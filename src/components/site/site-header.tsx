@@ -205,7 +205,7 @@ export function SiteHeader() {
                 key={g.key}
                 onMouseEnter={() => setOpen(g.key)}
                 onFocus={() => setOpen(g.key)}
-                onClick={() => setOpen((p) => (p === g.key ? null : g.key))}
+                onClick={() => setOpen(g.key)}
                 aria-haspopup="menu"
                 aria-expanded={open === g.key}
                 className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"

@@ -58,6 +58,25 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "button", name=f"Deal Grid ({self.live_count})"
         ).wait_for(state="visible")
 
+    def geocoded_listings(self, listings=None):
+        candidates = self.listings if listings is None else listings
+        return [
+            listing
+            for listing in candidates
+            if isinstance(listing.get("lat"), (int, float))
+            and isinstance(listing.get("lng"), (int, float))
+            and listing["lat"] != 0
+            and listing["lng"] != 0
+        ]
+
+    def open_live_market_map(self, page=None, result_count=None):
+        target_page = page or self.page
+        count = self.live_count if result_count is None else result_count
+        target_page.get_by_role("button", name=f"Map ({count})").click()
+        market_map = target_page.get_by_test_id("market-map")
+        market_map.wait_for(state="visible")
+        return market_map
+
     def test_navigation_links_have_real_destinations(self):
         placeholder_links = self.page.locator('a[href="#"]')
         labels = [text.strip() for text in placeholder_links.all_inner_texts() if text.strip()]
@@ -105,28 +124,255 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         unavailable = self.page.get_by_test_id("exact-source-listing-unavailable")
         self.assertEqual(exact_link.count() + unavailable.count(), 1)
 
-    def test_map_view_tracks_filtered_results_and_opens_the_listing_workflow(self):
+    def test_live_map_uses_maplibre_tracks_filters_and_opens_the_listing_workflow(self):
         self.wait_for_live_feed()
-        self.page.get_by_role("button", name=f"Map ({self.live_count})").click()
-        market_map = self.page.get_by_test_id("market-map")
-        market_map.wait_for(state="visible")
-        self.assertEqual(self.page.get_by_test_id("map-marker").count(), self.live_count)
+        market_map = self.open_live_market_map()
+        geocoded = self.geocoded_listings()
+        self.assertGreater(len(geocoded), 0)
+        self.assertEqual(market_map.get_attribute("data-map-engine"), "maplibre")
 
-        self.page.get_by_role("button", name="Zoom map in").click()
-        self.assertEqual(market_map.locator("[data-map-zoom]").get_attribute("data-map-zoom"), "1.25")
+        map_surface = self.page.get_by_test_id("live-market-maplibre")
+        map_surface.wait_for(state="visible")
+        self.assertTrue(
+            map_surface.evaluate(
+                "element => element.classList.contains('maplibregl-map') || Boolean(element.querySelector('.maplibregl-map'))"
+            )
+        )
+        map_canvas = map_surface.locator("canvas.maplibregl-canvas")
+        map_canvas.wait_for(state="visible")
+        self.assertEqual(map_canvas.count(), 1)
 
-        primary = self.primary_listing
-        self.page.get_by_role("button", name=f"Show {primary['address']} on map").click()
+        self.page.wait_for_function(
+            "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
+            arg=len(geocoded),
+            timeout=10_000,
+        )
+        self.page.wait_for_function(
+            "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
+            timeout=10_000,
+        )
+        markers = self.page.get_by_test_id("map-marker")
+        self.assertEqual(markers.count(), len(geocoded))
+        marker_labels = markers.evaluate_all(
+            "elements => elements.map(element => element.getAttribute('aria-label'))"
+        )
+        for listing in geocoded:
+            self.assertIn(f"Show {listing['address']} on map", marker_labels)
+
+        primary = geocoded[0]
+        primary_marker = self.page.get_by_role(
+            "button", name=f"Show {primary['address']} on map"
+        )
+        if market_map.get_attribute("data-map-unavailable") == "true":
+            self.page.get_by_role(
+                "button", name=f"Inspect {primary['address']} without map tiles"
+            ).click()
+        else:
+            primary_marker.click()
         preview = self.page.get_by_test_id("map-listing-preview")
+        preview.wait_for(state="visible")
         self.assertIn(primary["address"], preview.inner_text())
+        self.assertEqual(primary_marker.get_attribute("aria-pressed"), "true")
+        listing_link = preview.get_by_role("link", name="Listing page")
+        self.assertEqual(
+            listing_link.get_attribute("href"),
+            f"/listings/{primary['id']}",
+        )
         preview.get_by_role("button", name="Underwrite").click()
         self.page.get_by_role("dialog", name=primary["address"]).wait_for(state="visible")
 
         self.page.get_by_role("button", name="Close drawer").click()
-        state = Counter(listing["state"] for listing in self.listings).most_common(1)[0][0]
+        state = Counter(listing["state"] for listing in geocoded).most_common(1)[0][0]
         self.page.get_by_role("combobox", name="State filter").select_option(state)
-        expected = sum(listing["state"] == state for listing in self.listings)
+        expected = sum(listing["state"] == state for listing in geocoded)
+        self.page.wait_for_function(
+            "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
+            arg=expected,
+            timeout=10_000,
+        )
         self.assertEqual(self.page.get_by_test_id("map-marker").count(), expected)
+        self.assertIn(
+            f"{expected} geocoded {'listing' if expected == 1 else 'listings'}",
+            market_map.inner_text(),
+        )
+
+    def test_live_map_zoom_keyboard_pan_and_reset_controls_update_the_real_camera(self):
+        self.wait_for_live_feed()
+        market_map = self.open_live_market_map()
+        self.page.get_by_test_id("live-market-maplibre").wait_for(state="visible")
+        self.page.wait_for_function(
+            "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
+            timeout=10_000,
+        )
+        self.page.wait_for_timeout(800)
+
+        initial_center = market_map.get_attribute("data-map-center")
+        initial_zoom = float(market_map.get_attribute("data-map-zoom"))
+        self.assertRegex(initial_center, r"^-?\d+\.\d+,-?\d+\.\d+$")
+
+        zoom_in = self.page.get_by_role("button", name="Zoom map in")
+        zoom_out = self.page.get_by_role("button", name="Zoom map out")
+        reset = self.page.get_by_role("button", name="Reset map view")
+        self.assertTrue(zoom_in.is_enabled())
+        self.assertTrue(zoom_out.is_enabled())
+        self.assertTrue(reset.is_enabled())
+
+        zoom_in.click()
+        self.page.wait_for_function(
+            "initial => Number(document.querySelector('[data-testid=market-map]')?.dataset.mapZoom) > initial",
+            arg=initial_zoom,
+            timeout=5_000,
+        )
+        zoomed = float(market_map.get_attribute("data-map-zoom"))
+        self.assertGreater(zoomed, initial_zoom)
+
+        map_canvas = self.page.get_by_test_id("live-market-maplibre").locator(
+            "canvas.maplibregl-canvas"
+        )
+        did_pan = market_map.get_attribute("data-map-ready") == "true"
+        if did_pan:
+            before_pan = market_map.get_attribute("data-map-center")
+            map_canvas.evaluate("element => element.focus()")
+            map_canvas.press("ArrowRight")
+            self.page.wait_for_function(
+                "before => document.querySelector('[data-testid=market-map]')?.dataset.mapCenter !== before",
+                arg=before_pan,
+                timeout=5_000,
+            )
+            self.assertNotEqual(market_map.get_attribute("data-map-center"), before_pan)
+        else:
+            self.assertEqual(market_map.get_attribute("data-map-unavailable"), "true")
+            self.assertEqual(map_canvas.get_attribute("tabindex"), "0")
+            self.assertIn("map", map_canvas.get_attribute("aria-label").lower())
+            self.page.get_by_test_id("map-fallback-list").wait_for(state="visible")
+
+        center_before_reset = market_map.get_attribute("data-map-center")
+        reset.click()
+        self.page.wait_for_function(
+            "zoomed => Number(document.querySelector('[data-testid=market-map]')?.dataset.mapZoom) < zoomed",
+            arg=zoomed,
+            timeout=5_000,
+        )
+        if did_pan:
+            self.page.wait_for_function(
+                "panned => document.querySelector('[data-testid=market-map]')?.dataset.mapCenter !== panned",
+                arg=center_before_reset,
+                timeout=5_000,
+            )
+        self.assertLess(
+            float(market_map.get_attribute("data-map-zoom")), zoomed
+        )
+
+    def test_live_map_stays_within_mobile_bounds_and_respects_reduced_motion(self):
+        reduced_page = self.browser.new_page(viewport={"width": 390, "height": 844})
+        reduced_page.set_default_timeout(10_000)
+        reduced_page.emulate_media(reduced_motion="reduce")
+        try:
+            reduced_page.goto(BASE_URL, wait_until="domcontentloaded")
+            reduced_page.get_by_role(
+                "button", name=f"Deal Grid ({self.live_count})"
+            ).wait_for(state="visible")
+            market_map = self.open_live_market_map(reduced_page)
+            reduced_page.wait_for_function(
+                "document.querySelector('[data-testid=market-map]')?.dataset.mapMotion === 'reduced'"
+            )
+            reduced_page.wait_for_function(
+                "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
+                timeout=10_000,
+            )
+            self.assertEqual(market_map.get_attribute("data-map-motion"), "reduced")
+
+            map_box = market_map.bounding_box()
+            self.assertIsNotNone(map_box)
+            self.assertGreaterEqual(map_box["x"], 0)
+            self.assertLessEqual(map_box["x"] + map_box["width"], 390)
+            self.assertLessEqual(
+                market_map.evaluate("element => element.scrollWidth - element.clientWidth"),
+                1,
+            )
+            self.assertLessEqual(
+                reduced_page.evaluate("document.documentElement.scrollWidth"), 390
+            )
+
+            markers = reduced_page.get_by_test_id("map-marker")
+            reduced_page.wait_for_function(
+                "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
+                arg=len(self.geocoded_listings()),
+                timeout=10_000,
+            )
+            self.assertEqual(
+                markers.first.evaluate(
+                    "element => getComputedStyle(element).animationName"
+                ),
+                "none",
+            )
+
+            listing = self.geocoded_listings()[0]
+            if market_map.get_attribute("data-map-unavailable") == "true":
+                reduced_page.get_by_role(
+                    "button", name=f"Inspect {listing['address']} without map tiles"
+                ).click()
+            else:
+                reduced_page.get_by_role(
+                    "button", name=f"Show {listing['address']} on map"
+                ).click()
+            preview = reduced_page.get_by_test_id("map-listing-preview")
+            preview.wait_for(state="visible")
+            preview_box = preview.bounding_box()
+            self.assertIsNotNone(preview_box)
+            self.assertGreaterEqual(preview_box["x"], 0)
+            self.assertLessEqual(preview_box["x"] + preview_box["width"], 390)
+        finally:
+            reduced_page.close()
+
+    def test_live_map_keeps_an_accessible_listing_fallback_when_all_external_tiles_fail(self):
+        offline_page = self.browser.new_page(viewport={"width": 1440, "height": 1000})
+        offline_page.set_default_timeout(12_000)
+
+        def block_external_requests(route):
+            url = route.request.url
+            if url.startswith(BASE_URL) or url.startswith("data:") or url.startswith("blob:"):
+                route.continue_()
+            else:
+                route.abort()
+
+        offline_page.route("**/*", block_external_requests)
+        try:
+            offline_page.goto(BASE_URL, wait_until="domcontentloaded")
+            offline_page.get_by_role(
+                "button", name=f"Deal Grid ({self.live_count})"
+            ).wait_for(state="visible")
+            market_map = self.open_live_market_map(offline_page)
+            self.assertEqual(market_map.get_attribute("data-map-engine"), "maplibre")
+            canvas = offline_page.get_by_test_id("live-market-maplibre").locator(
+                "canvas.maplibregl-canvas"
+            )
+            canvas.wait_for(state="visible")
+
+            fallback_status = market_map.get_by_role("status").filter(
+                has_text=re.compile(r"tiles .*unavailable", re.I)
+            )
+            fallback_status.wait_for(state="visible", timeout=12_000)
+            self.assertIn("listing coordinates", fallback_status.inner_text())
+
+            geocoded = self.geocoded_listings()
+            fallback_list = offline_page.get_by_test_id("map-fallback-list")
+            self.assertEqual(fallback_list.get_by_role("button").count(), len(geocoded))
+            self.assertEqual(offline_page.get_by_test_id("map-marker").count(), len(geocoded))
+
+            listing = geocoded[0]
+            fallback_list.get_by_role(
+                "button", name=f"Inspect {listing['address']} without map tiles"
+            ).click()
+            preview = offline_page.get_by_test_id("map-listing-preview")
+            preview.wait_for(state="visible")
+            self.assertIn(listing["address"], preview.inner_text())
+            self.assertEqual(
+                preview.get_by_role("link", name="Listing page").get_attribute("href"),
+                f"/listings/{listing['id']}",
+            )
+        finally:
+            offline_page.close()
 
     def test_linked_information_pages_resolve(self):
         routes = [
@@ -271,11 +517,25 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         brand_box = brand.bounding_box()
         signup_box = signup.bounding_box()
         navigation_box = navigation.bounding_box()
+        hero = self.page.locator("#hero")
+        hero_heading = self.page.get_by_role(
+            "heading", name="Find the deal before everyone else.", level=1
+        )
+        hero_search = self.page.locator("#hero form").first
+        hero_art = self.page.get_by_test_id("hero-property-blueprint").locator("img")
+        hero_box = hero.bounding_box()
+        hero_heading_box = hero_heading.bounding_box()
+        hero_search_box = hero_search.bounding_box()
+        hero_art_box = hero_art.bounding_box()
 
         self.assertIsNotNone(header_box)
         self.assertIsNotNone(brand_box)
         self.assertIsNotNone(signup_box)
         self.assertIsNotNone(navigation_box)
+        self.assertIsNotNone(hero_box)
+        self.assertIsNotNone(hero_heading_box)
+        self.assertIsNotNone(hero_search_box)
+        self.assertIsNotNone(hero_art_box)
         self.assertGreater(header_box["width"], 2100)
         self.assertLess(brand_box["x"], 100)
         self.assertGreater(signup_box["x"] + signup_box["width"], 2220)
@@ -283,6 +543,23 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             navigation_box["x"] + navigation_box["width"] / 2,
             header_box["x"] + header_box["width"] / 2,
             delta=2,
+        )
+        hero_center = hero_box["x"] + hero_box["width"] / 2
+        self.assertAlmostEqual(
+            hero_heading_box["x"] + hero_heading_box["width"] / 2,
+            hero_center,
+            delta=3,
+        )
+        self.assertAlmostEqual(
+            hero_search_box["x"] + hero_search_box["width"] / 2,
+            hero_center,
+            delta=3,
+        )
+        self.assertGreaterEqual(hero_art_box["width"], 650)
+        self.assertLessEqual(hero_art_box["width"], 930)
+        self.assertNotEqual(
+            hero_art.evaluate("element => getComputedStyle(element).maskImage"),
+            "none",
         )
 
     def test_hero_hook_and_search_are_fully_visible_within_one_second(self):
@@ -307,10 +584,17 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             blueprint.evaluate("element => getComputedStyle(element).pointerEvents"),
             "none",
         )
-        self.assertEqual(
-            blueprint.locator("img").evaluate("element => element.naturalWidth"),
-            1672,
+        blueprint_image = blueprint.locator("img")
+        blueprint_metrics = blueprint_image.evaluate(
+            "element => ({ naturalWidth: element.naturalWidth, clientWidth: element.clientWidth })"
         )
+        self.assertGreaterEqual(
+            blueprint_metrics["naturalWidth"],
+            blueprint_metrics["clientWidth"] - 2,
+        )
+        self.assertEqual(blueprint_image.get_attribute("width"), "1536")
+        self.assertEqual(blueprint_image.get_attribute("height"), "1024")
+        self.assertIn("hero-villa-property.png", blueprint_image.get_attribute("src"))
         self.assertGreaterEqual(
             float(blueprint.evaluate("element => getComputedStyle(element).opacity")),
             0.9,
@@ -581,7 +865,15 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         errors = []
 
         def collect_console(message):
-            if message.type == "error" and "ERR_NETWORK_ACCESS_DENIED" not in message.text:
+            expected_map_transport_failure = (
+                "tiles.openfreemap.org/styles/positron" in message.text
+                and "Failed to fetch" in message.text
+            )
+            if (
+                message.type == "error"
+                and "ERR_NETWORK_ACCESS_DENIED" not in message.text
+                and not expected_map_transport_failure
+            ):
                 errors.append(f"console: {message.text}")
 
         self.page.on("console", collect_console)

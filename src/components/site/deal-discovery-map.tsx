@@ -123,6 +123,31 @@ const FALLBACK_MAP_TILES = [
   [557, 765], [558, 765], [559, 765], [560, 765], [561, 765],
 ] as const;
 
+// Padded bounding box of the opportunity set — used to project fallback
+// marker positions when the map engine itself fails to boot (offline chunk).
+const OPPORTUNITY_BOUNDS = OPPORTUNITIES.reduce(
+  (acc, deal) => ({
+    minLng: Math.min(acc.minLng, deal.lng),
+    maxLng: Math.max(acc.maxLng, deal.lng),
+    minLat: Math.min(acc.minLat, deal.lat),
+    maxLat: Math.max(acc.maxLat, deal.lat),
+  }),
+  { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity },
+);
+
+const FALLBACK_PAD = 0.12;
+function fallbackPosition(lng: number, lat: number) {
+  const spanLng = OPPORTUNITY_BOUNDS.maxLng - OPPORTUNITY_BOUNDS.minLng;
+  const spanLat = OPPORTUNITY_BOUNDS.maxLat - OPPORTUNITY_BOUNDS.minLat;
+  const x = spanLng === 0 ? 0.5 : (lng - OPPORTUNITY_BOUNDS.minLng) / spanLng;
+  const y = spanLat === 0 ? 0.5 : (OPPORTUNITY_BOUNDS.maxLat - lat) / spanLat;
+  const inset = FALLBACK_PAD * 100;
+  return {
+    left: `${(inset + x * (100 - inset * 2)).toFixed(2)}%`,
+    top: `${(inset + y * (100 - inset * 2)).toFixed(2)}%`,
+  };
+}
+
 type MarkerEntry = {
   element: HTMLButtonElement;
   marker: MapLibreMarker;
@@ -143,6 +168,7 @@ export function DealDiscoveryMap() {
   const [announcement, setAnnouncement] = React.useState("");
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
+  const [engineFailed, setEngineFailed] = React.useState(false);
   const [isInView, setIsInView] = React.useState(false);
   const [scanState, setScanState] = React.useState<ScanState>("idle");
   const [scanRun, setScanRun] = React.useState(0);
@@ -237,7 +263,48 @@ export function DealDiscoveryMap() {
     },
     [],
   );
-  selectDealRef.current = selectDeal;
+
+  // Ref updates belong in effects — writing during render breaks under
+  // React strict/concurrent re-renders.
+  React.useEffect(() => {
+    selectDealRef.current = selectDeal;
+  }, [selectDeal]);
+
+  // Roving keyboard control for the map markers: ArrowRight/Down selects the
+  // next opportunity, ArrowLeft/Up the previous, Home/End jump to the ends.
+  // Selection follows focus so screen-reader and keyboard users get the same
+  // fly-to + announcement as pointer users.
+  const handleMarkerKeydown = React.useCallback(
+    (event: React.KeyboardEvent) => {
+      const navigationKeys: Record<string, number> = {
+        ArrowRight: 1,
+        ArrowDown: 1,
+        ArrowLeft: -1,
+        ArrowUp: -1,
+        Home: -Infinity,
+        End: Infinity,
+      };
+      const direction = navigationKeys[event.key];
+      if (direction === undefined) return;
+      const target = event.target as HTMLElement | null;
+      if (!target?.dataset?.opportunityMarker) return;
+      event.preventDefault();
+      const count = OPPORTUNITIES.length;
+      let next = activeIndex + direction;
+      if (direction === -Infinity) next = 0;
+      else if (direction === Infinity) next = count - 1;
+      else next = ((next % count) + count) % count;
+      selectDealRef.current(next, true);
+      // Prefer the imperative MapLibre marker handles; fall back to a DOM
+      // query so the engine-failure fallback buttons rove focus identically.
+      const markerElement = markerEntriesRef.current[next]?.element;
+      const fallback = atlasRef.current?.querySelectorAll<HTMLElement>(
+        '[data-opportunity-marker="true"]',
+      )?.[next];
+      (markerElement ?? fallback)?.focus();
+    },
+    [activeIndex],
+  );
 
   React.useEffect(() => {
     markerEntriesRef.current.forEach(({ element }, index) => {
@@ -267,7 +334,6 @@ export function DealDiscoveryMap() {
           minZoom: 8,
           maxZoom: 17,
           attributionControl: false,
-          cooperativeGestures: true,
         });
         mapRef.current = map;
 
@@ -282,6 +348,10 @@ export function DealDiscoveryMap() {
             compact: true,
             customAttribution: "OpenFreeMap · OpenStreetMap",
           }),
+          "bottom-left",
+        );
+        map.addControl(
+          new maplibre.ScaleControl({ maxWidth: 90, unit: "imperial" }),
           "bottom-left",
         );
 
@@ -319,8 +389,28 @@ export function DealDiscoveryMap() {
           return { element, marker };
         });
 
+        // Fail fast on style/source errors instead of waiting for the load
+        // timeout — the fallback banner and ranked list should appear
+        // immediately when tiles are unreachable. One broken zoom tile must
+        // NOT trip it, so we only degrade while the style itself is cold.
+        const handleMapError = () => {
+          if (disposed) return;
+          const styleCold = !map.isStyleLoaded();
+          if (!styleCold) return;
+          if (loadTimeout !== null) {
+            window.clearTimeout(loadTimeout);
+            loadTimeout = null;
+          }
+          setMapUnavailable(true);
+        };
+        map.on("error", handleMapError);
+
         map.once("load", () => {
           if (disposed) return;
+          if (loadTimeout !== null) {
+            window.clearTimeout(loadTimeout);
+            loadTimeout = null;
+          }
           const geojson = {
             type: "FeatureCollection" as const,
             features: OPPORTUNITIES.map((deal) => ({
@@ -400,7 +490,9 @@ export function DealDiscoveryMap() {
         }, 8_000);
       })
       .catch(() => {
-        if (!disposed) setMapUnavailable(true);
+        if (disposed) return;
+        setMapUnavailable(true);
+        setEngineFailed(true);
       });
 
     return () => {
@@ -421,6 +513,7 @@ export function DealDiscoveryMap() {
   return (
     <div
       ref={atlasRef}
+      onKeyDown={handleMarkerKeydown}
       data-testid="storyteller-deal-map"
       data-map-engine="maplibre"
       data-map-ready={mapReady ? "true" : "false"}
@@ -433,7 +526,7 @@ export function DealDiscoveryMap() {
       className="opportunity-atlas relative w-full overflow-hidden rounded-[18px] border border-[#D9E2EC] bg-[#EAF1F6]"
     >
       <div className="opportunity-atlas__map relative h-[390px] overflow-hidden sm:h-[480px] lg:h-[620px]">
-        <div aria-hidden="true" className="opportunity-atlas__fallback-map absolute inset-0 overflow-hidden bg-[#E8EDF1]">
+        <div aria-hidden="true" className="opportunity-atlas__fallback-map absolute inset-0 z-0 overflow-hidden bg-[#E8EDF1]">
           <div className="absolute left-1/2 top-1/2 grid aspect-[5/3] min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 grid-cols-5 grid-rows-3">
             {FALLBACK_MAP_TILES.map(([x, y]) => (
               <img
@@ -453,7 +546,7 @@ export function DealDiscoveryMap() {
           ref={mapContainerRef}
           data-testid="maplibre-map"
           aria-label="Real street map of Cleveland"
-          className="opportunity-atlas__canvas absolute inset-0"
+          className="opportunity-atlas__canvas absolute inset-0 z-[1]"
         />
 
         {mapUnavailable ? (
@@ -462,6 +555,46 @@ export function DealDiscoveryMap() {
             className="absolute left-3 top-[72px] z-20 rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#475569] shadow-sm backdrop-blur sm:left-5"
           >
             Map tiles are unavailable. Opportunity coordinates and ranked list remain active.
+          </div>
+        ) : null}
+
+        {/* Engine-failure fallback: if the map chunk never boots there are no
+            MapLibre-mounted markers in the DOM. Render projected buttons over
+            the static tile collage so every opportunity stays selectable and
+            keyboard/SR reachable even with the map engine fully offline. */}
+        {engineFailed ? (
+          <div className="absolute inset-0 z-10">
+            {OPPORTUNITIES.map((deal, index) => {
+              const position = fallbackPosition(deal.lng, deal.lat);
+              const active = index === activeIndex;
+              return (
+                <button
+                  key={deal.id}
+                  type="button"
+                  onClick={() => selectDeal(index, true)}
+                  aria-label={`Show ${deal.address} opportunity`}
+                  aria-pressed={active ? "true" : "false"}
+                  aria-controls="storyteller-map-preview"
+                  className="opportunity-map-marker opportunity-map-marker--fallback absolute"
+                  data-testid="storyteller-map-marker-fallback"
+                  style={{
+                    left: position.left,
+                    top: position.top,
+                    ["--marker-color" as unknown as string]: deal.color,
+                  }}
+                  data-active={active ? "true" : "false"}
+                  data-opportunity-marker="true"
+                >
+                  <span aria-hidden="true" className="opportunity-map-marker__halo" />
+                  <span aria-hidden="true" className="opportunity-map-marker__pin">
+                    {deal.score}
+                  </span>
+                  <span aria-hidden="true" className="opportunity-map-marker__label">
+                    {deal.area}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
 

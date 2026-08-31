@@ -69,19 +69,15 @@ export function Hero() {
     };
   }, []);
 
-  const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const springConfig = { stiffness: 50, damping: 20, mass: 0.5 };
-  const px = useSpring(mouseX, springConfig);
   const py = useSpring(mouseY, springConfig);
-  const contentX = useTransform(px, [-0.5, 0.5], [-8, 8]);
   const contentY = useTransform(py, [-0.5, 0.5], [-4, 4]);
 
   const onMouseMove = React.useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
     mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
-  }, [mouseX, mouseY]);
+  }, [mouseY]);
 
   const placeholder = "City, county, state, country, ZIP, or address";
 
@@ -239,12 +235,12 @@ export function Hero() {
           className="hero-property-art absolute inset-0 z-[3]"
         >
           <Image
-            src="/hero-property-blueprint.png"
+            src="/hero-villa-property.png"
             alt=""
-            width={1672}
-            height={755}
+            width={1536}
+            height={1024}
             preload
-            sizes="(max-width: 639px) 175vw, (max-width: 1279px) 120vw, (max-width: 1672px) 100vw, 1672px"
+            sizes="(max-width: 767px) 116vw, (max-width: 1279px) 72vw, (max-width: 2095px) 42vw, 880px"
             className="absolute bottom-0 right-0 h-auto max-w-none"
           />
         </div>
@@ -252,15 +248,15 @@ export function Hero() {
 
       {/* Content */}
       <motion.div
-        className="relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12 xl:items-start xl:px-[7.5vw] xl:text-left"
-        style={{ x: contentX, y: contentY }}
+        className="relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12"
+        style={{ y: contentY }}
       >
         <motion.h1
           className="text-[32px] font-semibold leading-[36px] tracking-[-0.02em] text-[#111827] sm:text-[48px] sm:leading-[52px]"
           style={{ margin: 0, maxWidth: 620 }}
         >
           <span className="sr-only">Find the deal before everyone else.</span>
-          <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em] xl:justify-start">
+          <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em]">
             {H1_WORDS.map((w, i) => (
               <motion.span
                 key={i}
@@ -279,7 +275,7 @@ export function Hero() {
           initial={{ opacity: 1, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15, ease: EASE_OUT }}
-          className="mt-4 max-w-[700px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px] xl:max-w-[540px]"
+          className="mt-4 max-w-[620px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px]"
         >
           Search any market or address. See the best opportunities, the catch,
           and your next move &mdash; before you bid.
@@ -291,7 +287,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.24, ease: EASE_OUT }}
           onSubmit={handleSubmit}
-          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16 xl:self-start"
+          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16"
           style={{
             width: "100%",
             maxWidth: "min(620px, calc(100vw - 40px))",
@@ -414,7 +410,7 @@ export function Hero() {
           initial={{ opacity: 1, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-          className="mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:self-start"
+          className="mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
         >
           <Undo2 className="h-4 w-4 text-[#0F172A]" />
           Try the Cleveland market
