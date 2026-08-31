@@ -555,8 +555,23 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             hero_center,
             delta=3,
         )
-        self.assertGreaterEqual(hero_art_box["width"], 650)
-        self.assertLessEqual(hero_art_box["width"], 930)
+        self.assertAlmostEqual(
+            hero_search_box["y"] + hero_search_box["height"] / 2,
+            hero_box["y"] + hero_box["height"] * 0.355,
+            delta=20,
+        )
+        self.assertGreaterEqual(hero_art_box["width"], 1160)
+        self.assertLessEqual(hero_art_box["width"], 1200)
+        self.assertLessEqual(
+            hero_art_box["x"] + hero_art_box["width"],
+            hero_box["x"] + hero_box["width"] - 8,
+            "the villa's transparent right edge should remain visible inside the hero",
+        )
+        self.assertLessEqual(
+            hero_art_box["y"] + hero_art_box["height"],
+            hero_box["y"] + hero_box["height"] - 8,
+            "the villa's transparent bottom edge should remain visible inside the hero",
+        )
         self.assertNotEqual(
             hero_art.evaluate("element => getComputedStyle(element).maskImage"),
             "none",
@@ -578,7 +593,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(blueprint.is_visible())
         self.assertEqual(
             blueprint.evaluate("element => getComputedStyle(element).mixBlendMode"),
-            "normal",
+            "multiply",
         )
         self.assertEqual(
             blueprint.evaluate("element => getComputedStyle(element).pointerEvents"),
@@ -594,10 +609,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
         self.assertEqual(blueprint_image.get_attribute("width"), "1536")
         self.assertEqual(blueprint_image.get_attribute("height"), "1024")
-        self.assertIn("hero-villa-property.png", blueprint_image.get_attribute("src"))
+        self.assertIn("hero-modern-villa.png", blueprint_image.get_attribute("src"))
         self.assertGreaterEqual(
             float(blueprint.evaluate("element => getComputedStyle(element).opacity")),
-            0.9,
+            0.75,
         )
 
         self.page.set_viewport_size({"width": 390, "height": 844})
@@ -609,6 +624,28 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             float(blueprint.evaluate("element => getComputedStyle(element).opacity")),
             0.1,
         )
+
+    def test_hero_shader_field_tracks_the_pointer(self):
+        hero = self.page.locator("#hero")
+        shader = self.page.get_by_test_id("hero-shader-field")
+        hero_box = hero.bounding_box()
+        self.assertIsNotNone(hero_box)
+        shader.wait_for(state="visible")
+
+        self.page.mouse.move(
+            hero_box["x"] + hero_box["width"] * 0.2,
+            hero_box["y"] + hero_box["height"] * 0.25,
+        )
+        self.page.wait_for_timeout(350)
+        first_transform = shader.evaluate("element => getComputedStyle(element).transform")
+        self.page.mouse.move(
+            hero_box["x"] + hero_box["width"] * 0.82,
+            hero_box["y"] + hero_box["height"] * 0.72,
+        )
+        self.page.wait_for_timeout(350)
+        second_transform = shader.evaluate("element => getComputedStyle(element).transform")
+
+        self.assertNotEqual(first_transform, second_transform)
 
     def test_hero_search_focus_uses_a_soft_halo_without_a_black_outline(self):
         search = self.page.get_by_role("combobox", name="Market or address")
@@ -792,12 +829,45 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             self.page.get_by_test_id("storyteller-map-preview").inner_text(),
         )
 
-    def test_storyteller_and_team_tabs_render_each_feature_state(self):
+    def test_storyteller_workflow_renders_each_decision_state(self):
         self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
-        self.page.get_by_role("button", name="Prophecy").click()
-        self.assertTrue(self.page.get_by_text("~38 days").is_visible())
-        self.page.get_by_role("button", name="Visuals").click()
-        self.assertTrue(self.page.get_by_text("ARV Model", exact=True).is_visible())
+        stage = self.page.get_by_test_id("storyteller-stage")
+        expectations = [
+            ("Find", "find", "storyteller-deal-map"),
+            ("Verify", "verify", "storyteller-verify"),
+            ("Underwrite", "underwrite", "storyteller-underwrite"),
+            ("Act", "act", "storyteller-act"),
+        ]
+
+        for label, stage_name, test_id in expectations:
+            with self.subTest(stage=label):
+                self.page.get_by_role("tab", name=re.compile(rf"\b{label}\b")).click()
+                self.assertEqual(stage.get_attribute("data-stage"), stage_name)
+                self.page.get_by_test_id(test_id).wait_for(state="visible")
+
+    def test_storyteller_workflow_uses_keyboard_accessible_tab_semantics(self):
+        self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
+        tablist = self.page.get_by_role("tablist", name="Property decision workflow")
+        tabs = tablist.get_by_role("tab")
+        self.assertEqual(tabs.count(), 4)
+        self.assertEqual(
+            tabs.evaluate_all("elements => elements.filter(tab => tab.getAttribute('aria-selected') === 'true').length"),
+            1,
+        )
+
+        find_tab = self.page.get_by_role("tab", name=re.compile(r"\bFind\b"))
+        verify_tab = self.page.get_by_role("tab", name=re.compile(r"\bVerify\b"))
+        find_tab.focus()
+        self.page.keyboard.press("ArrowRight")
+        self.assertEqual(verify_tab.get_attribute("aria-selected"), "true")
+        self.assertTrue(verify_tab.evaluate("element => element === document.activeElement"))
+        self.assertEqual(self.page.get_by_test_id("storyteller-stage").get_attribute("data-stage"), "verify")
+        self.assertEqual(
+            self.page.get_by_role("tabpanel").get_attribute("aria-labelledby"),
+            "storyteller-tab-verify",
+        )
+
+    def test_team_tabs_render_each_feature_state(self):
 
         self.page.locator("#solutions").evaluate("element => element.scrollIntoView({block: 'center'})")
         for team in ["Marketing", "Acquisitions", "Disposition", "Underwriting"]:

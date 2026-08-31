@@ -17,6 +17,7 @@ pnpm-debug.log*
 out/
 dist/
 build/
+*.tsbuildinfo
 
 # --- Local env / secrets ---
 .env
@@ -49,6 +50,7 @@ $RECYCLE.BIN/
 
 # --- Logs ---
 *.log
+*.err
 logs/
 .pnpm-debug.log*
 

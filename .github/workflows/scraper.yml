@@ -8,6 +8,9 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write  # push the refreshed data.js back to the repo
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,6 +19,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Execute Scraper Pipeline
-        run: npm run scrape
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerate listing corpus from live scrapers
+        env:
+          RUN_REAL_SCRAPERS: '1'
+        run: npm run refresh-data:real
+
+      - name: Commit refreshed data.js (if changed)
+        run: |
+          git config user.name "property-crawl-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.js
+          if git diff --cached --quiet; then
+            echo "No listing changes"
+          else
+            git commit -m "chore(data): refresh listings from live scrapers [skip ci]"
+            git push
+          fi

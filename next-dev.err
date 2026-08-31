@@ -1,3 +1,0 @@
-⚠ Warning: Next.js ignored pnpm-lock.yaml in C:\Users\serge because it would include your home directory (C:\Users\serge).
- To use this directory, set `turbopack.root` in your Next.js config.
-

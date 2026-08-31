@@ -14,7 +14,7 @@ const suites = [
   { name: '7. Source Registry Sync Drift (v0 <-> v2)', cmd: 'node test/sync.test.js' },
   { name: '8. Next.js 16 Production Build & TypeScript', cmd: 'npx next build' },
   { name: '9. Canonical Next Runtime Contract', cmd: 'node --test test/canonical-runtime.test.js' },
-  { name: '10. Playwright Canonical UI Browser Suite', cmd: 'python test/next_ui_e2e_test.py' }
+  { name: '10. Playwright Canonical UI Browser Suite', cmd: 'node test/run-ui-suite.js' }
 ];
 
 let totalPassed = 0;

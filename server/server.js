@@ -16,20 +16,31 @@ const apiLimiter = rateLimiter.middleware();
 function parseJsonBody(req) {
   return new Promise((resolve) => {
     let body = '';
+    let settled = false;
+    const done = (nextBody) => {
+      if (settled) return;
+      settled = true;
+      req.body = nextBody;
+      resolve();
+    };
     req.on('data', chunk => {
       body += chunk;
       if (body.length > 2 * 1024 * 1024) { // 2MB max
         req.socket.destroy();
+        done({}); // don't hang the await after destroying the socket
       }
     });
     req.on('end', () => {
       try {
-        req.body = body ? JSON.parse(body) : {};
+        done(body ? JSON.parse(body) : {});
       } catch (_) {
-        req.body = {};
+        done({});
       }
-      resolve();
     });
+    // If the underlying socket dies mid-request (client abort, reset),
+    // 'end' never fires — resolve instead of leaking the pending await.
+    req.on('close', () => done({}));
+    req.on('error', () => done({}));
   });
 }
 
@@ -100,9 +111,18 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Static File Serving
-  let filePath = path.join(__dirname, '..', url.pathname === '/' ? 'index.html' : url.pathname);
+  // On Windows, URL pathnames keep backslashes intact (the URL spec does not
+  // treat "\" as a separator), so "/..\..\..." would resolve outside the
+  // project root via path.join. Normalise separators, then refuse anything
+  // that escapes the web root.
+  const webRoot = path.join(__dirname, '..');
+  const rawPath = (url.pathname === '/' ? '/index.html' : url.pathname).replace(/\\/g, '/');
+  let filePath = path.resolve(webRoot, '.' + rawPath);
+  if (!filePath.startsWith(webRoot + path.sep) && filePath !== webRoot) {
+    filePath = path.join(webRoot, 'index.html');
+  }
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(__dirname, '..', 'index.html');
+    filePath = path.join(webRoot, 'index.html');
   }
 
   const ext = path.extname(filePath).toLowerCase();

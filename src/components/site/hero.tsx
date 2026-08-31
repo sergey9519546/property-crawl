@@ -69,15 +69,24 @@ export function Hero() {
     };
   }, []);
 
+  const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-  const springConfig = { stiffness: 50, damping: 20, mass: 0.5 };
+  const springConfig = { stiffness: 58, damping: 22, mass: 0.55 };
+  const px = useSpring(mouseX, springConfig);
   const py = useSpring(mouseY, springConfig);
-  const contentY = useTransform(py, [-0.5, 0.5], [-4, 4]);
+  const shaderX = useTransform(px, [-0.5, 0.5], [-18, 18]);
+  const shaderY = useTransform(py, [-0.5, 0.5], [-12, 12]);
 
   const onMouseMove = React.useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
+    mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
     mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
-  }, [mouseY]);
+  }, [mouseX, mouseY]);
+
+  const onMouseLeave = React.useCallback(() => {
+    mouseX.set(0);
+    mouseY.set(0);
+  }, [mouseX, mouseY]);
 
   const placeholder = "City, county, state, country, ZIP, or address";
 
@@ -203,9 +212,10 @@ export function Hero() {
   return (
     <section
       id="hero"
-      className="relative isolate w-full overflow-visible pt-[120px] pb-[340px] sm:pt-[192px] sm:pb-[460px] lg:pb-[540px] xl:min-h-[820px] xl:pb-[184px]"
+      className="relative isolate w-full overflow-visible pt-[120px] pb-[340px] sm:pt-[192px] sm:pb-[460px] lg:pb-[540px] xl:min-h-[820px] xl:pb-[184px] xl:pt-[104px]"
       
       onMouseMove={onMouseMove}
+      onMouseLeave={onMouseLeave}
     >
       {/* Arcade panel: rounded rectangle, inset 16px, #F9FAFB, overflow hidden */}
       <div
@@ -222,25 +232,32 @@ export function Hero() {
           }}
         />
         {/* Unicorn Studio WebGL flow-field shader (base texture + Perlin noise) */}
-        <ErrorBoundary>
-          <UnicornHeroBg />
-        </ErrorBoundary>
+        <motion.div
+          aria-hidden
+          data-testid="hero-shader-field"
+          className="pointer-events-none absolute -inset-[5%] z-[1] will-change-transform"
+          style={{ x: shaderX, y: shaderY, scale: 1.06 }}
+        >
+          <ErrorBoundary>
+            <UnicornHeroBg />
+          </ErrorBoundary>
+        </motion.div>
 
-        {/* A local light field preserves the graphite drawing while the shader stays alive. */}
+        {/* A local light field keeps the architecture legible without separating it from the shader. */}
         <div aria-hidden className="hero-property-backlight absolute inset-0 z-[2]" />
 
-        {/* Blueprint layer: the supplied house resolves directly through the shader. */}
+        {/* Property layer: the supplied transparent villa is colorized by the live shader. */}
         <div
           data-testid="hero-property-blueprint"
           className="hero-property-art absolute inset-0 z-[3]"
         >
           <Image
-            src="/hero-villa-property.png"
+            src="/hero-modern-villa.png"
             alt=""
             width={1536}
             height={1024}
             preload
-            sizes="(max-width: 767px) 116vw, (max-width: 1279px) 72vw, (max-width: 2095px) 42vw, 880px"
+            sizes="(max-width: 767px) 132vw, (max-width: 1279px) 90vw, (max-width: 1532px) 920px, (max-width: 1966px) 60vw, 1180px"
             className="absolute bottom-0 right-0 h-auto max-w-none"
           />
         </div>
@@ -249,7 +266,6 @@ export function Hero() {
       {/* Content */}
       <motion.div
         className="relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12"
-        style={{ y: contentY }}
       >
         <motion.h1
           className="text-[32px] font-semibold leading-[36px] tracking-[-0.02em] text-[#111827] sm:text-[48px] sm:leading-[52px]"
@@ -275,7 +291,7 @@ export function Hero() {
           initial={{ opacity: 1, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15, ease: EASE_OUT }}
-          className="mt-4 max-w-[620px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px]"
+          className="mt-4 max-w-[620px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px] xl:mt-3 xl:max-w-[820px]"
         >
           Search any market or address. See the best opportunities, the catch,
           and your next move &mdash; before you bid.
@@ -287,7 +303,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.24, ease: EASE_OUT }}
           onSubmit={handleSubmit}
-          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16"
+          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16 xl:mt-4"
           style={{
             width: "100%",
             maxWidth: "min(620px, calc(100vw - 40px))",
@@ -410,7 +426,7 @@ export function Hero() {
           initial={{ opacity: 1, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-          className="mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+          className="relative mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:mt-5 xl:text-[#0F172A] xl:focus-visible:outline-[#0F172A]"
         >
           <Undo2 className="h-4 w-4 text-[#0F172A]" />
           Try the Cleveland market
