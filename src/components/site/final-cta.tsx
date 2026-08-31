@@ -18,7 +18,7 @@ export function FinalCta() {
         </GsapReveal>
         <div className="flex shrink-0 items-center gap-3">
           <a
-            href="#"
+            href="#live-feed"
             className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-5 text-[14px] font-semibold text-white transition-colors hover:bg-[#1E293B]"
           >
             Open the live feed

@@ -24,7 +24,7 @@ const INTEGRATIONS = [
 
 export function Integrations() {
   return (
-    <section className="pt-24 pb-28 sm:pt-24 sm:pb-28">
+    <section id="integrations" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal>
           <h2 className="text-center text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
@@ -57,7 +57,7 @@ export function Integrations() {
         <GsapReveal delay={0.7}>
           <div className="mt-8 flex justify-center">
             <a
-              href="#"
+              href="/resources#integrations"
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#111827] transition-colors hover:bg-[#F5F6F7]"
             >
               Explore all integrations

@@ -26,7 +26,11 @@ function parseNoticeText(text: string): Record<string, any> | null {
   const city = cszMatch ? cszMatch[1].trim() : "Unknown";
   const state = cszMatch ? cszMatch[2] : "OH";
   const zip = cszMatch ? cszMatch[3] : "00000";
-  const streetAddress = rawAddress || (city + ", " + state);
+  const countyMatch = text.match(/([A-Za-z]+(?:\s+[A-Za-z]+)*)\s+County(?:\s+Court)?/i);
+  const county = countyMatch ? countyMatch[1].trim() : city;
+  const streetAddress = rawAddress
+    ? `${rawAddress}, ${city}, ${state} ${zip}`
+    : `${city}, ${state} ${zip}`;
   const bidRe = /(?:opening\s+bid|minimum\s+bid|two[-\s]thirds[^$]*|minimum\s+opening\s+bid[^$]*)\$?([\d,]+(?:\.\d{2})?)/i;
   const bidMatch = text.match(bidRe);
   const bid = bidMatch ? Math.round(parseFloat(bidMatch[1].replace(/,/g, ""))) : 0;
@@ -62,7 +66,7 @@ function parseNoticeText(text: string): Record<string, any> | null {
   const parcelRe = /[Pp]arcel\s*(?:[Nn]o\.?|[Ii][Dd]\.?|[Nn]umber)?\s*:?\s*([0-9][0-9\-]+)/i;
   const parcelMatch = text.match(parcelRe);
   const parcel = parcelMatch ? parcelMatch[1].trim() : "Not found";
-  return { property_address: streetAddress, city, state, zip, parcel_or_lot: parcel, sale_date: saleDate, sale_type: "Sheriff Sale", plaintiff_or_seller: plaintiff, defendant, judgment_amount: judgmentAmount, deposit_terms: depositTerms, attorney, case_number: caseNumber, openingBid, estLow, estHigh, mid, equity, dealScore };
+  return { property_address: streetAddress, city, county, state, zip, parcel_or_lot: parcel, sale_date: saleDate, sale_type: "Sheriff Sale", plaintiff_or_seller: plaintiff, defendant, judgment_amount: judgmentAmount, deposit_terms: depositTerms, attorney, case_number: caseNumber, openingBid, estLow, estHigh, mid, equity, dealScore };
 }
 
 export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
@@ -107,7 +111,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
       id: "PARSE-" + Date.now().toString(36).toUpperCase(),
       source: "sheriff",
       state: parsedResult.state,
-      county: parsedResult.city,
+      county: parsedResult.county,
       city: parsedResult.city,
       zip: parsedResult.zip,
       address: parsedResult.property_address,
@@ -154,10 +158,11 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         value={rawText}
         onChange={(e) => { setRawText(e.target.value); setParsedResult(null); setParseError(null); }}
         placeholder="Paste raw foreclosure notice, gazette clipping, or court docket text here..."
+        aria-label="Raw legal notice"
         className="w-full h-36 p-4 rounded-xl border border-[#D1D5DB] text-xs font-mono text-[#111827] focus:outline-none focus:border-[#0F172A] focus:ring-2 focus:ring-[#0F172A]/20"
       />
       <div className="flex items-center justify-between">
-        <span className="text-xs text-[#6B7280]">Regex extraction engine — parses any notice format</span>
+        <span className="text-xs text-[#6B7280]">Structured extraction for supported court notice formats</span>
         <button
           onClick={handleParse}
           disabled={isParsing || !rawText.trim()}

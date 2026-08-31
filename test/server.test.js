@@ -45,6 +45,10 @@ function request(path, options = {}) {
 
 async function run() {
   await new Promise((resolve) => server.listen(3999, resolve));
+  const seedResponse = await request('/api/listings?limit=100');
+  const seedListings = seedResponse.body.listings;
+  assert.ok(seedListings.length > 0, 'server test requires at least one seeded listing');
+  const primaryListing = seedListings[0];
 
   await test('GET /api/health returns 200 and status ok', async () => {
     const res = await request('/api/health');
@@ -62,8 +66,8 @@ async function run() {
   await test('GET /api/listings returns filtered and paginated listings', async () => {
     const res = await request('/api/listings?limit=5');
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.listings.length, 5);
-    assert.ok(res.body.total >= 20);
+    assert.strictEqual(res.body.listings.length, Math.min(5, seedListings.length));
+    assert.strictEqual(res.body.total, seedListings.length);
   });
 
   await test('GET /api/listings with state filter filters correctly', async () => {
@@ -73,10 +77,10 @@ async function run() {
   });
 
   await test('GET /api/listings/:id returns single listing', async () => {
-    const res = await request('/api/listings/OH-CUY-10231');
+    const res = await request(`/api/listings/${encodeURIComponent(primaryListing.id)}`);
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.id, 'OH-CUY-10231');
-    assert.strictEqual(res.body.city, 'Cleveland');
+    assert.strictEqual(res.body.id, primaryListing.id);
+    assert.strictEqual(res.body.city, primaryListing.city);
   });
 
   await test('POST /api/parse extracts structured notice and caches result', async () => {
@@ -95,14 +99,14 @@ async function run() {
     const postRes = await request('/api/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-      body: { listingId: 'OH-CUY-10231' }
+      body: { listingId: primaryListing.id }
     });
     assert.strictEqual(postRes.status, 201);
 
     const getRes = await request(`/api/alerts?userId=${userId}`);
     assert.strictEqual(getRes.status, 200);
     assert.strictEqual(getRes.body.savedCount, 1);
-    assert.strictEqual(getRes.body.deals[0].id, 'OH-CUY-10231');
+    assert.strictEqual(getRes.body.deals[0].id, primaryListing.id);
   });
 
   await test('GET /api/export?format=csv returns valid CSV stream', async () => {

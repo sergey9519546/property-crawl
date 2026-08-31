@@ -63,14 +63,14 @@ const GROUPS: MenuGroup[] = [
     label: "Product",
     columns: [
       [
-        { label: "Deal Stacks", desc: "Effortlessly beautiful deal presentations", icon: LayoutDashboard, href: "#", tint: "#e7faef" },
-        { label: "Shadow Mode", desc: "Inspect off-market distress signals", icon: Eye, href: "#", tint: "#DBEAFE" },
-        { label: "Prophecy", desc: "Predict which parcels will list next", icon: Sparkles, href: "#", tint: "#E9D5FF" },
+        { label: "Deal Stacks", desc: "Effortlessly beautiful deal presentations", icon: LayoutDashboard, href: "#live-feed", tint: "#e7faef" },
+        { label: "Shadow Mode", desc: "Inspect off-market distress signals", icon: Eye, href: "#product", tint: "#DBEAFE" },
+        { label: "Prophecy", desc: "Predict which parcels will list next", icon: Sparkles, href: "#product", tint: "#E9D5FF" },
       ],
       [
-        { label: "Monitoring", desc: "Watchlisted parcels, live", icon: Radar, href: "#", tint: "#FFD6C8" },
-        { label: "Accuracy", desc: "Track your ARV engine hit rate", icon: Gauge, href: "#", tint: "#e7faef" },
-        { label: "Integrations", desc: "Connect PerfectProperty to your stack", icon: Plug, href: "#", tint: "#DBEAFE" },
+        { label: "Monitoring", desc: "Watchlisted parcels, live", icon: Radar, href: "#live-feed", tint: "#FFD6C8" },
+        { label: "Accuracy", desc: "Track your ARV engine hit rate", icon: Gauge, href: "#proof", tint: "#e7faef" },
+        { label: "Integrations", desc: "Connect PerfectProperty to your stack", icon: Plug, href: "#integrations", tint: "#DBEAFE" },
       ],
     ],
   },
@@ -79,12 +79,12 @@ const GROUPS: MenuGroup[] = [
     label: "Solutions",
     columns: [
       [
-        { label: "Acquisitions", desc: "From parcel to offer in minutes", icon: Target, href: "#", tint: "#e7faef" },
-        { label: "Disposition", desc: "Deal memos your partners trust", icon: Send, href: "#", tint: "#FFD6C8" },
+        { label: "Acquisitions", desc: "From parcel to offer in minutes", icon: Target, href: "#solutions", tint: "#e7faef" },
+        { label: "Disposition", desc: "Deal memos your partners trust", icon: Send, href: "#solutions", tint: "#FFD6C8" },
       ],
       [
-        { label: "Underwriting", desc: "Versioned ARV, offer, and profit", icon: Calculator, href: "#", tint: "#DBEAFE" },
-        { label: "Capital", desc: "Show lenders the story behind the number", icon: Landmark, href: "#", tint: "#E9D5FF" },
+        { label: "Underwriting", desc: "Versioned ARV, offer, and profit", icon: Calculator, href: "#solutions", tint: "#DBEAFE" },
+        { label: "Capital", desc: "Show lenders the story behind the number", icon: Landmark, href: "#solutions", tint: "#E9D5FF" },
       ],
     ],
   },
@@ -93,13 +93,13 @@ const GROUPS: MenuGroup[] = [
     label: "Resources",
     columns: [
       [
-        { label: "Blog", desc: "The latest in deal flow", icon: Newspaper, href: "#", tint: "#e7faef" },
-        { label: "Knowledge Base", desc: "Unlock your underwriting", icon: BookOpen, href: "#", tint: "#DBEAFE" },
-        { label: "Guides", desc: "Hands-on county playbooks", icon: Map, href: "#", tint: "#FFD6C8" },
+        { label: "Blog", desc: "The latest in deal flow", icon: Newspaper, href: "/resources#blog", tint: "#e7faef" },
+        { label: "Knowledge Base", desc: "Unlock your underwriting", icon: BookOpen, href: "/resources#knowledge-base", tint: "#DBEAFE" },
+        { label: "Guides", desc: "Hands-on county playbooks", icon: Map, href: "/resources#guides", tint: "#FFD6C8" },
       ],
       [
-        { label: "Changelog", desc: "What's new in PerfectProperty", icon: History, href: "#", tint: "#E9D5FF" },
-        { label: "Accuracy Report", desc: "Our ARV hit rate, in public", icon: BarChart3, href: "#", tint: "#e7faef" },
+        { label: "Changelog", desc: "What's new in PerfectProperty", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
+        { label: "Accuracy Report", desc: "Our ARV hit rate, in public", icon: BarChart3, href: "#proof", tint: "#e7faef" },
       ],
     ],
   },
@@ -175,33 +175,39 @@ export function SiteHeader() {
       className="fixed inset-x-0 top-4 z-50"
       style={{ padding: "12px 0" }}
     >
-      <div className="mx-auto max-w-[1304px]">
+      <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
         {/* Inner capsule: the visual nav shell. Transparent at top, white+blur+rounded when scrolled.
             Arcade: transition 0.2s, scroll threshold ~100px, wider container, tighter nav spacing */}
         <header
-          className={`flex items-center justify-between rounded-[16px] px-8 py-3 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          className={`relative flex items-center justify-between rounded-[16px] px-8 py-3 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
               ? "bg-white/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
           }`}
           style={{ willChange: scrolled || open ? "backdrop-filter" : "auto" }}
         >
-        {/* Left: logo + nav — logo gap 44px (arcade), nav items gap 34px (arcade) */}
-        <div className="flex items-center gap-[52px]">
+        {/* Brand is pinned left; desktop nav is centered independently. */}
+        <div className="flex items-center">
           <Link href="/" className="flex items-center gap-3" aria-label="PerfectProperty home">
             <Logo className="text-[20px]" />
           </Link>
+        </div>
 
-          <nav
-            className="hidden lg:flex items-center gap-[34px]"
-            onMouseLeave={() => setOpen(null)}
-          >
+        <nav
+          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[34px] lg:flex"
+          onMouseLeave={() => setOpen(null)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(null);
+          }}
+        >
             {GROUPS.map((g) => (
               <button
                 key={g.key}
                 onMouseEnter={() => setOpen(g.key)}
                 onFocus={() => setOpen(g.key)}
                 onClick={() => setOpen((p) => (p === g.key ? null : g.key))}
+                aria-haspopup="menu"
+                aria-expanded={open === g.key}
                 className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
               >
                 {g.label}
@@ -209,26 +215,25 @@ export function SiteHeader() {
             ))}
             {/* Arcade: Enterprise is a plain link (not dropdown) */}
             <Link
-              href="#"
+              href="/enterprise"
               onMouseEnter={() => setOpen(null)}
               className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
             >
               Enterprise
             </Link>
             <Link
-              href="#"
+              href="#pricing"
               onMouseEnter={() => setOpen(null)}
               className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
             >
               Pricing
             </Link>
-          </nav>
-        </div>
+        </nav>
 
         {/* Right: CTA — single dark button, rounded-[12px] */}
         <div className="hidden lg:flex items-center gap-2">
           <Link
-            href="#"
+            href="#live-feed"
             className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#1E293B]"
           >
             Sign up for free
@@ -250,6 +255,7 @@ export function SiteHeader() {
       <AnimatePresence>
         {open && (
           <motion.div
+            data-testid="desktop-mega-menu"
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
@@ -258,7 +264,7 @@ export function SiteHeader() {
             onMouseEnter={() => setOpen(open)}
             onMouseLeave={() => setOpen(null)}
           >
-            <div className="mx-auto max-w-[1304px] px-8">
+            <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
               <div className="mt-2 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
                 {GROUPS.filter((g) => g.key === open).map((g) => (
                   <MegaPanel key={g.key} group={g} />
@@ -295,6 +301,7 @@ export function SiteHeader() {
                           <Link
                             key={l.label}
                             href={l.href}
+                            onClick={() => setMobileOpen(false)}
                             className="rounded-lg px-3 py-2 text-[14px] text-[#4B5563] hover:bg-[#F3F4F6]"
                           >
                             {l.label}
@@ -304,6 +311,7 @@ export function SiteHeader() {
                           <Link
                             key={l.label}
                             href={l.href}
+                            onClick={() => setMobileOpen(false)}
                             className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-[#F3F4F6]"
                           >
                             <span
@@ -326,20 +334,17 @@ export function SiteHeader() {
                 </AccordionContent>
               </AccordionItem>
             ))}
-            <AccordionItem value="enterprise" className="border-b-0">
-              <AccordionTrigger className="px-3 text-[15px] font-semibold text-[#111827] hover:no-underline">
-                Enterprise
-              </AccordionTrigger>
-            </AccordionItem>
-            <AccordionItem value="pricing" className="border-b-0">
-              <AccordionTrigger className="px-3 text-[15px] font-semibold text-[#111827] hover:no-underline">
-                Pricing
-              </AccordionTrigger>
-            </AccordionItem>
+            <Link href="/enterprise" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+              Enterprise
+            </Link>
+            <Link href="#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+              Pricing
+            </Link>
           </Accordion>
           <div className="mt-2 grid gap-2 border-t border-[#F3F4F6] px-5 py-4">
             <Link
-              href="#"
+              href="#live-feed"
+              onClick={() => setMobileOpen(false)}
               className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
             >
               Sign up for free

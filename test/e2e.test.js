@@ -25,11 +25,11 @@ const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const dataJs = fs.readFileSync(path.join(root, 'data.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
-test('E2E Flow 1: Client initializes with all 20 listings and precomputed deal metrics', () => {
+test('E2E Flow 1: Client initializes with the generated listings and precomputed deal metrics', () => {
   const sandbox = { window: {}, Math };
   vm.createContext(sandbox);
   vm.runInContext(dataJs, sandbox);
-  assert.strictEqual(sandbox.window.LISTINGS.length, 20);
+  assert.ok(sandbox.window.LISTINGS.length >= 4);
   assert.strictEqual(Object.keys(sandbox.window.SOURCES).length, 11);
   sandbox.window.LISTINGS.forEach(l => {
     assert.ok(l.dealScore >= 1 && l.dealScore <= 99);

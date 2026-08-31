@@ -52,7 +52,7 @@ const COLS: Col[] = [
 
 export function AiComparison() {
   return (
-    <section className="pt-24 pb-28 sm:pt-24 sm:pb-28">
+    <section id="pricing" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">

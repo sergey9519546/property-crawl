@@ -82,17 +82,22 @@ async function runHardening() {
 
   await test('Watchlist: Rapid save and remove cycle maintains database consistency', async () => {
     const userId = 'hostile_tester_99';
-    await db.saveDeal(userId, 'OH-CUY-10231');
-    await db.saveDeal(userId, 'OH-FRA-33120');
+    const available = await db.getListings({ limit: 2 });
+    assert.strictEqual(available.listings.length, 2);
+    const firstId = available.listings[0].id;
+    const secondId = available.listings[1].id;
+
+    await db.saveDeal(userId, firstId);
+    await db.saveDeal(userId, secondId);
     let saved = await db.getSavedDeals(userId);
     assert.strictEqual(saved.length, 2);
 
-    await db.removeSavedDeal(userId, 'OH-CUY-10231');
+    await db.removeSavedDeal(userId, firstId);
     saved = await db.getSavedDeals(userId);
     assert.strictEqual(saved.length, 1);
-    assert.strictEqual(saved[0].id, 'OH-FRA-33120');
+    assert.strictEqual(saved[0].id, secondId);
 
-    await db.removeSavedDeal(userId, 'OH-FRA-33120');
+    await db.removeSavedDeal(userId, secondId);
     saved = await db.getSavedDeals(userId);
     assert.strictEqual(saved.length, 0);
   });

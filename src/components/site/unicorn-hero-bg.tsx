@@ -28,16 +28,28 @@ declare global {
 
 export function UnicornHeroBg() {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [loaded, setLoaded] = React.useState(false);
 
   // Load the UMD script exactly like arcade does (inline script that appends to head)
   React.useEffect(() => {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    if (!gl) return;
+
+    const rendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = rendererInfo
+      ? String(gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL) || "")
+      : "";
+    if (/swiftshader|software/i.test(renderer)) return;
+
     if (window.UnicornStudio) {
       if (!window.UnicornStudio.isInitialized) {
-        window.UnicornStudio.init();
-        window.UnicornStudio.isInitialized = true;
+        try {
+          window.UnicornStudio.init();
+          window.UnicornStudio.isInitialized = true;
+        } catch {
+          return;
+        }
       }
-      setLoaded(true);
       return;
     }
 
@@ -46,9 +58,12 @@ export function UnicornHeroBg() {
     script.async = true;
     script.onload = () => {
       if (window.UnicornStudio && !window.UnicornStudio.isInitialized) {
-        window.UnicornStudio.init();
-        window.UnicornStudio.isInitialized = true;
-        setLoaded(true);
+        try {
+          window.UnicornStudio.init();
+          window.UnicornStudio.isInitialized = true;
+        } catch {
+          // The local hero image remains visible when shader initialization fails.
+        }
       }
     };
     (document.head || document.body).appendChild(script);
@@ -62,7 +77,7 @@ export function UnicornHeroBg() {
   return (
     <div
       ref={containerRef}
-      className="unicorn-hero-bg absolute inset-0"
+      className="unicorn-hero-bg absolute inset-0 z-[1]"
       data-us-project-src="/arcade-us-project.json"
       data-us-dpi="1.5"
       data-us-scale="1"

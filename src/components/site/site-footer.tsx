@@ -1,24 +1,9 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { Logo } from "./logo";
 import { ArrowRight } from "lucide-react";
-
-function TwitterIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-    </svg>
-  );
-}
-
-function LinkedinIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.34a1.65 1.65 0 0 0-1.66 1.66 1.66 1.66 0 0 0 1.66 1.66 1.65 1.65 0 0 0 1.65-1.66 1.65 1.65 0 0 0-1.65-1.66" />
-    </svg>
-  );
-}
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -32,110 +17,133 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Deal Stacks", href: "#" },
-      { label: "Shadow Mode", href: "#" },
-      { label: "Prophecy", href: "#" },
-      { label: "Monitoring", href: "#" },
-      { label: "Accuracy", href: "#" },
-      { label: "Integrations", href: "#" },
+      { label: "Deal Stacks", href: "#live-feed" },
+      { label: "Shadow Mode", href: "#product" },
+      { label: "Prophecy", href: "#product" },
+      { label: "Monitoring", href: "#live-feed" },
+      { label: "Accuracy", href: "#proof" },
+      { label: "Integrations", href: "#integrations" },
     ],
   },
   {
     title: "Solutions",
     links: [
-      { label: "Acquisitions", href: "#" },
-      { label: "Disposition", href: "#" },
-      { label: "Underwriting", href: "#" },
-      { label: "Capital", href: "#" },
+      { label: "Acquisitions", href: "#solutions" },
+      { label: "Disposition", href: "#solutions" },
+      { label: "Underwriting", href: "#solutions" },
+      { label: "Capital", href: "#solutions" },
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Blog", href: "#" },
-      { label: "Knowledge Base", href: "#" },
-      { label: "Guides", href: "#" },
-      { label: "Changelog", href: "#" },
-      { label: "Accuracy Report", href: "#" },
+      { label: "Blog", href: "/resources#blog" },
+      { label: "Knowledge Base", href: "/resources#knowledge-base" },
+      { label: "Guides", href: "/resources#guides" },
+      { label: "Changelog", href: "/resources#changelog" },
+      { label: "Accuracy Report", href: "#proof" },
     ],
   },
   {
     title: "Company",
     links: [
-      { label: "About", href: "#" },
-      { label: "Customers", href: "#" },
-      { label: "Careers", href: "#" },
-      { label: "Contact", href: "#" },
+      { label: "About", href: "/about" },
+      { label: "Customers", href: "#customers" },
+      { label: "Careers", href: "/contact#careers" },
+      { label: "Contact", href: "/contact" },
     ],
   },
 ];
 
 export function SiteFooter() {
-  return (
-    <footer className="relative isolate border-t border-[#E5E7EB] bg-white overflow-hidden">
-      {/* Giant watermark behind footer content — subtle luxury */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 select-none text-center font-black uppercase leading-none tracking-[-0.04em] text-[#111827] opacity-[0.035]"
-        style={{
-          fontSize: "clamp(80px, 18vw, 220px)",
-          transform: "translateY(15%)",
-        }}
-      >
-        PERFECTPROPERTY
-      </div>
+  const [email, setEmail] = React.useState("");
+  const [newsletterStatus, setNewsletterStatus] = React.useState("");
 
-      {/* Newsletter band */}
-      <div className="border-b border-[#F3F4F6] bg-[#F5F6F7]">
-        <div className="mx-auto flex max-w-[1080px] flex-col items-start justify-between gap-4 px-5 py-8 sm:flex-row sm:items-center lg:px-8">
-          <div>
-            <p className="text-[15px] font-semibold text-[#111827]">
+  const handleNewsletterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    window.localStorage.setItem("perfectproperty:newsletter-preview", normalizedEmail);
+    setNewsletterStatus(
+      "Saved on this device. Email delivery will be connected before launch.",
+    );
+  };
+
+  return (
+    <footer id="resources" className="relative isolate overflow-hidden bg-[#EEF2F7]">
+      <div id="contact" className="bg-[#E7EDF5]">
+        <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] lg:items-center lg:gap-20 lg:py-16">
+          <div className="max-w-[600px]">
+            <p className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-[#111827] sm:text-[28px]">
               Subscribe to the PerfectProperty accuracy report
             </p>
-            <p className="text-[13px] text-[#6B7280]">
+            <p className="mt-2 max-w-[520px] text-[15px] leading-6 text-[#5B6472]">
               Monthly updates on valuation spreads, model releases, and new scrapers.
             </p>
           </div>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              alert("Thank you for subscribing!");
-            }}
-            className="flex w-full max-w-[360px] items-center gap-2"
+            onSubmit={handleNewsletterSubmit}
+            className="w-full"
           >
-            <input
-              type="email"
-              required
-              placeholder="you@company.com"
-              className="h-10 flex-1 rounded-[12px] border border-[#D1D5DB] bg-white px-3.5 text-[14px] text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/20"
-            />
-            <button
-              type="submit"
-              className="inline-flex h-10 shrink-0 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[13px] font-semibold text-white transition-colors hover:bg-[#1E293B]"
-              style={{ boxShadow: "0 0 0 1px rgb(15,23,42)" }}
-            >
-              Subscribe
-              <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-            </button>
+            <label htmlFor="footer-email" className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#697386]">
+              Work email
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="footer-email"
+                type="email"
+                required
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setNewsletterStatus("");
+                }}
+                aria-describedby="newsletter-status"
+                placeholder="you@company.com"
+                className="h-12 min-w-0 flex-1 rounded-[12px] border border-[#CBD5E1] bg-white px-4 text-[14px] text-[#111827] shadow-sm placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/20"
+              />
+              <button
+                type="submit"
+                className="inline-flex h-12 shrink-0 items-center justify-center rounded-[12px] bg-[#0F172A] px-5 text-[14px] font-semibold text-white transition-colors hover:bg-[#1E293B] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F172A]"
+              >
+                Subscribe
+                <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <p id="newsletter-status" aria-live="polite" className="mt-2 min-h-5 text-[12px] font-medium text-[#526071]">
+              {newsletterStatus}
+            </p>
           </form>
         </div>
       </div>
 
       {/* Link columns */}
-      <div className="mx-auto max-w-[1080px] px-5 py-14 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4 lg:grid-cols-5">
+      <div className="mx-auto max-w-[1240px] px-6 pb-10 pt-16 sm:px-8 lg:pb-12 lg:pt-20">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-4 lg:grid-cols-[1.6fr_repeat(4,1fr)] lg:gap-x-12">
           {/* Brand column */}
           <div className="col-span-2 lg:col-span-1">
             <Link href="/" className="flex items-center" aria-label="PerfectProperty home">
               <Logo className="text-[16px]" />
             </Link>
-            <div className="mt-4 flex items-center gap-3">
-              {[TwitterIcon, LinkedinIcon, GithubIcon].map((Icon, i) => (
+            <p className="mt-4 max-w-[230px] text-[14px] leading-6 text-[#647084]">
+              Find, compare, and underwrite distressed property opportunities in one focused workspace.
+            </p>
+            <div className="mt-5 flex items-center gap-3">
+              {[
+                {
+                  label: "PerfectProperty on GitHub",
+                  href: "https://github.com/sergey9519546/property-crawl",
+                  Icon: GithubIcon,
+                },
+              ].map(({ Icon, href, label }) => (
                 <a
-                  key={i}
-                  href="#"
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] transition-colors hover:bg-[#F5F6F7] hover:text-[#111827]"
-                  aria-label="Social link"
+                  aria-label={label}
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -165,26 +173,23 @@ export function SiteFooter() {
         </div>
 
         {/* Legal row */}
-        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-[#F3F4F6] pt-6 sm:flex-row sm:items-center">
+        <div className="mt-16 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <p className="text-[13px] text-[#9CA3AF]">
             &copy; {new Date().getFullYear()} PerfectProperty. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
-            <Link href="#" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/terms" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
               Terms
             </Link>
-            <Link href="#" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/privacy" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
               Privacy
             </Link>
-            <Link href="#" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/security" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
               Security
             </Link>
           </div>
         </div>
       </div>
-
-      {/* Bottom padding to account for the absolute wordmark behind */}
-      <div className="relative z-10 h-8" />
     </footer>
   );
 }

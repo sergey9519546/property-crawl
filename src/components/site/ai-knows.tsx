@@ -1,11 +1,15 @@
 "use client";
 
+import * as React from "react";
 import { GsapReveal } from "./gsap-reveal";
 import { Play } from "lucide-react";
+import { VideoModal } from "./video-modal";
 
 const TAGS = ["ARVs", "Visuals", "Deal Stacks"];
 
 export function AiKnows() {
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+
   return (
     <section className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
@@ -39,6 +43,7 @@ export function AiKnows() {
 
               <button
                 aria-label="Play preview"
+                onClick={() => setPreviewOpen(true)}
                 className="group relative z-10 inline-flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#111827] shadow-[0_8px_30px_rgba(0,0,0,0.18)] transition-transform duration-300 hover:scale-105"
               >
                 <span className="absolute inset-0 rounded-full bg-white/60 blur-md" />
@@ -75,6 +80,7 @@ export function AiKnows() {
           </div>
         </GsapReveal>
       </div>
+      <VideoModal isOpen={previewOpen} onClose={() => setPreviewOpen(false)} />
     </section>
   );
 }

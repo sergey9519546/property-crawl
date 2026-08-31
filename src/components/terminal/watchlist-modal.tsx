@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { PropertyListing, SOURCES } from "./property-data";
 import { X, Bookmark, FileText, Copy, Trash2 } from "lucide-react";
 
@@ -12,6 +12,20 @@ interface WatchlistProps {
 }
 
 export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSelectListing }: WatchlistProps) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const exportCsv = () => {
@@ -48,13 +62,23 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      className="fixed inset-0 z-50 overflow-hidden flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="watchlist-title"
+        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] overflow-hidden flex flex-col max-h-[85vh]"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
             <Bookmark className="w-5 h-5 text-[#16A34A] fill-[#16A34A]" />
-            <h3 className="text-lg font-bold text-[#111827]">Saved Watchlist ({savedListings.length})</h3>
+            <h3 id="watchlist-title" className="text-lg font-bold text-[#111827]">Saved Watchlist ({savedListings.length})</h3>
           </div>
           <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F5F6F7]">
             <X className="w-5 h-5" />
@@ -98,9 +122,10 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 key={l.id}
                 className="flex items-center justify-between p-4 rounded-xl border border-[#E5E7EB] hover:border-[#0F172A] bg-white transition group"
               >
-                <div
+                <button
+                  type="button"
                   onClick={() => { onSelectListing(l); onClose(); }}
-                  className="flex items-center gap-4 cursor-pointer flex-1 min-w-0"
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left"
                 >
                   <img src={l.photo} alt="" className="w-14 h-14 rounded-lg object-cover" />
                   <div className="min-w-0">
@@ -109,7 +134,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                       ${l.openingBid.toLocaleString()} · Sale: {l.saleDate}
                     </p>
                   </div>
-                </div>
+                </button>
 
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#16A34A]">
@@ -117,6 +142,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   </span>
                   <button
                     onClick={() => onRemove(l.id)}
+                    aria-label={`Remove ${l.address} from watchlist`}
                     className="p-1.5 text-[#9CA3AF] hover:text-[#B91C1C] transition"
                     title="Remove from watchlist"
                   >

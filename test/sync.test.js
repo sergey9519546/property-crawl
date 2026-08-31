@@ -124,12 +124,28 @@ test('SOURCES have the same label / tier / color / note / websiteUrl per key', (
 // v0's 20, because v2 is intentionally a curated marketing demo.
 // We only flag obvious cross-checks (e.g. count > 0).
 // -------------------------------------------------------------
-test('v0 dashboard has 20 listings (production set)', () => {
+test('v0 dashboard has a non-empty generated listing set', () => {
   const dataSrc = fs.readFileSync(dataJsPath, 'utf8');
   const sandbox = { window: {}, Math };
   vm.createContext(sandbox);
   vm.runInContext(dataSrc, sandbox);
-  assert.strictEqual(sandbox.window.LISTINGS.length, 20, 'v0 dashboard should have 20 listings');
+  assert.ok(sandbox.window.LISTINGS.length >= 4, 'v0 dashboard should retain the generated scraper fixtures');
+});
+
+test('generated listings never expose a source homepage as an exact record URL', () => {
+  const dataSrc = fs.readFileSync(dataJsPath, 'utf8');
+  const sandbox = { window: {}, Math };
+  vm.createContext(sandbox);
+  vm.runInContext(dataSrc, sandbox);
+  for (const listing of sandbox.window.LISTINGS) {
+    if (!listing.sourceUrl) continue;
+    const homepage = sandbox.window.SOURCES[listing.source]?.websiteUrl;
+    assert.notStrictEqual(
+      listing.sourceUrl.replace(/\/+$/, ''),
+      homepage?.replace(/\/+$/, ''),
+      `${listing.id} points at a generic source homepage`,
+    );
+  }
 });
 
 test('v2 marketing demo has at least 3 listings (curated subset)', () => {

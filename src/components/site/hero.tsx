@@ -1,13 +1,52 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { ArrowUp, Undo2, LayoutGrid, MousePointerClick } from "lucide-react";
+import { ArrowUp, Building2, Flag, Globe2, House, Map as MapIcon, MapPin, Undo2 } from "lucide-react";
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
 
-const H1_WORDS = ["Every", "distressed", "deal", "in", "America,", "in", "one", "feed."];
+const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
+
+type MarketSuggestion = {
+  id: string;
+  label: string;
+  query: string;
+  kind: "address" | "city" | "county" | "state" | "area" | "country";
+  description: string;
+};
+
+type ListingMarket = {
+  id: string;
+  address: string;
+  city: string;
+  county: string;
+  state: string;
+  zip: string;
+};
+
+const STATE_NAMES: Record<string, string> = {
+  AZ: "Arizona",
+  FL: "Florida",
+  GA: "Georgia",
+  IL: "Illinois",
+  NJ: "New Jersey",
+  NV: "Nevada",
+  OH: "Ohio",
+  PA: "Pennsylvania",
+  TX: "Texas",
+};
+
+const KIND_ORDER: MarketSuggestion["kind"][] = [
+  "city",
+  "county",
+  "state",
+  "area",
+  "address",
+  "country",
+];
 
 /**
  * Hero — Unicorn Studio WebGL shader in a rounded panel (arcade structure).
@@ -15,8 +54,20 @@ const H1_WORDS = ["Every", "distressed", "deal", "in", "America,", "in", "one", 
  * Toggle and buttons use solid/opaque styling (NOT pill, NOT glass).
  */
 export function Hero() {
-  const [mode, setMode] = React.useState<"deals" | "shadow">("deals");
   const [url, setUrl] = React.useState("");
+  const [status, setStatus] = React.useState("");
+  const [selectedMarket, setSelectedMarket] = React.useState<MarketSuggestion | null>(null);
+  const [suggestions, setSuggestions] = React.useState<MarketSuggestion[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = React.useState(false);
+  const [activeSuggestion, setActiveSuggestion] = React.useState(-1);
+  const blurTimerRef = React.useRef<number | null>(null);
+  const deferredUrl = React.useDeferredValue(url.trim());
+
+  React.useEffect(() => {
+    return () => {
+      if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+    };
+  }, []);
 
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -32,14 +83,131 @@ export function Hero() {
     mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
   }, [mouseX, mouseY]);
 
-  const placeholder =
-    mode === "deals"
-      ? "https://yourcountyassessor.com/parcel"
-      : "Paste a parcel address or APN…";
+  const placeholder = "City, county, state, country, ZIP, or address";
+
+  React.useEffect(() => {
+    if (deferredUrl.length < 2 || /^https?:\/\//i.test(deferredUrl)) {
+      setSuggestions([]);
+      setSuggestionsOpen(false);
+      return;
+    }
+
+    if (selectedMarket?.label === deferredUrl) {
+      setSuggestionsOpen(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const normalizedQuery = deferredUrl.toLowerCase();
+
+    fetch("/api/listings", { cache: "no-store", signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!payload?.listings || controller.signal.aborted) return;
+        const markets = new Map<string, MarketSuggestion>();
+        markets.set("country:US", {
+          id: "country:US",
+          label: "United States",
+          query: "",
+          kind: "country",
+          description: "Country coverage",
+        });
+        for (const listing of payload.listings as ListingMarket[]) {
+          const suggestionsForListing: MarketSuggestion[] = [
+            {
+              id: `address:${listing.id}`,
+              label: listing.address,
+              query: listing.city,
+              kind: "address",
+              description: `Address nearby ${listing.city}`,
+            },
+            {
+              id: `city:${listing.city}:${listing.state}`,
+              label: `${listing.city}, ${listing.state}`,
+              query: listing.city,
+              kind: "city",
+              description: "City market",
+            },
+            {
+              id: `county:${listing.county}:${listing.state}`,
+              label: `${listing.county} County, ${listing.state}`,
+              query: listing.county,
+              kind: "county",
+              description: "County market",
+            },
+            {
+              id: `state:${listing.state}`,
+              label: STATE_NAMES[listing.state] || listing.state,
+              query: listing.state,
+              kind: "state",
+              description: "State",
+            },
+            {
+              id: `area:${listing.zip}`,
+              label: `${listing.zip} — ${listing.city} area`,
+              query: listing.zip,
+              kind: "area",
+              description: "ZIP area",
+            },
+          ];
+          for (const suggestion of suggestionsForListing) {
+            markets.set(suggestion.id, suggestion);
+          }
+        }
+        const matches = Array.from(markets.values())
+          .filter((market) => market.label.toLowerCase().includes(normalizedQuery))
+          .sort((a, b) => {
+            const aStarts = a.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
+            const bStarts = b.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
+            return aStarts - bStarts || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label);
+          })
+          .slice(0, 6);
+        setSuggestions(matches);
+        setSuggestionsOpen(matches.length > 0);
+        setActiveSuggestion(-1);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setSuggestions([]);
+          setSuggestionsOpen(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [deferredUrl, selectedMarket]);
+
+  const selectSuggestion = (suggestion: MarketSuggestion) => {
+    setUrl(suggestion.label);
+    setSelectedMarket(suggestion);
+    setSuggestionsOpen(false);
+    setActiveSuggestion(-1);
+    setStatus(`${suggestion.label} selected.`);
+  };
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const label = url.trim();
+    const query = selectedMarket?.label === label ? selectedMarket.query : label;
+
+    if (!label) {
+      setStatus("Enter a city, county, state, country, ZIP, or address first.");
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("perfectproperty:search", {
+        detail: { query, scope: selectedMarket?.kind || "search" },
+      }),
+    );
+    window.location.hash = "live-feed";
+    setSuggestionsOpen(false);
+    setStatus(`Opened the live feed for ${label}.`);
+  };
 
   return (
     <section
-      className="relative isolate w-full overflow-visible pt-[120px] pb-[120px] sm:pt-[192px] sm:pb-[184px]"
+      id="hero"
+      className="relative isolate w-full overflow-visible pt-[120px] pb-[340px] sm:pt-[192px] sm:pb-[460px] lg:pb-[540px] xl:min-h-[820px] xl:pb-[184px]"
       
       onMouseMove={onMouseMove}
     >
@@ -48,45 +216,58 @@ export function Hero() {
         aria-hidden
         className="absolute inset-4 z-0 overflow-hidden rounded-2xl bg-[#F5F6F7]"
       >
-        {/* Unicorn Studio WebGL flow-field shader (base texture + Perlin noise) */}
-        <ErrorBoundary>
-          <UnicornHeroBg />
-        </ErrorBoundary>
         {/* Fallback static image while shader loads */}
-        <motion.div
+        <div
           aria-hidden
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 0 }}
-          transition={{ duration: 1.5, ease: "easeOut" }}
-          className="absolute inset-0 bg-cover bg-no-repeat"
+          className="absolute inset-0 z-0 bg-cover bg-no-repeat"
           style={{
             backgroundImage: "url(/hero-blob.jpg)",
             backgroundPosition: "center bottom",
           }}
         />
+        {/* Unicorn Studio WebGL flow-field shader (base texture + Perlin noise) */}
+        <ErrorBoundary>
+          <UnicornHeroBg />
+        </ErrorBoundary>
+
+        {/* A local light field preserves the graphite drawing while the shader stays alive. */}
+        <div aria-hidden className="hero-property-backlight absolute inset-0 z-[2]" />
+
+        {/* Blueprint layer: the supplied house resolves directly through the shader. */}
+        <div
+          data-testid="hero-property-blueprint"
+          className="hero-property-art absolute inset-0 z-[3]"
+        >
+          <Image
+            src="/hero-property-blueprint.png"
+            alt=""
+            width={1672}
+            height={755}
+            preload
+            sizes="(max-width: 639px) 175vw, (max-width: 1279px) 120vw, (max-width: 1672px) 100vw, 1672px"
+            className="absolute bottom-0 right-0 h-auto max-w-none"
+          />
+        </div>
       </div>
 
       {/* Content */}
       <motion.div
-        className="relative z-10 mx-auto flex max-w-[1080px] flex-col items-center px-5 text-center"
+        className="relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12 xl:items-start xl:px-[7.5vw] xl:text-left"
         style={{ x: contentX, y: contentY }}
       >
         <motion.h1
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.6, ease: EASE_OUT }}
           className="text-[32px] font-semibold leading-[36px] tracking-[-0.02em] text-[#111827] sm:text-[48px] sm:leading-[52px]"
-          style={{ margin: 0, maxWidth: 600 }}
+          style={{ margin: 0, maxWidth: 620 }}
         >
-          <span className="sr-only">Every distressed deal in America, in one feed.</span>
-          <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em]">
+          <span className="sr-only">Find the deal before everyone else.</span>
+          <span aria-hidden className="flex flex-wrap justify-center gap-x-[0.25em] xl:justify-start">
             {H1_WORDS.map((w, i) => (
               <motion.span
                 key={i}
                 className="inline-block"
-                initial={{ opacity: 0, y: -16 }}
+                initial={{ opacity: 1, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 1, delay: 0.6 + i * 0.06, ease: EASE_OUT }}
+                transition={{ duration: 0.45, delay: 0.04 + i * 0.035, ease: EASE_OUT }}
               >
                 {w}
               </motion.span>
@@ -95,78 +276,84 @@ export function Hero() {
         </motion.h1>
 
         <motion.p
-          initial={{ opacity: 0, y: -16 }}
+          initial={{ opacity: 1, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.9, ease: EASE_OUT }}
-          className="mt-4 sm:mt-[28px] max-w-[620px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)]"
+          transition={{ duration: 0.45, delay: 0.15, ease: EASE_OUT }}
+          className="mt-4 max-w-[700px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px] xl:max-w-[540px]"
         >
-          11 federal, GSE, and county sources &mdash; HUD, Fannie, Freddie, VA,
-          USDA, IRS, Treasury, sheriff sales, and more. AI reads the legal
-          notice, scores the deal, and tells you what the catch is &mdash; before
-          you put up the deposit.
+          Search any market or address. See the best opportunities, the catch,
+          and your next move &mdash; before you bid.
         </motion.p>
-
-        {/* Toggle — solid opaque, rounded-2xl (NOT pill, NOT glass) */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 1.0, ease: EASE_OUT }}
-          className="mt-8 sm:mt-20 inline-flex items-center gap-1 rounded-2xl p-1"
-          style={{ background: "rgba(17,24,39,0.14)" }}
-        >
-          {(["deals", "shadow"] as const).map((m) => {
-            const Icon = m === "deals" ? LayoutGrid : MousePointerClick;
-            return (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`relative inline-flex h-9 items-center justify-center gap-1.5 px-5 text-[14px] font-medium capitalize transition-colors ${
-                  mode === m ? "text-[#111827]" : "text-white/90 hover:text-white"
-                }`}
-                style={{ minWidth: 80 }}
-              >
-                {mode === m && (
-                  <motion.span
-                    layoutId="hero-toggle"
-                    className="absolute inset-0 rounded-xl bg-white shadow-[0_1px_2px_rgba(17,24,39,0.06),0_1px_3px_rgba(17,24,39,0.05)]"
-                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  />
-                )}
-                <Icon className="relative z-10 h-3.5 w-3.5" strokeWidth={1.75} />
-                <span className="relative z-10">{m}</span>
-              </button>
-            );
-          })}
-        </motion.div>
 
         {/* Frosted glass URL input — glass-input token */}
         <motion.form
-          initial={{ opacity: 0, y: -16 }}
+          initial={{ opacity: 1, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 1.1, ease: EASE_OUT }}
-          onSubmit={(e) => e.preventDefault()}
-          className="mt-2 flex h-[68px] items-center rounded-3xl px-6"
+          transition={{ duration: 0.45, delay: 0.24, ease: EASE_OUT }}
+          onSubmit={handleSubmit}
+          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16 xl:self-start"
           style={{
             width: "100%",
-            maxWidth: "min(444px, calc(100vw - 40px))",
+            maxWidth: "min(620px, calc(100vw - 40px))",
             background: "rgba(255,255,255,0.85)",
             backdropFilter: "blur(20px) saturate(180%)",
             WebkitBackdropFilter: "blur(20px) saturate(180%)",
             border: "1px solid rgba(255,255,255,0.8)",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.7)",
             willChange: "backdrop-filter",
           }}
         >
           <input
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setSelectedMarket(null);
+              setStatus("");
+            }}
+            onFocus={() => {
+              if (blurTimerRef.current !== null) {
+                window.clearTimeout(blurTimerRef.current);
+                blurTimerRef.current = null;
+              }
+              setSuggestionsOpen(suggestions.length > 0);
+            }}
+            onBlur={() => {
+              if (blurTimerRef.current !== null) window.clearTimeout(blurTimerRef.current);
+              blurTimerRef.current = window.setTimeout(() => {
+                setSuggestionsOpen(false);
+                blurTimerRef.current = null;
+              }, 120);
+            }}
+            onKeyDown={(event) => {
+              if (!suggestionsOpen || suggestions.length === 0) return;
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setActiveSuggestion((current) => Math.min(current + 1, suggestions.length - 1));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setActiveSuggestion((current) => Math.max(current - 1, 0));
+              } else if (event.key === "Enter" && activeSuggestion >= 0) {
+                event.preventDefault();
+                selectSuggestion(suggestions[activeSuggestion]);
+              } else if (event.key === "Escape") {
+                setSuggestionsOpen(false);
+              }
+            }}
             type="text"
+            role="combobox"
+            aria-label="Market or address"
+            aria-autocomplete="list"
+            aria-controls="hero-address-suggestions"
+            aria-expanded={suggestionsOpen}
+            aria-activedescendant={
+              activeSuggestion >= 0 ? `hero-address-suggestion-${activeSuggestion}` : undefined
+            }
             placeholder={placeholder}
+            autoComplete="off"
             className="min-w-0 flex-1 bg-transparent text-[18px] leading-none text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none"
           />
           <button
             type="submit"
-            aria-label="Generate deal"
+            aria-label="Search market"
             className="inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B]"
             style={{
               boxShadow: "0 0 0 1px rgb(15,23,42), 0 4px 8px rgba(15,23,42,0.18)",
@@ -174,18 +361,65 @@ export function Hero() {
           >
             <ArrowUp className="h-[19px] w-[19px]" />
           </button>
+
+          {suggestionsOpen ? (
+            <ul
+              id="hero-address-suggestions"
+              role="listbox"
+              aria-label="Market and address suggestions"
+              className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-2xl border border-white/80 bg-white/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.2)] backdrop-blur-xl"
+            >
+              {suggestions.map((suggestion, index) => (
+                <li
+                  id={`hero-address-suggestion-${index}`}
+                  key={suggestion.id}
+                  role="option"
+                  aria-selected={activeSuggestion === index}
+                  onClick={() => selectSuggestion(suggestion)}
+                  className={`flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
+                    activeSuggestion === index ? "bg-[#E8EEFF]" : "hover:bg-[#F3F4F6]"
+                  }`}
+                >
+                  {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "city" ? <Building2 className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "county" ? <MapIcon className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "state" ? <Flag className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "area" ? <MapPin className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "country" ? <Globe2 className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  <span className="min-w-0 flex-1">{suggestion.label}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7B8493]">
+                    {suggestion.description}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </motion.form>
 
         {/* Try with your parcel */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 1.25, ease: EASE_OUT }}
-          className="mt-[30px] flex items-center gap-1.5 text-[15px] font-medium text-[#FFFFFF]"
+        <motion.button
+          type="button"
+          onClick={() => {
+            const sampleMarket: MarketSuggestion = {
+              id: "city:Cleveland:OH",
+              label: "Cleveland, OH",
+              query: "Cleveland",
+              kind: "city",
+              description: "City market",
+            };
+            setUrl(sampleMarket.label);
+            setSelectedMarket(sampleMarket);
+            setStatus("Cleveland, OH selected. Select Search market to open the live feed.");
+          }}
+          initial={{ opacity: 1, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
+          className="mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:self-start"
         >
           <Undo2 className="h-4 w-4 text-[#0F172A]" />
-          Try with your parcel!
-        </motion.div>
+          Try the Cleveland market
+        </motion.button>
+        <p className="sr-only" aria-live="polite">{status}</p>
       </motion.div>
     </section>
   );

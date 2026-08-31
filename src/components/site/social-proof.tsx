@@ -18,16 +18,15 @@ const LOGOS: { name: string; style: "bold" | "mono" | "light" | "boxed" }[] = [
 
 export function SocialProof() {
   return (
-    <section className="pt-12 pb-16">
+    <section id="proof" className="pt-12 pb-16">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="text-center">
-          {/* Arcade: tiny caption + "30k companies" in a small bordered chip */}
           <p className="text-[16px] font-medium text-[#4B5563]">
-            More than{" "}
+            Built for{" "}
             <span className="inline-flex items-center rounded-md border border-[rgba(17,24,39,0.10)] bg-white px-1.5 py-0.5 text-[14px] font-semibold text-[#111827]">
-              2k flippers
+              faster triage
             </span>{" "}
-            choose PerfectProperty to find better deals
+            across public property and market data sources
           </p>
         </GsapReveal>
       </div>

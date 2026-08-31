@@ -1,26 +1,99 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { INITIAL_LISTINGS, PropertyListing, SOURCES } from "./property-data";
 import { PropertyDrawer } from "./property-drawer";
 import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
-import { Search, Bookmark, Calendar, Sparkles, LayoutGrid, ArrowRight } from "lucide-react";
+import { MarketMap } from "./market-map";
+import { Search, Bookmark, Calendar, Sparkles, LayoutGrid, ArrowRight, Map as MapIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const STATE_LABELS: Record<string, string> = {
+  AZ: "Arizona",
+  FL: "Florida",
+  GA: "Georgia",
+  IL: "Illinois",
+  NJ: "New Jersey",
+  NV: "Nevada",
+  OH: "Ohio",
+  PA: "Pennsylvania",
+  TX: "Texas",
+};
 
 export function InteractiveTerminal() {
   const [listings, setListings] = useState<PropertyListing[]>(INITIAL_LISTINGS);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set(["OH-CUY-10231", "OH-FRA-20419"]));
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [watchlistHydrated, setWatchlistHydrated] = useState(false);
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"grid" | "parser">("grid");
+  const [activeView, setActiveView] = useState<"grid" | "map" | "parser">("grid");
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
   const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date">("score");
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "done">("idle");
+  const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
+
+  const loadListings = useCallback(async (refresh = false) => {
+    setSyncStatus(refresh ? "refreshing" : "loading");
+    try {
+      const response = await fetch("/api/listings", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !Array.isArray(payload?.listings)) {
+        throw new Error(payload?.error || `Listings request failed with HTTP ${response.status}`);
+      }
+
+      setListings(payload.listings);
+      setSyncCount(payload.listings.length);
+      setSyncStatus("ready");
+    } catch {
+      setSyncStatus("error");
+      setSyncCount(INITIAL_LISTINGS.length);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadListings();
+  }, [loadListings]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("perfectproperty:saved-listings");
+      const ids = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(ids)) {
+        setSavedIds(new Set(ids.filter((id): id is string => typeof id === "string")));
+      }
+    } catch {
+      setSavedIds(new Set());
+    } finally {
+      setWatchlistHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!watchlistHydrated) return;
+    window.localStorage.setItem(
+      "perfectproperty:saved-listings",
+      JSON.stringify(Array.from(savedIds)),
+    );
+  }, [savedIds, watchlistHydrated]);
+
+  useEffect(() => {
+    const handleHeroSearch = (event: Event) => {
+      const detail = (event as CustomEvent<{ query?: string }>).detail;
+      if (typeof detail?.query !== "string") return;
+      const query = detail.query.trim();
+
+      setSearchQuery(query);
+      setActiveView("grid");
+    };
+
+    window.addEventListener("perfectproperty:search", handleHeroSearch);
+    return () => window.removeEventListener("perfectproperty:search", handleHeroSearch);
+  }, []);
 
   const toggleSave = (id: string) => {
     setSavedIds((prev) => {
@@ -43,7 +116,7 @@ export function InteractiveTerminal() {
     if (selectedSource !== "all" && l.source !== selectedSource) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const hay = [l.address, l.city, l.county, l.state, l.plaintiff, l.defendant, l.attorney].join(" ").toLowerCase();
+      const hay = [l.address, l.city, l.county, l.state, l.zip, l.plaintiff, l.defendant, l.attorney].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -55,9 +128,12 @@ export function InteractiveTerminal() {
   else filtered.sort((a, b) => b.dealScore - a.dealScore);
 
   const savedListings = listings.filter((l) => savedIds.has(l.id));
+  const availableStates = Array.from(
+    new Set(listings.map((listing) => listing.state).filter(Boolean)),
+  ).sort((a, b) => (STATE_LABELS[a] ?? a).localeCompare(STATE_LABELS[b] ?? b));
 
   return (
-    <section id="terminal-section" className="py-20 bg-[#F5F6F7] border-t border-[#E5E7EB]">
+    <section id="live-feed" className="py-20 bg-[#F5F6F7] border-t border-[#E5E7EB]" aria-label="Live property feed">
       <div className="mx-auto max-w-[1200px] px-4">
         {/* Terminal Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
@@ -71,6 +147,7 @@ export function InteractiveTerminal() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveView("grid")}
+              aria-pressed={activeView === "grid"}
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "grid"
@@ -83,7 +160,22 @@ export function InteractiveTerminal() {
             </button>
 
             <button
+              onClick={() => setActiveView("map")}
+              aria-pressed={activeView === "map"}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
+                activeView === "map"
+                  ? "bg-[#0F172A] text-white shadow-sm"
+                  : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-[#F5F6F7]"
+              )}
+            >
+              <MapIcon className="w-4 h-4" />
+              <span>Map ({filtered.length})</span>
+            </button>
+
+            <button
               onClick={() => setActiveView("parser")}
+              aria-pressed={activeView === "parser"}
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "parser"
@@ -112,36 +204,24 @@ export function InteractiveTerminal() {
             {/* Live Scraper Ingestion Banner */}
             <div className="mb-4 px-4 py-2.5 bg-[#0F172A] rounded-2xl border border-slate-700 text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full bg-[#22C55E] ${syncStatus !== "syncing" ? "animate-ping" : ""}`} />
-                <span className="font-bold text-[#22C55E]">Live Ingestion Engine Active</span>
-                <span className="text-slate-400 hidden sm:inline">· 11 county sheriff & federal feeds monitored</span>
+                <span className={cn("w-2 h-2 rounded-full", syncStatus === "error" ? "bg-amber-400" : "bg-[#22C55E]")} />
+                <span className={cn("font-bold", syncStatus === "error" ? "text-amber-300" : "text-[#22C55E]")}>
+                  {syncStatus === "error" ? "Demo fallback — data API unavailable" : "Connected to live data API"}
+                </span>
+                <span className="text-slate-400 hidden sm:inline">· scraper execution runs separately on the backend</span>
               </div>
               <div className="flex items-center gap-3 font-mono text-[11px] text-slate-300">
-                {syncStatus === "done" && (
-                  <span className="text-[#22C55E] font-bold">{syncCount} auction{syncCount !== 1 ? "s" : ""} indexed ✓</span>
-                )}
-                {syncStatus !== "done" && (
-                  <span>Scheduler: <strong className="text-white">Active (15m cycle)</strong></span>
-                )}
+                {syncStatus === "ready" && <span className="text-[#22C55E] font-bold">{syncCount} properties loaded</span>}
+                {syncStatus === "loading" && <span>Connecting to property API…</span>}
+                {syncStatus === "error" && <span>{syncCount} demo properties loaded</span>}
                 <button
-                  disabled={syncStatus === "syncing"}
-                  onClick={async () => {
-                    setSyncStatus("syncing");
-                    try {
-                      const res = await fetch("/api/scrapers", { method: "POST" });
-                      const data = await res.json();
-                      setSyncCount(data.ingestedCount ?? 4);
-                      setSyncStatus("done");
-                      setTimeout(() => setSyncStatus("idle"), 5000);
-                    } catch {
-                      setSyncStatus("idle");
-                    }
-                  }}
+                  disabled={syncStatus === "loading" || syncStatus === "refreshing"}
+                  onClick={() => void loadListings(true)}
                   className="bg-[#22C55E] hover:bg-[#16a34a] disabled:opacity-60 text-black font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1"
                 >
-                  {syncStatus === "syncing" ? (
-                    <><span className="w-2.5 h-2.5 border-2 border-black/40 border-t-black rounded-full animate-spin inline-block" />Syncing...</>
-                  ) : "Sync Feeds Now"}
+                  {syncStatus === "refreshing" ? (
+                    <><span className="w-2.5 h-2.5 border-2 border-black/40 border-t-black rounded-full animate-spin inline-block" />Refreshing…</>
+                  ) : "Refresh live feed"}
                 </button>
               </div>
             </div>
@@ -155,6 +235,7 @@ export function InteractiveTerminal() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  aria-label="Search listings"
                   placeholder="Search address, county, court docket..."
                   className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#D1D5DB] bg-white focus:outline-none focus:border-[#0F172A]"
                 />
@@ -164,20 +245,22 @@ export function InteractiveTerminal() {
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
+                aria-label="State filter"
                 className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
               >
                 <option value="all">All States</option>
-                <option value="OH">Ohio (OH)</option>
-                <option value="TX">Texas (TX)</option>
-                <option value="NV">Nevada (NV)</option>
-                <option value="FL">Florida (FL)</option>
-                <option value="GA">Georgia (GA)</option>
+                {availableStates.map((state) => (
+                  <option key={state} value={state}>
+                    {STATE_LABELS[state] ? `${STATE_LABELS[state]} (${state})` : state}
+                  </option>
+                ))}
               </select>
 
               {/* Source Filter */}
               <select
                 value={selectedSource}
                 onChange={(e) => setSelectedSource(e.target.value)}
+                aria-label="Source filter"
                 className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
               >
                 <option value="all">All Sources</option>
@@ -190,6 +273,7 @@ export function InteractiveTerminal() {
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
+                aria-label="Sort listings"
                 className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
               >
                 <option value="score">Deal Score (Highest)</option>
@@ -199,7 +283,10 @@ export function InteractiveTerminal() {
               </select>
             </div>
 
-            {/* Listings Grid */}
+            {activeView === "map" ? (
+              <MarketMap listings={filtered} onUnderwrite={setSelectedListing} />
+            ) : (
+            /* Listings Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map((listing) => {
                 const src = SOURCES[listing.source] || SOURCES.sheriff;
@@ -228,6 +315,8 @@ export function InteractiveTerminal() {
                         </div>
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleSave(listing.id); }}
+                          aria-label={isSaved ? `Remove ${listing.address} from watchlist` : `Add ${listing.address} to watchlist`}
+                          aria-pressed={isSaved}
                           className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#374151] hover:text-[#16A34A] shadow"
                         >
                           <Bookmark className={cn("w-4 h-4", isSaved && "fill-[#16A34A] text-[#16A34A]")} />
@@ -250,7 +339,7 @@ export function InteractiveTerminal() {
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E5E7EB] text-xs">
                           <div>
                             <span className="text-[#6B7280] block">Opening Bid:</span>
-                            <span className="font-bold text-[#111827] text-sm">${listing.openingBid.toLocaleString()}</span>
+                            <span data-testid="listing-opening-bid" className="font-bold text-[#111827] text-sm">${listing.openingBid.toLocaleString()}</span>
                           </div>
                           <div>
                             <span className="text-[#16A34A] font-semibold block">Est. Equity Spread:</span>
@@ -266,7 +355,7 @@ export function InteractiveTerminal() {
                     </div>
 
                     {/* Card Action */}
-                    <div className="px-5 pb-5 pt-1">
+                    <div className="grid grid-cols-2 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
                         className="w-full inline-flex h-10 items-center justify-center rounded-xl bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition gap-1 shadow-sm"
@@ -274,11 +363,21 @@ export function InteractiveTerminal() {
                         <span>Underwrite Deal</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
+                      <Link
+                        href={`/listings/${encodeURIComponent(listing.id)}`}
+                        data-testid="listing-detail-link"
+                        aria-label={`Open listing page for ${listing.address}`}
+                        className="w-full inline-flex h-10 items-center justify-center rounded-xl border border-[#D1D5DB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F3F4F6] transition gap-1 shadow-sm"
+                      >
+                        <span>Listing page</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
                   </div>
                 );
               })}
             </div>
+            )}
           </>
         )}
       </div>

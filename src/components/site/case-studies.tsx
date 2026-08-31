@@ -12,53 +12,53 @@ type Metric = {
 
 const METRICS: Metric[] = [
   {
-    value: "94.2",
-    label: "Avg Deal Score accuracy",
-    desc: "ARV predictions within 5% of closing price, tracked across 1,200+ parcels.",
+    value: "Live",
+    label: "Connected property feed",
+    desc: "A transparent beta dataset for exercising market search, filters, underwriting, and exports.",
     tint: "#DBEAFE",
   },
   {
-    value: "21 days",
-    label: "Faster from listing to offer",
-    desc: "Off-market distress signals surface parcels 3 weeks before MLS publication.",
+    value: "11",
+    label: "Source categories modeled",
+    desc: "Federal, GSE, and county-source schemas normalized into one consistent property format.",
     tint: "#e7faef",
   },
   {
-    value: "6 min",
-    label: "To a full deal memo",
-    desc: "From parcel URL to ARV, offer, profit, and risk paragraph in under 6 minutes.",
+    value: "3",
+    label: "Core beta workflows",
+    desc: "Market discovery, supported notice parsing, and persistent watchlist exports are available today.",
     tint: "#E9D5FF",
   },
 ];
 
 const CASES = [
   {
-    metric: "3×",
-    text: "more off-market deals sourced",
-    company: "BlueLine Capital",
-    href: "#",
+    metric: "Search",
+    text: "City, county, state, ZIP, country, and nearby-address scopes",
+    company: "Market discovery",
+    href: "#hero",
   },
   {
-    metric: "+62%",
-    text: "offer-to-close conversion rate",
-    company: "Northstar Flips",
-    href: "#",
+    metric: "Parse",
+    text: "Structured extraction for supported court notice formats",
+    company: "Notice parser",
+    href: "#live-feed",
   },
   {
-    metric: "$1.2M",
-    text: "additional profit in Q1 alone",
-    company: "Oakshire Properties",
-    href: "#",
+    metric: "Export",
+    text: "Persistent watchlists with CSV and JSON downloads",
+    company: "Watchlist workflow",
+    href: "#live-feed",
   },
 ];
 
 export function CaseStudies() {
   return (
-    <section className="pt-24 pb-28 sm:pt-24 sm:pb-28">
+    <section id="customers" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            What it&rsquo;s like working with PerfectProperty
+            What is working in the beta today
           </h2>
         </GsapReveal>
 
@@ -77,7 +77,7 @@ export function CaseStudies() {
                 className="inline-block rounded-lg px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#111827]"
                 style={{ backgroundColor: m.tint }}
               >
-                Verified
+                Beta snapshot
               </span>
               <p className="mt-4 text-[44px] font-bold tracking-[-0.03em] text-[#111827]">
                 {m.value}
@@ -106,7 +106,7 @@ export function CaseStudies() {
               </span>
               <div className="flex-1">
                 <p className="text-[14px] font-medium text-[#111827]">{c.text}</p>
-                <p className="text-[12px] text-[#6B7280]">Read the full story</p>
+                <p className="text-[12px] text-[#6B7280]">Open the workflow</p>
               </div>
               <ArrowRight className="h-4 w-4 text-[#9CA3AF] transition-colors group-hover:text-[#0F172A]" />
             </a>

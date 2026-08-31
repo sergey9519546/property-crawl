@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Bookmark, ExternalLink, Sparkles, MapPin, Calendar, Box, FileText } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
+import { getExactSourceListingUrl } from "@/lib/listing-links";
 
 interface PropertyDrawerProps {
   listing: Listing | null;
@@ -18,6 +19,20 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!listing) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [listing, onClose]);
+
   if (!listing) return null;
 
   const source = SOURCES[listing.source] || {
@@ -27,6 +42,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     note: "Public listing",
     websiteUrl: "#"
   };
+  const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
 
   const handleRunAi = () => {
     setAiLoading(true);
@@ -85,8 +101,18 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
-      <div className="w-full max-w-xl bg-white h-full shadow-2xl overflow-y-auto flex flex-col border-l border-[#E5E7EB]">
+    <div
+      className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-end animate-in fade-in duration-200"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="property-drawer-title"
+        className="w-full max-w-xl bg-white h-full shadow-2xl overflow-y-auto flex flex-col border-l border-[#E5E7EB]"
+      >
         {/* Drawer Header */}
         <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-[#E5E7EB] px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -167,7 +193,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         {/* Content Body */}
         <div className="p-6 space-y-6 flex-1">
           <div>
-            <h2 className="text-2xl font-bold text-[#111827]">{listing.address}</h2>
+            <h2 id="property-drawer-title" className="text-2xl font-bold text-[#111827]">{listing.address}</h2>
             <p className="text-sm text-[#6B7280] flex items-center gap-1.5 mt-1">
               <MapPin className="w-4 h-4 text-[#9CA3AF]" />
               {listing.city}, {listing.state} {listing.zip} · {listing.county} County
@@ -276,18 +302,26 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           )}
 
           {/* Source Link */}
-          {source.websiteUrl && (
+          {exactSourceUrl ? (
             <div className="pt-2">
               <a
-                href={source.websiteUrl}
+                href={exactSourceUrl}
                 target="_blank"
                 rel="noreferrer"
+                data-testid="exact-source-listing-link"
                 className="w-full inline-flex h-11 items-center justify-center rounded-xl bg-white border border-[#E5E7EB] text-sm font-bold text-[#0F172A] hover:bg-[#F5F6F7] transition gap-2 shadow-sm"
               >
-                <span>View on {source.label} Portal</span>
+                <span>Open exact {source.label} listing</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
             </div>
+          ) : (
+            <p
+              data-testid="exact-source-listing-unavailable"
+              className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-semibold leading-relaxed text-amber-900"
+            >
+              Exact upstream record unavailable. This listing will never send you to a generic portal homepage.
+            </p>
           )}
         </div>
       </div>

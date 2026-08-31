@@ -62,7 +62,8 @@ const SCRAPER_REGISTRY = [
   // Coming next: trustee, freddie, usda, va, marshals, gsa
 ];
 
-const RUN_REAL = process.env.RUN_REAL_SCRAPERS === '1';
+// `cross-env` is intentionally NOT required: pass --real on any platform.
+const RUN_REAL = process.env.RUN_REAL_SCRAPERS === '1' || process.argv.includes('--real');
 // Per-scraper wall-clock budget. Treasury fetches 16 detail pages at ~9s each
 // (US government site, polite throttling), so it needs ~3 min end-to-end.
 // Bump this if you add a slower source.
@@ -131,6 +132,12 @@ function normalize(listings) {
     if (!l.address || l.address.length < 8) return false;
     if (!l.openingBid || l.openingBid <= 0) return false;
     return true;
+  }).map(l => {
+    const sourceHomepage = SOURCES[l.source]?.websiteUrl;
+    const candidate = typeof l.sourceUrl === 'string' ? l.sourceUrl.replace(/\/+$/, '') : '';
+    const homepage = typeof sourceHomepage === 'string' ? sourceHomepage.replace(/\/+$/, '') : '';
+    const isGenericHomepage = !candidate || candidate === homepage;
+    return { ...l, sourceUrl: isGenericHomepage ? null : l.sourceUrl };
   });
   // 3. Sort: best deal score first; tiebreak by opening bid asc
   filtered.sort((a, b) => {

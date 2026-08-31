@@ -34,12 +34,12 @@ async function run() {
     assert.ok(item.equity > 0);
   });
 
-  await test('HUD scraper returns HUD listings with proper tier and sourceUrl', async () => {
+  await test('HUD demo scraper does not mislabel a portal homepage as a listing URL', async () => {
     const items = await hud.scrapeFeed();
     assert.ok(items.length > 0);
     const item = items[0];
     assert.strictEqual(item.source, 'hud');
-    assert.strictEqual(item.sourceUrl, 'https://www.hudhomestore.gov');
+    assert.strictEqual(item.sourceUrl, null);
   });
 
   await test('Fannie Mae scraper returns HomePath listings', async () => {

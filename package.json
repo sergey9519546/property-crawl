@@ -4,17 +4,22 @@
   "description": "Zillow for distressed and government-sold property with AI deal intelligence",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "dev": "node server/server.js",
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "dev:api": "node server/server.js",
+    "start:api": "node server/server.js",
     "test": "node test/verify.js",
     "test:unit": "node test/suite.test.js",
     "test:server": "node test/server.test.js",
     "test:scrapers": "node test/scrapers.test.js",
     "test:ai": "node test/ai.test.js",
     "test:e2e": "node test/e2e.test.js",
+    "test:ui:e2e": "python test/next_ui_e2e_test.py",
+    "test:canonical": "node --test test/canonical-runtime.test.js",
     "scrape": "node server/scrapers/scheduler.js",
     "refresh-data": "node scripts/build-data.js",
-    "refresh-data:real": "cross-env RUN_REAL_SCRAPERS=1 node scripts/build-data.js"
+    "refresh-data:real": "node scripts/build-data.js --real"
   },
   "keywords": [
     "real-estate",
@@ -69,6 +74,7 @@
     "gsap": "3.15.0",
     "input-otp": "1.5.0",
     "lucide-react": "1.38.0",
+    "maplibre-gl": "^5.24.0",
     "next": "16.3.3",
     "next-themes": "0.4.6",
     "postcss": "8.5.26",

@@ -5,9 +5,17 @@ const irs = require('./irs');
 const treasury = require('./treasury');
 const db = require('../db/client');
 
+// Scrapers that talk to live external sites. These only run when the caller
+// explicitly opts in (RUN_REAL_SCRAPERS=1 or --real). Default runs stay fully
+// offline so `npm test` and local dev never hit the network.
+const REAL_SCRAPER_KEYS = new Set(['treasury']);
+const RUN_REAL =
+  process.env.RUN_REAL_SCRAPERS === '1' || process.argv.includes('--real');
+
 class IngestionScheduler {
   constructor() {
-    this.scrapers = [sheriff, hud, fannie, irs, treasury];
+    this.mockScrapers = [sheriff, hud, fannie, irs];
+    this.realScrapers = [treasury];
     this.isRunning = false;
   }
 
@@ -17,11 +25,18 @@ class IngestionScheduler {
       return;
     }
     this.isRunning = true;
+    const scrapers = RUN_REAL
+      ? [...this.mockScrapers, ...this.realScrapers]
+      : this.mockScrapers;
+    const skipped = this.realScrapers.length;
     console.log('[Scheduler] Starting automated ingestion cycle...');
+    if (!RUN_REAL && skipped > 0) {
+      console.log(`[Scheduler] RUN_REAL_SCRAPERS not set — skipping ${skipped} live scraper(s) (${[...REAL_SCRAPER_KEYS].join(', ')})`);
+    }
     const startTime = Date.now();
     let totalIngested = 0;
 
-    for (const scraper of this.scrapers) {
+    for (const scraper of scrapers) {
       try {
         console.log(`[Scheduler] Running ${scraper.name}...`);
         const items = await scraper.scrapeFeed();

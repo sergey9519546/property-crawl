@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -52,6 +53,15 @@
   --600: #4b5563;
   --white: #ffffff;
   --dim-grey: #727272;
+
+  /* Shared interaction motion — fast UI feedback plus one explanatory map pass. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-press: 120ms;
+  --duration-hover: 150ms;
+  --duration-state: 180ms;
+  --duration-camera: 500ms;
+  --duration-market-scan: 1000ms;
 }
 
 @theme inline {
@@ -220,6 +230,49 @@
   opacity: 1;
 }
 
+/* Hero blueprint composition tokens and shader-to-property blend. */
+@keyframes hero-blueprint-resolve {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.992); }
+  to { opacity: var(--hero-art-opacity); transform: translate3d(0, 0, 0) scale(1); }
+}
+.hero-property-art {
+  --hero-art-opacity: 0.78;
+  pointer-events: none;
+  mix-blend-mode: normal;
+  filter: saturate(0.88) contrast(1.04) drop-shadow(0 24px 42px rgba(0, 62, 180, 0.12));
+  opacity: var(--hero-art-opacity);
+  animation: hero-blueprint-resolve 800ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: right bottom;
+}
+.hero-property-backlight {
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 58% 82% at 79% 64%,
+    rgba(255, 255, 255, 0.46) 0%,
+    rgba(225, 244, 255, 0.22) 48%,
+    rgba(225, 244, 255, 0) 76%
+  );
+}
+.hero-property-art img {
+  width: 175vw;
+}
+@media (min-width: 768px) {
+  .hero-property-art {
+    --hero-art-opacity: 0.86;
+  }
+  .hero-property-art img {
+    width: 120vw;
+  }
+}
+@media (min-width: 1280px) {
+  .hero-property-art {
+    --hero-art-opacity: 0.98;
+  }
+  .hero-property-art img {
+    width: min(calc(100% - 32px), 1672px);
+  }
+}
+
 /* Arcade float: subtle 3px range (translateY 6px→9px→6px) */
 @keyframes float-soft {
   0%, 100% { transform: translateY(6px); }
@@ -231,6 +284,304 @@
   50% { transform: translateY(10px); }
 }
 .animate-float-soft-2 { animation: float-soft-2 7.2s ease-in-out infinite; }
+
+/* Real opportunity atlas — MapLibre owns geographic transforms; UI motion stays
+   on marker children so camera movement and feedback never fight each other. */
+.opportunity-atlas {
+  isolation: isolate;
+}
+
+.opportunity-atlas__canvas {
+  opacity: 1;
+}
+
+.opportunity-atlas__canvas .maplibregl-canvas {
+  opacity: 0;
+  transition: opacity 240ms var(--ease-out);
+}
+
+.opportunity-atlas[data-map-ready="true"] .opportunity-atlas__canvas .maplibregl-canvas {
+  opacity: 1;
+}
+
+.opportunity-atlas[data-map-unavailable="true"] .opportunity-atlas__canvas .maplibregl-canvas {
+  opacity: 0;
+}
+
+.opportunity-atlas__fallback-map img {
+  filter: saturate(0.5) contrast(0.92) brightness(1.04);
+}
+
+@keyframes opportunity-scan-pass {
+  0% {
+    opacity: 0;
+    transform: translate3d(-65%, 0, 0);
+  }
+  12% { opacity: 0.86; }
+  84% { opacity: 0.72; }
+  100% {
+    opacity: 0;
+    transform: translate3d(65%, 0, 0);
+  }
+}
+
+.opportunity-discovery-scan {
+  background: linear-gradient(
+    90deg,
+    transparent 33%,
+    rgba(96, 165, 250, 0.08) 44%,
+    rgba(37, 99, 235, 0.34) 50%,
+    rgba(147, 197, 253, 0.1) 56%,
+    transparent 67%
+  );
+  opacity: 0;
+  animation: opportunity-scan-pass var(--duration-market-scan) linear both;
+  will-change: transform, opacity;
+}
+
+@keyframes opportunity-marker-discover {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes opportunity-marker-discover-active {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.opportunity-map-marker {
+  appearance: none;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.opportunity-map-marker__halo,
+.opportunity-map-marker__pin {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  transform-origin: center;
+}
+
+.opportunity-map-marker__halo {
+  background: rgba(37, 99, 235, 0.16);
+  background: color-mix(in srgb, var(--marker-color) 18%, transparent);
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity var(--duration-state) var(--ease-out),
+    transform var(--duration-state) var(--ease-out);
+}
+
+.opportunity-map-marker__pin {
+  display: grid;
+  place-items: center;
+  border: 3px solid #fff;
+  background: var(--marker-color);
+  box-shadow: 0 7px 20px rgba(15, 23, 42, 0.3);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity var(--duration-state) var(--ease-out),
+    transform var(--duration-state) var(--ease-out),
+    box-shadow var(--duration-hover) ease;
+}
+
+.opportunity-map-marker[data-active="true"] .opportunity-map-marker__halo {
+  opacity: 1;
+  transform: scale(1.28);
+}
+
+.opportunity-map-marker[data-active="true"] .opportunity-map-marker__pin {
+  transform: scale(1.08);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.36);
+}
+
+.opportunity-map-marker[data-discovering="true"] .opportunity-map-marker__pin {
+  animation: opportunity-marker-discover var(--duration-state) var(--ease-out) both;
+  animation-delay: var(--marker-delay, 0ms);
+}
+
+.opportunity-map-marker[data-discovering="true"][data-active="true"] .opportunity-map-marker__pin {
+  animation-name: opportunity-marker-discover-active;
+}
+
+.opportunity-map-marker__label {
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 50%;
+  z-index: 2;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #0f172a;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate3d(-50%, 25%, 0);
+  transition:
+    opacity var(--duration-hover) var(--ease-out),
+    transform var(--duration-hover) var(--ease-out);
+}
+
+.opportunity-map-marker[data-active="true"] .opportunity-map-marker__label,
+.opportunity-map-marker:focus-visible .opportunity-map-marker__label {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+}
+
+.opportunity-map-marker:active .opportunity-map-marker__pin {
+  transform: scale(0.96);
+  transition-duration: var(--duration-press);
+}
+
+.opportunity-replay,
+.opportunity-primary-action {
+  transition:
+    background-color var(--duration-hover) ease,
+    box-shadow var(--duration-hover) ease,
+    transform var(--duration-hover) ease;
+}
+
+.opportunity-replay:active,
+.opportunity-primary-action:active {
+  transform: scale(0.98);
+  transition-duration: var(--duration-press);
+}
+
+.opportunity-list-row {
+  transition: background-color var(--duration-hover) ease;
+}
+
+.opportunity-inspector {
+  scrollbar-gutter: stable;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .opportunity-map-marker:hover .opportunity-map-marker__pin {
+    transform: scale(1.06);
+  }
+
+  .opportunity-map-marker[data-active="true"]:hover .opportunity-map-marker__pin {
+    transform: scale(1.1);
+  }
+
+  .opportunity-map-marker:hover .opportunity-map-marker__label {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  .opportunity-replay:not(:disabled):hover,
+  .opportunity-primary-action:hover {
+    transform: translateY(-5%);
+  }
+
+  .opportunity-replay:not(:disabled):hover {
+    background-color: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+  }
+
+  .opportunity-primary-action:hover {
+    background-color: #1e293b;
+  }
+
+  .opportunity-list-row:hover {
+    background-color: #f1f5f9;
+  }
+}
+
+/* MapLibre chrome is deliberately quiet so the data and selected opportunity win. */
+.opportunity-atlas .maplibregl-canvas:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: -4px;
+}
+
+.opportunity-atlas .maplibregl-ctrl-bottom-left {
+  bottom: 8px;
+  left: 8px;
+}
+
+.opportunity-atlas .maplibregl-ctrl-group {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(12px);
+}
+
+.opportunity-atlas .maplibregl-ctrl-group button {
+  width: 38px;
+  height: 38px;
+}
+
+.opportunity-atlas .maplibregl-ctrl-group button + button {
+  border-top-color: rgba(226, 232, 240, 0.9);
+}
+
+.opportunity-atlas .maplibregl-ctrl-attrib {
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #64748b;
+  font-size: 9px;
+  backdrop-filter: blur(10px);
+}
+
+.opportunity-atlas .maplibregl-ctrl-attrib a {
+  color: #334155;
+}
+
+@media (min-width: 768px) {
+  .opportunity-atlas .maplibregl-ctrl-bottom-left {
+    bottom: 58px;
+    left: 12px;
+  }
+}
+
+/* Text fields use a quiet blue halo instead of the browser-like black outline. */
+.hero-search-shell {
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.7);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+.hero-search-shell:focus-within {
+  border-color: rgba(255,255,255,0.95) !important;
+  box-shadow: 0 0 0 4px rgba(37,99,235,0.22), 0 12px 36px rgba(0,43,176,0.18), inset 0 1px 0 rgba(255,255,255,0.85);
+}
+.hero-search-shell input:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+}
 
 /* Arcade bottom-blur — 8-layer progressive backdrop-blur at viewport bottom */
 .bottom-blur-stick {
@@ -250,6 +601,11 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+@media (max-width: 640px) {
+  .bottom-blur-stick {
+    display: none;
+  }
 }
 
 /* Arcade logo-infinite marquee */
@@ -294,6 +650,48 @@
   .unicorn-hero-bg canvas {
     display: none !important;
   }
+
+  /* Keep the atlas legible without spatial movement. The map camera also uses
+     jumpTo in React; these scoped rules retain only short opacity/color feedback. */
+  .opportunity-discovery-scan {
+    display: none !important;
+  }
+
+  .opportunity-atlas__canvas {
+    transition-property: opacity !important;
+    transition-duration: var(--duration-hover) !important;
+    transition-timing-function: var(--ease-out) !important;
+  }
+
+  .opportunity-map-marker__pin,
+  .opportunity-map-marker__halo {
+    animation: none !important;
+    transform: none !important;
+    transition-property: opacity, box-shadow !important;
+    transition-duration: var(--duration-hover) !important;
+    transition-timing-function: var(--ease-out) !important;
+  }
+
+  .opportunity-map-marker__label {
+    transform: translate3d(-50%, 0, 0) !important;
+    transition-property: opacity !important;
+    transition-duration: var(--duration-hover) !important;
+    transition-timing-function: var(--ease-out) !important;
+  }
+
+  .opportunity-replay,
+  .opportunity-primary-action {
+    transform: none !important;
+    transition-property: background-color, box-shadow !important;
+    transition-duration: var(--duration-hover) !important;
+    transition-timing-function: ease !important;
+  }
+
+  .opportunity-list-row {
+    transition-property: background-color !important;
+    transition-duration: var(--duration-hover) !important;
+    transition-timing-function: ease !important;
+  }
 }
 
 /* ===== FLUTED-GLASS DISTORTION ===== */
@@ -310,10 +708,19 @@
 
 /* ===== FOCUS STATES (accessibility) ===== */
 @layer base {
-  *:focus-visible {
+  *:focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
     outline: 2px solid #0F172A !important;
     outline-offset: 2px !important;
     border-radius: 4px;
+  }
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [contenteditable="true"]:focus-visible {
+    outline: none !important;
+    outline-offset: 0 !important;
+    border-color: #93C5FD;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.22);
   }
   *:focus:not(:focus-visible) {
     outline: none !important;

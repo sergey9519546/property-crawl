@@ -38,7 +38,7 @@ export interface PropertyListing {
   occupancy: string;
   deposit: string;
   photo: string;
-  sourceUrl?: string;
+  sourceUrl?: string | null;
   raw?: string;
 }
 
@@ -106,7 +106,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Occupied (drive-by only)',
     deposit: '$5,000 certified check to Sheriff at auction',
     photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80',
-    sourceUrl: 'https://cuyahogasheriff.org',
+    sourceUrl: null,
     raw: 'CASE NO. CV-24-991204: Huntington National Bank vs. Donald J. Kowalski. Permanent Parcel No. 132-08-041. Appraised at $110,000. Minimum bid $38,000.'
   },
   {
@@ -140,7 +140,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Vacant',
     deposit: '$1,000 earnest money via HUD HomeStore portal',
     photo: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80',
-    sourceUrl: 'https://www.hudhomestore.gov',
+    sourceUrl: null,
     raw: 'HUD CASE 411-998214: 892 S Champion Ave. List $52,000. Owner occupant period active through Sept 20.'
   },
   {
@@ -174,7 +174,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Vacant',
     deposit: 'Standard HomePath contract terms',
     photo: 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=800&q=80',
-    sourceUrl: 'https://www.homepath.com',
+    sourceUrl: null,
     raw: 'HOMEPATH REO PROPERTY: 3218 Avenue I. List $125,000. First Look program active.'
   },
   {
@@ -208,7 +208,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Vacant',
     deposit: '20% certified check day of auction',
     photo: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-    sourceUrl: 'https://www.irsauctions.gov',
+    sourceUrl: null,
     raw: 'IRS SEIZED PROPERTY AUCTION: 915 E Stewart Ave. Minimum bid $110,000. 180-day redemption rule applies.'
   },
   {
@@ -242,7 +242,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Vacant',
     deposit: '5% or $200 deposit via RealAuction',
     photo: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80',
-    sourceUrl: 'https://treasurer.cuyahogacounty.us',
+    sourceUrl: null,
     raw: 'DUVAL TAX DEED CERT 2022-8812: 5424 Moncrief Rd. Tax certificate redemption expired.'
   },
   {
@@ -276,7 +276,7 @@ export const INITIAL_LISTINGS: PropertyListing[] = [
     occupancy: 'Unknown',
     deposit: 'Certified cashier funds day of sale',
     photo: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80',
-    sourceUrl: 'https://clarkcountynv.gov',
+    sourceUrl: null,
     raw: 'GEORGIA NON-JUDICIAL POWER OF SALE: 1142 Cascade Ave SW. Minimum bid $95,000.'
   }
 ];
