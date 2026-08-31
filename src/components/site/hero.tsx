@@ -265,8 +265,10 @@ export function Hero() {
 
       {/* Content */}
       <motion.div
-        className="relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12"
+        data-testid="hero-content"
+        className="hero-content relative z-10 mx-auto flex w-full max-w-[2200px] flex-col items-center px-5 text-center sm:px-12"
       >
+        <div data-testid="hero-content-stack" className="flex w-full flex-col items-center">
         <motion.h1
           className="text-[32px] font-semibold leading-[36px] tracking-[-0.02em] text-[#111827] sm:text-[48px] sm:leading-[52px]"
           style={{ margin: 0, maxWidth: 620 }}
@@ -432,6 +434,7 @@ export function Hero() {
           Try the Cleveland market
         </motion.button>
         <p className="sr-only" aria-live="polite">{status}</p>
+        </div>
       </motion.div>
     </section>
   );

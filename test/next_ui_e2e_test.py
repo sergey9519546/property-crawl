@@ -522,10 +522,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "heading", name="Find the deal before everyone else.", level=1
         )
         hero_search = self.page.locator("#hero form").first
+        hero_content_stack = self.page.get_by_test_id("hero-content-stack")
         hero_art = self.page.get_by_test_id("hero-property-blueprint").locator("img")
         hero_box = hero.bounding_box()
         hero_heading_box = hero_heading.bounding_box()
         hero_search_box = hero_search.bounding_box()
+        hero_content_stack_box = hero_content_stack.bounding_box()
         hero_art_box = hero_art.bounding_box()
 
         self.assertIsNotNone(header_box)
@@ -535,6 +537,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertIsNotNone(hero_box)
         self.assertIsNotNone(hero_heading_box)
         self.assertIsNotNone(hero_search_box)
+        self.assertIsNotNone(hero_content_stack_box)
         self.assertIsNotNone(hero_art_box)
         self.assertGreater(header_box["width"], 2100)
         self.assertLess(brand_box["x"], 100)
@@ -556,9 +559,14 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             delta=3,
         )
         self.assertAlmostEqual(
-            hero_search_box["y"] + hero_search_box["height"] / 2,
-            hero_box["y"] + hero_box["height"] * 0.355,
-            delta=20,
+            hero_content_stack_box["x"] + hero_content_stack_box["width"] / 2,
+            hero_center,
+            delta=3,
+        )
+        self.assertAlmostEqual(
+            hero_content_stack_box["y"] + hero_content_stack_box["height"] / 2,
+            hero_box["y"] + hero_box["height"] / 2,
+            delta=4,
         )
         self.assertGreaterEqual(hero_art_box["width"], 1160)
         self.assertLessEqual(hero_art_box["width"], 1200)

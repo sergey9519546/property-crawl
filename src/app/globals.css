@@ -272,6 +272,12 @@
   }
 }
 @media (min-width: 1280px) {
+  .hero-content {
+    position: absolute;
+    inset: 0;
+    justify-content: center;
+  }
+
   .hero-property-art {
     --hero-art-opacity: 0.8;
   }

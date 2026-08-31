@@ -18,7 +18,7 @@ export function LogoMark({ className = "h-8 w-8" }: { className?: string }) {
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`font-black uppercase tracking-[0.01em] text-[#111827] ${className}`}
+      className={`font-black uppercase tracking-[0.025em] text-[#111827] ${className}`}
     >
       PERFECTPROPERTY
     </span>
