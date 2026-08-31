@@ -1,6 +1,6 @@
-# Sources still to scrape — 10 of 11
+# Sources still to scrape — 7 of 11
 
-**Status (2026-08-31):** Treasury is the only real scraper (16 properties fetched). Sheriff, HUD, Fannie, IRS return 1 hardcoded mock each. Trustee, Freddie, USDA, VA, Marshals, GSA have no scraper at all.
+**Status (2026-08-31):** Four real scrapers are live — Treasury (16), USDA RD/FSA (15), IRS seized (4), GSA surplus (3) = 38 real listings across 4 sources. Sheriff, HUD, Fannie still return mock fixtures. Trustee, Freddie, VA, Marshals have no scraper yet.
 
 **Goal:** Replace 4 mocks + write 6 missing scrapers = 10 new files, all conforming to `server/scrapers/base.js#standardizeListing`. Then `npm run refresh-data:real` produces a data.js with all 11 sources represented (target: 100+ real listings).
 
