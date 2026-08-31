@@ -8,6 +8,8 @@ const handleParse = require('./routes/parse');
 const handleEnrich = require('./routes/enrich');
 const handleAlerts = require('./routes/alerts');
 const handleExport = require('./routes/export');
+const handleScrapers = require('./routes/scrapers');
+const scheduler = require('./scrapers/scheduler');
 
 const PORT = process.env.PORT || 3000;
 const rateLimiter = new MemoryRateLimiter({ windowMs: 60000, maxRequests: 120 });
@@ -99,6 +101,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/enrich') return handleEnrich(req, res);
     if (url.pathname === '/api/alerts') return handleAlerts(req, res);
     if (url.pathname === '/api/export') return handleExport(req, res);
+    if (url.pathname.startsWith('/api/scrapers')) return handleScrapers(req, res);
     if (url.pathname === '/api/sources') {
       const sources = await db.getSources();
       return res.json(sources);
@@ -143,6 +146,8 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}`);
+    // Boot real data scrapers immediately
+    scheduler.runAll().catch(err => console.error('[Server] Scheduler failed on boot:', err));
   });
 }
 

@@ -45,6 +45,19 @@ function request(path, options = {}) {
 
 async function run() {
   await new Promise((resolve) => server.listen(3999, resolve));
+  await db.createListing({
+    id: "TEST-1",
+    source: "sheriff",
+    state: "OH",
+    county: "Cuyahoga",
+    city: "Cleveland",
+    address: "123 Test St",
+    openingBid: 50000,
+    estLow: 100000,
+    estHigh: 150000,
+    mid: 125000,
+    dealScore: 90
+  });
   const seedResponse = await request('/api/listings?limit=100');
   const seedListings = seedResponse.body.listings;
   assert.ok(seedListings.length > 0, 'server test requires at least one seeded listing');

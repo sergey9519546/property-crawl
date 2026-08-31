@@ -5,6 +5,7 @@ import { X, Bookmark, ExternalLink, Sparkles, MapPin, Calendar, Box, FileText } 
 import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
+import { BiddingSimulator } from "./bidding-simulator";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 
 interface PropertyDrawerProps {
@@ -15,7 +16,7 @@ interface PropertyDrawerProps {
 }
 
 export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: PropertyDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"underwrite" | "3d">("underwrite");
+  const [activeTab, setActiveTab] = useState<"underwrite" | "3d" | "bidding">("underwrite");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
@@ -44,60 +45,27 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   };
   const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
 
-  const handleRunAi = () => {
+  const handleRunAi = async () => {
     setAiLoading(true);
-    setTimeout(() => {
-      const lines: string[] = [];
-      const ratio = listing.openingBid / listing.mid;
-      const spread = listing.estHigh - listing.openingBid;
-
-      // Valuation spread analysis
-      if (ratio < 0.5) {
-        lines.push(`Opening bid of $${listing.openingBid.toLocaleString()} is ${Math.round((1 - ratio) * 100)}% below mid-range estimated value of $${listing.mid.toLocaleString()} — exceptional spread for a judicial sale. Upside to high estimate: $${spread.toLocaleString()}.`);
-      } else if (ratio < 0.7) {
-        lines.push(`Opening bid at ${Math.round(ratio * 100)}% of estimated value ($${listing.mid.toLocaleString()}). Strong spread of $${spread.toLocaleString()} before renovation costs — pencil out scope before auction day.`);
-      } else {
-        lines.push(`Opening bid at ${Math.round(ratio * 100)}% of estimated value ($${listing.mid.toLocaleString()}). Tighter margin of $${spread.toLocaleString()} — confirm repair budget stays under $${Math.round(spread * 0.6).toLocaleString()} to preserve return.`);
+    try {
+      const response = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ listingId: listing.id }),
+      });
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
       }
-
-      // Source-specific legal flags
-      if (listing.source === "irs" || listing.source === "usms") {
-        lines.push(`Federal seizure source (${source.label}): carries a 180-day statutory right of redemption. Do not close improvements until the redemption window expires. Consult title counsel before committing capital.`);
-      } else if (listing.source === "hud") {
-        lines.push(`HUD Home (FHA-insured REO): owner-occupant "First Look" priority period restricts investor bidding for 15–30 days from listing date. Verify current period status before submitting an offer.`);
-      } else if (listing.source === "fannie") {
-        lines.push(`Fannie Mae HomePath listing: direct purchase is available; no appraisal required for HomePath Mortgage. First Look period may still apply — confirm expiry date with listing agent.`);
-      } else if (listing.source === "sheriff" || listing.source === "tax") {
-        lines.push(`Judicial foreclosure — title conveyed by sheriff's deed. Confirm no senior federal or municipal liens survive the sale. Property tax arrears accrued after the foreclosure cut-off date are typically buyer's responsibility.`);
-      } else if (listing.source === "trustee") {
-        lines.push(`Non-judicial trustee sale — no court confirmation required. Title typically conveys quickly but verify state-specific redemption rights. Occupancy status critical: eviction timeline varies by county.`);
-      }
-
-      // Plaintiff / case type insight
-      const pLower = (listing.plaintiff || "").toLowerCase();
-      if (pLower.includes("bank") || pLower.includes("mortgage") || pLower.includes("financial")) {
-        lines.push(`Lender-initiated action (${listing.plaintiff}): primary mortgage foreclosure. Subordinate liens — second mortgages, HOA dues, mechanic's liens — are generally extinguished at sale. Verify with a local title search.`);
-      } else if (pLower.includes("county") || pLower.includes("treasurer") || pLower.includes("auditor")) {
-        lines.push(`Tax authority action (${listing.plaintiff}): tax deed foreclosures typically extinguish subordinate mortgages but check for any senior federal tax liens on the grantee separately.`);
-      }
-
-      // Deposit terms
-      if (listing.deposit) {
-        lines.push(`Deposit requirement: ${listing.deposit}. Bring certified funds — personal checks and wire transfers on the day are rejected at most county auctions. Confirm accepted forms with the sheriff's office before attending.`);
-      }
-
-      // Equity cushion summary
-      if (listing.equity > 60000) {
-        lines.push(`Built-in equity cushion of $${listing.equity.toLocaleString()} provides a strong renovation and carry-cost buffer even in a conservative market.`);
-      } else if (listing.equity > 25000) {
-        lines.push(`Moderate equity buffer of $${listing.equity.toLocaleString()}. Limit total acquisition + renovation spend to 70% of ARV ($${Math.round(listing.estHigh * 0.7).toLocaleString()}) to protect margin.`);
-      } else {
-        lines.push(`Slim equity buffer of $${listing.equity.toLocaleString()}. This deal requires accurate rehab scoping — overspending by more than $${Math.round(listing.equity * 0.4).toLocaleString()} erases the return.`);
-      }
-
-      setAiAnalysis(lines.join("\n\n"));
+      const data = await response.json();
+      setAiAnalysis(data.analysis);
+    } catch (error) {
+      console.error('Error fetching AI analysis:', error);
+      setAiAnalysis('An error occurred while fetching the analysis.');
+    } finally {
       setAiLoading(false);
-    }, 600);
+    }
   };
 
   return (
@@ -175,6 +143,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           >
             <Box className="w-3.5 h-3.5 text-[#22C55E]" />
             <span>3D Lot & Elevation</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("bidding")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
+              activeTab === "bidding"
+                ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
+                : "text-[#6B7280] hover:text-[#111827]"
+            )}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <span>Bidding Simulator</span>
           </button>
         </div>
 
@@ -340,6 +321,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <p>• Zero floodplain overlap detected (FEMA Zone X minimal hazard).</p>
               </div>
             </div>
+          )}
+
+          {/* TAB 3: Bidding Simulator */}
+          {activeTab === "bidding" && (
+            <BiddingSimulator listing={listing} />
           )}
 
           {/* Source Link */}

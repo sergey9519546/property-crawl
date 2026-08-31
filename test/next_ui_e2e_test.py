@@ -983,11 +983,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         city = self.primary_listing["city"]
         self.wait_for_live_feed()
         self.page.get_by_placeholder("Search address, county, court docket...").fill(city)
-        self.page.get_by_role("button", name="Underwrite Deal").click()
+        self.page.get_by_role("button", name="Underwrite Deal").first.click()
 
         self.assertTrue(self.page.get_by_role("heading", name=address, level=2).is_visible())
         self.page.get_by_role("button", name="Analyze Deal").click()
-        self.page.get_by_text(re.compile(r"Opening bid .* below mid-range estimated value")).wait_for(state="visible")
+        self.page.get_by_text(re.compile(r"Primary catch", re.IGNORECASE)).wait_for(state="visible")
 
         self.page.get_by_role("button", name="3D Lot & Elevation").click()
         self.assertTrue(self.page.get_by_text("3D Terrain & Contour Insights:").is_visible())
@@ -1081,7 +1081,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def test_property_drawer_is_an_accessible_escape_closeable_dialog(self):
         self.wait_for_live_feed()
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
-        dialog = self.page.get_by_role("dialog")
+        dialog = self.page.get_by_role("dialog").first
         dialog.wait_for(state="visible")
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)

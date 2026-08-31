@@ -27,12 +27,16 @@ async function handleEnrich(req, res) {
     return res.json({ analysis: cached, cached: true, model });
   }
 
-  // Sanitize scraper-sourced text fields before embedding in response.
   const safeDeposit = SecuritySanitizer.escapeHtml(String(listing.deposit || 'Certified funds'));
   const safeOccupancy = SecuritySanitizer.escapeHtml(String(listing.occupancy || 'Unknown'));
   const safePlaintiff = SecuritySanitizer.escapeHtml(String(listing.plaintiff || '—'));
 
-  const analysisText = `**Primary catch:** Opening bid of $${listing.openingBid.toLocaleString()} represents a substantial built-in spread against the estimated $${listing.estLow.toLocaleString()}–$${listing.estHigh.toLocaleString()} value band (Deal Score: ${listing.dealScore}/100), but requires immediate **${safeDeposit}** and carries potential unpaid municipal liens.
+  const bidText = listing.openingBid ? `$${listing.openingBid.toLocaleString()}` : 'TBD';
+  const estText = (listing.estLow && listing.estHigh) 
+    ? `$${listing.estLow.toLocaleString()}–$${listing.estHigh.toLocaleString()}` 
+    : 'market';
+  
+  const analysisText = `**Primary catch:** Opening bid of ${bidText} represents a substantial built-in spread against the estimated ${estText} value band (Deal Score: ${listing.dealScore || 'N/A'}/100), but requires immediate **${safeDeposit}** and carries potential unpaid municipal liens.
 
 **Occupancy & title:** The property is listed as **${safeOccupancy}**. Buyer takes title subject to standard foreclosure deed terms with no warranty on internal condition. Recommended for experienced bidders who have inspected the exterior and verified court docket ${safePlaintiff}.`;
 

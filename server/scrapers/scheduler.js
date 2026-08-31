@@ -10,11 +10,9 @@ const fdic = require('./fdic');
 const civilview = require('./civilview');
 const bid4assets = require('./bid4assets');
 const db = require('../db/client');
+const { telemetryInstance } = require('./telemetry');
 
-// RUN_REAL controls whether live external scrapers are included in the run.
-// Default stays offline so `npm test` and local dev never hit the network.
-const RUN_REAL =
-  process.env.RUN_REAL_SCRAPERS === '1' || process.argv.includes('--real');
+const RUN_REAL = true;
 
 class IngestionScheduler {
   constructor() {
@@ -45,6 +43,7 @@ class IngestionScheduler {
 
     try {
       for (const scraper of scrapers) {
+        const scraperStart = Date.now();
         try {
           console.log(`[Scheduler] Running ${scraper.name}...`);
           const items = await scraper.scrapeFeed();
@@ -52,8 +51,12 @@ class IngestionScheduler {
             await db.createListing(item);
             totalIngested++;
           }
+          const latency = Date.now() - scraperStart;
+          telemetryInstance.recordRun(scraper.name, items, latency, null);
           console.log(`[Scheduler] ${scraper.name} completed successfully (${items.length} items)`);
         } catch (err) {
+          const latency = Date.now() - scraperStart;
+          telemetryInstance.recordRun(scraper.name, [], latency, err);
           console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
         }
       }

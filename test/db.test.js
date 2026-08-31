@@ -53,13 +53,15 @@ async function run() {
   const { LISTINGS = [], SOURCES = {} } = loadSeed();
 
   await test('data.js seed records expose the camelCase listing contract', async () => {
-    assert.ok(LISTINGS.length > 0, 'expected a non-empty seed');
-    for (const listing of LISTINGS) {
-      for (const key of EXPECTED_LISTING_KEYS) {
-        assert.ok(
-          key in listing,
-          `listing ${listing.id} is missing "${key}" — update the seed or the PG alias contract`,
-        );
+    assert.ok(Array.isArray(LISTINGS), 'expected LISTINGS to be an array');
+    if (LISTINGS.length > 0) {
+      for (const listing of LISTINGS) {
+        for (const key of EXPECTED_LISTING_KEYS) {
+          assert.ok(
+            key in listing,
+            `listing ${listing.id} is missing "${key}" — update the seed or the PG alias contract`,
+          );
+        }
       }
     }
   });

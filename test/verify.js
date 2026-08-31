@@ -16,7 +16,9 @@ const suites = [
   { name: '9. Next.js 16 Production Build & TypeScript', cmd: 'npx next build' },
   { name: '10. Canonical Next Runtime Contract', cmd: 'node --test test/canonical-runtime.test.js' },
   { name: '11. Playwright Canonical UI Browser Suite', cmd: 'node test/run-ui-suite.js' },
-  { name: '12. Adversary Acceptance Suite (Scenarios 1–10)', cmd: 'node test/adversary.test.js' }
+  { name: '12. Adversary Acceptance Suite (Scenarios 1–10)', cmd: 'node test/adversary.test.js' },
+  { name: '13. Autonomous Bidding & MAO Simulator', cmd: 'node test/bidding.test.js' },
+  { name: '14. Scraper Telemetry & Drift Detection', cmd: 'node test/telemetry.test.js' }
 ];
 
 let totalPassed = 0;
