@@ -1,0 +1,61 @@
+# Base44 development compose — runs the app FROM the cloned source with
+# live-reload dev servers so edits appear without image rebuilds.
+# Web entry point (Next.js dev) is on host port 3000; the Node listing API
+# runs as an internal service reached over the compose network.
+services:
+  setup:
+    # One-shot dependency install into a shared named volume so the web and
+    # api services don't reinstall on every restart.
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app
+      - node_modules:/app/node_modules
+    command: sh -c "npm install --no-audit --no-fund"
+    restart: "no"
+
+  api:
+    image: node:22-alpine
+    working_dir: /app
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/app
+      - node_modules:/app/node_modules
+    # No DATABASE_URL → server/db/client.js falls back to the in-memory
+    # provider seeded from data.js. PORT is the in-container listen port.
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+    command: node server/server.js
+    restart: unless-stopped
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    volumes:
+      - ./:/app
+      - node_modules:/app/node_modules
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      # Reach the listing API over the compose network by service name.
+      - PROPERTY_API_URL=http://api:3000
+      # Lets Next.js derive the allowed dev origin for the preview hostname.
+      - BASE44_PUBLIC_HOST_SUFFIX
+    ports:
+      - "3000:3000"
+    # Bind 0.0.0.0 so the preview proxy (external hostname) can reach the
+    # dev server; run on port 3000 to match the host port mapping.
+    command: npx next dev -p 3000 -H 0.0.0.0
+    restart: unless-stopped
+
+volumes:
+  node_modules:
