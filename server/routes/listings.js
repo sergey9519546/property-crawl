@@ -1,0 +1,47 @@
+const db = require('../db/client');
+const Validator = require('../security/validation');
+
+async function handleListings(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const method = req.method;
+
+  if (method === 'GET') {
+    const id = url.pathname.split('/api/listings/')[1];
+    if (id) {
+      const listing = await db.getListingById(id);
+      if (!listing) return res.status(404).json({ error: 'Listing not found' });
+      return res.json(listing);
+    }
+
+    const filters = {
+      q: url.searchParams.get('q') || '',
+      state: url.searchParams.get('state') || 'all',
+      source: url.searchParams.get('source') || 'all',
+      type: url.searchParams.get('type') || 'all',
+      sort: url.searchParams.get('sort') || 'score',
+      limit: parseInt(url.searchParams.get('limit') || '50', 10),
+      offset: parseInt(url.searchParams.get('offset') || '0', 10),
+      lat: url.searchParams.get('lat') ? parseFloat(url.searchParams.get('lat')) : undefined,
+      lng: url.searchParams.get('lng') ? parseFloat(url.searchParams.get('lng')) : undefined,
+      radiusKm: url.searchParams.get('radiusKm') ? parseFloat(url.searchParams.get('radiusKm')) : 100
+    };
+
+    const result = await db.getListings(filters);
+    return res.json(result);
+  }
+
+  if (method === 'POST') {
+    const body = req.body || {};
+    const validation = Validator.validateListing(body);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: 'Validation failed', details: validation.errors });
+    }
+
+    const created = await db.createListing(body);
+    return res.status(201).json(created);
+  }
+
+  res.status(405).json({ error: 'Method not allowed' });
+}
+
+module.exports = handleListings;

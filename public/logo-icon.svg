@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none">
+  <path d="M8 28L32 8L56 28V54C56 56.2 54.2 58 52 58H12C9.8 58 8 56.2 8 54V28Z" fill="#0F172A"/>
+  <path d="M32 4L4 28L8 32L32 11L56 32L60 28L32 4Z" fill="#0F172A"/>
+  <!-- Gold Windows -->
+  <rect x="18" y="24" width="10" height="10" rx="2" fill="#FDBC15"/>
+  <rect x="36" y="24" width="10" height="10" rx="2" fill="#FDBC15"/>
+  <rect x="18" y="38" width="10" height="10" rx="2" fill="#FDBC15"/>
+  <rect x="36" y="38" width="10" height="10" rx="2" fill="#FDBC15"/>
+  <!-- Door outline -->
+  <path d="M28 58V48C28 45.8 29.8 44 32 44C34.2 44 36 45.8 36 48V58H28Z" fill="#1E293B"/>
+</svg>

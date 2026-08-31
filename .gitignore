@@ -1,0 +1,79 @@
+# =============================================================
+# PROPERTY_CRAWL — Git ignore rules
+# =============================================================
+# Without this, node_modules + .next + the 360MB perfectproperty
+# ui.tar would all be tracked. Do not commit a .gitignore-less repo.
+
+# --- Dependencies ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# --- Build output ---
+.next/
+out/
+dist/
+build/
+
+# --- Local env / secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+.secrets/
+
+# --- Test output ---
+test_output/
+playwright-report/
+playwright/.cache/
+.coverage
+.nyc_output/
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Editor / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.cache/
+
+# --- Logs ---
+*.log
+logs/
+.pnpm-debug.log*
+
+# --- PWA / puter runtime artifacts ---
+.puter/
+.playwright/
+
+# --- Backups / large archives ---
+# perfectproperty ui.tar was 343MB of build artifacts + screenshots.
+# If you really need it, store it in S3 / a release bucket, not git.
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+
+# --- Design assets / uploads ---
+# upload/ has 50 files (screenshots, blueprint, raw pasted images)
+# that are not part of the runtime. Add explicit allow-rules below
+# if any of them should be in git.
+upload/
+
+# --- Misc ---
+*.local
+.cache/
+.turbo/
+.vercel/
