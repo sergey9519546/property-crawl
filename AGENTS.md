@@ -22,7 +22,8 @@ listing API is a plain Node `http` server in `server/`. They share one
 
 No database is required to boot. `server/db/client.js` falls back to an
 in-memory provider seeded from `data.js` whenever `DATABASE_URL` is unset
-(20 listings, 11 sources). Set `DATABASE_URL` to a Postgres+PostGIS URL only
+(54 listings across 11 sources; 38 real via Treasury/USDA/IRS/GSA scrapers,
+16 mock fixtures). Set `DATABASE_URL` to a Postgres+PostGIS URL only
 to enable persistence. The repo's own `docker-compose.yml` wires PostGIS,
 but the Base44 dev compose intentionally omits it for a lighter dev loop.
 
@@ -34,7 +35,7 @@ fails closed when unset; IMAP/Sentry vars are post-launch only.
 ```bash
 docker compose -f docker-compose.base44.yml up -d
 # UI on http://localhost:3000, API proxied through /api/listings
-curl -sf http://localhost:3000/api/listings   # → 20 listings, source "property-api"
+curl -sf http://localhost:3000/api/listings   # → 50 listings (default cap), source "property-api"
 ```
 
 The preview is served through an external proxy hostname, so `next.config.mjs`

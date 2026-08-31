@@ -60,7 +60,8 @@ const SCRAPER_REGISTRY = [
   { key: 'irs',      mod: '../server/scrapers/irs',      real: true  },
   { key: 'treasury', mod: '../server/scrapers/treasury', real: true  },
   { key: 'gsa',      mod: '../server/scrapers/gsa',      real: true  },
-  // Coming next: trustee, freddie, usda, va, marshals
+  { key: 'usda',     mod: '../server/scrapers/usda',     real: true  },
+  // Coming next: trustee, freddie, va, marshals
 ];
 
 // `cross-env` is intentionally NOT required: pass --real on any platform.
