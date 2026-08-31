@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const root = 'c:\\Users\\serge\\.minimax\\sessions\\mvs_33469e4a8e48472faf25c6f55a29c489\\workspace\\property-crawl';
+const root = path.resolve(__dirname, '..');
 const indexHtml = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const appJs = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 const dataJs = fs.readFileSync(path.join(root, 'data.js'), 'utf8');

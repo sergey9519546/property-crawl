@@ -219,12 +219,12 @@ class DatabaseClient {
 
     if (this.isPg) {
       const sql = `INSERT INTO listings (
-        id, source_key, state, county, city, zip, address, latitude, longitude,
+        id, source_key, state, county, city, zip, address, latitude, longitude, geog,
         beds, baths, sqft, year_built, prop_type, opening_bid, est_low, est_high,
         deal_score, sale_date, plaintiff, defendant, judgment_amount, attorney,
         occupancy, deposit_terms, photo_url, source_url, raw_notice
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
-      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, updated_at = NOW()
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
+      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, updated_at = NOW()
       RETURNING id;`;
       const params = [
         enriched.id, enriched.source, enriched.state, enriched.county, enriched.city, enriched.zip,

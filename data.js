@@ -51,7 +51,7 @@ window.SOURCES = {
     "tier": "A",
     "color": "#3b82f6",
     "note": "resales.usda.gov",
-    "websiteUrl": "https://resales.usda.gov"
+    "websiteUrl": "https://www.resales.usda.gov"
   },
   "va": {
     "key": "va",

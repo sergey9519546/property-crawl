@@ -15,10 +15,11 @@ async function handleParse(req, res) {
     return res.status(400).json({ error: validation.error });
   }
 
-  const model = ModelRouter.selectModel({ taskType: 'notice_parser', promptLength: noticeText.length });
+  const cleanNotice = SecuritySanitizer.sanitizePromptInput(noticeText);
+  const model = ModelRouter.selectModel({ taskType: 'notice_parser', promptLength: cleanNotice.length });
   
   // Check AI cache first to avoid LLM cost
-  const cachedResponse = await AiCache.get(noticeText, model);
+  const cachedResponse = await AiCache.get(cleanNotice, model);
   if (cachedResponse) {
     try {
       return res.json({ parsed: JSON.parse(cachedResponse), cached: true, model });
@@ -27,7 +28,7 @@ async function handleParse(req, res) {
 
   // Fast offline deterministic extraction fallback & mock AI extraction
   const fallbackExtract = {
-    property_address: noticeText.match(/(?:commonly known as|premises at|property:)\s*([^.,\n]+)/i)?.[1]?.trim() || 'Extracted Property',
+    property_address: cleanNotice.match(/(?:commonly known as|premises at|property:)\s*([^.,\n]+)/i)?.[1]?.trim() || 'Extracted Property',
     city: noticeText.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*[A-Z]{2}/)?.[1] || 'Cleveland',
     state: noticeText.match(/,\s*([A-Z]{2})\b/)?.[1] || 'OH',
     zip: noticeText.match(/\b(\d{5})\b/)?.[1] || '44105',

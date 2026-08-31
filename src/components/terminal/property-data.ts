@@ -66,7 +66,7 @@ export const SOURCES: Record<string, SourceInfo> = {
   hud:      { key: 'hud',      label: 'HUD Home',             tier: 'A', color: '#1d4ed8', note: 'hudhomestore.gov — owner-occupant window applies',         websiteUrl: 'https://www.hudhomestore.gov' },
   fannie:   { key: 'fannie',   label: 'Fannie Mae REO',       tier: 'A', color: '#2563eb', note: 'homepath.com — First Look window',                         websiteUrl: 'https://www.homepath.com' },
   freddie:  { key: 'freddie',  label: 'Freddie Mac REO',      tier: 'A', color: '#1e40af', note: 'homesteps.com',                                            websiteUrl: 'https://www.homesteps.com' },
-  usda:     { key: 'usda',     label: 'USDA RD/FSA REO',      tier: 'A', color: '#3b82f6', note: 'resales.usda.gov',                                        websiteUrl: 'https://resales.usda.gov' },
+  usda:     { key: 'usda',     label: 'USDA RD/FSA REO',      tier: 'A', color: '#3b82f6', note: 'resales.usda.gov',                                        websiteUrl: 'https://www.resales.usda.gov' },
   va:       { key: 'va',       label: 'VA REO',               tier: 'A', color: '#0e7490', note: 'vrmproperties.com',                                       websiteUrl: 'https://vrmproperties.com' },
   irs:      { key: 'irs',      label: 'IRS Seized',           tier: 'A', color: '#b45309', note: 'irsauctions.gov — email subscribe',                       websiteUrl: 'https://www.irsauctions.gov' },
   treasury: { key: 'treasury', label: 'Treasury Forfeiture',  tier: 'A', color: '#c2410c', note: 'CWS Marketing contractor',                                websiteUrl: 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml' },

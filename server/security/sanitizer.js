@@ -13,7 +13,7 @@ class SecuritySanitizer {
     // Strip control characters and sanitize delimiter tags to prevent breaking prompt XML
     return String(text)
       .replace(/<\/?(raw_legal_notice|system_prompt|instruction|script)[^>]*>/gi, '[tag-removed]')
-      .slice(0, 10000);
+      .slice(0, 50000);
   }
 
   static buildHardenedPrompt({ systemInstructions, untrustedContent, schema }) {

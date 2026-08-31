@@ -1,0 +1,168 @@
+=== civilview-root ===
+status: 200, len: 13088
+---HEAD---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <title>Sales Web | Tyler Technologies</title>
+
+    <link href="/Content/bootstrap.min.css" rel="stylesheet"/>
+<link href="/Content/site.css" rel="stylesheet"/>
+
+
+
+
+    <script src="/Scripts/jquery-1.10.2.js"></script>
+
+
+    <script src="/Scripts/modernizr-2.6.2.js"></script>
+
+</head>
+<body>
+    
+    <div>
+        
+
+<style>
+    .table-striped > div {
+        padding: 8px;
+        border-top: 1px solid rgb(221, 221, 221);
+    }
+    .table-striped > div:nth-child(even) {
+        background-color: transparent;
+    }
+
+    .table-striped > div:nth-child(odd) {
+        background-color: #f9f9f9;
+    }
+</style>
+
+    <main class="container">
+        <h1>Sales Web - Foreclosure Sales Listing</h1>
+        <h2>Please click the link below to search that county's foreclosure listings.</h2>
+        <br />
+        <div class="table-responsive">
+            <div class="table table-striped ">
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=34" style="color: #255783;">Allen County, OH</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=55" style="color: #255783;">Ascension Parish, LA</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=25" style="color: #255783;">Atlantic County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=7" style="color: #255783;">Bergen County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=3" style="color: #255783;">Burlington County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=1" style="color: #255783;">Camden County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=68" style="color: #255783;">Canyon County, ID</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=52" style="color: #255783;">Cape May County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=42" style="color: #255783;">Champaign County, IL</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=92" style="color: #255783;">Coweta County, GA</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=6" style="color: #255783;">Cumberland County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=93" style="color: #255783;">Dallas County, TX, Constable Precinct 1</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=94" style="color: #255783;">Dallas County, TX, Constable Precinct 2</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=95" style="color: #255783;">Dallas County, TX, Constable Precinct 3</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=96" style="color: #255783;">Dallas County, TX, Constable Precinct 4</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=97" style="color: #255783;">Dallas County, TX, Constable Precinct 5</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=30" style="color: #255783;">Deschutes County, OR</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=2" style="color: #255783;">Essex County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=19" style="color: #255783;">Gloucester County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=86" style="color: #255783;">Guadalupe County, TX, Constable Precinct 1</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=87" style="color: #255783;">Guadalupe County, TX, Constable Precinct 2</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=88" style="color: #255783;">Guadalupe County, T
+---TAIL---
+ County, TX, Constable Precinct 2</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=71" style="color: #255783;">Rockwall County, TX, Constable Precinct 3</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=72" style="color: #255783;">Rockwall County, TX, Constable Precinct 4</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=63" style="color: #255783;">Rockwall County, TX, Sheriff&#39;s Office</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=20" style="color: #255783;">Salem County, NJ</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=75" style="color: #255783;">Santa Rosa County, FL</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=37" style="color: #255783;">Scott County, IA</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=56" style="color: #255783;">Shawnee County, KS</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=26" style="color: #255783;">Snohomish County, WA</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=91" style="color: #255783;">St. Louis County, MN</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=62" style="color: #255783;">Stearns County, MN</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=16" style="color: #255783;">Story County, IA</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=12" style="color: #255783;">Sussex, DE</a>
+                    </div>
+                    <div>
+                        <a href="/Sales/SalesSearch?countyId=15" style="color: #255783;">Union County, NJ</a>
+                    </div>
+            </div>
+        </div>
+    </main>
+    </div>
+
+    <script src="/Scripts/bootstrap.min.js"></script>
+<script src="/Scripts/respond.js"></script>
+
+    
+</body>
+</html>

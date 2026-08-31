@@ -1,0 +1,859 @@
+status: 200, len: 44416
+url: https://www.bid4assets.com/real-estate-auctions
+
+<!doctype html>
+<html lang="en-us">	
+<head>
+    <title>Real Estate Auctions</title>
+    <meta charset="utf-8">
+    <meta name="author" content="">
+    <meta name="description" content="Check out the big list of every real estate auction currently available on Bid4Assets. From house auctions to cheap land, you'll find your next investment here.">
+    <meta name="keywords" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <style type="text/css">
+        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
+        :root {
+        --opensans-regular: 'Open Sans', sans-serif;
+        --opensans-semibold: 'Open Sans', sans-serif;
+        }    
+    </style>
+
+    <link rel="stylesheet" href="/lib/bootstrap/3.4.1/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css">
+        
+    <link href="https://cdn.bid4assets.com/app/mvc/Content/kendo/2024.4.1112/classic-main.css" rel="stylesheet" type="text/css" />
+
+    
+        
+    
+        <link rel="stylesheet" href="/css/new-style-channel-2024-03-1.css" type="text/css" />
+     
+ 
+   <link rel="stylesheet" href="https://cdn.bid4assets.com/app/mvc/Content/css/new-style-auction-deposit.css" type="text/css" />
+
+    <link href="https://cdn.bid4assets.com/app/mvc/Content/new-style-footer-2019-1.css" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="https://cdn.bid4assets.com/app/mvc/Content/css/sumoselect.css">
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans" rel="stylesheet" />
+
+    <script type="text/javascript" src="https://www.bid4assets.com/resources/856461d7b78baa7776ed16751f040b2bd7f572b640a03"  ></script><script src="https://cdn.bid4assets.com/app/mvc/Scripts/modernizr-2.8.3.js"></script>
+    <script type="text/javascript" src="/lib/jquery/jquery-3.7.1.min.js"></script>
+
+    <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/kendo/2024.4.1112/kendo.all.min.js"></script>
+    <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/kendo/2024.4.1112/kendo.aspnetmvc.min.js"></script>
+
+
+    <script type="text/javascript" src="/lib/jquery-migrate/jquery-migrate-3.5.0.min.js"></script>
+
+    <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/new-menu.js"></script>
+    
+    <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/clamp.min.js"></script>
+
+    <style type="text/css">
+        @media only screen and (min-width: 320px) and (max-width: 506px) {
+            span.channel-thumbnail-desktop {
+                display: none;
+            }
+
+            span.channel-thumbnail-mobile {
+                display: block;
+            }
+
+                span.channel-thumbnail-mobile img {
+                    width: 80%;
+                    height: auto;
+                }
+        }
+
+        @media only screen and (max-width: 767px) and (min-width: 507px) {
+            span.channel-thumbnail-desktop {
+                display: none;
+            }
+
+            span.channel-thumbnail-mobile {
+                display: block;
+            }
+
+                span.channel-thumbnail-mobile img {
+                    width: 60%;
+                    height: auto;
+                }
+        }
+    </style>
+            <style type="text/css">
+                body.auction-deposit h1 {
+                    margin-top: 15px;
+                }
+            </style>
+    <style type="text/css">
+        #top-burb-text {
+            line-height: 26px;
+        }
+    </style>
+
+            <script type="text/javascript">
+        var appInsights = window.appInsights || function (config) {
+            function r(config) { t[config] = function () { var i = arguments; t.queue.push(function () { t[config].apply(t, i) }) } } var t = { config: config }, u = document, e = window, o = "script", s = u.createElement(o), i, f; for (s.src = config.url || "//az416426.vo.msecnd.net/scripts/a/ai.0.js", u.getElementsByTagName(o)[0].parentNode.appendChild(s), t.cookie = u.cookie, t.queue = [], i = ["Event", "Exception", "Metric", "PageView", "Trace"]; i.length;) r("track" + i.pop()); return r("setAuthenticatedUserContext"), r("clearAuthenticatedUserContext"), config.disableExceptionTracking || (i = "onerror", r("_" + i), f = e[i], e[i] = function (config, r, u, e, o) { var s = f && f(config, r, u, e, o); return s !== !0 && t["_" + i](config, r, u, e, o), s }), t
+        }({
+            instrumentationKey: "15da35aa-34fa-404b-ae87-916204dcce5d"
+        });
+
+        window.appInsights = appInsights;
+        appInsights.trackPageView();
+    </script>
+
+        <script language="Javascript" type="text/javascript" src="/js/live_visitor.js" async></script>
+<script type="text/javascript">
+    var hasAntiForgeryToken = false;
+    function checkLoginAndRedirect(redirectUrl, successFunction) {
+        login_page_options.redirectUrl = redirectUrl;
+        if ($("#hidden-anti-forgery-container-header").length) { hasAntiForgeryToken = true; } else { hasAntiForgeryToken = false; }
+        var ajaxOptions = {
+            type: 'POST',
+            dataType: 'json',
+            url: "/api/authentication/isuserloggedin",
+            data: "T=" + new Date().getTime(),
+            success: function (data) {
+                if (data.statusCode == 200) {
+                    successFunction();
+                } else {
+                    displayLoginDialog(successFunction, "");
+                }
+            },
+            error: function (xhr, err) {
+                displayLoginDialog(successFunction, "");
+            },
+            traditional: true
+        };
+        if (hasAntiForgeryToken) {
+            ajaxOptions.headers = { "X-CSRF-Header-Token": $("#hidden-anti-forgery-container-header input[name='__RequestVerificationToken']").val() };
+        }
+        $.ajax(ajaxOptions);
+    }
+</script>
+    <!-- Google Tag Manager -->
+    <script>
+    (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-KQ5TTXZ');
+    </script>
+    <noscript>
+    <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KQ5TTXZ" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+    </noscript>
+    <!-- End Google Tag Manager -->
+    <script type="text/javascript" async src="https://cdn.bid4assets.com/app/mvc/Scripts/engagement.js"></script>
+    <script type="text/javascript">
+        var engagementScriptLoaded = false;
+        function didFinishLoadingEnagementScriptCallback() {
+            engagementScriptLoaded = true;
+        }
+
+        function logSiteEngagementAnalytic(auctionID, funcTypeHash, funcNameHash, payload) {
+            if (engagementScriptLoaded) {
+                siteAnalyticsEngagement_LogData(auctionID, funcTypeHash, funcNameHash, payload);
+            }
+        }
+    </script>
+<!-- end Cookie Popup -->
+<!-- end Cookie Popup -->
+
+
+    <script src="https://cdn.bid4assets.com/app/mvc/Scripts/script-vertical-menu.js"></script>
+    <script src="https://cdn.bid4assets.com/app/mvc/Scripts/jquery.sumoselect.js"></script>
+
+    <style type="text/css">
+        .visuallyhidden {
+            border: 0;
+            clip: rect(0 0 0 0);
+            height: 1px;
+            margin: -1px;
+            overflow: hidden;
+            padding: 0;
+            position: absolute;
+            width: 1px;
+        }
+
+        .logo {
+            float: left;
+            width: 25%;
+        }
+
+            .logo img {
+                margin-top: 15px;
+                margin-bottom: 15px;
+            }
+
+        .assethoundlogo {
+            display: inline-flex;
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+            width: 25%;
+            padding: 5px;
+        }
+
+        .header-right {
+            float: right;
+            width: 50%;
+            text-align: right;
+        }
+
+        @media only screen and (max-width : 730px) {
+            .logo {
+                float: left;
+                width: 50%;
+                margin: 0 auto;
+            }
+
+            .assethoundlogo {
+                float: right;
+                text-align: right;
+                width: 50%;
+                padding: 5px;
+            }
+
+                .logo a img, .assethoundlogo a img {
+                    width: 80%;
+                }
+        }
+    </style>
+<script nonce="0f33012e0e6e2181024b7c5e5ce00440">bazadebezolkohpepadr="457199365"</script><script type="text/javascript" src="https://www.bid4assets.com/akam/13/1b404cb0" nonce="0f33012e0e6e2181024b7c5e5ce00440" defer></script></head>
+
+	<body class="auction-deposit">
+        <div id="registration-finish-container" style="display:none; text-align: center; padding: 5px; border: 1px solid #ff6a00; background-color: #ffd800; margin: 5px; font-weight: bold;">
+
+        </div>
+        <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/registration-check-v2.js" defer></script>
+
+
+        <header>
+
+            <div class="logo">
+            <a href="/"><img src="https://cdn.bid4assets.com/app/nextgen/B4A-LOGO-2024-small.png" alt="B4A Logo"></a>
+            </div>
+            <div class="assethoundlogo">
+                    <a target="_blank" href="https://www.bid4assets.com/assethound" aria-label="Asset Hound (opens in a new tab)"><img src="https://www.bid4assets.com/images/assethoundlogo.png" alt="Asset Hound Logo"></a>
+            </div>
+            <div id="header-right">
+                    <div class="follow-us">
+                        <p>Follow us:</p>
+                        <div id="social-icons-top">
+                            <a href="http://www.facebook.com/Bid4Assets" rel="noopener noreferrer" target="_blank" title="Facebook" aria-label="Bid4Assets on Facebook (opens in new tab)"><div id="facebook-new" class="social-top" role="presentation"></div></a>
+                            <a href="http://twitter.com/#!/bid4assetstweet" rel="noopener noreferrer" target="_blank" title="Twitter" aria-label="Bid4Assets on Twitter (opens in new tab)"><div id="twitter-new" class="social-top" role="presentation"></div></a>
+                            <a href="http://www.youtube.com/user/bid4assets" rel="noopener noreferrer" target="_blank" title="Youtube!" aria-label="Bid4Assets on YouTube (opens in new tab)"><div id="youtube-new" class="social-top" role="presentation"></div></a>
+                            <a href="http://www.linkedin.com/company/bid4assets" rel="noopener noreferrer" target="_blank" title="LinkedIn" aria-label="Bid4Assets on LinkedIn (opens in new tab)"><div id="linkedin-new" class="social-top" role="presentation"></div></a>
+                        </div>
+                        <div class="clearfix"></div>
+                    </div>
+                <div class="clearfix"></div>
+                    <div id="auction-field" style="width:445px;">
+                        <form id="Form2" name="search-form" method="get" action="/search/redirect/get">
+                            <div id="hidden-anti-forgery-container-header" style="display:none;"><input name="__RequestVerificationToken" type="hidden" value="CfDJ8GHXQqMZ8zNMlmIsqVsDFITCxyYDytiVXOlj8yBT50hdHDVMcPdIX3Z6CJsKJExaouvVh_eovkYmmUk0AHCkp2KXriUH8SSGJbeT7dTZntf-2P67jNQlJdEY4q97Pi_qbdt77wRlFhGKvXrEyDcMXUQ" /></div>
+                            <input type="hidden" name="fuseaction" value="search">
+                            <div class="form-radio-item-wrapper">
+                                <span class="form-radio-item" style="margin-right: 15px;">
+                                    <input type="radio" class="css-checkbox" id="search-keyword" name="Type" value="auctions" checked="checked" aria-label="Search keyword">
+                                    <label for="search-keyword" class="css-label" onclick="$('#search-keyword').prop('checked','checked')"> Keyword </label>
+                                </span>
+                                <span class="form-radio-item">
+                                    <input type="radio" class="css-checkbox" id="search-auction-id" name="Type" value="auctionID" onclick="this.form.criteria.focus()" aria-label="Search auction id">
+                                    <label for="search-auction-id" class="css-label" onclick="$('#search-auction-id').prop('checked','checked')"> Auction ID# </label>
+                                </span>
+                            </div>
+                            <input type="text" class="form-textbox" data-type="" id="input_40" name="criteria" size="20" value="" placeholder="Search" aria-label="Search criteria">
+                            <button id="" type="button" class="" onclick="$('#hidden-anti-forgery-container-header').remove();this.form.submit()">GO</button>
+                            <div class="clearfix"></div>
+                            <h6><a href="/v5/search">Advanced search</a></h6>
+                        </form>
+                    </div><!-- end auction-field -->
+            </div><!-- header right -->
+            <div class="clearfix"></div>
+
+            <div id="nav-line-wrapper">
+                    <div id="weekly-email-alerts" style="cursor:pointer" onclick="document.location = '/registration/signup/emailsubscriptions'" role="button" tabindex="0">
+                        Sign up for Weekly Email Alerts
+                    </div><!-- end weekly-email-alerts -->
+                    <div id="new-menu">
+                        <div id="menu-button" role="button" tabindex="0" aria-label="Open navigation menu" aria-expanded="false"></div>
+                        <ul role="navigation" aria-label="Main navigation">
+                            <li><a href="/"><span>HOME</span></a></li>
+                        <li><a href="/listing/ez"><span>SELL</span></a></li>
+                                <li><a href="/registration/signup/step1"><span>SIGN UP</span></a></li>
+                                <li><a href="/myb4a"><span>MY ACCOUNT / LOGIN</span></a></li>
+                                <li class='last'><a href="/help/support/contactus"><span>CONTACT US</span></a></li>
+                        </ul>
+                    </div><!-- end new-menu -->
+                <div class="clearfix"></div>
+
+            </div><!-- end nav-line-wrapper -->
+        </header>
+
+
+	<div class="content-cat">
+            
+		<div class="side-bar-new">
+			<div id='side-barmenu' class="menu-desk">
+                <ul role="navigation" aria-label="Site navigation">
+
+                    <h3><span class="channels-icon"></span>SPECIALTY CHANNELS</h3>
+                            <li><a href="/county-tax-sales">County Tax Sales</a></li>
+                            <li><a href="/sheriffsales">Sheriff's Sales/Foreclosures</a></li>
+                            <li><a href="/philadelphia">Philadelphia Sheriff Sales</a></li>
+                            <li><a href="/mvc/storefront/government">Federal, State &amp; Local Government</a></li>
+                            <li><a href="/bank-owned-auctions">Bank-Owned Property</a></li>
+                            <li><a href="/absolute-auctions-1dollar">$1 No Reserve Auctions</a></li>
+                    <h3><span class="categories-icon"></span>CATEGORIES</h3>
+                        <li class="has-sub">
+                            <a id="channelLink_22" onclick="loadTopLevelChannel('22',null)" href='javascript:void(0)'>Real Estate (514)</a>
+                            <ul role="menu">
+                                    <li><a href='/bid-and-assume-auctions'>Bid &amp; Assume <span>43</span></a></li>
+                                    <li><a href='/commercial-real-estate-auctions'>Commercial <span>3</span></a></li>
+                                    <li><a href='/other-real-estate-auctions'>Other <span>316</span></a></li>
+                                    <li><a href='/residential-property-auctions'>Residential <span>152</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="has-sub">
+                            <a id="channelLink_10" onclick="loadTopLevelChannel('10',null)" href='javascript:void(0)'>Art (1)</a>
+                            <ul role="menu">
+                                    <li><a href='/channel/index?channel=10-art&amp;category=03-prints'>Prints <span>1</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="has-sub">
+                            <a id="channelLink_12" onclick="loadTopLevelChannel('12',null)" href='javascript:void(0)'>Coins (28)</a>
+                            <ul role="menu">
+                                    <li><a href='/channel/index?channel=12-coins&amp;category=02-collections'>Collections <span>1</span></a></li>
+                                    <li><a href='/channel/index?channel=12-coins&amp;category=03-gold'>Gold <span>1</span></a></li>
+                                    <li><a href='/channel/index?channel=12-coins&amp;category=05-proof-sets'>Proof Sets <span>26</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="has-sub">
+                            <a id="channelLink_16" onclick="loadTopLevelChannel('16',null)" href='javascript:void(0)'>Financial Instruments (6)</a>
+                            <ul role="menu">
+                                    <li><a href='/channel/index?channel=16-financial-instruments&amp;category=05-tax-certificates'>Tax Certificates <span>6</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="has-sub">
+                            <a id="channelLink_18" onclick="loadTopLevelChannel('18',null)" href='javascript:void(0)'>Inventory (3)</a>
+                            <ul role="menu">
+                                    <li><a href='/channel/index?channel=18-inventory&amp;category=99-other'>Other <span>3</span></a></li>
+                            </ul>
+                        </li>
+                        <li class="has-sub">
+                            <a id="channelLink_19" onclick="loadTopLevelChannel('19',null)" href='javascript:void(0)'>Jewelry (47)</a>
+                            <ul role="menu">
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=01-bracelets'>Bracelets <span>7</span></a></li>
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=02-earrings'>Earrings <span>8</span></a></li>
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=03-loose-stones'>Loose Stones <span>6</span></a></li>
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=05-necklaces'>Necklaces <span>5</span></a></li>
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=06-pendants-and-lockets'>Pendants &amp; Lockets <span>1</span></a></li>
+                                    <li><a href='/channel/index?channel=19-jewelry&amp;category=08-rings'>Rings <span>20</span></a></li>
+                            </ul>
+                        </li>
+
+                    <h3><span class="help-icon"></span>HELP</h3>
+                    <li><a href='/help/support/contactus'>Contact Us</a></li>
+                    <li><a href='/pages/public/content/help'>Resource Center</a></li>
+                    <li><a href='/pages/public/content/ivids' target="_blank" aria-label="Video Tutorials (opens in a new tab)">Video Tutorials</a></li>
+                </ul>
+			</div>
+
+			<!-- MOBILE MENU -->
+			<div id='side-barmenu' class="mobile-menu">
+				<ul role="navigation" aria-label="Mobile site navigation">
+					<li class='has-sub'><a href='#' class="mobile-menu-title"><span class="channels-icon"></span> <i>SPECIALTY CHANNELS</i></a>
+						<ul role="menu">
+                                         <li><a href="/county-tax-sales">County Tax Sales</a></li>                            
+                                         <li><a href="/sheriffsales">Sheriff's Sales/Foreclosures</a></li>                            
+                                         <li><a href="/philadelphia">Philadelphia Sheriff Sales</a></li>                            
+                                         <li><a href="/mvc/storefront/government">Federal, State &amp; Local Government</a></li>                            
+                                         <li><a href="/bank-owned-auctions">Bank-Owned Property</a></li>                            
+                                         <li><a href="/absolute-auctions-1dollar">$1 No Reserve Auctions</a></li>                            
+						</ul>							
+					</li>
+					
+					<li class='has-sub'><a href='#' class="mobile-menu-title"><span class="categories-icon"></span> <i>CATEGORIES</i></a>
+						<ul role="menu">
+							    <li class='has-sub'><a id="channelLink_22" onclick="loadTopLevelChannel('22',null)" href='javascript:void(0)'>Real Estate</a>
+								    <ul role="menu">
+                                            <li><a href='/bid-and-assume-auctions'>Bid &amp; Assume <span>43</span></a></li>
+                                            <li><a href='/commercial-real-estate-auctions'>Commercial <span>3</span></a></li>
+                                            <li><a href='/other-real-estate-auctions'>Other <span>316</span></a></li>
+                                            <li><a href='/residential-property-auctions'>Residential <span>152</span></a></li>
+								    </ul>
+							    </li>
+							    <li class='has-sub'><a id="channelLink_10" onclick="loadTopLevelChannel('10',null)" href='javascript:void(0)'>Art</a>
+								    <ul role="menu">
+                                            <li><a href='/channel/index?channel=10-art&amp;category=03-prints'>Prints <span>1</span></a></li>
+								    </ul>
+							    </li>
+							    <li class='has-sub'><a id="channelLink_12" onclick="loadTopLevelChannel('12',null)" href='javascript:void(0)'>Coins</a>
+								    <ul role="menu">
+                                            <li><a href='/channel/index?channel=12-coins&amp;category=02-collections'>Collections <span>1</span></a></li>
+                                            <li><a href='/channel/index?channel=12-coins&amp;category=03-gold'>Gold <span>1</span></a></li>
+                                            <li><a href='/channel/index?channel=12-coins&amp;category=05-proof-sets'>Proof Sets <span>26</span></a></li>
+								    </ul>
+							    </li>
+							    <li class='has-sub'><a id="channelLink_16" onclick="loadTopLevelChannel('16',null)" href='javascript:void(0)'>Financial Instruments</a>
+								    <ul role="menu">
+                                            <li><a href='/channel/index?channel=16-financial-instruments&amp;category=05-tax-certificates'>Tax Certificates <span>6</span></a></li>
+								    </ul>
+							    </li>
+							    <li class='has-sub'><a id="channelLink_18" onclick="loadTopLevelChannel('18',null)" href='javascript:void(0)'>Inventory</a>
+								    <ul role="menu">
+                                            <li><a href='/channel/index?channel=18-inventory&amp;category=99-other'>Other <span>3</span></a></li>
+								    </ul>
+							    </li>
+							    <li class='has-sub'><a id="channelLink_19" onclick="loadTopLevelChannel('19',null)" href='javascript:void(0)'>Jewelry</a>
+								    <ul role="menu">
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=01-bracelets'>Bracelets <span>7</span></a></li>
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=02-earrings'>Earrings <span>8</span></a></li>
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=03-loose-stones'>Loose Stones <span>6</span></a></li>
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=05-necklaces'>Necklaces <span>5</span></a></li>
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=06-pendants-and-lockets'>Pendants &amp; Lockets <span>1</span></a></li>
+                                            <li><a href='/channel/index?channel=19-jewelry&amp;category=08-rings'>Rings <span>20</span></a></li>
+								    </ul>
+							    </li>
+						</ul>							
+					</li>					
+					<li class='has-sub'><a href='#' class="mobile-menu-title"><span class="help-icon"></span> <i>HELP</i></a>
+                                        <ul role="menu">
+                                            <li><a href='/Help/index.cfm?fuseAction=contactUs'>Contact Us</a></li>
+                                            <li><a href='/Help'>Resource Center</a></li>
+                                            <li><a href='/pages/public/content/ivids' target="_blank" aria-label="Video Tutorials (opens in a new tab)">Video Tutorials</a></li>
+                                        </ul>							
+					</li>					
+						
+
+				</ul>
+			</div>
+			<!-- END MOBILE MENU -->	
+			
+							
+			
+			<div class="clearfix"></div>
+			
+			
+		</div><!-- end side-bar-new -->
+
+        <script type="text/javascript">
+            $(document).ready(function () {
+                // $("#channelLink_22").trigger('click');
+
+                $($("#channelLink_22")).removeAttr('href');
+                var element = $($("#channelLink_22")).parent('li');
+                if (element.hasClass('open')) {
+                    element.removeClass('open');
+                    element.find('li').removeClass('open');
+                    element.find('ul').slideUp(200);
+                }
+                else {
+                    element.addClass('open');
+                    element.children('ul').slideDown(200);
+                    element.siblings('li').children('ul').slideUp(200);
+                    element.siblings('li').removeClass('open');
+                    element.siblings('li').find('li').removeClass('open');
+                    element.siblings('li').find('ul').slideUp(200);
+                }
+
+loadTopLevelChannel('22', null);
+            });
+        </script>
+
+		    <main class="right-side-cat">
+                
+
+<div class="title-cat-22" id="title_banner"><h1 id="channel-name">Real Estate Auctions</h1></div>
+    <h2 id="top-burb-text" class="h4">Bid4Assets features real estate auctions of homes, land and more for the government and private sector.  You can browse the auctions below or click on subcategories like residential and commercial on the left navigation pane.</h2>
+<div id="results-container">
+
+</div>
+
+<script type="text/javascript">
+    var rawUrl = 'https://www.bid4assets.com';
+    var curPageSize = 50;
+    var currentPage = 1;
+    var specialtyChannel = '';
+    var channelCode = '';
+    var categoryCode = '';
+    var lev3 = '';
+    var sortOrderColumn = 'Featured';
+    var sortOrderDirection = 'DESC';
+    var locatedState = '';
+    var allStates = [];
+    var allCats = [];
+
+channelCode = '22';
+    $(document).ready(function () {
+
+
+                    loadAuctions(1);
+                
+                });
+
+    function loadAuctions(pageNumber) {
+        if (channelCode == "22") {
+            $("#title_banner").prop("class", 'title-cat-22');
+            $("#channel-name").show();
+            $("#channel-name").html("Real Estate");
+        } else if (channelCode == "12") {
+            $("#title_banner").prop("class", 'title-cat-12');
+            $("#channel-name").show();
+            $("#channel-name").html("Coins");
+        } else if (channelCode == "16") {
+            $("#title_banner").prop("class", 'title-cat-16');
+            $("#channel-name").show();
+            $("#channel-name").html("Financial Instruments");
+        } else if (channelCode == "19") {
+            $("#title_banner").prop("class", 'title-cat-12');
+            $("#channel-name").show();
+            $("#channel-name").html("Jewelry");
+        } else {
+             if (specialtyChannel == '1NRAuctionsAll') {
+                $("#title_banner").prop("class", 'title-cat-absoluteAll');
+                $("#channel-name").hide();
+            } else if (specialtyChannel == '1NRHomes') {
+                $("#title_banner").prop("class", 'title-cat-absolutehomes');
+                $("#channel-name").hide();
+            } else if (specialtyChannel == '1NRLand') {
+                $("#title_banner").prop("class", 'title-cat-absolutelands');
+                $("#channel-name").hide();
+            } else if (specialtyChannel == 'BankOwned') {
+                $("#title_banner").prop("class", 'title-cat-bankowned');
+                $("#channel-name").hide();
+            } else if (specialtyChannel == 'FL_landing_page') {
+                $("#title_banner").prop("class", 'title-cat-florida');
+                $("#channel-name").hide();
+            } else {
+                $("#title_banner").prop("class", 'title-cat');
+                $("#channel-name").show();
+            }
+        }
+
+        currentPage = pageNumber;
+        $.ajax({
+            type: 'POST',
+            dataType: 'html',
+            url: "/channel/auctions/get",
+            data: "channelCode=" + channelCode + "&categoryCode=" + categoryCode + "&currentPage=" + currentPage + "&pageSize=" + curPageSize + "&lev3=" + lev3 + "&sortOrderColumn=" + sortOrderColumn + "&sortOrderDirection=" + sortOrderDirection + "&specialtyChannel=" + specialtyChannel + "&locatedState=" + locatedState,
+            success: function (data) {
+                $("#results-container").html(data);
+                $(document).ready(function () {
+                    window.asd = $('.SlectBox').SumoSelect();
+                    $("span[linkType^='channelauction']").each(function () {
+                        $clamp(this, { clamp: 2 });
+                    });
+                });
+            },
+            error: function (xhr, err) {
+
+            },
+            traditional: true
+        });
+    }
+
+    function pushHistoryState(channel, cat) {
+        if ((channel == "22") && ((rawUrl == "/real-estate-auctions") || (rawUrl == "/agricultural-land-auctions") || (rawUrl == "/bid-and-assume-auctions") || (rawUrl == "/commercial-real-estate-auctions") || (rawUrl == "/other-real-estate-auctions") || (rawUrl == "/residential-property-auctions") || (rawUrl == "/timeshare-auctions"))) {
+            history.pushState({}, '', rawUrl);
+        } else {
+            if (categoryCode != "") {
+                if ((channelCode == "22") && (categoryCode == "01")) {
+                    history.pushState({}, '', "/agricultural-land-auctions");
+                } else if ((channelCode == "22") && (categoryCode == "02")) {
+                    history.pushState({}, '', "/bid-and-assume-auctions");
+                } else if ((channelCode == "22") && (categoryCode == "03")) {
+                    history.pushState({}, '', "/commercial-real-estate-auctions");
+                } else if ((channelCode == "22") && (categoryCode == "99")) {
+                    history.pushState({}, '', "/other-real-estate-auctions");
+                } else if ((channelCode == "22") && (categoryCode == "05")) {
+                    history.pushState({}, '', "/residential-property-auctions");
+                } else if ((channelCode == "22") && (categoryCode == "06")) {
+                    history.pushState({}, '', "/timeshare-auctions");
+                } else {
+                    history.pushState({}, '', "/Channel/" + channelCode + "/" + categoryCode);
+                }
+            } else {
+                if (channelCode == "22") {
+                    history.pushState({}, '', "/real-estate-auctions");
+                } else {
+                    history.pushState({}, '', "/Channel/" + channelCode);
+                }
+            }
+        }
+        rawUrl = "";
+    }
+
+    function updateCategoryFilter() {
+        var categoryArray = $("#columnCategory").val();
+        console.log(categoryArray);
+        if ($.inArray("check-multiple", categoryArray) >= 0) {
+            openMultiselectWindow('category');
+        } else {
+            lev3 = categoryArray.join(",");
+            console.log(lev3);
+            pushHistoryState(channelCode, categoryCode);
+            loadAuctions(1);
+        }
+    }
+
+    function updateLocatedStateFilter() {
+        var stateArray = $("#columnLocatedState").val();
+        console.log(stateArray);
+        if ($.inArray("check-multiple", stateArray) >= 0) {
+            openMultiselectWindow('state');
+        } else {
+            locatedState = stateArray.join(",");
+            console.log(locatedState);
+            loadAuctions(1);
+        }
+    }
+
+    function togglePageCount(pageSize) {
+        curPageSize = pageSize;
+        loadAuctions(1);
+    }
+
+    function updateSortByBidColumn() {
+        sortOrderColumn = 'CurrentBid';
+        sortOrderDirection = $("#columnCurrentBid").val();
+        loadAuctions(1);
+    }
+
+    function updateSortByBidCountColumn() {
+        sortOrderColumn = 'Bids';
+        sortOrderDirection = $("#columnBidCount").val();
+        loadAuctions(1);
+    }
+
+    function updateSortByTimeLeftColumn() {
+        if ($("#columnTimeLeft").val() == "new-listings") {
+            sortOrderColumn = 'AssetPostDate';
+            sortOrderDirection = 'DESC';
+        } else {
+            sortOrderColumn = 'ActualCloseTime';
+            sortOrderDirection = 'ASC';
+        }
+        loadAuctions(1);
+    }
+
+    function openMultiselectWindow(windowType) {
+        msgTitle = "";
+        if (windowType == "category") {
+            msgTitle = "Select one or more categories";
+        } else if (windowType == "state") {
+            msgTitle = "Select one or more states";
+        }
+        var multiSelectWindow = $("#multiSelectWindow").data("kendoWindow");
+        multiSelectWindow.setOptions({
+            title: msgTitle
+        });
+        multiSelectWindow.center();
+        multiSelectWindow.open();
+    }
+
+    function closeMultiselectWindow() {
+        var multiSelectWindow = $("#multiSelectWindow").data("kendoWindow");
+        multiSelectWindow.close();
+    }
+
+    function submitStatesMultiselect() {
+        var selectedStates = $("input[name='locatedState']:checkbox:checked").map(function () {
+            return this.value;
+        }).get();
+        console.log(selectedStates);
+        locatedState = selectedStates.join(",");
+        console.log(locatedState);
+        loadAuctions(1);
+        closeMultiselectWindow();
+    }
+
+    function checkAllStates() {
+        $("input[name='locatedState']:checkbox").prop('checked', true);
+    }
+
+    function checkNoneStates() {
+        $("input[name='locatedState']:checkbox").prop('checked', false);
+    }
+
+    function submitCatsMultiselect() {
+        var selectedCats = $("input[name='category']:checkbox:checked").map(function () {
+            return this.value;
+        }).get();
+        console.log(selectedCats);
+        lev3 = selectedCats.join(",");
+        console.log(lev3);
+        loadAuctions(1);
+        closeMultiselectWindow();
+    }
+
+    function checkAllCats() {
+        $("input[name='category']:checkbox").prop('checked', true);
+    }
+
+    function checkNoneCats() {
+        $("input[name='category']:checkbox").prop('checked', false);
+    }
+
+    function get1NRAuctionItems(channel) {
+        var location = "";
+        switch (channel) {
+            case 1: location = "/absolute-auctions-1dollar"; break;
+            case 2: location = "/absolute-house-auctions-1dollar"; break;
+            case 3: location = "/absolute-land-auctions-1dollar"; break;
+        }
+        console.log(location);
+        document.location.href = location;
+    }
+</script>
+
+<form action="/channel/22" method="post"><input name="__RequestVerificationToken" type="hidden" value="CfDJ8GHXQqMZ8zNMlmIsqVsDFITCxyYDytiVXOlj8yBT50hdHDVMcPdIX3Z6CJsKJExaouvVh_eovkYmmUk0AHCkp2KXriUH8SSGJbeT7dTZntf-2P67jNQlJdEY4q97Pi_qbdt77wRlFhGKvXrEyDcMXUQ" /></form><script type="text/javascript">
+    function imgerr(img, auctiontype) {
+        img.onerror = "";
+        if (auctiontype == 5) {
+            img.src = "https://cdn.bid4assets.com/app/mvc/Content/images/notice_of_sale.png";
+        } else {
+            img.src = "https://cdn.bid4assets.com/app/mvc/images/photo_icon.png";
+        }
+    }
+
+    function imgload(img, mainimg) {
+        if ($(img).parent().parent().is(":visible")) {
+            img.src = mainimg;
+        }
+    }
+
+    function loadTopLevelChannel(chCode, catCode) {
+        channelCode = chCode;
+        specialtyChannel = '';
+        categoryCode = "";
+        lev3 = "";
+        pushHistoryState(channelCode, categoryCode);
+        loadAuctions(1);
+
+        var element = $($("#channelLink_" + chCode)).parent('li');
+        if (!element.hasClass('open')) {
+            element.addClass('open');
+            element.children('ul').slideDown(200);
+            element.siblings('li').children('ul').slideUp(200);
+            element.siblings('li').removeClass('open');
+            element.siblings('li').find('li').removeClass('open');
+            element.siblings('li').find('ul').slideUp(200);
+        }
+    }
+    function loadNewChannel(chCode, catCode) {
+        if (channelCode != chCode) {
+            channelCode = chCode;
+            specialtyChannel = '';
+            categoryCode = "";
+            lev3 = "";
+            pushHistoryState(channelCode, categoryCode);
+            loadAuctions(1);
+        } else if (categoryCode != catCode) {
+            channelCode = chCode;
+            categoryCode = catCode;
+            specialtyChannel = '';
+            if (categoryCode == null) {
+                categoryCode = "";
+            }
+            lev3 = "";
+            pushHistoryState(channelCode, categoryCode);
+            loadAuctions(1);
+        }
+    }
+</script>
+
+<div class="k-hidden" id="multiSelectWindow" name="multiSelectWindow">
+                    <div id="multiSelectWindowContent">
+
+                    </div>
+            </div><script>kendo.syncReady(function(){jQuery("#multiSelectWindow").kendoWindow({"scrollable":true,"visible":false,"content":null,"draggable":false,"actions":["Close"],"resizable":false,"title":"Select","modal":true,"height":"450px","width":"350px"});});</script>
+
+
+		
+			
+					
+			
+		    </main><!-- end right-side-cat -->
+
+
+		
+
+		<div class="clearfix"></div>
+		
+	</div>
+		
+				
+								
+            <div style="border-top: 1px solid #ddd; margin-top: 10px;">
+        <footer>
+            <div id="footer-menu" class="pull-left">
+                <a href="" class="footer-logo"><img src="https://cdn.bid4assets.com/app/nextgen/B4A-LOGO-2024-small2.png" alt=""></a>
+                <ul role="navigation" aria-label="About B4A">
+                    <li><a href="/pages/public/content/b4a">About Us</a></li>
+                    <li><a href="/help/support/contactus">Contact Us</a></li>
+                    <li><a href="/pages/public/content/b4a/jobs">Jobs</a></li>
+                    <li><a href="/pages/public/content/b4a/partners">Courthouse Steps<sup>&reg;</sup></a></li>
+                </ul>
+            </div><!-- end footer-menu -->
+
+            <div id="additional-info-footer" class="pull-right">
+                <div class="col-md-3 pull-left">
+                    <h3>NEED TO KNOW</h3>
+                    <ul role="navigation" aria-label="Need to know">
+                        <li><a href="/pages/public/content/b4a/privacy-policy">Privacy Policy</a></li>
+                        <li><a href="/pages/public/content/b4a/terms-of-service">Terms of Service</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>FOR SELLERS</h3>
+                    <ul role="navigation" aria-label="For sellers">
+                        <li><a href="/listing/ez">Sell an Asset</a></li>
+                        <li><a href="/sheriff-sale-government-auctions">Sheriff's Sales</a></li>
+                        <li><a href="/county-government-auctions">County Government Sellers</a></li>
+                        <li><a href="/pages/public/content/help#selling">Seller Help</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>FOR BUYERS</h3>
+                    <ul role="navigation" aria-label="For buyers">
+                        <li><a href="/registration/signup/emailsubscriptions">Weekly Email Alert</a></li>
+                        <li><a href="/pages/public/content/help/seller-rating-system"> Rate a Seller</a></li>
+                        <li><a href="/pages/public/content/ivids">Video Tutorials</a></li>
+                        <li><a href="/pages/public/content/help">Buyer Help</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>USEFUL LINKS</h3>
+                    <ul role="navigation" aria-label="Useful links">
+                        <li><a href="/myb4a">My Account/Login</a></li>
+                        <li><a href="/forms/sellyourproperty">Have Property to Sell?</a></li>
+                        <li><a href="/testimonials">Testimonials</a></li>
+                        <li><a href="mailto:testimonials@bid4assets.com?subject=Buyer Testimonial">Submit a Testimonial</a></li>
+                        <li><a href="mailto:feedback@bid4assets.com?subject=Feedback for Bid4Assets">Give Us Your Feedback</a></li>
+                    </ul>
+                </div>
+            </div><!-- end additional-info-footer -->
+
+            <div class="clearfix"></div>
+
+            <div id="footer-bottom">
+                <div class="pull-left col-md-8">
+                    <p>BID4ASSETS.com&reg; is a registered trademark of Bid4Assets, Inc.</p>
+                    <p>Where Great Deals Click&trade;; Bid4Assets&trade;; Copyright &copy; 1999-2026 ALL RIGHTS RESERVED Bid4Assets, Inc.</p>
+                </div>
+                <div class="pull-right col-md-4">
+                    <a href="https://www.bbb.org/washington-dc-eastern-pa/business-reviews/online-auctions/bid4assets-inc-in-silver-spring-md-1036083" rel="noopener noreferrer" aria-label="Bid4Assets Better Business Bureau profile (opens in new tab)"><img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/bbb.jpg" class="logo-company" alt="Better Business Bureau Logo"></a>
+                    <img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/naa.jpg" class="logo-company" alt="NAA Logo" />
+                    <a href="https://www.gsa.gov/" rel="noopener noreferrer" aria-label="U.S. General Services Administration website (opens in new tab)"><img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/gsa.jpg" class="logo-company" alt="GSA Logo"></a>
+                </div>
+                <div class="clearfix"></div>
+            </div>
+        </footer>
+    </div>
+<div id="popupAlertDialog"></div>
+
+
+            
+	<noscript><img src="https://www.bid4assets.com/akam/13/pixel_1b404cb0?a=dD0zMjQxMmNhMDY3OTkwMDczYmY1ZDFhMDg2OTg0MjEyMzBhNDFmMWViJmpzPW9mZg==" style="visibility: hidden; position: absolute; left: -999px; top: -999px;" /></noscript></body>
+
+</html>

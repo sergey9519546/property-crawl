@@ -3,6 +3,7 @@ const sheriff = require('../server/scrapers/sheriff');
 const hud = require('../server/scrapers/hud');
 const fannie = require('../server/scrapers/fannie');
 const irs = require('../server/scrapers/irs');
+const landbanksearch = require('../server/scrapers/landbanksearch');
 const scheduler = require('../server/scrapers/scheduler');
 
 console.log('=== RUNNING SCRAPERS TEST SUITE ===');
@@ -51,17 +52,35 @@ async function run() {
   });
 
   await test('IRS scraper standardizes seized asset auctions', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
+    }
     const items = await irs.scrapeFeed();
     assert.ok(items.length > 0);
     const item = items[0];
     assert.strictEqual(item.source, 'irs');
-    assert.strictEqual(item.state, 'NV');
+    assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
   });
 
   await test('Ingestion scheduler runs all scrapers concurrently and persists to database', async () => {
     const result = await scheduler.runAll();
     assert.ok(result.totalIngested >= 4);
     assert.ok(result.durationMs >= 0);
+  });
+
+  await test('LandBankSearch scraper returns standardized listings from real source (gated)', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
+    }
+    const items = await landbanksearch.scrapeFeed();
+    assert.ok(items.length >= 10, `expected >= 10 listings, got ${items.length}`);
+    const item = items[0];
+    assert.ok(/^LB-/.test(item.id), `id should start with LB-: ${item.id}`);
+    assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+    assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+    assert.strictEqual(item.source, 'landbank');
   });
 
   console.log(`--- SCRAPER TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);

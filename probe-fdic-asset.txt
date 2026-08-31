@@ -1,0 +1,116 @@
+=== fdic-asset ===
+status: 200, len: 83860
+---HEAD---
+<!DOCTYPE html>
+<html lang="en" dir="ltr" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="utf-8" />
+<noscript><style>form.antibot > * { display: none !important; } form.antibot noscript { display: block !important; }</style>
+</noscript><meta name="description" content="The FDIC retains all types of real estate from failed banks." />
+<link rel="canonical" href="https://www.fdic.gov/asset-sales/real-estate-and-property-sales" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://www.fdic.gov/asset-sales/real-estate-and-property-sales" />
+<meta property="og:title" content="Real Estate and Property Sales | FDIC.gov" />
+<meta property="og:description" content="The FDIC retains all types of real estate from failed banks." />
+<meta property="og:image" content="https://www.fdic.gov/system/files?file=2025-03/fdic-seal.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="600" />
+<meta property="og:image:alt" content="Federal Deposit Insurance Corporation seal" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:site" content="@FDICgov" />
+<meta name="twitter:creator" content="@FDICgov" />
+<meta name="twitter:image:alt" content="Federal Deposit Insurance Corporation seal" />
+<meta name="twitter:image" content="https://www.fdic.gov/system/files?file=2025-03/fdic-seal.png" />
+<script>(function(c,l,a,r,i,t,y){
+    c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+    t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+    y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+})(window, document, "clarity", "script", "sxcr2j4s0u");
+</script>
+<meta name="Generator" content="Drupal 10 (https://www.drupal.org)" />
+<meta name="MobileOptimized" content="width" />
+<meta name="HandheldFriendly" content="true" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://www.fdic.gov/"
+        },
+        {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Resources",
+            "item": "https://www.fdic.gov/resources"
+        },
+        {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "Resolutions",
+            "item": "https://www.fdic.gov/resolutions"
+        },
+        {
+            "@type": "ListItem",
+            "position": 4,
+            "name": "Asset Sales",
+            "item": "https://www.fdic.gov/asset-sales"
+        }
+    ]
+}</script>
+<link rel="icon" href="/modules/custom/fdic_custom/assets/images/fdic-wordmark.svg" type="image/svg+xml" />
+<link rel="icon" href="/modules/custom/fdic_custom/assets/images/fdic-wordmark.png" type="image/png" sizes="48x48" />
+<link rel="alternate" hreflang="en" href="https://www.fdic.gov/asset-sales/real-estate-and-property-sales" />
+
+  <title>Real Estate and Property Sales | FDIC.gov</title>
+  <link rel="stylesheet" media="all" href="/sites/default/files/css/css_k1iqZGTZnieDvzXHlfebmdlWqlCdK7x5Kl5jPSEwxyA.css?delta=0&amp;language=en&amp;theme=fdic_theme&amp;include=eJxlTVsOgzAMu1DVHgmFJkBE0lZNOsbthzamfezHll9yriLQjGepeU-5dgr0dOGyJ-yjgcRbhgU5T3mYV00LF9Sry2Wpn8A3UkrDDrS7FFZhpJ4-FJSQ4RqKU48ZmnMtoUGHtUPb7Pv2c-IobczCthEGO81J0wxGwedJaQWlMv4N81PIwoPpsPTGqBWH0AvKPVtF" />
+<link rel="stylesheet" media="all" href="/sites/default/files/css/css_mayqyyTi0oTivovAy1umktw7LrYqgIlQjvVWzj0bDww.css?delta=1&amp;language=en&amp;theme=fdic_theme&amp;include=eJxlTVsOgzAMu1DVHgmFJkBE0lZNOsbthzamfezHll9yriLQjGepeU-5dgr0dOGyJ-yjgcRbhgU5T3mYV00LF9Sry2Wpn8A3UkrDDrS7FFZhpJ4-FJSQ4RqKU48ZmnMtoUGHtUPb7Pv2c-IobczCthEGO81J0wxGwedJaQWlMv4N81PIwoPpsPTGqBWH0AvKPVtF" />
+<link rel="stylesheet" media="print" href="/sites/default/files/css/css_GiIcNgZ7385q2iyRAaTRPhiEDH3JEwPPE9umUOIAVN4.css?delta=2&amp;language=en&amp;theme=fdic_theme&amp;include=eJxlTVsOgzAMu1DVHgmFJkBE0lZNOsbthzamfezHll9yriLQjGepeU-5dgr0dOGyJ-yjgcRbhgU5T3mYV00LF9Sry2Wpn8A3UkrDDrS7FFZhpJ4-FJSQ4RqKU48ZmnMtoUGHtUPb7Pv2c-IobczCthEGO81J0wxGwedJaQWlMv4N81PIwoPpsPTGqBWH0AvKPVtF" />
+
+  <script src="https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js?agency=FDIC&amp;aip=true&amp;maincd=true" id="_fed_an_ua_tag" async></script>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=AW-11137896577"> </script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'AW-11137896577');
+  </script>
+
+                                <script>!function(e){var n="https://s.go-mpulse.net/boomerang/";if("False"=="True")e.BOOMR_config=e.BOOMR_config||{},e.BOOMR_config.PageParams=e.BOOMR_config.PageParams||{},e.BOOMR_config.PageParams.pci=!0,n=
+---TAIL---
+Classes":"","extAdditionalTelClasses":"","extFaTelClasses":"fa fa-phone","allowedDomains":[],"extExcludeNoreferrer":""}},"collapsiblock":{"active_pages":false,"slide_speed":200,"cookie_lifetime":null,"switcher_enabled":null,"switcher_class":null},"field_group":{"html_element":{"mode":"default","context":"view","settings":{"classes":"sidebar-container","show_empty_fields":false,"id":"","element":"div","show_label":false,"label_element":"h3","label_element_classes":"","attributes":"","effect":"none","speed":"fast"}}},"TBMegaMenu":{"TBElementsCounter":{"column":null},"theme":"fdic_theme","30d9b71d-f090-4d32-be9d-ab46bee4d366":{"arrows":"0"}},"mercuryEditor":{"rolloverPaddingBlock":"10"},"user":{"uid":0,"permissionsHash":"729e565733eccc44b40d0f9567723b5edf25ce2f97c5f40a6ef6dfc85b89baf6"}}</script>
+<script src="/sites/default/files/js/js_jDGu-SUzbg0PFxyQZE5dnwDkkb3V8LD_n-P7cDmI2qA.js?scope=footer&amp;delta=0&amp;language=en&amp;theme=fdic_theme&amp;include=eJxVjVEOwyAMQy9Ex5FQSgKLGggi0G63X6VW0_Zl2c-Wo4pAM15F4-ajdnL0GsJ189hnA3nc1iXkGOK0ocUnrljOLtekf2BnOkKDTGHoRtUuOJ5UyENrhcDmefGTTjvQ7rnLwkjdX-LGGgplKFSnX8HITUuEWfeQVbNQgAryHhzNiwIuX7tErB94sFVu"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+<script src="/modules/contrib/collapsiblock/theme/dist/collapsiblock.js?tkgf7w" type="module"></script>
+<script src="/sites/default/files/js/js_3YpCakDV5ZApsdaAwvMVE8N3uDrFZ9naH-3dPDp-W14.js?scope=footer&amp;delta=3&amp;language=en&amp;theme=fdic_theme&amp;include=eJxVjVEOwyAMQy9Ex5FQSgKLGggi0G63X6VW0_Zl2c-Wo4pAM15F4-ajdnL0GsJ189hnA3nc1iXkGOK0ocUnrljOLtekf2BnOkKDTGHoRtUuOJ5UyENrhcDmefGTTjvQ7rnLwkjdX-LGGgplKFSnX8HITUuEWfeQVbNQgAryHhzNiwIuX7tErB94sFVu"></script>
+
+<!-- START Omniture SiteCatalyst Code -->
+
+<script type="text/javascript">
+  /************* DO NOT ALTER ANYTHING BELOW THIS LINE ! **************/
+  if (typeof s !== 'undefined') {
+    var s_code = s.t();
+    if (s_code) document.write(s_code);
+  }
+</script>
+<script type="text/javascript">
+  if (navigator.appVersion.indexOf("MSIE") >= 0)
+    document.write(unescape("%3C") + "\!-" + "-");
+</script>
+<noscript>
+  <a href="https://www.omniture.com/" title="Web Analytics">
+    <img
+      src="https://fdic.122.2o7.net/b/ss/fdicgovprod/1/H.21--NS/0?[AQB]%26cl=Session%26AQE"
+      style="height: 1px; width: 1px; border: none;"
+      alt="adobe marketing cloud tracking image"
+  /></a>
+</noscript>
+<!--/DO NOT REMOVE/-->
+<!-- END Omniture SiteCatalyst Code -->
+</body>
+</html>

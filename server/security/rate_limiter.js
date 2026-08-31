@@ -9,6 +9,13 @@ class MemoryRateLimiter {
     return (req, res, next) => {
       const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
       const now = Date.now();
+      // Periodically evict expired entries to prevent memory leak
+      if (this.hits.size > 100) {
+        for (const [key, record] of this.hits.entries()) {
+          if (now > record.resetAt) this.hits.delete(key);
+        }
+      }
+
       const clientRecord = this.hits.get(ip) || { count: 0, resetAt: now + this.windowMs };
 
       if (now > clientRecord.resetAt) {

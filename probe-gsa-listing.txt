@@ -1,0 +1,186 @@
+=== gsa-listing ===
+status: 200, len: 71368
+---HEAD---
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <!-- /templates/layout/theme-4/Layout.html-->
+  <title>Real Estate Sales Home Page</title>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-8P43E672F7"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-8P43E672F7');
+  </script>
+
+  <!-- Meta Tags -->
+  <meta name="description" content="">
+  <meta name="keywords" content="">
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=2.0, user-scalable=yes">
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="format-decetion" content="telephone=no" />
+  
+  <!-- links -->
+  <script type="text/javascript" src="https://d2w9j5i7epyyai.cloudfront.net/static/assets/uswds/js/uswds-init.min.js?v=1.1" ></script>
+  <link rel="icon" href="https://d2m3yrz4x1yefr.cloudfront.net/property_image/1706846164.7074475_resauclogo.png" type="image/png" sizes="16x16">
+
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/theme-4/css/style.css?v=6.0" type="text/css" rel="stylesheet" />
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/theme-4/css/all.css?v=4.0" type="text/css" rel="stylesheet" />
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/theme-common/css/custom_style.css?v=3.0" type="text/css" rel="stylesheet" />
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/theme-common/css/jquery.growl.css?v=3.0" type="text/css" rel="stylesheet" />
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/theme-common/css/dropzone.css?v=2.1" type="text/css" rel="stylesheet" />
+  <link href="https://d2w9j5i7epyyai.cloudfront.net/static/assets/css/styles.css?v=2.1" type="text/css" rel="stylesheet" />
+
+  <!-- PGC 6.6.0 did not work, back to 6.1.1 
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" type="text/css" rel="stylesheet" />
+  -->
+ <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
+
+  
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-tour/0.11.0/css/bootstrap-tour.css">
+
+
+  <!-- PGC Quick Hack to make it look better -->
+  <style>
+    .banner-wrap .container-fluid h1 {
+      color: #FFFFFF;
+      background: transparent; /* Ensure no background color */
+    }
+    .banner-wrap .container-fluid h4 {
+      color: #FFFFFF;
+      background: transparent; /* Ensure no background color */
+    }
+  </style>
+
+  <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--about-us.html-->
+
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+
+  <!--[if lte IE 7]> <html class="ie7"> <![endif]-->
+  <!--[if IE 8]>     <html class="ie8"> <![endif]-->
+  <!--[if IE 9]>     <html class="ie9"> <![endif]-->
+  <!--[if !IE]><!-->
+
+<script>
+    var aws_url = 'https://d2m3yrz4x1yefr.cloudfront.net/';
+    var base_url = 'https://realestatesales.gov';
+  </script>
+</head>
+
+<body class="">
+
+    
+    
+<header id="header" class="header fixed-header">
+<section
+  class="usa-banner"
+  aria-label="Official website of the United States government"
+>
+  <div class="usa-accordion">
+    <header class="usa-banner__header">
+      <div class="usa-banner__inner">
+        <div class="grid-col-auto">
+          <img
+            aria-hidden="true"
+            class="usa-banner__header-flag"
+            src="https://d2w9j5i7epyyai.cloudfront.net/static/assets/uswds/img/us_flag_small.png"
+            alt=""
+          />
+        </div>
+        <div class="grid-col-fill tablet:grid-col-auto" aria-hidden="true">
+          <p class="usa-banner__header-text">
+            An official website of the United States government
+          </p>
+          <p class="usa-banner__header-action">Here’s how you know</p>
+        </div>
+        <button
+          type="button"
+          class="usa-accordion__button usa-banner__button"
+          aria-expanded="false"
+          aria-controls="gov-banner-default"
+        >
+          <span class="usa-banner__button-text">Here’s how you know</span>
+        </button>
+      </div>
+    </header>
+    <div
+      class="usa-banner__content usa-accordion__content"
+      id="gov-banner-default"
+    >
+      <div class="grid-row grid-gap-lg">
+        <div class="usa-banner__guidance tablet:grid-col-6">
+          <img
+            class="usa-banner__icon usa-media-block__img"
+            src="https://d2w9j5i7epyyai.cloudfront.net/static/assets/uswd
+---TAIL---
+ecord').val() != ""){
+                recordPerpage = $('#prop_num_record').val();
+            }*/
+
+            $("#count_residential").text(response.property_residential || 0);
+            $("#count_commercial").text(response.property_commercial || 0);
+            $("#count_land").text(response.property_land_lots || 0);
+
+            if($('#pagi').val() != ""){
+                recordPerpage = $('#pagi').val();
+            }
+            response.pagination_html = response.pagination_html.replaceAll("getresult", "getpgcresult")
+            $("#prop_listing_pagination_list").html(response.pagination_html);
+            // console.log("pagination_html", response.pagination_html)
+            if(response.listing_filter == 'auctions_listing'){
+                pre_active_listing = '#auctions-listing';
+            } else if(response.listing_filter == 'new_listing'){
+                pre_active_listing = '#newlistings-listing';
+            } else if(response.listing_filter == 'traditional_listing'){
+                pre_active_listing = '#traditional-listing';
+            } else if(response.listing_filter == 'recent_sold_listing'){
+                pre_active_listing = '#recently-listing';
+            } else if(response.listing_filter == 'featured'){
+                pre_active_listing = '#featured';
+            }
+            // } else if(response.listing_filter == '#all-listing'){
+            //   listing_filter = 'closed_listing';                        
+            // } else if(response.listing_filter == '#coming-soon'){
+            //   listing_filter = 'coming_soon';
+            // } else if(response.listing_filter == 'active_listing'){
+            //   listing_filter = 'active-listing';
+            // } else if(response.listing_filter == '#closed-listing'){
+            //   listing_filter = 'closed_listing';
+            // }
+            
+            listing_filter = response.listing_filter;
+            // console.log("listing_filter", listing_filter)
+            // console.log("total properties:", response.total)
+            // $('#pagi').chosen();
+            // $("#datesort").chosen();
+            $(window).scrollTop(0);
+            if(response.total > 0){
+                var show_page_txt = 'Showing page '+response.current_page+' of '+response.no_page ;
+            } else {
+              var show_page_txt = 'Showing page 1 of 1';
+            }
+            $('#show_page_record').html(show_page_txt);
+
+          }
+        }
+    });
+  }
+}
+</script>
+
+
+</body>
+</html>

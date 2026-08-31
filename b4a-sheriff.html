@@ -1,0 +1,865 @@
+status: 200, len: 58431
+url: https://www.bid4assets.com/sheriffsales
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en-us">
+<head>
+    <meta charset="utf-8" />
+    <title>Bid4Assets: Bid4Assets.com &gt; Sheriff&#x27;s Sales &gt; County List</title>
+    <meta name="description" content="" />
+
+    <!--Jquery-->
+    <script type="text/javascript" src="https://www.bid4assets.com/resources/856461d7b78baa7776ed16751f040b2bd7f572b640a03"  ></script><script type="text/javascript" src="/lib/jquery/jquery-3.7.1.min.js"></script>
+    <script src="/lib/jquery-ajax-unobtrusive/jquery.unobtrusive-ajax.min.js"></script>
+    <script type="text/javascript" src="/lib/jquery-migrate/jquery-migrate-3.5.0.min.js"></script>
+
+    <!--Jquery Validation-->
+    <script src="/lib/jquery-validate/jquery.validate.min.js"></script>
+    <script src="/lib/jquery-validate-unobtrusive/jquery.validate.unobtrusive.min.js"></script>
+
+   <!--Kendo-->
+   <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/kendo/2024.4.1112/kendo.all.min.js"></script>
+   <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/kendo/2024.4.1112/kendo.aspnetmvc.min.js"></script>
+   <link href="https://cdn.bid4assets.com/app/mvc/Content/kendo/2024.4.1112/classic-main.css" rel="stylesheet" type="text/css" />
+   <script src="https://cdn.bid4assets.com/app/mvc/Scripts/kendo/2021.3.1207/jszip.min.js"></script>
+   
+    <!--BootStrap-->
+                                <link href="https://cdn.bid4assets.com/app/mvc/Content/new-style-2019-1.css" rel="stylesheet" type="text/css" />
+       <link rel="stylesheet" href="/lib/bootstrap/3.4.1/css/bootstrap.min.css" />
+
+    <!-- Scripts --->
+    <script src="https://cdn.bid4assets.com/app/mvc/Scripts/modernizr-2.8.3.js"></script>
+    <script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/new-menu.js"></script>
+
+   <!--StyleSheets-->
+
+    
+        
+    
+       <link href="/css/new-style-footer-2024-1.css" rel="stylesheet" type="text/css" />
+     
+
+   <link rel="stylesheet" href="https://cdn.bid4assets.com/app/mvc/Content/font-awesome-4.7.0/css/font-awesome.min.css" />
+
+
+
+    
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800&display=swap" rel="stylesheet">
+    <link href="https://publicresources.bid4assets.com/static/partners/css/style-2.css" rel="stylesheet">
+    <link href="https://publicresources.bid4assets.com/static/partners/css/sumoselect.css" rel="stylesheet">
+    <link href="https://publicresources.bid4assets.com/static/partners/css/newstyle.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://publicresources.bid4assets.com/static/partners/css/bootstrap.css">
+    <link rel="stylesheet" href="https://publicresources.bid4assets.com/static/partners/css/all.min.css">
+
+    <script>$(document).ready(function() {
+
+                $('#myTab a').on('click', function (e) {
+                e.preventDefault();
+                $(this).tab('show');
+
+            });
+        });</script>
+    <!-- jQuery first, then Bootstrap JS (bundle includes Popper) -->
+    <!-- <script src="/lib/jquery/jquery-3.7.1.min.js" crossorigin="anonymous"></script>  Already referenced in layout-->
+    <script src="/lib/bootstrap/4.6.2/js/bootstrap.bundle.min.js"></script>
+
+    <style type="text/css">
+        #new-container-right {
+            width: 800px;
+        }
+
+        div#wrapper {
+            width: 1080px;
+        }
+
+        div#header-right {
+            width: 468px;
+        }
+
+        div#login-bar {
+            width: 1080px;
+        }
+
+        div#new-menu {
+            margin-right: 10px;
+        }
+    </style>
+
+    
+            <script type="text/javascript">
+        var appInsights = window.appInsights || function (config) {
+            function r(config) { t[config] = function () { var i = arguments; t.queue.push(function () { t[config].apply(t, i) }) } } var t = { config: config }, u = document, e = window, o = "script", s = u.createElement(o), i, f; for (s.src = config.url || "//az416426.vo.msecnd.net/scripts/a/ai.0.js", u.getElementsByTagName(o)[0].parentNode.appendChild(s), t.cookie = u.cookie, t.queue = [], i = ["Event", "Exception", "Metric", "PageView", "Trace"]; i.length;) r("track" + i.pop()); return r("setAuthenticatedUserContext"), r("clearAuthenticatedUserContext"), config.disableExceptionTracking || (i = "onerror", r("_" + i), f = e[i], e[i] = function (config, r, u, e, o) { var s = f && f(config, r, u, e, o); return s !== !0 && t["_" + i](config, r, u, e, o), s }), t
+        }({
+            instrumentationKey: "15da35aa-34fa-404b-ae87-916204dcce5d"
+        });
+
+        window.appInsights = appInsights;
+        appInsights.trackPageView();
+    </script>
+
+        <script type="text/javascript">
+            function showActionWindowWithText(title, text) {
+                text += '<br /><br /><input type="button" value="OK" id="bttnWindowOk" class="k-button" onclick="closeActionWindow()"  aria-label="OK" />';
+                var actionWindow = $("#actionWindow").data("kendoWindow");
+                actionWindow.title(title);
+                actionWindow.content('<div style="text-align:center;">' + text + '<br /></div>');
+                actionWindow.center();
+                actionWindow.open();
+            }
+
+            function closeActionWindow() {
+                var actionWindow = $("#actionWindow").data("kendoWindow");
+                actionWindow.close();
+            }
+            var popupNotification;
+
+            function showNotificationText(text, notificationType) {
+                var d = new Date();
+                popupNotification = $("#popupNotification").data("kendoNotification");
+                popupNotification.show(kendo.toString(d, 'h:MM:ss tt') + " " + text, notificationType);
+            }
+
+            function actionKendoWindowResized(e) {
+                iframeHeight = e.sender.wrapper.height() - 45;
+                $("#" + e.sender.element[0].id).find(">:first-child").css("min-height", iframeHeight + "px");
+            }
+
+
+        </script>
+        <script type="text/javascript" src="/js/client/session_helper.js" async=async></script>
+        <script language="Javascript" type="text/javascript" src="/js/live_visitor.js" async></script>
+<script type="text/javascript">
+    var hasAntiForgeryToken = false;
+    function checkLoginAndRedirect(redirectUrl, successFunction) {
+        login_page_options.redirectUrl = redirectUrl;
+        if ($("#hidden-anti-forgery-container-header").length) { hasAntiForgeryToken = true; } else { hasAntiForgeryToken = false; }
+        var ajaxOptions = {
+            type: 'POST',
+            dataType: 'json',
+            url: "/api/authentication/isuserloggedin",
+            data: "T=" + new Date().getTime(),
+            success: function (data) {
+                if (data.statusCode == 200) {
+                    successFunction();
+                } else {
+                    displayLoginDialog(successFunction, "");
+                }
+            },
+            error: function (xhr, err) {
+                displayLoginDialog(successFunction, "");
+            },
+            traditional: true
+        };
+        if (hasAntiForgeryToken) {
+            ajaxOptions.headers = { "X-CSRF-Header-Token": $("#hidden-anti-forgery-container-header input[name='__RequestVerificationToken']").val() };
+        }
+        $.ajax(ajaxOptions);
+    }
+</script>
+    <!-- Google Tag Manager -->
+    <script>
+    (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-KQ5TTXZ');
+    </script>
+    <noscript>
+    <iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KQ5TTXZ" height="0" width="0" style="display:none;visibility:hidden"></iframe>
+    </noscript>
+    <!-- End Google Tag Manager -->
+    <script type="text/javascript" async src="https://cdn.bid4assets.com/app/mvc/Scripts/engagement.js"></script>
+    <script type="text/javascript">
+        var engagementScriptLoaded = false;
+        function didFinishLoadingEnagementScriptCallback() {
+            engagementScriptLoaded = true;
+        }
+
+        function logSiteEngagementAnalytic(auctionID, funcTypeHash, funcNameHash, payload) {
+            if (engagementScriptLoaded) {
+                siteAnalyticsEngagement_LogData(auctionID, funcTypeHash, funcNameHash, payload);
+            }
+        }
+    </script>
+<!-- end Cookie Popup -->
+<!-- end Cookie Popup -->
+
+    <link href="https://cdn.bid4assets.com/app/mvc/Content/css/responsive-override-2020-09.css" />
+<script nonce="8cd574a23483589749f83f806507650b">bazadebezolkohpepadr="457199365"</script><script type="text/javascript" src="https://www.bid4assets.com/akam/13/1b404cb0" nonce="8cd574a23483589749f83f806507650b" defer></script></head>
+
+<body class="">
+
+    <!-- ------------------------ HEADER ----------------------------- -->
+<div id="wrapper" style="">
+    <div id="modalAlertDialog"></div>
+<script type="text/javascript">
+    var modalAlertDialogCallbackTemp;
+
+    function onModalAlertDialogClose() {
+        if (modalAlertDialogCallbackTemp != null) {
+            modalAlertDialogCallbackTemp();
+        }
+       // $("#modalAlertDialog").data("kendoDialog").destroy();
+    }
+
+    function showModalAlertDialog(title, text, modalAlertDialogCallback) {
+        console.log(text);
+        var modalAlertDialog = $('#modalAlertDialog');
+        if (modalAlertDialog.data("kendoDialog")) {
+            console.log(modalAlertDialog.data("kendoDialog"));
+            modalAlertDialog.data("kendoDialog").title(title);
+            modalAlertDialog.data("kendoDialog").content(text);
+            modalAlertDialog.data("kendoDialog").open();
+        } else {
+            modalAlertDialogCallbackTemp = modalAlertDialogCallback;
+            modalAlertDialog.kendoDialog({
+                width: "450px",
+                title: title,
+                closable: false,
+                modal: true,
+                content: "<p>" + text + "<p>",
+                actions: [
+                    { text: 'OK', primary: true }
+                ],
+                close: onModalAlertDialogClose
+            });
+        }
+
+    }
+</script>   
+    <style type="text/css">
+    @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap');
+    :root {
+    --opensans-regular: 'Open Sans', sans-serif;
+    --opensans-semibold: 'Open Sans', sans-serif;
+    }    
+</style>
+<link rel="stylesheet" href="https://cdn.bid4assets.com/app/nextgen/nextgen-new-layout-header.css" />
+<script type="text/javascript" src="https://cdn.bid4assets.com/app/mvc/Scripts/registration-check-v2.js" defer></script>
+<header class="">
+    <div class="logo">
+            <a href="/"><img src="https://cdn.bid4assets.com/app/nextgen/B4A-LOGO-2024-small.png" alt="B4A Logo"></a>
+    </div>
+        <div class="assethoundlogo">
+                <a target="_blank" href="/assethound" aria-label="Asset Hound (opens in new tab)"><img src="https://cdn.bid4assets.com/app/homepage/images/assethoundlogo.png" alt="Asset Hound Logo"></a>
+        </div>
+        <div id="header-right">
+                <div class="follow-us">
+                    <p>Follow us:</p>
+                    <div id="social-icons-top">
+                        <a href="https://www.facebook.com/Bid4Assets" rel="noopener noreferrer" target="_blank" title="Bid4Assets" aria-label="Bid4Assets on Facebook (opens in a new tab)"><div id="facebook-new" class="social-top" role="presentation"></div></a>
+                        <a href="https://twitter.com/#!/bid4assetstweet" rel="noopener noreferrer" target="_blank" title="Twitter" aria-label="Bid4Assets on Twitter (opens in a new tab)"><div id="twitter-new" class="social-top" role="presentation"></div></a>
+                        <a href="http://www.youtube.com/user/bid4assets" rel="noopener noreferrer" target="_blank" title="Youtube!" aria-label="Bid4Assets on YouTube (opens in a new tab)"><div id="youtube-new" class="social-top" role="presentation"></div></a>
+                        <a href="https://www.linkedin.com/company/bid4assets" rel="noopener noreferrer" target="_blank" title="LinkedIn" aria-label="Bid4Assets on LinkedIn (opens in a new tab)"><div id="linkedin-new" class="social-top" role="presentation"></div></a>
+                    </div>
+                    <div class="clearfix"></div>
+                </div>
+                <div class="clearfix"></div>
+                <div id="auction-field" style="width:445px;">
+                    <form id="search-form" name="search-form" method="get" action="/search/redirect/get">
+                        <div id="hidden-anti-forgery-container-header" style="display:none;"><input name="__RequestVerificationToken" type="hidden" value="CfDJ8GHXQqMZ8zNMlmIsqVsDFITtATIJE3kqIkr0VOlKaypB5bOyPRDoctxbA_h10epv6qXpYcq6Z5YVoGoFaxby5zR_AbzsRVKs--cAli0VE5-XuSjU4NGab-wm38tRFDt8gC2t5XJXsrxHa1UNcotXoP4" /></div>
+                        <input type="hidden" name="fuseaction" value="search" />
+                        <div class="form-radio-item-wrapper">
+                            <span class="form-radio-item" style="margin-right: 15px;">
+                                <input type="radio" class="css-checkbox" id="search-keyword" name="Type" value="auctions" checked="checked"  aria-label="Search keyword" />
+                                <label for="search-keyword" class="css-label"> Keyword </label>
+                            </span>
+                            <span class="form-radio-item">
+                                <input type="radio" class="css-checkbox" id="search-auction-id" name="Type" value="auctionID" onclick="this.form.criteria.focus()"  aria-label="Search auction id" />
+                                <label for="search-auction-id" class="css-label"> Auction ID# </label>
+                            </span>
+                        </div>
+                        <input type="text" class="form-textbox" data-type="" id="input_40" name="criteria" size="20" value="" aria-label="Search criteria" />
+                        <button id="" type="button" class="" onclick="$('#hidden-anti-forgery-container-header').remove();this.form.submit()">GO</button>
+                        <div class="clearfix"></div>
+                        <h6><a href="/v5/search">Advanced search</a></h6>
+                    </form>
+                </div><!-- end auction-field -->
+        </div><!-- header right -->
+    <div class="clearfix"></div>
+
+        <div id="nav-line-wrapper">
+                <div id="weekly-email-alerts" style="cursor:pointer" onclick="document.location = '/registration/signup/emailsubscriptions'" role="button" tabindex="0">
+                    Sign up for Weekly Email Alerts
+                </div><!-- end weekly-email-alerts -->
+                <div id='new-menu' style="">
+                    <ul role="navigation" aria-label="Main navigation">
+                        <li><a href="/"><span>HOME</span></a></li>
+                        <li><a href="/listing/ez"><span>SELL</span></a></li>
+                            <li><a href="/registration/signup/step1"><span>SIGN UP</span></a></li>
+                            <li><a href="/myaccount/login?returnUrl=%2Fmyb4a"><span>MY ACCOUNT / LOGIN</span></a></li>
+                            <li class='last'><a href="/help/support/contactus"><span>CONTACT US</span></a></li>
+                    </ul>
+                </div><!-- end new-menu -->
+            <div class="clearfix"></div>
+
+        </div><!-- end nav-line-wrapper -->
+</header>
+
+    <!-- ------------------------ END HEADER ------------------------- -->
+    <!-- ----------------------- NAV LEFT SIDE ----------------------- -->
+<div id="nav-left-side">
+	<h4 class="specialty-channels-nav">SPECIALTY CHANNELS</h4>
+      <ul role="navigation" aria-label="Specialty channels">
+              <li><a href="/county-tax-sales">County Tax Sales</a></li>
+              <li><a href="/sheriffsales">Sheriff's Sales/Foreclosures</a></li>
+              <li><a href="/philadelphia">Philadelphia Sheriff Sales</a></li>
+              <li><a href="/mvc/storefront/government">Federal, State &amp; Local Government</a></li>
+              <li><a href="/bank-owned-auctions">Bank-Owned Property</a></li>
+              <li><a href="/absolute-auctions-1dollar">$1 No Reserve Auctions</a></li>
+      </ul>
+	<h4 class="categories-nav">CATEGORIES</h4>
+      <ul role="navigation" aria-label="Categories">
+              <li><a href="/channel/22">Real Estate</a></li>
+              <li><a href="/channel/10">Art</a></li>
+              <li><a href="/channel/12">Coins</a></li>
+              <li><a href="/channel/16">Financial Instruments</a></li>
+              <li><a href="/channel/18">Inventory</a></li>
+              <li><a href="/channel/19">Jewelry</a></li>
+      </ul>
+	<h4 class="help-nav">HELP</h4> 
+    <ul role="navigation" aria-label="Help links">
+        <li><a href="/help/support/contactus">Contact Us</a></li>
+        <li><a href="/Help">Resource Center</a></li>
+    </ul>
+    <div class="share-placeholder">
+			<img src="https://cdn.bid4assets.com/app/mvc/images/share.jpg" alt="Share" />    
+    </div>    
+</div><!-- end nav-left-side -->
+
+<nav id="menu_box" role="navigation" aria-label="Mobile site navigation">
+  <ul class="menu-nav-left">
+   <li><a href='#'>SPECIALTY CHANNELS</a>
+      <ul role="menu">
+              <li><a href="/county-tax-sales">County Tax Sales</a></li>
+              <li><a href="/sheriffsales">Sheriff's Sales/Foreclosures</a></li>
+              <li><a href="/philadelphia">Philadelphia Sheriff Sales</a></li>
+              <li><a href="/mvc/storefront/government">Federal, State &amp; Local Government</a></li>
+              <li><a href="/bank-owned-auctions">Bank-Owned Property</a></li>
+              <li><a href="/absolute-auctions-1dollar">$1 No Reserve Auctions</a></li>
+      </ul>
+   </li>
+    <li><a href='#'>CATEGORIES</a>
+      <ul role="menu">
+                <li><a href="/channel/22">Real Estate</a></li>
+                <li><a href="/channel/10">Art</a></li>
+                <li><a href="/channel/12">Coins</a></li>
+                <li><a href="/channel/16">Financial Instruments</a></li>
+                <li><a href="/channel/18">Inventory</a></li>
+                <li><a href="/channel/19">Jewelry</a></li>
+      </ul>
+   </li>
+    <li><a href='#'>HELP</a>
+        <ul role="menu">
+            <li><a href="/Help/index.cfm?fuseAction=contactUs">Contact Us</a></li>
+            <li><a href="/Help">Resource Center</a></li>
+        </ul>
+   </li>     
+</ul>
+</nav><!-- end nav-left-side-mobile --> 
+    <!-- --------------------- END NAV LEFT SIDE --------------------- -->
+    <!-- ------------------------ FORM ------------------------- -->
+<main id="new-container-right" style="">
+
+
+    
+<div class="right-side-cat" style="float: none; margin-left: 30px;">
+    <div id="title_banner" class="title-cat-absolutehomes">
+        <h1 id="channel-name">Online Sheriff's Sales / Foreclosures</h1>
+    </div>
+    <h2 id="top-burb-text" class="h4 f-light mb-1">Bid4Assets helps county/city sheriff's offices conduct online sheriff's sales (foreclosure auctions). Please click on a municipality below to view upcoming sheriff's' sales.</h2>
+    <br /><!-- Nav tabs -->
+    <!-- Tab panes -->
+    <div class="tab-content">
+        <!-- ALL COUNTIES -->
+        <div id="all" class="tab-pane active" role="tabpanel" aria-labelledby="all-tab">
+            <!-- CAlIFORNIA counties in all tab -->
+                <h3 class="orange countytitle">Florida Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/CitrusFLForeclosures"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/citrus_fl/logo_thumb.png" alt="" /> Citrus County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/OkaloosaFL"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/okaloosa_fl/logo_thumb.png" alt="" /> Okaloosa County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/pbsosheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/palmbeach_fl/logo_thumb.jpg" alt="" /> Palm Beach County</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Louisiana Parishes</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/BossierSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bossier_la/logo_thumb.png" alt="" /> Bossier Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CPSOSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/calcasieuparish_la/logo_thumb.jpg" alt="" /> Calcasieu Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ebrsosheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/ebrso_la/logo_thumb.png" alt="" /> East Baton Rouge Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/LPSOSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/lafourcheparish_la/logo_thumb.png" alt="" /> Lafourche Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ouachitasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/ouachitaparish_la/logo_thumb.png" alt="" /> Ouachita Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/tangipahoalasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/tangipahoaparish_la/logo_thumb.png" alt="" /> Tangipahoa Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/vermilionsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/vermilion_la/logo_thumb.png" alt="" /> Vermilion Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/vernonsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/vernonparish_la/logo_thumbb.png" alt="" /> Vernon Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/WPSOSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/washington_la/washington_sheriffthumb.png" alt="" /> Washington Parish</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Oklahoma Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/OKCSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/oklahoma_ok/logo_thumba.png" alt="" /> Oklahoma County</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Pennsylvania Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/adamscountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/adamscounty_pa/logo_thumb.jpg" alt="" /> Adams County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/armstrongpasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/armstrong_pa/logo_thumb.png" alt="" /> Armstrong County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/beavercountypasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/beavercounty_pa/logo_thumb.jpg" alt="" /> Beaver County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/BedfordPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bedford_pa/logo_thumb.png" alt="" /> Bedford County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/berkscountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/berkscounty_pa/logo_thumb.jpg" alt="" /> Berks County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/BradfordPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bradfordcounty_pa/logo_thumb.png" alt="" /> Bradford County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CameronPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/cameron_pa/logo_thumb.jpg" alt="" /> Cameron County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CarbonPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/carboncounty_pa/logo_thumb.jpg" alt="" /> Carbon County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/chestercopasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/chestercounty_pa/logo_thumb.png" alt="" /> Chester County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ColumbiaPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/columbiacounty_pa/logo_thumb.png" alt="" /> Columbia County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/elksheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/elk_pa/logo_thumb.jpg" alt="" /> Elk County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/franklincountypasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/franklincounty_pa/logo_thumb.jpg" alt="" /> Franklin County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/IndianaCountyPASheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/indiana_pa/logo_thumb.png" alt="" /> Indiana County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/monroecountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/monroecounty_pa/logo_thumbb.png" alt="" /> Monroe County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/MontcoPASheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/montgomerycounty_pa/logo_thumb.jpg" alt="" /> Montgomery County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/philadelphia"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/philadelphia_pa/logo_thumba.jpg" alt="" /> Philadelphia County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/SchuylkillSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/schuylkillcounty_pa/logo_thumb.png" alt="" /> Schuylkill County</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Pennsylvania HUD Sales</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/berkshudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Berks County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/chesterhudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Chester County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/phillyhudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Philadelphia County</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Washington Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/chelancountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/chelancounty_wa/logo_thumb.png" alt="" /> Chelan County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/graysharborsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/graysharbor_wa/logo_thumb.jpg" alt="" /> Grays Harbor County</div></a>
+                        </div>
+                </div>
+                <h3 class="orange countytitle">Wisconsin Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/MilwaukeeSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/milwaukee_wi/logo_thumb.jpg" alt="" /> Milwaukee County</div></a>
+                        </div>
+                </div>
+        </div>
+        <!-- CALIFORNIA COUNTIES -->
+            <div id="florida_counties" class="tab-pane" role="tabpanel" aria-labelledby="florida_counties-tab">
+                <h3 class="orange countytitle">Florida Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/CitrusFLForeclosures"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/citrus_fl/logo_thumb.png" alt="" /> Citrus County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/OkaloosaFL"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/okaloosa_fl/logo_thumb.png" alt="" /> Okaloosa County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/pbsosheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/palmbeach_fl/logo_thumb.jpg" alt="" /> Palm Beach County</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="louisiana_parishes" class="tab-pane" role="tabpanel" aria-labelledby="louisiana_parishes-tab">
+                <h3 class="orange countytitle">Louisiana Parishes</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/BossierSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bossier_la/logo_thumb.png" alt="" /> Bossier Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CPSOSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/calcasieuparish_la/logo_thumb.jpg" alt="" /> Calcasieu Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ebrsosheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/ebrso_la/logo_thumb.png" alt="" /> East Baton Rouge Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/LPSOSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/lafourcheparish_la/logo_thumb.png" alt="" /> Lafourche Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ouachitasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/ouachitaparish_la/logo_thumb.png" alt="" /> Ouachita Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/tangipahoalasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/tangipahoaparish_la/logo_thumb.png" alt="" /> Tangipahoa Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/vermilionsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/vermilion_la/logo_thumb.png" alt="" /> Vermilion Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/vernonsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/vernonparish_la/logo_thumbb.png" alt="" /> Vernon Parish</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/WPSOSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/washington_la/washington_sheriffthumb.png" alt="" /> Washington Parish</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="oklahoma_counties" class="tab-pane" role="tabpanel" aria-labelledby="oklahoma_counties-tab">
+                <h3 class="orange countytitle">Oklahoma Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/OKCSheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/oklahoma_ok/logo_thumba.png" alt="" /> Oklahoma County</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="pennsylvania_counties" class="tab-pane" role="tabpanel" aria-labelledby="pennsylvania_counties-tab">
+                <h3 class="orange countytitle">Pennsylvania Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/adamscountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/adamscounty_pa/logo_thumb.jpg" alt="" /> Adams County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/armstrongpasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/armstrong_pa/logo_thumb.png" alt="" /> Armstrong County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/beavercountypasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/beavercounty_pa/logo_thumb.jpg" alt="" /> Beaver County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/BedfordPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bedford_pa/logo_thumb.png" alt="" /> Bedford County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/berkscountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/berkscounty_pa/logo_thumb.jpg" alt="" /> Berks County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/BradfordPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/bradfordcounty_pa/logo_thumb.png" alt="" /> Bradford County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CameronPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/cameron_pa/logo_thumb.jpg" alt="" /> Cameron County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/CarbonPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/carboncounty_pa/logo_thumb.jpg" alt="" /> Carbon County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/chestercopasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/chestercounty_pa/logo_thumb.png" alt="" /> Chester County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/ColumbiaPASheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/columbiacounty_pa/logo_thumb.png" alt="" /> Columbia County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/elksheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/elk_pa/logo_thumb.jpg" alt="" /> Elk County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/franklincountypasheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/franklincounty_pa/logo_thumb.jpg" alt="" /> Franklin County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/IndianaCountyPASheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/indiana_pa/logo_thumb.png" alt="" /> Indiana County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/monroecountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/monroecounty_pa/logo_thumbb.png" alt="" /> Monroe County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/MontcoPASheriff"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/montgomerycounty_pa/logo_thumb.jpg" alt="" /> Montgomery County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/philadelphia"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/philadelphia_pa/logo_thumba.jpg" alt="" /> Philadelphia County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/SchuylkillSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/schuylkillcounty_pa/logo_thumb.png" alt="" /> Schuylkill County</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="pennsylvania_hud_sales" class="tab-pane" role="tabpanel" aria-labelledby="pennsylvania_hud_sales-tab">
+                <h3 class="orange countytitle">Pennsylvania HUD Sales</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/berkshudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Berks County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/chesterhudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Chester County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/phillyhudpa"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/phillyhud_pa/sheriff_logo_thumba.png" alt="" /> Philadelphia County</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="washington_counties" class="tab-pane" role="tabpanel" aria-labelledby="washington_counties-tab">
+                <h3 class="orange countytitle">Washington Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/chelancountysheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/chelancounty_wa/logo_thumb.png" alt="" /> Chelan County</div></a>
+                        </div>
+                        <div class="col-lg-6">
+                                <a href="/graysharborsheriffsales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/graysharbor_wa/logo_thumb.jpg" alt="" /> Grays Harbor County</div></a>
+                        </div>
+                </div>
+            </div>
+            <div id="wisconsin_counties" class="tab-pane" role="tabpanel" aria-labelledby="wisconsin_counties-tab">
+                <h3 class="orange countytitle">Wisconsin Counties</h3>
+                <div class="row">
+                        <div class="col-lg-6">
+                                <a href="/MilwaukeeSheriffSales"><div class="countybox d-flex align-items-center"><img src="https://publicresources.bid4assets.com/landingpages/countyimages/milwaukee_wi/logo_thumb.jpg" alt="" /> Milwaukee County</div></a>
+                        </div>
+                </div>
+            </div>
+    </div>
+</div>
+<!-- jQuery first, then Popper.js, then Bootstrap JS -->
+<p>&nbsp;</p>
+
+
+    </main>
+    <!-- end new-container-right -->
+
+    <div class="clearfix"></div>
+    <!-- ------------------------ END FORM --------------------------- -->
+    <!-- ------------------------ FOOTER ----------------------------- -->
+
+            <div style="border-top: 1px solid #ddd; margin-top: 10px;">
+        <footer>
+            <div id="footer-menu" class="pull-left">
+                <a href="" class="footer-logo"><img src="https://cdn.bid4assets.com/app/nextgen/B4A-LOGO-2024-small2.png" alt=""></a>
+                <ul role="navigation" aria-label="About B4A">
+                    <li><a href="/pages/public/content/b4a">About Us</a></li>
+                    <li><a href="/help/support/contactus">Contact Us</a></li>
+                    <li><a href="/pages/public/content/b4a/jobs">Jobs</a></li>
+                    <li><a href="/pages/public/content/b4a/partners">Courthouse Steps<sup>&reg;</sup></a></li>
+                </ul>
+            </div><!-- end footer-menu -->
+
+            <div id="additional-info-footer" class="pull-right">
+                <div class="col-md-3 pull-left">
+                    <h3>NEED TO KNOW</h3>
+                    <ul role="navigation" aria-label="Need to know">
+                        <li><a href="/pages/public/content/b4a/privacy-policy">Privacy Policy</a></li>
+                        <li><a href="/pages/public/content/b4a/terms-of-service">Terms of Service</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>FOR SELLERS</h3>
+                    <ul role="navigation" aria-label="For sellers">
+                        <li><a href="/listing/ez">Sell an Asset</a></li>
+                        <li><a href="/sheriff-sale-government-auctions">Sheriff's Sales</a></li>
+                        <li><a href="/county-government-auctions">County Government Sellers</a></li>
+                        <li><a href="/pages/public/content/help#selling">Seller Help</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>FOR BUYERS</h3>
+                    <ul role="navigation" aria-label="For buyers">
+                        <li><a href="/registration/signup/emailsubscriptions">Weekly Email Alert</a></li>
+                        <li><a href="/pages/public/content/help/seller-rating-system"> Rate a Seller</a></li>
+                        <li><a href="/pages/public/content/ivids">Video Tutorials</a></li>
+                        <li><a href="/pages/public/content/help">Buyer Help</a></li>
+                    </ul>
+                </div>
+
+                <div class="col-md-3 pull-left">
+                    <h3>USEFUL LINKS</h3>
+                    <ul role="navigation" aria-label="Useful links">
+                        <li><a href="/myb4a">My Account/Login</a></li>
+                        <li><a href="/forms/sellyourproperty">Have Property to Sell?</a></li>
+                        <li><a href="/testimonials">Testimonials</a></li>
+                        <li><a href="mailto:testimonials@bid4assets.com?subject=Buyer Testimonial">Submit a Testimonial</a></li>
+                        <li><a href="mailto:feedback@bid4assets.com?subject=Feedback for Bid4Assets">Give Us Your Feedback</a></li>
+                    </ul>
+                </div>
+            </div><!-- end additional-info-footer -->
+
+            <div class="clearfix"></div>
+
+            <div id="footer-bottom">
+                <div class="pull-left col-md-8">
+                    <p>BID4ASSETS.com&reg; is a registered trademark of Bid4Assets, Inc.</p>
+                    <p>Where Great Deals Click&trade;; Bid4Assets&trade;; Copyright &copy; 1999-2026 ALL RIGHTS RESERVED Bid4Assets, Inc.</p>
+                </div>
+                <div class="pull-right col-md-4">
+                    <a href="https://www.bbb.org/washington-dc-eastern-pa/business-reviews/online-auctions/bid4assets-inc-in-silver-spring-md-1036083" rel="noopener noreferrer" aria-label="Bid4Assets Better Business Bureau profile (opens in new tab)"><img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/bbb.jpg" class="logo-company" alt="Better Business Bureau Logo"></a>
+                    <img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/naa.jpg" class="logo-company" alt="NAA Logo" />
+                    <a href="https://www.gsa.gov/" rel="noopener noreferrer" aria-label="U.S. General Services Administration website (opens in new tab)"><img src="https://cdn.bid4assets.com/app/mvc/Content/Images/footer/gsa.jpg" class="logo-company" alt="GSA Logo"></a>
+                </div>
+                <div class="clearfix"></div>
+            </div>
+        </footer>
+    </div>
+<div id="popupAlertDialog"></div>
+
+
+        <!-- ------------------------ END FOOTER ------------------------- -->
+</div><span id="popupNotification" name="popupNotification"></span><script>kendo.syncReady(function(){jQuery("#popupNotification").kendoNotification({"position":{"pinned":true}});});</script>                
+<div class="k-hidden" id="actionWindow" name="actionWindow"></div><script>kendo.syncReady(function(){jQuery("#actionWindow").kendoWindow({"resize":actionKendoWindowResized,"open":actionKendoWindowResized,"iframe":true,"scrollable":true,"visible":false,"content":null,"draggable":false,"actions":["Close"],"resizable":false,"title":"","modal":true});});</script>        <div id="dialogBox">
+        </div>
+                <div id="loginDialog"></div>
+
+<script src="/js/client/session.js?60dc97c5-c893-4527-a11a-c7cb46009438"></script>
+<script type="text/javascript">
+    var login_page_options = {
+        resendEmailConfirmationToken : "",
+        apiResendEmailConfirmationUrl : "/api/authentication/account/resendconfirmationemail",
+        apiLoginUrl: "/api/authentication/session",
+        apiSingleSignOnUrl: "",
+        requiresCaptcha : false,
+        captchaResponse: "",
+        loginResult: {},
+        redirectUrl: "",
+        singleSignOnToken: "",
+        defaultRedirectUrl: "/myaccount/home",
+        createAuthenticationTicket: true,
+        loginStarted: false,
+        inviteEmailAddress: "",
+        inviteToken: ""
+    };
+
+    var globalLoginCallback;
+    var dialogButtonPressed = false;
+
+    function displayLoginDialog(loginCallback,msg) {
+        globalLoginCallback = loginCallback;
+        var loginDialog = $('#loginDialog');
+        dialogButtonPressed = false;
+
+        loginDialog.kendoDialog({
+            width: "400px",
+            title: "Session expired. Please login.",
+            closable: false,
+            modal: true,
+            content: '<div style="padding-bottom:5px;margin-top:-10px;color:#ff0000;font-weight:bold;display:none;" id="dialogErrorMessage"></div><strong>Please login to continue.</strong><br />Enter your username/email and password below. Then, click LOGIN.<br /><strong style="color:#f00">Important Note</strong>: Passwords are Case-Sensitive.<br /><div id="new-form-style" style="margin: 0px;"><ul><li class="form-line"><label class="form-label-left" for="Username">Username</label><input class="form-textbox" data-val="true" data-val-required="The Username field is required." id="txtDialogUsername" name="Username" value="" type="text" aria-label="Dialog Username"><span id="txtDialogUsernameValidation" class="field-validation-valid" data-valmsg-for="Username" data-valmsg-replace="false">*</span></li><li class="form-line"><label class="form-label-left" for="Password">Password</label><input class="form-textbox" data-val="true" data-val-required="The Password field is required." id="txtDialogPassword" name="Password" type="password" aria-label="Dialog Password"><span id="txtDialogPasswordValidation" class="field-validation-valid" data-valmsg-for="Password" data-valmsg-replace="false">*</span></li></ul></div>',
+            actions: [
+                { text: 'Forgot my password', action: onDialogForgotPasswordClicked },
+                { text: 'LOGIN', primary: true, action: onDialogLoginClicked }
+            ],
+            close: onDialogLoginClose
+        });
+    }
+
+    function onDialogForgotPasswordClicked(e) {
+        dialogButtonPressed = true;
+        document.location = "/myaccount/forgotpassword";
+    }
+
+    function onDialogLoginClose(e) {
+        if (!dialogButtonPressed) {
+            document.location = "/myaccount/login";
+        }
+    }
+
+    function onDialogLoginClicked(e) {
+        dialogButtonPressed = true;
+        dialogUsernameValid = false;
+        dialogPasswordValid = false;
+
+        if ($("#txtDialogUsername").val() == "") {
+            $("#txtDialogUsernameValidation").prop("class", "field-validation-error");
+        } else {
+            $("#txtDialogUsernameValidation").prop("class", "field-validation-valid");
+            dialogUsernameValid = true;
+        }
+
+        if ($("#txtDialogPassword").val() == "") {
+            $("#txtDialogPasswordValidation").prop("class", "field-validation-error");
+        } else {
+            $("#txtDialogPasswordValidation").prop("class", "field-validation-valid");
+            dialogPasswordValid = true;
+        }
+
+        if (dialogPasswordValid && dialogUsernameValid) {
+            var loginModel = {
+                "apiScope": "/public",
+                "username": $("#txtDialogUsername").val(),
+                "password": $("#txtDialogPassword").val(),
+                "domain": "bid4assets.com",
+                "createSessionCookie": true,
+                "redirectUrl": login_page_options.redirectUrl,
+                "createAuthenticationTicket": login_page_options.createAuthenticationTicket,
+                "inviteEmailAddress": login_page_options.inviteEmailAddress,
+                "inviteToken": login_page_options.inviteToken,
+                "redirectLocationId": 3
+            };
+            userSessionLogin(loginModel, globalLoginCallback);
+        } else {
+            dialogButtonPressed = false;
+        }
+        return false;
+    }
+</script>
+
+
+    <style type="text/css">
+        .pull-left {
+            float: left !important;
+        }
+
+        .pull-right {
+            float: right !important;
+        }
+        .k-button-text
+        {
+            font-size: 10pt !important;
+        }
+        .k-scheduler-cell
+          {
+            font-size: 10pt !important;
+        }
+        .k-dialog-content
+        {
+            font-size: 10pt !important;
+        }
+        .k-dialog-title
+        {
+            font-size: 11pt !important;
+        }
+    </style>
+
+        
+            
+        
+            <link href="/css/design/responsive-layout-update.css" rel="stylesheet" />
+                 
+    <input type="hidden" name="__NextGenRequestVerificationToken" id="__NextGenRequestVerificationToken" />
+<noscript><img src="https://www.bid4assets.com/akam/13/pixel_1b404cb0?a=dD0zMjQxMmNhMDY3OTkwMDczYmY1ZDFhMDg2OTg0MjEyMzBhNDFmMWViJmpzPW9mZg==" style="visibility: hidden; position: absolute; left: -999px; top: -999px;" /></noscript></body>
+</html>
+
