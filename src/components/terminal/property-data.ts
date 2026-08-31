@@ -40,6 +40,11 @@ export interface PropertyListing {
   photo: string;
   sourceUrl?: string | null;
   raw?: string;
+  redemptionDays?: number;
+  redemptionWarning?: string | null;
+  seniorLienRisk?: string;
+  seniorLienWarning?: string | null;
+  cashToClose?: number;
 }
 
 // Source registry — KEPT IN SYNC with the production SOURCES at

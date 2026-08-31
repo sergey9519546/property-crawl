@@ -264,6 +264,47 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 )}
               </div>
 
+              {/* Statutory Redemption & Senior Lien Warnings */}
+              {(listing.redemptionWarning || (listing.state === 'AL' || listing.state === 'MI' || listing.state === 'NJ' || listing.source === 'irs')) && (
+                <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-900 space-y-1">
+                  <span className="font-bold flex items-center gap-1.5 text-amber-950">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+                    Statutory Redemption & Title Caveat
+                  </span>
+                  <p>
+                    {listing.redemptionWarning || (listing.state === 'AL' ? 'Alabama: 180-Day Statutory Right of Redemption Applies.' : listing.state === 'MI' ? 'Michigan: 6-Month Statutory Right of Redemption Applies.' : listing.state === 'NJ' ? 'New Jersey: 10-Day Statutory Objection Window Applies.' : 'Federal asset seizure rules apply.')}
+                  </p>
+                </div>
+              )}
+
+              {/* Cash to Close Breakdown */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide">Cash-to-Close Breakdown</h3>
+                  <span className="text-xs font-extrabold text-[#0F172A]">
+                    Est. ${(listing.openingBid * 1.045 + 500).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
+                  <div className="p-3 flex justify-between">
+                    <span className="text-[#6B7280]">Opening Bid</span>
+                    <span className="font-semibold text-[#111827]">${listing.openingBid.toLocaleString()}</span>
+                  </div>
+                  <div className="p-3 flex justify-between">
+                    <span className="text-[#6B7280]">Estimated Statutory Poundage & Fees (2–3%)</span>
+                    <span className="font-semibold text-[#374151]">${Math.round(listing.openingBid * 0.02).toLocaleString()}</span>
+                  </div>
+                  <div className="p-3 flex justify-between">
+                    <span className="text-[#6B7280]">State/County Transfer Tax & Recording</span>
+                    <span className="font-semibold text-[#374151]">${Math.round(listing.openingBid * 0.005 + 500).toLocaleString()}</span>
+                  </div>
+                  <div className="p-3 flex justify-between bg-[#F8FAFC]">
+                    <span className="font-bold text-[#111827]">Estimated Total Due at Settlement</span>
+                    <span className="font-extrabold text-[#16A34A]">${Math.round(listing.openingBid * 1.025 + 500).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Court & Legal Specifics */}
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide">Legal Docket & Deposit Terms</h3>

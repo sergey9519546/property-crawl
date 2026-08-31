@@ -62,6 +62,9 @@ const SCRAPER_REGISTRY = [
   { key: 'gsa',        mod: '../server/scrapers/gsa',             real: true  },
   { key: 'usda',       mod: '../server/scrapers/usda',            real: true  },
   { key: 'landbank',   mod: '../server/scrapers/landbanksearch',  real: true  },
+  { key: 'fdic',       mod: '../server/scrapers/fdic',            real: true  },
+  { key: 'civilview',  mod: '../server/scrapers/civilview',       real: true  },
+  { key: 'bid4assets', mod: '../server/scrapers/bid4assets',      real: true  },
   // Coming next: trustee, freddie, va, marshals
 ];
 

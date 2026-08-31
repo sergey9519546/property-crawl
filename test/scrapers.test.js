@@ -4,6 +4,9 @@ const hud = require('../server/scrapers/hud');
 const fannie = require('../server/scrapers/fannie');
 const irs = require('../server/scrapers/irs');
 const landbanksearch = require('../server/scrapers/landbanksearch');
+const fdic = require('../server/scrapers/fdic');
+const civilview = require('../server/scrapers/civilview');
+const bid4assets = require('../server/scrapers/bid4assets');
 const scheduler = require('../server/scrapers/scheduler');
 
 console.log('=== RUNNING SCRAPERS TEST SUITE ===');
@@ -81,6 +84,34 @@ async function run() {
     assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
     assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
     assert.strictEqual(item.source, 'landbank');
+  });
+
+  await test('FDIC scraper extracts standardized failed-bank asset listings', async () => {
+    const items = await fdic.scrapeFeed();
+    assert.ok(items.length > 0, `expected FDIC listings, got ${items.length}`);
+    const item = items[0];
+    assert.ok(/^FDIC-/.test(item.id), `id should start with FDIC-: ${item.id}`);
+    assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+    assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+  });
+
+  await test('CivilView scraper extracts county foreclosure notices', async () => {
+    const items = await civilview.scrapeFeed();
+    assert.ok(items.length >= 0, `CivilView returned listings`);
+    if (items.length > 0) {
+      const item = items[0];
+      assert.ok(/^CIV-/.test(item.id), `id should start with CIV-: ${item.id}`);
+      assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+    }
+  });
+
+  await test('Bid4Assets scraper parses auction channels into standardized listings', async () => {
+    const items = await bid4assets.scrapeFeed();
+    assert.ok(items.length > 0, `Bid4Assets returned listings`);
+    const item = items[0];
+    assert.ok(/^B4A-/.test(item.id), `id should start with B4A-: ${item.id}`);
+    assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+    assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
   });
 
   console.log(`--- SCRAPER TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);

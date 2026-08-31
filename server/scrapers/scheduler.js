@@ -6,6 +6,9 @@ const treasury = require('./treasury');
 const gsa = require('./gsa');
 const usda = require('./usda');
 const landbanksearch = require('./landbanksearch');
+const fdic = require('./fdic');
+const civilview = require('./civilview');
+const bid4assets = require('./bid4assets');
 const db = require('../db/client');
 
 // RUN_REAL controls whether live external scrapers are included in the run.
@@ -16,7 +19,7 @@ const RUN_REAL =
 class IngestionScheduler {
   constructor() {
     this.mockScrapers = [sheriff, hud, fannie];
-    this.realScrapers = [treasury, gsa, irs, usda, landbanksearch];
+    this.realScrapers = [treasury, gsa, irs, usda, landbanksearch, fdic, civilview, bid4assets];
     // Derive key set from actual array so the log message never drifts.
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
     this.isRunning = false;
