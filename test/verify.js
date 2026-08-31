@@ -12,9 +12,10 @@ const suites = [
   { name: '5. E2E User Journey Emulation Suite', cmd: 'node test/e2e.test.js' },
   { name: '6. Hostile Security & Boundary Hardening', cmd: 'node test/hardening.test.js' },
   { name: '7. Source Registry Sync Drift (v0 <-> v2)', cmd: 'node test/sync.test.js' },
-  { name: '8. Next.js 16 Production Build & TypeScript', cmd: 'npx next build' },
-  { name: '9. Canonical Next Runtime Contract', cmd: 'node --test test/canonical-runtime.test.js' },
-  { name: '10. Playwright Canonical UI Browser Suite', cmd: 'node test/run-ui-suite.js' }
+  { name: '8. DB Row Shape & Types Contract', cmd: 'node test/db.test.js' },
+  { name: '9. Next.js 16 Production Build & TypeScript', cmd: 'npx next build' },
+  { name: '10. Canonical Next Runtime Contract', cmd: 'node --test test/canonical-runtime.test.js' },
+  { name: '11. Playwright Canonical UI Browser Suite', cmd: 'node test/run-ui-suite.js' }
 ];
 
 let totalPassed = 0;

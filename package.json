@@ -17,6 +17,7 @@
     "test:e2e": "node test/e2e.test.js",
     "test:ui:e2e": "python test/next_ui_e2e_test.py",
     "test:canonical": "node --test test/canonical-runtime.test.js",
+    "test:db": "node test/db.test.js",
     "scrape": "node server/scrapers/scheduler.js",
     "refresh-data": "node scripts/build-data.js",
     "refresh-data:real": "node scripts/build-data.js --real"

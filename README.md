@@ -76,13 +76,13 @@ The source may be slow or unavailable; failures are reported rather than silentl
 
 ## Verification
 
-With the UI and API development services running, execute the complete quality gate:
+The complete quality gate is self-contained — no servers need to be running first:
 
 ```bash
 npm test
 ```
 
-It runs the client formulas, backend routes, scraper pipeline, AI/security checks, emulated journeys, hostile-input hardening, source-registry/link contracts, a production Next build, the canonical-runtime contract, and the Playwright browser suite.
+`test/verify.js` runs eleven suites in sequence: client formulas, backend routes, scraper pipeline, AI/security checks, emulated journeys, hostile-input hardening, source-registry/link contracts, a DB row-shape/type contract, a production Next build, the canonical-runtime contract, and the Playwright browser suite. The browser suite is launched by `test/run-ui-suite.js`, which boots the Node API on `:3000` and a production Next server on a dedicated port, waits for readiness, runs the tests, then tears both down. With `DATABASE_URL` set, suite 8 (`npm run test:db`) additionally round-trips a record through Postgres and checks the result matches the in-memory shape.
 
 Useful focused commands:
 
@@ -93,6 +93,7 @@ npm run test:scrapers
 npm run test:ai
 npm run test:e2e
 npm run test:canonical
+npm run test:db
 npm run test:ui:e2e
 npm run build
 ```

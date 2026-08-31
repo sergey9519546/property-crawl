@@ -1,6 +1,41 @@
 const fs = require('fs');
 const path = require('path');
 
+// Canonical camelCase projection for listings. The in-memory provider emits
+// camelCase (dealScore, openingBid, propType, ...) and the UUID-style record
+// shape is what the API + Next.js UI consume. The Postgres schema stores
+// snake_case (deal_score, opening_bid, prop_type) with NUMERIC columns that
+// node-pg returns as strings — so every PG read must alias + cast back to the
+// exact same contract or the UI silently breaks only in production.
+const LISTING_SELECT = `
+  id,
+  source_key AS "source",
+  state, county, city, zip, address,
+  latitude::float8   AS "lat",
+  longitude::float8  AS "lng",
+  beds, baths, sqft,
+  year_built         AS "year",
+  prop_type          AS "propType",
+  opening_bid::float8 AS "openingBid",
+  est_low::float8     AS "estLow",
+  est_high::float8    AS "estHigh",
+  assessed_value::float8 AS "assessed",
+  mid_value::float8   AS "mid",
+  CASE WHEN (est_low + est_high) > 0
+       THEN (opening_bid / ((est_low + est_high) / 2.0))::float8
+       ELSE 0 END      AS "ratio",
+  equity_spread::float8 AS "equity",
+  deal_score          AS "dealScore",
+  sale_date::text     AS "saleDate",
+  plaintiff, defendant,
+  judgment_amount::float8 AS "judgment",
+  attorney, occupancy,
+  deposit_terms       AS "deposit",
+  photo_url           AS "photo",
+  source_url          AS "sourceUrl",
+  raw_notice          AS "raw"
+`;
+
 class DatabaseClient {
   constructor() {
     this.isPg = false;
@@ -68,7 +103,10 @@ class DatabaseClient {
 
   async getSources() {
     if (this.isPg) {
-      const res = await this.pool.query('SELECT * FROM sources WHERE is_active = TRUE ORDER BY tier, label');
+      const res = await this.pool.query(
+        `SELECT key, label, tier, color, note, website_url AS "websiteUrl"
+         FROM sources WHERE is_active = TRUE ORDER BY tier, label`
+      );
       return res.rows;
     }
     return Object.entries(this.inMemoryData.sources).map(([key, s]) => ({ key, ...s }));
@@ -89,7 +127,7 @@ class DatabaseClient {
     } = filters;
 
     if (this.isPg) {
-      let sql = 'SELECT * FROM listings WHERE 1=1';
+      let sql = `SELECT ${LISTING_SELECT}, COUNT(*) OVER() AS "fullCount" FROM listings WHERE 1=1`;
       const params = [];
       let paramIdx = 1;
 
@@ -124,7 +162,10 @@ class DatabaseClient {
       params.push(Number(limit), Number(offset));
 
       const res = await this.pool.query(sql, params);
-      return { total: res.rowCount, listings: res.rows };
+      // total = full match count (COUNT(*) OVER), not the page size.
+      const total = Number(res.rows[0]?.fullCount ?? 0);
+      const listings = res.rows.map(({ fullCount, ...row }) => row);
+      return { total, listings };
     }
 
     let results = this.inMemoryData.listings.filter(l => {
@@ -155,7 +196,7 @@ class DatabaseClient {
 
   async getListingById(id) {
     if (this.isPg) {
-      const res = await this.pool.query('SELECT * FROM listings WHERE id = $1', [id]);
+      const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       return res.rows[0] || null;
     }
     return this.inMemoryData.listings.find(l => l.id === id) || null;
@@ -184,7 +225,7 @@ class DatabaseClient {
         occupancy, deposit_terms, photo_url, source_url, raw_notice
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
       ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, updated_at = NOW()
-      RETURNING *;`;
+      RETURNING id;`;
       const params = [
         enriched.id, enriched.source, enriched.state, enriched.county, enriched.city, enriched.zip,
         enriched.address, enriched.lat, enriched.lng, enriched.beds || 0, enriched.baths || 0,
@@ -194,8 +235,8 @@ class DatabaseClient {
         enriched.attorney, enriched.occupancy || 'Unknown', enriched.deposit || 'Certified funds',
         enriched.photo, enriched.sourceUrl, enriched.raw
       ];
-      const res = await this.pool.query(sql, params);
-      return res.rows[0];
+      await this.pool.query(sql, params);
+      return enriched; // camelCase, matches the in-memory return contract
     }
 
     const idx = this.inMemoryData.listings.findIndex(l => l.id === enriched.id);
@@ -210,10 +251,31 @@ class DatabaseClient {
   async getSavedDeals(userId) {
     if (this.isPg) {
       const res = await this.pool.query(
-        `SELECT l.*, sd.notes, sd.created_at as saved_at 
-         FROM saved_deals sd 
-         JOIN listings l ON sd.listing_id = l.id 
-         WHERE sd.user_id = $1 
+        `SELECT
+           l.id,
+           l.source_key AS "source",
+           l.state, l.county, l.city, l.zip, l.address,
+           l.latitude::float8 AS "lat", l.longitude::float8 AS "lng",
+           l.beds, l.baths, l.sqft, l.year_built AS "year",
+           l.prop_type AS "propType",
+           l.opening_bid::float8 AS "openingBid",
+           l.est_low::float8 AS "estLow", l.est_high::float8 AS "estHigh",
+           l.assessed_value::float8 AS "assessed",
+           l.mid_value::float8 AS "mid",
+           CASE WHEN (l.est_low + l.est_high) > 0
+                THEN (l.opening_bid / ((l.est_low + l.est_high) / 2.0))::float8
+                ELSE 0 END AS "ratio",
+           l.equity_spread::float8 AS "equity",
+           l.deal_score AS "dealScore",
+           l.sale_date::text AS "saleDate",
+           l.plaintiff, l.defendant, l.judgment_amount::float8 AS "judgment",
+           l.attorney, l.occupancy, l.deposit_terms AS "deposit",
+           l.photo_url AS "photo", l.source_url AS "sourceUrl",
+           l.raw_notice AS "raw",
+           sd.notes, sd.created_at AS "savedAt"
+         FROM saved_deals sd
+         JOIN listings l ON sd.listing_id = l.id
+         WHERE sd.user_id = $1
          ORDER BY l.sale_date ASC`,
         [userId]
       );
