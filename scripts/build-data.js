@@ -54,13 +54,14 @@ const SOURCES = {
 // server/scrapers/<key>.js that exports a singleton with .scrapeFeed(),
 // then add it here.
 const SCRAPER_REGISTRY = [
-  { key: 'sheriff',  mod: '../server/scrapers/sheriff',  real: false },
-  { key: 'hud',      mod: '../server/scrapers/hud',      real: false },
-  { key: 'fannie',   mod: '../server/scrapers/fannie',   real: false },
-  { key: 'irs',      mod: '../server/scrapers/irs',      real: true  },
-  { key: 'treasury', mod: '../server/scrapers/treasury', real: true  },
-  { key: 'gsa',      mod: '../server/scrapers/gsa',      real: true  },
-  { key: 'usda',     mod: '../server/scrapers/usda',     real: true  },
+  { key: 'sheriff',    mod: '../server/scrapers/sheriff',         real: false },
+  { key: 'hud',        mod: '../server/scrapers/hud',             real: false },
+  { key: 'fannie',     mod: '../server/scrapers/fannie',          real: false },
+  { key: 'irs',        mod: '../server/scrapers/irs',             real: true  },
+  { key: 'treasury',   mod: '../server/scrapers/treasury',        real: true  },
+  { key: 'gsa',        mod: '../server/scrapers/gsa',             real: true  },
+  { key: 'usda',       mod: '../server/scrapers/usda',            real: true  },
+  { key: 'landbank',   mod: '../server/scrapers/landbanksearch',  real: true  },
   // Coming next: trustee, freddie, va, marshals
 ];
 

@@ -118,7 +118,10 @@ const server = http.createServer(async (req, res) => {
   const webRoot = path.join(__dirname, '..');
   const rawPath = (url.pathname === '/' ? '/index.html' : url.pathname).replace(/\\/g, '/');
   let filePath = path.resolve(webRoot, '.' + rawPath);
-  if (!filePath.startsWith(webRoot + path.sep) && filePath !== webRoot) {
+  // Use path.relative() to detect traversal — it works correctly on
+  // case-insensitive Windows NTFS and handles all separator variants.
+  const rel = path.relative(webRoot, filePath);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
     filePath = path.join(webRoot, 'index.html');
   }
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {

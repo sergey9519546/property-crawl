@@ -3,6 +3,16 @@ class MemoryRateLimiter {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
     this.hits = new Map();
+
+    // Periodic eviction so stale IP records are removed regardless of traffic
+    // volume. .unref() ensures this timer doesn't keep the Node process alive
+    // after all other async work has completed (e.g. in tests).
+    this._evictTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [key, record] of this.hits.entries()) {
+        if (now > record.resetAt) this.hits.delete(key);
+      }
+    }, this.windowMs).unref();
   }
 
   middleware() {

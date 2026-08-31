@@ -5,19 +5,20 @@ const irs = require('./irs');
 const treasury = require('./treasury');
 const gsa = require('./gsa');
 const usda = require('./usda');
+const landbanksearch = require('./landbanksearch');
 const db = require('../db/client');
 
-// Scrapers that talk to live external sites. These only run when the caller
-// explicitly opts in (RUN_REAL_SCRAPERS=1 or --real). Default runs stay fully
-// offline so `npm test` and local dev never hit the network.
-const REAL_SCRAPER_KEYS = new Set(['treasury', 'irs', 'gsa', 'usda']);
+// RUN_REAL controls whether live external scrapers are included in the run.
+// Default stays offline so `npm test` and local dev never hit the network.
 const RUN_REAL =
   process.env.RUN_REAL_SCRAPERS === '1' || process.argv.includes('--real');
 
 class IngestionScheduler {
   constructor() {
     this.mockScrapers = [sheriff, hud, fannie];
-    this.realScrapers = [treasury, gsa, irs, usda];
+    this.realScrapers = [treasury, gsa, irs, usda, landbanksearch];
+    // Derive key set from actual array so the log message never drifts.
+    this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
     this.isRunning = false;
   }
 
@@ -30,32 +31,36 @@ class IngestionScheduler {
     const scrapers = RUN_REAL
       ? [...this.mockScrapers, ...this.realScrapers]
       : this.mockScrapers;
-    const skipped = this.realScrapers.length;
+    const skipped = RUN_REAL ? 0 : this.realScrapers.length;
     console.log('[Scheduler] Starting automated ingestion cycle...');
     if (!RUN_REAL && skipped > 0) {
-      console.log(`[Scheduler] RUN_REAL_SCRAPERS not set — skipping ${skipped} live scraper(s) (${[...REAL_SCRAPER_KEYS].join(', ')})`);
+      const skippedKeys = [...this.realScraperKeys].join(', ');
+      console.log(`[Scheduler] RUN_REAL_SCRAPERS not set — skipping ${skipped} live scraper(s) (${skippedKeys})`);
     }
     const startTime = Date.now();
     let totalIngested = 0;
 
-    for (const scraper of scrapers) {
-      try {
-        console.log(`[Scheduler] Running ${scraper.name}...`);
-        const items = await scraper.scrapeFeed();
-        for (const item of items) {
-          await db.createListing(item);
-          totalIngested++;
+    try {
+      for (const scraper of scrapers) {
+        try {
+          console.log(`[Scheduler] Running ${scraper.name}...`);
+          const items = await scraper.scrapeFeed();
+          for (const item of items) {
+            await db.createListing(item);
+            totalIngested++;
+          }
+          console.log(`[Scheduler] ${scraper.name} completed successfully (${items.length} items)`);
+        } catch (err) {
+          console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
         }
-        console.log(`[Scheduler] ${scraper.name} completed successfully (${items.length} items)`);
-      } catch (err) {
-        console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
       }
-    }
 
-    const duration = Date.now() - startTime;
-    console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
-    this.isRunning = false;
-    return { totalIngested, durationMs: duration };
+      const duration = Date.now() - startTime;
+      console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
+      return { totalIngested, durationMs: duration };
+    } finally {
+      this.isRunning = false;
+    }
   }
 }
 

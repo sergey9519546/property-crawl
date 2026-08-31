@@ -102,6 +102,9 @@ CREATE INDEX IF NOT EXISTS idx_listings_state ON listings(state);
 CREATE INDEX IF NOT EXISTS idx_listings_sale_date ON listings(sale_date);
 CREATE INDEX IF NOT EXISTS idx_listings_deal_score ON listings(deal_score DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC);
+-- GiST spatial index: required for ST_DWithin radius queries to use index scan.
+-- Without this, every radius filter performs a full sequential scan of listings.
+CREATE INDEX IF NOT EXISTS idx_listings_geog ON listings USING GIST(geog);
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
 
 -- ==========================================================

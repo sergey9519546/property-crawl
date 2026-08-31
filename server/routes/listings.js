@@ -19,8 +19,8 @@ async function handleListings(req, res) {
       source: url.searchParams.get('source') || 'all',
       type: url.searchParams.get('type') || 'all',
       sort: url.searchParams.get('sort') || 'score',
-      limit: parseInt(url.searchParams.get('limit') || '50', 10),
-      offset: parseInt(url.searchParams.get('offset') || '0', 10),
+      limit: Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10))),
+      offset: Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10)),
       lat: url.searchParams.get('lat') ? parseFloat(url.searchParams.get('lat')) : undefined,
       lng: url.searchParams.get('lng') ? parseFloat(url.searchParams.get('lng')) : undefined,
       radiusKm: url.searchParams.get('radiusKm') ? parseFloat(url.searchParams.get('radiusKm')) : 100
@@ -35,6 +35,22 @@ async function handleListings(req, res) {
     const validation = Validator.validateListing(body);
     if (!validation.isValid) {
       return res.status(400).json({ error: 'Validation failed', details: validation.errors });
+    }
+
+    // Normalize sourceUrl: strip generic source homepages so the DB stays
+    // consistent with the build-data.js pipeline normalization.
+    if (body.sourceUrl && body.source) {
+      // Any URL that is just the source's homepage root is treated as null.
+      // We check by stripping trailing slashes and comparing path depth.
+      const candidate = body.sourceUrl.replace(/\/+$/, '');
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.pathname === '' || parsed.pathname === '/') {
+          body.sourceUrl = null;
+        }
+      } catch (_) {
+        body.sourceUrl = null; // malformed URL
+      }
     }
 
     const created = await db.createListing(body);

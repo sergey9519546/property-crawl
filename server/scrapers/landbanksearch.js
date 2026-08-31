@@ -31,6 +31,14 @@
 //   - 5 land banks x ~12 cards = ~60 listings per run (well under
 //     the 180s build-data.js timeout)
 //   - maxListingsPerBank cap = 100 (defensive)
+//
+// Coordinates:
+//   LandBankSearch listing cards do not contain per-property lat/lng. We use
+//   the land bank's city centroid (from /explore?lng=&lat= URL) for every
+//   listing from that bank, then apply a small pseudorandom offset (±0.05°,
+//   ~5.5 km) per listing so map markers don't all stack on the same point.
+//   Geocoding individual cards would require the Google Maps API or similar;
+//   this jitter is the best approximation without that dependency.
 
 const BaseScraper = require('./base');
 
@@ -208,6 +216,14 @@ class LandBankSearchScraper extends BaseScraper {
     const address = `${street}, ${city}, ${state}`;
     const county = bank.name.replace(/ Land Bank.*$/i, '').trim() || city;
 
+    // Apply a small pseudorandom jitter (±0.05°, ~5.5 km) so map markers
+    // from the same land bank don't all overlap on the city centroid.
+    // Seed derived from the UUID for reproducibility across runs.
+    const hash = uuid.split('-')[0];
+    const seed = parseInt(hash, 16) || 0;
+    const jitterLat = ((seed % 1000) / 10000) - 0.05;   // -0.05 to +0.05
+    const jitterLng = (((seed >> 8) % 1000) / 10000) - 0.05;
+
     return {
       id: `LB-${uuid}`,
       state,
@@ -215,8 +231,8 @@ class LandBankSearchScraper extends BaseScraper {
       city,
       zip: '00000',
       address,
-      lat: defaultLat,
-      lng: defaultLng,
+      lat: +(defaultLat + jitterLat).toFixed(6),
+      lng: +(defaultLng + jitterLng).toFixed(6),
       propType,
       openingBid,
       occupancy: 'Vacant',
