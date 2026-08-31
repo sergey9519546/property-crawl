@@ -3,19 +3,20 @@ const hud = require('./hud');
 const fannie = require('./fannie');
 const irs = require('./irs');
 const treasury = require('./treasury');
+const gsa = require('./gsa');
 const db = require('../db/client');
 
 // Scrapers that talk to live external sites. These only run when the caller
 // explicitly opts in (RUN_REAL_SCRAPERS=1 or --real). Default runs stay fully
 // offline so `npm test` and local dev never hit the network.
-const REAL_SCRAPER_KEYS = new Set(['treasury']);
+const REAL_SCRAPER_KEYS = new Set(['treasury', 'irs', 'gsa']);
 const RUN_REAL =
   process.env.RUN_REAL_SCRAPERS === '1' || process.argv.includes('--real');
 
 class IngestionScheduler {
   constructor() {
-    this.mockScrapers = [sheriff, hud, fannie, irs];
-    this.realScrapers = [treasury];
+    this.mockScrapers = [sheriff, hud, fannie];
+    this.realScrapers = [treasury, gsa, irs];
     this.isRunning = false;
   }
 
