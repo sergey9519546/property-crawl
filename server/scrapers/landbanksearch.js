@@ -219,10 +219,11 @@ class LandBankSearchScraper extends BaseScraper {
     // Apply a small pseudorandom jitter (±0.05°, ~5.5 km) so map markers
     // from the same land bank don't all overlap on the city centroid.
     // Seed derived from the UUID for reproducibility across runs.
-    const hash = uuid.split('-')[0];
-    const seed = parseInt(hash, 16) || 0;
-    const jitterLat = ((seed % 1000) / 10000) - 0.05;   // -0.05 to +0.05
-    const jitterLng = (((seed >> 8) % 1000) / 10000) - 0.05;
+    const hash = uuid.replace(/-/g, '');
+    const seed1 = parseInt(hash.slice(0, 4), 16) || 0;
+    const seed2 = parseInt(hash.slice(4, 8), 16) || 0;
+    const jitterLat = ((seed1 % 1000) / 10000) - 0.05;   // -0.05 to +0.049
+    const jitterLng = ((seed2 % 1000) / 10000) - 0.05;
 
     return {
       id: `LB-${uuid}`,

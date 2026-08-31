@@ -3,6 +3,8 @@ const Validator = require('../security/validation');
 const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
 const { CostTracker } = require('../ai/cost_tracker');
+const { deterministicParse, normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
+const { computeCashToClose } = require('../ai/legal-rules');
 
 async function handleParse(req, res) {
   if (req.method !== 'POST') {
@@ -15,7 +17,7 @@ async function handleParse(req, res) {
     return res.status(400).json({ error: validation.error });
   }
 
-  const cleanNotice = SecuritySanitizer.sanitizePromptInput(noticeText);
+  const cleanNotice = neutralizePromptInjection(SecuritySanitizer.sanitizePromptInput(noticeText));
   const model = ModelRouter.selectModel({ taskType: 'notice_parser', promptLength: cleanNotice.length });
   
   // Check AI cache first to avoid LLM cost
@@ -26,31 +28,32 @@ async function handleParse(req, res) {
     } catch (_) {}
   }
 
-  // Fast offline deterministic extraction fallback & mock AI extraction
-  const fallbackExtract = {
-    property_address: cleanNotice.match(/(?:commonly known as|premises at|property:)\s*([^.,\n]+)/i)?.[1]?.trim() || 'Extracted Property',
-    city: cleanNotice.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*[A-Z]{2}/)?.[1] || 'Cleveland',
-    state: cleanNotice.match(/,\s*([A-Z]{2})\b/)?.[1] || 'OH',
-    zip: cleanNotice.match(/\b(\d{5})\b/)?.[1] || '44105',
-    parcel_or_lot: cleanNotice.match(/(?:parcel|lot)\s*([0-9A-Z-]+)/i)?.[1] || '102-44-01',
-    sale_date: cleanNotice.match(/(?:on|dated)\s*([A-Z][a-z]+\s+\d{1,2},\s*202\d)/i)?.[1] || '2026-09-30',
+  // Resilient deterministic parse with OCR normalization, legal rules, and senior lien analysis
+  const parsedData = deterministicParse(cleanNotice);
+
+  // If opening bid or judgment is found, compute statutory cash-to-close
+  const cashToClose = computeCashToClose({
+    openingBid: parsedData.opening_bid || parsedData.judgment_amount || 50000,
+    state: parsedData.state || 'OH',
+    source: 'sheriff'
+  });
+
+  const structuredResult = {
+    ...parsedData,
     sale_time: '10:00 AM',
     sale_type: 'Sheriff Sale',
-    plaintiff_or_seller: cleanNotice.match(/([A-Z0-9.,\s]+)\s+(?:vs|v\.|against)/i)?.[1]?.trim() || 'Bank National Association',
-    defendant: cleanNotice.match(/(?:vs|v\.|against)\s+([A-Z.,\s]+?)(?:,|\.|\n|$)/i)?.[1]?.trim() || 'Estate of Debtor',
-    judgment_amount: Number(cleanNotice.match(/\$([0-9,]+(?:\.[0-9]{2})?)/)?.[1]?.replace(/,/g, '')) || 75000,
-    deposit_terms: '10% day of sale by certified funds',
-    attorney: 'Legal Counsel LLP',
-    case_number: cleanNotice.match(/case\s*(?:no\.?)?\s*([0-9A-Z-]+)/i)?.[1] || 'CV-26-00412',
-    subject_to: 'Prior liens, unpaid taxes, and municipal assessments',
-    redemption_note: 'Subject to statutory redemption rights under state law'
+    deposit_terms: parsedData.deposit_terms || '10% day of sale by certified funds',
+    attorney: parsedData.attorney || 'Legal Counsel LLP',
+    subject_to: parsedData.senior_lien_warning || 'Prior liens, unpaid taxes, and municipal assessments',
+    redemption_note: parsedData.redemption_warning || 'Subject to statutory redemption rights under state law',
+    cash_to_close: cashToClose
   };
 
   const cost = CostTracker.calculateCost(model, cleanNotice.length / 4, 150);
-  await AiCache.set(cleanNotice, model, JSON.stringify(fallbackExtract), cleanNotice.length / 4, 150, cost, 'parser');
+  await AiCache.set(cleanNotice, model, JSON.stringify(structuredResult), cleanNotice.length / 4, 150, cost, 'parser');
 
   return res.json({
-    parsed: fallbackExtract,
+    parsed: structuredResult,
     cached: false,
     model,
     costUsd: cost

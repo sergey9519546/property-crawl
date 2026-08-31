@@ -1,12 +1,20 @@
+const { ScraperCircuitBreaker } = require('./circuit-breaker');
+const { getRedemptionRule, detectSeniorLienSurvival, computeCashToClose } = require('../ai/legal-rules');
+
 class BaseScraper {
   constructor({ name, sourceKey, timeoutMs = 15000, maxRetries = 3 } = {}) {
     this.name = name;
     this.sourceKey = sourceKey;
     this.timeoutMs = timeoutMs;
     this.maxRetries = maxRetries;
+    this.circuitBreaker = new ScraperCircuitBreaker();
   }
 
   async executeWithRetry(fn) {
+    if (this.circuitBreaker.isOpen()) {
+      throw new Error(`[${this.name}] Scraper halted: Circuit breaker is OPEN`);
+    }
+
     let lastError;
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
@@ -19,6 +27,7 @@ class BaseScraper {
         }
       }
     }
+    this.circuitBreaker.trip(lastError ? lastError.message : 'Max retries exhausted');
     throw lastError;
   }
 
@@ -30,11 +39,20 @@ class BaseScraper {
     const ratio = openingBid / mid;
     const equity = Math.max(0, mid - openingBid);
     const dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)));
+    const state = (raw.state || 'OH').toUpperCase();
+
+    const redemption = getRedemptionRule(state);
+    const seniorLien = detectSeniorLienSurvival(raw.plaintiff || '', raw.raw || '');
+    const cashToClose = computeCashToClose({
+      openingBid,
+      state,
+      source: this.sourceKey
+    });
 
     return {
-      id: raw.id || `${raw.state || 'US'}-${Date.now().toString(36).toUpperCase()}`,
+      id: raw.id || `${state}-${Date.now().toString(36).toUpperCase()}`,
       source: this.sourceKey,
-      state: (raw.state || 'OH').toUpperCase(),
+      state,
       county: raw.county || 'County',
       city: raw.city || 'City',
       zip: raw.zip || '00000',
@@ -54,6 +72,12 @@ class BaseScraper {
       ratio,
       equity,
       dealScore,
+      redemptionDays: redemption.days,
+      redemptionWarning: redemption.warning,
+      seniorLienRisk: seniorLien.riskLevel,
+      seniorLienWarning: seniorLien.warning,
+      cashToClose: cashToClose.totalCashToClose,
+      cashToCloseDetails: cashToClose,
       saleDate: raw.saleDate || new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
       plaintiff: raw.plaintiff || '—',
       defendant: raw.defendant || '—',
