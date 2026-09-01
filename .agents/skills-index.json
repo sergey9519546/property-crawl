@@ -1,0 +1,71 @@
+{
+  "skills": [
+    {
+      "name": "agent-verification",
+      "description": "",
+      "domain": "agent-system",
+      "version": "v1",
+      "trigger": [
+        "agent-verification"
+      ],
+      "dir": ".agents/skills/agent-verification",
+      "file": ".agents/skills/agent-verification/SKILL.md"
+    },
+    {
+      "name": "deal-scoring",
+      "description": "",
+      "domain": "property-data",
+      "version": "v1",
+      "trigger": [
+        "deal-scoring"
+      ],
+      "dir": ".agents/skills/deal-scoring",
+      "file": ".agents/skills/deal-scoring/SKILL.md"
+    },
+    {
+      "name": "foreclosure-title-intelligence",
+      "description": "",
+      "domain": "real-estate-intelligence",
+      "version": "v1",
+      "trigger": [
+        "foreclosure-title-intelligence"
+      ],
+      "dir": ".agents/skills/foreclosure-title-intelligence",
+      "file": ".agents/skills/foreclosure-title-intelligence/SKILL.md"
+    },
+    {
+      "name": "listing-normalization",
+      "description": "",
+      "domain": "property-data",
+      "version": "v1",
+      "trigger": [
+        "listing-normalization"
+      ],
+      "dir": ".agents/skills/listing-normalization",
+      "file": ".agents/skills/listing-normalization/SKILL.md"
+    },
+    {
+      "name": "property-scraper-engineering",
+      "description": "",
+      "domain": "data-engineering",
+      "version": "v1",
+      "trigger": [
+        "property-scraper-engineering"
+      ],
+      "dir": ".agents/skills/property-scraper-engineering",
+      "file": ".agents/skills/property-scraper-engineering/SKILL.md"
+    },
+    {
+      "name": "skill-repair",
+      "description": "",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "skill-repair"
+      ],
+      "dir": ".agents/skills/skill-repair",
+      "file": ".agents/skills/skill-repair/SKILL.md"
+    }
+  ],
+  "digest": "c3f01f0bc8644023b52437975c1db175820a93d4d8983c84f825fff67d4885d5"
+}

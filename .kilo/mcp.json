@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/spec/main/schemas/mcp-config.json",
+  "description": "MCP server configuration for property-crawl. PostGIS is conditional — only starts when DATABASE_URL is set. Falls back to in-memory provider when unset (Base44 dev loop). Browser MCP is optional for UI verification.",
+  "servers": {
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      },
+      "condition": "DATABASE_URL must be set. When unset, the agent uses the in-memory provider seeded from data.js and skips this server cleanly. Do NOT start if DATABASE_URL is empty or unset.",
+      "disabled": true,
+      "disabledReason": "DATABASE_URL is not set in the Base44 dev environment. The in-memory provider in server/db/client.js is used instead. Set DATABASE_URL to a Postgres+PostGIS URL to enable."
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-playwright"],
+      "condition": "Optional. Used for UI verification of the Next.js marketing site. Requires Playwright browsers installed.",
+      "disabled": true,
+      "disabledReason": "Playwright browsers are not installed in the current environment. Install with 'npx playwright install' to enable."
+    }
+  },
+  "gracefulDegradation": {
+    "description": "When MCP servers are disabled or fail to start, the agent must continue operating using fallback mechanisms: in-memory DB (server/db/client.js) instead of PostGIS, DOM inspection instead of Playwright, and git/file inspection instead of GitHub MCP.",
+    "fallbacks": {
+      "postgres": "server/db/client.js in-memory provider seeded from data.js",
+      "playwright": "DOM inspection via test/e2e.test.js and test/hardening.test.js",
+      "github": "git CLI commands"
+    }
+  }
+}
