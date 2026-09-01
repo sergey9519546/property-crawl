@@ -24,7 +24,13 @@
     "refresh-data:real": "node scripts/build-data.js --real",
     "skills:doctor": "node scripts/skills-doctor.js",
     "skills:doctor:json": "node scripts/skills-doctor.js --json",
-    "context:gen": "node scripts/gen-context.js"
+    "context:gen": "node scripts/gen-context.js",
+    "skills:index": "node scripts/gen-skills-index.js",
+    "skills:route": "node scripts/skill-router.js",
+    "verify:gate": "node scripts/verify-gate.js",
+    "test:agent-system": "node --test test/agent-system.test.js",
+    "test:commands": "node --test test/commands.test.js",
+    "test:agents": "node --test test/agents.test.js"
   },
   "keywords": [
     "real-estate",

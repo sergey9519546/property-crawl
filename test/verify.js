@@ -18,7 +18,10 @@ const suites = [
   { name: '11. Playwright Canonical UI Browser Suite', cmd: 'node test/run-ui-suite.js' },
   { name: '12. Adversary Acceptance Suite (Scenarios 1–10)', cmd: 'node test/adversary.test.js' },
   { name: '13. Autonomous Bidding & MAO Simulator', cmd: 'node test/bidding.test.js' },
-  { name: '14. Scraper Telemetry & Drift Detection', cmd: 'node test/telemetry.test.js' }
+  { name: '14. Scraper Telemetry & Drift Detection', cmd: 'node test/telemetry.test.js' },
+  { name: '15. Agent System Acceptance (Adversary Scenarios 1–10)', cmd: 'node --test test/agent-system.test.js' },
+  { name: '16. Commands Config-under-Test', cmd: 'node --test test/commands.test.js' },
+  { name: '17. Agents Config-under-Test', cmd: 'node --test test/agents.test.js' }
 ];
 
 let totalPassed = 0;
