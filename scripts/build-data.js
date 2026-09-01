@@ -54,18 +54,20 @@ const SOURCES = {
 // server/scrapers/<key>.js that exports a singleton with .scrapeFeed(),
 // then add it here.
 const SCRAPER_REGISTRY = [
-  { key: 'sheriff',    mod: '../server/scrapers/sheriff',         real: false },
-  { key: 'hud',        mod: '../server/scrapers/hud',             real: false },
-  { key: 'fannie',     mod: '../server/scrapers/fannie',          real: false },
-  { key: 'irs',        mod: '../server/scrapers/irs',             real: true  },
-  { key: 'treasury',   mod: '../server/scrapers/treasury',        real: true  },
-  { key: 'gsa',        mod: '../server/scrapers/gsa',             real: true  },
-  { key: 'usda',       mod: '../server/scrapers/usda',            real: true  },
-  { key: 'landbank',   mod: '../server/scrapers/landbanksearch',  real: true  },
-  { key: 'fdic',       mod: '../server/scrapers/fdic',            real: true  },
-  { key: 'civilview',  mod: '../server/scrapers/civilview',       real: true  },
-  { key: 'bid4assets', mod: '../server/scrapers/bid4assets',      real: true  },
-  // Coming next: trustee, freddie, va, marshals
+  { key: 'sheriff',    mod: '../server/scrapers/sheriff',         real: true },
+  { key: 'hud',        mod: '../server/scrapers/hud',             real: true },
+  { key: 'fannie',     mod: '../server/scrapers/fannie',          real: true },
+  { key: 'freddie',    mod: '../server/scrapers/freddie',         real: true },
+  { key: 'va',         mod: '../server/scrapers/va',              real: true },
+  { key: 'marshals',   mod: '../server/scrapers/marshals',        real: true },
+  { key: 'irs',        mod: '../server/scrapers/irs',             real: true },
+  { key: 'treasury',   mod: '../server/scrapers/treasury',        real: true },
+  { key: 'gsa',        mod: '../server/scrapers/gsa',             real: true },
+  { key: 'usda',       mod: '../server/scrapers/usda',            real: true },
+  { key: 'landbank',   mod: '../server/scrapers/landbanksearch',  real: true },
+  { key: 'fdic',       mod: '../server/scrapers/fdic',            real: true },
+  { key: 'civilview',  mod: '../server/scrapers/civilview',       real: true },
+  { key: 'bid4assets', mod: '../server/scrapers/bid4assets',      real: true },
 ];
 
 // `cross-env` is intentionally NOT required: pass --real on any platform.

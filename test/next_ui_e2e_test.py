@@ -991,6 +991,26 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         self.page.get_by_role("button", name="3D Lot & Elevation").click()
         self.assertTrue(self.page.get_by_text("3D Terrain & Contour Insights:").is_visible())
+        
+        # Test 3D layer and wireframe buttons
+        self.page.get_by_role("button", name="Zoning", exact=True).click()
+        self.page.get_by_role("button", name="Lot Boundary", exact=True).click()
+        self.page.get_by_role("button", name="Elevation", exact=True).click()
+        self.page.get_by_title("Toggle Wireframe Topography").click()
+        self.page.get_by_title("Toggle Wireframe Topography").click()
+
+        # Test Bidding Simulator tab & MAO calculations
+        self.page.get_by_role("button", name="Bidding Simulator").click()
+        self.assertTrue(self.page.get_by_text("Max Allowable Offer (MAO)").is_visible())
+        self.assertTrue(self.page.get_by_text("Win Probability").is_visible())
+
+        # Test Deal Video Teaser generator
+        self.page.get_by_role("button", name="Generate 15s Deal Video Reel").click()
+        self.page.get_by_text("OPPORTUNITY REVEAL").wait_for(state="visible", timeout=6000)
+        self.assertTrue(self.page.get_by_text("Reel generated").is_visible())
+        self.page.get_by_role("button", name="Re-generate").click()
+        self.assertTrue(self.page.get_by_role("button", name="Generate 15s Deal Video Reel").is_visible())
+
         self.page.get_by_role("button", name="Add to Watchlist").click()
         self.page.get_by_role("button", name="Close drawer").click()
 

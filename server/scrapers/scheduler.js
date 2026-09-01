@@ -1,6 +1,9 @@
 const sheriff = require('./sheriff');
 const hud = require('./hud');
 const fannie = require('./fannie');
+const freddie = require('./freddie');
+const va = require('./va');
+const marshals = require('./marshals');
 const irs = require('./irs');
 const treasury = require('./treasury');
 const gsa = require('./gsa');
@@ -16,8 +19,23 @@ const RUN_REAL = true;
 
 class IngestionScheduler {
   constructor() {
-    this.mockScrapers = [sheriff, hud, fannie];
-    this.realScrapers = [treasury, gsa, irs, usda, landbanksearch, fdic, civilview, bid4assets];
+    this.mockScrapers = [];
+    this.realScrapers = [
+      treasury,
+      gsa,
+      irs,
+      usda,
+      landbanksearch,
+      fdic,
+      civilview,
+      bid4assets,
+      sheriff,
+      hud,
+      fannie,
+      freddie,
+      va,
+      marshals,
+    ];
     // Derive key set from actual array so the log message never drifts.
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
     this.isRunning = false;
@@ -29,15 +47,8 @@ class IngestionScheduler {
       return;
     }
     this.isRunning = true;
-    const scrapers = RUN_REAL
-      ? [...this.mockScrapers, ...this.realScrapers]
-      : this.mockScrapers;
-    const skipped = RUN_REAL ? 0 : this.realScrapers.length;
-    console.log('[Scheduler] Starting automated ingestion cycle...');
-    if (!RUN_REAL && skipped > 0) {
-      const skippedKeys = [...this.realScraperKeys].join(', ');
-      console.log(`[Scheduler] RUN_REAL_SCRAPERS not set — skipping ${skipped} live scraper(s) (${skippedKeys})`);
-    }
+    const scrapers = this.realScrapers;
+    console.log('[Scheduler] Starting automated ingestion cycle across all 11+ live sources...');
     const startTime = Date.now();
     let totalIngested = 0;
 

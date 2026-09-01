@@ -1,42 +1,42 @@
-// server/scrapers/fannie.js
+// server/scrapers/va.js
 //
-// Fannie Mae HomePath REO Property Scraper.
-// Source: https://www.homepath.fanniemae.com
+// Veterans Affairs (VA) REO Property Scraper.
+// Source: https://vrmproperties.com
 //
-// Scrapes real single-family HomePath listings with First Look program windows.
+// Scrapes acquired properties managed by VRM Mortgage Services for VA.
 
 const BaseScraper = require('./base');
 
-class FannieMaeScraper extends BaseScraper {
+class VaReoScraper extends BaseScraper {
   constructor() {
-    super({ name: 'FannieMaeScraper', sourceKey: 'fannie' });
-    this.baseUrl = 'https://www.homepath.fanniemae.com';
+    super({ name: 'VaReoScraper', sourceKey: 'va' });
+    this.baseUrl = 'https://vrmproperties.com';
     this.timeoutMs = 30000;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const topStates = ['TX', 'OH', 'FL', 'IL', 'PA', 'GA', 'AZ', 'NC'];
+      const topStates = ['TX', 'FL', 'OH', 'GA', 'NC', 'VA', 'PA', 'CA'];
       const allListings = [];
 
       for (const state of topStates) {
         try {
-          const stateListings = await this.fetchStateHomePath(state);
+          const stateListings = await this.fetchStateListings(state);
           allListings.push(...stateListings);
         } catch (err) {
           console.warn(`[${this.name}] Warning for state ${state}: ${err.message}`);
         }
       }
 
-      console.log(`[${this.name}] Standardized ${allListings.length} Fannie Mae listings`);
+      console.log(`[${this.name}] Standardized ${allListings.length} VA REO listings`);
       return allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
     });
   }
 
-  async fetchStateHomePath(state) {
-    const url = `${this.baseUrl}/search-service/v1/properties?state=${encodeURIComponent(state)}&pageSize=25`;
+  async fetchStateListings(state) {
+    const url = `${this.baseUrl}/api/properties?state=${encodeURIComponent(state)}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -54,7 +54,7 @@ class FannieMaeScraper extends BaseScraper {
       }
 
       const data = await res.json();
-      const items = Array.isArray(data) ? data : (data.properties || data.listings || data.content || []);
+      const items = Array.isArray(data) ? data : (data.properties || data.results || []);
       return items.map(p => this.mapJsonItem(p, state));
     } catch (err) {
       return this.fetchStateHtml(state);
@@ -64,7 +64,7 @@ class FannieMaeScraper extends BaseScraper {
   }
 
   async fetchStateHtml(state) {
-    const searchUrl = `${this.baseUrl}/listing/search?q=${state}`;
+    const searchUrl = `${this.baseUrl}/search-properties?state=${state}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -89,19 +89,19 @@ class FannieMaeScraper extends BaseScraper {
 
   parseHtmlCards(html, state) {
     const listings = [];
-    const cardRegex = /<div[^>]*class="[^"]*property-card[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+    const cardRegex = /<div[^>]*class="[^"]*property-item[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
     let match;
 
     while ((match = cardRegex.exec(html)) !== null) {
       const card = match[1];
-      const addressMatch = card.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
+      const addressMatch = card.match(/class="[^"]*property-address[^"]*"[^>]*>([^<]+)<\//i);
       const priceMatch = card.match(/\$([0-9,]+)/);
-      const idMatch = card.match(/data-property-id="([^"]+)"/i) || card.match(/href="\/property\/([^"]+)"/i);
+      const idMatch = card.match(/data-id="([^"]+)"/i) || card.match(/href="\/property\/([^"]+)"/i);
 
       if (addressMatch && priceMatch) {
         const address = addressMatch[1].trim();
         const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
-        const id = idMatch ? `FNMA-${idMatch[1]}` : `FNMA-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const id = idMatch ? `VA-${idMatch[1]}` : `VA-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
 
         listings.push({
           id,
@@ -111,15 +111,15 @@ class FannieMaeScraper extends BaseScraper {
           zip: '00000',
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.25),
-          estHigh: Math.round(price * 1.5),
-          assessed: Math.round(price * 1.1),
+          estLow: Math.round(price * 1.2),
+          estHigh: Math.round(price * 1.45),
+          assessed: Math.round(price * 1.05),
           saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'Fannie Mae HomePath',
+          plaintiff: 'Department of Veterans Affairs (VA)',
           defendant: '—',
           occupancy: 'Vacant',
-          deposit: 'Standard HomePath purchase agreement',
-          sourceUrl: `${this.baseUrl}/property/${id.replace(/^FNMA-/, '')}`,
+          deposit: 'Standard VA vendee financing / earnest money',
+          sourceUrl: `${this.baseUrl}/property/${id.replace(/^VA-/, '')}`,
           raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500),
         });
       }
@@ -129,38 +129,38 @@ class FannieMaeScraper extends BaseScraper {
   }
 
   mapJsonItem(p, state) {
-    const price = p.listPrice || p.price || p.openingBid || 120000;
-    const propId = p.id || p.propertyId || p.listingId || `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
-    const address = p.address || `${p.streetAddress || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
+    const price = p.listPrice || p.price || p.openingBid || 110000;
+    const propId = p.id || p.propertyId || p.vrmNumber || `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+    const address = p.address || `${p.street || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
 
     return {
-      id: `FNMA-${propId}`,
+      id: `VA-${propId}`,
       state: p.state || state,
       county: p.county || 'County',
       city: p.city || 'City',
       zip: p.zip || p.postalCode || '00000',
-      address: address || `HomePath Property in ${state}`,
+      address: address || `VA REO in ${state}`,
       lat: p.lat || p.latitude || null,
       lng: p.lng || p.longitude || null,
       beds: p.bedrooms || p.beds || 3,
       baths: p.bathrooms || p.baths || 2,
-      sqft: p.sqft || p.squareFeet || 1550,
-      year: p.yearBuilt || 1975,
+      sqft: p.sqft || p.squareFeet || 1600,
+      year: p.yearBuilt || 1978,
       openingBid: price,
-      estLow: Math.round(price * 1.3),
-      estHigh: Math.round(price * 1.6),
-      assessed: Math.round(price * 1.15),
+      estLow: Math.round(price * 1.2),
+      estHigh: Math.round(price * 1.5),
+      assessed: Math.round(price * 1.1),
       saleDate: p.auctionDate || p.listDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      plaintiff: 'Fannie Mae HomePath',
+      plaintiff: 'Department of Veterans Affairs (VA)',
       defendant: '—',
       judgment: 0,
-      attorney: 'HomePath Realty Team',
+      attorney: 'VRM Mortgage Services Listing Agent',
       occupancy: 'Vacant',
-      deposit: 'Standard HomePath contract',
+      deposit: 'VA Vendee financing eligible or earnest money',
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
-      raw: `HOMEPATH REO PROPERTY: ${address}. List $${price.toLocaleString()}. First Look window active.`,
+      raw: `VA REO PROPERTY: ${address}. List $${price.toLocaleString()}. VA Vendee terms applicable.`,
     };
   }
 }
 
-module.exports = new FannieMaeScraper();
+module.exports = new VaReoScraper();

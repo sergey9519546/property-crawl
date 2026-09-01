@@ -6,6 +6,7 @@ import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
+import { DealVideoGenerator } from "./deal-video-generator";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 
 interface PropertyDrawerProps {
@@ -323,9 +324,12 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             </div>
           )}
 
-          {/* TAB 3: Bidding Simulator */}
+          {/* TAB 3: Bidding Simulator & AI Video Pitch */}
           {activeTab === "bidding" && (
-            <BiddingSimulator listing={listing} />
+            <div className="space-y-6 animate-in fade-in">
+              <BiddingSimulator listing={listing} />
+              <DealVideoGenerator listing={listing} />
+            </div>
           )}
 
           {/* Source Link */}
