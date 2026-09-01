@@ -37,7 +37,7 @@ test('Scenario 1: Deterministic routing under ambiguity', () => {
   }
 
   // an ambiguous query with multiple matches must rank them (not equal weight)
-  const ambig = route('bigquery data pipeline');
+  const ambig = route('legal title scrape');
   if (ambig.candidates.length > 1) {
     const scores = ambig.candidates.map((c) => c.score);
     // at least the top must differ from the bottom (ranking, not equal weight)

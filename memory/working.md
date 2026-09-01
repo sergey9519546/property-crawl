@@ -15,7 +15,7 @@
 - T1.1: gen-context.js + CONTEXT.md + context.test.js (drift-gated domain model)
 - T1.2: .kilo/command/ (5 commands, config-under-test)
 - T1.3: .kilo/agent/ (3 agents, config-under-test)
-- T1.4: gen-skills-index.js + skills-index.json (34 skills, drift-gated)
+- T1.4: gen-skills-index.js + skills-index.json (6 skills after T3.2 collapse, drift-gated)
 
 ### Tier 2 (recognized-as-right)
 - T2.1: verify-gate.js + pre-completion hook (proportional completion gate, evidence-cited)
@@ -24,9 +24,9 @@
 - T2.4: skill-router.js (ranked disambiguation, top-3, deterministic pick)
 - T2.5: memory/ layer (facts.md with citations, working.md, episodes/)
 
-### Tier 3 (partial)
+### Tier 3 (complete except T3.3)
 - T3.1: Self-verifying loop (verify-gate "agent" type + pre-completion hook)
-- T3.2: Capability collapse (3 project-native skills created; full removal of GCP skills deferred)
+- T3.2: Capability collapse COMPLETE — 28 generic cloud-pack skills deleted (34→6), router precision measurably improved (see memory/episodes/2026-09-01-capability-collapse.md)
 - T3.4: Telemetry hook (post-tool-use.js, non-blocking, append-only log)
 
 ## Deferred
