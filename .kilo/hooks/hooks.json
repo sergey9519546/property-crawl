@@ -1,0 +1,19 @@
+{
+  "hooks": [
+    {
+      "event": "Stop",
+      "description": "Run proportional verification gate before the agent may claim completion. Refuses to certify 'done' without cited evidence.",
+      "command": "node scripts/hooks/pre-completion.js",
+      "blocking": true
+    },
+    {
+      "event": "PostToolUse",
+      "description": "Record tool/skill usage to episodic memory for the telemetry feedback loop.",
+      "command": "node scripts/hooks/post-tool-use.js",
+      "blocking": false,
+      "filter": {
+        "tools": ["skill", "bash", "edit"]
+      }
+    }
+  ]
+}

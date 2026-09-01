@@ -58,11 +58,21 @@ function classifyChange(files) {
     f === 'index.html' ||
     f === 'app.js'
   );
+  const hasAgentSystem = files.some((f) =>
+    f.startsWith('.kilo/') ||
+    f.startsWith('.agents/') ||
+    f.startsWith('memory/') ||
+    f.startsWith('scripts/hooks/') ||
+    f.startsWith('scripts/skill-router') ||
+    f.startsWith('scripts/gen-skills-index') ||
+    f.startsWith('scripts/verify-gate')
+  );
 
+  if (hasAgentSystem) return 'agent';
   if (hasSchema) return 'schema';
   if (hasScraper) return 'scraper';
   if (hasServer || hasUI) return 'runtime';
-  // docs, config, tests-only, .kilo, .agents — trivial
+  // docs, config, tests-only — trivial
   return 'trivial';
 }
 
@@ -87,6 +97,17 @@ function getGate(changeType) {
       suites: ['node test/server.test.js', 'node test/suite.test.js', 'node test/hardening.test.js'],
       label: 'server + unit + hardening',
       maxDuration: 20000
+    },
+    agent: {
+      suites: [
+        'node --test test/agent-system.test.js',
+        'node --test test/commands.test.js',
+        'node --test test/agents.test.js',
+        'node scripts/gen-skills-index.js --check',
+        'node scripts/gen-context.js --check'
+      ],
+      label: 'agent-system acceptance + drift gates',
+      maxDuration: 30000
     },
     full: {
       suites: ['node test/verify.js'],

@@ -56,9 +56,9 @@ test('Scenario 1: Deterministic routing under ambiguity', () => {
 test('Scenario 2: Proportional verification', () => {
   const { classifyChange, getGate } = require('../scripts/verify-gate.js');
 
-  // trivial: docs/config only
+  // trivial: docs only
   assert.strictEqual(classifyChange(['README.md']), 'trivial');
-  assert.strictEqual(classifyChange(['.kilo/command/test.md']), 'trivial');
+  assert.strictEqual(classifyChange(['AGENTS.md']), 'trivial');
 
   // scraper: scraper files
   assert.strictEqual(classifyChange(['server/scrapers/sheriff.js']), 'scraper');
@@ -71,6 +71,12 @@ test('Scenario 2: Proportional verification', () => {
   assert.strictEqual(classifyChange(['server/routes/listings.js']), 'runtime');
   assert.strictEqual(classifyChange(['src/app/page.tsx']), 'runtime');
 
+  // agent: .kilo, .agents, memory, hooks
+  assert.strictEqual(classifyChange(['.kilo/command/test.md']), 'agent');
+  assert.strictEqual(classifyChange(['.agents/skills/test/SKILL.md']), 'agent');
+  assert.strictEqual(classifyChange(['memory/facts.md']), 'agent');
+  assert.strictEqual(classifyChange(['scripts/hooks/pre-completion.js']), 'agent');
+
   // gate must be proportional: trivial < scraper < full
   const trivialGate = getGate('trivial');
   const scraperGate = getGate('scraper');
@@ -81,6 +87,13 @@ test('Scenario 2: Proportional verification', () => {
   assert.ok(schemaGate.suites.some((s) => s.includes('sync')), 'schema gate must include sync drift test');
   assert.ok(schemaGate.suites.some((s) => s.includes('context')), 'schema gate must include context drift test');
   assert.ok(trivialGate.maxDuration < scraperGate.maxDuration, 'trivial gate must be faster than scraper gate');
+
+  // agent gate must run agent-system acceptance tests
+  const agentGate = getGate('agent');
+  assert.ok(agentGate.suites.some((s) => s.includes('agent-system')), 'agent gate must include agent-system acceptance');
+  assert.ok(agentGate.suites.some((s) => s.includes('gen-skills-index') || s.includes('gen-context')),
+    'agent gate must include drift checks');
+  assert.ok(trivialGate.maxDuration < agentGate.maxDuration, 'trivial gate must be faster than agent gate');
 });
 
 // --- Scenario 3: Evidence-cited completion ---
@@ -137,6 +150,12 @@ test('Scenario 5: Config-under-test', () => {
   // test files must exist for commands and agents
   assert.ok(fs.existsSync(path.join(ROOT, 'test', 'commands.test.js')), 'test/commands.test.js must exist');
   assert.ok(fs.existsSync(path.join(ROOT, 'test', 'agents.test.js')), 'test/agents.test.js must exist');
+
+  // hooks must exist with a pre-completion gate
+  assert.ok(fs.existsSync(path.join(ROOT, '.kilo', 'hooks', 'hooks.json')), '.kilo/hooks/hooks.json must exist');
+  const hooks = JSON.parse(fs.readFileSync(path.join(ROOT, '.kilo', 'hooks', 'hooks.json'), 'utf8'));
+  assert.ok(hooks.hooks.some((h) => h.event === 'Stop' && h.blocking), 'must have a blocking Stop hook');
+  assert.ok(fs.existsSync(path.join(ROOT, 'scripts', 'hooks', 'pre-completion.js')), 'pre-completion hook script must exist');
 });
 
 // --- Scenario 6: Dead-config cleanup with provenance ---

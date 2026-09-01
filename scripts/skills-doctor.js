@@ -155,8 +155,8 @@ function main() {
 
   const dups = [...byName.entries()].filter(([, dirs]) => dirs.length > 1);
 
-  // stale/empty bundle dirs at repo root (e.g. .gemini)
-  const staleBundles = [path.resolve(__dirname, '..', '.gemini')].filter((p) => dirEmpty(p));
+  // stale/empty bundle dirs at repo root (e.g. .gemini) — only flag if they exist
+  const staleBundles = [path.resolve(__dirname, '..', '.gemini')].filter((p) => fs.existsSync(p) && dirEmpty(p));
 
   const report = { dups, emptydirs, epoch, staleBundles };
 

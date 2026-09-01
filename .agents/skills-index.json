@@ -12,6 +12,17 @@
       "file": ".agents/skills/accidental-data-loss-prevention/SKILL.md"
     },
     {
+      "name": "agent-verification",
+      "description": "",
+      "domain": "agent-system",
+      "version": "v1",
+      "trigger": [
+        "agent-verification"
+      ],
+      "dir": ".agents/skills/agent-verification",
+      "file": ".agents/skills/agent-verification/SKILL.md"
+    },
+    {
       "name": "bigquery-ai-ml",
       "description": "Leverages BigQuery's built-in machine learning and GenAI capabilities",
       "domain": "general",
@@ -167,6 +178,17 @@
       ],
       "dir": ".agents/skills/dbt-bigquery",
       "file": ".agents/skills/dbt-bigquery/SKILL.md"
+    },
+    {
+      "name": "deal-scoring",
+      "description": "",
+      "domain": "property-data",
+      "version": "v1",
+      "trigger": [
+        "deal-scoring"
+      ],
+      "dir": ".agents/skills/deal-scoring",
+      "file": ".agents/skills/deal-scoring/SKILL.md"
     },
     {
       "name": "discovering-gcp-data-assets",
@@ -425,6 +447,17 @@
       "file": ".agents/skills/google-cloud-storage-basics/SKILL.md"
     },
     {
+      "name": "listing-normalization",
+      "description": "",
+      "domain": "property-data",
+      "version": "v1",
+      "trigger": [
+        "listing-normalization"
+      ],
+      "dir": ".agents/skills/listing-normalization",
+      "file": ".agents/skills/listing-normalization/SKILL.md"
+    },
+    {
       "name": "managing-python-dependencies",
       "description": "",
       "domain": "general",
@@ -480,5 +513,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "2e5a211225a96a862d6363853b0065a80d6086a09ac462fea351a0e3a4512b5d"
+  "digest": "0526b45e90b894a799c8c66924716e0a9584dc02330c87549b17a24e81cb1dc3"
 }
