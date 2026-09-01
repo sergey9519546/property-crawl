@@ -53,7 +53,7 @@ class IngestionScheduler {
     let totalIngested = 0;
 
     try {
-      for (const scraper of scrapers) {
+      const results = await Promise.allSettled(scrapers.map(async (scraper) => {
         const scraperStart = Date.now();
         try {
           console.log(`[Scheduler] Running ${scraper.name}...`);
@@ -65,12 +65,14 @@ class IngestionScheduler {
           const latency = Date.now() - scraperStart;
           telemetryInstance.recordRun(scraper.name, items, latency, null);
           console.log(`[Scheduler] ${scraper.name} completed successfully (${items.length} items)`);
+          return items.length;
         } catch (err) {
           const latency = Date.now() - scraperStart;
           telemetryInstance.recordRun(scraper.name, [], latency, err);
           console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
+          return 0;
         }
-      }
+      }));
 
       const duration = Date.now() - startTime;
       console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);

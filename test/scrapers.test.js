@@ -10,6 +10,7 @@ const landbanksearch = require('../server/scrapers/landbanksearch');
 const fdic = require('../server/scrapers/fdic');
 const civilview = require('../server/scrapers/civilview');
 const bid4assets = require('../server/scrapers/bid4assets');
+const gsa = require('../server/scrapers/gsa');
 const scheduler = require('../server/scrapers/scheduler');
 
 console.log('=== RUNNING SCRAPERS TEST SUITE ===');
@@ -124,36 +125,69 @@ async function run() {
     assert.strictEqual(item.source, 'landbank');
   });
 
-  await test('FDIC scraper extracts standardized failed-bank asset listings', async () => {
+  await test('FDIC scraper extracts standardized failed-bank asset listings (gated)', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
+    }
     const items = await fdic.scrapeFeed();
-    assert.ok(items.length > 0, `expected FDIC listings, got ${items.length}`);
+    assert.ok(items.length >= 1, `expected >= 1 FDIC listing, got ${items.length}`);
     const item = items[0];
     assert.ok(/^FDIC-/.test(item.id), `id should start with FDIC-: ${item.id}`);
     assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
     assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+    assert.ok((item.address || '').length >= 8, `address should be >= 8 chars: ${item.address}`);
+    assert.strictEqual(item.source, 'fdic');
   });
 
-  await test('CivilView scraper extracts county foreclosure notices', async () => {
-    const items = await civilview.scrapeFeed();
-    assert.ok(items.length >= 0, `CivilView returned listings`);
-    if (items.length > 0) {
-      const item = items[0];
-      assert.ok(/^CIV-/.test(item.id), `id should start with CIV-: ${item.id}`);
-      assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+  await test('CivilView scraper extracts NJ county foreclosure notices (gated)', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
     }
+    const items = await civilview.scrapeFeed();
+    assert.ok(items.length >= 3, `expected >= 3 CivilView NJ listings, got ${items.length}`);
+    const item = items[0];
+    assert.ok(/^CIV-NJ-\d+-\d+$/.test(item.id), `id should match CIV-NJ-N-N: ${item.id}`);
+    assert.strictEqual(item.state, 'NJ', `state should be NJ: ${item.state}`);
+    assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+    assert.ok((item.address || '').length >= 8, `address should be >= 8 chars: ${item.address}`);
+    assert.strictEqual(item.source, 'civilview');
   });
 
-  await test('Bid4Assets scraper parses auction channels into standardized listings', async () => {
+  await test('Bid4Assets scraper parses auction channels into standardized listings (gated)', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
+    }
     const items = await bid4assets.scrapeFeed();
-    assert.ok(items.length > 0, `Bid4Assets returned listings`);
+    assert.ok(items.length >= 5, `expected >= 5 Bid4Assets listings, got ${items.length}`);
     const item = items[0];
-    assert.ok(/^B4A-/.test(item.id), `id should start with B4A-: ${item.id}`);
+    assert.ok(/^B4A-\d+$/.test(item.id), `id should match B4A-N: ${item.id}`);
     assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
     assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+    assert.ok((item.address || '').length >= 8, `address should be >= 8 chars: ${item.address}`);
+    assert.strictEqual(item.source, 'bid4assets');
+  });
+
+  await test('GSA scraper extracts standardized federal surplus listings (gated)', async () => {
+    if (process.env.RUN_REAL_SCRAPERS !== '1') {
+      console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+      return;
+    }
+    const items = await gsa.scrapeFeed();
+    assert.ok(items.length >= 1, `expected >= 1 GSA listing, got ${items.length}`);
+    const item = items[0];
+    assert.ok(/^GSA-/.test(item.id), `id should start with GSA-: ${item.id}`);
+    assert.ok(/^[A-Z]{2}$/.test(item.state), `state should be 2 letters: ${item.state}`);
+    assert.ok(item.openingBid > 0, `openingBid should be > 0: ${item.openingBid}`);
+    assert.ok((item.address || '').length >= 8, `address should be >= 8 chars: ${item.address}`);
+    assert.strictEqual(item.source, 'gsa');
   });
 
   console.log(`--- SCRAPER TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
   if (failed > 0) process.exit(1);
+  process.exit(0);
 }
 
 run();

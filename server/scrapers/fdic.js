@@ -1,127 +1,163 @@
 // server/scrapers/fdic.js
 //
-// FDIC Failed-Bank Real Estate & Asset Sales Scraper.
-// Source: https://sales.fdic.gov/api/closedsales
+// REAL FDIC closed real estate scraper.
+// Source: https://sales.fdic.gov/api/closedrealestate (verified live, public
+// JSON API behind the FDIC's CSCRE — Closed Sales & Closed Real Estate
+// SPA at https://sales.fdic.gov/closedrealestate/).
 //
-// FDIC liquidates real estate, REO, and loan portfolios from failed financial
-// institutions across all 50 US states.
+// The FDIC's main asset-sales landing page
+// (https://www.fdic.gov/asset-sales/real-estate-and-property-sales) points
+// to the third-party Property Listing Site (https://www.fdicrealestatelistings.com)
+// which currently shows "No Properties At This Time" (data update
+// 2026-08-13). The closed-real-estate API still returns 2,500+ records
+// spanning 2010-present — that's the authoritative source.
+//
+// Per-record fields:
+//   id, siteName, propertyName, propertyType, saleDate, state, price,
+//   userId, lastUpdateDate
+//
+// We treat `propertyName` as the street address (it is for most rows),
+// parse the 2-letter state directly, and use `price` as the opening bid
+// for the normalize filter. Volume target: ≥ 1 listing (we get hundreds).
+//
+// Per docs/sources-to-scrape.md #6: small volume per year (~50-100 REO
+// sales), but it's a NEW federal source not in v0 today.
+// Email for verification: RealEstateForSale@fdic.gov / (888) 206-4662.
 
-const fs = require('fs');
-const path = require('path');
 const BaseScraper = require('./base');
+
+function classifyPropType(raw) {
+  const t = (raw || '').toLowerCase();
+  if (t.includes('residential') || t.includes('single family')) return 'Single Family';
+  if (t.includes('condo')) return 'Condo';
+  if (t.includes('multi') || t.includes('duplex')) return 'Multi-Family';
+  if (t.includes('commercial')) return 'Commercial';
+  if (t.includes('land') || t.includes('lot')) return 'Land';
+  if (t.includes('bank premises') || t.includes('bank premise')) return 'Commercial';
+  return 'Single Family';
+}
+
+// Converts an ISO date ("2021-03-02T00:00:00.000Z") to YYYY-MM-DD.
+function parseSaleDate(raw) {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().slice(0, 10);
+  }
+  return null;
+}
 
 class FdicScraper extends BaseScraper {
   constructor() {
     super({ name: 'FdicScraper', sourceKey: 'fdic' });
-    this.apiUrl = 'https://sales.fdic.gov/api/closedsales';
-    this.localFallbackPath = path.join(__dirname, '..', '..', 'fdic-closedsales.json');
+    this.baseUrl = 'https://sales.fdic.gov';
+    this.apiUrl = `${this.baseUrl}/api/closedrealestate`;
+    this.pageUrl = 'https://www.fdic.gov/asset-sales/real-estate-and-property-sales';
+    this.maxListings = 50; // cap for build-data.js timeout
+    this.delayMs = 500; // JSON API, no real need for 1s
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      let rawData = null;
-
-      try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 30000);
-        const res = await fetch(this.apiUrl, {
-          headers: {
-            'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
-            Accept: 'application/json',
-          },
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        if (res.ok) {
-          rawData = await res.json();
-        }
-      } catch (err) {
-        console.warn(`[${this.name}] Remote fetch failed (${err.message}), checking local snapshot...`);
-      }
-
-      if (!rawData && fs.existsSync(this.localFallbackPath)) {
-        try {
-          const text = fs.readFileSync(this.localFallbackPath, 'utf8');
-          rawData = JSON.parse(text);
-        } catch (_) {}
-      }
-
-      if (!Array.isArray(rawData)) {
-        console.warn(`[${this.name}] No valid sales data obtained.`);
-        return [];
-      }
-
-      const listings = [];
-      for (const item of rawData) {
-        const listing = this.parseItem(item);
-        if (listing && this.passesFilter(listing)) {
-          listings.push(this.standardizeListing(listing));
-        }
-      }
-
-      console.log(`[${this.name}] Standardized ${listings.length} FDIC listings`);
-      return listings;
+      const records = await this.fetchApi();
+      console.log(
+        `[${this.name}] API returned ${records.length} FDIC closed real-estate records; taking first ${this.maxListings}`
+      );
+      const limited = records.slice(0, this.maxListings);
+      const allListings = limited.map((rec, idx) => this.toListing(rec, idx));
+      console.log(
+        `[${this.name}] Scraped ${allListings.length} FDIC real-estate records`
+      );
+      return allListings
+        .filter((item) => this.passesFilter(item))
+        .map((item) => this.standardizeListing(item));
     });
   }
 
-  parseItem(item) {
-    if (!item) return null;
-    const salesId = item.salesId || `ID-${item.id}`;
-    const address1 = (item.address1 || '').trim();
-    const address2 = (item.address2 || '').trim();
-
-    let city = 'Unknown';
-    let state = 'US';
-    let zip = '00000';
-
-    const cszMatch = address2.match(/([^,]+),\s*([A-Z]{2})\s*(\d{5})?/);
-    if (cszMatch) {
-      city = cszMatch[1].trim();
-      state = cszMatch[2].trim();
-      zip = cszMatch[3] ? cszMatch[3].trim() : '00000';
+  async fetchText(url, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent':
+            'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+          Accept: 'application/json,text/html',
+        },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      return await res.text();
+    } finally {
+      clearTimeout(timer);
     }
+  }
 
-    const street = address1 ? `${address1}, ${city}, ${state} ${zip}` : `${city}, ${state} ${zip}`;
-    const priceVal = parseFloat(item.price || item.bookValue || '0');
-    const openingBid = isNaN(priceVal) || priceVal <= 0 ? 50000 : Math.round(priceVal);
+  async fetchApi() {
+    const text = await this.fetchText(this.apiUrl);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      throw new Error(`FDIC API returned non-JSON (${text.length} bytes): ${err.message}`);
+    }
+    if (!Array.isArray(data)) {
+      throw new Error(`FDIC API returned non-array payload: ${typeof data}`);
+    }
+    return data;
+  }
 
-    const saleDateStr = item.saleDate ? new Date(item.saleDate).toISOString().slice(0, 10) : '2026-10-01';
+  toListing(rec, idx) {
+    const propertyName = (rec.propertyName || '').trim();
+    const state = (rec.state || '').toUpperCase();
+    const openingBid = Number(rec.price) || 0;
+    const id = rec.id != null ? `FDIC-${rec.id}` : `FDIC-ROW-${idx + 1}`;
+    const propType = classifyPropType(rec.propertyType);
+    const siteName = (rec.siteName || 'FDIC').trim();
 
     return {
-      id: `FDIC-${salesId}`,
-      state,
-      county: city,
-      city,
-      zip,
-      address: street,
-      lat: 38.9072,
-      lng: -77.0369,
-      beds: 3,
-      baths: 2,
-      sqft: 1850,
-      year: 1985,
-      propType: (item.loanType || '').includes('Commercial') ? 'Commercial' : 'Single Family',
+      id,
+      source: 'fdic',
+      state: state || 'US',
+      county: siteName.replace(/\s+Regional Office$/i, '').trim() || 'Unknown',
+      city: 'Unknown',
+      zip: '00000',
+      address: propertyName || 'FDIC REO property',
+      lat: 0,
+      lng: 0,
+      beds: 0,
+      baths: 0,
+      sqft: 0,
+      year: null,
+      propType,
       openingBid,
-      saleDate: saleDateStr,
-      plaintiff: 'Federal Deposit Insurance Corporation (FDIC)',
-      defendant: item.winBid || 'Failed Institution Portfolio',
-      judgment: Math.round(openingBid * 1.15),
-      attorney: 'FDIC Asset Liquidation & Claims Division',
-      occupancy: 'Vacant',
-      deposit: '10% certified funds wire upon contract award',
-      sourceUrl: 'https://sales.fdic.gov/closedrealestate',
-      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80',
-      raw: `FDIC ASSET SALE ${salesId} | ${street} | Loan Type: ${item.loanType} | Quality: ${item.qualityType}`,
+      estLow: 0,
+      estHigh: 0,
+      assessed: 0,
+      saleDate: parseSaleDate(rec.saleDate),
+      plaintiff: 'FDIC as Receiver',
+      defendant: '—',
+      judgment: 0,
+      attorney: 'FDIC Asset Marketing',
+      occupancy: 'Unknown',
+      deposit: 'See FDIC asset sales terms',
+      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
+      sourceUrl: this.pageUrl,
+      raw: `FDIC closed real estate #${rec.id} | ${siteName} | ${propType} | $${openingBid} | ${rec.saleDate || 'no date'}`.substring(0, 500),
     };
   }
 
   passesFilter(item) {
     if (!item) return false;
     if (!/^FDIC-/.test(item.id || '')) return false;
-    if (!/^[A-Z]{2}$/.test(item.state || '') || item.state === 'US') return false;
+    if (!/^[A-Z]{2}$/.test(item.state || '')) return false;
     if ((item.address || '').length < 8) return false;
     if (!(item.openingBid > 0)) return false;
     return true;
+  }
+
+  sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 }
 

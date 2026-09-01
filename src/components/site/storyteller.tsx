@@ -143,8 +143,7 @@ export function Storyteller() {
           </p>
         </GsapReveal>
 
-        <GsapReveal delay={0.2} y={22}>
-          <div className="mt-14 overflow-hidden rounded-[28px] border border-white/90 bg-white/88 shadow-[0_30px_100px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+        <div className="mt-14 overflow-hidden rounded-[28px] border border-white/90 bg-white/88 shadow-[0_30px_100px_rgba(15,23,42,0.14)] backdrop-blur-xl">
             <div className="flex flex-col gap-3 border-b border-[#E8EDF3] bg-white/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-blue-700">
@@ -286,7 +285,6 @@ export function Storyteller() {
               </div>
             </div>
           </div>
-        </GsapReveal>
       </div>
     </section>
   );

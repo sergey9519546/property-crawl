@@ -40,7 +40,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         cls.playwright.stop()
 
     def setUp(self):
-        self.page = self.browser.new_page(viewport={"width": 1440, "height": 1000})
+        self.context = self.browser.new_context(viewport={"width": 1440, "height": 1000})
+        self.page = self.context.new_page()
         self.page.set_default_timeout(5_000)
         self.page.goto(BASE_URL, wait_until="domcontentloaded")
         listings_response = self.page.request.get(f"{BASE_URL}/api/listings")
@@ -52,6 +53,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def tearDown(self):
         self.page.close()
+        self.context.close()
 
     def wait_for_live_feed(self):
         self.page.get_by_role(

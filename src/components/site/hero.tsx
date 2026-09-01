@@ -148,8 +148,8 @@ export function Hero() {
               description: "State",
             },
             {
-              id: `area:${listing.zip}`,
-              label: `${listing.zip} — ${listing.city} area`,
+              id: `area:${listing.zip}:${listing.city}`,
+              label: `${listing.zip} \u2014 ${listing.city} area`,
               query: listing.zip,
               kind: "area",
               description: "ZIP area",
@@ -335,7 +335,7 @@ export function Hero() {
               blurTimerRef.current = window.setTimeout(() => {
                 setSuggestionsOpen(false);
                 blurTimerRef.current = null;
-              }, 120);
+              }, 300);
             }}
             onKeyDown={(event) => {
               if (!suggestionsOpen || suggestions.length === 0) return;
@@ -389,6 +389,10 @@ export function Hero() {
                   key={suggestion.id}
                   role="option"
                   aria-selected={activeSuggestion === index}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectSuggestion(suggestion);
+                  }}
                   onClick={() => selectSuggestion(suggestion)}
                   className={`flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
                     activeSuggestion === index ? "bg-[#E8EEFF]" : "hover:bg-[#F3F4F6]"

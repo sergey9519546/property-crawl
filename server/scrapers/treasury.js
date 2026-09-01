@@ -50,24 +50,22 @@ class TreasuryForfeitureScraper extends BaseScraper {
       console.log(`[${this.name}] Found ${slugs.length} property links on listing page`);
 
       const listings = [];
-      for (const slug of slugs) {
+      const targetSlugs = slugs.slice(0, 8);
+      const detailResults = await Promise.allSettled(targetSlugs.map(async (slug) => {
         try {
           const detail = await this.fetchDetail(slug);
-          if (detail) {
-            listings.push(detail);
-            await this.sleep(this.delayMs);
-          }
+          if (detail) listings.push(detail);
         } catch (err) {
           console.warn(`[${this.name}] Failed ${slug}: ${err.message}`);
         }
-      }
+      }));
 
       console.log(`[${this.name}] Scraped ${listings.length} Treasury properties`);
       return listings.map(item => this.standardizeListing(item));
     });
   }
 
-  async fetchText(url, timeoutMs = 30000) {
+  async fetchText(url, timeoutMs = 4000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {

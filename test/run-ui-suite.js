@@ -83,8 +83,9 @@ async function main() {
       if (build.status !== 0) throw new Error('[ui-suite] next build failed');
     }
 
+    const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
     console.log(`[ui-suite] booting Next production server on :${UI_PORT}...`);
-    const ui = startCmd('npx', ['next', 'start', '-p', String(UI_PORT)], {
+    const ui = startCmd(process.execPath, [nextBin, 'start', '-p', String(UI_PORT)], {
       PROPERTY_API_URL: `http://localhost:${API_PORT}`,
     });
     owned.push(ui);

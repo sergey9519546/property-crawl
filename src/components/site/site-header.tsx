@@ -169,6 +169,14 @@ export function SiteHeader() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
     <div
       // Outer layer: fixed, full-width, transparent. Handles sticky positioning only.
@@ -196,9 +204,6 @@ export function SiteHeader() {
         <nav
           className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[34px] lg:flex"
           onMouseLeave={() => setOpen(null)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(null);
-          }}
         >
             {GROUPS.map((g) => (
               <button
@@ -277,80 +282,82 @@ export function SiteHeader() {
 
       {/* Mobile sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="right" className="w-[320px] overflow-y-auto p-0">
-          <SheetDescription className="sr-only">
-            PerfectProperty navigation menu
-          </SheetDescription>
-          <SheetHeader className="flex flex-row items-center border-b border-[#F3F4F6] px-5 py-4 pr-12">
-            <SheetTitle asChild>
-              <span className="flex items-center">
-                <Logo className="text-[16px]" />
-              </span>
-            </SheetTitle>
-          </SheetHeader>
-          <Accordion type="multiple" className="px-2 py-2">
-            {GROUPS.map((g) => (
-              <AccordionItem key={g.key} value={g.key} className="border-b-0">
-                <AccordionTrigger className="px-3 text-[15px] font-semibold text-[#111827] hover:no-underline">
-                  {g.label}
-                </AccordionTrigger>
-                <AccordionContent className="px-1 pb-2">
-                  <div className="grid gap-0.5">
-                    {g.simple
-                      ? g.simple.map((l) => (
-                          <Link
-                            key={l.label}
-                            href={l.href}
-                            onClick={() => setMobileOpen(false)}
-                            className="rounded-lg px-3 py-2 text-[14px] text-[#4B5563] hover:bg-[#F3F4F6]"
-                          >
-                            {l.label}
-                          </Link>
-                        ))
-                      : g.columns?.flat().map((l) => (
-                          <Link
-                            key={l.label}
-                            href={l.href}
-                            onClick={() => setMobileOpen(false)}
-                            className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-[#F3F4F6]"
-                          >
-                            <span
-                              className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg"
-                              style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
+        {mobileOpen && (
+          <SheetContent side="right" className="w-[320px] overflow-y-auto p-0">
+            <SheetDescription className="sr-only">
+              PerfectProperty navigation menu
+            </SheetDescription>
+            <SheetHeader className="flex flex-row items-center border-b border-[#F3F4F6] px-5 py-4 pr-12">
+              <SheetTitle asChild>
+                <span className="flex items-center">
+                  <Logo className="text-[16px]" />
+                </span>
+              </SheetTitle>
+            </SheetHeader>
+            <Accordion type="multiple" className="px-2 py-2">
+              {GROUPS.map((g) => (
+                <AccordionItem key={g.key} value={g.key} className="border-b-0">
+                  <AccordionTrigger className="px-3 text-[15px] font-semibold text-[#111827] hover:no-underline">
+                    {g.label}
+                  </AccordionTrigger>
+                  <AccordionContent className="px-1 pb-2">
+                    <div className="grid gap-0.5">
+                      {g.simple
+                        ? g.simple.map((l) => (
+                            <Link
+                              key={l.label}
+                              href={l.href}
+                              onClick={() => setMobileOpen(false)}
+                              className="rounded-lg px-3 py-2 text-[14px] text-[#4B5563] hover:bg-[#F3F4F6]"
                             >
-                              <l.icon className="h-4 w-4 text-[#111827]" />
-                            </span>
-                            <span>
-                              <span className="block text-[14px] font-semibold text-[#111827]">
-                                {l.label}
+                              {l.label}
+                            </Link>
+                          ))
+                        : g.columns?.flat().map((l) => (
+                            <Link
+                              key={l.label}
+                              href={l.href}
+                              onClick={() => setMobileOpen(false)}
+                              className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-[#F3F4F6]"
+                            >
+                              <span
+                                className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg"
+                                style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
+                              >
+                                <l.icon className="h-4 w-4 text-[#111827]" />
                               </span>
-                              <span className="block text-[12px] text-[#6B7280]">
-                                {l.desc}
+                              <span>
+                                <span className="block text-[14px] font-semibold text-[#111827]">
+                                  {l.label}
+                                </span>
+                                <span className="block text-[12px] text-[#6B7280]">
+                                  {l.desc}
+                                </span>
                               </span>
-                            </span>
-                          </Link>
-                        ))}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-            <Link href="/enterprise" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
-              Enterprise
-            </Link>
-            <Link href="#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
-              Pricing
-            </Link>
-          </Accordion>
-          <div className="mt-2 grid gap-2 border-t border-[#F3F4F6] px-5 py-4">
-            <Link
-              href="#live-feed"
-              onClick={() => setMobileOpen(false)}
-              className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
-            >
-              Sign up for free
-            </Link>
-          </div>
-        </SheetContent>
+                            </Link>
+                          ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+              <Link href="/enterprise" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+                Enterprise
+              </Link>
+              <Link href="#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+                Pricing
+              </Link>
+            </Accordion>
+            <div className="mt-2 grid gap-2 border-t border-[#F3F4F6] px-5 py-4">
+              <Link
+                href="#live-feed"
+                onClick={() => setMobileOpen(false)}
+                className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
+              >
+                Sign up for free
+              </Link>
+            </div>
+          </SheetContent>
+        )}
       </Sheet>
     </div>
   );

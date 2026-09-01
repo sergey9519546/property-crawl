@@ -11,20 +11,17 @@ class FreddieMacScraper extends BaseScraper {
   constructor() {
     super({ name: 'FreddieMacScraper', sourceKey: 'freddie' });
     this.baseUrl = 'https://www.homesteps.com';
-    this.timeoutMs = 30000;
+    this.timeoutMs = 4000;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
       const topStates = ['OH', 'TX', 'FL', 'PA', 'IL', 'GA', 'NC', 'MI'];
+      const results = await Promise.allSettled(topStates.map(state => this.fetchStateListings(state)));
       const allListings = [];
-
-      for (const state of topStates) {
-        try {
-          const stateListings = await this.fetchStateListings(state);
-          allListings.push(...stateListings);
-        } catch (err) {
-          console.warn(`[${this.name}] Warning for state ${state}: ${err.message}`);
+      for (const res of results) {
+        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          allListings.push(...res.value);
         }
       }
 

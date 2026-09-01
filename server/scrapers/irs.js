@@ -67,24 +67,21 @@ class IrsSeizedScraper extends BaseScraper {
       console.log(`[${this.name}] Found ${cards.length} real-estate auction cards on list page`);
 
       const listings = [];
-      for (const { slug } of cards) {
+      await Promise.allSettled(cards.map(async ({ slug }) => {
         try {
           const detail = await this.fetchDetail(slug);
-          if (detail) {
-            listings.push(detail);
-            await this.sleep(this.delayMs);
-          }
+          if (detail) listings.push(detail);
         } catch (err) {
           console.warn(`[${this.name}] Failed /ad/${slug}: ${err.message}`);
         }
-      }
+      }));
 
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       return listings.map(item => this.standardizeListing(item));
     });
   }
 
-  async fetchText(url, timeoutMs = 30000) {
+  async fetchText(url, timeoutMs = 4000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {

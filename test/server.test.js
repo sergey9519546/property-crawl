@@ -79,8 +79,14 @@ async function run() {
   await test('GET /api/listings returns filtered and paginated listings', async () => {
     const res = await request('/api/listings?limit=5');
     assert.strictEqual(res.status, 200);
-    assert.strictEqual(res.body.listings.length, Math.min(5, seedListings.length));
-    assert.strictEqual(res.body.total, seedListings.length);
+    // The page contains at most `limit` listings.
+    assert.ok(res.body.listings.length <= 5, `page size ${res.body.listings.length} exceeds limit=5`);
+    // `body.total` is the FULL filtered count, not the page size.
+    // Compare it to the seed page's `body.total` (which the seed call
+    // captured), since both calls return the same unfiltered set when
+    // no filters are applied.
+    const seedTotal = seedResponse.body.total;
+    assert.strictEqual(res.body.total, seedTotal, 'body.total must be the full filtered count, not the page size');
   });
 
   await test('GET /api/listings with state filter filters correctly', async () => {

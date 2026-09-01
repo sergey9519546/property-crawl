@@ -11,20 +11,17 @@ class FannieMaeScraper extends BaseScraper {
   constructor() {
     super({ name: 'FannieMaeScraper', sourceKey: 'fannie' });
     this.baseUrl = 'https://www.homepath.fanniemae.com';
-    this.timeoutMs = 30000;
+    this.timeoutMs = 4000;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
       const topStates = ['TX', 'OH', 'FL', 'IL', 'PA', 'GA', 'AZ', 'NC'];
+      const results = await Promise.allSettled(topStates.map(state => this.fetchStateHomePath(state)));
       const allListings = [];
-
-      for (const state of topStates) {
-        try {
-          const stateListings = await this.fetchStateHomePath(state);
-          allListings.push(...stateListings);
-        } catch (err) {
-          console.warn(`[${this.name}] Warning for state ${state}: ${err.message}`);
+      for (const res of results) {
+        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          allListings.push(...res.value);
         }
       }
 

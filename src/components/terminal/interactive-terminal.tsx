@@ -115,7 +115,17 @@ export function InteractiveTerminal() {
     if (selectedState !== "all" && l.state !== selectedState) return false;
     if (selectedSource !== "all" && l.source !== selectedSource) return false;
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      const matchesCounty = listings.some((item) => item.county?.toLowerCase() === q);
+      const matchesCity = listings.some((item) => item.city?.toLowerCase() === q);
+      const matchesState = listings.some((item) => item.state?.toLowerCase() === q);
+      const matchesZip = listings.some((item) => item.zip?.toLowerCase() === q);
+
+      if (matchesCounty) return l.county?.toLowerCase() === q;
+      if (matchesCity) return l.city?.toLowerCase() === q;
+      if (matchesState) return l.state?.toLowerCase() === q;
+      if (matchesZip) return l.zip?.toLowerCase() === q;
+
       const hay = [l.address, l.city, l.county, l.state, l.zip, l.plaintiff, l.defendant, l.attorney].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
@@ -131,6 +141,10 @@ export function InteractiveTerminal() {
   const availableStates = Array.from(
     new Set(listings.map((listing) => listing.state).filter(Boolean)),
   ).sort((a, b) => (STATE_LABELS[a] ?? a).localeCompare(STATE_LABELS[b] ?? b));
+
+  const availableSources = Array.from(
+    new Set([...Object.keys(SOURCES), ...listings.map((l) => l.source).filter(Boolean)]),
+  );
 
   return (
     <section id="live-feed" className="py-20 bg-[#F5F6F7] border-t border-[#E5E7EB]" aria-label="Live property feed">
@@ -264,9 +278,14 @@ export function InteractiveTerminal() {
                 className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
               >
                 <option value="all">All Sources</option>
-                {Object.values(SOURCES).map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
+                {availableSources.map((key) => {
+                  const s = SOURCES[key];
+                  return (
+                    <option key={key} value={key}>
+                      {s ? s.label : key}
+                    </option>
+                  );
+                })}
               </select>
 
               {/* Sort By */}
