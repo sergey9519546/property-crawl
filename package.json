@@ -21,7 +21,10 @@
     "test:db": "node test/db.test.js",
     "scrape": "node server/scrapers/scheduler.js",
     "refresh-data": "node scripts/build-data.js",
-    "refresh-data:real": "node scripts/build-data.js --real"
+    "refresh-data:real": "node scripts/build-data.js --real",
+    "skills:doctor": "node scripts/skills-doctor.js",
+    "skills:doctor:json": "node scripts/skills-doctor.js --json",
+    "context:gen": "node scripts/gen-context.js"
   },
   "keywords": [
     "real-estate",

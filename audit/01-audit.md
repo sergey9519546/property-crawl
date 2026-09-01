@@ -107,7 +107,26 @@ Rationale: a *fresh, well-verified application* (green 11-suite test gate, activ
 1. No `.kilo/command/*.md`, `.kilo/agent/*.md`, or hooks exist — the documented extension points are empty.
 2. Zero MCP servers configured.
 3. Zero persistent memory (`memory/`, MEMORY.md).
-4. `.gemini/skills` duplicates `.agents/skills` (committed waste; N × repo size).
-5. No dedupe / no namespacing / no routing between 650 skills.
+4. ~~`.gemini/skills` duplicates `.agents/skills`~~ — **CORRECTED, see ERRATA below.**
+5. No dedupe / no namespacing / no routing between ~650 skills (the *user* roots, not the project root).
 6. No agent-output verification enforcement (only advisory skills + a codebase test gate that the agent never auto-runs).
-7. No project-specific capability for the actual domain (property scraping / Next 16 / Node API).
+7. ~~No project-specific capability~~ — **CORRECTED**: two project-native skills exist (see ERRATA).
+
+---
+
+## 5. ERRATA (re-verification, 2026-08-31, later than the body above)
+
+The first-pass body above contains **two factual errors** found on closer re-verification. Per the discipline (evidence over assertion, revert what fails), they are corrected here and supersede the earlier claims.
+
+**E1 — `.gemini/skills` is NOT a live duplicate.** Re-verification: `Get-ChildItem .gemini -Recurse` returns **0 entries** (the directory is empty) and `git ls-files .gemini/skills` returns **0 tracked files**. It was once created (git log shows `.gemini` in commits `e970215` and `252146d`) but holds nothing now. The "byte-for-byte mirror" claim in §1.1/§2/§4.4 was wrong at time of writing. Consequence: there is **nothing to delete** under `.gemini`.
+
+**E2 — Project-native capability ALREADY exists.** The project skill root `.agents/skills` contains two domain-specific skills the first pass missed (they were alphabetically deep in a mostly-GCP list):
+
+| Skill | Purpose | File |
+|---|---|---|
+| `property-scraper-engineering` (v1, data-engineering) | Circuit-breaker enforcement, canonical listing-contract normalization (matches `data.js` schema), `normalizeOcrText`, 250–750ms jitter politeness for sheriff/Bid4Assets/HUD/Treasury/IRS scrapers | `.agents/skills/property-scraper-engineering/SKILL.md` |
+| `foreclosure-title-intelligence` (v1, real-estate-intelligence) | Lien priority/survival, 50-state statutory redemption periods, cash-to-close computation, multi-parcel disambiguation | `.agents/skills/foreclosure-title-intelligence/SKILL.md` |
+
+**E3 — A provenance manifest already exists.** `.agents/skills/.datacloud_skills_manifest` (4546 B, modified 2026-08-31) records a `bundleChecksum` plus per-skill `checksum`/`status` for the 29 GCP skills. The audit's "no manifest/provenance story" was overstated.
+
+**Net effect on scores:** Coverage was understated (two real domain skills exist) — adjust **72 → 74**. Redundancy was overstated (the `.gemini` copy no longer exists) — adjust **28 → 32**. Other axes unchanged. Overall **51 → 53/100**. The structural findings (no commands/hooks/MCP/memory, no output-verification enforcement, ambiguous dispatch) stand.

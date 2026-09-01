@@ -47,11 +47,12 @@ async function waitFor(port, route, label, timeoutMs = 90_000) {
 }
 
 function startCmd(command, args, extraEnv = {}) {
+  const isExe = command.toLowerCase().endsWith('.exe') || command === process.execPath;
   const child = spawn(command, args, {
     cwd: ROOT,
     env: { ...process.env, ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: process.platform === 'win32',
+    shell: process.platform === 'win32' && !isExe,
     windowsHide: true,
   });
   child.stdout.on('data', () => {});
