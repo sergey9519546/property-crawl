@@ -1,5 +1,22 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import {
+  ArrowRight,
+  ArrowLeft,
+  Building2,
+  FileText,
+  ShieldCheck,
+  Mail,
+  Users,
+  BookOpen,
+  Scale,
+  Lock,
+  BarChart3,
+  type LucideIcon,
+} from "lucide-react";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
+import { ContactForm } from "@/components/site/contact-form";
 
 type InfoSection = {
   id?: string;
@@ -12,6 +29,17 @@ type InfoPage = {
   title: string;
   intro: string;
   sections: InfoSection[];
+};
+
+const PAGE_ICONS: Record<string, LucideIcon> = {
+  enterprise: Building2,
+  resources: BookOpen,
+  "case-studies": BarChart3,
+  about: Users,
+  contact: Mail,
+  terms: Scale,
+  privacy: Lock,
+  security: ShieldCheck,
 };
 
 const INFO_PAGES: Record<string, InfoPage> = {
@@ -28,7 +56,7 @@ const INFO_PAGES: Record<string, InfoPage> = {
   resources: {
     eyebrow: "Resources",
     title: "Practical guidance for finding and underwriting public-sale deals.",
-    intro: "These resources describe the product’s current beta workflows. They do not replace legal, title, tax, inspection, or investment advice.",
+    intro: "These resources describe the product's current beta workflows. They do not replace legal, title, tax, inspection, or investment advice.",
     sections: [
       { id: "blog", title: "Field notes", body: "Source-by-source collection notes, county workflow changes, and product updates will appear here as the live data pipeline is verified." },
       { id: "knowledge-base", title: "Knowledge base", body: "Start in the live feed, filter by geography and source, open a deal, review legal terms, and save only the properties that merit independent due diligence." },
@@ -107,27 +135,115 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
 
   if (!page) notFound();
 
+  const Icon = PAGE_ICONS[slug] ?? FileText;
+  const isContact = slug === "contact";
+  const isLegal = slug === "terms" || slug === "privacy" || slug === "security";
+
   return (
-    <main className="min-h-screen bg-[#F5F6F7] px-5 py-16 text-[#111827] sm:py-24">
-      <div className="mx-auto max-w-3xl">
-        <Link href="/" className="text-sm font-semibold text-[#0F172A] hover:underline">
-          ← Back to PerfectProperty
-        </Link>
-        <p className="mt-12 text-xs font-bold uppercase tracking-[0.18em] text-[#64748B]">{page.eyebrow}</p>
-        <h1 className="mt-3 text-4xl font-semibold tracking-[-0.03em] sm:text-5xl">{page.title}</h1>
-        <p className="mt-6 text-lg leading-8 text-[#475569]">{page.intro}</p>
-        <div className="mt-12 space-y-5">
-          {page.sections.map((section) => (
-            <section key={section.title} id={section.id} className="scroll-mt-8 rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold">{section.title}</h2>
-              <p className="mt-3 leading-7 text-[#475569]">{section.body}</p>
-            </section>
-          ))}
+    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-[#F5F6F7] text-[#111827]">
+      <SiteHeader />
+
+      {/* Hero */}
+      <section className="relative px-5 pt-40 pb-12 sm:pt-48 sm:pb-16">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#64748B] transition-colors hover:text-[#111827]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to PerfectProperty
+          </Link>
+          <div className="mt-8 flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0F172A] text-white shadow-sm">
+              <Icon className="h-5 w-5" />
+            </span>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#64748B]">
+              {page.eyebrow}
+            </p>
+          </div>
+          <h1 className="mt-5 text-4xl font-semibold tracking-[-0.03em] text-[#111827] sm:text-5xl">
+            {page.title}
+          </h1>
+          <p className="mt-6 text-lg leading-8 text-[#475569]">{page.intro}</p>
         </div>
-        <Link href="/#live-feed" className="mt-10 inline-flex rounded-xl bg-[#0F172A] px-5 py-3 text-sm font-bold text-white hover:bg-[#1E293B]">
-          Open the live feed
-        </Link>
-      </div>
+      </section>
+
+      {/* Content sections */}
+      <section className="px-5 pb-20 sm:pb-28">
+        <div className="mx-auto max-w-3xl">
+          {isContact && (
+            <div className="mb-8 overflow-hidden rounded-3xl border border-[#E2E8F0] bg-white shadow-sm">
+              <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-6 py-5 sm:px-8">
+                <h2 className="text-xl font-bold text-[#111827]">Send us a message</h2>
+                <p className="mt-1 text-sm text-[#64748B]">
+                  We read every message. Expect a response before public launch.
+                </p>
+              </div>
+              <div className="p-6 sm:p-8">
+                <ContactForm />
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {page.sections.map((section, i) => (
+              <section
+                key={section.title}
+                id={section.id}
+                className="group scroll-mt-24 overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm transition-all duration-200 hover:shadow-[0_4px_24px_rgba(15,23,42,0.06)]"
+              >
+                <div className="flex items-stretch">
+                  <div className="flex w-12 shrink-0 items-center justify-center bg-[#F8FAFC] sm:w-14">
+                    <span className="text-sm font-bold tabular-nums text-[#94A3B8]">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <div className="flex-1 p-6 sm:p-7">
+                    <h2 className="text-lg font-bold text-[#111827]">{section.title}</h2>
+                    <p className="mt-2.5 leading-7 text-[#475569]">{section.body}</p>
+                  </div>
+                </div>
+              </section>
+            ))}
+          </div>
+
+          {isLegal && (
+            <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+              <p className="flex items-start gap-2 text-sm leading-relaxed text-amber-900">
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <span>
+                  <strong className="font-bold">Beta draft.</strong>{" "}
+                  These documents are working drafts for the private beta and are
+                  not final. They will be reviewed by qualified professionals before
+                  public launch.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* CTA */}
+          <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <Link
+              href="/#live-feed"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 text-sm font-bold text-white transition-colors hover:bg-[#1E293B]"
+            >
+              Open the live feed
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            {isContact && (
+              <Link
+                href="/about"
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-6 text-sm font-bold text-[#0F172A] transition-colors hover:bg-[#F5F6F7]"
+              >
+                Learn about PerfectProperty
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <SiteFooter />
     </main>
   );
 }
