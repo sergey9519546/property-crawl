@@ -122,7 +122,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
 Text:
 ${rawText.slice(0, 3000)}`;
 
-        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'claude-3-5-sonnet' });
         const textResp = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString() || '';
         const jsonMatch = textResp.match(/\{[\s\S]*\}/);
         if (jsonMatch) {

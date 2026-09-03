@@ -244,14 +244,14 @@ test('PropertyDrawer wires Puter AI alongside backend enrich endpoint', () => {
   const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
   assert.ok(drawerContent.includes('handleRunPuterAi'), 'handleRunPuterAi function missing from property-drawer.tsx');
   assert.ok(drawerContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from property-drawer.tsx');
-  assert.ok(drawerContent.includes('gpt-4o-mini'), 'gpt-4o-mini model configuration missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet model configuration missing from property-drawer.tsx');
   assert.ok(drawerContent.includes('Puter AI'), 'Puter AI button label missing from property-drawer.tsx');
 });
 
 test('NoticeParser includes Puter AI fallback for low-confidence dockets', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from notice-parser.tsx');
-  assert.ok(parserContent.includes('gpt-4o-mini'), 'gpt-4o-mini model configuration missing from notice-parser.tsx');
+  assert.ok(parserContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet model configuration missing from notice-parser.tsx');
 });
 
 // ----------------------------------------------------

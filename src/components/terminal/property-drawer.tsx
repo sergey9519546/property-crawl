@@ -131,7 +131,7 @@ Provide a rigorous 2-paragraph institutional deal breakdown:
 Paragraph 1 - **Valuation Spread & Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
 Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
 
-        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'claude-3-5-sonnet' });
         const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
         if (text && text.trim().length > 20) {
           setAiAnalysis(text);
@@ -334,7 +334,7 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                   <div className="flex items-center gap-2">
                     {aiSource && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        {aiSource === 'puter' ? '✨ Puter GPT-4o-mini (Free)' : 'Rule Engine'}
+                        {aiSource === 'puter' ? '✨ Claude 3.5 Sonnet (Puter Free)' : 'Rule Engine'}
                       </span>
                     )}
                     {!aiAnalysis && !aiLoading ? (
@@ -347,7 +347,7 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                         </button>
                         <button
                           onClick={handleRunPuterAi}
-                          title="Free live GPT-4o-mini intelligence via Puter.js"
+                          title="Free live Claude 3.5 Sonnet intelligence via Puter.js"
                           className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center gap-1"
                         >
                           <Sparkles className="w-3 h-3" />
@@ -361,7 +361,7 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                           className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>Puter GPT-4o-mini</span>
+                          <span>Puter Claude 3.5 Sonnet</span>
                         </button>
                         <button
                           onClick={handleRunAi}
