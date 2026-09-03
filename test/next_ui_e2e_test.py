@@ -988,6 +988,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
 
         self.assertTrue(self.page.get_by_role("heading", name=address, level=2).is_visible())
+        self.assertTrue(self.page.get_by_role("button", name="Puter AI").is_visible())
         self.page.get_by_role("button", name="Analyze Deal").click()
         self.page.get_by_text(re.compile(r"Primary catch", re.IGNORECASE)).wait_for(state="visible")
 

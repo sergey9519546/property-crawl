@@ -231,6 +231,30 @@ test('acq-investment-report produces executive IC acquisition memorandum', () =>
 });
 
 // ----------------------------------------------------
+// 10. Puter.js Free Client AI Integration
+// ----------------------------------------------------
+console.log('\n[Suite 10: Puter.js Free AI Integration]');
+
+test('RootLayout loads Puter.js SDK from js.puter.com/v2/', () => {
+  const layoutContent = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
+  assert.ok(layoutContent.includes('js.puter.com/v2/'), 'Puter.js SDK script tag missing from layout.tsx');
+});
+
+test('PropertyDrawer wires Puter AI alongside backend enrich endpoint', () => {
+  const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
+  assert.ok(drawerContent.includes('handleRunPuterAi'), 'handleRunPuterAi function missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('gpt-4o-mini'), 'gpt-4o-mini model configuration missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('Puter AI'), 'Puter AI button label missing from property-drawer.tsx');
+});
+
+test('NoticeParser includes Puter AI fallback for low-confidence dockets', () => {
+  const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
+  assert.ok(parserContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from notice-parser.tsx');
+  assert.ok(parserContent.includes('gpt-4o-mini'), 'gpt-4o-mini model configuration missing from notice-parser.tsx');
+});
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n--- TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
