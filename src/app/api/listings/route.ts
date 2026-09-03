@@ -7,9 +7,13 @@ type ListingRecord = Record<string, unknown>;
 let lastSuccessfulListings: ListingRecord[] | null = null;
 let lastSuccessfulAt: string | null = null;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/listings`, {
+    const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString();
+    const targetUrl = `${API_BASE_URL}/api/listings${queryString ? `?${queryString}` : ""}`;
+
+    const response = await fetch(targetUrl, {
       cache: "no-store",
       signal: AbortSignal.timeout(8_000),
     });

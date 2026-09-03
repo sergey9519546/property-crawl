@@ -18,6 +18,7 @@ async function handleListings(req, res) {
       state: url.searchParams.get('state') || 'all',
       source: url.searchParams.get('source') || 'all',
       type: url.searchParams.get('type') || 'all',
+      status: url.searchParams.get('status') || 'all',
       sort: url.searchParams.get('sort') || 'score',
       limit: Math.min(200, Math.max(1, parseInt(url.searchParams.get('limit') || '50', 10))),
       offset: Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10)),
