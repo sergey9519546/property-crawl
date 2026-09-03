@@ -264,9 +264,10 @@ class DatabaseClient {
   async createListing(listing) {
     const enriched = {
       ...listing,
-      dealScore: listing.dealScore || Math.min(99, Math.max(1, Math.round((1 - (listing.openingBid / Math.max(1, (listing.estLow + listing.estHigh) / 2))) * 130))),
-      equity: listing.equity || Math.max(0, Math.round(((listing.estLow + listing.estHigh) / 2) - listing.openingBid)),
-      mid: listing.mid || Math.round((listing.estLow + listing.estHigh) / 2)
+      dealScore: listing.dealScore ?? Math.min(99, Math.max(1, Math.round((1 - (listing.openingBid / Math.max(1, (listing.estLow + listing.estHigh) / 2))) * 130))),
+      equity: listing.equity ?? Math.max(0, (listing.estLow + listing.estHigh) / 2 - listing.openingBid),
+      mid: listing.mid ?? (listing.estLow + listing.estHigh) / 2,
+      seniorLienRisk: (listing.seniorLienRisk || 'normal').toLowerCase()
     };
 
     if (this.isPg) {
@@ -290,7 +291,7 @@ class DatabaseClient {
         enriched.photo, enriched.sourceUrl, enriched.raw,
         enriched.price ?? null, enriched.listingDate ?? null,
         enriched.redemptionDays || 0, enriched.redemptionWarning || null,
-        enriched.seniorLienRisk || 'NORMAL', enriched.seniorLienWarning || null,
+        enriched.seniorLienRisk || 'normal', enriched.seniorLienWarning || null,
         enriched.cashToClose ?? null, enriched.status || 'active'
       ];
       await this.pool.query(sql, params);

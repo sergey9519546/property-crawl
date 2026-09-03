@@ -50,7 +50,7 @@ runTest('Scenario 2: Junior Lien Foreclosure & Senior Mortgage Survival Detectio
 
   const result = detectSeniorLienSurvival(plaintiff, legalText);
   assert.strictEqual(result.isJuniorLien, true, 'Must identify junior lienholder');
-  assert.strictEqual(result.riskLevel, 'HIGH', 'Risk level must be HIGH');
+  assert.strictEqual(result.riskLevel, 'high', 'Risk level must be high');
   assert.strictEqual(result.survivingSeniorLiens, true, 'Must flag surviving senior liens');
   assert.ok(result.warning.includes('SENIOR_LIEN_RISK: High'), 'Must provide clear senior lien warning');
 });

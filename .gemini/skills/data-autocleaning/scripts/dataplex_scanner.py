@@ -23,23 +23,34 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+# Identifiers interpolated into argv are restricted to a safe charset so a
+# malicious table/location value cannot smuggle shell metacharacters or BigQuery
+# SQL through the command line.
+_SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.-]+$")
 
-async def run_command_async(cmd: str) -> str:
-  """Runs a shell command asynchronously and returns the stdout."""
-  process = await asyncio.create_subprocess_shell(
-      cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+
+def _assert_safe(identifier: str, label: str) -> None:
+  if not _SAFE_IDENTIFIER.match(identifier):
+    raise ValueError(f"Unsafe {label}: {identifier!r}")
+
+
+async def run_command_async(cmd: list[str]) -> str:
+  """Runs a command (argument list, no shell) asynchronously and returns stdout."""
+  process = await asyncio.create_subprocess_exec(
+      *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
   )
   stdout, stderr = await process.communicate()
 
   if process.returncode != 0:
     raise RuntimeError(
-        f"Command failed: {cmd}\nError: {stderr.decode('utf-8')}"
+        f"Command failed: {' '.join(cmd)}\nError: {stderr.decode('utf-8')}"
     )
 
   return stdout.decode("utf-8")
@@ -47,10 +58,15 @@ async def run_command_async(cmd: str) -> str:
 
 async def get_table_row_count(table_ref: str) -> int:
   """Gets the row count of a BigQuery table using count(*)."""
-  cmd = (
-      "bq query --quiet --nouse_legacy_sql --format=json "
-      f"'SELECT count(*) as count FROM `{table_ref}`'"
-  )
+  _assert_safe(table_ref, "table reference")
+  cmd = [
+      "bq",
+      "query",
+      "--quiet",
+      "--nouse_legacy_sql",
+      "--format=json",
+      f"SELECT count(*) as count FROM `{table_ref}`",
+  ]
   output = await run_command_async(cmd)
   try:
     results = json.loads(output)
@@ -76,10 +92,17 @@ async def create_and_wait_for_scan(
   parts = table_id.split(".")
   if len(parts) == 3:
     project, dataset, table = parts
+    _assert_safe(project, "project")
+    _assert_safe(dataset, "dataset")
+    _assert_safe(table, "table")
     data_source_resource = f"//bigquery.googleapis.com/projects/{project}/datasets/{dataset}/tables/{table}"
     bq_table_ref = f"{project}.{dataset}.{table}"
   elif len(parts) == 4:
     project, catalog, namespace, table = parts
+    _assert_safe(project, "project")
+    _assert_safe(catalog, "catalog")
+    _assert_safe(namespace, "namespace")
+    _assert_safe(table, "table")
     data_source_resource = f"//biglake.googleapis.com/iceberg/v1/restcatalog/v1/projects/{project}/catalogs/{catalog}/namespaces/{namespace}/tables/{table}"
     bq_table_ref = f"{project}.{catalog}.{namespace}.{table}"
   else:
@@ -90,6 +113,7 @@ async def create_and_wait_for_scan(
     )
     return
 
+  _assert_safe(location, "location")
   profile_name = f"data-profile-{uuid.uuid4().hex[:8]}"
 
   try:
@@ -115,20 +139,23 @@ async def create_and_wait_for_scan(
     )
 
   # Construct the base create command
-  create_cmd_parts = [
-      f"gcloud dataplex datascans create data-profile {profile_name}",
+  create_cmd = [
+      "gcloud",
+      "dataplex",
+      "datascans",
+      "create",
+      "data-profile",
+      profile_name,
       f"--location={location}",
-      f'--data-source-resource="{data_source_resource}"',
+      f"--data-source-resource={data_source_resource}",
       f"--project={project}",
       "--one-time",
-      '--ttl-after-scan-completion="2400s"',
+      "--ttl-after-scan-completion=2400s",
       "--format=json",
   ]
 
   if sampling_percent is not None:
-    create_cmd_parts.append(f"--sampling-percent={sampling_percent}")
-
-  create_cmd = " ".join(create_cmd_parts)
+    create_cmd.append(f"--sampling-percent={sampling_percent}")
 
   logging.info("[%s] Creating Dataplex profile: %s", table_id, profile_name)
   try:
@@ -141,13 +168,17 @@ async def create_and_wait_for_scan(
     return
 
   # Construct the describe command to poll for results
-  describe_cmd = (
-      f"gcloud dataplex datascans describe {profile_name} "
-      f"--location={location} "
-      f"--project={project} "
-      "--view=full "
-      "--format=json"
-  )
+  describe_cmd = [
+      "gcloud",
+      "dataplex",
+      "datascans",
+      "describe",
+      profile_name,
+      f"--location={location}",
+      f"--project={project}",
+      "--view=full",
+      "--format=json",
+  ]
 
   logging.info("[%s] Waiting for profile results...", table_id)
   max_retries = 50

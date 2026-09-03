@@ -100,7 +100,7 @@ function getRedemptionRule(state) {
  * where senior mortgages and superior tax encumbrances survive the auction.
  * @param {string} plaintiff
  * @param {string} legalText
- * @returns {object} { isJuniorLien: boolean, riskLevel: 'HIGH'|'NORMAL', warning: string|null }
+ * @returns {object} { isJuniorLien: boolean, riskLevel: 'high'|'normal', warning: string|null }
  */
 function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
   const combined = `${String(plaintiff || '')} ${String(legalText || '')}`.toLowerCase();
@@ -136,7 +136,7 @@ function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
   if (matched.length > 0) {
     return {
       isJuniorLien: true,
-      riskLevel: 'HIGH',
+      riskLevel: 'high',
       survivingSeniorLiens: true,
       matchedTerms: [...new Set(matched)],
       warning: 'SENIOR_LIEN_RISK: High. Plaintiff appears to be a junior lienholder or notice indicates subject to senior encumbrances of record. Senior mortgages survive the sale.'
@@ -145,7 +145,7 @@ function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
 
   return {
     isJuniorLien: false,
-    riskLevel: 'NORMAL',
+    riskLevel: 'normal',
     survivingSeniorLiens: false,
     matchedTerms: [],
     warning: null

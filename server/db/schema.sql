@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS listings (
     listing_date DATE,
     redemption_days INT DEFAULT 0,
     redemption_warning TEXT,
-    senior_lien_risk VARCHAR(16) DEFAULT 'NORMAL',
+    senior_lien_risk VARCHAR(16) DEFAULT 'normal',
     senior_lien_warning TEXT,
     cash_to_close NUMERIC(14, 2),
     status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),

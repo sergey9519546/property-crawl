@@ -4,11 +4,17 @@
     "ses_fa65b00a7ffeihM78bLDDG5IJQ": {
       "worktreeId": null,
       "createdAt": "2026-08-31T21:06:20.682Z"
+    },
+    "ses_f99f896a0ffeQ2MjAlkaanGtFj": {
+      "worktreeId": null,
+      "createdAt": "2026-09-03T06:49:16.925Z"
     }
   },
   "tabOrder": {
     "local": [
-      "ses_fa65b00a7ffeihM78bLDDG5IJQ"
+      "pending:16c4becf-ce7b-4971-b98f-6fa61eb06d31",
+      "ses_fa65b00a7ffeihM78bLDDG5IJQ",
+      "ses_f99f896a0ffeQ2MjAlkaanGtFj"
     ]
   },
   "sessionsCollapsed": true

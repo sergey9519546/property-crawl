@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Listing } from "@/data/listings";
 import { Calculator, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { computeCashToClose } from "@/lib/underwriting";
 
 interface BiddingSimulatorProps {
   listing: Listing;
@@ -15,12 +16,13 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   
   const arv = listing.estHigh || listing.mid || 0;
   const targetPercentage = 1 - (targetMargin / 100);
-  
-  // Base statuary cash to close estimate (2% + 500 flat)
-  const cashToClose = Math.round(listing.openingBid * 0.025 + 500);
-  
+
+  // Statutory closing-cost estimate (buyer's premium, poundage, transfer, deed fees).
+  const feeSchedule = computeCashToClose({ openingBid: listing.openingBid, state: listing.state, source: listing.source });
+  const closingCosts = feeSchedule.total - feeSchedule.openingBid;
+
   const targetProfit = Math.round(arv * (targetMargin / 100));
-  const mao = Math.max(0, Math.floor(arv * targetPercentage - rehabBudget - cashToClose));
+  const mao = Math.max(0, Math.floor(arv * targetPercentage - rehabBudget - closingCosts));
   
   // Calculate clearing probability
   let upsetBidCeiling = 0;

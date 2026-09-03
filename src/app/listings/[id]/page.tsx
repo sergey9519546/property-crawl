@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, ShieldCheck, Scale, Clock, DollarSign, Calculator } from "lucide-react";
 import { Listing, LISTINGS, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { computeCashToClose, redemptionLabel } from "@/lib/underwriting";
 import { Logo } from "@/components/site/logo";
 
 type ListingsPayload = { listings?: Listing[] };
@@ -62,6 +63,10 @@ export default function ListingPage() {
 
   const source = SOURCES[listing.source];
   const exactSourceUrl = getExactSourceListingUrl(listing, source?.websiteUrl);
+  const cashToClose = computeCashToClose({ openingBid: listing.openingBid, state: listing.state, source: listing.source });
+  const redemptionDays = listing.redemptionDays ?? 0;
+  const seniorLienRisk = (listing.seniorLienRisk || "").toLowerCase();
+  const isHighRisk = seniorLienRisk === "high";
 
   return (
     <main className="min-h-screen bg-[#F5F6F7] text-slate-950">
@@ -107,27 +112,27 @@ export default function ListingPage() {
                 <span>Title Risk & Lien Survival Arbitration</span>
               </h2>
               <span className={`text-xs font-extrabold uppercase px-3 py-1 rounded-full ${
-                listing.seniorLienRisk === "high" ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                isHighRisk ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
               }`}>
-                {listing.seniorLienRisk === "high" ? "Senior Lien Survival Hazard" : "Clean Senior Foreclosure"}
+                {isHighRisk ? "Senior Lien Survival Hazard" : "Clean Senior Foreclosure"}
               </span>
             </div>
             <div className={`p-4 rounded-2xl border text-xs flex items-start gap-3 ${
-              listing.seniorLienRisk === "high"
+              isHighRisk
                 ? "border-red-200 bg-red-50 text-red-900"
                 : "border-emerald-200 bg-emerald-50 text-emerald-900"
             }`}>
-              {listing.seniorLienRisk === "high" ? (
+              {isHighRisk ? (
                 <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
               ) : (
                 <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-600 mt-0.5" />
               )}
               <div>
                 <strong className="block font-bold">
-                  {listing.seniorLienRisk === "high" ? "High Title Risk: Junior Creditor Foreclosure" : "Senior Foreclosure Proceeding"}
+                  {isHighRisk ? "High Title Risk: Junior Creditor Foreclosure" : "Senior Foreclosure Proceeding"}
                 </strong>
                 <p className="mt-1">
-                  {listing.seniorLienRisk === "high"
+                  {isHighRisk
                     ? "Notice indicates execution by a junior claimant (second mortgage, HELOC, or HOA assessment). Any pre-existing first mortgage survives this foreclosure and remains encumbered on the deed."
                     : "Action brought by senior first mortgagee or taxing authority. Junior mortgages, subordinate mechanics liens, and judgments will be extinguished upon court confirmation of sale."}
                 </p>
@@ -136,7 +141,7 @@ export default function ListingPage() {
           </div>
 
           {/* Statutory Redemption Caveat */}
-          {(listing.redemptionWarning || listing.state === 'AL' || listing.state === 'MI' || listing.state === 'NJ' || listing.source === 'irs') && (
+          {(listing.redemptionWarning || redemptionDays > 0) && (
             <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-6 sm:p-8 text-xs text-amber-950 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold flex items-center gap-2 text-amber-950">
@@ -144,16 +149,11 @@ export default function ListingPage() {
                   <span>Statutory Right of Redemption</span>
                 </h2>
                 <span className="font-extrabold text-[11px] uppercase px-2.5 py-0.5 rounded bg-amber-200 text-amber-950">
-                  {listing.state === 'AL' ? '180 Days' : listing.state === 'MI' ? '6 Months' : listing.state === 'NJ' ? '10 Days' : '120 Days'}
+                  {redemptionLabel(redemptionDays)}
                 </span>
               </div>
               <p className="leading-relaxed">
-                {listing.redemptionWarning || (
-                  listing.state === 'AL' ? 'Alabama Ala. Code § 6-5-248: 180-day statutory right of redemption applies. The debtor may redeem the property upon paying purchase price plus 7.5% statutory interest.' :
-                  listing.state === 'MI' ? 'Michigan MCL 600.3240: 6-month statutory redemption applies unless property is certified vacant/abandoned (shortened to 30 days).' :
-                  listing.state === 'NJ' ? 'New Jersey Rule 4:65-5: 10-day objection and redemption window prior to sheriff deed delivery.' :
-                  'Federal IRS 120-day right of redemption applies pursuant to 28 U.S.C. § 2410(c).'
-                )}
+                {listing.redemptionWarning || `A statutory right of redemption of ${redemptionLabel(redemptionDays).toLowerCase()} applies to this ${listing.state} sale under state law.`}
               </p>
             </div>
           )}
@@ -166,33 +166,33 @@ export default function ListingPage() {
                 <span>Statutory Cash-to-Close Fee Schedule</span>
               </h2>
               <span className="text-xs font-extrabold text-emerald-700">
-                Est. Total ${Math.round(listing.openingBid * 1.025 + 500).toLocaleString()}
+                Est. Total ${cashToClose.total.toLocaleString()}
               </span>
             </div>
             <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl text-xs">
               <div className="p-3.5 flex justify-between">
-                <span className="text-slate-600">Auction Day Deposit Required</span>
-                <span className="font-bold text-slate-950">{listing.deposit || "$5,000 certified funds"}</span>
+                <span className="text-slate-600">Opening Bid (Purchase Price)</span>
+                <span className="font-bold text-slate-950">${cashToClose.openingBid.toLocaleString()}</span>
               </div>
               <div className="p-3.5 flex justify-between">
-                <span className="text-slate-600">Remaining Purchase Balance at Settlement</span>
-                <span className="font-bold text-slate-950">${Math.max(0, listing.openingBid - 5000).toLocaleString()}</span>
+                <span className="text-slate-600">Buyer's Premium</span>
+                <span className="font-semibold text-slate-700">${cashToClose.buyersPremium.toLocaleString()}</span>
               </div>
               <div className="p-3.5 flex justify-between">
-                <span className="text-slate-600">Sheriff / Trustee Statutory Poundage (2%)</span>
-                <span className="font-semibold text-slate-700">${Math.round(listing.openingBid * 0.02).toLocaleString()}</span>
+                <span className="text-slate-600">Sheriff / Trustee Statutory Poundage</span>
+                <span className="font-semibold text-slate-700">${cashToClose.sheriffPoundage.toLocaleString()}</span>
               </div>
               <div className="p-3.5 flex justify-between">
                 <span className="text-slate-600">State / County Transfer Conveyance</span>
-                <span className="font-semibold text-slate-700">${Math.round(listing.openingBid * 0.005).toLocaleString()}</span>
+                <span className="font-semibold text-slate-700">${cashToClose.transferTax.toLocaleString()}</span>
               </div>
               <div className="p-3.5 flex justify-between">
                 <span className="text-slate-600">Deed Recording & Docket Filing Fees</span>
-                <span className="font-semibold text-slate-700">$500</span>
+                <span className="font-semibold text-slate-700">${cashToClose.deedFees.toLocaleString()}</span>
               </div>
               <div className="p-3.5 flex justify-between bg-slate-50 rounded-b-2xl">
                 <span className="font-bold text-slate-950">Total Liquid Cash Required to Close</span>
-                <span className="font-extrabold text-emerald-700">${Math.round(listing.openingBid * 1.025 + 500).toLocaleString()}</span>
+                <span className="font-extrabold text-emerald-700">${cashToClose.total.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -212,7 +212,7 @@ export default function ListingPage() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 flex items-center gap-1"><Calculator className="h-3.5 w-3.5" /> 70% Rule MAO:</span>
                 <span className="font-bold text-emerald-400">
-                  ${Math.max(0, Math.round(listing.mid * 0.7 - 25000 - (listing.openingBid * 0.025 + 500))).toLocaleString()}
+                  ${Math.max(0, Math.round(listing.mid * 0.7 - 25000 - (cashToClose.total - listing.openingBid))).toLocaleString()}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">

@@ -1,4 +1,5 @@
 const db = require('../db/client');
+const { computeCashToClose } = require('../ai/legal-rules');
 
 async function handleExport(req, res) {
   const url = new URL(req.url, 'http://localhost');
@@ -23,8 +24,8 @@ async function handleExport(req, res) {
   const headers = ['ID', 'Address', 'City', 'State', 'ZIP', 'Source', 'Opening Bid', 'Est Low', 'Est High', 'Built-in Equity', 'Deal Score', 'Cash to Close', 'Redemption Days', 'Senior Lien Risk', 'Sale Date', 'Plaintiff', 'Defendant', 'Deposit Terms'];
   const rows = items.map(l => [
     l.id, `"${(l.address||'').replace(/"/g, '""')}"`, `"${l.city||''}"`, l.state||'', l.zip||'',
-    `"${l.source||''}"`, l.openingBid, l.estLow, l.estHigh, l.equity || Math.max(0, Math.round(((l.estLow+l.estHigh)/2)-l.openingBid)), l.dealScore,
-    l.cashToClose || Math.round(l.openingBid * 1.025 + 500), l.redemptionDays || 0, `"${l.seniorLienRisk || 'NORMAL'}"`,
+    `"${l.source||''}"`, l.openingBid, l.estLow, l.estHigh, l.equity ?? Math.max(0, (l.estLow + l.estHigh) / 2 - l.openingBid), l.dealScore,
+    l.cashToClose ?? computeCashToClose({ openingBid: l.openingBid, state: l.state, source: l.source }).totalCashToClose, l.redemptionDays || 0, `"${(l.seniorLienRisk || 'normal').toLowerCase()}"`,
     l.saleDate, `"${(l.plaintiff||'').replace(/"/g, '""')}"`, `"${(l.defendant||'').replace(/"/g, '""')}"`,
     `"${(l.deposit||'').replace(/"/g, '""')}"`
   ].join(','));
