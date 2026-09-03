@@ -1109,6 +1109,23 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)
 
+    def test_listings_directory_route_renders_and_loads_inventory(self):
+        self.page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
+        heading = self.page.get_by_role("heading", name="Live National Distressed Property Inventory")
+        heading.wait_for(state="visible")
+        self.assertTrue(heading.is_visible())
+        self.assertTrue(self.page.get_by_text("Live Auction Directory").is_visible())
+        self.page.get_by_role("button", name=f"Deal Grid ({self.live_count})").wait_for(state="visible")
+
+    def test_not_found_page_renders_with_recovery_actions(self):
+        self.page.goto(f"{BASE_URL}/non-existent-route-audit-404", wait_until="domcontentloaded")
+        heading = self.page.get_by_role("heading", name="Listing or Page Unavailable")
+        heading.wait_for(state="visible")
+        self.assertTrue(heading.is_visible())
+        self.assertTrue(self.page.get_by_text("404 — Not Found").is_visible())
+        return_link = self.page.get_by_role("link", name="Return to Terminal")
+        self.assertTrue(return_link.is_visible())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
