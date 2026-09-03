@@ -1,0 +1,221 @@
+// server/scrapers/irs.js
+//
+// REAL IRS Seized Property auction scraper.
+// Source: https://www.irsauctions.gov/auction/items  (public, no auth)
+// Strategy: list page → per-auction detail pages at /ad/<slug>, regex-parse the
+//   structured "Asset Address" <address> block + "Asset Description" prose.
+//
+// Per docs/STRATEGY.md §2 Tier A and docs/sources-to-scrape.md #1: public
+// government site, low volume (~5-10 active listings), front page live.
+// Personal-property auctions (boats, watches, safes) are filtered out by
+// requiring a street-number Asset Address.
+//
+// Rate limit: 1 req/sec between detail pages. Be polite — US government site.
+
+const BaseScraper = require('./base');
+
+// Title substrings that mark an IRS auction as personal property, not real
+// estate (these auctions are hosted at a venue address, so a street-number
+// check can't exclude them). Matched case-insensitively against the title.
+const PERSONAL_PROPERTY_KEYWORDS = [
+  'personal property', 'watch', 'purse', 'jewelry', 'jewellery', 'jet ski',
+  'kawasaki', 'boat', 'safe', 'vehicle', 'motorcycle', 'trailer', 'equipment',
+  'firearm', 'coin', 'instrument', 'furniture', 'artwork', 'painting'
+];
+
+const STATE_NAME_TO_CODE = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
+  Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
+  Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
+  Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
+  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO',
+  Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND',
+  Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI',
+  'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT',
+  Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV',
+  Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC', 'Puerto Rico': 'PR'
+};
+
+class IrsSeizedScraper extends BaseScraper {
+  constructor() {
+    super({ name: 'IrsAuctionCollector', sourceKey: 'irs' });
+    this.baseUrl = 'https://www.irsauctions.gov';
+    this.delayMs = 1000; // 1 req/sec
+  }
+
+  async scrapeFeed() {
+    return this.executeWithRetry(async () => {
+      const listHtml = await this.fetchText(`${this.baseUrl}/auction/items`);
+
+      // Each auction card links to /ad/<slug> with the auction title. IRS mixes
+      // real-estate and personal-property (boats, watches, safes) auctions on
+      // one page; the personal-property ones are hosted at a venue address, so
+      // a street-number check alone can't tell them apart. Filter by title here
+      // so we never fetch personal-property detail pages.
+      const cardRe = /href="\/ad\/([a-z0-9-]+)"\s+rel="bookmark">\s*<span class="treas-page-title">([^<]+)<\/span>/g;
+      const seen = new Set();
+      const cards = [];
+      let cm;
+      while ((cm = cardRe.exec(listHtml)) !== null) {
+        if (seen.has(cm[1])) continue;
+        seen.add(cm[1]);
+        const title = this.decodeEntities(cm[2]).trim();
+        if (PERSONAL_PROPERTY_KEYWORDS.some(kw => title.toLowerCase().includes(kw))) continue;
+        cards.push({ slug: cm[1], title });
+      }
+      console.log(`[${this.name}] Found ${cards.length} real-estate auction cards on list page`);
+
+      const listings = [];
+      await Promise.allSettled(cards.map(async ({ slug }) => {
+        try {
+          const detail = await this.fetchDetail(slug);
+          if (detail) listings.push(detail);
+        } catch (err) {
+          console.warn(`[${this.name}] Failed /ad/${slug}: ${err.message}`);
+        }
+      }));
+
+      console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
+      return listings.map(item => this.standardizeListing(item));
+    });
+  }
+
+  async fetchText(url, timeoutMs = 4000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' },
+        signal: controller.signal
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+      return await res.text();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async fetchDetail(slug) {
+    const detailUrl = `${this.baseUrl}/ad/${slug}`;
+    const html = await this.fetchText(detailUrl);
+
+    // --- Asset Address block: <address ...> STREET <br> City, ZIP ST <br> Country </address> ---
+    const addrBlockMatch = html.match(/<address[^>]*>([\s\S]*?)<\/address>/);
+    if (!addrBlockMatch) return null; // personal-property auctions have no <address>
+
+    const addrLines = addrBlockMatch[1]
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (addrLines.length < 2) return null;
+    const street = addrLines[0];
+    if (!/^\d/.test(street)) return null; // require a street number (real property)
+
+    // Second line: "Drexel Hill, 19026 PA"
+    const cityLine = addrLines[1];
+    const cityMatch = cityLine.match(/^(.+?),\s*(\d{5})\s+([A-Z]{2})$/);
+    if (!cityMatch) return null;
+
+    const city = cityMatch[1].trim();
+    const zip = cityMatch[2];
+    const state = cityMatch[3];
+
+    // --- Asset Description prose: "...built in 1942...3 bedrooms, 2 bathrooms, ~1,152 sq ft." ---
+    const descMatch = html.match(/Asset Description<\/div>\s*<div class="field__item">([\s\S]*?)<\/div>/);
+    const desc = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+      : '';
+
+    const beds = this.firstInt(desc, /(\d+)\s*bedrooms?/i);
+    const baths = this.firstInt(desc, /(\d+)\s*bathrooms?/i);
+    const sqft = this.firstInt(desc.replace(/,/g, ''), /([\d,]+)\s*sq\s*ft/i);
+    const year = this.firstInt(desc, /built in (\d{4})/i) || null;
+
+    // --- Minimum bid: <div content="110665.00" class="field__item">110,665.00</div> ---
+    const bidMatch = html.match(/content="([\d,]+\.\d+)"\s+class="field__item"/);
+    const openingBid = bidMatch ? this.parseMoney(bidMatch[1]) : 0;
+
+    // --- Date of Auction: first <time datetime="2026-09-08T17:30:00Z"> ---
+    const timeMatch = html.match(/<time datetime="([^"]+)"/);
+    const saleDate = timeMatch ? timeMatch[1].slice(0, 10) : null;
+
+    // --- Defendant / taxpayer: "...seized ... due from Albert W Sperry." ---
+    const defMatch = html.match(/due from ([^.]+?)\./i);
+    const defendant = defMatch ? defMatch[1].trim() : '—';
+
+    const id = `IRS-${state}-${slug.toUpperCase().slice(0, 18)}`;
+    const fullAddress = `${street}, ${city}, ${state} ${zip}`;
+
+    return {
+      id,
+      state,
+      county: 'Unknown',
+      city,
+      zip,
+      address: fullAddress,
+      lat: 0,
+      lng: 0,
+      beds,
+      baths,
+      sqft,
+      year,
+      propType: this.classifyPropertyType(desc),
+      openingBid,
+      estLow: 0,
+      estHigh: 0,
+      assessed: 0,
+      saleDate,
+      plaintiff: 'Internal Revenue Service (PALS)',
+      defendant,
+      judgment: 0,
+      attorney: 'IRS Property Appraisal & Liquidation Specialist',
+      occupancy: 'Unknown',
+      deposit: '20% certified check day of auction',
+      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
+      sourceUrl: detailUrl,
+      raw: desc.substring(0, 800) || 'IRS seized property auction'
+    };
+  }
+
+  classifyPropertyType(desc) {
+    if (/commercial/i.test(desc)) return 'Commercial';
+    if (/condo/i.test(desc)) return 'Condo';
+    if (/multi.?family|duplex|triplex/i.test(desc)) return 'Multi-Family';
+    if (/land|vacant|lot|acre/i.test(desc)) return 'Land';
+    return 'Single Family';
+  }
+
+  firstInt(str, re) {
+    if (!str) return 0;
+    const m = str.match(re);
+    return m ? parseInt(m[1].replace(/[^\d]/g, ''), 10) || 0 : 0;
+  }
+
+  parseMoney(s) {
+    if (!s) return 0;
+    // Values carry cents, e.g. "110665.00" — strip currency/commas but keep the
+    // decimal so we don't fold ".00" into the integer (×100 bug).
+    return Math.round(parseFloat(s.replace(/[,$]/g, '')) || 0);
+  }
+
+  decodeEntities(s) {
+    return s
+      .replace(/&amp;/g, '&')
+      .replace(/&#0?39;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&ndash;/g, '-')
+      .replace(/&mdash;/g, '-')
+      .replace(/&hellip;/g, '\u2026')
+  }
+
+  sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+}
+
+module.exports = new IrsSeizedScraper();

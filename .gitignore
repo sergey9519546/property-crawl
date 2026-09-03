@@ -79,3 +79,6 @@ upload/
 .cache/
 .turbo/
 .vercel/
+
+# --- v0 PWA backup (retired UI; kept locally for one-cycle rollback) ---
+.v0_backup/
