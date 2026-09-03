@@ -13,7 +13,9 @@ import {
   Download,
   Building2,
   Calendar,
-  DollarSign
+  DollarSign,
+  Copy,
+  Check
 } from "lucide-react";
 
 interface DocketAgentProps {
@@ -53,6 +55,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
   const [logs, setLogs] = useState<string[]>([]);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [agentEngine, setAgentEngine] = useState<"api" | "claude">("claude");
+  const [copied, setCopied] = useState(false);
 
   const effectiveAddress = listing?.address || customAddress || "11818 Superior Ave, Cleveland, OH";
   const effectiveCounty = listing?.county || "Cuyahoga";
@@ -192,6 +195,13 @@ Generate a strict, bulleted 3-part title audit:
     URL.revokeObjectURL(url);
   };
 
+  const copyCertificate = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.summaryMarkdown);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-5 text-white shadow-xl space-y-4">
       {/* Header */}
@@ -276,13 +286,23 @@ Generate a strict, bulleted 3-part title audit:
               </span>
             </div>
 
-            <button
-              onClick={downloadReport}
-              className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white transition"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>Download Report (.md)</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copyCertificate}
+                className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white transition"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copied ? "Copied!" : "Copy Certificate"}</span>
+              </button>
+
+              <button
+                onClick={downloadReport}
+                className="flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/15 px-2.5 py-1 text-[11px] font-semibold text-white transition"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Download Report (.md)</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1">

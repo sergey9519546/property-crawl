@@ -5,6 +5,7 @@ import { Listing, LISTINGS, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { computeCashToClose, redemptionLabel } from "@/lib/underwriting";
 import { Logo } from "@/components/site/logo";
+import { DocketAgent } from "@/components/terminal/docket-agent";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -209,6 +210,11 @@ export default async function ListingPage({ params }: Props) {
               </p>
             </div>
           )}
+
+          {/* On-Demand Live Court Docket & Title Agent */}
+          <div className="mt-6">
+            <DocketAgent listing={listing as any} />
+          </div>
 
           {/* Cash-to-Close Fee Schedule */}
           <div className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-4">

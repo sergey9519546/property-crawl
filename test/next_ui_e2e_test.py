@@ -1163,6 +1163,19 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         heading.wait_for(state="visible")
         self.assertTrue(heading.is_visible())
 
+    def test_listing_detail_page_renders_docket_agent_and_can_verify(self):
+        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        agent_heading = self.page.get_by_text("Live County Docket & Title Agent")
+        agent_heading.wait_for(state="visible", timeout=5000)
+        self.assertTrue(agent_heading.is_visible())
+        self.page.get_by_role("combobox", name="Agent Engine").select_option("api")
+        self.page.get_by_role("button", name="Verify Live Docket").click()
+        verified_badge = self.page.get_by_text("Docket Verified: Case #")
+        verified_badge.wait_for(state="visible", timeout=5000)
+        self.assertTrue(verified_badge.is_visible())
+        copy_btn = self.page.get_by_role("button", name="Copy Certificate")
+        self.assertTrue(copy_btn.is_visible())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
