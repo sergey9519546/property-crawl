@@ -68,6 +68,7 @@ const SCRAPER_REGISTRY = [
   { key: 'fdic',       mod: '../server/scrapers/fdic',            real: true },
   { key: 'civilview',  mod: '../server/scrapers/civilview',       real: true },
   { key: 'bid4assets', mod: '../server/scrapers/bid4assets',      real: true },
+  { key: 'trustee',    mod: '../server/scrapers/trustee',         real: true },
 ];
 
 // `cross-env` is intentionally NOT required: pass --real on any platform.
@@ -183,6 +184,24 @@ async function main() {
 
   fs.writeFileSync(DATA_JS_PATH, emit(SOURCES, normalized), 'utf8');
   console.log(`[build-data] wrote ${normalized.length} listings → ${path.relative(PROJECT_ROOT, DATA_JS_PATH)}`);
+
+  // Also sync snapshot files for Next.js App Router (src/lib/db)
+  const dataDir = path.join(PROJECT_ROOT, 'data');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  const listingsSnapshotPath = path.join(dataDir, 'listings.snapshot.json');
+  const sourcesSnapshotPath = path.join(dataDir, 'sources.snapshot.json');
+
+  const snapshotPayload = {
+    capturedAt: new Date().toISOString(),
+    total: normalized.length,
+    listings: normalized
+  };
+  fs.writeFileSync(listingsSnapshotPath, JSON.stringify(snapshotPayload, null, 2), 'utf8');
+  console.log(`[build-data] wrote snapshot → ${path.relative(PROJECT_ROOT, listingsSnapshotPath)}`);
+
+  const sourcesList = Object.entries(SOURCES).map(([k, s]) => ({ key: k, ...s }));
+  fs.writeFileSync(sourcesSnapshotPath, JSON.stringify(sourcesList, null, 2), 'utf8');
+  console.log(`[build-data] wrote snapshot → ${path.relative(PROJECT_ROOT, sourcesSnapshotPath)}`);
 }
 
 main().catch(err => {

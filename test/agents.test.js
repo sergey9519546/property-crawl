@@ -16,11 +16,11 @@ const ROOT = path.resolve(__dirname, '..');
 const AGENT_DIR = path.join(ROOT, '.kilo', 'agent');
 
 function parseFrontmatter(content) {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const fields = {};
   let currentKey = null;
-  for (const line of m[1].split('\n')) {
+  for (const line of m[1].split(/\r?\n/)) {
     const kv = line.match(/^(\w+):\s*(.*)$/);
     const nested = line.match(/^\s{2}(\w+):\s*(.*)$/);
     if (kv) {

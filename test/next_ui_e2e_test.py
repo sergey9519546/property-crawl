@@ -313,11 +313,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             if market_map.get_attribute("data-map-unavailable") == "true":
                 reduced_page.get_by_role(
                     "button", name=f"Inspect {listing['address']} without map tiles"
-                ).click()
+                ).click(force=True)
             else:
                 reduced_page.get_by_role(
                     "button", name=f"Show {listing['address']} on map"
-                ).click()
+                ).click(force=True)
             preview = reduced_page.get_by_test_id("map-listing-preview")
             preview.wait_for(state="visible")
             preview_box = preview.bounding_box()

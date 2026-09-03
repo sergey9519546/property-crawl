@@ -12,6 +12,7 @@ const landbanksearch = require('./landbanksearch');
 const fdic = require('./fdic');
 const civilview = require('./civilview');
 const bid4assets = require('./bid4assets');
+const trustee = require('./trustee');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 
@@ -35,6 +36,7 @@ class IngestionScheduler {
       freddie,
       va,
       marshals,
+      trustee,
     ];
     // Derive key set from actual array so the log message never drifts.
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));

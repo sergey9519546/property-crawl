@@ -15,10 +15,10 @@ const ROOT = path.resolve(__dirname, '..');
 const CMD_DIR = path.join(ROOT, '.kilo', 'command');
 
 function parseFrontmatter(content) {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return null;
   const fields = {};
-  for (const line of m[1].split('\n')) {
+  for (const line of m[1].split(/\r?\n/)) {
     const kv = line.match(/^(\w+):\s*(.*)$/);
     if (kv) fields[kv[1]] = kv[2] || '';
   }

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROPERTY_CRAWL — Distressed & Government Property Intelligence</title>
+<meta name="description" content="Zillow for distressed and government-sold property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is." />
+<meta name="theme-color" content="#0f766e" />
+
+<!-- error reporting -->
+<script>
+window.onerror=function(msg,src,line,col,err){console.error('app-error',msg,src,line,col,err);window.parent.postMessage({type:'app-error',message:msg,source:src,lineno:line,colno:col,stack:err&&err.stack||''},'*');};
+window.onunhandledrejection=function(e){var m=e.reason&&e.reason.message||e.reason||'unknown';console.error('app-unhandledrejection',m,e.reason&&e.reason.stack||'');window.parent.postMessage({type:'app-error',message:'Unhandled promise rejection: '+m,stack:e.reason&&e.reason.stack||''},'*');};
+window.addEventListener('error',function(e){var t=e&&e.target;if(t&&t!==window&&t.tagName==='SCRIPT'){var u=t.src||'';var m='Failed to load script'+(u?': '+u:' (inline module)');console.error('app-script',m);window.parent.postMessage({type:'app-error',message:m,source:u},'*');}},true);
+(function(){var _f=window.fetch;window.fetch=function(){var a=arguments,u=typeof a[0]==='string'?a[0]:(a[0]&&a[0].url)||'';var p=_f.apply(this,a);p.then(function(r){if(r.status===500){r.clone().text().then(function(b){window.parent.postMessage({type:'fetch-error',url:u,status:500,body:b},'*');}).catch(function(){window.parent.postMessage({type:'fetch-error',url:u,status:500,body:''},'*');});}}).catch(function(e){console.error('app-fetch',u,e);window.parent.postMessage({type:'fetch-error',url:u,status:0,body:e.message||'fetch failed'},'*');});return p;};})();
+</script>
+<script src="https://builder.puter.com/runtime.js" defer></script>
+<script src="https://js.puter.com/v2/"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Vendor (no CDN): Leaflet for the map, Lucide for icons -->
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/lucide/lucide.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: { 50:'#f0fdfa',100:'#ccfbf1',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a' },
+          ink: { 900:'#0b1220', 800:'#131c2e', 700:'#1c2740' }
+        },
+        fontFamily: { sans:['Inter','system-ui','sans-serif'] }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',sans-serif}
+  .leaflet-container{font-family:'Inter',sans-serif}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+  .no-scrollbar::-webkit-scrollbar{display:none}
+  .fade-in{animation:fi .35s ease both}
+  @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .spin{animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .score-ring{transition:stroke-dashoffset .6s ease}
+  .prose-ai p{margin:.5rem 0}
+  .prose-ai strong{color:#0f766e}
+  /* mobile-menu slide-in */
+  .mm-panel{transition:opacity .18s ease, transform .18s ease}
+</style>
+    <!-- puter-pwa: generated, do not edit -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PROPERTY_CRAWL">
+    <!-- /puter-pwa -->
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<noscript>
+  <div style="max-width:680px;margin:48px auto;padding:20px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;font-family:Inter,system-ui,sans-serif;">
+    <h1 style="font-size:20px;margin:0 0 8px;">PROPERTY_CRAWL needs JavaScript</h1>
+    <p style="margin:0;color:#475569;">This is an interactive property intelligence dashboard. Please enable JavaScript and reload. The notice-parser and AI deal analysis also require an active internet connection.</p>
+  </div>
+</noscript>
+
+<!-- ============ HEADER ============ -->
+<header class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-200">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center gap-4">
+    <a href="#" class="flex items-center gap-2.5 shrink-0">
+      <span class="w-9 h-9 rounded-xl bg-brand-700 flex items-center justify-center text-white" aria-hidden="true">
+        <i data-lucide="house" class="w-5 h-5"></i>
+      </span>
+      <span class="font-extrabold tracking-tight text-lg text-ink-900">PROPERTY<span class="text-brand-700">_CRAWL</span></span>
+    </a>
+    <nav aria-label="Primary" class="hidden lg:flex items-center gap-1 ml-4 text-sm font-medium text-slate-500">
+      <a href="#dashboard" class="px-3 py-2 rounded-lg hover:bg-slate-100 hover:text-slate-900">Listings</a>
+      <a href="#map" class="px-3 py-2 rounded-lg hover:bg-slate-100 hover:text-slate-900">Map</a>
+      <a href="#parser" class="px-3 py-2 rounded-lg hover:bg-slate-100 hover:text-slate-900">Notice Parser</a>
+      <a href="#sources" class="px-3 py-2 rounded-lg hover:bg-slate-100 hover:text-slate-900">Sources</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-2">
+      <button id="alertsBtn" class="hidden sm:inline-flex items-center gap-2 text-sm font-semibold px-3.5 py-2 rounded-lg text-brand-700 hover:bg-brand-50" aria-label="Open saved and alerts">
+        <i data-lucide="bell" class="w-4 h-4" aria-hidden="true"></i><span>Alerts</span>
+        <span id="alertCount" class="hidden text-xs bg-brand-700 text-white rounded-full px-1.5 py-0.5" aria-hidden="true"></span>
+      </button>
+      <div id="authArea" class="flex items-center gap-2"></div>
+      <button id="menuBtn" class="lg:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg text-slate-600 hover:bg-slate-100" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+        <i data-lucide="menu" class="w-5 h-5" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ MOBILE MENU ============ -->
+<div id="mobileMenu" class="hidden fixed inset-0 z-50 bg-ink-900/40 backdrop-blur-sm lg:hidden" role="dialog" aria-modal="true" aria-label="Site navigation">
+  <div class="mm-panel absolute top-0 right-0 h-full w-72 max-w-[85vw] bg-white shadow-2xl p-5 flex flex-col opacity-0 -translate-y-2">
+    <div class="flex items-center justify-between mb-4">
+      <span class="font-extrabold text-ink-900">Menu</span>
+      <button id="closeMenu" class="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100" aria-label="Close menu">
+        <i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i>
+      </button>
+    </div>
+    <nav aria-label="Mobile" class="flex flex-col gap-1 text-sm font-semibold">
+      <a href="#dashboard" class="px-3 py-2.5 rounded-lg hover:bg-slate-100 text-slate-700">Listings</a>
+      <a href="#map"      class="px-3 py-2.5 rounded-lg hover:bg-slate-100 text-slate-700">Map</a>
+      <a href="#parser"   class="px-3 py-2.5 rounded-lg hover:bg-slate-100 text-slate-700">Notice Parser</a>
+      <a href="#sources"  class="px-3 py-2.5 rounded-lg hover:bg-slate-100 text-slate-700">Sources</a>
+    </nav>
+    <p class="mt-auto text-[11px] text-slate-400 leading-relaxed">Triage tool · verify all terms at the source before bidding.</p>
+  </div>
+</div>
+
+<!-- ============ HERO ============ -->
+<section class="relative overflow-hidden bg-ink-900 text-white">
+  <div class="absolute inset-0 opacity-[0.07]" style="background-image:radial-gradient(circle at 20% 20%,#14b8a6 0,transparent 40%),radial-gradient(circle at 80% 60%,#3b82f6 0,transparent 40%)"></div>
+  <div class="relative max-w-[1400px] mx-auto px-4 sm:px-6 py-12 sm:py-16">
+    <div class="max-w-3xl">
+      <div class="inline-flex items-center gap-2 text-xs font-semibold bg-white/10 border border-white/15 rounded-full px-3 py-1.5 mb-5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Triage tool · 9 states · 11 source types
+      </div>
+      <h1 class="text-3xl sm:text-5xl font-extrabold leading-[1.05] tracking-tight">
+        Zillow for distressed &amp;<br class="hidden sm:block"> government-sold property.
+      </h1>
+      <p class="mt-5 text-lg text-slate-300 max-w-2xl">
+        An AI that reads the fine print on every foreclosure, sheriff sale, and government seizure — and tells you if it's actually a deal, <span class="text-white font-semibold">and what the catch is.</span>
+      </p>
+      <div class="mt-7 flex flex-wrap gap-3">
+        <a href="#dashboard" class="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold px-5 py-3 rounded-xl">
+          <i data-lucide="search" class="w-4 h-4"></i> Browse listings
+        </a>
+        <a href="#parser" class="inline-flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/15 text-white font-semibold px-5 py-3 rounded-xl">
+          <i data-lucide="scan-text" class="w-4 h-4"></i> Try the AI notice parser
+        </a>
+      </div>
+    </div>
+    <div id="heroStats" class="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl"></div>
+  </div>
+</section>
+
+<!-- ============ DASHBOARD ============ -->
+<main id="dashboard" class="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+
+  <!-- toolbar -->
+  <div class="flex flex-col lg:flex-row lg:items-center gap-3 mb-5">
+    <div class="relative flex-1">
+      <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+      <input id="q" type="text" placeholder="Search address, city, county, lender, attorney, status…" class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500" />
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <select id="stateFilter" class="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/40"></select>
+      <select id="typeFilter" class="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/40"></select>
+      <select id="sortBy" class="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500/40">
+        <option value="score">Best deal score</option>
+        <option value="equity">Most equity</option>
+        <option value="bid-asc">Lowest opening bid</option>
+        <option value="date">Soonest sale date</option>
+      </select>
+      <button id="resetBtn" class="px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-500 hover:bg-slate-50 inline-flex items-center gap-1.5">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reset
+      </button>
+    </div>
+  </div>
+
+  <!-- source chips -->
+  <div id="sourceChips" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 mb-5"></div>
+
+  <div class="flex items-center justify-between mb-3">
+    <p class="text-sm text-slate-500"><span id="resultCount" class="font-semibold text-slate-800">0</span> properties</p>
+    <button id="scoreHelpBtn" class="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-700 font-medium rounded-lg px-2 py-1 hover:bg-brand-50 transition">
+      <i data-lucide="sparkles" class="w-3.5 h-3.5 text-brand-600"></i> Deal Score = opening bid ÷ estimated value band
+      <i data-lucide="circle-help" class="w-3.5 h-3.5"></i>
+    </button>
+  </div>
+
+  <!-- listing grid -->
+  <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+  <div id="emptyState" class="hidden text-center py-20 text-slate-400">
+    <i data-lucide="package-open" class="w-10 h-10 mx-auto mb-3"></i>
+    <p class="font-medium">No properties match those filters.</p>
+  </div>
+</main>
+
+<!-- ============ MAP ============ -->
+<section id="map" class="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+  <div class="flex items-center gap-2 mb-4">
+    <i data-lucide="map" class="w-5 h-5 text-brand-700"></i>
+    <h2 class="text-xl font-bold text-ink-900">Map view</h2>
+    <span class="text-sm text-slate-400 ml-1">— filtered results, colored by source</span>
+  </div>
+  <div id="leaflet" class="w-full h-[460px] rounded-2xl border border-slate-200 overflow-hidden z-0"></div>
+</section>
+
+<!-- ============ PARSER ============ -->
+<section id="parser" class="bg-white border-y border-slate-200">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-12">
+    <div class="max-w-3xl mb-6">
+      <div class="inline-flex items-center gap-2 text-xs font-semibold bg-brand-50 text-brand-700 rounded-full px-3 py-1.5 mb-3">
+        <i data-lucide="scan-text" class="w-3.5 h-3.5"></i> Hack #1 — LLM-as-parser
+      </div>
+      <h2 class="text-2xl font-bold text-ink-900">Turn a messy legal notice into structured data</h2>
+      <p class="mt-2 text-slate-500">Paste any sheriff-sale / foreclosure / trustee's-sale notice — the exact unstructured prose that lands in the alerts inbox. The AI extracts a clean, validated record.</p>
+    </div>
+    <div class="grid lg:grid-cols-2 gap-5">
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-sm font-semibold text-slate-600">Raw notice text</label>
+          <button id="sampleBtn" class="text-xs font-semibold text-brand-700 hover:underline">Load a sample notice</button>
+        </div>
+        <textarea id="rawNotice" rows="12" placeholder="Paste a legal notice here…" class="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-500/40"></textarea>
+        <button id="parseBtn" class="mt-3 inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold px-5 py-2.5 rounded-xl">
+          <i data-lucide="wand-sparkles" class="w-4 h-4"></i> Parse with AI
+        </button>
+      </div>
+      <div>
+        <label class="text-sm font-semibold text-slate-600 mb-2 block">Structured output</label>
+        <div id="parseOut" class="min-h-[320px] rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-400 flex items-center justify-center text-center">
+          Parsed JSON will appear here.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SOURCES ============ -->
+<section id="sources" class="max-w-[1400px] mx-auto px-4 sm:px-6 py-12">
+  <div class="max-w-3xl mb-6">
+    <h2 class="text-2xl font-bold text-ink-900">Verified source registry</h2>
+    <p class="mt-2 text-slate-500">Every source below is treated as a subscriber/read-only intelligence feed. We never scrape hostile portals, never touch the transaction, and keep zero homeowner-contact features.</p>
+  </div>
+  <div id="sourceGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+</section>
+
+<footer class="bg-ink-900 text-slate-400 text-sm">
+  <div class="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <p>© 2026 PROPERTY_CRAWL — a discovery &amp; intelligence layer. Not a broker. Not legal or financial advice.</p>
+    <p class="text-slate-500">Triage tool · verify all terms at the source before bidding.</p>
+  </div>
+</footer>
+
+<!-- ============ DETAIL DRAWER ============ -->
+<div id="drawer" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="Listing details">
+  <div id="drawerBg" class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm"></div>
+  <div id="drawerPanel" class="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col">
+    <div id="drawerContent" class="flex-1 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ============ ALERTS MODAL ============ -->
+<div id="alertsModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="alertsTitle">
+  <div id="alertsBg" class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+      <h3 id="alertsTitle" class="font-bold text-lg text-ink-900 flex items-center gap-2"><i data-lucide="bell" class="w-5 h-5 text-brand-700" aria-hidden="true"></i> Saved &amp; alerts</h3>
+      <button id="closeAlerts" class="text-slate-400 hover:text-slate-700" aria-label="Close saved and alerts"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+    </div>
+    <div id="alertsBody" class="p-6 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ============ DEAL SCORE HELP MODAL ============ -->
+<div id="scoreModal" class="fixed inset-0 z-[55] hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="scoreTitle">
+  <div id="scoreBg" class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[88vh] flex flex-col fade-in">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+      <h3 id="scoreTitle" class="font-bold text-lg text-ink-900 flex items-center gap-2"><i data-lucide="sparkles" class="w-5 h-5 text-brand-700" aria-hidden="true"></i> How the Deal Score works</h3>
+      <button id="closeScore" class="text-slate-400 hover:text-slate-700" aria-label="Close deal score help"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+    </div>
+    <div class="p-6 overflow-y-auto space-y-5">
+
+      <p class="text-sm text-slate-600 leading-relaxed">The Deal Score is a fast triage signal from <span class="font-semibold text-ink-900">0 to 100</span> — it answers one question: <span class="font-semibold text-brand-700">how far below market is the opening bid?</span> A higher score means more built-in equity relative to what the property is likely worth.</p>
+
+      <!-- the formula -->
+      <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-2">The formula</p>
+        <div class="text-sm text-slate-700 space-y-2 font-mono">
+          <p>value midpoint = (est. low + est. high) ÷ 2</p>
+          <p>bid ratio = opening bid ÷ value midpoint</p>
+          <p class="text-brand-800 font-bold">Deal Score = (1 − bid ratio) × 130</p>
+          <p class="text-slate-400 text-[10px]">130 maps the (1−ratio) ∈ [0,1] range to a 0–130 display, then clamps to 1–99 (see data.js).</p>
+          <p class="text-slate-400">…clamped to the 1–99 range</p>
+        </div>
+      </div>
+
+      <!-- worked example (swapped for the active listing when opened from a card) -->
+      <div id="scoreExample" class="rounded-xl border border-brand-200 bg-brand-50/60 p-4">
+        <p class="text-[11px] uppercase tracking-wide text-brand-700/70 font-semibold mb-2">Worked example</p>
+        <div class="text-sm text-slate-700 space-y-1.5">
+          <div class="flex justify-between"><span>Opening bid</span><span class="font-semibold">$52,000</span></div>
+          <div class="flex justify-between"><span>Est. value band</span><span class="font-semibold">$118k – $139k</span></div>
+          <div class="flex justify-between border-t border-brand-200/60 pt-1.5"><span>Midpoint</span><span class="font-semibold">$128,500</span></div>
+          <div class="flex justify-between"><span>Bid ratio</span><span class="font-semibold">52,000 ÷ 128,500 = 40%</span></div>
+          <div class="flex justify-between text-brand-800"><span class="font-semibold">Deal Score</span><span class="font-extrabold">(1 − 0.40) × 130 ≈ 77</span></div>
+        </div>
+      </div>
+
+      <!-- bands — populated from SCORE_BANDS in app.js so the help modal
+           and the score bar can never drift apart -->
+      <div>
+        <p class="text-[11px] uppercase tracking-wide text-slate-400 font-semibold mb-2">What the score means</p>
+        <div id="scoreBands" class="space-y-2"></div>
+      </div>
+
+      <!-- caveats -->
+      <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
+        <i data-lucide="triangle-alert" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+        <div class="text-sm text-amber-800 leading-relaxed">
+          <p class="font-semibold mb-1">The score is triage, not truth.</p>
+          <p>It ignores <span class="font-semibold">liens, back taxes, repair costs, occupancy, and redemption rights</span> — which is exactly what the AI "here's the catch" analysis on each listing covers. The value band comes from assessed value, last sale × price index, and ZIP-level home values. Always confirm with your own comps before bidding.</p>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t border-slate-200">
+      <button id="closeScore2" class="w-full bg-brand-700 hover:bg-brand-800 text-white font-semibold py-2.5 rounded-xl">Got it</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] hidden">
+  <div class="bg-ink-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMsg"></span>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

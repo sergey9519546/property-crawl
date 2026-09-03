@@ -90,6 +90,14 @@ class BaseScraper {
       raw: raw.raw || 'Scraped property record'
     };
   }
+
+  passesFilter(item) {
+    if (!item) return false;
+    if (!item.state || item.state === 'US' || item.state.length !== 2) return false;
+    if (!item.address || item.address.length < 8) return false;
+    if (!item.openingBid || Number(item.openingBid) <= 0) return false;
+    return true;
+  }
 }
 
 module.exports = BaseScraper;
