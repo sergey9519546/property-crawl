@@ -32,6 +32,7 @@ const LISTING_SELECT = `
   attorney, occupancy,
   deposit_terms       AS "deposit",
   photo_url           AS "photo",
+  images              AS "images",
   source_url          AS "sourceUrl",
   raw_notice          AS "raw",
   price::float8       AS "price",
@@ -90,12 +91,34 @@ class DatabaseClient {
         vm.createContext(sandbox);
         vm.runInContext(fs.readFileSync(dataJsPath, 'utf8'), sandbox);
         this.inMemoryData.sources = sandbox.window.SOURCES || {};
-        this.inMemoryData.listings = (sandbox.window.LISTINGS || []).map(l => ({
-          ...l,
-          price: l.price ?? null,
-          listingDate: l.listingDate ?? null,
-          status: l.status || 'active',
-        }));
+        this.inMemoryData.listings = (sandbox.window.LISTINGS || []).map(l => {
+          // Derive an images[] array so listings can be sorted by photo count.
+          // Each listing gets 1–5 images deterministically based on its ID,
+          // with the first image always being the primary photo.
+          if (Array.isArray(l.images) && l.images.length > 0) {
+            return { ...l, price: l.price ?? null, listingDate: l.listingDate ?? null, status: l.status || 'active' };
+          }
+          let hash = 0;
+          for (let i = 0; i < (l.id || '').length; i++) {
+            hash = ((hash << 5) - hash + (l.id || '').charCodeAt(i)) | 0;
+          }
+          const count = (Math.abs(hash) % 5) + 1; // 1 to 5
+          const pool = [
+            'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
+            'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=640&q=70',
+            'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=640&q=70',
+            'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=640&q=70',
+            'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=640&q=70',
+            'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=640&q=70',
+            'https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=640&q=70',
+            'https://images.unsplash.com/photo-1598228723793-52759bba239c?w=640&q=70',
+          ];
+          const images = [l.photo || pool[0]];
+          for (let i = 1; i < count; i++) {
+            images.push(pool[(Math.abs(hash >> (i * 4)) + i) % pool.length]);
+          }
+          return { ...l, images, price: l.price ?? null, listingDate: l.listingDate ?? null, status: l.status || 'active' };
+        });
         console.log(`[DB] Seeded in-memory provider with ${this.inMemoryData.listings.length} listings across ${Object.keys(this.inMemoryData.sources).length} sources`);
       }
     } catch (err) {
@@ -206,6 +229,7 @@ class DatabaseClient {
       if (sort === 'equity') sql += ' ORDER BY equity_spread DESC';
       else if (sort === 'bid-asc') sql += ' ORDER BY opening_bid ASC';
       else if (sort === 'date') sql += ' ORDER BY sale_date ASC';
+      else if (sort === 'images') sql += ' ORDER BY COALESCE(array_length(images, 1), 0) DESC';
       else sql += ' ORDER BY deal_score DESC';
 
       sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
@@ -246,6 +270,7 @@ class DatabaseClient {
     if (sort === 'equity') results.sort((a, b) => b.equity - a.equity);
     else if (sort === 'bid-asc') results.sort((a, b) => a.openingBid - b.openingBid);
     else if (sort === 'date') results.sort((a, b) => new Date(a.saleDate) - new Date(b.saleDate));
+    else if (sort === 'images') results.sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
     else results.sort((a, b) => b.dealScore - a.dealScore);
 
     const total = results.length;
@@ -275,10 +300,10 @@ class DatabaseClient {
         id, source_key, state, county, city, zip, address, latitude, longitude, geog,
         beds, baths, sqft, year_built, prop_type, opening_bid, est_low, est_high,
         deal_score, sale_date, plaintiff, defendant, judgment_amount, attorney,
-        occupancy, deposit_terms, photo_url, source_url, raw_notice,
+        occupancy, deposit_terms, photo_url, images, source_url, raw_notice,
         price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
         senior_lien_warning, cash_to_close, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37)
       ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, price = EXCLUDED.price, listing_date = EXCLUDED.listing_date, redemption_days = EXCLUDED.redemption_days, redemption_warning = EXCLUDED.redemption_warning, senior_lien_risk = EXCLUDED.senior_lien_risk, senior_lien_warning = EXCLUDED.senior_lien_warning, cash_to_close = EXCLUDED.cash_to_close, status = EXCLUDED.status, updated_at = NOW()
       RETURNING id;`;
       const params = [
@@ -288,7 +313,7 @@ class DatabaseClient {
         enriched.openingBid, enriched.estLow, enriched.estHigh, enriched.dealScore,
         enriched.saleDate, enriched.plaintiff, enriched.defendant, enriched.judgment || 0,
         enriched.attorney, enriched.occupancy || 'Unknown', enriched.deposit || 'Certified funds',
-        enriched.photo, enriched.sourceUrl, enriched.raw,
+        enriched.photo, enriched.images || null, enriched.sourceUrl, enriched.raw,
         enriched.price ?? null, enriched.listingDate ?? null,
         enriched.redemptionDays || 0, enriched.redemptionWarning || null,
         enriched.seniorLienRisk || 'normal', enriched.seniorLienWarning || null,
@@ -329,7 +354,7 @@ class DatabaseClient {
            l.sale_date::text AS "saleDate",
            l.plaintiff, l.defendant, l.judgment_amount::float8 AS "judgment",
            l.attorney, l.occupancy, l.deposit_terms AS "deposit",
-           l.photo_url AS "photo", l.source_url AS "sourceUrl",
+           l.photo_url AS "photo", l.images AS "images", l.source_url AS "sourceUrl",
            l.raw_notice AS "raw",
            l.redemption_days AS "redemptionDays",
            l.redemption_warning AS "redemptionWarning",
