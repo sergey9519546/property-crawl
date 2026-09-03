@@ -135,6 +135,41 @@ async function run() {
     assert.ok(res.raw.includes('Opening Bid,Est Low,Est High,Built-in Equity,Deal Score,Cash to Close,Redemption Days,Senior Lien Risk'));
   });
 
+  await test('GET /api/parcel-boundary returns GeoJSON Polygon and cadastral metrics for listing', async () => {
+    const res = await request(`/api/parcel-boundary?listingId=${primaryListing.id}`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.type, 'Feature');
+    assert.strictEqual(res.body.geometry.type, 'Polygon');
+    assert.ok(Array.isArray(res.body.geometry.coordinates[0]));
+    assert.strictEqual(res.body.geometry.coordinates[0].length, 5); // 4 corners + closed
+    assert.ok(res.body.properties.lotSqft > 0);
+    assert.ok(res.body.properties.frontageFt > 0);
+    assert.ok(res.body.properties.depthFt > 0);
+    assert.ok(res.body.properties.zoning);
+    assert.ok(res.body.properties.source);
+  });
+
+  await test('POST /api/parcel-boundary accepts custom spatial coordinates and computes setback envelope', async () => {
+    const res = await request('/api/parcel-boundary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        lat: 25.7617,
+        lng: -80.1918,
+        state: 'FL',
+        county: 'Miami-Dade',
+        sqft: 2200,
+        apn: '01-3124-001-0120'
+      }
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.type, 'Feature');
+    assert.strictEqual(res.body.geometry.type, 'Polygon');
+    assert.ok(res.body.properties.setbackGeometry);
+    assert.strictEqual(res.body.properties.setbackGeometry.type, 'Polygon');
+    assert.strictEqual(res.body.properties.parcelId, '01-3124-001-0120');
+  });
+
   await new Promise((resolve) => server.close(resolve));
   console.log(`--- SERVER TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
   if (failed > 0) process.exit(1);

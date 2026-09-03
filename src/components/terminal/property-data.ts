@@ -45,6 +45,7 @@ export interface PropertyListing {
   seniorLienRisk?: string;
   seniorLienWarning?: string | null;
   cashToClose?: number;
+  apn?: string;
 }
 
 // Source registry — KEPT IN SYNC with the production SOURCES at

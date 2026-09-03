@@ -48,6 +48,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
   const [mapView, setMapView] = React.useState<MapView>(DEFAULT_VIEW);
   const [announcement, setAnnouncement] = React.useState("");
+  const [parcelBoundary, setParcelBoundary] = React.useState<any>(null);
   const shouldReduceMotion = usePrefersReducedMotion();
 
   const mappable = React.useMemo(() => listings.filter(isGeocoded), [listings]);
@@ -82,6 +83,88 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
       element.dataset.active = active ? "true" : "false";
       element.setAttribute("aria-pressed", active ? "true" : "false");
     });
+  }, [selectedId]);
+
+  React.useEffect(() => {
+    if (!selectedId) {
+      setParcelBoundary(null);
+      const map = mapRef.current;
+      if (map && map.isStyleLoaded()) {
+        const pSrc = map.getSource("selected-parcel-source") as any;
+        if (pSrc) pSrc.setData({ type: "FeatureCollection", features: [] });
+        const sSrc = map.getSource("selected-setback-source") as any;
+        if (sSrc) sSrc.setData({ type: "FeatureCollection", features: [] });
+      }
+      return;
+    }
+
+    let active = true;
+    void fetch(`/api/parcel-boundary?listingId=${encodeURIComponent(selectedId)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data) return;
+        setParcelBoundary(data);
+        const map = mapRef.current;
+        if (!map || !map.isStyleLoaded()) return;
+
+        try {
+          const parcelSource = map.getSource("selected-parcel-source") as any;
+          if (parcelSource) {
+            parcelSource.setData(data);
+          } else {
+            map.addSource("selected-parcel-source", { type: "geojson", data });
+            map.addLayer({
+              id: "selected-parcel-fill",
+              type: "fill",
+              source: "selected-parcel-source",
+              paint: {
+                "fill-color": "#22c55e",
+                "fill-opacity": 0.22,
+              },
+            });
+            map.addLayer({
+              id: "selected-parcel-line",
+              type: "line",
+              source: "selected-parcel-source",
+              paint: {
+                "line-color": "#15803d",
+                "line-width": 2.5,
+              },
+            });
+          }
+
+          if (data.properties?.setbackGeometry) {
+            const setbackFeature = {
+              type: "Feature",
+              geometry: data.properties.setbackGeometry,
+              properties: {},
+            };
+            const setbackSource = map.getSource("selected-setback-source") as any;
+            if (setbackSource) {
+              setbackSource.setData(setbackFeature);
+            } else {
+              map.addSource("selected-setback-source", { type: "geojson", data: setbackFeature });
+              map.addLayer({
+                id: "selected-setback-line",
+                type: "line",
+                source: "selected-setback-source",
+                paint: {
+                  "line-color": "#f59e0b",
+                  "line-width": 1.5,
+                  "line-dasharray": [2, 2],
+                },
+              });
+            }
+          }
+        } catch (_) {
+          // Gracefully continue if layer creation encounters race condition
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
   }, [selectedId]);
 
   React.useEffect(() => {
@@ -283,7 +366,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
           </div>
         ) : null}
 
-        {selected ? <MapPreview listing={selected} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} /> : null}
+        {selected ? <MapPreview listing={selected} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} parcelBoundary={parcelBoundary} /> : null}
 
         {mappable.length === 0 ? <div className="absolute inset-0 z-20 grid place-items-center bg-slate-50 px-6 text-center"><div><MapPin className="mx-auto h-8 w-8 text-slate-400" aria-hidden /><p className="mt-3 font-bold text-slate-700">No geocoded listings match these filters.</p></div></div> : null}
       </div>
@@ -296,12 +379,35 @@ function MapControl({ label, onClick, children }: { label: string; onClick: () =
   return <button type="button" aria-label={label} onClick={onClick} className="grid h-11 w-11 place-items-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">{children}</button>;
 }
 
-function MapPreview({ listing, onClose, onUnderwrite }: { listing: PropertyListing; onClose: () => void; onUnderwrite: (listing: PropertyListing) => void }) {
+function MapPreview({
+  listing,
+  onClose,
+  onUnderwrite,
+  parcelBoundary,
+}: {
+  listing: PropertyListing;
+  onClose: () => void;
+  onUnderwrite: (listing: PropertyListing) => void;
+  parcelBoundary?: any;
+}) {
+  const pProps = parcelBoundary?.properties;
+
   return (
     <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={`Selected listing: ${listing.address}`} className="absolute bottom-4 left-4 right-4 z-30 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.24)] backdrop-blur-xl sm:left-auto sm:w-[390px]">
       <button type="button" onClick={onClose} aria-label="Close map listing preview" className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"><X className="h-4 w-4" aria-hidden /></button>
       <div className="pr-11"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">{SOURCES[listing.source]?.label ?? listing.source} · Score {listing.dealScore}</p><h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-slate-950">{listing.address}</h4><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" aria-hidden /> {listing.city}, {listing.state} · {listing.county} County</p></div>
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center"><MapStat label="Opening" value={`$${Math.round(listing.openingBid / 1000)}k`} /><MapStat label="Value" value={`$${Math.round(listing.mid / 1000)}k`} /><MapStat label="Equity" value={`$${Math.round(listing.equity / 1000)}k`} green /></div>
+      {pProps ? (
+        <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-mono">
+          <span className="flex items-center gap-1.5 font-bold text-emerald-900">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+            Lot: {Number(pProps.lotSqft || 8450).toLocaleString()} sq ft ({pProps.frontageFt || 62}&apos; × {pProps.depthFt || 136}&apos;)
+          </span>
+          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800">
+            {pProps.source === "arcgis_rest" ? "ArcGIS Live" : "Cadastral GIS"}
+          </span>
+        </div>
+      ) : null}
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center"><MapStat label="Opening" value={`$${Math.round(listing.openingBid / 1000)}k`} /><MapStat label="Value" value={`$${Math.round(listing.mid / 1000)}k`} /><MapStat label="Equity" value={`$${Math.round(listing.equity / 1000)}k`} green /></div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-slate-950 px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
         <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
