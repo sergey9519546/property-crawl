@@ -258,11 +258,170 @@ function detectBankruptcyOrAdjournment(rawNotice = '') {
   };
 }
 
+/**
+ * Extracts commercial multi-tenant lease schedules and rent roll data from legal notices or court filings.
+ * Implements "the-gavel" rent roll abstraction engine.
+ * @param {string} rawNotice
+ * @returns {object}
+ */
+function parseRentRollSchedule(rawNotice = '') {
+  const text = String(rawNotice || '');
+  const units = [];
+  const lines = text.split(/[\r\n]+/);
+
+  for (const line of lines) {
+    const unitMatch = line.match(/(?:unit|suite|apt|space)\s*([A-Za-z0-9\-]+)[:\-\s]+(.*)/i);
+    if (!unitMatch) continue;
+
+    const unit = unitMatch[1].trim();
+    const rest = unitMatch[2].trim();
+
+    let tenant = 'Occupied';
+    const firstSegment = rest.split(/,|\s-\s/)[0].trim();
+    if (firstSegment) tenant = firstSegment;
+    if (/vacant|empty|unoccupied/i.test(rest)) {
+      tenant = 'Vacant';
+    }
+
+    const sqftMatch = rest.match(/(\d[\d,]*)\s*(?:sqft|sf|sq\s*ft)/i);
+    const sqft = sqftMatch ? parseInt(sqftMatch[1].replace(/,/g, ''), 10) : 0;
+
+    const rentMatch = rest.match(/(?:rent|\$)\s*[:\$]?\s*(\d[\d,]*)/i);
+    const rent = rentMatch ? parseInt(rentMatch[1].replace(/,/g, ''), 10) : 0;
+
+    const leaseMatch = rest.match(/(?:exp|expires|lease\s*end)\s*[:\s]?\s*([0-9\/\-]+)/i);
+    const leaseEnd = leaseMatch ? leaseMatch[1].trim() : null;
+
+    const isVacant = tenant === 'Vacant';
+    units.push({
+      unit,
+      tenant,
+      status: isVacant ? 'Vacant' : 'Occupied',
+      sqft,
+      monthlyRent: rent,
+      annualRent: rent * 12,
+      leaseEnd
+    });
+  }
+
+  const totalSqft = units.reduce((acc, u) => acc + u.sqft, 0);
+  const occupiedSqft = units.filter(u => u.status === 'Occupied').reduce((acc, u) => acc + u.sqft, 0);
+  const totalAnnualRent = units.reduce((acc, u) => acc + u.annualRent, 0);
+  const occupancyRate = totalSqft > 0
+    ? Number(((occupiedSqft / totalSqft) * 100).toFixed(1))
+    : (units.length > 0 ? Number(((units.filter(u => u.status === 'Occupied').length / units.length) * 100).toFixed(1)) : 100);
+
+  return {
+    unitCount: units.length,
+    units,
+    totalSqft,
+    totalAnnualRent,
+    occupancyRate,
+    inPlaceNoi: Math.round(totalAnnualRent * 0.60) // 40% standard OPEX
+  };
+}
+
+/**
+ * Generates an institutional Letter of Intent (LOI) for distressed real estate acquisition.
+ * Implements "loi-generator" skill.
+ * @param {object} listing
+ * @param {object} options
+ * @returns {string}
+ */
+function generateLetterOfIntent(listing = {}, options = {}) {
+  const buyer = options.buyerEntity || 'Institutional Acquisition Partner LLC';
+  const price = options.offerPrice || Number(listing.openingBid) || 100000;
+  const deposit = Math.round(price * (options.depositPct || 0.10));
+  const inspectionDays = options.inspectionDays || 10;
+  const closingDays = options.closingDays || 30;
+  const cashToClose = computeCashToClose({
+    openingBid: price,
+    state: listing.state || 'OH',
+    source: listing.source || 'sheriff'
+  });
+
+  const deedFees = cashToClose.deedPrepAndRecording || cashToClose.deedFees || 500;
+  const bp = cashToClose.buyersPremium || 0;
+  const poundage = cashToClose.sheriffPoundage || 0;
+  const tax = cashToClose.transferTax || 0;
+  const total = cashToClose.total || cashToClose.totalCashToClose || price;
+
+  return `CONFIDENTIAL LETTER OF INTENT (LOI)
+ACQUISITION OF DISTRESSED REAL ASSET
+
+DATE: ${new Date().toISOString().split('T')[0]}
+TO: Trustee / Foreclosing Counsel / Special Servicer
+REGARDING: ${listing.address || 'Property'}, ${listing.city || ''}, ${listing.state || ''} ${listing.zip || ''}
+COURT DOCKET / CASE: ${listing.id || 'N/A'}
+SOURCE PORTAL: ${(listing.source || 'AUCTION').toUpperCase()}
+
+1. PURCHASER: ${buyer}, or its designated special purpose entity (SPE).
+2. PROPERTY: Real property situated in ${listing.county || 'County'} County, State of ${listing.state || 'OH'}, commonly known as ${listing.address || 'Property'}.
+3. PURCHASE PRICE: $${price.toLocaleString()} USD (all cash at closing).
+4. EARNEST MONEY DEPOSIT: $${deposit.toLocaleString()} USD (10% earnest funds), deposited into escrow within two (2) business days of mutual execution.
+5. DUE DILIGENCE PERIOD: ${inspectionDays} calendar days from receipt of preliminary title commitment and docket filings.
+6. STATUTORY CASH-TO-CLOSE & ESTIMATED CLOSING COSTS:
+   - Base Offering Bid: $${price.toLocaleString()}
+   - Estimated Buyer's Premium: $${bp.toLocaleString()}
+   - Statutory Sheriff Poundage (${listing.state || 'OH'}): $${poundage.toLocaleString()}
+   - State Transfer Tax: $${tax.toLocaleString()}
+   - Estimated Deed Recording Fees: $${deedFees.toLocaleString()}
+   - Net Estimated Cash to Close: $${total.toLocaleString()}
+7. CLOSING DATE: On or before ${closingDays} calendar days following expiration of the Due Diligence Period, subject to statutory confirmation and redemption rules under ${listing.state || 'OH'} law.
+8. CONDITION: "As-Is, Where-Is", subject to insurable title free and clear of un-extinguished senior encumbrances.
+
+AGREED & SUBMITTED:
+By: ___________________________
+Authorized Representative, ${buyer}`;
+}
+
+/**
+ * Generates an Investment Committee (IC) Acquisition Memo for institutional deal review.
+ * Implements "acq-investment-report" skill.
+ * @param {object} listing
+ * @param {object} creMetrics
+ * @returns {string}
+ */
+function generateInvestmentCommitteeMemo(listing = {}, creMetrics = {}) {
+  const bid = Number(listing.openingBid) || 0;
+  const estMid = ((Number(listing.estLow) || bid) + (Number(listing.estHigh) || bid)) / 2;
+  const equity = Math.max(0, estMid - bid);
+  const discountPct = estMid > 0 ? ((equity / estMid) * 100).toFixed(1) : '0.0';
+
+  return `# INVESTMENT COMMITTEE (IC) ACQUISITION MEMORANDUM
+
+## EXECUTIVE SUMMARY
+- **Asset**: ${listing.address || 'Subject Property'}, ${listing.city || ''}, ${listing.state || ''} ${listing.zip || ''}
+- **Asset Class**: ${listing.propType || 'Residential / Commercial'}
+- **Source Channel**: ${(listing.source || 'Sheriff').toUpperCase()}
+- **Deal Score**: ${listing.dealScore || 85}/100
+- **Opening / Target Bid**: $${bid.toLocaleString()}
+- **Estimated Fair Market Value**: $${Math.round(estMid).toLocaleString()}
+- **Gross Built-In Equity**: +$${equity.toLocaleString()} (${discountPct}% below market)
+
+## TITLE RISK & STATUTORY ANALYSIS
+- **Statutory Redemption Period**: ${listing.redemptionDays || 0} Days (${listing.redemptionWarning || 'Clean / No post-sale statutory redemption'})
+- **Senior Lien Risk**: ${listing.seniorLienRisk ? listing.seniorLienRisk.toUpperCase() : 'LOW'} (${listing.seniorLienWarning || 'No surviving prior senior encumbrance detected'})
+- **Occupancy Status**: ${listing.occupancy || 'Unknown (Drive-by inspection recommended)'}
+
+## FINANCIAL & RETURN METRICS
+- **Net Operating Income (NOI)**: $${(creMetrics.netOperatingIncome || Math.round(bid * 0.085)).toLocaleString()} / year
+- **Capitalization Rate**: ${creMetrics.capitalizationRate || '8.50'}%
+- **Debt Service Coverage Ratio (DSCR)**: ${creMetrics.estimatedDscr || '1.45'}x
+- **Target Yield Max Allowable Offer (MAO)**: $${(creMetrics.maxAllowableOffer || Math.round(bid * 1.15)).toLocaleString()}
+
+## UNDERWRITING RECOMMENDATION
+Proceed with pre-auction title search and deposit placement. Target maximum bid of $${(creMetrics.maxAllowableOffer || Math.round(bid * 1.15)).toLocaleString()} preserves an institutional yield floor above 8.00% Cap Rate.`;
+}
+
 module.exports = {
   STATE_REDEMPTION_RULES,
   parseCurrency,
   getRedemptionRule,
   detectSeniorLienSurvival,
   computeCashToClose,
-  detectBankruptcyOrAdjournment
+  detectBankruptcyOrAdjournment,
+  parseRentRollSchedule,
+  generateLetterOfIntent,
+  generateInvestmentCommitteeMemo
 };

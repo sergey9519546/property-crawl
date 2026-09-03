@@ -35,7 +35,9 @@ for (const suite of suites) {
     totalPassed++;
   } catch (err) {
     console.error(`FAILED: ${suite.name}`);
-    console.error(err.stdout ? err.stdout.toString() : err.message);
+    if (err.stdout) console.error(err.stdout.toString());
+    if (err.stderr) console.error(err.stderr.toString());
+    if (!err.stdout && !err.stderr) console.error(err.message);
     totalFailed++;
   }
 }

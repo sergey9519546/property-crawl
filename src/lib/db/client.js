@@ -101,8 +101,8 @@ class DatabaseClient {
       // useful if a future caller seeds from a non-cwd location.
       void candidates[2]; void candidates[3];
 
-      if (fs.existsSync(sourcesPath)) {
-        const sourcesRaw = JSON.parse(fs.readFileSync(sourcesPath, 'utf8'));
+      if (fs.existsSync(/*turbopackIgnore: true*/ sourcesPath)) {
+        const sourcesRaw = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ sourcesPath, 'utf8'));
         // Convert the array shape [{key, label, tier, color, ...}] into the
         // {key: {label, tier, ...}} map the rest of the client expects.
         this.inMemoryData.sources = {};
@@ -112,8 +112,8 @@ class DatabaseClient {
         }
       }
 
-      if (fs.existsSync(listingsPath)) {
-        const payload = JSON.parse(fs.readFileSync(listingsPath, 'utf8'));
+      if (fs.existsSync(/*turbopackIgnore: true*/ listingsPath)) {
+        const payload = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ listingsPath, 'utf8'));
         const raw = Array.isArray(payload) ? payload : (payload.listings || []);
         this.inMemoryData.listings = raw.map(l => ({
           ...l,

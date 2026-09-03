@@ -19,7 +19,8 @@ import {
   Home,
   CheckCircle2,
   AlertTriangle,
-  ArrowUpRight
+  ArrowUpRight,
+  Download
 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
 import { DealVideoGenerator } from "./deal-video-generator";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
-import { computeCashToClose, computeCreMetrics } from "@/lib/underwriting";
+import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo } from "@/lib/underwriting";
 
 interface PropertyDrawerProps {
   listing: Listing | null;
@@ -107,6 +108,35 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     }
   };
 
+  const handleDownloadLoi = () => {
+    if (!listing) return;
+    const text = generateLetterOfIntent(listing, { offerPrice: listing.openingBid });
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `LOI-${listing.id}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadIcMemo = () => {
+    if (!listing) return;
+    const creMetrics = computeCreMetrics({
+      sqft: listing.sqft,
+      openingBid: listing.openingBid,
+      propType: listing.propType,
+    });
+    const text = generateInvestmentCommitteeMemo(listing, creMetrics);
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `IC-Memo-${listing.id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-sm flex justify-end animate-in fade-in duration-200"
@@ -157,8 +187,10 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         </div>
 
         {/* Tab Navigation */}
-        <div className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
+        <div aria-label="Property inspection tabs" className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
           <button
+            id="tab-underwrite"
+            aria-controls="panel-underwrite"
             onClick={() => setActiveTab("underwrite")}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
@@ -172,6 +204,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           </button>
 
           <button
+            id="tab-3d"
+            aria-controls="panel-3d"
             onClick={() => setActiveTab("3d")}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
@@ -185,6 +219,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           </button>
 
           <button
+            id="tab-bidding"
+            aria-controls="panel-bidding"
             onClick={() => setActiveTab("bidding")}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
@@ -222,17 +258,17 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
           {/* TAB 1: Underwrite & Legal */}
           {activeTab === "underwrite" && (
-            <>
+            <div id="panel-underwrite" role="tabpanel" aria-labelledby="tab-underwrite" className="space-y-6">
               {/* Core Valuation Matrix */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-[#F5F6F7] rounded-2xl border border-[#E5E7EB]">
                 <div>
                   <p className="text-[11px] font-bold text-[#6B7280] uppercase">Opening Bid</p>
-                  <p className="text-lg font-extrabold text-[#111827]">$${listing.openingBid.toLocaleString()}</p>
+                  <p className="text-lg font-extrabold text-[#111827]">${listing.openingBid.toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-[#6B7280] uppercase">Est. Low / High</p>
                   <p className="text-sm font-bold text-[#374151]">
-                    $${(listing.estLow / 1000).toFixed(0)}k–$${(listing.estHigh / 1000).toFixed(0)}k
+                    ${(listing.estLow / 1000).toFixed(0)}k–${(listing.estHigh / 1000).toFixed(0)}k
                   </p>
                 </div>
                 <div>
@@ -526,12 +562,34 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                 </div>
               </div>
-            </>
+
+              {/* Institutional Deal Execution Artifacts */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide">Institutional Execution Documents</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    onClick={handleDownloadLoi}
+                    className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-[#0F172A] bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Letter of Intent</span>
+                  </button>
+
+                  <button
+                    onClick={handleDownloadIcMemo}
+                    className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-[#E5E7EB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F8FAFC] transition shadow-sm"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Export IC Memo</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* TAB 2: 3D Parcel & Topography */}
           {activeTab === "3d" && (
-            <div className="space-y-4 animate-in fade-in">
+            <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" className="space-y-4 animate-in fade-in">
               <Parcel3DVisualizer listing={listing} />
               <div className="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] text-xs text-[#6B7280] space-y-1.5">
                 <span className="font-bold text-[#111827] block">3D Terrain & Contour Insights:</span>
@@ -543,7 +601,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
           {/* TAB 3: Bidding Simulator & AI Video Pitch */}
           {activeTab === "bidding" && (
-            <div className="space-y-6 animate-in fade-in">
+            <div id="panel-bidding" role="tabpanel" aria-labelledby="tab-bidding" className="space-y-6 animate-in fade-in">
               <BiddingSimulator listing={listing} />
               <DealVideoGenerator listing={listing} />
             </div>

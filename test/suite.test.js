@@ -164,6 +164,72 @@ test('CRE Underwriting formulas calculate Net Operating Income and Cap Rates acc
   assert.ok(capRate > 10, 'Distressed commercial cap rate should be accretive');
 });
 
+test('the-gavel rent roll abstraction parses commercial units and computes in-place NOI', () => {
+  const { parseRentRollSchedule } = require('../server/ai/legal-rules');
+  const sampleDocket = `
+COMMERCIAL FORECLOSURE RENT ROLL SCHEDULE
+Unit 101: Starbucks Coffee, 1,800 sqft, rent $4,500/mo, exp 2028-12-31
+Unit 102: Apex Dental Care, 2,200 sf, rent $5,200/month, expires 2027-06-30
+Unit 103: Vacant Retail Suite, 1,000 sqft
+`;
+  const result = parseRentRollSchedule(sampleDocket);
+  assert.strictEqual(result.unitCount, 3);
+  assert.strictEqual(result.totalSqft, 5000);
+  assert.strictEqual(result.units[0].tenant, 'Starbucks Coffee');
+  assert.strictEqual(result.units[0].monthlyRent, 4500);
+  assert.strictEqual(result.units[2].status, 'Vacant');
+  assert.strictEqual(result.totalAnnualRent, (4500 + 5200) * 12);
+  assert.strictEqual(result.occupancyRate, 80.0); // 4000/5000 sf
+  assert.ok(result.inPlaceNoi > 0);
+});
+
+test('loi-generator produces institutional acquisition offer with statutory cash-to-close', () => {
+  const { generateLetterOfIntent } = require('../server/ai/legal-rules');
+  const listing = {
+    id: 'B4A-1287806',
+    address: '321 West Penn Avenue',
+    city: 'Robesonia',
+    state: 'PA',
+    zip: '19551',
+    county: 'Berks',
+    openingBid: 75000,
+    source: 'bid4assets'
+  };
+  const loi = generateLetterOfIntent(listing, { offerPrice: 85000 });
+  assert.ok(loi.includes('CONFIDENTIAL LETTER OF INTENT'));
+  assert.ok(loi.includes('PURCHASE PRICE: $85,000'));
+  assert.ok(loi.includes('EARNEST MONEY DEPOSIT: $8,500'));
+  assert.ok(loi.includes('Statutory Sheriff Poundage (PA)'));
+  assert.ok(loi.includes('Net Estimated Cash to Close'));
+});
+
+test('acq-investment-report produces executive IC acquisition memorandum', () => {
+  const { generateInvestmentCommitteeMemo } = require('../server/ai/legal-rules');
+  const listing = {
+    address: '450 Commercial Way',
+    city: 'Cleveland',
+    state: 'OH',
+    zip: '44114',
+    propType: 'Commercial',
+    openingBid: 250000,
+    estLow: 380000,
+    estHigh: 420000,
+    dealScore: 92,
+    redemptionDays: 0,
+    seniorLienRisk: 'low'
+  };
+  const memo = generateInvestmentCommitteeMemo(listing, {
+    netOperatingIncome: 34000,
+    capitalizationRate: 13.6,
+    estimatedDscr: 1.85,
+    maxAllowableOffer: 360000
+  });
+  assert.ok(memo.includes('INVESTMENT COMMITTEE (IC) ACQUISITION MEMORANDUM'));
+  assert.ok(memo.includes('Cleveland, OH 44114'));
+  assert.ok(memo.includes('13.6%'));
+  assert.ok(memo.includes('Target Yield Max Allowable Offer (MAO)'));
+});
+
 // ----------------------------------------------------
 // Summary
 // ----------------------------------------------------

@@ -224,6 +224,21 @@ class BaseScraper {
     if (!item.openingBid || Number(item.openingBid) <= 0) return false;
     return true;
   }
+
+  getVerifiedInventory() {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const snapshotPath = path.resolve(__dirname, '../../../data/listings.snapshot.json');
+      if (fs.existsSync(snapshotPath)) {
+        const payload = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
+        const listings = Array.isArray(payload) ? payload : (payload.listings || []);
+        const filtered = listings.filter(l => l.source === this.sourceKey);
+        if (filtered.length > 0) return filtered;
+      }
+    } catch (_) {}
+    return [];
+  }
 }
 
 module.exports = BaseScraper;

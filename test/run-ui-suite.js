@@ -34,16 +34,21 @@ function probe(port, route = '/') {
   });
 }
 
-async function waitFor(port, route, label, timeoutMs = 90_000) {
+async function waitFor(child, port, route, label, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (child && child.exitCode !== null) {
+      const logs = child.logs ? child.logs.join('') : '';
+      throw new Error(`[ui-suite] ${label} exited prematurely with code ${child.exitCode}:\n${logs}`);
+    }
     if (await probe(port, route)) {
       console.log(`[ui-suite] ${label} ready on :${port}`);
       return;
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error(`[ui-suite] ${label} failed to start on :${port} within ${timeoutMs / 1000}s`);
+  const logs = child && child.logs ? child.logs.join('') : '';
+  throw new Error(`[ui-suite] ${label} failed to start on :${port} within ${timeoutMs / 1000}s.\n${logs}`);
 }
 
 function startCmd(command, args, extraEnv = {}) {
@@ -55,8 +60,9 @@ function startCmd(command, args, extraEnv = {}) {
     shell: process.platform === 'win32' && !isExe,
     windowsHide: true,
   });
-  child.stdout.on('data', () => {});
-  child.stderr.on('data', () => {});
+  child.logs = [];
+  if (child.stdout) child.stdout.on('data', (d) => child.logs.push(d.toString()));
+  if (child.stderr) child.stderr.on('data', (d) => child.logs.push(d.toString()));
   return child;
 }
 
@@ -64,13 +70,13 @@ async function main() {
   const owned = [];
 
   try {
-    if (await probe(API_PORT, '/api/health')) {
+    if (await probe(API_PORT, '/api/health') && await probe(API_PORT, '/api/listings')) {
       console.log('[ui-suite] reusing existing Node API on :3000');
     } else {
       console.log('[ui-suite] booting Node API (server/server.js) on :3000...');
       const api = startCmd(process.execPath, ['server/server.js'], { PORT: String(API_PORT) });
       owned.push(api);
-      await waitFor(API_PORT, '/api/health', 'Node API');
+      await waitFor(api, API_PORT, '/api/health', 'Node API');
     }
 
     if (!fs.existsSync(path.join(ROOT, '.next', 'BUILD_ID'))) {
@@ -89,7 +95,7 @@ async function main() {
       PROPERTY_API_URL: `http://localhost:${API_PORT}`,
     });
     owned.push(ui);
-    await waitFor(UI_PORT, '/api/listings', 'Next production server', 120_000);
+    await waitFor(ui, UI_PORT, '/', 'Next production server', 60_000);
 
     const py = process.platform === 'win32'
       ? 'python'

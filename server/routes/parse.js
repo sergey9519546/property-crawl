@@ -4,7 +4,38 @@ const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
 const { CostTracker } = require('../ai/cost_tracker');
 const { deterministicParse, normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
-const { computeCashToClose } = require('../ai/legal-rules');
+const { computeCashToClose, parseRentRollSchedule } = require('../ai/legal-rules');
+
+function extractTextFromPdf(input) {
+  if (typeof input !== 'string') return '';
+  let str = input;
+  if (str.startsWith('data:application/pdf;base64,')) {
+    try {
+      str = Buffer.from(str.slice('data:application/pdf;base64,'.length), 'base64').toString('latin1');
+    } catch (_) {
+      return '';
+    }
+  } else if (/^[A-Za-z0-9+/=]{100,}$/.test(str.trim())) {
+    try {
+      const decoded = Buffer.from(str.trim(), 'base64').toString('latin1');
+      if (decoded.startsWith('%PDF')) str = decoded;
+    } catch (_) {}
+  }
+  if (!str.includes('%PDF')) return input;
+
+  const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
+  let text = '';
+  let match;
+  while ((match = streamRegex.exec(str)) !== null) {
+    const rawStream = match[1];
+    const textMatches = rawStream.match(/\(([^)]+)\)\s*Tj/g) || [];
+    for (const tm of textMatches) {
+      const inner = tm.match(/\(([^)]+)\)\s*Tj/);
+      if (inner && inner[1]) text += inner[1] + ' ';
+    }
+  }
+  return text.trim() || str.replace(/[^\x20-\x7E\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 function calculateConfidence(parsed) {
   let score = 0;
@@ -81,7 +112,13 @@ async function handleParse(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { noticeText, source: sourceHint, forceLlm } = req.body || {};
+  let { noticeText, pdfBase64, source: sourceHint, forceLlm } = req.body || {};
+  if (pdfBase64) {
+    noticeText = extractTextFromPdf(pdfBase64);
+  } else if (noticeText && (noticeText.startsWith('data:application/pdf') || noticeText.startsWith('%PDF'))) {
+    noticeText = extractTextFromPdf(noticeText);
+  }
+
   const validation = Validator.validateNoticeInput(noticeText);
   if (!validation.isValid) {
     return res.status(400).json({ error: validation.error });
@@ -100,6 +137,15 @@ async function handleParse(req, res) {
 
   // 1. Deterministic parse with OCR normalization, legal rules, and senior lien analysis
   let parsedData = deterministicParse(cleanNotice);
+
+  // Extract multi-tenant rent rolls for commercial dockets (the-gavel)
+  const rentRoll = parseRentRollSchedule(cleanNotice);
+  if (rentRoll.unitCount > 0) {
+    parsedData.rentRoll = rentRoll;
+    parsedData.in_place_noi = rentRoll.inPlaceNoi;
+    parsedData.occupancy_rate = rentRoll.occupancyRate;
+  }
+
   let confidence = calculateConfidence(parsedData);
   let strategy = 'deterministic_regex';
   let cost = 0;
