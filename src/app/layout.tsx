@@ -39,9 +39,11 @@ export const metadata: Metadata = {
     "off-market",
     "real estate investing",
   ],
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://property-crawl.com"),
   authors: [{ name: "PerfectProperty" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo-icon.svg",
+    apple: "/logo-icon.png",
   },
   openGraph: {
     title: "PerfectProperty — Every distressed deal in America, in one feed",
