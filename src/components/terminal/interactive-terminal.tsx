@@ -5,10 +5,12 @@ import { INITIAL_LISTINGS, PropertyListing, SOURCES } from "./property-data";
 import { PropertyDrawer } from "./property-drawer";
 import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
+import { AlertsModal } from "./alerts-modal";
 import { MarketMap } from "./market-map";
 import {
   Search,
   Bookmark,
+  Bell,
   Calendar,
   Sparkles,
   LayoutGrid,
@@ -44,6 +46,7 @@ export function InteractiveTerminal() {
   const [watchlistHydrated, setWatchlistHydrated] = useState(false);
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
+  const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [activeView, setActiveView] = useState<"grid" | "map" | "parser">("grid");
 
   // Filter states
@@ -279,6 +282,15 @@ export function InteractiveTerminal() {
             >
               <Bookmark className="w-4 h-4 text-[#16A34A] fill-[#16A34A]" />
               <span>Watchlist ({savedIds.size})</span>
+            </button>
+
+            <button
+              onClick={() => setIsAlertsOpen(true)}
+              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-amber-500 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              aria-label="Open Alerts Manager"
+            >
+              <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+              <span>Alerts</span>
             </button>
           </div>
         </div>
@@ -796,6 +808,13 @@ export function InteractiveTerminal() {
         savedListings={savedListings}
         onRemove={toggleSave}
         onSelectListing={setSelectedListing}
+      />
+
+      {/* Automated Alerts Modal */}
+      <AlertsModal
+        isOpen={isAlertsOpen}
+        onClose={() => setIsAlertsOpen(false)}
+        availableStates={availableStates}
       />
     </section>
   );

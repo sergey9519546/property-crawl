@@ -1126,6 +1126,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         return_link = self.page.get_by_role("link", name="Return to Terminal")
         self.assertTrue(return_link.is_visible())
 
+    def test_alerts_modal_is_escape_closeable(self):
+        self.wait_for_live_feed()
+        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        dialog = self.page.get_by_role("dialog", name="Deal Alerts Manager")
+        dialog.wait_for(state="visible")
+        self.assertTrue(dialog.is_visible())
+        self.assertTrue(self.page.get_by_text("Automated Deal Alerts").is_visible())
+        self.page.keyboard.press("Escape")
+        self.assertEqual(dialog.count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -270,6 +270,38 @@ test('NoticeParser includes Puter AI fallback for low-confidence dockets', () =>
 });
 
 // ----------------------------------------------------
+// 11. Alerts Manager & Scraper On-Demand Endpoints
+// ----------------------------------------------------
+console.log('\n[Suite 11: Alerts Manager & Scraper Controls]');
+
+test('InteractiveTerminal wires AlertsModal and Alerts button', () => {
+  const terminalContent = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
+  assert.ok(terminalContent.includes('AlertsModal'), 'AlertsModal missing from interactive-terminal.tsx');
+  assert.ok(terminalContent.includes('isAlertsOpen'), 'isAlertsOpen state missing from interactive-terminal.tsx');
+  assert.ok(terminalContent.includes('Open Alerts Manager'), 'Alerts button missing from interactive-terminal.tsx');
+});
+
+test('AlertsModal provides state, minScore, and maxBid criteria filters', () => {
+  const modalContent = fs.readFileSync(path.join(root, 'src/components/terminal/alerts-modal.tsx'), 'utf8');
+  assert.ok(modalContent.includes('Automated Deal Alerts'), 'Title missing from alerts-modal.tsx');
+  assert.ok(modalContent.includes('handleCreateAlert'), 'handleCreateAlert missing from alerts-modal.tsx');
+  assert.ok(modalContent.includes('handleDeleteAlert'), 'handleDeleteAlert missing from alerts-modal.tsx');
+  assert.ok(modalContent.includes('/api/alerts'), 'API integration missing from alerts-modal.tsx');
+});
+
+test('Scrapers API route supports POST /api/scrapers/run for on-demand triggers', () => {
+  const scrapersRoute = fs.readFileSync(path.join(root, 'server/routes/scrapers.js'), 'utf8');
+  assert.ok(scrapersRoute.includes('/api/scrapers/run'), 'run endpoint missing from server/routes/scrapers.js');
+  assert.ok(scrapersRoute.includes('scheduler.runAll()'), 'scheduler call missing from server/routes/scrapers.js');
+});
+
+test('Server boot includes clean startup logging and recurring scrape interval', () => {
+  const serverContent = fs.readFileSync(path.join(root, 'server/server.js'), 'utf8');
+  assert.ok(serverContent.includes('SCRAPE_INTERVAL_HOURS'), 'recurring scrape interval missing from server/server.js');
+  assert.ok(serverContent.includes('setTimeout'), 'clean boot delay missing from server/server.js');
+});
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n--- TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);

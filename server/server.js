@@ -145,9 +145,19 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
-    console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}`);
-    // Boot real data scrapers immediately
-    scheduler.runAll().catch(err => console.error('[Server] Scheduler failed on boot:', err));
+    console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}\n`);
+    // Boot real data scrapers after initial server banner prints
+    setTimeout(() => {
+      scheduler.runAll().catch(err => console.error('[Server] Scheduler failed on boot:', err));
+    }, 500);
+
+    // Recurring automated ingestion (default every 6 hours)
+    const scrapeIntervalHours = parseFloat(process.env.SCRAPE_INTERVAL_HOURS) || 6;
+    const intervalMs = scrapeIntervalHours * 60 * 60 * 1000;
+    setInterval(() => {
+      console.log(`[Server] Triggering scheduled ${scrapeIntervalHours}h ingestion cycle...`);
+      scheduler.runAll().catch(err => console.error('[Server] Scheduled scrape failed:', err));
+    }, intervalMs);
   });
 }
 
