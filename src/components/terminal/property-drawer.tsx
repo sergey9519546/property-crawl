@@ -88,40 +88,6 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleRunAi = async () => {
     setAiLoading(true);
-
-    // 1. Prioritize Puter.js free client-side AI (GPT-4o-mini)
-    if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-      try {
-        const prompt = `You are an institutional real estate underwriting AI analyzing a distressed foreclosure auction asset:
-Address: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Source Agency: ${listing.source.toUpperCase()}
-Opening Bid: $${listing.openingBid ? listing.openingBid.toLocaleString() : 'TBD'}
-Estimated Market Value: $${listing.estLow ? listing.estLow.toLocaleString() : 'N/A'} - $${listing.estHigh ? listing.estHigh.toLocaleString() : 'N/A'} (Deal Score: ${listing.dealScore || 'N/A'}/100)
-Property Type: ${listing.propType || 'Residential'}
-Deposit Terms: ${listing.deposit || 'Certified funds'}
-Occupancy Status: ${listing.occupancy || 'Unknown'}
-Foreclosing Plaintiff: ${listing.plaintiff || '—'}
-Statutory Redemption: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'None'}
-Senior Lien Survival: ${listing.seniorLienRisk === 'high' ? 'HIGH HAZARD - Junior foreclosure; senior mortgage survives' : 'Clean senior foreclosure'}
-
-Provide a rigorous 2-paragraph institutional deal breakdown:
-Paragraph 1 - **Valuation Spread & The Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
-Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
-
-        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
-        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
-        if (text && text.trim().length > 20) {
-          setAiAnalysis(text);
-          setAiSource('puter');
-          setAiLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.warn("Puter AI client fallback to backend:", err);
-      }
-    }
-
-    // 2. Fallback to server endpoint
     try {
       const response = await fetch('/api/enrich', {
         method: 'POST',
@@ -143,6 +109,41 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleRunPuterAi = async () => {
+    setAiLoading(true);
+    if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+      try {
+        const prompt = `You are an institutional real estate underwriting AI analyzing a distressed foreclosure auction asset:
+Address: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
+Source Agency: ${listing.source.toUpperCase()}
+Opening Bid: $${listing.openingBid ? listing.openingBid.toLocaleString() : 'TBD'}
+Estimated Market Value: $${listing.estLow ? listing.estLow.toLocaleString() : 'N/A'} - $${listing.estHigh ? listing.estHigh.toLocaleString() : 'N/A'} (Deal Score: ${listing.dealScore || 'N/A'}/100)
+Property Type: ${listing.propType || 'Residential'}
+Deposit Terms: ${listing.deposit || 'Certified funds'}
+Occupancy Status: ${listing.occupancy || 'Unknown'}
+Foreclosing Plaintiff: ${listing.plaintiff || '—'}
+Statutory Redemption: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'None'}
+Senior Lien Survival: ${listing.seniorLienRisk === 'high' ? 'HIGH HAZARD - Junior foreclosure; senior mortgage survives' : 'Clean senior foreclosure'}
+
+Provide a rigorous 2-paragraph institutional deal breakdown:
+Paragraph 1 - **Valuation Spread & Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
+Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
+        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
+        if (text && text.trim().length > 20) {
+          setAiAnalysis(text);
+          setAiSource('puter');
+          setAiLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("Puter AI client fallback to backend:", err);
+      }
+    }
+    await handleRunAi();
   };
 
   const handleDownloadLoi = () => {
@@ -337,19 +338,38 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                       </span>
                     )}
                     {!aiAnalysis && !aiLoading ? (
-                      <button
-                        onClick={handleRunAi}
-                        className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition shadow-sm"
-                      >
-                        Analyze Deal
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={handleRunAi}
+                          className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition shadow-sm"
+                        >
+                          Analyze Deal
+                        </button>
+                        <button
+                          onClick={handleRunPuterAi}
+                          title="Free live GPT-4o-mini intelligence via Puter.js"
+                          className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Puter AI</span>
+                        </button>
+                      </div>
                     ) : !aiLoading && (
-                      <button
-                        onClick={handleRunAi}
-                        className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
-                      >
-                        Re-analyze
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleRunPuterAi}
+                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>Puter GPT-4o-mini</span>
+                        </button>
+                        <button
+                          onClick={handleRunAi}
+                          className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
+                        >
+                          Re-analyze
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
