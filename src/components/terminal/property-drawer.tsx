@@ -41,7 +41,10 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [activeTab, setActiveTab] = useState<"underwrite" | "3d" | "bidding">("underwrite");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [aiSource, setAiSource] = useState<"puter" | "backend" | null>(null);
+  const [aiSource, setAiSource] = useState<string | null>(null);
+  const [selectedPuterModel, setSelectedPuterModel] = useState<string>("claude-3-5-sonnet");
+  const [generatingAiLoi, setGeneratingAiLoi] = useState<boolean>(false);
+  const [generatingAiMemo, setGeneratingAiMemo] = useState<boolean>(false);
 
   useEffect(() => {
     if (!listing) return;
@@ -131,11 +134,11 @@ Provide a rigorous 2-paragraph institutional deal breakdown:
 Paragraph 1 - **Valuation Spread & Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
 Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
 
-        const resp = await (window as any).puter.ai.chat(prompt, { model: 'claude-3-5-sonnet' });
+        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
         const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
         if (text && text.trim().length > 20) {
           setAiAnalysis(text);
-          setAiSource('puter');
+          setAiSource(selectedPuterModel);
           setAiLoading(false);
           return;
         }
@@ -158,6 +161,41 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
     URL.revokeObjectURL(url);
   };
 
+  const handleGenerateAiLoi = async () => {
+    if (!listing) return;
+    setGeneratingAiLoi(true);
+    try {
+      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+        const prompt = `You are a distressed asset acquisitions attorney drafting a formal Letter of Intent (LOI) to purchase an auction asset:
+Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
+Opening Bid: $${listing.openingBid.toLocaleString()}
+Deposit Required: ${listing.deposit}
+Occupancy: ${listing.occupancy}
+Plaintiff / Docket: ${listing.plaintiff || 'County Court Foreclosure'}
+
+Draft a complete, formal Letter of Intent (LOI) with purchase terms, deposit escrow provisions, clear title deed contingencies, and closing timeline.`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
+        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
+        if (text && text.trim().length > 50) {
+          const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `AI-LOI-${listing.id}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setGeneratingAiLoi(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("AI LOI fallback to static template:", e);
+    }
+    setGeneratingAiLoi(false);
+    handleDownloadLoi();
+  };
+
   const handleDownloadIcMemo = () => {
     if (!listing) return;
     const creMetrics = computeCreMetrics({
@@ -173,6 +211,48 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
     a.download = `IC-Memo-${listing.id}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleGenerateAiMemo = async () => {
+    if (!listing) return;
+    setGeneratingAiMemo(true);
+    try {
+      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+        const creMetrics = computeCreMetrics({
+          sqft: listing.sqft,
+          openingBid: listing.openingBid,
+          propType: listing.propType,
+        });
+        const prompt = `You are an acquisitions director preparing an Investment Committee (IC) acquisition memorandum for this asset:
+Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
+Opening Bid: $${listing.openingBid.toLocaleString()}
+Estimated ARV: $${listing.estHigh.toLocaleString()}
+Deal Score: ${listing.dealScore}/100
+NOI: $${creMetrics ? creMetrics.netOperatingIncome.toLocaleString() : 'N/A'}/yr
+Target Yield MAO: $${creMetrics ? creMetrics.maxAllowableOffer.toLocaleString() : 'N/A'}
+Senior Lien Risk: ${listing.seniorLienRisk}
+
+Draft an executive 1-page Investment Committee Acquisition Memorandum covering Executive Summary, Valuation Spread & Downside Protections, Title & Lien Risk Analysis, and Final Investment Recommendation.`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
+        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
+        if (text && text.trim().length > 50) {
+          const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `AI-IC-Memo-${listing.id}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+          setGeneratingAiMemo(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("AI IC Memo fallback:", e);
+    }
+    setGeneratingAiMemo(false);
+    handleDownloadIcMemo();
   };
 
   return (
@@ -332,9 +412,19 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
+                    <select
+                      value={selectedPuterModel}
+                      onChange={(e) => setSelectedPuterModel(e.target.value)}
+                      title="Select Puter AI Model"
+                      className="text-[11px] font-semibold bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-[#374151] focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer shadow-sm"
+                    >
+                      <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Legal/Title)</option>
+                      <option value="gpt-4o-mini">GPT-4o-mini (Fast Triage)</option>
+                      <option value="deepseek-reasoner">DeepSeek R1 (Math/Debt)</option>
+                    </select>
                     {aiSource && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        {aiSource === 'puter' ? '✨ Claude 3.5 Sonnet (Puter Free)' : 'Rule Engine'}
+                        {aiSource === 'backend' ? 'Rule Engine' : `✨ ${aiSource === 'claude-3-5-sonnet' ? 'Claude 3.5' : aiSource === 'gpt-4o-mini' ? 'GPT-4o-mini' : 'DeepSeek R1'}`}
                       </span>
                     )}
                     {!aiAnalysis && !aiLoading ? (
@@ -347,7 +437,7 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                         </button>
                         <button
                           onClick={handleRunPuterAi}
-                          title="Free live Claude 3.5 Sonnet intelligence via Puter.js"
+                          title={`Free live ${selectedPuterModel} intelligence via Puter.js`}
                           className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center gap-1"
                         >
                           <Sparkles className="w-3 h-3" />
@@ -361,7 +451,7 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                           className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>Puter Claude 3.5 Sonnet</span>
+                          <span>Run {selectedPuterModel === 'claude-3-5-sonnet' ? 'Claude 3.5' : selectedPuterModel === 'gpt-4o-mini' ? 'GPT-4o-mini' : 'DeepSeek'}</span>
                         </button>
                         <button
                           onClick={handleRunAi}
@@ -640,18 +730,36 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     onClick={handleDownloadLoi}
-                    className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-[#0F172A] bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm"
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#0F172A] bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Letter of Intent</span>
+                    <span>Download Standard LOI</span>
+                  </button>
+
+                  <button
+                    onClick={handleGenerateAiLoi}
+                    disabled={generatingAiLoi}
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-emerald-600 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{generatingAiLoi ? "Drafting with Puter..." : "✨ AI Tailored LOI"}</span>
                   </button>
 
                   <button
                     onClick={handleDownloadIcMemo}
-                    className="flex items-center justify-center gap-2 h-11 px-4 rounded-xl border border-[#E5E7EB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F8FAFC] transition shadow-sm"
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#E5E7EB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F8FAFC] transition shadow-sm"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Export IC Memo</span>
+                    <span>Export Standard IC Memo</span>
+                  </button>
+
+                  <button
+                    onClick={handleGenerateAiMemo}
+                    disabled={generatingAiMemo}
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-blue-600 bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{generatingAiMemo ? "Synthesizing Memo..." : "✨ AI Investment Memo"}</span>
                   </button>
                 </div>
               </div>

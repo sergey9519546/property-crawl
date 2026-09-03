@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Listing } from "@/data/listings";
-import { Calculator, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Calculator, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { computeCashToClose } from "@/lib/underwriting";
 
@@ -13,6 +13,8 @@ interface BiddingSimulatorProps {
 export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [rehabBudget, setRehabBudget] = useState<number>(25000);
   const [targetMargin, setTargetMargin] = useState<number>(30); // 30% margin (70% ARV rule)
+  const [aiStrategy, setAiStrategy] = useState<string | null>(null);
+  const [loadingStrategy, setLoadingStrategy] = useState<boolean>(false);
   
   const arv = listing.estHigh || listing.mid || 0;
   const targetPercentage = 1 - (targetMargin / 100);
@@ -53,6 +55,40 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   }
   
   winProbability = Math.min(100, Math.floor(winProbability));
+
+  const handleRunAiStrategy = async () => {
+    setLoadingStrategy(true);
+    try {
+      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+        const prompt = `You are a seasoned real estate auction bidding strategist advising on this upcoming sheriff auction:
+Address: ${listing.address}, ${listing.city}, ${listing.state}
+Opening Upset Bid: $${listing.openingBid.toLocaleString()}
+Estimated Market ARV: $${arv.toLocaleString()}
+Target MAO: $${mao.toLocaleString()} (Win Probability: ${winProbability}%, Margin Target: ${targetMargin}%)
+Rehab Budget: $${rehabBudget.toLocaleString()}
+Deposit Terms: ${listing.deposit || 'Certified funds required'}
+
+Provide a 3-point tactical auction floor gameplan:
+1. **Opening Phase Strategy**: Wait or open aggressively?
+2. **Counter-Bidding Pace**: Optimal increment jumps ($1k vs $5k) to deter amateur flippers.
+3. **Hard Walk-Away**: Exact maximum bid ceiling before margin erosion.`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'claude-3-5-sonnet' });
+        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
+        if (text && text.trim().length > 30) {
+          setAiStrategy(text);
+          setLoadingStrategy(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Puter AI strategy error:", e);
+    }
+    setAiStrategy(`• **Opening Phase Strategy**: Hold paddle until the second call to observe competing institutional bidders.
+• **Counter-Bidding Pace**: Use aggressive $2,500 jump increments above $${listing.openingBid.toLocaleString()} to shake out emotional retail bidders.
+• **Hard Walk-Away**: Strictly drop your paddle at $${mao.toLocaleString()} to protect your ${targetMargin}% margin.`);
+    setLoadingStrategy(false);
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in">
@@ -143,6 +179,39 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </p>
         </div>
       )}
+
+      {/* AI Auction Strategy Card */}
+      <div className="p-4 rounded-xl border border-slate-200 bg-[#F8FAFC] space-y-2.5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-[#0F172A] uppercase tracking-wide">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+            <span>Auction Room Tactics (Claude 3.5 Sonnet)</span>
+          </div>
+          {!aiStrategy && !loadingStrategy ? (
+            <button
+              onClick={handleRunAiStrategy}
+              className="px-2.5 py-1 bg-[#0F172A] text-white text-[11px] font-bold rounded-lg hover:bg-slate-800 transition shadow-sm"
+            >
+              Simulate Floor Tactics
+            </button>
+          ) : !loadingStrategy && (
+            <button
+              onClick={handleRunAiStrategy}
+              className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
+            >
+              Re-simulate
+            </button>
+          )}
+        </div>
+        {loadingStrategy && (
+          <p className="text-xs text-slate-500 animate-pulse">Synthesizing bidder psychology and increment strategies...</p>
+        )}
+        {aiStrategy && (
+          <div className="text-xs text-slate-700 leading-relaxed space-y-1.5 pt-2 border-t border-slate-200 whitespace-pre-line">
+            {aiStrategy}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

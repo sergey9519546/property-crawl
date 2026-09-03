@@ -248,6 +248,21 @@ test('PropertyDrawer wires Puter AI alongside backend enrich endpoint', () => {
   assert.ok(drawerContent.includes('Puter AI'), 'Puter AI button label missing from property-drawer.tsx');
 });
 
+test('PropertyDrawer includes Puter AI model dropdown and AI LOI/Memo generators', () => {
+  const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
+  assert.ok(drawerContent.includes('selectedPuterModel'), 'selectedPuterModel state missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('handleGenerateAiLoi'), 'handleGenerateAiLoi missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('handleGenerateAiMemo'), 'handleGenerateAiMemo missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('AI Tailored LOI'), 'AI Tailored LOI button missing from property-drawer.tsx');
+});
+
+test('BiddingSimulator includes AI floor tactics strategy with Claude 3.5 Sonnet', () => {
+  const bidsimContent = fs.readFileSync(path.join(root, 'src/components/terminal/bidding-simulator.tsx'), 'utf8');
+  assert.ok(bidsimContent.includes('handleRunAiStrategy'), 'handleRunAiStrategy missing from bidding-simulator.tsx');
+  assert.ok(bidsimContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet missing from bidding-simulator.tsx');
+  assert.ok(bidsimContent.includes('Auction Room Tactics'), 'Auction Room Tactics card missing from bidding-simulator.tsx');
+});
+
 test('NoticeParser includes Puter AI fallback for low-confidence dockets', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from notice-parser.tsx');
