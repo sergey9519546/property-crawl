@@ -1136,6 +1136,33 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)
 
+    def test_docket_agent_runs_verification_in_property_drawer(self):
+        self.wait_for_live_feed()
+        self.page.get_by_role("button", name="Underwrite Deal").first.click()
+        dialog = self.page.get_by_role("dialog").first
+        dialog.wait_for(state="visible")
+        self.assertTrue(self.page.get_by_text("Live County Docket & Title Agent").is_visible())
+        # Select Deterministic API for sub-second offline test stability
+        self.page.get_by_role("combobox", name="Agent Engine").select_option("api")
+        self.page.get_by_role("button", name="Verify Live Docket").click()
+        verified_badge = self.page.get_by_text("Docket Verified: Case #")
+        verified_badge.wait_for(state="visible", timeout=5000)
+        self.assertTrue(verified_badge.is_visible())
+
+    def test_custom_address_deep_check_opens_drawer(self):
+        self.wait_for_live_feed()
+        search_input = self.page.get_by_label("Search listings")
+        search_input.fill("9999 Unlisted Blvd, Cleveland, OH")
+        verify_prompt = self.page.get_by_text("On-Demand Address Verification")
+        verify_prompt.wait_for(state="visible", timeout=3000)
+        self.assertTrue(verify_prompt.is_visible())
+        self.page.get_by_role("button", name="Deep Check \"9999 Unlisted Blvd, Cleveland, OH\" with Live Agent").click()
+        dialog = self.page.get_by_role("dialog").first
+        dialog.wait_for(state="visible")
+        heading = self.page.get_by_role("heading", name="9999 Unlisted Blvd")
+        heading.wait_for(state="visible")
+        self.assertTrue(heading.is_visible())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

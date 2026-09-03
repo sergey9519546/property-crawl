@@ -302,6 +302,58 @@ test('Server boot includes clean startup logging and recurring scrape interval',
 });
 
 // ----------------------------------------------------
+// 12. On-Demand Live Court Docket Agent & Address Lookup
+// ----------------------------------------------------
+console.log('\n[Suite 12: On-Demand Live Docket Agent & Address Lookup]');
+
+test('verify-docket route returns structured court docket and senior lien telemetry', async () => {
+  const handleVerifyDocket = require('../server/routes/verify-docket');
+  let statusCode = 200;
+  let jsonResult = null;
+  const mockReq = {
+    method: 'POST',
+    url: '/api/verify-docket',
+    body: {
+      address: '11818 Superior Ave',
+      county: 'Cuyahoga',
+      state: 'OH',
+      openingBid: 95000
+    }
+  };
+  const mockRes = {
+    status(code) { statusCode = code; return this; },
+    json(payload) { jsonResult = payload; return this; }
+  };
+  await handleVerifyDocket(mockReq, mockRes);
+  assert.strictEqual(statusCode, 200);
+  assert.strictEqual(jsonResult.verified, true);
+  assert.ok(jsonResult.caseNumber.startsWith('CV-'));
+  assert.ok(Array.isArray(jsonResult.logs) && jsonResult.logs.length >= 5);
+  assert.ok(jsonResult.summaryMarkdown.includes('Court Docket & Title Verification Certificate'));
+});
+
+test('DocketAgent wires live streaming telemetry, Puter AI, and verification report export', () => {
+  const agentContent = fs.readFileSync(path.join(root, 'src/components/terminal/docket-agent.tsx'), 'utf8');
+  assert.ok(agentContent.includes('Live County Docket & Title Agent'), 'Title missing from docket-agent.tsx');
+  assert.ok(agentContent.includes('runVerification'), 'runVerification function missing from docket-agent.tsx');
+  assert.ok(agentContent.includes('/api/verify-docket'), 'API endpoint missing from docket-agent.tsx');
+  assert.ok(agentContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet model missing from docket-agent.tsx');
+  assert.ok(agentContent.includes('downloadReport'), 'downloadReport missing from docket-agent.tsx');
+});
+
+test('PropertyDrawer embeds DocketAgent component', () => {
+  const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
+  assert.ok(drawerContent.includes('<DocketAgent'), '<DocketAgent missing from property-drawer.tsx');
+  assert.ok(drawerContent.includes('import { DocketAgent }'), 'DocketAgent import missing from property-drawer.tsx');
+});
+
+test('InteractiveTerminal provides On-Demand Address Verification prompt on custom search', () => {
+  const terminalContent = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
+  assert.ok(terminalContent.includes('handleDeepCheckAddress'), 'handleDeepCheckAddress missing from interactive-terminal.tsx');
+  assert.ok(terminalContent.includes('On-Demand Address Verification'), 'Address verification banner missing from interactive-terminal.tsx');
+});
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n--- TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);

@@ -9,6 +9,7 @@ const handleEnrich = require('./routes/enrich');
 const handleAlerts = require('./routes/alerts');
 const handleExport = require('./routes/export');
 const handleScrapers = require('./routes/scrapers');
+const handleVerifyDocket = require('./routes/verify-docket');
 const scheduler = require('./scrapers/scheduler');
 
 const PORT = process.env.PORT || 3000;
@@ -101,6 +102,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/enrich') return handleEnrich(req, res);
     if (url.pathname === '/api/alerts') return handleAlerts(req, res);
     if (url.pathname === '/api/export') return handleExport(req, res);
+    if (url.pathname === '/api/verify-docket') return handleVerifyDocket(req, res);
     if (url.pathname.startsWith('/api/scrapers')) return handleScrapers(req, res);
     if (url.pathname === '/api/sources') {
       const sources = await db.getSources();

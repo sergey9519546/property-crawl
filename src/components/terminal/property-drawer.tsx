@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
 import { DealVideoGenerator } from "./deal-video-generator";
+import { DocketAgent } from "./docket-agent";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo } from "@/lib/underwriting";
 
@@ -480,6 +481,9 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                   )
                 )}
               </div>
+
+              {/* On-Demand Live Court Docket & Title Agent */}
+              <DocketAgent listing={listing} />
 
               {/* Title Risk & Senior Lien Survival Arbitration */}
               <div className="space-y-3">
