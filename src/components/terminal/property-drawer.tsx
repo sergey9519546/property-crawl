@@ -41,6 +41,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [activeTab, setActiveTab] = useState<"underwrite" | "3d" | "bidding">("underwrite");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiSource, setAiSource] = useState<"puter" | "backend" | null>(null);
 
   useEffect(() => {
     if (!listing) return;
@@ -87,6 +88,40 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
   const handleRunAi = async () => {
     setAiLoading(true);
+
+    // 1. Prioritize Puter.js free client-side AI (GPT-4o-mini)
+    if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+      try {
+        const prompt = `You are an institutional real estate underwriting AI analyzing a distressed foreclosure auction asset:
+Address: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
+Source Agency: ${listing.source.toUpperCase()}
+Opening Bid: $${listing.openingBid ? listing.openingBid.toLocaleString() : 'TBD'}
+Estimated Market Value: $${listing.estLow ? listing.estLow.toLocaleString() : 'N/A'} - $${listing.estHigh ? listing.estHigh.toLocaleString() : 'N/A'} (Deal Score: ${listing.dealScore || 'N/A'}/100)
+Property Type: ${listing.propType || 'Residential'}
+Deposit Terms: ${listing.deposit || 'Certified funds'}
+Occupancy Status: ${listing.occupancy || 'Unknown'}
+Foreclosing Plaintiff: ${listing.plaintiff || '—'}
+Statutory Redemption: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'None'}
+Senior Lien Survival: ${listing.seniorLienRisk === 'high' ? 'HIGH HAZARD - Junior foreclosure; senior mortgage survives' : 'Clean senior foreclosure'}
+
+Provide a rigorous 2-paragraph institutional deal breakdown:
+Paragraph 1 - **Valuation Spread & The Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
+Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
+        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
+        if (text && text.trim().length > 20) {
+          setAiAnalysis(text);
+          setAiSource('puter');
+          setAiLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("Puter AI client fallback to backend:", err);
+      }
+    }
+
+    // 2. Fallback to server endpoint
     try {
       const response = await fetch('/api/enrich', {
         method: 'POST',
@@ -100,9 +135,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
       }
       const data = await response.json();
       setAiAnalysis(data.analysis);
+      setAiSource('backend');
     } catch (error) {
       console.error('Error fetching AI analysis:', error);
       setAiAnalysis('An error occurred while fetching the analysis.');
+      setAiSource('backend');
     } finally {
       setAiLoading(false);
     }
@@ -293,14 +330,28 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                       AI Deal Intelligence ("Here's the Catch")
                     </h3>
                   </div>
-                  {!aiAnalysis && !aiLoading && (
-                    <button
-                      onClick={handleRunAi}
-                      className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition"
-                    >
-                      Analyze Deal
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {aiSource && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {aiSource === 'puter' ? '✨ Puter GPT-4o-mini (Free)' : 'Rule Engine'}
+                      </span>
+                    )}
+                    {!aiAnalysis && !aiLoading ? (
+                      <button
+                        onClick={handleRunAi}
+                        className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition shadow-sm"
+                      >
+                        Analyze Deal
+                      </button>
+                    ) : !aiLoading && (
+                      <button
+                        onClick={handleRunAi}
+                        className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
+                      >
+                        Re-analyze
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {aiLoading && (

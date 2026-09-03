@@ -80,6 +80,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <SeoSchema />
+        <script src="https://js.puter.com/v2/" defer></script>
       </head>
       <body className="antialiased bg-[#F5F6F7] text-[#111827]">
         {children}

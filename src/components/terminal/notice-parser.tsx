@@ -87,22 +87,90 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
     "Attorney: Manley Deas Kochalski LLC."
   ].join("\n");
 
-  const handleParse = () => {
+  const handleParse = async () => {
     if (!rawText.trim()) return;
     setIsParsing(true);
     setParseError(null);
     setParsedResult(null);
-    setTimeout(() => {
-      const result = parseNoticeText(rawText);
-      if (!result) {
-        setParseError("Not enough data found. Paste a complete foreclosure notice with a dollar amount, address, and sale date.");
-      } else if (!result.openingBid || result.openingBid === 0) {
-        setParseError("Could not extract a bid amount. Ensure the notice includes wording like opening bid or appraised at a dollar value.");
-      } else {
-        setParsedResult(result);
-      }
+
+    // 1. Fast deterministic regex parse
+    const result = parseNoticeText(rawText);
+    if (result && result.openingBid && result.openingBid > 0) {
+      setParsedResult(result);
       setIsParsing(false);
-    }, 300);
+      return;
+    }
+
+    // 2. If regex extraction is incomplete and Puter AI is available, run Puter AI (GPT-4o-mini)
+    if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
+      try {
+        const prompt = `You are a real estate legal notice extraction engine. Extract auction details from this foreclosure text into pure JSON (no markdown formatting, just raw JSON):
+{
+  "property_address": "full street address",
+  "city": "city name",
+  "county": "county name",
+  "state": "2-letter state code",
+  "zip": "5-digit zip",
+  "openingBid": number,
+  "sale_date": "YYYY-MM-DD",
+  "case_number": "court case number",
+  "plaintiff": "plaintiff or lender",
+  "defendant": "defendant or debtor",
+  "deposit_terms": "deposit description",
+  "attorney": "attorney of record"
+}
+Text:
+${rawText.slice(0, 3000)}`;
+
+        const resp = await (window as any).puter.ai.chat(prompt, { model: 'gpt-4o-mini' });
+        const textResp = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString() || '';
+        const jsonMatch = textResp.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.openingBid) {
+            const openingBid = Number(parsed.openingBid) || 0;
+            const mid = Math.round(openingBid * 1.4);
+            const estLow = Math.round(mid * 0.9);
+            const estHigh = Math.round(mid * 1.2);
+            setParsedResult({
+              property_address: parsed.property_address || result?.property_address || 'Foreclosure Property',
+              city: parsed.city || result?.city || 'Unknown',
+              county: parsed.county || result?.county || 'Unknown',
+              state: parsed.state || result?.state || 'OH',
+              zip: parsed.zip || result?.zip || '00000',
+              parcel_or_lot: result?.parcel_or_lot || 'See court docket',
+              sale_date: parsed.sale_date || result?.sale_date || '',
+              sale_type: 'Sheriff Sale (Puter AI Parsed)',
+              plaintiff_or_seller: parsed.plaintiff || result?.plaintiff_or_seller || 'Lender',
+              defendant: parsed.defendant || result?.defendant || 'Unknown',
+              judgment_amount: Math.round(openingBid * 1.1),
+              deposit_terms: parsed.deposit_terms || result?.deposit_terms || 'Certified funds',
+              attorney: parsed.attorney || result?.attorney || 'Unknown',
+              case_number: parsed.case_number || result?.case_number || 'Court Docket',
+              openingBid,
+              estLow,
+              estHigh,
+              mid,
+              equity: mid - openingBid,
+              dealScore: 78
+            });
+            setIsParsing(false);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Puter AI notice parsing fallback:", err);
+      }
+    }
+
+    if (!result) {
+      setParseError("Not enough data found. Paste a complete foreclosure notice with a dollar amount, address, and sale date.");
+    } else if (!result.openingBid || result.openingBid === 0) {
+      setParseError("Could not extract a bid amount. Ensure the notice includes wording like opening bid or appraised at a dollar value.");
+    } else {
+      setParsedResult(result);
+    }
+    setIsParsing(false);
   };
 
   const handleAddToWatchlist = () => {
