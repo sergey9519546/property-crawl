@@ -103,7 +103,10 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     scene.add(roofMesh);
 
     let animationFrameId: number;
+    let isDisposed = false;
+
     const animate = () => {
+      if (isDisposed) return;
       animationFrameId = requestAnimationFrame(animate);
       scene.rotation.y += 0.003;
       renderer.render(scene, camera);
@@ -111,19 +114,61 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     animate();
 
     const handleResize = () => {
-      if (!containerRef.current || !rendererRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
+      if (!containerRef.current || !rendererRef.current || isDisposed) return;
+      const w = containerRef.current.clientWidth || 500;
+      const h = containerRef.current.clientHeight || 280;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       rendererRef.current.setSize(w, h);
     };
+
     window.addEventListener("resize", handleResize);
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(containerRef.current);
+    }
 
     return () => {
+      isDisposed = true;
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener("resize", handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+
+      // Explicitly dispose all geometries and materials in the scene graph
+      scene.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        }
+      });
+
+      // Clear scene references
+      while (scene.children.length > 0) {
+        scene.remove(scene.children[0]);
+      }
+
+      // Dispose renderer and detach canvas
       renderer.dispose();
+      renderer.forceContextLoss();
+      if (renderer.domElement && renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+
+      sceneRef.current = null;
+      rendererRef.current = null;
+      terrainMeshRef.current = null;
+      buildingMeshRef.current = null;
     };
   }, [listing]);
 

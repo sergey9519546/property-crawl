@@ -71,5 +71,26 @@ test('AiCache produces consistent SHA-256 prompt hashes', () => {
   assert.notStrictEqual(h1, h3);
 });
 
+// Hybrid Notice Parser & Confidence Scoring
+test('deterministicParse extracts high-confidence attributes from clean notices', () => {
+  const { deterministicParse } = require('../server/ai/notice-parser');
+  const notice = 'SHERIFF SALE: Bank of America vs. John Smith. Case No. CV-2024-9120. 1234 Euclid Ave, Cleveland, OH 44115. Opening bid: $65,000. Judgment: $110,000.';
+  const parsed = deterministicParse(notice);
+  assert.strictEqual(parsed.state, 'OH');
+  assert.strictEqual(parsed.case_number, 'CV-2024-9120');
+  assert.strictEqual(parsed.opening_bid, 65000);
+  assert.strictEqual(parsed.judgment_amount, 110000);
+  assert.strictEqual(parsed._strategy, 'deterministic_fallback');
+});
+
+test('air-gapped notice parser handles corrupted inputs without crashing', () => {
+  const { deterministicParse } = require('../server/ai/notice-parser');
+  const corrupt = 'Notice without valid address or bid amounts. Subject to review.';
+  const parsed = deterministicParse(corrupt);
+  assert.strictEqual(parsed.state, 'OH'); // Default fallback state
+  assert.strictEqual(parsed.opening_bid, 0);
+  assert.strictEqual(parsed.judgment_amount, 0);
+});
+
 console.log(`--- AI & SECURITY TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
 if (failed > 0) process.exit(1);

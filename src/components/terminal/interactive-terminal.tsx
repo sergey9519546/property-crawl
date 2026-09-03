@@ -170,9 +170,9 @@ export function InteractiveTerminal() {
     if (maxOpeningBid !== null && l.openingBid > maxOpeningBid) return false;
     if (propertyType !== "all" && l.propType?.toLowerCase() !== propertyType.toLowerCase()) return false;
     if (occupancy !== "all" && l.occupancy?.toLowerCase() !== occupancy.toLowerCase()) return false;
-    if (seniorLienFilter === "clean" && (l.seniorLienRisk === "high" || l.seniorLienRisk === "moderate")) return false;
-    if (seniorLienFilter === "high_risk" && l.seniorLienRisk !== "high") return false;
-    if (redemptionFilter === "immediate" && (l.redemptionDays && l.redemptionDays > 0)) return false;
+    if (seniorLienFilter === "clean" && l.seniorLienRisk === "high") return false;
+    if (seniorLienFilter === "risk" && l.seniorLienRisk !== "high") return false;
+    if (redemptionFilter === "immediate" && l.redemptionDays !== 0) return false;
     if (redemptionFilter === "redemption_active" && (!l.redemptionDays || l.redemptionDays === 0)) return false;
 
     if (searchQuery.trim()) {
@@ -492,7 +492,7 @@ export function InteractiveTerminal() {
                     >
                       <option value="all">All Title Profiles</option>
                       <option value="clean">Clean 1st Lien Only</option>
-                      <option value="high_risk">Junior Foreclosure Risk</option>
+                      <option value="risk">Junior Foreclosure Risk</option>
                     </select>
                   </div>
 

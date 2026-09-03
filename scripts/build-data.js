@@ -94,36 +94,98 @@ async function withTimeout(promise, ms, label) {
   }
 }
 
+function loadExistingListings() {
+  try {
+    if (fs.existsSync(DATA_JS_PATH)) {
+      const src = fs.readFileSync(DATA_JS_PATH, 'utf8');
+      const sandbox = { window: {}, Math };
+      const vm = require('vm');
+      vm.createContext(sandbox);
+      vm.runInContext(src, sandbox);
+      if (Array.isArray(sandbox.window.LISTINGS) && sandbox.window.LISTINGS.length > 0) {
+        return sandbox.window.LISTINGS;
+      }
+    }
+  } catch (_) {}
+  try {
+    const snapPath = path.join(PROJECT_ROOT, 'data', 'listings.snapshot.json');
+    if (fs.existsSync(snapPath)) {
+      const parsed = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
+      if (Array.isArray(parsed.listings) && parsed.listings.length > 0) {
+        return parsed.listings;
+      }
+    }
+  } catch (_) {}
+  return [];
+}
+
 async function gather() {
   const all = [];
   const counts = {};
+  const existingListings = loadExistingListings();
+  const existingBySource = {};
+  for (const l of existingListings) {
+    if (!existingBySource[l.source]) existingBySource[l.source] = [];
+    existingBySource[l.source].push(l);
+  }
+
   for (const entry of SCRAPER_REGISTRY) {
-    if (entry.real && !RUN_REAL) {
-      counts[entry.key] = { skipped: 'set RUN_REAL_SCRAPERS=1 to enable' };
-      continue;
-    }
     let scraper;
     try {
       scraper = require(entry.mod);
     } catch (err) {
       console.warn(`[build-data] could not load ${entry.key}: ${err.message}`);
-      counts[entry.key] = { error: err.message };
+      const fallback = existingBySource[entry.key] || [];
+      if (fallback.length > 0) {
+        all.push(...fallback);
+        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing' };
+      } else {
+        counts[entry.key] = { error: err.message };
+      }
       continue;
     }
     if (!scraper || typeof scraper.scrapeFeed !== 'function') {
       console.warn(`[build-data] ${entry.key} has no scrapeFeed()`);
-      counts[entry.key] = { error: 'no scrapeFeed()' };
+      const fallback = existingBySource[entry.key] || [];
+      if (fallback.length > 0) {
+        all.push(...fallback);
+        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing' };
+      } else {
+        counts[entry.key] = { error: 'no scrapeFeed()' };
+      }
       continue;
     }
+
+    if (entry.real && !RUN_REAL) {
+      let items = typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : [];
+      if (items.length === 0 && existingBySource[entry.key]?.length > 0) {
+        items = existingBySource[entry.key];
+      }
+      all.push(...items);
+      counts[entry.key] = { count: items.length, mode: 'verified_inventory' };
+      console.log(`[build-data] ${entry.key} → ${items.length} verified listings (fast mode)`);
+      continue;
+    }
+
     try {
       console.log(`[build-data] running ${entry.key}…`);
       const items = await withTimeout(scraper.scrapeFeed(), TIMEOUT_PER_SCRAPER_MS, entry.key);
-      all.push(...items);
-      counts[entry.key] = { count: items.length };
-      console.log(`[build-data] ${entry.key} → ${items.length} listings`);
+      if (items && items.length > 0) {
+        all.push(...items);
+        counts[entry.key] = { count: items.length, mode: 'live_scraped' };
+        console.log(`[build-data] ${entry.key} → ${items.length} listings`);
+      } else {
+        // Anti-poisoning fallback: preserve existing verified records if upstream returned 0
+        const fallback = existingBySource[entry.key] || (typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : []);
+        all.push(...fallback);
+        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing_zero_scraped' };
+        console.warn(`[build-data] ${entry.key} returned 0 items; preserved ${fallback.length} existing records`);
+      }
     } catch (err) {
-      console.warn(`[build-data] ${entry.key} failed: ${err.message}`);
-      counts[entry.key] = { error: err.message };
+      console.warn(`[build-data] ${entry.key} failed: ${err.message}; preserving existing records`);
+      const fallback = existingBySource[entry.key] || (typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : []);
+      all.push(...fallback);
+      counts[entry.key] = { count: fallback.length, mode: 'preserved_existing_error', error: err.message };
     }
   }
   return { all, counts };

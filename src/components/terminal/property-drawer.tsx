@@ -27,6 +27,7 @@ import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
 import { DealVideoGenerator } from "./deal-video-generator";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { computeCashToClose, computeCreMetrics } from "@/lib/underwriting";
 
 interface PropertyDrawerProps {
   listing: Listing | null;
@@ -64,6 +65,24 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     websiteUrl: "#"
   };
   const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
+
+  const cashToClose = computeCashToClose({
+    openingBid: listing.openingBid,
+    state: listing.state,
+    source: listing.source
+  });
+
+  const isCommercialOrMulti = (
+    (listing.propType || "").toLowerCase().includes("commercial") ||
+    (listing.propType || "").toLowerCase().includes("multi")
+  );
+
+  const creMetrics = isCommercialOrMulti ? computeCreMetrics({
+    sqft: listing.sqft,
+    openingBid: listing.openingBid,
+    estimatedValue: listing.mid,
+    propType: listing.propType
+  }) : null;
 
   const handleRunAi = async () => {
     setAiLoading(true);
@@ -345,39 +364,70 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
                     <DollarSign className="w-4 h-4 text-[#0F172A]" />
-                    <span>Cash-to-Close Fee Schedule</span>
+                    <span>Statutory Cash-to-Close Fee Schedule</span>
                   </h3>
-                  <span className="text-xs font-extrabold text-[#0F172A]">
-                    Total Est. ${(Math.round(listing.openingBid * 1.025 + 500)).toLocaleString()}
+                  <span className="text-xs font-extrabold text-emerald-700">
+                    Total Est. ${cashToClose.total.toLocaleString()}
                   </span>
                 </div>
                 <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
                   <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Auction Day Deposit Required</span>
-                    <span className="font-semibold text-[#111827]">{listing.deposit || "$5,000 certified funds"}</span>
+                    <span className="text-[#6B7280]">Opening Bid (Purchase Price)</span>
+                    <span className="font-semibold text-[#111827]">${cashToClose.openingBid.toLocaleString()}</span>
+                  </div>
+                  {cashToClose.buyersPremium > 0 && (
+                    <div className="p-3 flex justify-between">
+                      <span className="text-[#6B7280]">Buyer's Premium (Auction Platform)</span>
+                      <span className="font-semibold text-[#374151]">${cashToClose.buyersPremium.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="p-3 flex justify-between">
+                    <span className="text-[#6B7280]">Sheriff / Trustee Statutory Poundage</span>
+                    <span className="font-semibold text-[#374151]">${cashToClose.sheriffPoundage.toLocaleString()}</span>
                   </div>
                   <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Remaining Purchase Bid at Settlement</span>
-                    <span className="font-semibold text-[#111827]">${Math.max(0, listing.openingBid - 5000).toLocaleString()}</span>
+                    <span className="text-[#6B7280]">State / County Transfer Conveyance</span>
+                    <span className="font-semibold text-[#374151]">${cashToClose.transferTax.toLocaleString()}</span>
                   </div>
                   <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Sheriff Poundage (2% statutory)</span>
-                    <span className="font-semibold text-[#374151]">${Math.round(listing.openingBid * 0.02).toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">State/County Transfer Conveyance ($1–$4 per $1k)</span>
-                    <span className="font-semibold text-[#374151]">${Math.round(listing.openingBid * 0.005).toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Deed Recording & Legal Notice Costs</span>
-                    <span className="font-semibold text-[#374151]">$500</span>
+                    <span className="text-[#6B7280]">Deed Recording & Filing Costs</span>
+                    <span className="font-semibold text-[#374151]">${cashToClose.deedFees.toLocaleString()}</span>
                   </div>
                   <div className="p-3 flex justify-between bg-[#F8FAFC]">
                     <span className="font-bold text-[#111827]">Total Liquid Cash Required to Close</span>
-                    <span className="font-extrabold text-[#16A34A]">${Math.round(listing.openingBid * 1.025 + 500).toLocaleString()}</span>
+                    <span className="font-extrabold text-[#16A34A]">${cashToClose.total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
+
+              {/* Commercial & Multi-Family CRE Underwriting */}
+              {creMetrics && (
+                <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Scale className="w-4 h-4 text-blue-900" />
+                      <h3 className="text-sm font-bold text-blue-950 uppercase tracking-wide">CRE / Multi-Family Underwriting</h3>
+                    </div>
+                    <span className="text-xs font-extrabold text-blue-800">
+                      Cap Rate: {creMetrics.capitalizationRate}%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                      <p className="text-[#6B7280] text-[10px] uppercase font-bold">Net Operating Income</p>
+                      <p className="font-extrabold text-sm text-[#111827]">${creMetrics.netOperatingIncome.toLocaleString()}/yr</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                      <p className="text-[#6B7280] text-[10px] uppercase font-bold">Estimated DSCR</p>
+                      <p className="font-extrabold text-sm text-slate-800">{creMetrics.estimatedDscr}x</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                      <p className="text-emerald-700 text-[10px] uppercase font-bold">Target Yield MAO</p>
+                      <p className="font-extrabold text-sm text-emerald-700">${creMetrics.maxAllowableOffer.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Quick MAO Underwriting (70% Rule) */}
               <div className="p-4 rounded-2xl border border-[#0F172A]/15 bg-[#F8FAFC] space-y-3">
@@ -400,7 +450,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <div className="p-2.5 rounded-xl bg-white border border-[#E5E7EB]">
                     <p className="text-[#16A34A] text-[10px] uppercase font-bold">Max Allowable Bid</p>
                     <p className="font-extrabold text-sm text-[#16A34A]">
-                      ${Math.max(0, Math.round(listing.mid * 0.7 - 25000 - (listing.openingBid * 0.025 + 500))).toLocaleString()}
+                      ${Math.max(0, Math.round(listing.mid * 0.7 - 25000 - (cashToClose.total - listing.openingBid))).toLocaleString()}
                     </p>
                   </div>
                 </div>

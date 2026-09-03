@@ -11,7 +11,7 @@ async function handleParse(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { noticeText } = req.body || {};
+  const { noticeText, source: sourceHint } = req.body || {};
   const validation = Validator.validateNoticeInput(noticeText);
   if (!validation.isValid) {
     return res.status(400).json({ error: validation.error });
@@ -35,7 +35,7 @@ async function handleParse(req, res) {
   const cashToClose = computeCashToClose({
     openingBid: parsedData.opening_bid || parsedData.judgment_amount || 50000,
     state: parsedData.state || 'OH',
-    source: 'sheriff'
+    source: sourceHint || 'sheriff'
   });
 
   const structuredResult = {

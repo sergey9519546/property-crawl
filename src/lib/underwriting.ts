@@ -76,3 +76,50 @@ export function redemptionLabel(days: number): string {
   if (d === 180) return "6 Months";
   return `${d} Days`;
 }
+
+export interface CreUnderwritingMetrics {
+  grossPotentialRent: number;
+  effectiveGrossIncome: number;
+  operatingExpenses: number;
+  netOperatingIncome: number;
+  capitalizationRate: number;
+  estimatedDscr: number;
+  maxAllowableOffer: number;
+}
+
+export function computeCreMetrics(params: {
+  sqft?: number;
+  openingBid: number;
+  estimatedValue?: number;
+  propType?: string;
+  marketRentPerSqftAnnual?: number;
+  expenseRatio?: number;
+  ltv?: number;
+}): CreUnderwritingMetrics {
+  const sqft = toNumber(params.sqft, 2400);
+  const bid = toNumber(params.openingBid, 100000);
+  const isCommercial = (params.propType || "").toLowerCase().includes("commercial") || (params.propType || "").toLowerCase().includes("multi");
+
+  const rentPerSqft = toNumber(params.marketRentPerSqftAnnual, isCommercial ? 15 : 18);
+  const grossPotentialRent = Math.round(sqft * rentPerSqft);
+  const effectiveGrossIncome = Math.round(grossPotentialRent * 0.95);
+  const opexRatio = toNumber(params.expenseRatio, 0.40);
+  const operatingExpenses = Math.round(effectiveGrossIncome * opexRatio);
+  const netOperatingIncome = Math.max(0, effectiveGrossIncome - operatingExpenses);
+
+  const capitalizationRate = bid > 0 ? Number(((netOperatingIncome / bid) * 100).toFixed(2)) : 0;
+  const loanAmount = bid * (params.ltv || 0.75);
+  const annualDebtService = Math.round(loanAmount * 0.077);
+  const estimatedDscr = annualDebtService > 0 ? Number((netOperatingIncome / annualDebtService).toFixed(2)) : 1.5;
+  const maxAllowableOffer = Math.max(0, Math.round((netOperatingIncome / 0.08) * 0.85));
+
+  return {
+    grossPotentialRent,
+    effectiveGrossIncome,
+    operatingExpenses,
+    netOperatingIncome,
+    capitalizationRate,
+    estimatedDscr,
+    maxAllowableOffer
+  };
+}

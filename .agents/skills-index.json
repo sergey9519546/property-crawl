@@ -3,10 +3,10 @@
     {
       "name": "agent-verification",
       "description": "",
-      "domain": "agent-system",
+      "domain": "general",
       "version": "v1",
       "trigger": [
-        "agent-verification"
+        "undefined"
       ],
       "dir": ".agents/skills/agent-verification",
       "file": ".agents/skills/agent-verification/SKILL.md"
@@ -14,10 +14,10 @@
     {
       "name": "deal-scoring",
       "description": "",
-      "domain": "property-data",
+      "domain": "general",
       "version": "v1",
       "trigger": [
-        "deal-scoring"
+        "undefined"
       ],
       "dir": ".agents/skills/deal-scoring",
       "file": ".agents/skills/deal-scoring/SKILL.md"
@@ -34,12 +34,30 @@
       "file": ".agents/skills/foreclosure-title-intelligence/SKILL.md"
     },
     {
+      "name": "google-cloud-auth-verification",
+      "description": "Mandatory Step 0 pre-flight execution order and authentication verification",
+      "domain": "general",
+      "version": "v2",
+      "trigger": [
+        "authentication",
+        "execution",
+        "google-cloud-auth-verification",
+        "mandatory",
+        "order",
+        "pre-flight",
+        "step",
+        "verification"
+      ],
+      "dir": ".agents/skills/google-cloud-auth-verification",
+      "file": ".agents/skills/google-cloud-auth-verification/SKILL.md"
+    },
+    {
       "name": "listing-normalization",
       "description": "",
-      "domain": "property-data",
+      "domain": "general",
       "version": "v1",
       "trigger": [
-        "listing-normalization"
+        "undefined"
       ],
       "dir": ".agents/skills/listing-normalization",
       "file": ".agents/skills/listing-normalization/SKILL.md"
@@ -56,6 +74,23 @@
       "file": ".agents/skills/property-scraper-engineering/SKILL.md"
     },
     {
+      "name": "schema-mapping",
+      "description": "Guides the process of analyzing, mapping, and documenting transformations",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "analyzing",
+        "documenting",
+        "guides",
+        "mapping",
+        "process",
+        "schema-mapping",
+        "transformations"
+      ],
+      "dir": ".agents/skills/schema-mapping",
+      "file": ".agents/skills/schema-mapping/SKILL.md"
+    },
+    {
       "name": "skill-repair",
       "description": "",
       "domain": "general",
@@ -67,5 +102,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "c3f01f0bc8644023b52437975c1db175820a93d4d8983c84f825fff67d4885d5"
+  "digest": "8ab745c87e8a06107499fbc90c2ec4771d935cd8173d62262361f55d9e4d59df"
 }

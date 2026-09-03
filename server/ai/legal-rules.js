@@ -198,6 +198,7 @@ function computeCashToClose({
     delinquentTaxes: taxes,
     deedPrepAndRecording: fees,
     totalCashToClose,
+    total: totalCashToClose,
     effectiveDiscountRate: bid > 0 ? Number(((totalCashToClose - bid) / bid).toFixed(4)) : 0
   };
 }

@@ -215,7 +215,7 @@ class DatabaseClient {
         sql += ` AND senior_lien_risk = 'high'`;
       }
       if (redemption === 'immediate') {
-        sql += ` AND (redemption_days IS NULL OR redemption_days = 0)`;
+        sql += ` AND redemption_days = 0`;
       } else if (redemption === 'redemption_active') {
         sql += ` AND redemption_days > 0`;
       }
@@ -255,7 +255,7 @@ class DatabaseClient {
       if (occupancy !== 'all' && l.occupancy !== occupancy) return false;
       if (seniorLien === 'clean' && l.seniorLienRisk === 'high') return false;
       if (seniorLien === 'risk' && l.seniorLienRisk !== 'high') return false;
-      if (redemption === 'immediate' && (l.redemptionDays || 0) > 0) return false;
+      if (redemption === 'immediate' && l.redemptionDays !== 0) return false;
       if (redemption === 'redemption_active' && (!l.redemptionDays || l.redemptionDays <= 0)) return false;
       if (lat != null && lng != null) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);

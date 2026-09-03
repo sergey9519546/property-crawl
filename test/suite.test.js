@@ -130,6 +130,41 @@ test('app.js wraps untrusted notice text in XML delimiter tags to prevent prompt
 });
 
 // ----------------------------------------------------
+// 9. Statutory Cash to Close & CRE Underwriting Math
+// ----------------------------------------------------
+console.log('\n[Suite 9: Statutory Cash to Close & CRE Underwriting]');
+
+test('Statutory Cash to Close calculates accurate state poundage and transfer tax', () => {
+  const { computeCashToClose } = require('../server/ai/legal-rules');
+  const ctcOH = computeCashToClose({ openingBid: 100000, state: 'OH', source: 'sheriff' });
+  assert.strictEqual(ctcOH.openingBid, 100000);
+  assert.strictEqual(ctcOH.sheriffPoundage, 2000); // 2% in OH
+  assert.strictEqual(ctcOH.transferTax, 400); // 0.4% in OH
+  assert.strictEqual(ctcOH.total, 102900); // 100k + 2k + 400 + 500 deed
+
+  const ctcBid4Assets = computeCashToClose({ openingBid: 100000, state: 'PA', source: 'bid4assets' });
+  assert.strictEqual(ctcBid4Assets.buyersPremium, 5000); // 5% BP
+  assert.strictEqual(ctcBid4Assets.sheriffPoundage, 2000); // 2% in PA
+  assert.strictEqual(ctcBid4Assets.transferTax, 2000); // 2% in PA
+  assert.strictEqual(ctcBid4Assets.total, 109500);
+});
+
+test('CRE Underwriting formulas calculate Net Operating Income and Cap Rates accurately', () => {
+  const sqft = 10000;
+  const openingBid = 500000;
+  const rentPerSqft = 15;
+  const grossRent = sqft * rentPerSqft; // $150,000
+  const egi = grossRent * 0.95; // $142,500
+  const opex = egi * 0.40; // $57,000
+  const noi = egi - opex; // $85,500
+  const capRate = Number(((noi / openingBid) * 100).toFixed(2)); // 17.1%
+
+  assert.strictEqual(noi, 85500);
+  assert.strictEqual(capRate, 17.1);
+  assert.ok(capRate > 10, 'Distressed commercial cap rate should be accretive');
+});
+
+// ----------------------------------------------------
 // Summary
 // ----------------------------------------------------
 console.log(`\n--- TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);

@@ -1,53 +1,71 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { Metadata } from "next";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, ShieldCheck, Scale, Clock, DollarSign, Calculator } from "lucide-react";
 import { Listing, LISTINGS, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { computeCashToClose, redemptionLabel } from "@/lib/underwriting";
 import { Logo } from "@/components/site/logo";
 
-type ListingsPayload = { listings?: Listing[] };
+type Props = {
+  params: Promise<{ id: string }>;
+};
 
-export default function ListingPage() {
-  const params = useParams<{ id: string }>();
-  const listingId = decodeURIComponent(params.id);
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+async function getListing(id: string): Promise<Listing | null> {
+  const listingId = decodeURIComponent(id);
+  const localMatch = LISTINGS.find((item) => item.id === listingId);
+  if (localMatch) return localMatch;
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/listings", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json() as Promise<ListingsPayload>;
-      })
-      .then((payload) => {
-        if (!active) return;
-        const match = payload.listings?.find((item) => item.id === listingId)
-          ?? LISTINGS.find((item) => item.id === listingId)
-          ?? null;
-        setListing(match);
-        setStatus(match ? "ready" : "missing");
-      })
-      .catch(() => {
-        if (!active) return;
-        const fallback = LISTINGS.find((item) => item.id === listingId) ?? null;
-        setListing(fallback);
-        setStatus(fallback ? "ready" : "missing");
-      });
-    return () => {
-      active = false;
+  try {
+    const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
+    const res = await fetch(`${apiUrl}/api/listings/${encodeURIComponent(listingId)}`, {
+      cache: "no-store",
+      next: { revalidate: 0 }
+    });
+    if (res.ok) {
+      return (await res.json()) as Listing;
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const listing = await getListing(id);
+
+  if (!listing) {
+    return {
+      title: "Listing Unavailable | PerfectProperty",
+      description: "This distressed property record is no longer present in the active feed."
     };
-  }, [listingId]);
-
-  if (status === "loading") {
-    return <main className="grid min-h-screen place-items-center bg-[#F5F6F7] text-sm font-semibold text-slate-600">Loading listing…</main>;
   }
 
-  if (!listing || status === "missing") {
+  const title = `${listing.address} | ${listing.county} County, ${listing.state} | PerfectProperty`;
+  const description = `Foreclosure auction listing for ${listing.address}. Deal Score: ${listing.dealScore}/100. Opening Bid: $${listing.openingBid.toLocaleString()}. Built-in Equity: +$${listing.equity.toLocaleString()}.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      images: listing.photo ? [{ url: listing.photo, alt: listing.address }] : []
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: listing.photo ? [listing.photo] : []
+    }
+  };
+}
+
+export default async function ListingPage({ params }: Props) {
+  const { id } = await params;
+  const listing = await getListing(id);
+
+  if (!listing) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#F5F6F7] px-6 text-center">
         <div>
@@ -68,8 +86,42 @@ export default function ListingPage() {
   const seniorLienRisk = (listing.seniorLienRisk || "").toLowerCase();
   const isHighRisk = seniorLienRisk === "high";
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    name: listing.address,
+    description: `Foreclosure auction listing for ${listing.address}, ${listing.county} County, ${listing.state} ${listing.zip}. Deal Score: ${listing.dealScore}/100.`,
+    image: listing.photo || undefined,
+    offers: {
+      "@type": "AggregateOffer",
+      price: listing.openingBid,
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      validFrom: listing.saleDate
+    },
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: listing.address,
+      addressLocality: listing.city || listing.county,
+      addressRegion: listing.state,
+      postalCode: listing.zip,
+      addressCountry: "US"
+    },
+    geo: Number.isFinite(listing.lat) && Number.isFinite(listing.lng) && listing.lat !== 0 && listing.lng !== 0 ? {
+      "@type": "GeoCoordinates",
+      latitude: listing.lat,
+      longitude: listing.lng
+    } : undefined
+  };
+
   return (
     <main className="min-h-screen bg-[#F5F6F7] text-slate-950">
+      {/* Schema.org RealEstateListing JSON-LD for Google Rich Results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
       <header className="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4">
           <Link href="/" aria-label="PerfectProperty home"><Logo className="text-[18px]" /></Link>
