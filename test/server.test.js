@@ -132,7 +132,7 @@ async function run() {
     const res = await request('/api/export?format=csv');
     assert.strictEqual(res.status, 200);
     assert.ok(res.headers['content-type'].includes('text/csv'));
-    assert.ok(res.raw.includes('Opening Bid,Est Low,Est High,Deal Score'));
+    assert.ok(res.raw.includes('Opening Bid,Est Low,Est High,Built-in Equity,Deal Score,Cash to Close,Redemption Days,Senior Lien Risk'));
   });
 
   await new Promise((resolve) => server.close(resolve));

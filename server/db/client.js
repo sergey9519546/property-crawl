@@ -36,6 +36,11 @@ const LISTING_SELECT = `
   raw_notice          AS "raw",
   price::float8       AS "price",
   listing_date::text  AS "listingDate",
+  redemption_days     AS "redemptionDays",
+  redemption_warning  AS "redemptionWarning",
+  senior_lien_risk    AS "seniorLienRisk",
+  senior_lien_warning AS "seniorLienWarning",
+  cash_to_close::float8 AS "cashToClose",
   status
 `;
 
@@ -130,6 +135,12 @@ class DatabaseClient {
       sort = 'score',
       limit = 50,
       offset = 0,
+      minScore,
+      minEquity,
+      maxBid,
+      occupancy = 'all',
+      seniorLien = 'all',
+      redemption = 'all',
       lat,
       lng,
       radiusKm = 100
@@ -155,6 +166,32 @@ class DatabaseClient {
       if (status !== 'all') {
         sql += ` AND status = $${paramIdx++}`;
         params.push(status);
+      }
+      if (minScore) {
+        sql += ` AND deal_score >= $${paramIdx++}`;
+        params.push(Number(minScore));
+      }
+      if (minEquity) {
+        sql += ` AND equity_spread >= $${paramIdx++}`;
+        params.push(Number(minEquity));
+      }
+      if (maxBid) {
+        sql += ` AND opening_bid <= $${paramIdx++}`;
+        params.push(Number(maxBid));
+      }
+      if (occupancy && occupancy !== 'all') {
+        sql += ` AND occupancy = $${paramIdx++}`;
+        params.push(occupancy);
+      }
+      if (seniorLien === 'clean') {
+        sql += ` AND (senior_lien_risk IS NULL OR senior_lien_risk != 'high')`;
+      } else if (seniorLien === 'risk') {
+        sql += ` AND senior_lien_risk = 'high'`;
+      }
+      if (redemption === 'immediate') {
+        sql += ` AND (redemption_days IS NULL OR redemption_days = 0)`;
+      } else if (redemption === 'redemption_active') {
+        sql += ` AND redemption_days > 0`;
       }
       if (q) {
         sql += ` AND (address ILIKE $${paramIdx} OR city ILIKE $${paramIdx} OR county ILIKE $${paramIdx} OR plaintiff ILIKE $${paramIdx} OR defendant ILIKE $${paramIdx} OR attorney ILIKE $${paramIdx})`;
@@ -186,6 +223,14 @@ class DatabaseClient {
       if (source !== 'all' && l.source !== source) return false;
       if (type !== 'all' && l.propType !== type) return false;
       if (status !== 'all' && (l.status || 'active') !== status) return false;
+      if (minScore && l.dealScore < Number(minScore)) return false;
+      if (minEquity && l.equity < Number(minEquity)) return false;
+      if (maxBid && l.openingBid > Number(maxBid)) return false;
+      if (occupancy !== 'all' && l.occupancy !== occupancy) return false;
+      if (seniorLien === 'clean' && l.seniorLienRisk === 'high') return false;
+      if (seniorLien === 'risk' && l.seniorLienRisk !== 'high') return false;
+      if (redemption === 'immediate' && (l.redemptionDays || 0) > 0) return false;
+      if (redemption === 'redemption_active' && (!l.redemptionDays || l.redemptionDays <= 0)) return false;
       if (lat != null && lng != null) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);
         if (dist > Number(radiusKm)) return false;
@@ -217,21 +262,11 @@ class DatabaseClient {
   }
 
   async createListing(listing) {
-    const mid = (listing.estLow + listing.estHigh) / 2;
-    const ratio = listing.openingBid / mid;
-    const equity = Math.max(0, mid - listing.openingBid);
-    const dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)));
-
     const enriched = {
       ...listing,
-      mid,
-      ratio,
-      equity,
-      dealScore,
-      price: listing.price ?? null,
-      listingDate: listing.listingDate ?? null,
-      status: listing.status || 'active',
-      createdAt: new Date().toISOString()
+      dealScore: listing.dealScore || Math.min(99, Math.max(1, Math.round((1 - (listing.openingBid / Math.max(1, (listing.estLow + listing.estHigh) / 2))) * 130))),
+      equity: listing.equity || Math.max(0, Math.round(((listing.estLow + listing.estHigh) / 2) - listing.openingBid)),
+      mid: listing.mid || Math.round((listing.estLow + listing.estHigh) / 2)
     };
 
     if (this.isPg) {
@@ -240,9 +275,10 @@ class DatabaseClient {
         beds, baths, sqft, year_built, prop_type, opening_bid, est_low, est_high,
         deal_score, sale_date, plaintiff, defendant, judgment_amount, attorney,
         occupancy, deposit_terms, photo_url, source_url, raw_notice,
-        price, listing_date, status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
-      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, price = EXCLUDED.price, listing_date = EXCLUDED.listing_date, status = EXCLUDED.status, updated_at = NOW()
+        price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
+        senior_lien_warning, cash_to_close, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36)
+      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, price = EXCLUDED.price, listing_date = EXCLUDED.listing_date, redemption_days = EXCLUDED.redemption_days, redemption_warning = EXCLUDED.redemption_warning, senior_lien_risk = EXCLUDED.senior_lien_risk, senior_lien_warning = EXCLUDED.senior_lien_warning, cash_to_close = EXCLUDED.cash_to_close, status = EXCLUDED.status, updated_at = NOW()
       RETURNING id;`;
       const params = [
         enriched.id, enriched.source, enriched.state, enriched.county, enriched.city, enriched.zip,
@@ -252,7 +288,10 @@ class DatabaseClient {
         enriched.saleDate, enriched.plaintiff, enriched.defendant, enriched.judgment || 0,
         enriched.attorney, enriched.occupancy || 'Unknown', enriched.deposit || 'Certified funds',
         enriched.photo, enriched.sourceUrl, enriched.raw,
-        enriched.price ?? null, enriched.listingDate ?? null, enriched.status || 'active'
+        enriched.price ?? null, enriched.listingDate ?? null,
+        enriched.redemptionDays || 0, enriched.redemptionWarning || null,
+        enriched.seniorLienRisk || 'NORMAL', enriched.seniorLienWarning || null,
+        enriched.cashToClose ?? null, enriched.status || 'active'
       ];
       await this.pool.query(sql, params);
       return enriched; // camelCase, matches the in-memory return contract
@@ -291,6 +330,11 @@ class DatabaseClient {
            l.attorney, l.occupancy, l.deposit_terms AS "deposit",
            l.photo_url AS "photo", l.source_url AS "sourceUrl",
            l.raw_notice AS "raw",
+           l.redemption_days AS "redemptionDays",
+           l.redemption_warning AS "redemptionWarning",
+           l.senior_lien_risk AS "seniorLienRisk",
+           l.senior_lien_warning AS "seniorLienWarning",
+           l.cash_to_close::float8 AS "cashToClose",
            sd.notes, sd.created_at AS "savedAt"
          FROM saved_deals sd
          JOIN listings l ON sd.listing_id = l.id

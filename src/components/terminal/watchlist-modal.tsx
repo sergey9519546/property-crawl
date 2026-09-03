@@ -30,10 +30,11 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
 
   const exportCsv = () => {
     if (!savedListings.length) return;
-    const headers = ["ID", "Address", "City", "State", "ZIP", "Source", "Opening Bid", "Est Low", "Est High", "Deal Score", "Sale Date", "Plaintiff", "Defendant"];
+    const headers = ["ID", "Address", "City", "State", "ZIP", "Source", "Opening Bid", "Est Low", "Est High", "Built-in Equity", "Deal Score", "Cash to Close", "Redemption Days", "Senior Lien Risk", "Sale Date", "Plaintiff", "Defendant"];
     const rows = savedListings.map(l => [
       l.id, `"${(l.address||'').replace(/"/g, '""')}"`, `"${l.city||''}"`, l.state, l.zip,
-      `"${SOURCES[l.source]?.label||l.source}"`, l.openingBid, l.estLow, l.estHigh, l.dealScore,
+      `"${SOURCES[l.source]?.label||l.source}"`, l.openingBid, l.estLow, l.estHigh, l.equity || Math.max(0, Math.round(((l.estLow+l.estHigh)/2)-l.openingBid)), l.dealScore,
+      l.cashToClose || Math.round(l.openingBid * 1.025 + 500), l.redemptionDays || 0, `"${l.seniorLienRisk || 'NORMAL'}"`,
       l.saleDate, `"${(l.plaintiff||'').replace(/"/g, '""')}"`, `"${(l.defendant||'').replace(/"/g, '""')}"`
     ].join(","));
     const csvContent = [headers.join(","), ...rows].join("\r\n");

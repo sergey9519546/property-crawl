@@ -26,6 +26,7 @@ const EXPECTED_LISTING_KEYS = [
   'openingBid', 'estLow', 'estHigh', 'assessed', 'mid', 'ratio', 'equity',
   'dealScore', 'saleDate', 'plaintiff', 'defendant', 'judgment',
   'attorney', 'occupancy', 'deposit', 'photo', 'sourceUrl', 'raw',
+  'redemptionDays', 'redemptionWarning', 'seniorLienRisk', 'seniorLienWarning', 'cashToClose',
 ];
 
 // Source registry contract: key + label/tier/color/note/websiteUrl.

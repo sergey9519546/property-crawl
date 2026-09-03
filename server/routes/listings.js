@@ -5,17 +5,23 @@ const Validator = require('../security/validation');
 // line at 8 KB (next-adapter.js), so these caps are about preventing wasted
 // CPU on absurdly long search strings and keeping the API surface honest.
 const PARAM_CAPS = Object.freeze({
-  q:       { maxLen: 256,  defaultIfEmpty: ''     },
-  state:   { maxLen: 2,    defaultIfEmpty: 'all'  }, // 2-letter US state code
-  source:  { maxLen: 32,   defaultIfEmpty: 'all'  },
-  type:    { maxLen: 32,   defaultIfEmpty: 'all'  },
-  status:  { maxLen: 16,   defaultIfEmpty: 'all'  },
-  sort:    { maxLen: 16,   defaultIfEmpty: 'score'}
+  q:          { maxLen: 256, defaultIfEmpty: ''     },
+  state:      { maxLen: 2,   defaultIfEmpty: 'all'  }, // 2-letter US state code
+  source:     { maxLen: 32,  defaultIfEmpty: 'all'  },
+  type:       { maxLen: 32,  defaultIfEmpty: 'all'  },
+  status:     { maxLen: 16,  defaultIfEmpty: 'all'  },
+  occupancy:  { maxLen: 32,  defaultIfEmpty: 'all'  },
+  seniorLien: { maxLen: 16,  defaultIfEmpty: 'all'  },
+  redemption: { maxLen: 32,  defaultIfEmpty: 'all'  },
+  sort:       { maxLen: 16,  defaultIfEmpty: 'score'}
 });
 
 const NUMERIC_RANGES = Object.freeze({
-  limit:    { defaultValue: 50,    min: 1,     max: 1000    },
-  offset:   { defaultValue: 0,     min: 0,     max: 100000  }
+  limit:      { defaultValue: 50, min: 1, max: 1000    },
+  offset:     { defaultValue: 0,  min: 0, max: 100000  },
+  minScore:   { defaultValue: 0,  min: 0, max: 100     },
+  minEquity:  { defaultValue: 0,  min: 0, max: 50000000 },
+  maxBid:     { defaultValue: 0,  min: 0, max: 50000000 }
 });
 
 function parseStringParam(raw, field, maxLen) {
