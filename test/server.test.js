@@ -73,7 +73,7 @@ async function run() {
     const res = await request('/api/sources');
     assert.strictEqual(res.status, 200);
     assert.ok(Array.isArray(res.body));
-    assert.ok(res.body.length >= 11);
+    assert.strictEqual(res.body.length, 15, `Expected 15 sources, got ${res.body.length}`);
   });
 
   await test('GET /api/listings returns filtered and paginated listings', async () => {

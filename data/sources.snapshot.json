@@ -86,5 +86,37 @@
     "color": "#92400e",
     "note": "realestatesales.gov",
     "websiteUrl": "https://realestatesales.gov"
+  },
+  {
+    "key": "landbank",
+    "label": "Land Bank",
+    "tier": "B",
+    "color": "#059669",
+    "note": "landbanksearch.com — 70+ county land bank aggregator",
+    "websiteUrl": "https://www.landbanksearch.com"
+  },
+  {
+    "key": "fdic",
+    "label": "FDIC REO",
+    "tier": "A",
+    "color": "#1e3a8a",
+    "note": "sales.fdic.gov — Closed sales & receivership assets",
+    "websiteUrl": "https://sales.fdic.gov"
+  },
+  {
+    "key": "civilview",
+    "label": "CivilView Sheriff",
+    "tier": "B",
+    "color": "#0d9488",
+    "note": "salesweb.civilview.com — Tyler Technologies docket",
+    "websiteUrl": "https://salesweb.civilview.com"
+  },
+  {
+    "key": "bid4assets",
+    "label": "Bid4Assets",
+    "tier": "B",
+    "color": "#7c3aed",
+    "note": "bid4assets.com — County sheriff & tax auctions",
+    "websiteUrl": "https://www.bid4assets.com"
   }
 ]

@@ -30,7 +30,7 @@ test('E2E Flow 1: Client initializes with the generated listings and precomputed
   vm.createContext(sandbox);
   vm.runInContext(dataJs, sandbox);
   assert.ok(Array.isArray(sandbox.window.LISTINGS));
-  assert.strictEqual(Object.keys(sandbox.window.SOURCES).length, 11);
+  assert.strictEqual(Object.keys(sandbox.window.SOURCES).length, 15);
   sandbox.window.LISTINGS.forEach(l => {
     assert.ok(l.dealScore >= 1 && l.dealScore <= 99);
     assert.ok(l.equity >= 0);

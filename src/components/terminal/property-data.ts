@@ -75,8 +75,12 @@ export const SOURCES: Record<string, SourceInfo> = {
   va:       { key: 'va',       label: 'VA REO',               tier: 'A', color: '#0e7490', note: 'vrmproperties.com',                                       websiteUrl: 'https://vrmproperties.com' },
   irs:      { key: 'irs',      label: 'IRS Seized',           tier: 'A', color: '#b45309', note: 'irsauctions.gov — email subscribe',                       websiteUrl: 'https://www.irsauctions.gov' },
   treasury: { key: 'treasury', label: 'Treasury Forfeiture',  tier: 'A', color: '#c2410c', note: 'CWS Marketing contractor',                                websiteUrl: 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml' },
-  marshals: { key: 'marshals', label: 'US Marshals',          tier: 'A', color: '#a16207', note: 'RealLook.com / Gaston & Sheehan',                          websiteUrl: 'https://www.usmarshals.gov' },
-  gsa:      { key: 'gsa',      label: 'GSA Surplus',          tier: 'A', color: '#92400e', note: 'realestatesales.gov',                                     websiteUrl: 'https://realestatesales.gov' },
+  marshals:   { key: 'marshals',   label: 'US Marshals',          tier: 'A', color: '#a16207', note: 'RealLook.com / Gaston & Sheehan',                          websiteUrl: 'https://www.usmarshals.gov' },
+  gsa:        { key: 'gsa',        label: 'GSA Surplus',          tier: 'A', color: '#92400e', note: 'realestatesales.gov',                                     websiteUrl: 'https://realestatesales.gov' },
+  landbank:   { key: 'landbank',   label: 'Land Bank',            tier: 'B', color: '#059669', note: 'landbanksearch.com — 70+ county land bank aggregator',      websiteUrl: 'https://www.landbanksearch.com' },
+  fdic:       { key: 'fdic',       label: 'FDIC REO',             tier: 'A', color: '#1e3a8a', note: 'sales.fdic.gov — Closed sales & receivership assets',      websiteUrl: 'https://sales.fdic.gov' },
+  civilview:  { key: 'civilview',  label: 'CivilView Sheriff',    tier: 'B', color: '#0d9488', note: 'salesweb.civilview.com — Tyler Technologies docket',       websiteUrl: 'https://salesweb.civilview.com' },
+  bid4assets: { key: 'bid4assets', label: 'Bid4Assets',           tier: 'B', color: '#7c3aed', note: 'bid4assets.com — County sheriff & tax auctions',          websiteUrl: 'https://www.bid4assets.com' },
 };
 
 export const INITIAL_LISTINGS: PropertyListing[] = [

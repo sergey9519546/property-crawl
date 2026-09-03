@@ -14,7 +14,7 @@ const PARAM_CAPS = Object.freeze({
 });
 
 const NUMERIC_RANGES = Object.freeze({
-  limit:    { defaultValue: 50,    min: 1,     max: 200     },
+  limit:    { defaultValue: 50,    min: 1,     max: 1000    },
   offset:   { defaultValue: 0,     min: 0,     max: 100000  }
 });
 
