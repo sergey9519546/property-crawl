@@ -33,7 +33,10 @@ const LISTING_SELECT = `
   deposit_terms       AS "deposit",
   photo_url           AS "photo",
   source_url          AS "sourceUrl",
-  raw_notice          AS "raw"
+  raw_notice          AS "raw",
+  price::float8       AS "price",
+  listing_date::text  AS "listingDate",
+  status
 `;
 
 class DatabaseClient {
@@ -82,7 +85,12 @@ class DatabaseClient {
         vm.createContext(sandbox);
         vm.runInContext(fs.readFileSync(dataJsPath, 'utf8'), sandbox);
         this.inMemoryData.sources = sandbox.window.SOURCES || {};
-        this.inMemoryData.listings = [...(sandbox.window.LISTINGS || [])];
+        this.inMemoryData.listings = (sandbox.window.LISTINGS || []).map(l => ({
+          ...l,
+          price: l.price ?? null,
+          listingDate: l.listingDate ?? null,
+          status: l.status || 'active',
+        }));
         console.log(`[DB] Seeded in-memory provider with ${this.inMemoryData.listings.length} listings across ${Object.keys(this.inMemoryData.sources).length} sources`);
       }
     } catch (err) {
@@ -118,6 +126,7 @@ class DatabaseClient {
       state = 'all',
       source = 'all',
       type = 'all',
+      status = 'all',
       sort = 'score',
       limit = 50,
       offset = 0,
@@ -142,6 +151,10 @@ class DatabaseClient {
       if (type !== 'all') {
         sql += ` AND prop_type = $${paramIdx++}`;
         params.push(type);
+      }
+      if (status !== 'all') {
+        sql += ` AND status = $${paramIdx++}`;
+        params.push(status);
       }
       if (q) {
         sql += ` AND (address ILIKE $${paramIdx} OR city ILIKE $${paramIdx} OR county ILIKE $${paramIdx} OR plaintiff ILIKE $${paramIdx} OR defendant ILIKE $${paramIdx} OR attorney ILIKE $${paramIdx})`;
@@ -172,6 +185,7 @@ class DatabaseClient {
       if (state !== 'all' && l.state !== state) return false;
       if (source !== 'all' && l.source !== source) return false;
       if (type !== 'all' && l.propType !== type) return false;
+      if (status !== 'all' && (l.status || 'active') !== status) return false;
       if (lat != null && lng != null) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);
         if (dist > Number(radiusKm)) return false;
@@ -214,6 +228,9 @@ class DatabaseClient {
       ratio,
       equity,
       dealScore,
+      price: listing.price ?? null,
+      listingDate: listing.listingDate ?? null,
+      status: listing.status || 'active',
       createdAt: new Date().toISOString()
     };
 
@@ -222,9 +239,10 @@ class DatabaseClient {
         id, source_key, state, county, city, zip, address, latitude, longitude, geog,
         beds, baths, sqft, year_built, prop_type, opening_bid, est_low, est_high,
         deal_score, sale_date, plaintiff, defendant, judgment_amount, attorney,
-        occupancy, deposit_terms, photo_url, source_url, raw_notice
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
-      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, updated_at = NOW()
+        occupancy, deposit_terms, photo_url, source_url, raw_notice,
+        price, listing_date, status
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31)
+      ON CONFLICT (id) DO UPDATE SET opening_bid = EXCLUDED.opening_bid, deal_score = EXCLUDED.deal_score, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, geog = EXCLUDED.geog, price = EXCLUDED.price, listing_date = EXCLUDED.listing_date, status = EXCLUDED.status, updated_at = NOW()
       RETURNING id;`;
       const params = [
         enriched.id, enriched.source, enriched.state, enriched.county, enriched.city, enriched.zip,
@@ -233,7 +251,8 @@ class DatabaseClient {
         enriched.openingBid, enriched.estLow, enriched.estHigh, enriched.dealScore,
         enriched.saleDate, enriched.plaintiff, enriched.defendant, enriched.judgment || 0,
         enriched.attorney, enriched.occupancy || 'Unknown', enriched.deposit || 'Certified funds',
-        enriched.photo, enriched.sourceUrl, enriched.raw
+        enriched.photo, enriched.sourceUrl, enriched.raw,
+        enriched.price ?? null, enriched.listingDate ?? null, enriched.status || 'active'
       ];
       await this.pool.query(sql, params);
       return enriched; // camelCase, matches the in-memory return contract

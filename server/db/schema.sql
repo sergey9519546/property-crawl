@@ -53,6 +53,9 @@ CREATE TABLE IF NOT EXISTS listings (
     photo_url TEXT,
     source_url TEXT,
     raw_notice TEXT,
+    price NUMERIC(14, 2),
+    listing_date DATE,
+    status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold', 'cancelled', 'scheduled')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -102,6 +105,8 @@ CREATE INDEX IF NOT EXISTS idx_listings_state ON listings(state);
 CREATE INDEX IF NOT EXISTS idx_listings_sale_date ON listings(sale_date);
 CREATE INDEX IF NOT EXISTS idx_listings_deal_score ON listings(deal_score DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC);
+CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
+CREATE INDEX IF NOT EXISTS idx_listings_listing_date ON listings(listing_date);
 -- GiST spatial index: required for ST_DWithin radius queries to use index scan.
 -- Without this, every radius filter performs a full sequential scan of listings.
 CREATE INDEX IF NOT EXISTS idx_listings_geog ON listings USING GIST(geog);

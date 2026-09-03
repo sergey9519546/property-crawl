@@ -238,7 +238,15 @@ export function SiteHeader() {
         {/* Right: CTA — single dark button, rounded-[12px] */}
         <div className="hidden lg:flex items-center gap-2">
           <Link
-            href="#live-feed"
+            href="/sign-in"
+            onMouseEnter={() => setOpen(null)}
+            className="inline-flex h-10 items-center justify-center rounded-[12px] px-4 text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/register"
+            onMouseEnter={() => setOpen(null)}
             className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#1E293B]"
           >
             Sign up for free
@@ -349,7 +357,14 @@ export function SiteHeader() {
             </Accordion>
             <div className="mt-2 grid gap-2 border-t border-[#F3F4F6] px-5 py-4">
               <Link
-                href="#live-feed"
+                href="/sign-in"
+                onClick={() => setMobileOpen(false)}
+                className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#E5E7EB] bg-white px-4 text-[14px] font-semibold text-[#111827]"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
               >
