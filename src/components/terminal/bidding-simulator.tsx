@@ -56,7 +56,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     <div className="space-y-6 animate-in fade-in">
       <div className="p-5 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm space-y-5">
         <div className="flex items-center gap-2 mb-2">
-          <Calculator className="w-5 h-5 text-[#3B82F6]" />
+          <Calculator className="w-5 h-5 text-[#0F172A]" />
           <h3 className="text-base font-bold text-[#111827]">Max Allowable Offer (MAO) Simulator</h3>
         </div>
         
@@ -73,7 +73,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               step="5000"
               value={rehabBudget}
               onChange={(e) => setRehabBudget(Number(e.target.value))}
-              className="w-full accent-[#3B82F6]"
+              className="w-full accent-[#0F172A]"
             />
             <div className="flex justify-between text-xs text-[#9CA3AF]">
               <span>$0</span>
@@ -93,7 +93,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               step="5"
               value={targetMargin}
               onChange={(e) => setTargetMargin(Number(e.target.value))}
-              className="w-full accent-[#3B82F6]"
+              className="w-full accent-[#0F172A]"
             />
             <div className="flex justify-between text-xs text-[#9CA3AF]">
               <span>10% (Risky)</span>

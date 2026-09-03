@@ -19,7 +19,7 @@
   --page-bg: #F5F6F7;
   --card-bg-white: #FFFFFF;
   --card-bg-green: #e7faef;
-  --card-bg-blue: #DBEAFE;
+  --card-bg-blue: #F1F5F9;
   --card-bg-pink: #FFD6C8;
   --card-bg-lavender: #E9D5FF;
   --card-bg-yellow: #fffaea;
@@ -609,7 +609,7 @@
 }
 
 .live-market-maplibre .maplibregl-canvas:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #0F172A;
   outline-offset: -4px;
 }
 

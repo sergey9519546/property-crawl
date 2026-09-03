@@ -203,6 +203,27 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
             <div><span className="text-[#6B7280] block">Est. Value:</span> <strong className="text-[#111827]">${parsedResult.estLow.toLocaleString()}–${parsedResult.estHigh.toLocaleString()}</strong></div>
             <div><span className="text-[#6B7280] block">Built-in Equity:</span> <strong className="text-[#16A34A]">+${parsedResult.equity.toLocaleString()}</strong></div>
           </div>
+
+          {/* Multi-Parcel & Title Risk Annotations */}
+          {/(?:tract\s+[12]|parcel\s+(?:one|two|[12])|lot\s+[12]|permanent parcel nos|parcels:)/i.test(rawText) && (
+            <div className="p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-700" />
+              <div>
+                <strong className="block font-bold">Multi-Parcel / Tract Notice Detected</strong>
+                <span>This legal advertisement references multiple parcels or tracts. Ensure opening bid applies to the desired parcel.</span>
+              </div>
+            </div>
+          )}
+
+          {/(?:second mortgage|heloc|subordinate mortgage|hoa assessment|condominium association|junior lien)/i.test(rawText) && (
+            <div className="p-3 rounded-lg border border-red-300 bg-red-50 text-red-900 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-700" />
+              <div>
+                <strong className="block font-bold">Junior Lien Foreclosure Alert</strong>
+                <span>Notice text indicates action by a junior creditor or HOA. Senior 1st mortgage may survive sale under state law.</span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

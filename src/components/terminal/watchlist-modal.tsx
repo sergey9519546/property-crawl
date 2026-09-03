@@ -87,25 +87,53 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
 
         {/* Action Bar */}
         {savedListings.length > 0 && (
-          <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex items-center justify-between">
-            <span className="text-xs text-[#6B7280] font-medium">Sorted by soonest auction date</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={exportCsv}
-                className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
-              >
-                <FileText className="w-3.5 h-3.5 text-[#0F172A]" />
-                <span>Export CSV</span>
-              </button>
-              <button
-                onClick={exportJson}
-                className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
-              >
-                <Copy className="w-3.5 h-3.5 text-[#0F172A]" />
-                <span>Export JSON</span>
-              </button>
+          <>
+            <div className="px-6 py-2.5 bg-[#0F172A] text-white flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-4">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Required Capital</span>
+                  <span className="font-extrabold text-sm text-white">
+                    ${savedListings.reduce((sum, l) => sum + l.openingBid, 0).toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 block">Total Built-in Equity</span>
+                  <span className="font-extrabold text-sm text-[#22C55E]">
+                    +${savedListings.reduce((sum, l) => sum + l.equity, 0).toLocaleString()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Avg Deal Score</span>
+                  <span className="font-extrabold text-sm text-white">
+                    {Math.round(savedListings.reduce((sum, l) => sum + l.dealScore, 0) / savedListings.length)}/100
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                {savedListings.length} tracked opportunities
+              </span>
             </div>
-          </div>
+
+            <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex items-center justify-between">
+              <span className="text-xs text-[#6B7280] font-medium">Sorted by soonest auction date</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={exportCsv}
+                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[#0F172A]" />
+                  <span>Export CSV</span>
+                </button>
+                <button
+                  onClick={exportJson}
+                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
+                >
+                  <Copy className="w-3.5 h-3.5 text-[#0F172A]" />
+                  <span>Export JSON</span>
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Listings List */}

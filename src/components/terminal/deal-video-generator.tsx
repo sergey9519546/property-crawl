@@ -35,7 +35,7 @@ export function DealVideoGenerator({ listing }: DealVideoProps) {
       badge: "ESTIMATED VALUE",
       content: `Spread: +$${(listing.estHigh - listing.openingBid).toLocaleString()} Potential Margin`,
       stat: `$${listing.estLow.toLocaleString()} - $${listing.estHigh.toLocaleString()}`,
-      color: "bg-blue-600"
+      color: "bg-slate-800"
     },
     {
       title: "AI FINE-PRINT ANALYSIS",

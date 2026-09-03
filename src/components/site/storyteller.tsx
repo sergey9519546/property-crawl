@@ -131,7 +131,7 @@ export function Storyteller() {
 
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[820px] text-center">
-          <p className="text-[12px] font-extrabold uppercase tracking-[0.16em] text-blue-700">
+          <p className="text-[12px] font-extrabold uppercase tracking-[0.16em] text-slate-900">
             One property. Four decisions.
           </p>
           <h2 className="mt-4 text-[36px] font-semibold leading-[1.12] tracking-[-0.025em] text-[#111827] sm:text-[48px]">
@@ -146,7 +146,7 @@ export function Storyteller() {
         <div className="mt-14 overflow-hidden rounded-[28px] border border-white/90 bg-white/88 shadow-[0_30px_100px_rgba(15,23,42,0.14)] backdrop-blur-xl">
             <div className="flex flex-col gap-3 border-b border-[#E8EDF3] bg-white/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-blue-700">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
                   Property decision workflow
                 </p>
                 <p className="mt-1 text-[16px] font-semibold text-[#111827]">
@@ -188,7 +188,7 @@ export function Storyteller() {
                     <span
                       aria-hidden
                       className={`absolute inset-x-0 top-0 h-[3px] transition-colors ${
-                        selected ? "bg-blue-600" : "bg-transparent"
+                        selected ? "bg-[#0F172A]" : "bg-transparent"
                       }`}
                     />
                     <span className="flex items-start gap-2 sm:gap-3">
@@ -224,7 +224,7 @@ export function Storyteller() {
             >
               <div className="grid gap-4 border-b border-[#E8EDF3] bg-[#F8FAFC] px-5 py-5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-7">
                 <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-700">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
                     {activeStage.step} · {activeStage.eyebrow}
                   </p>
                   <h3 className="mt-1 text-[23px] font-bold tracking-[-0.02em] text-[#111827]">
@@ -234,7 +234,7 @@ export function Storyteller() {
                     {activeStage.description}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-blue-100 bg-white px-4 py-3 shadow-sm">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                   <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#94A3B8]">
                     Output
                   </p>
@@ -332,8 +332,8 @@ function VerificationPanel() {
   return (
     <div data-testid="storyteller-verify" className="grid min-h-[480px] gap-5 lg:grid-cols-[0.88fr_1.12fr]">
       <article className="relative overflow-hidden rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
-        <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl" />
-        <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-blue-300">
+        <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-slate-500/20 blur-3xl" />
+        <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-300">
           Demo evidence packet
         </p>
         <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{DEMO_DEAL.address}</h4>
@@ -348,7 +348,7 @@ function VerificationPanel() {
 
         <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="flex items-center gap-2 text-[11px] font-bold text-white">
-            <FileText className="h-4 w-4 text-blue-300" aria-hidden /> Filing translated into plain English
+            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> Filing translated into plain English
           </div>
           <p className="mt-2 text-[12px] leading-[1.55] text-slate-300">
             Demo notice indicates a county sale in eight days with a {DEMO_DEAL.opening} opening bid.
@@ -363,7 +363,7 @@ function VerificationPanel() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#64748B]">Source-by-source check</p>
             <h4 className="mt-1 text-[20px] font-bold text-[#111827]">What is known—and what is not</h4>
           </div>
-          <ShieldCheck className="h-7 w-7 text-blue-600" aria-hidden />
+          <ShieldCheck className="h-7 w-7 text-emerald-600" aria-hidden />
         </div>
         <div className="mt-5 space-y-2.5">
           {checks.map((check) => (
@@ -401,7 +401,7 @@ function EvidenceFact({ label, value }: { label: string; value: string }) {
 
 function UnderwritePanel() {
   const deductions = [
-    { label: "Modeled ARV", value: "$95k", width: "100%", color: "bg-blue-600" },
+    { label: "Modeled ARV", value: "$95k", width: "100%", color: "bg-emerald-600" },
     { label: "Repairs", value: "−$18k", width: "78%", color: "bg-sky-500" },
     { label: "Carry + close", value: "−$7k", width: "60%", color: "bg-indigo-400" },
     { label: "Required profit", value: "−$22k", width: "46%", color: "bg-violet-400" },
@@ -412,11 +412,11 @@ function UnderwritePanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-700">Demo assumptions</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Demo assumptions</p>
             <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Build the walk-away number</h4>
             <p className="mt-1 text-[12px] font-medium text-[#64748B]">Every estimate stays visible, editable, and attributable.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2 text-[11px] font-bold text-blue-800">
+          <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-900">
             <Calculator className="h-4 w-4" aria-hidden /> Conservative model
           </span>
         </div>
@@ -443,7 +443,7 @@ function UnderwritePanel() {
       </article>
 
       <article className="flex flex-col rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-300">Decision</p>
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
         <p className="mt-3 text-[13px] font-semibold text-slate-300">Modeled bid range</p>
         <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">$42k–$46k</p>
         <div className="mt-5 h-px bg-white/10" />
@@ -475,7 +475,7 @@ function ModelStat({ label, value, emphasis }: { label: string; value: string; e
 function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-blue-200">
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-slate-300">
         <Icon className="h-4 w-4" aria-hidden />
       </span>
       <span className="flex-1 text-[12px] font-medium text-slate-300">{label}</span>
@@ -496,7 +496,7 @@ function ActionPanel() {
       <article className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-[#0F172A] px-6 py-5 text-white">
           <div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-blue-300">Decision memo · demo</p>
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision memo · demo</p>
             <h4 className="mt-1 text-[21px] font-bold">{DEMO_DEAL.address}</h4>
             <p className="mt-0.5 text-[11px] font-medium text-slate-400">Prepared for acquisition review</p>
           </div>
@@ -536,7 +536,7 @@ function ActionPanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-[#F8FAFC] p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-700">Next-action board</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Next-action board</p>
             <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Move before the deadline</h4>
           </div>
           <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#64748B] shadow-sm">1 of 3 done</span>

@@ -6,7 +6,24 @@ import { PropertyDrawer } from "./property-drawer";
 import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
 import { MarketMap } from "./market-map";
-import { Search, Bookmark, Calendar, Sparkles, LayoutGrid, ArrowRight, Map as MapIcon } from "lucide-react";
+import {
+  Search,
+  Bookmark,
+  Calendar,
+  Sparkles,
+  LayoutGrid,
+  ArrowRight,
+  Map as MapIcon,
+  SlidersHorizontal,
+  RotateCcw,
+  X as CloseIcon,
+  TrendingUp,
+  ShieldCheck,
+  ShieldAlert,
+  ChevronDown,
+  Building2,
+  Filter
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATE_LABELS: Record<string, string> = {
@@ -34,6 +51,14 @@ export function InteractiveTerminal() {
   const [selectedState, setSelectedState] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
   const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date">("score");
+  const [minDealScore, setMinDealScore] = useState<number>(0);
+  const [minEquity, setMinEquity] = useState<number>(0);
+  const [maxOpeningBid, setMaxOpeningBid] = useState<number | null>(null);
+  const [propertyType, setPropertyType] = useState<string>("all");
+  const [occupancy, setOccupancy] = useState<string>("all");
+  const [seniorLienFilter, setSeniorLienFilter] = useState<string>("all");
+  const [redemptionFilter, setRedemptionFilter] = useState<string>("all");
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
 
@@ -111,9 +136,45 @@ export function InteractiveTerminal() {
     setSelectedListing(newListing);
   };
 
+  const resetFilters = () => {
+    setSearchQuery("");
+    setSelectedState("all");
+    setSelectedSource("all");
+    setMinDealScore(0);
+    setMinEquity(0);
+    setMaxOpeningBid(null);
+    setPropertyType("all");
+    setOccupancy("all");
+    setSeniorLienFilter("all");
+    setRedemptionFilter("all");
+    setSortBy("score");
+  };
+
+  const activeFiltersCount =
+    (searchQuery ? 1 : 0) +
+    (selectedState !== "all" ? 1 : 0) +
+    (selectedSource !== "all" ? 1 : 0) +
+    (minDealScore > 0 ? 1 : 0) +
+    (minEquity > 0 ? 1 : 0) +
+    (maxOpeningBid !== null ? 1 : 0) +
+    (propertyType !== "all" ? 1 : 0) +
+    (occupancy !== "all" ? 1 : 0) +
+    (seniorLienFilter !== "all" ? 1 : 0) +
+    (redemptionFilter !== "all" ? 1 : 0);
+
   const filtered = listings.filter((l) => {
     if (selectedState !== "all" && l.state !== selectedState) return false;
     if (selectedSource !== "all" && l.source !== selectedSource) return false;
+    if (minDealScore > 0 && l.dealScore < minDealScore) return false;
+    if (minEquity > 0 && l.equity < minEquity) return false;
+    if (maxOpeningBid !== null && l.openingBid > maxOpeningBid) return false;
+    if (propertyType !== "all" && l.propType?.toLowerCase() !== propertyType.toLowerCase()) return false;
+    if (occupancy !== "all" && l.occupancy?.toLowerCase() !== occupancy.toLowerCase()) return false;
+    if (seniorLienFilter === "clean" && (l.seniorLienRisk === "high" || l.seniorLienRisk === "moderate")) return false;
+    if (seniorLienFilter === "high_risk" && l.seniorLienRisk !== "high") return false;
+    if (redemptionFilter === "immediate" && (l.redemptionDays && l.redemptionDays > 0)) return false;
+    if (redemptionFilter === "redemption_active" && (!l.redemptionDays || l.redemptionDays === 0)) return false;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const matchesCounty = listings.some((item) => item.county?.toLowerCase() === q);
@@ -136,6 +197,17 @@ export function InteractiveTerminal() {
   else if (sortBy === "bid") filtered.sort((a, b) => a.openingBid - b.openingBid);
   else if (sortBy === "date") filtered.sort((a, b) => new Date(a.saleDate).getTime() - new Date(b.saleDate).getTime());
   else filtered.sort((a, b) => b.dealScore - a.dealScore);
+
+  const medianBid = filtered.length > 0
+    ? [...filtered].sort((a, b) => a.openingBid - b.openingBid)[Math.floor(filtered.length / 2)].openingBid
+    : 0;
+  const avgEquity = filtered.length > 0
+    ? Math.round(filtered.reduce((sum, l) => sum + l.equity, 0) / filtered.length)
+    : 0;
+  const eliteCount = filtered.filter((l) => l.dealScore >= 70).length;
+  const strongCount = filtered.filter((l) => l.dealScore >= 55 && l.dealScore < 70).length;
+  const fairCount = filtered.filter((l) => l.dealScore >= 35 && l.dealScore < 55).length;
+  const thinCount = filtered.filter((l) => l.dealScore < 35).length;
 
   const savedListings = listings.filter((l) => savedIds.has(l.id));
   const availableStates = Array.from(
@@ -241,71 +313,379 @@ export function InteractiveTerminal() {
             </div>
 
             {/* Filter Bar */}
-            <div className="p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm mb-6 flex flex-wrap items-center gap-3">
-              {/* Search */}
-              <div className="relative flex-1 min-w-[240px]">
-                <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  aria-label="Search listings"
-                  placeholder="Search address, county, court docket..."
-                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#D1D5DB] bg-white focus:outline-none focus:border-[#0F172A]"
-                />
+            <div className="p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm mb-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[240px]">
+                  <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label="Search listings"
+                    placeholder="Search address, county, court docket..."
+                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#D1D5DB] bg-white focus:outline-none focus:border-[#0F172A]"
+                  />
+                </div>
+
+                {/* State Filter */}
+                <select
+                  value={selectedState}
+                  onChange={(e) => setSelectedState(e.target.value)}
+                  aria-label="State filter"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                >
+                  <option value="all">All States</option>
+                  {availableStates.map((state) => (
+                    <option key={state} value={state}>
+                      {STATE_LABELS[state] ? `${STATE_LABELS[state]} (${state})` : state}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Source Filter */}
+                <select
+                  value={selectedSource}
+                  onChange={(e) => setSelectedSource(e.target.value)}
+                  aria-label="Source filter"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                >
+                  <option value="all">All Sources</option>
+                  {availableSources.map((key) => {
+                    const s = SOURCES[key];
+                    return (
+                      <option key={key} value={key}>
+                        {s ? s.label : key}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Sort By */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  aria-label="Sort listings"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                >
+                  <option value="score">Deal Score (Highest)</option>
+                  <option value="equity">Built-in Equity (Highest)</option>
+                  <option value="bid">Opening Bid (Lowest)</option>
+                  <option value="date">Auction Date (Soonest)</option>
+                </select>
+
+                {/* Advanced Underwriting Box Trigger */}
+                <button
+                  type="button"
+                  onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                  className={cn(
+                    "px-3 py-2 text-xs font-semibold rounded-xl border transition flex items-center gap-1.5 shadow-sm",
+                    isAdvancedOpen || activeFiltersCount > 0
+                      ? "bg-[#0F172A] text-white border-[#0F172A]"
+                      : "bg-white border-[#D1D5DB] text-[#374151] hover:bg-[#F5F6F7]"
+                  )}
+                  aria-expanded={isAdvancedOpen}
+                  aria-label="Toggle institutional filters"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Institutional Filters {activeFiltersCount > 0 ? `(${activeFiltersCount})` : ""}</span>
+                  <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isAdvancedOpen && "rotate-180")} />
+                </button>
+
+                {/* Reset All Filters */}
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition flex items-center gap-1"
+                    aria-label="Reset all filters"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset ({activeFiltersCount})</span>
+                  </button>
+                )}
               </div>
 
-              {/* State Filter */}
-              <select
-                value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
-                aria-label="State filter"
-                className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
-              >
-                <option value="all">All States</option>
-                {availableStates.map((state) => (
-                  <option key={state} value={state}>
-                    {STATE_LABELS[state] ? `${STATE_LABELS[state]} (${state})` : state}
-                  </option>
-                ))}
-              </select>
+              {/* Advanced Underwriting Drawer Tray */}
+              {isAdvancedOpen && (
+                <div className="pt-3 border-t border-[#E5E7EB] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
+                  {/* Min Deal Score */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Min Deal Score
+                    </label>
+                    <select
+                      value={minDealScore}
+                      onChange={(e) => setMinDealScore(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value={0}>Any Score</option>
+                      <option value={70}>70+ (Elite Only)</option>
+                      <option value={55}>55+ (Strong & Above)</option>
+                      <option value={35}>35+ (Fair & Above)</option>
+                    </select>
+                  </div>
 
-              {/* Source Filter */}
-              <select
-                value={selectedSource}
-                onChange={(e) => setSelectedSource(e.target.value)}
-                aria-label="Source filter"
-                className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
-              >
-                <option value="all">All Sources</option>
-                {availableSources.map((key) => {
-                  const s = SOURCES[key];
-                  return (
-                    <option key={key} value={key}>
-                      {s ? s.label : key}
-                    </option>
-                  );
-                })}
-              </select>
+                  {/* Min Built-in Equity */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Min Equity Spread
+                    </label>
+                    <select
+                      value={minEquity}
+                      onChange={(e) => setMinEquity(Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value={0}>Any Equity</option>
+                      <option value={25000}>$25,000+</option>
+                      <option value={50000}>$50,000+</option>
+                      <option value={75000}>$75,000+</option>
+                      <option value={100000}>$100,000+</option>
+                    </select>
+                  </div>
 
-              {/* Sort By */}
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                aria-label="Sort listings"
-                className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
-              >
-                <option value="score">Deal Score (Highest)</option>
-                <option value="equity">Built-in Equity (Highest)</option>
-                <option value="bid">Opening Bid (Lowest)</option>
-                <option value="date">Auction Date (Soonest)</option>
-              </select>
+                  {/* Max Opening Bid */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Max Opening Bid
+                    </label>
+                    <select
+                      value={maxOpeningBid === null ? "all" : maxOpeningBid}
+                      onChange={(e) => setMaxOpeningBid(e.target.value === "all" ? null : Number(e.target.value))}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value="all">Any Opening Bid</option>
+                      <option value={50000}>Under $50k</option>
+                      <option value={100000}>Under $100k</option>
+                      <option value={150000}>Under $150k</option>
+                      <option value={250000}>Under $250k</option>
+                    </select>
+                  </div>
+
+                  {/* Property Type */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Property Type
+                    </label>
+                    <select
+                      value={propertyType}
+                      onChange={(e) => setPropertyType(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="Single Family">Single Family</option>
+                      <option value="Multi-Family">Multi-Family</option>
+                      <option value="Condo">Condo / Townhome</option>
+                      <option value="Land">Land / Lot</option>
+                    </select>
+                  </div>
+
+                  {/* Senior Lien / Title Risk */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Senior Title Risk
+                    </label>
+                    <select
+                      value={seniorLienFilter}
+                      onChange={(e) => setSeniorLienFilter(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value="all">All Title Profiles</option>
+                      <option value="clean">Clean 1st Lien Only</option>
+                      <option value="high_risk">Junior Foreclosure Risk</option>
+                    </select>
+                  </div>
+
+                  {/* Statutory Redemption */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                      Redemption Status
+                    </label>
+                    <select
+                      value={redemptionFilter}
+                      onChange={(e) => setRedemptionFilter(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                    >
+                      <option value="all">All Jurisdictions</option>
+                      <option value="immediate">Immediate Possession</option>
+                      <option value="redemption_active">Active Redemption Period</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Filter Chips */}
+              {activeFiltersCount > 0 && (
+                <div className="pt-2 border-t border-[#F1F5F9] flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-[11px] font-bold text-[#6B7280] mr-1">Active:</span>
+                  {selectedState !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      State: {selectedState}
+                      <button type="button" onClick={() => setSelectedState("all")} aria-label="Remove state filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {selectedSource !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Source: {SOURCES[selectedSource]?.label || selectedSource}
+                      <button type="button" onClick={() => setSelectedSource("all")} aria-label="Remove source filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {minDealScore > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#16A34A] text-white text-[11px] font-semibold">
+                      Score: ≥{minDealScore}
+                      <button type="button" onClick={() => setMinDealScore(0)} aria-label="Remove score filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {minEquity > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Equity: ≥${(minEquity / 1000).toFixed(0)}k
+                      <button type="button" onClick={() => setMinEquity(0)} aria-label="Remove equity filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {maxOpeningBid !== null && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Bid: ≤${(maxOpeningBid / 1000).toFixed(0)}k
+                      <button type="button" onClick={() => setMaxOpeningBid(null)} aria-label="Remove max bid filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {propertyType !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Type: {propertyType}
+                      <button type="button" onClick={() => setPropertyType("all")} aria-label="Remove property type filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {seniorLienFilter !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Title: {seniorLienFilter === "clean" ? "Clean 1st" : "Junior Risk"}
+                      <button type="button" onClick={() => setSeniorLienFilter("all")} aria-label="Remove title risk filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                  {redemptionFilter !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                      Redemption: {redemptionFilter === "immediate" ? "Immediate" : "Active Window"}
+                      <button type="button" onClick={() => setRedemptionFilter("all")} aria-label="Remove redemption filter">
+                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Triage Analytics Summary Bar */}
+            <div className="mb-6 p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0F172A]/5 flex items-center justify-center text-[#0F172A] shrink-0">
+                  <LayoutGrid className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
+                  <p className="text-base font-extrabold text-[#111827]">{filtered.length} Properties</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#0F172A]/5 flex items-center justify-center text-[#0F172A] shrink-0">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
+                  <p className="text-base font-extrabold text-[#111827]">${medianBid.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#16A34A]/10 flex items-center justify-center text-[#16A34A] shrink-0">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-[#16A34A] text-[10px] font-bold uppercase tracking-wider">Avg Equity Spread</p>
+                  <p className="text-base font-extrabold text-[#16A34A]">+${avgEquity.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Interactive Deal Score Band Spectrum */}
+              <div className="flex flex-col justify-center">
+                <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMinDealScore(minDealScore === 70 ? 0 : 70)}
+                    title={`Elite (70+): ${eliteCount} deals`}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
+                      minDealScore === 70
+                        ? "bg-[#059669] text-white ring-2 ring-[#0F172A]"
+                        : "bg-[#059669]/15 text-[#059669] hover:bg-[#059669]/25"
+                    )}
+                  >
+                    Elite: {eliteCount}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMinDealScore(minDealScore === 55 ? 0 : 55)}
+                    title={`Strong (55–69): ${strongCount} deals`}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
+                      minDealScore === 55
+                        ? "bg-[#16A34A] text-white ring-2 ring-[#0F172A]"
+                        : "bg-[#16A34A]/15 text-[#16A34A] hover:bg-[#16A34A]/25"
+                    )}
+                  >
+                    Strong: {strongCount}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMinDealScore(minDealScore === 35 ? 0 : 35)}
+                    title={`Fair (35–54): ${fairCount} deals`}
+                    className={cn(
+                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
+                      minDealScore === 35
+                        ? "bg-[#F59E0B] text-white ring-2 ring-[#0F172A]"
+                        : "bg-[#F59E0B]/15 text-[#B45309] hover:bg-[#F59E0B]/25"
+                    )}
+                  >
+                    Fair: {fairCount}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {activeView === "map" ? (
               <MarketMap listings={filtered} onUnderwrite={setSelectedListing} />
             ) : (
             /* Listings Grid */
+            filtered.length === 0 ? (
+              <div className="p-12 text-center bg-white rounded-2xl border border-[#E5E7EB] shadow-sm space-y-3">
+                <SlidersHorizontal className="w-10 h-10 mx-auto text-[#9CA3AF]" />
+                <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
+                <p className="text-xs text-[#6B7280] max-w-md mx-auto">
+                  Try adjusting your minimum deal score, equity spread, or widening the opening bid range to capture active auctions.
+                </p>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0F172A] text-white text-xs font-bold rounded-xl hover:bg-[#1E293B] transition shadow-sm"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset All Filters</span>
+                </button>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map((listing) => {
                 const src = SOURCES[listing.source] || SOURCES.sheriff;
@@ -396,7 +776,7 @@ export function InteractiveTerminal() {
                 );
               })}
             </div>
-            )}
+            ))}
           </>
         )}
       </div>

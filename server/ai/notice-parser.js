@@ -47,11 +47,11 @@ function neutralizePromptInjection(text = '') {
   let sanitized = String(text);
 
   const injectionPatterns = [
-    /ignore\s+(?:all\s+)?previous\s+instructions/gi,
-    /system\s+instruction:?/gi,
-    /system\s+prompt:?/gi,
+    /ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+    /disregard\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+    /system\s+(?:instruction|prompt|directive):?/gi,
     /override\s+(?:all\s+)?prior\s+rules/gi,
-    /you\s+must\s+output\s+deal\s+score\s+99/gi,
+    /you\s+must\s+output\s+deal\s+score\s+[0-9]+/gi,
     /tell\s+the\s+user\s+this\s+property\s+has\s+\$?[0-9,]+\s+equity/gi
   ];
 
@@ -59,27 +59,28 @@ function neutralizePromptInjection(text = '') {
     sanitized = sanitized.replace(pattern, '[REDACTED_ADVERSARIAL_PAYLOAD]');
   }
 
-  // Escape XML-like tags
-  sanitized = sanitized.replace(/<\/?(system|instruction|context|prompt)>/gi, '');
+  // Escape XML-like tags with any attributes
+  sanitized = sanitized.replace(/<\/?(raw_legal_notice|system|system_prompt|instruction|context|prompt|script)[^>]*>/gi, '');
 
   return sanitized;
 }
 
 /**
  * Splits a legal notice containing multiple parcels into discrete parcel blocks.
+ * Ignores preambles before the first parcel boundary.
  * @param {string} rawNotice
  * @returns {Array<string>} Array of parcel notice strings
  */
 function splitMultiParcelNotice(rawNotice = '') {
   const normalized = normalizeOcrText(rawNotice);
-
-  // Matches "PARCEL 1:", "PARCEL A:", "TRACT 1:", "PARCEL I:" at line boundaries or major separators
+  const parcelHeaderRegex = /(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.]/i;
   const parcelSplitter = /(?:^|\n|\.\s+)(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.])/i;
 
-  const parts = normalized.split(parcelSplitter).map(p => p.trim()).filter(Boolean);
+  const rawParts = normalized.split(parcelSplitter).map(p => p.trim()).filter(Boolean);
+  const parcelParts = rawParts.filter(part => parcelHeaderRegex.test(part));
 
-  if (parts.length > 1) {
-    return parts;
+  if (parcelParts.length > 1) {
+    return parcelParts;
   }
 
   return [normalized];

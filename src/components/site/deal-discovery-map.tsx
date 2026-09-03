@@ -47,7 +47,7 @@ const OPPORTUNITIES: Opportunity[] = [
     opening: "$42k",
     arv: "$95k",
     spread: "$53k",
-    color: "#2563EB",
+    color: "#0F172A",
     lng: -81.7136629,
     lat: 41.469781,
   },
@@ -609,11 +609,11 @@ export function DealDiscoveryMap() {
 
         <div className="absolute left-3 right-3 top-3 z-30 flex items-center justify-between gap-3 lg:right-[384px] sm:left-5 sm:top-5">
           <div className="flex min-w-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 py-2 shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-700">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-900">
               <MapPinned className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.12em] text-blue-700">
+              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-900">
                 Real map · demo opportunities
               </p>
               <p className="truncate text-[12px] font-semibold text-[#111827]">
@@ -644,7 +644,7 @@ export function DealDiscoveryMap() {
         </div>
 
         <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-[10px] font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
-          <span className="h-2 w-2 rounded-full bg-[#2563EB]" /> County
+          <span className="h-2 w-2 rounded-full bg-[#0F172A]" /> County
           <span className="ml-1 h-2 w-2 rounded-full bg-[#7C3AED]" /> Tax
           <span className="ml-1 h-2 w-2 rounded-full bg-[#EA580C]" /> Auction
           <span className="ml-1 h-2 w-2 rounded-full bg-[#0891B2]" /> Code
@@ -661,7 +661,7 @@ export function DealDiscoveryMap() {
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-blue-700">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-900">
               {activeDeal.source}
             </p>
             <h3 className="mt-1 truncate text-[20px] font-bold tracking-[-0.02em] text-[#111827]">

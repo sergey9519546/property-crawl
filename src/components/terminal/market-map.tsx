@@ -273,7 +273,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
             <div role="status" className="mx-auto max-w-3xl rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="font-bold text-slate-950">Street tiles are temporarily unavailable.</p><p className="mt-1 text-xs leading-5 text-slate-500">The listing coordinates and actions remain available below. Reconnect to restore the interactive street map.</p></div>
             <div data-testid="map-fallback-list" className="mx-auto mt-3 grid max-w-3xl gap-2 sm:grid-cols-2">
               {mappable.map((listing) => (
-                <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label={`Inspect ${listing.address} without map tiles`}>
+                <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900" aria-label={`Inspect ${listing.address} without map tiles`}>
                   <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-950">{listing.address}</span><span className="block text-xs text-slate-500">{listing.city}, {listing.state} · {listing.county} County</span></span>
                   <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-extrabold text-emerald-700">{listing.dealScore}</span>
                 </button>
@@ -293,18 +293,18 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
 }
 
 function MapControl({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" aria-label={label} onClick={onClick} className="grid h-11 w-11 place-items-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">{children}</button>;
+  return <button type="button" aria-label={label} onClick={onClick} className="grid h-11 w-11 place-items-center rounded-lg text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">{children}</button>;
 }
 
 function MapPreview({ listing, onClose, onUnderwrite }: { listing: PropertyListing; onClose: () => void; onUnderwrite: (listing: PropertyListing) => void }) {
   return (
     <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={`Selected listing: ${listing.address}`} className="absolute bottom-4 left-4 right-4 z-30 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.24)] backdrop-blur-xl sm:left-auto sm:w-[390px]">
-      <button type="button" onClick={onClose} aria-label="Close map listing preview" className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"><X className="h-4 w-4" aria-hidden /></button>
+      <button type="button" onClick={onClose} aria-label="Close map listing preview" className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"><X className="h-4 w-4" aria-hidden /></button>
       <div className="pr-11"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">{SOURCES[listing.source]?.label ?? listing.source} · Score {listing.dealScore}</p><h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-slate-950">{listing.address}</h4><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" aria-hidden /> {listing.city}, {listing.state} · {listing.county} County</p></div>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center"><MapStat label="Opening" value={`$${Math.round(listing.openingBid / 1000)}k`} /><MapStat label="Value" value={`$${Math.round(listing.mid / 1000)}k`} /><MapStat label="Equity" value={`$${Math.round(listing.equity / 1000)}k`} green /></div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-slate-950 px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
-        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+        <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-slate-950 px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
+        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>
     </article>
   );

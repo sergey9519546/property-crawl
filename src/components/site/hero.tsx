@@ -395,15 +395,15 @@ export function Hero() {
                   }}
                   onClick={() => selectSuggestion(suggestion)}
                   className={`flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
-                    activeSuggestion === index ? "bg-[#E8EEFF]" : "hover:bg-[#F3F4F6]"
+                    activeSuggestion === index ? "bg-[#F1F5F9]" : "hover:bg-[#F3F4F6]"
                   }`}
                 >
-                  {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
-                  {suggestion.kind === "city" ? <Building2 className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
-                  {suggestion.kind === "county" ? <MapIcon className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
-                  {suggestion.kind === "state" ? <Flag className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
-                  {suggestion.kind === "area" ? <MapPin className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
-                  {suggestion.kind === "country" ? <Globe2 className="h-4 w-4 shrink-0 text-[#2563EB]" aria-hidden /> : null}
+                  {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "city" ? <Building2 className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "county" ? <MapIcon className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "state" ? <Flag className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "area" ? <MapPin className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "country" ? <Globe2 className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
                   <span className="min-w-0 flex-1">{suggestion.label}</span>
                   <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7B8493]">
                     {suggestion.description}

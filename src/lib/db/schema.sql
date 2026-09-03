@@ -19,6 +19,25 @@ CREATE TABLE IF NOT EXISTS sources (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Seed the 15 verified sources into PostgreSQL
+INSERT INTO sources (key, label, tier, color, note, website_url) VALUES
+  ('sheriff', 'Sheriff Sale', 'B', '#0f766e', 'Foreclosure sale notice published under state law', 'https://www.cuyahogasheriff.org'),
+  ('trustee', 'Trustee''s Sale', 'B', '#0ea5e9', 'Non-judicial foreclosure auction', 'https://www.clarkcountynv.gov'),
+  ('hud', 'HUD Home', 'A', '#1d4ed8', 'hudhomestore.gov — owner-occupant window applies', 'https://www.hudhomestore.gov'),
+  ('fannie', 'Fannie Mae REO', 'A', '#2563eb', 'homepath.com — First Look window', 'https://www.homepath.com'),
+  ('freddie', 'Freddie Mac REO', 'A', '#1e40af', 'homesteps.com', 'https://www.homesteps.com'),
+  ('usda', 'USDA RD/FSA REO', 'A', '#3b82f6', 'resales.usda.gov', 'https://www.resales.usda.gov'),
+  ('va', 'VA REO', 'A', '#0e7490', 'vrmproperties.com', 'https://vrmproperties.com'),
+  ('irs', 'IRS Seized', 'A', '#b45309', 'irsauctions.gov — email subscribe', 'https://www.irsauctions.gov'),
+  ('treasury', 'Treasury Forfeiture', 'A', '#c2410c', 'CWS Marketing contractor', 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml'),
+  ('marshals', 'US Marshals', 'A', '#a16207', 'RealLook.com / Gaston & Sheehan', 'https://www.usmarshals.gov'),
+  ('gsa', 'GSA Surplus', 'A', '#92400e', 'realestatesales.gov', 'https://realestatesales.gov'),
+  ('landbank', 'Land Bank', 'B', '#059669', 'landbanksearch.com — 70+ county land bank aggregator', 'https://www.landbanksearch.com'),
+  ('fdic', 'FDIC REO', 'A', '#1e3a8a', 'sales.fdic.gov — Closed sales & receivership assets', 'https://sales.fdic.gov'),
+  ('civilview', 'CivilView Sheriff', 'B', '#0d9488', 'salesweb.civilview.com — Tyler Technologies docket', 'https://salesweb.civilview.com'),
+  ('bid4assets', 'Bid4Assets', 'B', '#7c3aed', 'bid4assets.com — County sheriff & tax auctions', 'https://www.bid4assets.com')
+ON CONFLICT (key) DO NOTHING;
+
 -- 2. Property Listings Table
 CREATE TABLE IF NOT EXISTS listings (
     id VARCHAR(64) PRIMARY KEY,
@@ -55,7 +74,12 @@ CREATE TABLE IF NOT EXISTS listings (
     raw_notice TEXT,
     price NUMERIC(14, 2),
     listing_date DATE,
-    status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold', 'cancelled', 'scheduled')),
+    redemption_days INT DEFAULT 0,
+    redemption_warning TEXT,
+    senior_lien_risk VARCHAR(16) DEFAULT 'NORMAL',
+    senior_lien_warning TEXT,
+    cash_to_close NUMERIC(14, 2),
+    status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -108,7 +132,6 @@ CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC)
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
 CREATE INDEX IF NOT EXISTS idx_listings_listing_date ON listings(listing_date);
 -- GiST spatial index: required for ST_DWithin radius queries to use index scan.
--- Without this, every radius filter performs a full sequential scan of listings.
 CREATE INDEX IF NOT EXISTS idx_listings_geog ON listings USING GIST(geog);
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
 
@@ -149,5 +172,3 @@ BEGIN
     ORDER BY distance_meters ASC;
 END;
 $$;
-
-
