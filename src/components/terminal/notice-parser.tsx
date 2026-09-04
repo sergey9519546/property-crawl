@@ -206,6 +206,7 @@ ${rawText.slice(0, 3000)}`;
       occupancy: "Unknown",
       deposit: parsedResult.deposit_terms,
       photo: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80",
+      images: ["https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80"],
       raw: rawText
     };
     onSaveToWatchlist(newListing);

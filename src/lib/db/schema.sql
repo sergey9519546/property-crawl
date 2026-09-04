@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS listings (
     occupancy VARCHAR(64) DEFAULT 'Unknown',
     deposit_terms TEXT NOT NULL DEFAULT 'Certified funds',
     photo_url TEXT,
+    images TEXT[],
     source_url TEXT,
     raw_notice TEXT,
     price NUMERIC(14, 2),

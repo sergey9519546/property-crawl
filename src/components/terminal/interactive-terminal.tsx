@@ -54,7 +54,7 @@ export function InteractiveTerminal() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
-  const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date">("score");
+  const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date" | "images">("score");
   const [minDealScore, setMinDealScore] = useState<number>(0);
   const [minEquity, setMinEquity] = useState<number>(0);
   const [maxOpeningBid, setMaxOpeningBid] = useState<number | null>(null);
@@ -175,6 +175,7 @@ export function InteractiveTerminal() {
       occupancy: "Vacant",
       deposit: "10% certified check",
       photo: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&auto=format&fit=crop&q=60",
+      images: ["https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&auto=format&fit=crop&q=60"],
       plaintiff: "Specialized Loan Servicing LLC",
       defendant: "Titleholder of Record",
       judgment: 168000,
@@ -247,6 +248,7 @@ export function InteractiveTerminal() {
   if (sortBy === "equity") filtered.sort((a, b) => b.equity - a.equity);
   else if (sortBy === "bid") filtered.sort((a, b) => a.openingBid - b.openingBid);
   else if (sortBy === "date") filtered.sort((a, b) => new Date(a.saleDate).getTime() - new Date(b.saleDate).getTime());
+  else if (sortBy === "images") filtered.sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
   else filtered.sort((a, b) => b.dealScore - a.dealScore);
 
   const medianBid = filtered.length > 0
@@ -432,6 +434,7 @@ export function InteractiveTerminal() {
                   <option value="equity">Built-in Equity (Highest)</option>
                   <option value="bid">Opening Bid (Lowest)</option>
                   <option value="date">Auction Date (Soonest)</option>
+                  <option value="images">Most Photos</option>
                 </select>
 
                 {/* Advanced Underwriting Box Trigger */}

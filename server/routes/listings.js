@@ -13,7 +13,7 @@ const PARAM_CAPS = Object.freeze({
   occupancy:  { maxLen: 32,  defaultIfEmpty: 'all'  },
   seniorLien: { maxLen: 16,  defaultIfEmpty: 'all'  },
   redemption: { maxLen: 32,  defaultIfEmpty: 'all'  },
-  sort:       { maxLen: 16,  defaultIfEmpty: 'score'}
+  sort:       { maxLen: 16,  defaultIfEmpty: 'score' }
 });
 
 const NUMERIC_RANGES = Object.freeze({
