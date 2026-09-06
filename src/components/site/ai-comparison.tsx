@@ -12,40 +12,36 @@ type Col = {
 
 const COLS: Col[] = [
   {
-    name: "County sites",
-    tag: "Free, manual",
+    name: "Research workspace",
+    tag: "Available in this beta",
     features: [
-      { label: "Aggregates federal + GSE sources", ok: false },
-      { label: "Reads legal-prose notices with AI", ok: false },
-      { label: "Scores every listing vs. comps", ok: false },
-      { label: "Writes the risk paragraph for you", ok: false },
-      { label: "Cross-county dedupe on address+APN", ok: false },
-      { label: "Saved searches with instant alerts", ok: false },
+      { label: "Market and source filters", ok: true },
+      { label: "Source-observed record labels", ok: true },
+      { label: "Exact listing detail pages", ok: true },
+      { label: "Local watchlists and saved searches", ok: true },
+      { label: "CSV and JSON watchlist exports", ok: true },
     ],
   },
   {
-    name: "Foreclosure.com",
-    tag: "$40/mo, list-only",
+    name: "Evidence and judgment",
+    tag: "Review required for each property",
     features: [
-      { label: "Aggregates federal + GSE sources", ok: true },
-      { label: "Reads legal-prose notices with AI", ok: false },
-      { label: "Scores every listing vs. comps", ok: false },
-      { label: "Writes the risk paragraph for you", ok: false },
-      { label: "Cross-county dedupe on address+APN", ok: false },
-      { label: "Saved searches with instant alerts", ok: true },
+      { label: "Published facts separated from models", ok: true },
+      { label: "Notice extraction for supported formats", ok: true },
+      { label: "Publisher photos when source-matched", ok: true },
+      { label: "Qualified Street View fallback", ok: true },
+      { label: "Title and valuation require verification", ok: false },
     ],
   },
   {
-    name: "PerfectProperty",
-    tag: "Beta: free during launch",
-    highlight: true,
+    name: "Not connected yet",
+    tag: "These are not active services",
+    highlight: false,
     features: [
-      { label: "Aggregates federal + GSE sources", ok: true },
-      { label: "Reads legal-prose notices with AI", ok: true },
-      { label: "Scores every listing vs. comps", ok: true },
-      { label: "Writes the risk paragraph for you", ok: true },
-      { label: "Cross-county dedupe on address+APN", ok: true },
-      { label: "Saved searches with instant alerts", ok: true },
+      { label: "Cloud accounts and device sync", ok: false },
+      { label: "Email and background search alerts", ok: false },
+      { label: "Guaranteed complete national coverage", ok: false },
+      { label: "Verified title reports and live comps", ok: false },
     ],
   },
 ];
@@ -56,13 +52,12 @@ export function AiComparison() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            Not a list. A scored shortlist.
+            Know what is ready. Know what needs review.
           </h2>
           <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]">
-            County sites show you everything for free. Foreclosure.com shows
-            you everything for $40/mo. PerfectProperty shows you what&rsquo;s
-            actually a deal &mdash; and writes the risk paragraph for the ones
-            that pass.
+            The research workspace is free during beta. Source evidence, modeled
+            scenarios, and unfinished services are kept separate so you can make
+            an informed next move.
           </p>
         </GsapReveal>
 

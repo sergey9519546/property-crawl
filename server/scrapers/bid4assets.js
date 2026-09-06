@@ -39,9 +39,7 @@ function classifyPropType(rawType, statusId, title) {
   if (t.includes('commercial') || h.includes('commercial')) return 'Commercial';
   if (t.includes('land') || t.includes('vacant') || h.includes('vacant land')) return 'Land';
   if (t.includes('residential') || t.includes('single')) return 'Single Family';
-  // B4A records don't always carry a property type — derive from status.
-  // StatusID 2 = "Scheduled", 6 = "Postponed"/"Stayed". Both are SF by default.
-  return 'Single Family';
+  return null;
 }
 
 // Parses a Bid4Assets "Asset_Title" like
@@ -50,7 +48,7 @@ function classifyPropType(rawType, statusId, title) {
 //   "***POSTPONED***Berks County, PA Sheriff Sale: 906 NORTH 25TH STREET- Postponed to 11/06/2026, New Auction 1308882"
 // into { state, street, status }.
 function parseAssetTitle(title) {
-  if (!title) return { state: 'US', street: '', status: 'Scheduled' };
+  if (!title) return { state: null, street: '', status: null };
   let status = 'Scheduled';
   let cleaned = title;
   if (/^\*+\s*(POSTPONED|STAYED|CANCELLED|WITHDRAWN)/i.test(cleaned)) {
@@ -60,12 +58,12 @@ function parseAssetTitle(title) {
   // The first colon is the field separator: prefix : street
   const colonIdx = cleaned.indexOf(':');
   const prefix = colonIdx >= 0 ? cleaned.substring(0, colonIdx) : cleaned;
-  let street = colonIdx >= 0 ? cleaned.substring(colonIdx + 1).trim() : cleaned;
+  let street = colonIdx >= 0 ? cleaned.substring(colonIdx + 1).trim() : '';
   // Strip trailing " - Postponed to ..." / " New Auction N" annotations
   street = street.split(' - ')[0].trim();
   // Pull a 2-letter state code from the prefix (e.g. "Berks County, PA Sheriff Sale")
   const stateMatch = prefix.match(/\b([A-Z]{2})\b/);
-  const state = stateMatch ? stateMatch[1] : 'US';
+  const state = stateMatch ? stateMatch[1] : null;
   return { state, street, status };
 }
 
@@ -88,7 +86,6 @@ class Bid4AssetsScraper extends BaseScraper {
   constructor() {
     super({ name: 'Bid4AssetsScraper', sourceKey: 'bid4assets' });
     this.baseUrl = 'https://www.bid4assets.com';
-    this.delayMs = 1000; // 1 req/sec
     this.maxStorefronts = 3; // Berks alone has 80+ — 3 storefronts is enough for v1
     // Browser UA — the Akamai CDN returns 403 for Node's default UA.
     this.userAgent =
@@ -122,7 +119,7 @@ class Bid4AssetsScraper extends BaseScraper {
         } catch (err) {
           console.warn(`[${this.name}] Failed ${slug}: ${err.message}`);
         }
-        if (i < this.maxStorefronts - 1) await this.sleep(this.delayMs);
+        if (i < this.maxStorefronts - 1) await this.crawlJitter();
       }
 
       console.log(
@@ -135,22 +132,14 @@ class Bid4AssetsScraper extends BaseScraper {
   }
 
   async fetchText(url, timeoutMs = 30000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': this.userAgent,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-        },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: {
+        'User-Agent': this.userAgent,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+      }
+    });
   }
 
   async discoverStorefronts() {
@@ -207,15 +196,19 @@ class Bid4AssetsScraper extends BaseScraper {
 
     return records
       .map((rec) => this.toListing(rec, slug, url))
-      .filter((item) => item.openingBid > 0);
+      .filter(Boolean);
   }
 
   toListing(rec, slug, storefrontUrl) {
     const { state, street, status } = parseAssetTitle(rec.Asset_Title);
     const saleDate = parseSaleDate(rec.ActualCloseTime);
-    const id = `B4A-${rec.AuctionID}`;
-    const openingBid = Number(rec.CurrentBid || rec.MinimumBid || 0) || 0;
-    const judgment = Number(rec.DebtAmount || 0) || 0;
+    const auctionId = rec.AuctionID;
+    const id = `B4A-${auctionId}`;
+    const minimumBid = Number(rec.MinimumBid);
+    const currentBid = Number(rec.CurrentBid);
+    const debtAmount = Number(rec.DebtAmount);
+    const openingBid = Number.isFinite(minimumBid) && minimumBid > 0 ? minimumBid : null;
+    const price = Number.isFinite(currentBid) && currentBid > 0 ? currentBid : null;
     // Derive a friendly county name from the storefront slug. The slug
     // shapes are: /berkscountysheriffsales -> "berks",
     //              /BedfordPASheriffSales -> "Bedford",
@@ -226,37 +219,52 @@ class Bid4AssetsScraper extends BaseScraper {
     const county = (countyMatch ? countyMatch[1] : raw)
       .replace(/sheriff|sheriffsales|countysheriff|sales/i, '')
       .replace(/pa$/i, '')
-      .trim() || 'Unknown';
+      .trim() || null;
+
+    if (!auctionId || !state || !street) return null;
 
     return {
       id,
       source: 'bid4assets',
       state,
-      county: county || 'Unknown',
-      city: 'Unknown',
-      zip: '00000',
-      address: street || rec.Asset_Title,
-      lat: 0,
-      lng: 0,
-      beds: 0,
-      baths: 0,
-      sqft: 0,
+      county,
+      city: null,
+      zip: null,
+      address: street,
+      lat: null,
+      lng: null,
+      beds: null,
+      baths: null,
+      sqft: null,
       year: null,
       propType: classifyPropType(rec.PropertyType, rec.StatusID, rec.Asset_Title),
       openingBid,
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
+      price,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate,
-      plaintiff: 'Plaintiff per docket',
-      defendant: (rec.Defendant || '—').trim() || '—',
-      judgment,
-      attorney: (rec.Attorney || '—').trim() || '—',
-      occupancy: 'Unknown',
-      deposit: 'See Bid4Assets sale terms',
-      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
-      sourceUrl: `${this.baseUrl}/auction/${rec.AuctionID}`,
-      raw: `[B4A ${status}] ${rec.Asset_Title} | Sheriff# ${rec.SheriffNumber || '—'} | Bid count: ${rec.BidCount || 0} | MinBid $${rec.MinimumBid || 0} | Debt $${rec.DebtAmount || 0}`.substring(0, 500),
+      plaintiff: null,
+      defendant: rec.Defendant?.trim() || null,
+      judgment: null,
+      attorney: rec.Attorney?.trim() || null,
+      occupancy: null,
+      deposit: null,
+      photo: rec.PhotoUrl ?? rec.ImageUrl ?? null,
+      status,
+      sourceUrl: `${this.baseUrl}/auction/${auctionId}`,
+      raw: JSON.stringify(rec),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'Bid4Assets',
+        recordId: String(auctionId),
+        sourceFacts: {
+          sheriffNumber: rec.SheriffNumber ?? null,
+          bidCount: rec.BidCount ?? null,
+          debtAmount: Number.isFinite(debtAmount) && debtAmount > 0 ? debtAmount : null
+        }
+      },
     };
   }
 
@@ -265,12 +273,8 @@ class Bid4AssetsScraper extends BaseScraper {
     if (!/^B4A-\d+$/.test(item.id || '')) return false;
     if (!/^[A-Z]{2}$/.test(item.state || '')) return false;
     if ((item.address || '').length < 8) return false;
-    if (!(item.openingBid > 0)) return false;
+    if (item.openingBid != null && !(Number(item.openingBid) > 0)) return false;
     return true;
-  }
-
-  sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
   }
 }
 

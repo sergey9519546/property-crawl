@@ -4,20 +4,25 @@ import Link from "next/link";
 import * as React from "react";
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X } from "lucide-react";
 import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import { displayMoney, displayText, knownNumber } from "@/lib/listing-display";
+import { inspectMapLocation, groupMapLocations } from "@/lib/listing-map-policy";
+import { sourceDisplayText } from "@/lib/source-display";
 import { PropertyListing, SOURCES } from "./property-data";
 
 type MarketMapProps = {
   listings: PropertyListing[];
   onUnderwrite: (listing: PropertyListing) => void;
+  returnTo?: string;
 };
 
-type MarkerEntry = { id: string; element: HTMLButtonElement; marker: MapLibreMarker };
+type MarkerEntry = { ids: string[]; element: HTMLButtonElement; marker: MapLibreMarker };
 type MapView = { center: string; zoom: string };
+type GeocodedListing = PropertyListing & { lat: number; lng: number };
 
 const DEFAULT_VIEW: MapView = { center: "-98.5795,39.8283", zoom: "3.25" };
 
-function isGeocoded(listing: PropertyListing) {
-  return Number.isFinite(listing.lat) && Number.isFinite(listing.lng) && listing.lat !== 0 && listing.lng !== 0;
+function isGeocoded(listing: PropertyListing): listing is GeocodedListing {
+  return inspectMapLocation(listing).accepted;
 }
 
 function usePrefersReducedMotion() {
@@ -32,12 +37,12 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
-export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
+export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=map" }: MarketMapProps) {
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const maplibreRef = React.useRef<typeof import("maplibre-gl") | null>(null);
   const markersRef = React.useRef<MarkerEntry[]>([]);
-  const listingsRef = React.useRef<PropertyListing[]>([]);
+  const listingsRef = React.useRef<GeocodedListing[]>([]);
   const reducedMotionRef = React.useRef(false);
   const fitListingsRef = React.useRef<() => void>(() => undefined);
   const homeViewRef = React.useRef<MapView>(DEFAULT_VIEW);
@@ -52,7 +57,9 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
   const shouldReduceMotion = usePrefersReducedMotion();
 
   const mappable = React.useMemo(() => listings.filter(isGeocoded), [listings]);
+  const locationGroups: GeocodedListing[][] = React.useMemo(() => groupMapLocations(mappable), [mappable]);
   const selected = mappable.find((listing) => listing.id === selectedId) ?? null;
+  const related = selected ? locationGroups.find((group) => group.some((listing) => listing.id === selected.id)) ?? [] : [];
 
   listingsRef.current = mappable;
   reducedMotionRef.current = shouldReduceMotion;
@@ -62,9 +69,9 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
     setMapView({ center: `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`, zoom: map.getZoom().toFixed(2) });
   }, []);
 
-  const selectListing = React.useCallback((listing: PropertyListing, focus = true) => {
+  const selectListing = React.useCallback((listing: GeocodedListing, focus = true) => {
     setSelectedId(listing.id);
-    setAnnouncement(`${listing.address} selected. Deal score ${listing.dealScore}.`);
+    setAnnouncement(`${listing.address} selected. ${knownNumber(listing.dealScore) !== null ? `Modeled deal score ${listing.dealScore}.` : "No modeled deal score is available."}`);
     if (!focus || !mapRef.current) return;
     const map = mapRef.current;
     map.stop();
@@ -78,8 +85,8 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
   }, []);
 
   React.useEffect(() => {
-    markersRef.current.forEach(({ id, element }) => {
-      const active = id === selectedId;
+    markersRef.current.forEach(({ ids, element }) => {
+      const active = selectedId !== null && ids.includes(selectedId);
       element.dataset.active = active ? "true" : "false";
       element.setAttribute("aria-pressed", active ? "true" : "false");
     });
@@ -228,24 +235,36 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
     markersRef.current.forEach(({ marker }) => marker.remove());
     markersRef.current = [];
 
-    mappable.forEach((listing) => {
+    locationGroups.forEach((group) => {
+      const listing = group[0];
       const source = SOURCES[listing.source] ?? SOURCES.sheriff;
       const element = document.createElement("button");
       element.type = "button";
       element.className = "live-market-marker";
       element.dataset.testid = "map-marker";
+      element.dataset.recordCount = String(group.length);
       element.dataset.active = listing.id === selectedId ? "true" : "false";
-      element.setAttribute("aria-label", `Show ${listing.address} on map`);
+      element.setAttribute("aria-label", group.length > 1 ? `Show ${group.length} source records at ${listing.address}` : `Show ${listing.address} on map`);
       element.setAttribute("aria-controls", "live-market-map-preview");
       element.setAttribute("aria-pressed", listing.id === selectedId ? "true" : "false");
       element.style.setProperty("--marker-color", source.color);
-      element.innerHTML = `<span aria-hidden="true" class="live-market-marker__halo"></span><span aria-hidden="true" class="live-market-marker__pin">${listing.dealScore}</span><span aria-hidden="true" class="live-market-marker__label">${listing.city}, ${listing.state}</span>`;
+      for (const [className, value] of [
+        ["live-market-marker__halo", ""],
+        ["live-market-marker__pin", group.length > 1 ? String(group.length) : "•"],
+        ["live-market-marker__label", group.length > 1 ? `${group.length} source records` : `${displayText(listing.city, listing.county || listing.state)}, ${listing.state}`],
+      ]) {
+        const span = document.createElement("span");
+        span.className = className;
+        span.setAttribute("aria-hidden", "true");
+        span.textContent = value;
+        element.appendChild(span);
+      }
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         selectListing(listing);
       });
       const marker = new maplibre.Marker({ element, anchor: "center" }).setLngLat([listing.lng, listing.lat]).addTo(map);
-      markersRef.current.push({ id: listing.id, element, marker });
+      markersRef.current.push({ ids: group.map((record) => record.id), element, marker });
     });
 
     const fitListings = () => {
@@ -254,7 +273,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
         const camera = { center: [-98.5795, 39.8283] as [number, number], zoom: 3.25 };
         homeViewRef.current = DEFAULT_VIEW;
         setMapView(DEFAULT_VIEW);
-        if (reducedMotionRef.current) map.jumpTo(camera);
+        if (reducedMotionRef.current || !map.isStyleLoaded()) map.jumpTo(camera);
         else map.easeTo({ ...camera, duration: 450 });
         return;
       }
@@ -264,7 +283,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
         const home = { center: `${listing.lng.toFixed(4)},${listing.lat.toFixed(4)}`, zoom: "10.75" };
         homeViewRef.current = home;
         setMapView(home);
-        if (reducedMotionRef.current) map.jumpTo(camera);
+        if (reducedMotionRef.current || !map.isStyleLoaded()) map.jumpTo(camera);
         else map.easeTo({ ...camera, duration: 450 });
         return;
       }
@@ -290,7 +309,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
       map.fitBounds(boundsArray, {
         padding,
         maxZoom: 11.5,
-        duration: reducedMotionRef.current ? 0 : 500,
+        duration: reducedMotionRef.current || !map.isStyleLoaded() ? 0 : 500,
       });
     };
     fitListingsRef.current = fitListings;
@@ -300,7 +319,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
       markersRef.current.forEach(({ marker }) => marker.remove());
       markersRef.current = [];
     };
-  }, [mapCreated, mappable, selectListing]);
+  }, [mapCreated, locationGroups, selectListing]);
 
   const changeZoom = (delta: number) => {
     const map = mapRef.current;
@@ -312,7 +331,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
       center: `${center.lng.toFixed(4)},${center.lat.toFixed(4)}`,
       zoom: nextZoom.toFixed(2),
     });
-    if (reducedMotionRef.current) map.jumpTo({ zoom: nextZoom });
+    if (reducedMotionRef.current || !map.isStyleLoaded()) map.jumpTo({ zoom: nextZoom });
     else map.easeTo({ zoom: nextZoom, duration: 300 });
   };
 
@@ -336,9 +355,9 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden /><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">Live geographic view</p></div>
           <h3 className="mt-1 font-bold text-slate-950">Market map</h3>
-          <p className="text-xs text-slate-500">{mappable.length} geocoded {mappable.length === 1 ? "listing" : "listings"} · synced with the feed</p>
+          <p className="text-xs text-slate-500">{mappable.length} records with verified locations · {locationGroups.length} map locations</p>
+          {listings.length > mappable.length && <p className="mt-1 text-xs text-slate-500">{listings.length - mappable.length} records need verified coordinates and remain available in the feed.</p>}
         </div>
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
           <MapControl label="Zoom map out" onClick={() => changeZoom(-1)}><Minus className="h-4 w-4" aria-hidden /></MapControl>
@@ -358,7 +377,7 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
               {mappable.map((listing) => (
                 <button key={listing.id} type="button" onClick={() => selectListing(listing, false)} className="flex min-h-16 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900" aria-label={`Inspect ${listing.address} without map tiles`}>
                   <span className="min-w-0"><span className="block truncate text-sm font-bold text-slate-950">{listing.address}</span><span className="block text-xs text-slate-500">{listing.city}, {listing.state} · {listing.county} County</span></span>
-                  <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-extrabold text-emerald-700">{listing.dealScore}</span>
+                  <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 text-xs font-extrabold text-emerald-700">{knownNumber(listing.dealScore) ?? "—"}</span>
                 </button>
               ))}
             </div>
@@ -366,9 +385,9 @@ export function MarketMap({ listings, onUnderwrite }: MarketMapProps) {
           </div>
         ) : null}
 
-        {selected ? <MapPreview listing={selected} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} parcelBoundary={parcelBoundary} /> : null}
+        {selected ? <MapPreview listing={selected} relatedListings={related} onSelect={(listing) => selectListing(listing, false)} onClose={() => setSelectedId(null)} onUnderwrite={onUnderwrite} parcelBoundary={parcelBoundary} returnTo={returnTo} /> : null}
 
-        {mappable.length === 0 ? <div className="absolute inset-0 z-20 grid place-items-center bg-slate-50 px-6 text-center"><div><MapPin className="mx-auto h-8 w-8 text-slate-400" aria-hidden /><p className="mt-3 font-bold text-slate-700">No geocoded listings match these filters.</p></div></div> : null}
+        {mappable.length === 0 ? <div className="absolute inset-0 z-20 grid place-items-center bg-slate-50 px-6 text-center"><div className="max-w-md"><MapPin className="mx-auto h-8 w-8 text-slate-400" aria-hidden /><p className="mt-3 font-bold text-slate-700">No verified property locations match these filters.</p><p className="mt-2 text-sm leading-relaxed text-slate-500">Source coordinates or an exact address match are required before a property pin appears. Browse the feed while location evidence is collected.</p></div></div> : null}
       </div>
       <p className="sr-only" aria-live="polite">{announcement}</p>
     </section>
@@ -384,33 +403,52 @@ function MapPreview({
   onClose,
   onUnderwrite,
   parcelBoundary,
+  relatedListings,
+  onSelect,
+  returnTo,
 }: {
   listing: PropertyListing;
   onClose: () => void;
   onUnderwrite: (listing: PropertyListing) => void;
   parcelBoundary?: any;
+  relatedListings: GeocodedListing[];
+  onSelect: (listing: GeocodedListing) => void;
+  returnTo: string;
 }) {
   const pProps = parcelBoundary?.properties;
+  const parcelSqft = knownNumber(pProps?.lotSqft);
+  const parcelAcres = knownNumber(pProps?.lotAcres);
+  const parcelFrontage = knownNumber(pProps?.frontageFt);
+  const parcelDepth = knownNumber(pProps?.depthFt);
+  const parcelArea = parcelSqft !== null
+    ? `${parcelSqft.toLocaleString()} sq ft`
+    : parcelAcres !== null
+      ? `${parcelAcres.toLocaleString()} ac`
+      : "area not reported";
+  const parcelDimensions = parcelFrontage !== null && parcelDepth !== null
+    ? ` · ${parcelFrontage.toLocaleString()}′ × ${parcelDepth.toLocaleString()}′`
+    : " · dimensions not reported";
 
   return (
     <article id="live-market-map-preview" data-testid="map-listing-preview" aria-label={`Selected listing: ${listing.address}`} className="absolute bottom-4 left-4 right-4 z-30 rounded-2xl border border-white/80 bg-white/95 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.24)] backdrop-blur-xl sm:left-auto sm:w-[390px]">
       <button type="button" onClick={onClose} aria-label="Close map listing preview" className="absolute right-3 top-3 grid h-10 w-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900"><X className="h-4 w-4" aria-hidden /></button>
-      <div className="pr-11"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">{SOURCES[listing.source]?.label ?? listing.source} · Score {listing.dealScore}</p><h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-slate-950">{listing.address}</h4><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" aria-hidden /> {listing.city}, {listing.state} · {listing.county} County</p></div>
+      <div className="pr-11"><p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-700">{sourceDisplayText(SOURCES[listing.source]?.label ?? listing.source)} · {knownNumber(listing.dealScore) !== null ? `Modeled score ${listing.dealScore}` : "Unscored"}</p><h4 className="mt-1 text-lg font-bold tracking-[-0.02em] text-slate-950">{listing.address}</h4><p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" aria-hidden /> {displayText(listing.city, listing.state)}, {listing.state}{listing.county ? ` · ${listing.county} County` : ""}</p></div>
+      {relatedListings.length > 1 && <div className="mt-3 border-t border-slate-200 pt-3"><p className="text-xs font-semibold text-slate-600">{relatedListings.length} source records at this location</p><div className="mt-2 flex max-h-24 flex-wrap gap-2 overflow-auto">{relatedListings.map((record) => <button key={record.id} type="button" aria-pressed={record.id === listing.id} onClick={() => onSelect(record)} className={`rounded border px-2 py-1 text-xs ${record.id === listing.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 text-slate-600"}`}>{sourceDisplayText(record.id)}</button>)}</div></div>}
       {pProps ? (
-        <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-mono">
+        <div className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-mono">
           <span className="flex items-center gap-1.5 font-bold text-emerald-900">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-            Lot: {Number(pProps.lotSqft || 8450).toLocaleString()} sq ft ({pProps.frontageFt || 62}&apos; × {pProps.depthFt || 136}&apos;)
+            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+            Parcel: {parcelArea}{parcelDimensions}
           </span>
-          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800">
-            {pProps.source === "arcgis_rest" ? "ArcGIS Live" : "Cadastral GIS"}
+          <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-amber-800">
+            Not a survey
           </span>
         </div>
       ) : null}
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center"><MapStat label="Opening" value={`$${Math.round(listing.openingBid / 1000)}k`} /><MapStat label="Value" value={`$${Math.round(listing.mid / 1000)}k`} /><MapStat label="Equity" value={`$${Math.round(listing.equity / 1000)}k`} green /></div>
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center"><MapStat label="Reported" value={displayMoney(listing.openingBid)} /><MapStat label="Modeled value" value={displayMoney(listing.mid, "Not modeled")} /><MapStat label="Bid spread" value={displayMoney(listing.equity, "Not modeled")} green /></div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-slate-950 px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
-        <Link href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
+        <Link href={`/listings/${listing.id}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>
     </article>
   );

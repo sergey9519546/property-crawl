@@ -1,6 +1,27 @@
 const db = require('../db/client');
 const Validator = require('../security/validation');
 
+function neutralCustomerText(value) {
+  return typeof value === 'string'
+    ? value.replace(/servicelink(?:[\s_-]*auction)?/gi, 'Public Auction Network')
+    : value;
+}
+
+function presentListing(listing) {
+  if (!listing || typeof listing !== 'object') return listing;
+  const presented = { ...listing };
+  for (const field of ['raw', 'plaintiff', 'defendant', 'attorney', 'deposit', 'description', 'notes', 'photoProvider']) {
+    if (typeof presented[field] === 'string') presented[field] = neutralCustomerText(presented[field]);
+  }
+  if (presented.provenance && typeof presented.provenance === 'object' && !Array.isArray(presented.provenance)) {
+    presented.provenance = {
+      ...presented.provenance,
+      publisher: neutralCustomerText(presented.provenance.publisher),
+    };
+  }
+  return presented;
+}
+
 // Bounds for query-string parameters. The HTTP server already caps the request
 // line at 8 KB (next-adapter.js), so these caps are about preventing wasted
 // CPU on absurdly long search strings and keeping the API surface honest.
@@ -41,11 +62,14 @@ async function handleListings(req, res) {
   const method = req.method;
 
   if (method === 'GET') {
-    const id = url.pathname.split('/api/listings/')[1];
-    if (id) {
+    const encodedId = url.pathname.split('/api/listings/')[1];
+    if (encodedId) {
+      let id;
+      try { id = decodeURIComponent(encodedId); } catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
+      if (id.length > 256 || /[\/\\\u0000-\u001f\u007f]/.test(id)) return res.status(400).json({ error: 'Invalid listing identifier' });
       const listing = await db.getListingById(id);
       if (!listing) return res.status(404).json({ error: 'Listing not found' });
-      return res.json(listing);
+      return res.json(presentListing(listing));
     }
 
     // Strict input validation. Each reject short-circuits with 400 so the
@@ -74,37 +98,11 @@ async function handleListings(req, res) {
     filters.radiusKm = url.searchParams.get('radiusKm') ? parseFloat(url.searchParams.get('radiusKm')) : 100;
 
     const result = await db.getListings(filters);
-    return res.json(result);
-  }
-
-  if (method === 'POST') {
-    const body = req.body || {};
-    const validation = Validator.validateListing(body);
-    if (!validation.isValid) {
-      return res.status(400).json({ error: 'Validation failed', details: validation.errors });
-    }
-
-    // Normalize sourceUrl: strip generic source homepages so the DB stays
-    // consistent with the build-data.js pipeline normalization.
-    if (body.sourceUrl && body.source) {
-      // Any URL that is just the source's homepage root is treated as null.
-      // We check by stripping trailing slashes and comparing path depth.
-      const candidate = body.sourceUrl.replace(/\/+$/, '');
-      try {
-        const parsed = new URL(candidate);
-        if (parsed.pathname === '' || parsed.pathname === '/') {
-          body.sourceUrl = null;
-        }
-      } catch (_) {
-        body.sourceUrl = null; // malformed URL
-      }
-    }
-
-    const created = await db.createListing(body);
-    return res.status(201).json(created);
+    return res.json({ ...result, listings: result.listings.map(presentListing) });
   }
 
   res.status(405).json({ error: 'Method not allowed' });
 }
 
 module.exports = handleListings;
+module.exports.presentListing = presentListing;

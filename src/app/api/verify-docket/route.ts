@@ -1,5 +1,4 @@
-import { adapt } from "@/lib/next-adapter";
-import handleVerifyDocket from "@/lib/server-routes/verify-docket";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const POST = adapt(handleVerifyDocket, { securityHeaders: true, cors: true });
+export const POST = (request: Request) => proxyPropertyApi(request);
 export const GET = POST;

@@ -1,5 +1,4 @@
-import { adapt } from "@/lib/next-adapter";
-import handleEnrich from "@/lib/server-routes/enrich";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const POST = adapt(handleEnrich, { securityHeaders: true, cors: true });
+export const POST = (request: Request) => proxyPropertyApi(request);
 export const GET = POST;

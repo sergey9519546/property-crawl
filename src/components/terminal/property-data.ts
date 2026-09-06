@@ -11,42 +11,59 @@ export interface PropertyListing {
   id: string;
   source: string;
   state: string;
-  county: string;
-  city: string;
-  zip: string;
+  county: string | null;
+  city: string | null;
+  zip: string | null;
   address: string;
-  lat: number;
-  lng: number;
-  beds: number;
-  baths: number;
-  sqft: number;
+  lat: number | null;
+  lng: number | null;
+  beds: number | null;
+  baths: number | null;
+  sqft: number | null;
   year: number | null;
-  propType: string;
-  openingBid: number;
-  estLow: number;
-  estHigh: number;
-  assessed: number;
-  mid: number;
-  ratio: number;
-  equity: number;
-  dealScore: number;
-  saleDate: string;
-  plaintiff: string;
-  defendant: string;
-  judgment: number;
-  attorney: string;
-  occupancy: string;
-  deposit: string;
-  photo: string;
+  propType: string | null;
+  openingBid: number | null;
+  estLow: number | null;
+  estHigh: number | null;
+  assessed: number | null;
+  mid: number | null;
+  ratio: number | null;
+  equity: number | null;
+  dealScore: number | null;
+  saleDate: string | null;
+  plaintiff: string | null;
+  defendant: string | null;
+  judgment: number | null;
+  attorney: string | null;
+  occupancy: string | null;
+  deposit: string | null;
+  photo: string | null;
   images?: string[];
   sourceUrl?: string | null;
-  raw?: string;
-  redemptionDays?: number;
+  raw?: string | null;
+  redemptionDays?: number | null;
   redemptionWarning?: string | null;
   seniorLienRisk?: string;
   seniorLienWarning?: string | null;
-  cashToClose?: number;
+  cashToClose?: number | null;
+  cashToCloseDetails?: Record<string, unknown> | null;
+  price?: number | null;
+  listingDate?: string | null;
   apn?: string;
+  status?: string | null;
+  /** Publisher-observed sale mechanism. Absence means it was not captured. */
+  program?: string | null;
+  auctionProgram?: string | null;
+  /** Publisher lifecycle value; deliberately separate from auction completion. */
+  lifecycle?: string | null;
+  lifecycleStatus?: string | null;
+  /** Discovery pipeline state, distinct from publisher lifecycle facts. */
+  discoveryStatus?: string | null;
+  /** Whether publisher documents were observed; document contents remain evidence-backed. */
+  hasDocuments?: boolean | null;
+  provenance?: Record<string, unknown> | null;
+  sourceObservedAt?: string | null;
+  fetchedAt?: string | null;
 }
 
 // Source registry — KEPT IN SYNC with the production SOURCES at
@@ -68,10 +85,11 @@ export interface PropertyListing {
 // source types are real, but the per-listing values are demo data. The
 // production dataset for the live dashboard is at `data.js` (20 listings).
 export const SOURCES: Record<string, SourceInfo> = {
+  servicelink: { key: 'servicelink', label: 'Public Auction Network', tier: 'B', color: '#0369a1', note: 'Public auction listings; sale status and terms require confirmation', websiteUrl: 'https://www.servicelinkauction.com' },
   sheriff:  { key: 'sheriff',  label: "Sheriff Sale",         tier: 'B', color: '#0f766e', note: 'Foreclosure sale notice published under state law',        websiteUrl: 'https://www.cuyahogasheriff.org' },
   trustee:  { key: 'trustee',  label: "Trustee's Sale",       tier: 'B', color: '#0ea5e9', note: 'Non-judicial foreclosure auction',                          websiteUrl: 'https://www.clarkcountynv.gov' },
   hud:      { key: 'hud',      label: 'HUD Home',             tier: 'A', color: '#1d4ed8', note: 'hudhomestore.gov — owner-occupant window applies',         websiteUrl: 'https://www.hudhomestore.gov' },
-  fannie:   { key: 'fannie',   label: 'Fannie Mae REO',       tier: 'A', color: '#2563eb', note: 'homepath.com — First Look window',                         websiteUrl: 'https://www.homepath.com' },
+  fannie:   { key: 'fannie',   label: 'Fannie Mae REO',       tier: 'A', color: '#2563eb', note: 'HomePath by Fannie Mae — First Look window',               websiteUrl: 'https://www.homepath.fanniemae.com' },
   freddie:  { key: 'freddie',  label: 'Freddie Mac REO',      tier: 'A', color: '#1e40af', note: 'homesteps.com',                                            websiteUrl: 'https://www.homesteps.com' },
   usda:     { key: 'usda',     label: 'USDA RD/FSA REO',      tier: 'A', color: '#3b82f6', note: 'resales.usda.gov',                                        websiteUrl: 'https://www.resales.usda.gov' },
   va:       { key: 'va',       label: 'VA REO',               tier: 'A', color: '#0e7490', note: 'vrmproperties.com',                                       websiteUrl: 'https://vrmproperties.com' },

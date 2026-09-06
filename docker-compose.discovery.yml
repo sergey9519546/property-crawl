@@ -1,0 +1,94 @@
+services:
+  discovery-db:
+    image: postgis/postgis:16-3.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-property}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-property_crawl}
+    volumes:
+      - discovery_pgdata:/var/lib/postgresql/data
+    ports:
+      # Loopback-only integration database; intentionally separate from the
+      # repository compose file's default 5432 binding.
+      - "127.0.0.1:${DISCOVERY_DB_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  discovery-api:
+    build: .
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DISCOVERY_MODE: advanced
+      DATABASE_URL: postgres://${POSTGRES_USER:-property}:${POSTGRES_PASSWORD}@discovery-db:5432/${POSTGRES_DB:-property_crawl}
+      SCRAPER_BACKGROUND_ENABLED: "0"
+      SCRAPER_ADMIN_TOKEN: ${SCRAPER_ADMIN_TOKEN:?set SCRAPER_ADMIN_TOKEN}
+      WORKSPACE_SESSION_SECRET: ${WORKSPACE_SESSION_SECRET:?set WORKSPACE_SESSION_SECRET}
+      PROPERTY_COLLECTION_JOBS_PATH: /var/lib/property-crawl/jobs.json
+      PROPERTY_LIVE_CACHE_PATH: /var/lib/property-crawl/live-listings.json
+      PROPERTY_MEDIA_CACHE_PATH: /var/lib/property-crawl/property-media.json
+    depends_on:
+      discovery-migrate:
+        condition: service_completed_successfully
+      discovery-db:
+        condition: service_healthy
+    volumes:
+      - discovery_state:/var/lib/property-crawl
+      - discovery_media:/var/lib/property-crawl/media
+    ports:
+      - "${DISCOVERY_API_PORT:-3000}:3000"
+
+  discovery-migrate:
+    build: .
+    command: ["node", "scripts/discovery-migrate.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-property}:${POSTGRES_PASSWORD}@discovery-db:5432/${POSTGRES_DB:-property_crawl}
+    depends_on:
+      discovery-db:
+        condition: service_healthy
+
+  discovery-worker:
+    build: .
+    command: ["node", "scripts/discovery-worker.js"]
+    environment:
+      NODE_ENV: production
+      DISCOVERY_MODE: advanced
+      DATABASE_URL: postgres://${POSTGRES_USER:-property}:${POSTGRES_PASSWORD}@discovery-db:5432/${POSTGRES_DB:-property_crawl}
+      SCRAPER_BACKGROUND_ENABLED: "0"
+      SCRAPER_ADMIN_TOKEN: ${SCRAPER_ADMIN_TOKEN:?set SCRAPER_ADMIN_TOKEN}
+      WORKSPACE_SESSION_SECRET: ${WORKSPACE_SESSION_SECRET:?set WORKSPACE_SESSION_SECRET}
+      PROPERTY_COLLECTION_JOBS_PATH: /var/lib/property-crawl/jobs.json
+      PROPERTY_LIVE_CACHE_PATH: /var/lib/property-crawl/live-listings.json
+      PROPERTY_MEDIA_CACHE_PATH: /var/lib/property-crawl/property-media.json
+    depends_on:
+      discovery-migrate:
+        condition: service_completed_successfully
+      discovery-db:
+        condition: service_healthy
+    volumes:
+      - discovery_state:/var/lib/property-crawl
+      - discovery_media:/var/lib/property-crawl/media
+
+  discovery-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.discovery
+    environment:
+      NODE_ENV: production
+      SCRAPER_ADMIN_TOKEN: ${SCRAPER_ADMIN_TOKEN:?set SCRAPER_ADMIN_TOKEN}
+      WORKSPACE_SESSION_SECRET: ${WORKSPACE_SESSION_SECRET:?set WORKSPACE_SESSION_SECRET}
+      PROPERTY_API_URL: http://discovery-api:3000
+    depends_on:
+      discovery-api:
+        condition: service_started
+    ports:
+      - "${DISCOVERY_WEB_PORT:-3001}:3001"
+
+volumes:
+  discovery_pgdata:
+  discovery_state:
+  discovery_media:

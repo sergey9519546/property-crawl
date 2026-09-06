@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Keep production verification separate from an active development server.
+  distDir: process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'
+    : process.env.NEXT_VERIFY_BUILD === '1' ? '.next-verify' : '.next',
+  experimental: {
+    turbopackFileSystemCacheForBuild: !process.env.NEXT_VERIFY_BUILD,
+  },
   // Allow the Base44 preview origin (served through a proxy hostname that
   // changes whenever the environment is recreated) to reach dev assets/HMR.
   allowedDevOrigins: process.env.BASE44_PUBLIC_HOST_SUFFIX

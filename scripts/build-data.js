@@ -24,12 +24,13 @@
 // returns an array conforming to the v0 schema (see
 // server/scrapers/base.js#standardizeListing). Results are:
 //   1. Deduplicated by `id` (Treasury + a hypothetical GSE won't collide)
-//   2. Filtered for required fields (state, address, openingBid > 0)
-//   3. Sorted by dealScore descending (best deals first)
+//   2. Filtered for required identity/evidence fields (an unpublished bid is valid)
+//   3. Sorted by known dealScore descending, with unknowns last
 //   4. Emitted as window.LISTINGS
 
 const fs = require('fs');
 const path = require('path');
+const { validateListingForIngestion } = require('../server/scrapers/validation');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DATA_JS_PATH = path.join(PROJECT_ROOT, 'data.js');
@@ -37,10 +38,11 @@ const DATA_JS_PATH = path.join(PROJECT_ROOT, 'data.js');
 // SOURCES — the 11-source registry. Single source of truth here.
 // Mirrors src/components/terminal/property-data.ts (test/sync.test.js enforces).
 const SOURCES = {
+  servicelink: { key: 'servicelink', label: 'Public Auction Network', tier: 'B', color: '#0369a1', note: 'Public auction listings; sale status and terms require confirmation', websiteUrl: 'https://www.servicelinkauction.com' },
   sheriff:   { key: "sheriff",   label: "Sheriff Sale",         tier: "B", color: "#0f766e", note: "Foreclosure sale notice published under state law",        websiteUrl: "https://www.cuyahogasheriff.org" },
   trustee:   { key: "trustee",   label: "Trustee's Sale",       tier: "B", color: "#0ea5e9", note: "Non-judicial foreclosure auction",                          websiteUrl: "https://www.clarkcountynv.gov" },
   hud:       { key: "hud",       label: "HUD Home",             tier: "A", color: "#1d4ed8", note: "hudhomestore.gov — owner-occupant window applies",         websiteUrl: "https://www.hudhomestore.gov" },
-  fannie:    { key: "fannie",    label: "Fannie Mae REO",       tier: "A", color: "#2563eb", note: "homepath.com — First Look window",                         websiteUrl: "https://www.homepath.com" },
+  fannie:    { key: "fannie",    label: "Fannie Mae REO",       tier: "A", color: "#2563eb", note: "HomePath by Fannie Mae — First Look window",               websiteUrl: "https://www.homepath.fanniemae.com" },
   freddie:   { key: "freddie",   label: "Freddie Mac REO",      tier: "A", color: "#1e40af", note: "homesteps.com",                                            websiteUrl: "https://www.homesteps.com" },
   usda:      { key: "usda",      label: "USDA RD/FSA REO",      tier: "A", color: "#3b82f6", note: "resales.usda.gov",                                        websiteUrl: "https://www.resales.usda.gov" },
   va:        { key: "va",        label: "VA REO",               tier: "A", color: "#0e7490", note: "vrmproperties.com",                                       websiteUrl: "https://vrmproperties.com" },
@@ -58,6 +60,7 @@ const SOURCES = {
 // server/scrapers/<key>.js that exports a singleton with .scrapeFeed(),
 // then add it here.
 const SCRAPER_REGISTRY = [
+  { key: 'servicelink', mod: '../server/scrapers/servicelink', real: true },
   { key: 'sheriff',    mod: '../server/scrapers/sheriff',         real: true },
   { key: 'hud',        mod: '../server/scrapers/hud',             real: true },
   { key: 'fannie',     mod: '../server/scrapers/fannie',          real: true },
@@ -119,26 +122,33 @@ function loadExistingListings() {
   return [];
 }
 
-async function gather() {
+async function gather(options = {}) {
   const all = [];
   const counts = {};
-  const existingListings = loadExistingListings();
+  const registry = options.registry || SCRAPER_REGISTRY;
+  const runReal = options.runReal ?? RUN_REAL;
+  const loadScraper = options.loadScraper || ((modulePath) => require(modulePath));
+  const timeoutMs = options.timeoutMs || TIMEOUT_PER_SCRAPER_MS;
+  const existingListings = options.existingListings ?? loadExistingListings();
   const existingBySource = {};
   for (const l of existingListings) {
     if (!existingBySource[l.source]) existingBySource[l.source] = [];
     existingBySource[l.source].push(l);
   }
 
-  for (const entry of SCRAPER_REGISTRY) {
+  for (const entry of registry) {
     let scraper;
     try {
-      scraper = require(entry.mod);
+      scraper = loadScraper(entry.mod, entry);
     } catch (err) {
       console.warn(`[build-data] could not load ${entry.key}: ${err.message}`);
-      const fallback = existingBySource[entry.key] || [];
+      const existing = existingBySource[entry.key] || [];
+      const fallback = runReal
+        ? existing.filter(isRetainableObservedRecord)
+        : existing.map(markSnapshotRecord);
       if (fallback.length > 0) {
         all.push(...fallback);
-        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing' };
+        counts[entry.key] = { count: fallback.length, mode: runReal ? 'preserved_observed_load_error' : 'non_live_snapshot' };
       } else {
         counts[entry.key] = { error: err.message };
       }
@@ -146,52 +156,143 @@ async function gather() {
     }
     if (!scraper || typeof scraper.scrapeFeed !== 'function') {
       console.warn(`[build-data] ${entry.key} has no scrapeFeed()`);
-      const fallback = existingBySource[entry.key] || [];
+      const existing = existingBySource[entry.key] || [];
+      const fallback = runReal
+        ? existing.filter(isRetainableObservedRecord)
+        : existing.map(markSnapshotRecord);
       if (fallback.length > 0) {
         all.push(...fallback);
-        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing' };
+        counts[entry.key] = { count: fallback.length, mode: runReal ? 'preserved_observed_invalid_collector' : 'non_live_snapshot' };
       } else {
         counts[entry.key] = { error: 'no scrapeFeed()' };
       }
       continue;
     }
 
-    if (entry.real && !RUN_REAL) {
-      let items = typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : [];
-      if (items.length === 0 && existingBySource[entry.key]?.length > 0) {
-        items = existingBySource[entry.key];
-      }
+    if (scraper.fixtureOnly === true) {
+      counts[entry.key] = { count: 0, mode: 'fixture_only_excluded' };
+      console.log(`[build-data] ${entry.key} excluded: fixture-only collector`);
+      continue;
+    }
+
+    if (scraper.historicalOnly === true) {
+      counts[entry.key] = { count: 0, mode: 'historical_only_excluded' };
+      console.log(`[build-data] ${entry.key} excluded: historical-only dataset`);
+      continue;
+    }
+
+    if (entry.real && !runReal) {
+      const items = (existingBySource[entry.key] || []).map(markSnapshotRecord);
       all.push(...items);
-      counts[entry.key] = { count: items.length, mode: 'verified_inventory' };
-      console.log(`[build-data] ${entry.key} → ${items.length} verified listings (fast mode)`);
+      counts[entry.key] = { count: items.length, mode: 'non_live_snapshot' };
+      console.log(`[build-data] ${entry.key} → ${items.length} non-live demo records (fast mode)`);
       continue;
     }
 
     try {
       console.log(`[build-data] running ${entry.key}…`);
-      const items = await withTimeout(scraper.scrapeFeed(), TIMEOUT_PER_SCRAPER_MS, entry.key);
+      const items = await withTimeout(scraper.scrapeFeed(), timeoutMs, entry.key);
       if (items && items.length > 0) {
-        all.push(...items);
-        counts[entry.key] = { count: items.length, mode: 'live_scraped' };
-        console.log(`[build-data] ${entry.key} → ${items.length} listings`);
+        const observedItems = items
+          .filter((item) => !isFixtureRecord(item))
+          .map((item) => markLiveObservedRecord(item));
+        all.push(...observedItems);
+        counts[entry.key] = { count: observedItems.length, mode: 'live_scraped' };
+        console.log(`[build-data] ${entry.key} → ${observedItems.length} observed listings (${items.length - observedItems.length} fixtures rejected)`);
       } else {
-        // Anti-poisoning fallback: preserve existing verified records if upstream returned 0
-        const fallback = existingBySource[entry.key] || (typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : []);
+        // Preserve only records whose earlier live run explicitly recorded
+        // source observation. Embedded fixture/snapshot inventory is excluded.
+        const fallback = (existingBySource[entry.key] || []).filter(isRetainableObservedRecord);
         all.push(...fallback);
-        counts[entry.key] = { count: fallback.length, mode: 'preserved_existing_zero_scraped' };
-        console.warn(`[build-data] ${entry.key} returned 0 items; preserved ${fallback.length} existing records`);
+        counts[entry.key] = { count: fallback.length, mode: 'preserved_observed_zero_scraped' };
+        console.warn(`[build-data] ${entry.key} returned 0 items; preserved ${fallback.length} explicitly observed records`);
       }
     } catch (err) {
-      console.warn(`[build-data] ${entry.key} failed: ${err.message}; preserving existing records`);
-      const fallback = existingBySource[entry.key] || (typeof scraper.getVerifiedInventory === 'function' ? scraper.getVerifiedInventory() : []);
+      console.warn(`[build-data] ${entry.key} failed: ${err.message}; preserving only explicitly observed records`);
+      const fallback = (existingBySource[entry.key] || []).filter(isRetainableObservedRecord);
       all.push(...fallback);
-      counts[entry.key] = { count: fallback.length, mode: 'preserved_existing_error', error: err.message };
+      counts[entry.key] = { count: fallback.length, mode: 'preserved_observed_error', error: err.message };
     }
   }
   return { all, counts };
 }
 
-function normalize(listings) {
+function recordProvenance(listing) {
+  return listing && listing.provenance && typeof listing.provenance === 'object' && !Array.isArray(listing.provenance)
+    ? listing.provenance
+    : {};
+}
+
+function isFixtureRecord(listing) {
+  const provenance = recordProvenance(listing);
+  const origin = String(provenance.origin || '').toLowerCase();
+  return provenance.fixture === true || provenance.observed === false || ['fixture', 'demo', 'snapshot'].includes(origin);
+}
+
+function isRetainableObservedRecord(listing) {
+  const provenance = recordProvenance(listing);
+  return !isFixtureRecord(listing) && provenance.observed === true && Boolean(listing.sourceObservedAt || provenance.observedAt);
+}
+
+function markSnapshotRecord(listing) {
+  return {
+    ...listing,
+    provenance: {
+      ...recordProvenance(listing),
+      origin: 'snapshot',
+      observed: false,
+      recordKind: 'demo',
+      publisher: 'Embedded data snapshot',
+    },
+  };
+}
+
+function markLiveObservedRecord(listing, observedAt = new Date().toISOString()) {
+  if (isFixtureRecord(listing)) return listing;
+  const provenance = recordProvenance(listing);
+  const effectiveObservedAt = provenance.observedAt || listing.sourceObservedAt || observedAt;
+  return {
+    ...listing,
+    sourceObservedAt: listing.sourceObservedAt || effectiveObservedAt,
+    provenance: {
+      ...provenance,
+      origin: 'live',
+      observed: true,
+      observedAt: effectiveObservedAt,
+    },
+  };
+}
+
+function isExactRecordUrl(value, sourceHomepage) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const candidate = new URL(value);
+    if (!['http:', 'https:'].includes(candidate.protocol)) return false;
+    const normalized = candidate.toString().replace(/\/$/, '');
+    if (sourceHomepage && normalized === String(sourceHomepage).replace(/\/$/, '')) return false;
+    const genericPaths = new Set(['/asset-sales/real-estate-and-property-sales', '/auctions', '/listings', '/properties', '/property-search', '/sales/salessearch', '/search']);
+    if (genericPaths.has(candidate.pathname.replace(/\/$/, '').toLowerCase() || '/')) return false;
+    const recordKeys = new Set(['auctionid', 'case', 'casenumber', 'docket', 'id', 'listingid', 'p', 'parcel', 'property_id', 'propertyid', 'saleid']);
+    if ([...candidate.searchParams.keys()].some((key) => recordKeys.has(key.toLowerCase()))) return true;
+    const segments = candidate.pathname.split('/').filter(Boolean);
+    const last = (segments.at(-1) || '').toLowerCase();
+    if (segments.length < 2 || /^(index(?:\.[a-z]+)?|home|search|listings?|properties|auctions?)$/.test(last)) return false;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function compareKnownNumbers(left, right, descending) {
+  const leftKnown = left !== null && left !== undefined && Number.isFinite(Number(left));
+  const rightKnown = right !== null && right !== undefined && Number.isFinite(Number(right));
+  if (leftKnown !== rightKnown) return leftKnown ? -1 : 1;
+  if (!leftKnown) return 0;
+  return descending ? Number(right) - Number(left) : Number(left) - Number(right);
+}
+
+function normalize(listings, options = {}) {
+  const live = options.live ?? RUN_REAL;
   // 1. Dedupe by id (keep first)
   const seen = new Set();
   const deduped = [];
@@ -201,23 +302,30 @@ function normalize(listings) {
     seen.add(l.id);
     deduped.push(l);
   }
-  // 2. Filter: must have a state, an address, and a positive opening bid
+  // 2. Filter: identity and exact source evidence are required, while
+  // source-unpublished financial/enrichment fields remain nullable.
   const filtered = deduped.filter(l => {
     if (!l.state || l.state === 'US' || l.state.length !== 2) return false;
     if (!l.address || l.address.length < 8) return false;
-    if (!l.openingBid || l.openingBid <= 0) return false;
+    if (l.openingBid != null && (!Number.isFinite(Number(l.openingBid)) || Number(l.openingBid) <= 0)) return false;
+    if (live) {
+      if (isFixtureRecord(l)) return false;
+      if (!isExactRecordUrl(l.sourceUrl, SOURCES[l.source]?.websiteUrl)) return false;
+      if (!validateListingForIngestion(l, { expectedSource: l.source }).isValid) return false;
+    }
     return true;
   }).map(l => {
     const sourceHomepage = SOURCES[l.source]?.websiteUrl;
-    const candidate = typeof l.sourceUrl === 'string' ? l.sourceUrl.replace(/\/+$/, '') : '';
-    const homepage = typeof sourceHomepage === 'string' ? sourceHomepage.replace(/\/+$/, '') : '';
-    const isGenericHomepage = !candidate || candidate === homepage;
-    return { ...l, sourceUrl: isGenericHomepage ? null : l.sourceUrl };
+    return {
+      ...l,
+      sourceUrl: isExactRecordUrl(l.sourceUrl, sourceHomepage) ? l.sourceUrl : null,
+      ...(live ? {} : { provenance: markSnapshotRecord(l).provenance }),
+    };
   });
-  // 3. Sort: best deal score first; tiebreak by opening bid asc
+  // 3. Sort known modeled values first; unknown values never masquerade as 0.
   filtered.sort((a, b) => {
-    if ((b.dealScore || 0) !== (a.dealScore || 0)) return (b.dealScore || 0) - (a.dealScore || 0);
-    return (a.openingBid || 0) - (b.openingBid || 0);
+    const scoreOrder = compareKnownNumbers(a.dealScore, b.dealScore, true);
+    return scoreOrder !== 0 ? scoreOrder : compareKnownNumbers(a.openingBid, b.openingBid, false);
   });
   return filtered;
 }
@@ -238,7 +346,7 @@ function emit(sources, listings) {
 async function main() {
   console.log(`[build-data] RUN_REAL_SCRAPERS=${RUN_REAL ? '1' : '0'}`);
   const { all, counts } = await gather();
-  const normalized = normalize(all);
+  const normalized = normalize(all, { live: RUN_REAL });
   console.log(`[build-data] ${all.length} raw → ${normalized.length} after normalize`);
 
   // Per-source summary
@@ -270,7 +378,21 @@ async function main() {
   console.log(`[build-data] wrote snapshot → ${path.relative(PROJECT_ROOT, sourcesSnapshotPath)}`);
 }
 
-main().catch(err => {
-  console.error('[build-data] FATAL:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('[build-data] FATAL:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  SOURCES,
+  compareKnownNumbers,
+  gather,
+  isExactRecordUrl,
+  isFixtureRecord,
+  isRetainableObservedRecord,
+  markLiveObservedRecord,
+  markSnapshotRecord,
+  normalize,
+};

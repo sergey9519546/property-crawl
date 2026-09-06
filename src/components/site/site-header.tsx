@@ -64,13 +64,13 @@ const GROUPS: MenuGroup[] = [
     columns: [
       [
         { label: "Deal Stacks", desc: "Effortlessly beautiful deal presentations", icon: LayoutDashboard, href: "#live-feed", tint: "#e7faef" },
-        { label: "Shadow Mode", desc: "Inspect off-market distress signals", icon: Eye, href: "#product", tint: "#DBEAFE" },
+        { label: "Shadow Mode", desc: "Inspect off-market distress signals", icon: Eye, href: "#product", tint: "#E2E8F0" },
         { label: "Prophecy", desc: "Predict which parcels will list next", icon: Sparkles, href: "#product", tint: "#E9D5FF" },
       ],
       [
-        { label: "Monitoring", desc: "Watchlisted parcels, live", icon: Radar, href: "#live-feed", tint: "#FFD6C8" },
+        { label: "Saved Hunts", desc: "Explain matches and track evidence changes", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
         { label: "Accuracy", desc: "Track your ARV engine hit rate", icon: Gauge, href: "#proof", tint: "#e7faef" },
-        { label: "Integrations", desc: "Connect PerfectProperty to your stack", icon: Plug, href: "#integrations", tint: "#DBEAFE" },
+        { label: "Source Radar", desc: "Follow sources and investigate what changed", icon: Plug, href: "/sources", tint: "#E2E8F0" },
       ],
     ],
   },
@@ -83,7 +83,7 @@ const GROUPS: MenuGroup[] = [
         { label: "Disposition", desc: "Deal memos your partners trust", icon: Send, href: "#solutions", tint: "#FFD6C8" },
       ],
       [
-        { label: "Underwriting", desc: "Versioned ARV, offer, and profit", icon: Calculator, href: "#solutions", tint: "#DBEAFE" },
+        { label: "Underwriting", desc: "Versioned ARV, offer, and profit", icon: Calculator, href: "#solutions", tint: "#E2E8F0" },
         { label: "Capital", desc: "Show lenders the story behind the number", icon: Landmark, href: "#solutions", tint: "#E9D5FF" },
       ],
     ],
@@ -94,7 +94,7 @@ const GROUPS: MenuGroup[] = [
     columns: [
       [
         { label: "Blog", desc: "The latest in deal flow", icon: Newspaper, href: "/resources#blog", tint: "#e7faef" },
-        { label: "Knowledge Base", desc: "Unlock your underwriting", icon: BookOpen, href: "/resources#knowledge-base", tint: "#DBEAFE" },
+        { label: "Knowledge Base", desc: "Unlock your underwriting", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
         { label: "Guides", desc: "Hands-on county playbooks", icon: Map, href: "/resources#guides", tint: "#FFD6C8" },
       ],
       [
@@ -187,7 +187,7 @@ export function SiteHeader() {
         {/* Inner capsule: the visual nav shell. Transparent at top, white+blur+rounded when scrolled.
             Arcade: transition 0.2s, scroll threshold ~100px, wider container, tighter nav spacing */}
         <header
-          className={`relative flex items-center justify-between rounded-[16px] px-8 py-3 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          className={`relative flex items-center justify-between rounded-[16px] px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
               ? "bg-white/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
@@ -197,12 +197,12 @@ export function SiteHeader() {
         {/* Brand is pinned left; desktop nav is centered independently. */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center gap-3" aria-label="PerfectProperty home">
-            <Logo className="text-[20px]" />
+            <Logo className="text-[14px] min-[375px]:text-[16px] sm:text-[20px]" />
           </Link>
         </div>
 
         <nav
-          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[34px] lg:flex"
+          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[34px] xl:flex"
           onMouseLeave={() => setOpen(null)}
         >
             {GROUPS.map((g) => (
@@ -236,7 +236,7 @@ export function SiteHeader() {
         </nav>
 
         {/* Right: CTA — single dark button, rounded-[12px] */}
-        <div className="hidden lg:flex items-center gap-2">
+        <div className="hidden xl:flex items-center gap-2">
           <Link
             href="/sign-in"
             onMouseEnter={() => setOpen(null)}
@@ -255,7 +255,7 @@ export function SiteHeader() {
 
         {/* Mobile trigger */}
         <button
-          className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg text-[#111827] hover:bg-[#F3F4F6]"
+          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[#111827] hover:bg-[#F3F4F6]"
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
         >
@@ -273,7 +273,7 @@ export function SiteHeader() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute inset-x-0 top-full hidden lg:block"
+            className="absolute inset-x-0 top-full hidden xl:block"
             onMouseEnter={() => setOpen(open)}
             onMouseLeave={() => setOpen(null)}
           >

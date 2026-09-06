@@ -6,92 +6,192 @@
 // Scrapes single-family HUD homes offered through HUD HomeStore.
 
 const BaseScraper = require('./base');
+const { mapWithConcurrency } = require('./http');
+const { ScraperResponseError } = require('./circuit-breaker');
+
+const ALL_HUD_JURISDICTIONS = Object.freeze([
+  'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
+  'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
+  'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
+  'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV',
+  'WI', 'WY', 'DC', 'PR'
+]);
+const DEFAULT_MAX_PAGES_PER_STATE = 3;
+const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_STATE_CONCURRENCY = 2;
+
+class HudScrapeError extends Error {
+  constructor(message, report) {
+    super(message);
+    this.name = 'HudScrapeError';
+    this.code = 'HUD_UPSTREAM_UNAVAILABLE';
+    this.report = report;
+  }
+}
+
+function positiveInt(value, fallback, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
+}
+
+function configuredStates(value) {
+  if (Array.isArray(value)) return [...new Set(value.map((state) => String(state).trim().toUpperCase()).filter((state) => ALL_HUD_JURISDICTIONS.includes(state)))];
+  if (typeof value !== 'string' || !value.trim()) return [...ALL_HUD_JURISDICTIONS];
+  return [...new Set(value.split(',').map((state) => state.trim().toUpperCase()).filter((state) => ALL_HUD_JURISDICTIONS.includes(state)))];
+}
 
 class HudHomeScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'HudHomeScraper', sourceKey: 'hud' });
-    this.baseUrl = 'https://www.hudhomestore.gov';
-    this.timeoutMs = 4000;
+  constructor(options = {}) {
+    super({
+      ...options,
+      name: 'HudHomeScraper',
+      sourceKey: 'hud',
+      timeoutMs: options.timeoutMs ?? 15_000,
+    });
+    this.baseUrl = options.baseUrl || 'https://www.hudhomestore.gov';
+    this.states = configuredStates(options.states ?? process.env.HUD_STATES);
+    this.maxStates = positiveInt(options.maxStates ?? process.env.HUD_MAX_STATES, this.states.length, ALL_HUD_JURISDICTIONS.length);
+    this.maxPagesPerState = positiveInt(options.maxPagesPerState ?? process.env.HUD_MAX_PAGES_PER_STATE, DEFAULT_MAX_PAGES_PER_STATE, 10);
+    this.pageSize = positiveInt(options.pageSize ?? process.env.HUD_PAGE_SIZE, DEFAULT_PAGE_SIZE, 100);
+    this.stateConcurrency = positiveInt(options.stateConcurrency ?? process.env.HUD_STATE_CONCURRENCY, DEFAULT_STATE_CONCURRENCY, 4);
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const topStates = ['OH', 'TX', 'GA', 'FL', 'IL', 'PA', 'NC', 'MI'];
-      const results = await Promise.allSettled(topStates.map(state => this.fetchStateHudHomes(state)));
+      const states = this.states.slice(0, this.maxStates);
+      if (states.length === 0) throw new HudScrapeError('No valid HUD jurisdictions configured', this.createRunReport([]));
+      const report = this.createRunReport(states);
+      const results = await mapWithConcurrency(states, this.stateConcurrency, (state) => this.fetchStateHudHomes(state));
       const allListings = [];
-      for (const res of results) {
-        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
-          allListings.push(...res.value);
+      for (let index = 0; index < results.length; index += 1) {
+        const state = states[index];
+        const result = results[index];
+        report.statesAttempted += 1;
+        if (result.status === 'fulfilled') {
+          const stateResult = result.value;
+          report.pagesAttempted += stateResult.pagesAttempted;
+          report.pagesFetched += stateResult.pagesFetched;
+          report.fallbackStates += stateResult.usedHtmlFallback ? 1 : 0;
+          allListings.push(...stateResult.listings);
+          if (stateResult.listings.length) report.statesWithListings += 1;
+          else report.statesEmpty += 1;
+        } else {
+          report.statesFailed += 1;
+          report.failures.push({ state, error: this.errorSummary(result.reason) });
         }
       }
-
-      if (allListings.length === 0) {
-        allListings.push(...this.getVerifiedInventory());
-      }
-
-      console.log(`[${this.name}] Standardized ${allListings.length} HUD listings`);
-      return allListings
+      report.listingsParsed = allListings.length;
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      report.listingsEmitted = standardized.length;
+      report.outcome = report.statesFailed === report.statesAttempted
+        ? 'failed'
+        : report.statesFailed > 0
+          ? 'partial_failure'
+          : standardized.length === 0
+            ? 'empty'
+            : 'success';
+      this.lastRunReport = Object.freeze(report);
+
+      if (report.outcome === 'failed') {
+        throw new HudScrapeError(`[${this.name}] No HUD state endpoint completed; refusing to treat upstream failure as empty inventory`, this.lastRunReport);
+      }
+      console.log(`[${this.name}] ${report.outcome}: ${standardized.length} listings from ${report.statesAttempted - report.statesFailed}/${report.statesAttempted} completed jurisdictions`);
+      return standardized;
     });
   }
 
   async fetchStateHudHomes(state) {
-    const url = `${this.baseUrl}/Home/DataGrid?state=${encodeURIComponent(state)}&pageNo=1&pageSize=25`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
+    const listings = [];
+    let pagesAttempted = 0;
+    let pagesFetched = 0;
     try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'application/json, text/html, */*',
-        },
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        return this.fetchStateHtml(state);
+      for (let pageNo = 1; pageNo <= this.maxPagesPerState; pageNo += 1) {
+        pagesAttempted += 1;
+        const page = await this.fetchDataGridPage(state, pageNo);
+        pagesFetched += 1;
+        listings.push(...page.items.map((item) => this.mapJsonItem(item, state)).filter(Boolean));
+        if (!page.hasMore) break;
+        await this.crawlJitter();
       }
-
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const data = await res.json();
-        const items = Array.isArray(data) ? data : (data.aaData || data.rows || data.properties || []);
-        return items.map(p => this.mapJsonItem(p, state));
-      }
-
-      const html = await res.text();
-      return this.parseHtmlCards(html, state);
-    } catch (err) {
-      return this.fetchStateHtml(state);
-    } finally {
-      clearTimeout(timer);
+      return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false };
+    } catch (error) {
+      if (error instanceof ScraperResponseError && error.haltScraper) throw error;
+      if (this.circuitBreaker.isOpen()) throw error;
+      const html = await this.fetchStateHtml(state, error);
+      return { state, listings: html, pagesAttempted, pagesFetched, usedHtmlFallback: true };
     }
   }
 
-  async fetchStateHtml(state) {
+  async fetchDataGridPage(state, pageNo) {
+    const url = `${this.baseUrl}/Home/DataGrid?state=${encodeURIComponent(state)}&pageNo=${pageNo}&pageSize=${this.pageSize}`;
+    const payload = await this.requestText(url, { headers: this.jsonHeaders() });
+    let data;
+    try { data = JSON.parse(payload); } catch (error) {
+      const htmlItems = this.parseHtmlCards(payload, state);
+      if (htmlItems.length > 0) return { items: htmlItems, hasMore: false };
+      const parseError = new Error(`HUD DataGrid returned neither JSON nor property rows for ${state} page ${pageNo}`);
+      parseError.cause = error;
+      throw parseError;
+    }
+    const items = this.extractJsonItems(data);
+    if (!Array.isArray(items)) throw new Error(`HUD DataGrid JSON schema has no recognized listing array for ${state} page ${pageNo}`);
+    return { items, hasMore: this.hasMorePages(data, items.length, pageNo) };
+  }
+
+  async fetchStateHtml(state, primaryError) {
     const searchUrl = `${this.baseUrl}/Home/Index?state=${state}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
-      });
-
-      if (!res.ok) return [];
-      const html = await res.text();
+      const html = await this.requestText(searchUrl, { headers: this.htmlHeaders() });
       return this.parseHtmlCards(html, state);
     } catch (err) {
-      return [];
-    } finally {
-      clearTimeout(timer);
+      const combined = new Error(`HUD DataGrid and HTML fallback both failed for ${state}: ${this.errorSummary(primaryError)}; ${this.errorSummary(err)}`);
+      combined.cause = err;
+      throw combined;
     }
+  }
+
+  extractJsonItems(data) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return null;
+    for (const key of ['aaData', 'data', 'rows', 'properties', 'results', 'items']) {
+      if (Array.isArray(data[key])) return data[key];
+    }
+    if (data.d && typeof data.d === 'object') return this.extractJsonItems(data.d);
+    return null;
+  }
+
+  hasMorePages(data, itemCount, pageNo) {
+    if (pageNo >= this.maxPagesPerState) return false;
+    if (data && typeof data === 'object') {
+      for (const key of ['hasMore', 'hasNextPage', 'more']) {
+        if (typeof data[key] === 'boolean') return data[key];
+      }
+      const total = ['iTotalRecords', 'recordsTotal', 'total', 'totalCount', 'totalRecords']
+        .map((key) => Number(data[key]))
+        .find(Number.isFinite);
+      if (Number.isFinite(total)) return pageNo * this.pageSize < total;
+    }
+    return itemCount === this.pageSize;
+  }
+
+  jsonHeaders() {
+    return { 'User-Agent': 'property-crawl-bot/2.0 (research; contact: ops@property-crawl.example)', Accept: 'application/json, text/html, */*' };
+  }
+
+  htmlHeaders() {
+    return { 'User-Agent': 'property-crawl-bot/2.0 (research; contact: ops@property-crawl.example)', Accept: 'text/html,application/xhtml+xml' };
+  }
+
+  createRunReport(states) {
+    return { source: 'hud', startedAt: new Date().toISOString(), configuredStates: states, statesAttempted: 0, statesWithListings: 0, statesEmpty: 0, statesFailed: 0, fallbackStates: 0, pagesAttempted: 0, pagesFetched: 0, listingsParsed: 0, listingsEmitted: 0, failures: [], outcome: 'running' };
+  }
+
+  errorSummary(error) {
+    return error instanceof Error ? error.message : String(error);
   }
 
   parseHtmlCards(html, state) {
@@ -105,30 +205,31 @@ class HudHomeScraper extends BaseScraper {
       const addressMatch = row.match(/class="[^"]*prop-address[^"]*"[^>]*>([^<]+)<\//i);
       const priceMatch = row.match(/\$([0-9,]+)/);
 
-      if (addressMatch && priceMatch) {
+      if (addressMatch && caseMatch) {
         const address = addressMatch[1].trim();
-        const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
-        const caseNum = caseMatch ? caseMatch[1] : `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+        const caseNum = caseMatch[1];
         const id = `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
 
         listings.push({
           id,
           state,
-          county: 'County',
-          city: address.split(',')[1]?.trim() || 'City',
-          zip: '00000',
+          county: null,
+          city: null,
+          zip: null,
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.25),
-          estHigh: Math.round(price * 1.5),
-          assessed: Math.round(price * 1.1),
-          saleDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'U.S. Dept of Housing and Urban Development (HUD)',
-          defendant: '—',
-          occupancy: 'Vacant',
-          deposit: '$1,000 earnest money via HUD HomeStore portal',
-          sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${caseNum}`,
-          raw: `HUD CASE ${caseNum}: ${address}. List $${price.toLocaleString()}. Owner occupant exclusive window active.`,
+          estLow: null,
+          estHigh: null,
+          assessed: null,
+          saleDate: null,
+          plaintiff: null,
+          defendant: null,
+          occupancy: null,
+          deposit: null,
+          sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
+          raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+          provenance: { origin: 'live', observed: true, publisher: 'HUD HomeStore', recordId: caseNum },
         });
       }
     }
@@ -137,42 +238,49 @@ class HudHomeScraper extends BaseScraper {
   }
 
   mapJsonItem(p, state) {
-    const caseNum = p.caseNumber || p.CaseNumber || p.id || `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
-    const price = p.listPrice || p.ListPrice || p.price || 65000;
+    const caseNum = p.caseNumber || p.CaseNumber || p.id;
+    const price = p.listPrice ?? p.ListPrice ?? p.price ?? null;
     const address = p.address || p.Address || `${p.street || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
+
+    if (!caseNum || !address || !address.replace(/[\s,]/g, '')) return null;
 
     return {
       id: `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`,
       state: p.state || state,
-      county: p.county || 'County',
-      city: p.city || 'City',
-      zip: p.zip || p.postalCode || '00000',
-      address: address || `HUD Property in ${state}`,
-      lat: p.lat || p.latitude || null,
-      lng: p.lng || p.longitude || null,
-      beds: p.bedrooms || p.beds || 3,
-      baths: p.bathrooms || p.baths || 1.5,
-      sqft: p.sqft || p.squareFeet || 1250,
-      year: p.yearBuilt || 1960,
+      county: p.county ?? null,
+      city: p.city ?? null,
+      zip: p.zip ?? p.postalCode ?? null,
+      address,
+      lat: p.lat ?? p.latitude ?? null,
+      lng: p.lng ?? p.longitude ?? null,
+      beds: p.bedrooms ?? p.beds ?? null,
+      baths: p.bathrooms ?? p.baths ?? null,
+      sqft: p.sqft ?? p.squareFeet ?? null,
+      year: p.yearBuilt ?? null,
+      propType: p.propertyType ?? p.propType ?? null,
       openingBid: price,
-      estLow: Math.round(price * 1.25),
-      estHigh: Math.round(price * 1.55),
-      assessed: Math.round(price * 1.1),
-      saleDate: p.bidsDue || new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
-      plaintiff: 'U.S. Dept of Housing and Urban Development (HUD)',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'HUD Registered Listing Broker',
-      occupancy: 'Vacant',
-      deposit: 'Earnest money via HUD HomeStore portal',
-      sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${caseNum}`,
-      raw: `HUD CASE ${caseNum}: ${address}. List $${price.toLocaleString()}. Owner-occupant window active.`,
+      estLow: p.estimatedValueLow ?? null,
+      estHigh: p.estimatedValueHigh ?? null,
+      assessed: p.assessedValue ?? null,
+      saleDate: p.bidsDue ?? p.bidDeadline ?? null,
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: p.listingBroker ?? null,
+      occupancy: p.occupancy ?? null,
+      deposit: p.earnestMoney ?? p.deposit ?? null,
+      photoUrl: p.photoUrl ?? p.imageUrl ?? null,
+      sourceUrl: p.url
+        ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`)
+        : `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      raw: JSON.stringify(p),
+      provenance: { origin: 'live', observed: true, publisher: 'HUD HomeStore', recordId: String(caseNum) },
     };
   }
 
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'HUD-411-998214',
         state: 'OH',
@@ -405,9 +513,13 @@ class HudHomeScraper extends BaseScraper {
         sourceUrl: 'https://www.hudhomestore.gov/Property/PropertyDetails?caseNumber=381-662910',
         raw: 'HUD CASE 381-662910: 2415 Rozzelles Ferry Rd, Charlotte NC 28208. List $62,000. Exclusive bidding period active.'
       }
-    ];
+    ], 'hud-embedded-demo');
   }
 
 }
 
-module.exports = new HudHomeScraper();
+const hudHomeScraper = new HudHomeScraper();
+module.exports = hudHomeScraper;
+module.exports.HudHomeScraper = HudHomeScraper;
+module.exports.HudScrapeError = HudScrapeError;
+module.exports.ALL_HUD_JURISDICTIONS = ALL_HUD_JURISDICTIONS;

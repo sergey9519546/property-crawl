@@ -76,24 +76,28 @@ runTest('Scenario 4: OCR Defect Repair & Number Normalization', () => {
   assert.strictEqual(parsed.judgment_amount, 45000, 'Must convert $4S,OOO with letter S to number 45000');
 });
 
-// SCENARIO 5: Complete Cash-to-Close & Statutory Fee Calculator
-runTest('Scenario 5: Complete Cash-to-Close & Statutory Fee Schedule Calculation', () => {
-  // Ohio Sheriff Sale: $100,000 opening bid, 2% poundage ($2,000), 0.4% transfer tax ($400), $1,200 delinquent taxes, $500 deed prep
-  // Total Cash-to-Close = 100000 + 2000 + 400 + 1200 + 500 = 104,100 (or $103,700 base without transfer tax)
+// SCENARIO 5: Evidence-backed Cash Requirements
+runTest('Scenario 5: Cash requirements use explicit amounts and preserve funding timing', () => {
   const feeSchedule = computeCashToClose({
     openingBid: 100000,
     state: 'OH',
     source: 'sheriff',
+    registrationFunds: 5000,
+    creditedDeposit: 10000,
+    buyersPremium: 0,
+    sheriffPoundage: 2000,
+    transferTax: 400,
     delinquentTaxes: 1200,
-    deedFees: 500
+    settlementCosts: 500
   });
 
   assert.strictEqual(feeSchedule.openingBid, 100000);
-  assert.strictEqual(feeSchedule.sheriffPoundage, 2000, 'Ohio Sheriff 2% poundage must be $2,000');
-  assert.strictEqual(feeSchedule.transferTax, 400, 'Ohio 0.4% transfer tax must be $400');
+  assert.strictEqual(feeSchedule.sheriffPoundage, 2000, 'Explicit sheriff fee must be retained');
+  assert.strictEqual(feeSchedule.transferTax, 400, 'Explicit transfer tax must be retained');
   assert.strictEqual(feeSchedule.delinquentTaxes, 1200, 'Delinquent tax must match $1,200');
   assert.strictEqual(feeSchedule.deedPrepAndRecording, 500, 'Deed prep must be $500');
   assert.strictEqual(feeSchedule.totalCashToClose, 104100, 'Total cash to close must equal sum of all fees');
+  assert.strictEqual(feeSchedule.cashDueAtSettlement, 94100, 'Credited deposit must be subtracted exactly once at settlement');
 });
 
 // SCENARIO 6: Hostile Prompt Injection Neutralization

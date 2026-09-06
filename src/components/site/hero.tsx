@@ -7,6 +7,7 @@ import { ArrowUp, Building2, Flag, Globe2, House, Map as MapIcon, MapPin, Undo2 
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
+import { loadListingInventory } from "@/lib/listing-inventory";
 
 const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
 
@@ -62,6 +63,20 @@ export function Hero() {
   const [activeSuggestion, setActiveSuggestion] = React.useState(-1);
   const blurTimerRef = React.useRef<number | null>(null);
   const deferredUrl = React.useDeferredValue(url.trim());
+  const [marketListings, setMarketListings] = React.useState<ListingMarket[]>([]);
+
+  React.useEffect(() => {
+    let disposed = false;
+    loadListingInventory<ListingMarket>().then(({ listings }) => {
+      if (!disposed) setMarketListings(listings);
+    }).catch(() => { /* Free-text search remains available if suggestions fail. */ });
+    const onInventory = (event: Event) => setMarketListings((event as CustomEvent<ListingMarket[]>).detail);
+    window.addEventListener("perfectproperty:inventory", onInventory);
+    return () => {
+      disposed = true;
+      window.removeEventListener("perfectproperty:inventory", onInventory);
+    };
+  }, []);
 
   React.useEffect(() => {
     return () => {
@@ -102,13 +117,7 @@ export function Hero() {
       return;
     }
 
-    const controller = new AbortController();
     const normalizedQuery = deferredUrl.toLowerCase();
-
-    fetch("/api/listings", { cache: "no-store", signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((payload) => {
-        if (!payload?.listings || controller.signal.aborted) return;
         const markets = new Map<string, MarketSuggestion>();
         markets.set("country:US", {
           id: "country:US",
@@ -117,7 +126,7 @@ export function Hero() {
           kind: "country",
           description: "Country coverage",
         });
-        for (const listing of payload.listings as ListingMarket[]) {
+        for (const listing of marketListings) {
           const suggestionsForListing: MarketSuggestion[] = [
             {
               id: `address:${listing.id}`,
@@ -156,6 +165,8 @@ export function Hero() {
             },
           ];
           for (const suggestion of suggestionsForListing) {
+            if (!suggestion.label || !suggestion.query || /\b(?:unknown|undefined|null)\b/i.test(suggestion.label)) continue;
+            if (suggestion.kind === "area" && (!/^\d{5}$/.test(listing.zip) || listing.zip === "00000")) continue;
             markets.set(suggestion.id, suggestion);
           }
         }
@@ -170,16 +181,7 @@ export function Hero() {
         setSuggestions(matches);
         setSuggestionsOpen(matches.length > 0);
         setActiveSuggestion(-1);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setSuggestions([]);
-          setSuggestionsOpen(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [deferredUrl, selectedMarket]);
+  }, [deferredUrl, selectedMarket, marketListings]);
 
   const selectSuggestion = (suggestion: MarketSuggestion) => {
     setUrl(suggestion.label);

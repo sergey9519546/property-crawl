@@ -1,5 +1,6 @@
-import { adapt } from "@/lib/next-adapter";
-import handleListings from "@/lib/server-routes/listings";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const GET = adapt(handleListings, { securityHeaders: true, cors: true });
-export const POST = GET;
+// Listing ingestion happens inside the scraper scheduler through the database
+// layer. The public HTTP surface is deliberately read-only so an unauthenticated
+// caller cannot manufacture records that later appear to be source-backed.
+export const GET = (request: Request) => proxyPropertyApi(request);

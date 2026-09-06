@@ -1,257 +1,496 @@
-// server/scrapers/civilview.js
+// CivilView (Tyler Technologies) sheriff-sale scraper.
 //
-// REAL CivilView NJ scraper (Tyler Technologies foreclosure platform).
-// Source: https://salesweb.civilview.com (verified live, no auth, no UA
-// required — returns static HTML).
+// CivilView's county search page is a discovery surface, not a record URL.
+// Each row contains a /Sales/SaleDetails?PropertyId=... link. Detail pages
+// require the ASP.NET session cookie established by the county search request,
+// so this scraper keeps that cookie while enriching a bounded, polite sample.
 //
-// Strategy (2-stage):
-//   1. Fetch the root to extract the list of 67 counties. Filter to NJ
-//      counties only (17 of them — Bergen, Hudson, Monmouth, etc.) since
-//      NJ is the highest-volume and the spec scopes Phase 1 to NJ. Other
-//      states can be added in Phase 2 by widening the state filter.
-//   2. For each NJ county, fetch
-//      https://salesweb.civilview.com/Sales/SalesSearch?countyId={N}
-//      and parse the property table on the results page. Columns:
-//        Sheriff # | Sales Date | Plaintiff | Defendant | Address | View Details
-//      A typical NJ county (Bergen) has 50-200+ active rows.
-//
-// Per docs/sources-to-scrape.md #5: 75+ counties on one platform; one URL
-// pattern works for all of them. Volume target: ≥ 3 listings (Bergen alone
-// has 78+). We aim higher to keep the data useful.
-//
-// Per-listing fields: id (CIV-NJ-{countyId}-{rowIndex}), source
-// (civilview), state hardcoded to "NJ", county from the county page title,
-// plaintiff and defendant from the table, address parsed from the last
-// "ADDRESS CITY ST ZIP" cell, openingBid = 0 (CivilView does not display
-// the bid — passed-filter requires openingBid > 0 so we use a conservative
-// 5000 placeholder derived from the sheriff#; the normalize filter in
-// build-data.js can override).
-//
-// Rate limit: 1 req/sec between county page fetches.
+// Data-integrity policy:
+//   - Only emit records backed by a successfully parsed detail page.
+//   - Only use CivilView's published "Approx. Upset" as openingBid; preserve
+//     the exact record with a null bid when that amount has not been published.
+//   - Unknown facts remain null; no hashes, stock photos, inferred valuations,
+//     geocodes, property attributes, or future dates are generated.
+//   - Preserve the exact detail URL, source fields, and status history as
+//     provenance so downstream consumers can distinguish published facts.
 
 const BaseScraper = require('./base');
+const { ScraperResponseError } = require('./circuit-breaker');
+const { normalizeOcrText } = require('../ai/notice-parser');
 
-const STATE_NAME_TO_CODE = {
-  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
-  Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', Florida: 'FL', Georgia: 'GA',
-  Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA',
-  Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
-  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO',
-  Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
-  'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND',
-  Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI',
-  'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT',
-  Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV',
-  Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC', 'Puerto Rico': 'PR',
-};
+const DETAIL_PATH = '/Sales/SaleDetails';
+const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_COUNTIES = 4;
+const DEFAULT_DETAIL_LIMIT = 60;
 
 class CivilViewScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'CivilViewScraper', sourceKey: 'civilview' });
-    this.baseUrl = 'https://salesweb.civilview.com';
-    this.delayMs = 1000;
-    this.maxCounties = 4; // Bergen alone is 80+; cap to keep build < 60s
-    this.targetState = 'NJ';
+  constructor(options = {}) {
+    super({
+      name: 'CivilViewScraper',
+      sourceKey: 'civilview',
+      timeoutMs: options.timeoutMs || DEFAULT_TIMEOUT_MS,
+      maxRetries: options.maxRetries || 3,
+    });
+    this.baseUrl = options.baseUrl || 'https://salesweb.civilview.com';
+    this.targetState = options.targetState || 'NJ';
+    this.observedRecordIds = new Set(options.observedRecordIds || []);
+    this.maxCounties = this.positiveInt(
+      options.maxCounties ?? process.env.CIVILVIEW_MAX_COUNTIES,
+      DEFAULT_MAX_COUNTIES,
+    );
+    this.maxDetailPages = this.positiveInt(
+      options.maxDetailPages ?? process.env.CIVILVIEW_DETAIL_LIMIT,
+      DEFAULT_DETAIL_LIMIT,
+    );
+    this.fetchImpl = options.fetchImpl || globalThis.fetch;
+    this.random = options.random || Math.random;
+    this.sleepImpl = options.sleepImpl || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.now = options.now || (() => new Date());
+    this.userAgent =
+      options.userAgent ||
+      'property-crawl-bot/2.0 (+https://github.com/property-crawl; contact: ops@property-crawl.example)';
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
       const counties = await this.fetchCounties();
-      const nj = counties.filter((c) => c.state === this.targetState);
-      console.log(
-        `[${this.name}] Found ${counties.length} counties total; ${nj.length} in ${this.targetState}`
-      );
+      const stateCounties = counties.filter((county) => county.state === this.targetState);
+      const ordered = this.orderCounties(stateCounties).slice(0, this.maxCounties);
 
-      // Process the largest-known counties first to maximize the yield in
-      // our maxCounties budget. Bergen (id=7) and Hudson (id=10) are the
-      // historical heavy hitters; others vary month to month.
-      const priority = ['7', '10', '8', '17', '2']; // Bergen, Hudson, Monmouth, Passaic, Essex
-      const ordered = [
-        ...priority.filter((id) => nj.some((c) => c.id === id)).map((id) => nj.find((c) => c.id === id)),
-        ...nj.filter((c) => !priority.includes(c.id)),
-      ].slice(0, this.maxCounties);
+      if (ordered.length === 0) {
+        throw new Error(`No CivilView counties found for ${this.targetState}`);
+      }
 
-      const allListings = [];
-      for (let i = 0; i < ordered.length; i++) {
-        const county = ordered[i];
+      const report = {
+        countiesDiscovered: counties.length,
+        countiesAttempted: 0,
+        summariesDiscovered: 0,
+        detailPagesAttempted: 0,
+        detailPagesParsed: 0,
+        recordsEmitted: 0,
+        newDetailsAttempted: 0,
+        refreshDetailsAttempted: 0,
+        failures: [],
+      };
+      const emitted = [];
+      const seenPropertyIds = new Set();
+      let remainingDetailBudget = this.maxDetailPages;
+
+      for (let index = 0; index < ordered.length; index += 1) {
+        const county = ordered[index];
+        report.countiesAttempted += 1;
         try {
-          const rows = await this.fetchCountyListings(county);
-          console.log(
-            `[${this.name}]   ${county.name} (id=${county.id}): ${rows.length} rows`
+          const discovered = await this.fetchCountySummaries(county);
+          report.summariesDiscovered += discovered.summaries.length;
+
+          const countiesRemaining = ordered.length - index;
+          const countyBudget = Math.min(
+            discovered.summaries.length,
+            Math.ceil(remainingDetailBudget / Math.max(1, countiesRemaining)),
           );
-          allListings.push(...rows);
-        } catch (err) {
-          console.warn(`[${this.name}] Failed ${county.name}: ${err.message}`);
+          const selected = this.prioritizeSummaries(discovered.summaries, county).slice(0, countyBudget);
+
+          for (const summary of selected) {
+            if (this.circuitBreaker.isOpen()) {
+              report.failures.push({
+                scope: 'circuit-breaker',
+                county: county.name,
+                error: 'Circuit breaker opened; remaining detail requests were not attempted',
+              });
+              break;
+            }
+
+            report.detailPagesAttempted += 1;
+            if (this.observedRecordIds.has(`CIV-${county.state}-${county.id}-${summary.propertyId}`)) report.refreshDetailsAttempted += 1;
+            else report.newDetailsAttempted += 1;
+            remainingDetailBudget -= 1;
+            await this.crawlJitter();
+
+            try {
+              const detailHtml = await this.fetchText(
+                summary.detailUrl,
+                this.timeoutMs,
+                discovered.sessionCookie,
+              );
+              const listing = this.parseDetailPage(detailHtml, summary);
+              if (!listing) {
+                throw new Error('Detail page did not contain a CivilView sale record');
+              }
+              report.detailPagesParsed += 1;
+
+              if (!this.passesFilter(listing)) {
+                report.failures.push({
+                  scope: 'detail-validation',
+                  sourceUrl: summary.detailUrl,
+                  error: 'Record omitted: required identity or exact detail evidence is invalid',
+                });
+                continue;
+              }
+              if (seenPropertyIds.has(listing.provenance.propertyId)) continue;
+              seenPropertyIds.add(listing.provenance.propertyId);
+              emitted.push(listing);
+            } catch (error) {
+              report.failures.push({
+                scope: 'detail-fetch',
+                sourceUrl: summary.detailUrl,
+                error: this.errorMessage(error),
+              });
+            }
+          }
+        } catch (error) {
+          report.failures.push({
+            scope: 'county-fetch',
+            county: county.name,
+            error: this.errorMessage(error),
+          });
         }
-        if (i < ordered.length - 1) await this.sleep(this.delayMs);
+
+        if (remainingDetailBudget <= 0 || this.circuitBreaker.isOpen()) break;
+        if (index < ordered.length - 1) await this.crawlJitter();
+      }
+
+      report.recordsEmitted = emitted.length;
+      report.unattemptedSummaries = Math.max(0, report.summariesDiscovered - report.detailPagesAttempted);
+      report.boundedSample = report.unattemptedSummaries > 0 || stateCounties.length > report.countiesAttempted;
+      this.lastRunReport = report;
+
+      if (emitted.length === 0) {
+        const reason = report.failures[0]?.error || 'No detail-backed records were available';
+        throw new Error(`CivilView produced no trustworthy records: ${reason}`);
       }
 
       console.log(
-        `[${this.name}] Scraped ${allListings.length} CivilView ${this.targetState} listings across ${ordered.length} counties`
+        `[${this.name}] ${report.recordsEmitted} detail-backed records emitted from ` +
+        `${report.summariesDiscovered} summaries; ${report.failures.length} records/requests omitted`,
       );
-      return allListings
-        .filter((item) => this.passesFilter(item))
-        .map((item) => this.standardizeListing(item));
+      return emitted;
     });
   }
 
-  async fetchText(url, timeoutMs = 30000) {
+  orderCounties(counties) {
+    const priority = ['7', '10', '8', '17', '2'];
+    const byId = new Map(counties.map((county) => [county.id, county]));
+    return [
+      ...priority.map((id) => byId.get(id)).filter(Boolean),
+      ...counties.filter((county) => !priority.includes(county.id)),
+    ];
+  }
+
+  prioritizeSummaries(summaries, county) {
+    // Preserve publisher order within each group. Never mutate discovery data.
+    const known = (summary) => this.observedRecordIds.has(`CIV-${county.state}-${county.id}-${summary.propertyId}`);
+    return [...summaries.filter((summary) => !known(summary)), ...summaries.filter(known)];
+  }
+
+  async fetchPage(url, timeoutMs = this.timeoutMs, sessionCookie = '') {
+    if (this.circuitBreaker.isOpen()) {
+      throw new Error(`[${this.name}] request blocked: circuit breaker is OPEN`);
+    }
+    if (typeof this.fetchImpl !== 'function') {
+      throw new Error(`[${this.name}] fetch implementation is unavailable`);
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, {
+      const response = await this.fetchImpl(url, {
         headers: {
-          'User-Agent':
-            'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+          'User-Agent': this.userAgent,
           Accept: 'text/html,application/xhtml+xml',
+          ...(sessionCookie ? { Cookie: sessionCookie } : {}),
         },
+        redirect: 'follow',
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
+      const body = await response.text();
+      const validation = this.circuitBreaker.validateResponse({
+        status: response.status,
+        body,
+        headers: Object.fromEntries(response.headers?.entries?.() || []),
+      });
+      if (!validation.isValid) {
+        throw new ScraperResponseError(`${validation.error} for ${url}`, {
+          code: validation.code,
+          status: response.status,
+          haltScraper: validation.haltScraper,
+          circuitRecorded: true,
+        });
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+
+      return {
+        body,
+        finalUrl: response.url || url,
+        sessionCookie: this.cookieHeader(response.headers),
+      };
+    } catch (error) {
+      if (error instanceof ScraperResponseError) throw error;
+      if (error?.name === 'AbortError') {
+        this.circuitBreaker.trip(`Timeout after ${timeoutMs}ms for ${url}`);
+        throw new ScraperResponseError(`TIMEOUT after ${timeoutMs}ms for ${url}`, {
+          code: 'UPSTREAM_TIMEOUT',
+          circuitRecorded: true,
+        });
+      }
+      this.circuitBreaker.trip(this.errorMessage(error));
+      throw new ScraperResponseError(this.errorMessage(error), {
+        code: 'UPSTREAM_TRANSPORT_ERROR',
+        circuitRecorded: true,
+      });
     } finally {
       clearTimeout(timer);
     }
   }
 
+  async fetchText(url, timeoutMs = this.timeoutMs, sessionCookie = '') {
+    const page = await this.fetchPage(url, timeoutMs, sessionCookie);
+    return page.body;
+  }
+
   async fetchCounties() {
-    const html = await this.fetchText(`${this.baseUrl}/`);
-    const linkRe =
-      /href="(\/Sales\/SalesSearch\?countyId=(\d+))"[^>]*>([^<]+)<\/a>/g;
-    const seen = new Set();
+    const page = await this.fetchPage(`${this.baseUrl}/`, this.timeoutMs);
+    const linkRe = /href=["'](\/Sales\/SalesSearch\?countyId=(\d+))["'][^>]*>([\s\S]*?)<\/a>/gi;
     const counties = [];
-    let m;
-    while ((m = linkRe.exec(html)) !== null) {
-      const id = m[2];
+    const seen = new Set();
+    let match;
+    while ((match = linkRe.exec(page.body)) !== null) {
+      const id = match[2];
       if (seen.has(id)) continue;
       seen.add(id);
-      const name = m[3].trim();
-      // Parse the state from "County Name, ST" suffix
-      const stateMatch = name.match(/,\s*([A-Z]{2})$/);
-      const state = stateMatch ? stateMatch[1] : 'US';
-      // Strip the state suffix from the name to leave a clean "County Name"
-      const cleanName = stateMatch ? name.replace(/,\s*[A-Z]{2}$/, '').trim() : name;
-      counties.push({ id, name: cleanName, state, fullName: name });
+      const fullName = this.cleanText(match[3]);
+      const stateMatch = fullName.match(/,\s*([A-Z]{2})(?:\b|,)/);
+      if (!stateMatch) continue;
+      const state = stateMatch[1];
+      const name = fullName.slice(0, stateMatch.index).trim();
+      counties.push({ id, name, state, fullName });
     }
     return counties;
   }
 
-  async fetchCountyListings(county) {
-    const url = `${this.baseUrl}/Sales/SalesSearch?countyId=${county.id}`;
-    const html = await this.fetchText(url);
-    return this.parseSalesTable(html, county, url);
+  async fetchCountySummaries(county) {
+    const pageUrl = `${this.baseUrl}/Sales/SalesSearch?countyId=${encodeURIComponent(county.id)}`;
+    const page = await this.fetchPage(pageUrl, this.timeoutMs);
+    const summaries = this.parseSalesTable(page.body, county, pageUrl);
+    if (summaries.length > 0 && !page.sessionCookie) {
+      throw new Error('CivilView county page did not establish the session required for detail pages');
+    }
+    return { summaries, sessionCookie: page.sessionCookie, pageUrl };
+  }
+
+  async fetchCountyListings(county, detailLimit = this.maxDetailPages) {
+    const discovered = await this.fetchCountySummaries(county);
+    const listings = [];
+    for (const summary of discovered.summaries.slice(0, detailLimit)) {
+      await this.crawlJitter();
+      const html = await this.fetchText(summary.detailUrl, this.timeoutMs, discovered.sessionCookie);
+      const listing = this.parseDetailPage(html, summary);
+      if (listing && this.passesFilter(listing)) listings.push(listing);
+    }
+    return listings;
   }
 
   parseSalesTable(html, county, pageUrl) {
-    // The sales table is the second <table> on the page (the first holds
-    // the page header/notice). Its data rows have 6 <td> cells in this
-    // fixed order:
-    //   [0] "View Details" link (sometimes wrapped in <th> in the header)
-    //   [1] Sheriff #
-    //   [2] Sales Date
-    //   [3] Plaintiff
-    //   [4] Defendant
-    //   [5] Address
-    // We capture all 6, then drop the first (View Details) before mapping.
-
-    const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-    const rows = [];
+    const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+    const cellRe = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
+    const summaries = [];
     let rowMatch;
-    while ((rowMatch = rowRe.exec(html)) !== null) {
+
+    while ((rowMatch = rowRe.exec(html || '')) !== null) {
       const rowHtml = rowMatch[1];
-      if (!/View Details|F-\d|Sheriff #/i.test(rowHtml)) continue;
+      const linkMatch = rowHtml.match(
+        /<a\b[^>]*href=["']([^"']+)["'][^>]*>\s*View\s+Details\s*<\/a>/i,
+      );
+      if (!linkMatch) continue;
+      const detailUrl = this.resolveDetailUrl(linkMatch[1], pageUrl);
+      if (!detailUrl) continue;
+
       const cells = [];
       let cellMatch;
       while ((cellMatch = cellRe.exec(rowHtml)) !== null) {
-        const cellText = cellMatch[1]
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&amp;/g, '&')
-          .replace(/\s+/g, ' ')
-          .trim();
-        cells.push(cellText);
+        cells.push({ text: this.cleanText(cellMatch[1]) });
       }
-      // We need at least 6 cells (View Details + 5 data columns). If the
-      // "View Details" cell is missing or the data cells are present in a
-      // different order, fall back to using however many cells we got.
-      if (cells.length < 5) continue;
-      let dataCells;
-      if (cells.length >= 6 && /View Details/i.test(cells[0])) {
-        dataCells = cells.slice(1, 6);
-      } else {
-        dataCells = cells.slice(0, 5);
-      }
-      // Skip header row (Sheriff # is in cell[0] of the header).
-      if (/^Sheriff\s*#$/i.test(dataCells[0])) continue;
-      // Filter placeholder rows that have no real data.
-      if (!dataCells[0] && !dataCells[4]) continue;
-      rows.push(dataCells);
+      if (cells.length < 6) continue;
+      const dataCells = /View\s+Details/i.test(cells[0].text)
+        ? cells.slice(1, 6).map((cell) => cell.text)
+        : cells.slice(-5).map((cell) => cell.text);
+      if (!dataCells[0] || !dataCells[4]) continue;
+
+      summaries.push(this.toSummary(dataCells, county, pageUrl, detailUrl));
     }
-    return rows.map((cells, idx) => this.toListing(cells, idx, county, pageUrl));
+    return summaries;
   }
 
-  toListing(cells, rowIndex, county, pageUrl) {
-    const [sheriffNo, salesDateRaw, plaintiffRaw, defendantRaw, addressRaw] = cells;
-    const parsed = this.parseAddress(addressRaw || '');
-    const saleDate = this.parseSaleDate(salesDateRaw || '');
-    const id = `CIV-${this.targetState}-${county.id}-${rowIndex + 1}`;
-
+  toSummary(cells, county, pageUrl, detailUrl) {
+    const [sheriffNumber, saleDateRaw, plaintiff, defendant, addressRaw] = cells;
+    const propertyId = new URL(detailUrl).searchParams.get('PropertyId');
     return {
-      id,
-      source: 'civilview',
-      state: this.targetState,
-      county: county.name,
-      city: parsed.city || 'Unknown',
-      zip: parsed.zip || '00000',
-      address: this.formatAddress(parsed, addressRaw),
-      lat: 0,
-      lng: 0,
-      beds: 0,
-      baths: 0,
-      sqft: 0,
-      year: null,
-      propType: 'Single Family',
-      // CivilView does not publish the opening bid in the summary table.
-      // In NJ sheriff sales, statutory upset / starting bids typically range from $48k to $135k.
-      // We derive a realistic, deterministic opening bid from the docket id.
-      openingBid: 48000 + (Math.abs((id.split('').reduce((acc, c) => ((acc << 5) - acc) + c.charCodeAt(0), 0)) % 85) * 1000),
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
-      saleDate,
-      plaintiff: (plaintiffRaw || '—').trim() || '—',
-      defendant: (defendantRaw || '—').trim() || '—',
-      judgment: 0,
-      attorney: '—',
-      occupancy: 'Unknown',
-      deposit: "10% day of sale by cashier's or certified check",
-      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
-      sourceUrl: pageUrl,
-      raw: `CivilView ${county.name} ${this.targetState} | Sheriff# ${sheriffNo || '—'} | ${salesDateRaw || 'TBD'} | ${(plaintiffRaw || '').substring(0, 80)} | ${(addressRaw || '').substring(0, 200)}`.substring(0, 500),
+      propertyId,
+      sheriffNumber: sheriffNumber.trim(),
+      saleDateRaw: saleDateRaw.trim(),
+      plaintiff: plaintiff.trim(),
+      defendant: defendant.trim(),
+      addressRaw: addressRaw.trim(),
+      parsedAddress: this.parseAddress(addressRaw),
+      county,
+      countySearchUrl: pageUrl,
+      detailUrl,
     };
   }
 
-  // "19 WEST PARK AVENUE PARK RIDGE NJ 07656" -> { street, city, state, zip }
-  parseAddress(raw) {
-    if (!raw) return { street: '', city: '', state: this.targetState, zip: '00000' };
-    const trimmed = raw.trim();
-    // Pull state+zip from the tail: "... ST 12345" or "... ST 12345-6789"
-    const stateZip = trimmed.match(/\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b/);
-    if (!stateZip) {
-      return { street: trimmed, city: 'Unknown', state: this.targetState, zip: '00000' };
+  parseDetailPage(html, summary) {
+    if (!html || !/sale-details-list/i.test(html)) return null;
+    const fields = this.parseDetailFields(html);
+    const sheriffNumber = this.field(fields, 'sheriff #') || summary.sheriffNumber;
+    const courtCaseNumber = this.field(fields, 'court case #');
+    const detailAddressRaw = this.field(fields, 'address') || summary.addressRaw;
+    const parsedAddress = this.parseAddress(detailAddressRaw);
+    const saleDateRaw = this.field(fields, 'sales date') || summary.saleDateRaw;
+    const description = normalizeOcrText(this.field(fields, 'description'));
+    const propertyNote = normalizeOcrText(this.field(fields, 'property note'));
+    const detailUpsetRaw = this.field(fields, 'approx. upset*') || this.field(fields, 'approx. upset');
+    const noteUpsetRaw = this.parseLabeledNote(propertyNote, 'GOOD FAITH ESTIMATED UPSET PRICE');
+    const upsetRaw = detailUpsetRaw || noteUpsetRaw;
+    const openingBid = this.parseMoney(upsetRaw);
+    const openingBidSource = detailUpsetRaw
+      ? 'CivilView Approx. Upset'
+      : noteUpsetRaw
+        ? 'CivilView Property Note — Good Faith Estimated Upset Price'
+        : null;
+    const judgment = this.parseExecutionAmount(description);
+    const occupancy = this.parseOccupancy(propertyNote);
+    const statusHistory = this.parseStatusHistory(html);
+    const propertyId = summary.propertyId || new URL(summary.detailUrl).searchParams.get('PropertyId');
+    const sourceObservedAt = new Date(this.now()).toISOString();
+
+    if (!propertyId || !sheriffNumber || !detailAddressRaw) return null;
+
+    const sourceFields = Object.fromEntries(fields.entries());
+    return {
+      id: `CIV-${summary.county.state}-${summary.county.id}-${propertyId}`,
+      source: 'civilview',
+      state: parsedAddress.state || summary.county.state,
+      county: summary.county.name,
+      city: parsedAddress.city || null,
+      zip: parsedAddress.zip || null,
+      address: this.formatAddress(parsedAddress, detailAddressRaw),
+      lat: null,
+      lng: null,
+      beds: null,
+      baths: null,
+      sqft: null,
+      year: null,
+      propType: 'Unknown',
+      openingBid: openingBid || null,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
+      saleDate: this.parseSaleDate(saleDateRaw),
+      plaintiff: this.field(fields, 'plaintiff') || summary.plaintiff || null,
+      defendant: this.field(fields, 'defendant') || summary.defendant || null,
+      judgment: judgment || null,
+      attorney: this.field(fields, 'attorney') || null,
+      occupancy: occupancy || null,
+      deposit: null,
+      photo: null,
+      sourceUrl: summary.detailUrl,
+      raw: description || propertyNote || JSON.stringify(sourceFields),
+      status: 'scheduled',
+      sourceObservedAt,
+      provenance: {
+        origin: 'live',
+        observed: true,
+        observedAt: sourceObservedAt,
+        recordKind: 'source_record',
+        publisher: 'CivilView / participating county sheriff office',
+        recordId: propertyId,
+        propertyId,
+        sheriffNumber,
+        courtCaseNumber: courtCaseNumber || null,
+        parcelNumber: this.field(fields, 'parcel #') || null,
+        countySearchUrl: summary.countySearchUrl,
+        detailUrl: summary.detailUrl,
+        detailUrlRequiresCountySession: true,
+        detailPageFetched: true,
+        openingBidSource: openingBid ? openingBidSource : null,
+        openingBidSourceNote: openingBid
+          ? 'Publisher labels this amount Approx. Upset and states that judgment interest and sheriff fees are excluded.'
+          : null,
+        statusHistory,
+        sourceFields,
+      },
+    };
+  }
+
+  parseDetailFields(html) {
+    const fields = new Map();
+    const itemRe =
+      /<div\b[^>]*class=["'][^"']*\bsale-detail-item\b[^"']*["'][^>]*>[\s\S]*?<div\b[^>]*class=["'][^"']*\bsale-detail-label\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div\b[^>]*class=["'][^"']*\bsale-detail-value\b[^"']*["'][^>]*>([\s\S]*?)<\/div>[\s\S]*?<\/div>/gi;
+    let match;
+    while ((match = itemRe.exec(html)) !== null) {
+      const label = this.cleanText(match[1]).replace(/\s*:\s*$/, '').toLowerCase();
+      const value = this.cleanText(match[2], true);
+      if (label && value && !fields.has(label)) fields.set(label, value);
     }
+    return fields;
+  }
+
+  parseStatusHistory(html) {
+    const table = (html || '').match(/<table\b[^>]*id=["']longTable["'][^>]*>([\s\S]*?)<\/table>/i);
+    if (!table) return [];
+    const rows = [];
+    const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch;
+    while ((rowMatch = rowRe.exec(table[1])) !== null) {
+      const cells = [...rowMatch[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)]
+        .map((match) => this.cleanText(match[1]));
+      if (cells.length >= 2 && cells[0] && cells[1]) {
+        rows.push({ status: cells[0], date: this.parseSaleDate(cells[1]) || cells[1] });
+      }
+    }
+    return rows;
+  }
+
+  resolveDetailUrl(rawHref, pageUrl) {
+    try {
+      const decodedHref = this.decodeHtml(rawHref).trim();
+      const resolved = new URL(decodedHref, pageUrl);
+      const expectedOrigin = new URL(this.baseUrl).origin;
+      const propertyId = resolved.searchParams.get('PropertyId');
+      if (resolved.origin !== expectedOrigin) return null;
+      if (resolved.pathname.toLowerCase() !== DETAIL_PATH.toLowerCase()) return null;
+      if (!/^\d+$/.test(propertyId || '')) return null;
+      return resolved.href;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  cookieHeader(headers) {
+    if (!headers) return '';
+    const values = typeof headers.getSetCookie === 'function'
+      ? headers.getSetCookie()
+      : [headers.get?.('set-cookie')].filter(Boolean);
+    return values
+      .map((value) => String(value).split(';', 1)[0].trim())
+      .filter(Boolean)
+      .join('; ');
+  }
+
+  field(fields, name) {
+    return fields.get(name.toLowerCase()) || '';
+  }
+
+  parseAddress(raw) {
+    const clean = this.cleanText(raw, true).replace(/\n+/g, ' ').trim();
+    if (!clean) return { street: '', city: '', state: '', zip: '' };
+    const stateZip = clean.match(/\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b/);
+    if (!stateZip) return { street: clean, city: '', state: '', zip: '' };
+
     const state = stateZip[1];
     const zip = stateZip[2];
-    // Remove the matched tail and any trailing whitespace
-    const head = trimmed.substring(0, stateZip.index).trim();
+    const head = clean.slice(0, stateZip.index).replace(/,+$/, '').trim();
     const tokens = head.split(/\s+/);
-    // Strategy: the city is the run of tokens AFTER the last street-type
-    // suffix. We split tokens into [street-part..., city-part...] by
-    // finding the rightmost match of a known street-type keyword and
-    // taking everything after it as the city.
     const streetTypes = new Set([
       'AVENUE', 'AVE', 'STREET', 'ST', 'ROAD', 'RD', 'DRIVE', 'DR',
       'BOULEVARD', 'BLVD', 'LANE', 'LN', 'COURT', 'CT', 'PLACE', 'PL',
@@ -259,82 +498,111 @@ class CivilViewScraper extends BaseScraper {
       'TRAIL', 'TRL', 'CIRCLE', 'CIR', 'PLAZA', 'PLZ', 'SQUARE', 'SQ',
       'LOOP', 'PATH', 'PIKE', 'ROW', 'RUN', 'PASS', 'CROSSING', 'XING',
     ]);
-    let splitIdx = -1;
-    for (let i = 0; i < tokens.length; i++) {
-      if (streetTypes.has(tokens[i].toUpperCase().replace(/[.,]$/, ''))) {
-        splitIdx = i;
-      }
+    let splitIndex = -1;
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (streetTypes.has(tokens[index].toUpperCase().replace(/[.,]$/, ''))) splitIndex = index;
     }
-    let city;
-    let street;
-    if (splitIdx >= 0 && splitIdx < tokens.length - 1) {
-      // Street is tokens[0..splitIdx], city is tokens[splitIdx+1..]
-      street = tokens.slice(0, splitIdx + 1).join(' ');
-      city = tokens.slice(splitIdx + 1).join(' ');
-    } else {
-      // No street-type match: fall back to treating the last 1-2 tokens
-      // as the city. We prefer 2 tokens when the address is long enough
-      // (4+ tokens) because NJ city names are usually 1-2 words.
-      if (tokens.length >= 4) {
-        city = tokens.slice(-2).join(' ');
-        street = tokens.slice(0, -2).join(' ');
-      } else {
-        city = tokens.slice(-1).join(' ');
-        street = tokens.slice(0, -1).join(' ');
-      }
+    if (splitIndex < 0 || splitIndex >= tokens.length - 1) {
+      return { street: head, city: '', state, zip };
     }
-    return { street: street || trimmed, city, state, zip };
+    return {
+      street: tokens.slice(0, splitIndex + 1).join(' '),
+      city: tokens.slice(splitIndex + 1).join(' '),
+      state,
+      zip,
+    };
   }
 
   formatAddress(parsed, raw) {
-    // Always emit a clean "street, city, state zip" form. The raw text is
-    // captured in `raw` for the description; the `address` field stays
-    // structured so it plays well with the geocoder (Phase 3) and the
-    // duplicate-detection job.
-    const street = parsed.street || (raw ? raw.split(/\s+/).slice(0, -3).join(' ') : '');
-    const city = parsed.city || 'Unknown';
-    const state = parsed.state || this.targetState;
-    const zip = parsed.zip || '00000';
-    if (street && street !== 'Unknown address') {
-      return `${street}, ${city}, ${state} ${zip}`;
+    if (parsed.street && parsed.city && parsed.state && parsed.zip) {
+      return `${parsed.street}, ${parsed.city}, ${parsed.state} ${parsed.zip}`;
     }
-    if (raw && raw.length >= 8) return `${raw}, ${state} ${zip}`;
-    return `${city}, ${state} ${zip}`;
+    return this.cleanText(raw, true).replace(/\n+/g, ' ').trim();
   }
 
   parseSaleDate(raw) {
     if (!raw) return null;
-    const trimmed = raw.trim();
-    // "9/11/2026" -> "2026-09-11"
-    const m = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m) {
-      return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
-    }
-    // "September 11, 2026"
-    const months = {
-      January: '01', February: '02', March: '03', April: '04',
-      May: '05', June: '06', July: '07', August: '08',
-      September: '09', October: '10', November: '11', December: '12',
+    const match = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+    return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  }
+
+  parseMoney(raw) {
+    if (!raw) return 0;
+    const normalized = String(raw).replace(/[$,\s]/g, '');
+    const match = normalized.match(/-?\d+(?:\.\d{1,2})?/);
+    if (!match) return 0;
+    const value = Number(match[0]);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  parseExecutionAmount(description) {
+    const match = String(description || '').match(
+      /approximate\s+amount\s+due\s+on\s+this\s+execution\s+is\s+(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+    );
+    return match ? this.parseMoney(match[1]) : 0;
+  }
+
+  parseLabeledNote(note, label) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = String(note || '').match(new RegExp(`${escaped}\\s*:\\s*([^;]+)`, 'i'));
+    return match ? match[1].trim() : '';
+  }
+
+  parseOccupancy(note) {
+    const raw = this.parseLabeledNote(note, 'OCCUPANCY STATUS');
+    if (!raw) return '';
+    const known = raw.match(
+      /\b(OWNER[ -]?OCCUPIED|TENANT[ -]?OCCUPIED|UNOCCUPIED|VACANT|OCCUPIED|UNKNOWN)\b/i,
+    );
+    return known ? known[1].toUpperCase().replace('-', ' ') : raw.split(/[.;]/, 1)[0].trim();
+  }
+
+  cleanText(html, preserveBreaks = false) {
+    const breakReplacement = preserveBreaks ? '\n' : ' ';
+    return this.decodeHtml(
+      String(html || '')
+        .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, breakReplacement)
+        .replace(/<[^>]+>/g, ' '),
+    )
+      .replace(preserveBreaks ? /[ \t\f\v]+/g : /\s+/g, ' ')
+      .replace(/\s*\n\s*/g, '\n')
+      .trim();
+  }
+
+  decodeHtml(value) {
+    const named = {
+      amp: '&', apos: "'", colon: ':', gt: '>', lt: '<', nbsp: ' ', quot: '"',
     };
-    const dm = trimmed.match(/^([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})$/);
-    if (dm && months[dm[1]]) {
-      return `${dm[3]}-${months[dm[1]]}-${dm[2].padStart(2, '0')}`;
-    }
-    return null;
+    return String(value || '')
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+      .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
+      .replace(/&([a-z]+);/gi, (token, name) => named[name.toLowerCase()] ?? token);
   }
 
   passesFilter(item) {
     if (!item) return false;
-    if (!/^CIV-NJ-\d+-\d+$/.test(item.id || '')) return false;
+    if (!/^CIV-[A-Z]{2}-\d+-\d+$/.test(item.id || '')) return false;
     if (item.state !== this.targetState) return false;
-    if ((item.address || '').length < 8) return false;
-    if (!(item.openingBid > 0)) return false;
+    if (!item.address || item.address.length < 8) return false;
+    if (item.openingBid != null && (!Number.isFinite(item.openingBid) || item.openingBid <= 0)) return false;
+    if (!this.resolveDetailUrl(item.sourceUrl, this.baseUrl)) return false;
+    if (!item.provenance?.detailPageFetched) return false;
     return true;
   }
 
-  sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
+  positiveInt(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  errorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
 
-module.exports = new CivilViewScraper();
+const civilView = new CivilViewScraper();
+module.exports = civilView;
+module.exports.CivilViewScraper = CivilViewScraper;

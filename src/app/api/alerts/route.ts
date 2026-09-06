@@ -1,6 +1,5 @@
-import { adapt } from "@/lib/next-adapter";
-import handleAlerts from "@/lib/server-routes/alerts";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const GET = adapt(handleAlerts, { securityHeaders: true, cors: true });
+export const GET = (request: Request) => proxyPropertyApi(request);
 export const POST = GET;
 export const DELETE = GET;

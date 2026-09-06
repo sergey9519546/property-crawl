@@ -1,5 +1,8 @@
 const { execSync } = require('child_process');
 
+// An immutable test build must not overwrite the developer's running .next.
+process.env.NEXT_VERIFY_BUILD = '1';
+
 console.log('====================================================');
 console.log('🚀 PROPERTY_CRAWL — COMPLETE VERIFICATION LOOP');
 console.log('====================================================\n');
@@ -8,6 +11,13 @@ const suites = [
   { name: '1. Client Unit & Formula Suite', cmd: 'node test/suite.test.js' },
   { name: '2. Backend REST API & Server Suite', cmd: 'node test/server.test.js' },
   { name: '3. Data Scrapers & Ingestion Pipeline', cmd: 'node test/scrapers.test.js' },
+  { name: '3a. Scraper Reliability, CivilView & Durable Live Records', cmd: 'node --test test/scraper-reliability.test.js test/civilview.test.js test/live-record-store.test.js' },
+  { name: '3b. Exact Source Links & Structured Data Safety', cmd: 'node --experimental-strip-types --test test/source-integrity.test.mjs' },
+  { name: '3c. Evidence-Only Enrichment, Exports, Underwriting, Legal Rules & CORS', cmd: 'node --test test/cors-policy.test.js test/enrich-evidence.test.js test/export-truth.test.js test/underwriting-truth.test.mjs test/legal-rules-truth.test.js' },
+  { name: '3d. Verified Property Media & Street View Fallback', cmd: 'node --test test/property-image.test.js test/publisher-media.test.js test/secondary-property-media.test.js test/gsa-usda-publisher-gallery.test.js' },
+  { name: '3e. Canonical Listing API Transport', cmd: 'node --test test/property-api.test.mjs' },
+  { name: '3f. Inventory, Source Record Groups and Saved Search Workflows', cmd: 'node --test test/workspace-flows.test.mjs test/listing-record-groups.test.mjs' },
+  { name: '3g. Verified Map Locations & Coincident Source Records', cmd: 'node --test test/listing-map-policy.test.js' },
   { name: '4. AI Pipeline, Cost Tracker & Security', cmd: 'node test/ai.test.js' },
   { name: '5. E2E User Journey Emulation Suite', cmd: 'node test/e2e.test.js' },
   { name: '6. Hostile Security & Boundary Hardening', cmd: 'node test/hardening.test.js' },

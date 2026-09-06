@@ -7,6 +7,7 @@ import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
 import { AlertsModal } from "./alerts-modal";
 import { MarketMap } from "./market-map";
+import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
 import {
   Search,
   Bookmark,
@@ -28,6 +29,58 @@ import {
   Scale
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayDate, displayMoney, displayText, knownNumber } from "@/lib/listing-display";
+import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { loadListingInventory } from "@/lib/listing-inventory";
+import { sourceRecordCountsAtAddress } from "@/lib/listing-record-groups";
+import { inspectPublisherPhoto } from "@/lib/scrapers/media-policy";
+import { inspectSecondaryMedia } from "@/lib/scrapers/secondary-property-media";
+import { sourceDisplayText } from "@/lib/source-display";
+import type { SavedSearch } from "@/lib/saved-searches";
+import { CaseAction } from "@/components/research/case-action";
+
+type TerminalFilters = {
+  searchQuery: string; selectedState: string; selectedSource: string; observedOnly: boolean;
+  sortBy: "score" | "equity" | "bid" | "date" | "images"; minDealScore: number; minEquity: number;
+  maxOpeningBid: number | null; propertyType: string; occupancy: string;
+  seniorLienFilter: string; redemptionFilter: string; activeView: "grid" | "map" | "parser";
+};
+
+function terminalQuery(filters: TerminalFilters) {
+  const params = new URLSearchParams();
+  if (filters.searchQuery) params.set("q", filters.searchQuery);
+  if (filters.selectedState !== "all") params.set("state", filters.selectedState);
+  if (filters.selectedSource !== "all") params.set("source", filters.selectedSource);
+  if (filters.observedOnly) params.set("observed", "1");
+  if (filters.sortBy !== "date") params.set("sort", filters.sortBy);
+  if (filters.minDealScore > 0) params.set("minScore", String(filters.minDealScore));
+  if (filters.minEquity > 0) params.set("minSpread", String(filters.minEquity));
+  if (filters.maxOpeningBid !== null) params.set("maxBid", String(filters.maxOpeningBid));
+  if (filters.propertyType !== "all") params.set("type", filters.propertyType);
+  if (filters.occupancy !== "all") params.set("occupancy", filters.occupancy);
+  if (filters.seniorLienFilter !== "all") params.set("lien", filters.seniorLienFilter);
+  if (filters.redemptionFilter !== "all") params.set("redemption", filters.redemptionFilter);
+  if (filters.activeView !== "grid") params.set("view", filters.activeView);
+  return params.toString();
+}
+
+function isObservedSourceRecord(listing: PropertyListing) {
+  const provenance = listing.provenance;
+  if (!provenance || typeof provenance !== "object") return false;
+  const observedAt = listing.sourceObservedAt ?? provenance.observedAt;
+  const publisher = typeof provenance.publisher === "string" ? provenance.publisher.trim() : "";
+  const recordId = typeof provenance.recordId === "string" || typeof provenance.recordId === "number"
+    ? String(provenance.recordId).trim()
+    : "";
+  return provenance.origin === "live"
+    && provenance.observed === true
+    && provenance.recordKind === "source_record"
+    && publisher.length > 0
+    && recordId.length > 0
+    && typeof observedAt === "string"
+    && Number.isFinite(Date.parse(observedAt))
+    && getExactSourceListingUrl(listing, SOURCES[listing.source]?.websiteUrl) !== null;
+}
 
 const STATE_LABELS: Record<string, string> = {
   AZ: "Arizona",
@@ -54,7 +107,8 @@ export function InteractiveTerminal() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedState, setSelectedState] = useState("all");
   const [selectedSource, setSelectedSource] = useState("all");
-  const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date" | "images">("score");
+  const [observedOnly, setObservedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date" | "images">("date");
   const [minDealScore, setMinDealScore] = useState<number>(0);
   const [minEquity, setMinEquity] = useState<number>(0);
   const [maxOpeningBid, setMaxOpeningBid] = useState<number | null>(null);
@@ -65,22 +119,54 @@ export function InteractiveTerminal() {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
+  const [observedCount, setObservedCount] = useState(0);
+  const [inventoryNotice, setInventoryNotice] = useState("");
+  const [workspaceRecords, setWorkspaceRecords] = useState<PropertyListing[]>([]);
+  const workspaceRecordsRef = React.useRef<PropertyListing[]>([]);
+  const refreshGeneration = React.useRef(0);
+  const [urlReady, setUrlReady] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setSearchQuery(params.get("q") || "");
+    setSelectedState(params.get("state") || "all");
+    setSelectedSource(params.get("source") || "all");
+    setObservedOnly(params.get("observed") === "1");
+    const sort = params.get("sort");
+    if (sort && ["score", "equity", "bid", "date"].includes(sort)) setSortBy(sort as "score" | "equity" | "bid" | "date");
+    const numberParam = (name: string) => { const value = Number(params.get(name)); return Number.isFinite(value) && value >= 0 ? value : 0; };
+    setMinDealScore(numberParam("minScore"));
+    setMinEquity(numberParam("minSpread"));
+    setMaxOpeningBid(params.has("maxBid") ? numberParam("maxBid") : null);
+    setPropertyType(params.get("type") || "all");
+    setOccupancy(params.get("occupancy") || "all");
+    setSeniorLienFilter(params.get("lien") || "all");
+    setRedemptionFilter(params.get("redemption") || "all");
+    const view = params.get("view");
+    if (view && ["grid", "map", "parser"].includes(view)) setActiveView(view as "grid" | "map" | "parser");
+    setUrlReady(true);
+  }, []);
 
   const loadListings = useCallback(async (refresh = false) => {
+    const generation = ++refreshGeneration.current;
     setSyncStatus(refresh ? "refreshing" : "loading");
     try {
-      const response = await fetch("/api/listings", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok || !Array.isArray(payload?.listings)) {
-        throw new Error(payload?.error || `Listings request failed with HTTP ${response.status}`);
-      }
-
-      setListings(payload.listings);
+      const payload = await loadListingInventory<PropertyListing>();
+      if (generation !== refreshGeneration.current) return;
+      const nextListings = payload.listings;
+      setListings(nextListings);
+      try {
+        window.sessionStorage.setItem("perfectproperty:inventory-cache", JSON.stringify(nextListings));
+      } catch {}
+      window.dispatchEvent(new CustomEvent("perfectproperty:inventory", { detail: nextListings }));
       setSyncCount(payload.listings.length);
+      setObservedCount(nextListings.filter(isObservedSourceRecord).length);
+      setInventoryNotice(payload.truncated ? `Showing ${nextListings.length} of ${payload.total} records. The local inventory safety limit was reached.` : "");
       setSyncStatus("ready");
     } catch {
+      if (generation !== refreshGeneration.current) return;
       setSyncStatus("error");
-      setSyncCount(INITIAL_LISTINGS.length);
+      setInventoryNotice("Refresh failed. Last loaded records remain available; source freshness has not been confirmed.");
     }
   }, []);
 
@@ -90,10 +176,28 @@ export function InteractiveTerminal() {
 
   useEffect(() => {
     try {
+      const cached = window.sessionStorage.getItem("perfectproperty:inventory-cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setListings(parsed);
+          setSyncCount(parsed.length);
+          setObservedCount(parsed.filter(isObservedSourceRecord).length);
+        }
+      }
+    } catch {}
+    try {
       const stored = window.localStorage.getItem("perfectproperty:saved-listings");
       const ids = stored ? JSON.parse(stored) : [];
       if (Array.isArray(ids)) {
         setSavedIds(new Set(ids.filter((id): id is string => typeof id === "string")));
+      }
+      const rawRecords = window.localStorage.getItem("perfectproperty:research-records:v1");
+      const records = rawRecords && rawRecords.length < 2_000_000 ? JSON.parse(rawRecords) : [];
+      if (Array.isArray(records)) {
+        const valid = records.filter((item) => item && typeof item.id === "string" && typeof item.address === "string" && typeof item.source === "string" && typeof item.state === "string").slice(0, 100);
+        workspaceRecordsRef.current = valid;
+        setWorkspaceRecords(valid);
       }
     } catch {
       setSavedIds(new Set());
@@ -104,10 +208,10 @@ export function InteractiveTerminal() {
 
   useEffect(() => {
     if (!watchlistHydrated) return;
-    window.localStorage.setItem(
+    try { window.localStorage.setItem(
       "perfectproperty:saved-listings",
       JSON.stringify(Array.from(savedIds)),
-    );
+    ); } catch { setInventoryNotice("Browser storage is unavailable. Watchlist changes will last only for this session."); }
   }, [savedIds, watchlistHydrated]);
 
   useEffect(() => {
@@ -134,7 +238,11 @@ export function InteractiveTerminal() {
   };
 
   const handleAddParsedListing = (newListing: PropertyListing) => {
-    setListings((prev) => [newListing, ...prev]);
+    const next = [newListing, ...workspaceRecordsRef.current.filter((item) => item.id !== newListing.id)].slice(0, 100);
+    workspaceRecordsRef.current = next;
+    setWorkspaceRecords(next);
+    try { window.localStorage.setItem("perfectproperty:research-records:v1", JSON.stringify(next)); }
+    catch { setInventoryNotice("This research record could not be saved to browser storage. Export it before closing this session."); }
     setSavedIds((prev) => new Set([...prev, newListing.id]));
     setActiveView("grid");
     setSelectedListing(newListing);
@@ -143,52 +251,55 @@ export function InteractiveTerminal() {
   const handleDeepCheckAddress = (addressQuery: string) => {
     const parts = addressQuery.split(",").map((p) => p.trim());
     const address = parts[0] || addressQuery;
-    const city = parts[1] || "Cleveland";
-    const stateZip = parts[2]?.trim().split(" ") || ["OH", "44114"];
-    const state = stateZip[0] || "OH";
-    const zip = stateZip[1] || "44114";
+    const city = parts[1] || null;
+    const stateZip = parts[2]?.trim().split(/\s+/) || [];
+    const state = stateZip[0] || "";
+    const zip = stateZip[1] || null;
 
     const customListing: PropertyListing = {
       id: `custom-${Date.now()}`,
       address,
       city,
-      county: "Cuyahoga",
+      county: null,
       state: state.toUpperCase(),
       zip,
-      lat: 41.4993,
-      lng: -81.6944,
-      beds: 3,
-      baths: 2,
-      sqft: 1650,
-      year: 1988,
-      openingBid: 140000,
-      estLow: 210000,
-      estHigh: 240000,
-      assessed: 185000,
-      mid: 225000,
-      ratio: 0.62,
-      equity: 85000,
-      dealScore: 84,
-      saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
-      source: "sheriff",
-      propType: "Single Family",
-      occupancy: "Vacant",
-      deposit: "10% certified check",
-      photo: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&auto=format&fit=crop&q=60",
-      images: ["https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&auto=format&fit=crop&q=60"],
-      plaintiff: "Specialized Loan Servicing LLC",
-      defendant: "Titleholder of Record",
-      judgment: 168000,
-      attorney: "Reimer Law Co.",
-      redemptionDays: 0,
-      seniorLienRisk: "low",
-      cashToClose: 154200,
+      lat: null,
+      lng: null,
+      beds: null,
+      baths: null,
+      sqft: null,
+      year: null,
+      openingBid: null,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
+      mid: null,
+      ratio: null,
+      equity: null,
+      dealScore: null,
+      saleDate: null,
+      source: "manual",
+      propType: null,
+      occupancy: null,
+      deposit: null,
+      photo: null,
+      images: [],
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: null,
+      redemptionDays: null,
+      seniorLienRisk: undefined,
+      cashToClose: null,
+      status: "research",
+      provenance: { recordKind: "user-entered research query" },
     };
 
     setSelectedListing(customListing);
   };
 
   const resetFilters = () => {
+    setObservedOnly(false);
     setSearchQuery("");
     setSelectedState("all");
     setSelectedSource("all");
@@ -199,10 +310,27 @@ export function InteractiveTerminal() {
     setOccupancy("all");
     setSeniorLienFilter("all");
     setRedemptionFilter("all");
-    setSortBy("score");
+    setSortBy("date");
   };
 
+  const serializedFilters = terminalQuery({ searchQuery, selectedState, selectedSource, observedOnly, sortBy, minDealScore, minEquity, maxOpeningBid, propertyType, occupancy, seniorLienFilter, redemptionFilter, activeView });
+  const currentPath = typeof window !== "undefined" ? window.location.pathname : "/";
+  const currentHash = typeof window !== "undefined" ? window.location.hash : "";
+  const returnContext = `${currentPath}${serializedFilters ? `?${serializedFilters}` : ""}${currentHash}`;
+
+  useEffect(() => {
+    if (!urlReady) return;
+    if (typeof window !== "undefined" && window.location.pathname === "/") {
+      if (window.location.hash) {
+        window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.hash}`);
+      }
+      return;
+    }
+    window.history.replaceState(window.history.state, "", returnContext);
+  }, [urlReady, returnContext]);
+
   const activeFiltersCount =
+    (observedOnly ? 1 : 0) +
     (searchQuery ? 1 : 0) +
     (selectedState !== "all" ? 1 : 0) +
     (selectedSource !== "all" ? 1 : 0) +
@@ -214,30 +342,30 @@ export function InteractiveTerminal() {
     (seniorLienFilter !== "all" ? 1 : 0) +
     (redemptionFilter !== "all" ? 1 : 0);
 
-  const filtered = listings.filter((l) => {
+  const inventory = [...workspaceRecords.filter((record) => !listings.some((item) => item.id === record.id)), ...listings];
+  const observedRecordCountsAtAddress = sourceRecordCountsAtAddress(inventory, isObservedSourceRecord);
+  const normalizedQuery = searchQuery.toLowerCase().trim();
+  const exactSearchField = (["county", "city", "state", "zip"] as const).find((field) => normalizedQuery && inventory.some((item) => item[field]?.toLowerCase() === normalizedQuery));
+  const filtered = inventory.filter((l) => {
+    if (observedOnly && !isObservedSourceRecord(l)) return false;
     if (selectedState !== "all" && l.state !== selectedState) return false;
     if (selectedSource !== "all" && l.source !== selectedSource) return false;
-    if (minDealScore > 0 && l.dealScore < minDealScore) return false;
-    if (minEquity > 0 && l.equity < minEquity) return false;
-    if (maxOpeningBid !== null && l.openingBid > maxOpeningBid) return false;
+    const dealScore = knownNumber(l.dealScore);
+    const equity = knownNumber(l.equity);
+    const openingBid = knownNumber(l.openingBid);
+    if (minDealScore > 0 && (dealScore === null || dealScore < minDealScore)) return false;
+    if (minEquity > 0 && (equity === null || equity < minEquity)) return false;
+    if (maxOpeningBid !== null && (openingBid === null || openingBid > maxOpeningBid)) return false;
     if (propertyType !== "all" && l.propType?.toLowerCase() !== propertyType.toLowerCase()) return false;
     if (occupancy !== "all" && l.occupancy?.toLowerCase() !== occupancy.toLowerCase()) return false;
-    if (seniorLienFilter === "clean" && l.seniorLienRisk === "high") return false;
+    if (seniorLienFilter === "clean" && l.seniorLienRisk !== "low") return false;
     if (seniorLienFilter === "risk" && l.seniorLienRisk !== "high") return false;
     if (redemptionFilter === "immediate" && l.redemptionDays !== 0) return false;
     if (redemptionFilter === "redemption_active" && (!l.redemptionDays || l.redemptionDays === 0)) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchesCounty = listings.some((item) => item.county?.toLowerCase() === q);
-      const matchesCity = listings.some((item) => item.city?.toLowerCase() === q);
-      const matchesState = listings.some((item) => item.state?.toLowerCase() === q);
-      const matchesZip = listings.some((item) => item.zip?.toLowerCase() === q);
-
-      if (matchesCounty) return l.county?.toLowerCase() === q;
-      if (matchesCity) return l.city?.toLowerCase() === q;
-      if (matchesState) return l.state?.toLowerCase() === q;
-      if (matchesZip) return l.zip?.toLowerCase() === q;
+      if (exactSearchField) return l[exactSearchField]?.toLowerCase() === q;
 
       const hay = [l.address, l.city, l.county, l.state, l.zip, l.plaintiff, l.defendant, l.attorney].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
@@ -245,24 +373,46 @@ export function InteractiveTerminal() {
     return true;
   });
 
-  if (sortBy === "equity") filtered.sort((a, b) => b.equity - a.equity);
-  else if (sortBy === "bid") filtered.sort((a, b) => a.openingBid - b.openingBid);
-  else if (sortBy === "date") filtered.sort((a, b) => new Date(a.saleDate).getTime() - new Date(b.saleDate).getTime());
+  const compareKnown = (a: number | null, b: number | null, direction: "asc" | "desc") => {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    return direction === "asc" ? a - b : b - a;
+  };
+  const parsedDate = (value: string | null) => {
+    if (!value) return null;
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  };
+  const deadlineOrder = (value: string | null) => {
+    const timestamp = parsedDate(value);
+    if (timestamp === null) return { bucket: 1, value: Number.MAX_SAFE_INTEGER };
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (timestamp >= startOfToday.getTime()) return { bucket: 0, value: timestamp };
+    return { bucket: 2, value: -timestamp };
+  };
+
+  if (sortBy === "equity") filtered.sort((a, b) => compareKnown(knownNumber(a.equity), knownNumber(b.equity), "desc"));
+  else if (sortBy === "bid") filtered.sort((a, b) => compareKnown(knownNumber(a.openingBid), knownNumber(b.openingBid), "asc"));
+  else if (sortBy === "date") filtered.sort((a, b) => {
+    const left = deadlineOrder(a.saleDate);
+    const right = deadlineOrder(b.saleDate);
+    return left.bucket - right.bucket || left.value - right.value || a.id.localeCompare(b.id);
+  });
   else if (sortBy === "images") filtered.sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
-  else filtered.sort((a, b) => b.dealScore - a.dealScore);
+  else filtered.sort((a, b) => compareKnown(knownNumber(a.dealScore), knownNumber(b.dealScore), "desc"));
 
-  const medianBid = filtered.length > 0
-    ? [...filtered].sort((a, b) => a.openingBid - b.openingBid)[Math.floor(filtered.length / 2)].openingBid
-    : 0;
-  const avgEquity = filtered.length > 0
-    ? Math.round(filtered.reduce((sum, l) => sum + l.equity, 0) / filtered.length)
-    : 0;
-  const eliteCount = filtered.filter((l) => l.dealScore >= 70).length;
-  const strongCount = filtered.filter((l) => l.dealScore >= 55 && l.dealScore < 70).length;
-  const fairCount = filtered.filter((l) => l.dealScore >= 35 && l.dealScore < 55).length;
-  const thinCount = filtered.filter((l) => l.dealScore < 35).length;
+  const knownBids = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
+  const medianBid = knownBids.length > 0 ? knownBids[Math.floor(knownBids.length / 2)] : null;
+  const knownEquity = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
+  const avgEquity = knownEquity.length > 0 ? Math.round(knownEquity.reduce((sum, value) => sum + value, 0) / knownEquity.length) : null;
+  const knownScores = filtered.map((listing) => knownNumber(listing.dealScore)).filter((value): value is number => value !== null);
+  const eliteCount = knownScores.filter((score) => score >= 70).length;
+  const strongCount = knownScores.filter((score) => score >= 55 && score < 70).length;
+  const fairCount = knownScores.filter((score) => score >= 35 && score < 55).length;
 
-  const savedListings = listings.filter((l) => savedIds.has(l.id));
+  const savedListings = inventory.filter((l) => savedIds.has(l.id));
   const availableStates = Array.from(
     new Set(listings.map((listing) => listing.state).filter(Boolean)),
   ).sort((a, b) => (STATE_LABELS[a] ?? a).localeCompare(STATE_LABELS[b] ?? b));
@@ -277,7 +427,7 @@ export function InteractiveTerminal() {
         {/* Terminal Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#16A34A]">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
               LIVE TRIAGE TERMINAL
             </span>
             <h2 className="text-3xl font-bold text-[#111827]">Property Intelligence Engine</h2>
@@ -295,7 +445,7 @@ export function InteractiveTerminal() {
               )}
             >
               <LayoutGrid className="w-4 h-4" />
-              <span>Deal Grid ({filtered.length})</span>
+              <span>Deal Grid ({filtered.length} records)</span>
             </button>
 
             <button
@@ -309,7 +459,7 @@ export function InteractiveTerminal() {
               )}
             >
               <MapIcon className="w-4 h-4" />
-              <span>Map ({filtered.length})</span>
+              <span>Map ({filtered.length} records)</span>
             </button>
 
             <button
@@ -328,9 +478,9 @@ export function InteractiveTerminal() {
 
             <button
               onClick={() => setIsWatchlistOpen(true)}
-              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-[#16A34A] text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-slate-900 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
             >
-              <Bookmark className="w-4 h-4 text-[#16A34A] fill-[#16A34A]" />
+              <Bookmark className="w-4 h-4 text-[#0F172A] fill-[#0F172A]" />
               <span>Watchlist ({savedIds.size})</span>
             </button>
 
@@ -340,7 +490,7 @@ export function InteractiveTerminal() {
               aria-label="Open Alerts Manager"
             >
               <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
-              <span>Alerts</span>
+              <span>Saved searches</span>
             </button>
           </div>
         </div>
@@ -352,20 +502,26 @@ export function InteractiveTerminal() {
             {/* Live Scraper Ingestion Banner */}
             <div className="mb-4 px-4 py-2.5 bg-[#0F172A] rounded-2xl border border-slate-700 text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
               <div className="flex items-center gap-2">
-                <span className={cn("w-2 h-2 rounded-full", syncStatus === "error" ? "bg-amber-400" : "bg-[#22C55E]")} />
-                <span className={cn("font-bold", syncStatus === "error" ? "text-amber-300" : "text-[#22C55E]")}>
-                  {syncStatus === "error" ? "Demo fallback — data API unavailable" : "Connected to live data API"}
+                <span className={cn("w-2 h-2 rounded-full", syncStatus === "ready" && observedCount > 0 ? "bg-emerald-400" : "bg-amber-400")} />
+                <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-emerald-400" : "text-amber-300")}>
+                  {syncStatus === "error"
+                    ? "Demo fallback — data API unavailable"
+                    : observedCount === 0 && syncCount > 0
+                      ? "Unverified or demo feed — no source-observed records"
+                      : observedCount === syncCount && syncCount > 0
+                        ? "Connected to source-observed property feed"
+                        : "Mixed evidence feed — verify each record"}
                 </span>
                 <span className="text-slate-400 hidden sm:inline">· scraper execution runs separately on the backend</span>
               </div>
               <div className="flex items-center gap-3 font-mono text-[11px] text-slate-300">
-                {syncStatus === "ready" && <span className="text-[#22C55E] font-bold">{syncCount} properties loaded</span>}
+                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-emerald-400" : "text-amber-300")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
                 {syncStatus === "loading" && <span>Connecting to property API…</span>}
-                {syncStatus === "error" && <span>{syncCount} demo properties loaded</span>}
+                {syncStatus === "error" && <span>Last loaded inventory retained</span>}
                 <button
                   disabled={syncStatus === "loading" || syncStatus === "refreshing"}
                   onClick={() => void loadListings(true)}
-                  className="bg-[#22C55E] hover:bg-[#16a34a] disabled:opacity-60 text-black font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1"
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1 border border-slate-600"
                 >
                   {syncStatus === "refreshing" ? (
                     <><span className="w-2.5 h-2.5 border-2 border-black/40 border-t-black rounded-full animate-spin inline-block" />Refreshing…</>
@@ -374,6 +530,7 @@ export function InteractiveTerminal() {
               </div>
             </div>
 
+            {inventoryNotice && <p role="status" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{inventoryNotice}</p>}
             {/* Filter Bar */}
             <div className="p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm mb-4 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
@@ -395,7 +552,7 @@ export function InteractiveTerminal() {
                   value={selectedState}
                   onChange={(e) => setSelectedState(e.target.value)}
                   aria-label="State filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
                   <option value="all">All States</option>
                   {availableStates.map((state) => (
@@ -410,7 +567,7 @@ export function InteractiveTerminal() {
                   value={selectedSource}
                   onChange={(e) => setSelectedSource(e.target.value)}
                   aria-label="Source filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
                   <option value="all">All Sources</option>
                   {availableSources.map((key) => {
@@ -424,16 +581,22 @@ export function InteractiveTerminal() {
                 </select>
 
                 {/* Sort By */}
+                <button
+                  type="button"
+                  aria-pressed={observedOnly}
+                  onClick={() => setObservedOnly((value) => !value)}
+                  className={cn("rounded-xl border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-[#D1D5DB] bg-white text-[#374151]")}
+                >Source-observed only</button>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   aria-label="Sort listings"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151]"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
-                  <option value="score">Deal Score (Highest)</option>
-                  <option value="equity">Built-in Equity (Highest)</option>
+                  <option value="date">Published Deadline (Soonest)</option>
+                  <option value="equity">Bid Spread (Highest)</option>
                   <option value="bid">Opening Bid (Lowest)</option>
-                  <option value="date">Auction Date (Soonest)</option>
+                  <option value="score">Modeled Triage Score (Highest)</option>
                   <option value="images">Most Photos</option>
                 </select>
 
@@ -489,17 +652,17 @@ export function InteractiveTerminal() {
                     </select>
                   </div>
 
-                  {/* Min Built-in Equity */}
+                  {/* Minimum modeled bid spread */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
-                      Min Equity Spread
+                      Min Bid Spread
                     </label>
                     <select
                       value={minEquity}
                       onChange={(e) => setMinEquity(Number(e.target.value))}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
-                      <option value={0}>Any Equity</option>
+                      <option value={0}>Any Bid Spread</option>
                       <option value={25000}>$25,000+</option>
                       <option value={50000}>$50,000+</option>
                       <option value={75000}>$75,000+</option>
@@ -581,6 +744,7 @@ export function InteractiveTerminal() {
               {activeFiltersCount > 0 && (
                 <div className="pt-2 border-t border-[#F1F5F9] flex flex-wrap items-center gap-1.5 text-xs">
                   <span className="text-[11px] font-bold text-[#6B7280] mr-1">Active:</span>
+                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => setObservedOnly(false)} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
                   {selectedState !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       State: {selectedState}
@@ -591,14 +755,14 @@ export function InteractiveTerminal() {
                   )}
                   {selectedSource !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
-                      Source: {SOURCES[selectedSource]?.label || selectedSource}
+                      Source: {sourceDisplayText(SOURCES[selectedSource]?.label || selectedSource)}
                       <button type="button" onClick={() => setSelectedSource("all")} aria-label="Remove source filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
                   )}
                   {minDealScore > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#16A34A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Score: ≥{minDealScore}
                       <button type="button" onClick={() => setMinDealScore(0)} aria-label="Remove score filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
@@ -607,8 +771,8 @@ export function InteractiveTerminal() {
                   )}
                   {minEquity > 0 && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
-                      Equity: ≥${(minEquity / 1000).toFixed(0)}k
-                      <button type="button" onClick={() => setMinEquity(0)} aria-label="Remove equity filter">
+                      Bid spread: ≥${(minEquity / 1000).toFixed(0)}k
+                      <button type="button" onClick={() => setMinEquity(0)} aria-label="Remove bid spread filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -657,7 +821,7 @@ export function InteractiveTerminal() {
                 </div>
                 <div>
                   <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
-                  <p className="text-base font-extrabold text-[#111827]">{filtered.length} Properties</p>
+                  <p className="text-base font-extrabold text-[#111827]">{filtered.length} Records</p>
                 </div>
               </div>
 
@@ -667,17 +831,17 @@ export function InteractiveTerminal() {
                 </div>
                 <div>
                   <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
-                  <p className="text-base font-extrabold text-[#111827]">${medianBid.toLocaleString()}</p>
+                  <p className="text-base font-extrabold text-[#111827]">{displayMoney(medianBid)}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#16A34A]/10 flex items-center justify-center text-[#16A34A] shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-800 shrink-0">
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-[#16A34A] text-[10px] font-bold uppercase tracking-wider">Avg Equity Spread</p>
-                  <p className="text-base font-extrabold text-[#16A34A]">+${avgEquity.toLocaleString()}</p>
+                  <p className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Avg Bid Spread</p>
+                  <p className="text-base font-extrabold text-emerald-950">{avgEquity === null ? "Not modeled" : `+${avgEquity.toLocaleString()}`}</p>
                 </div>
               </div>
 
@@ -692,8 +856,8 @@ export function InteractiveTerminal() {
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
                       minDealScore === 70
-                        ? "bg-[#059669] text-white ring-2 ring-[#0F172A]"
-                        : "bg-[#059669]/15 text-[#059669] hover:bg-[#059669]/25"
+                        ? "bg-[#0F172A] text-white ring-2 ring-[#0F172A]"
+                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
                     )}
                   >
                     Elite: {eliteCount}
@@ -705,8 +869,8 @@ export function InteractiveTerminal() {
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
                       minDealScore === 55
-                        ? "bg-[#16A34A] text-white ring-2 ring-[#0F172A]"
-                        : "bg-[#16A34A]/15 text-[#16A34A] hover:bg-[#16A34A]/25"
+                        ? "bg-[#0F172A] text-white ring-2 ring-[#0F172A]"
+                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
                     )}
                   >
                     Strong: {strongCount}
@@ -729,7 +893,7 @@ export function InteractiveTerminal() {
             </div>
 
             {activeView === "map" ? (
-              <MarketMap listings={filtered} onUnderwrite={setSelectedListing} />
+              <MarketMap listings={filtered} onUnderwrite={setSelectedListing} returnTo={returnContext} />
             ) : (
             /* Listings Grid */
             filtered.length === 0 ? (
@@ -737,25 +901,25 @@ export function InteractiveTerminal() {
                 <SlidersHorizontal className="w-10 h-10 mx-auto text-[#9CA3AF]" />
                 <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
                 <p className="text-xs text-[#6B7280] max-w-md mx-auto">
-                  Try adjusting your minimum deal score, equity spread, or widening the opening bid range to capture active auctions.
+                  Try adjusting your modeled score, bid spread, or opening amount range to capture more published records.
                 </p>
 
                 {searchQuery.trim() && (
                   <div className="pt-2 max-w-md mx-auto p-4 rounded-xl bg-[#0F172A] text-white space-y-2 border border-slate-700 shadow-md text-left">
-                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-2 text-emerald-300 text-xs font-bold uppercase tracking-wider">
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>On-Demand Address Verification</span>
+                      <span>Address research workspace</span>
                     </div>
                     <p className="text-xs text-slate-300">
-                      Looking for <strong>&quot;{searchQuery}&quot;</strong>? Dispatch our Autonomous Court Docket Agent to deep check county records and title status for this address.
+                      Looking for <strong>&quot;{searchQuery}&quot;</strong>? Open an evidence checklist for this address. Legal and title status remains unverified until official records are attached.
                     </p>
                     <button
                       type="button"
                       onClick={() => handleDeepCheckAddress(searchQuery)}
-                      className="w-full mt-2 py-2 px-4 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                      className="w-full mt-2 py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition border border-slate-600"
                     >
                       <Scale className="w-3.5 h-3.5" />
-                      <span>Deep Check &quot;{searchQuery}&quot; with Live Agent</span>
+                      <span>Open evidence checklist for &quot;{searchQuery}&quot;</span>
                     </button>
                   </div>
                 )}
@@ -776,20 +940,22 @@ export function InteractiveTerminal() {
               {filtered.map((listing) => {
                 const src = SOURCES[listing.source] || SOURCES.sheriff;
                 const isSaved = savedIds.has(listing.id);
+                const isObserved = isObservedSourceRecord(listing);
+                const sourceRecordCountAtAddress = observedRecordCountsAtAddress.get(listing.id);
+                const publisherMedia = inspectPublisherPhoto(listing);
+                const secondaryMedia = publisherMedia.accepted ? null : inspectSecondaryMedia(listing);
+                const cardPhoto = publisherMedia.accepted ? publisherMedia.url : secondaryMedia?.url;
 
                 return (
                   <div
                     key={listing.id}
+                    style={{ contentVisibility: "auto", containIntrinsicSize: "auto 460px" }}
                     className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm hover:shadow-lg transition duration-200 flex flex-col justify-between group"
                   >
                     <div>
                       {/* Photo + Tags */}
                       <div className="relative h-48 w-full bg-[#F5F6F7] overflow-hidden">
-                        <img
-                          src={listing.photo}
-                          alt={listing.address}
-                          className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        />
+                        <ListingThumbnail listingId={listing.id} address={listing.address} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
                           <span
                             className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
@@ -797,14 +963,20 @@ export function InteractiveTerminal() {
                           >
                             {src.label}
                           </span>
+                          <span className={cn(
+                            "rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase shadow-sm",
+                            isObserved ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900",
+                          )}>
+                            {isObserved ? "Observed" : "Demo / unverified"}
+                          </span>
                         </div>
                         <button
                           onClick={(e) => { e.stopPropagation(); toggleSave(listing.id); }}
                           aria-label={isSaved ? `Remove ${listing.address} from watchlist` : `Add ${listing.address} to watchlist`}
                           aria-pressed={isSaved}
-                          className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#374151] hover:text-[#16A34A] shadow"
+                          className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#374151] hover:text-slate-900 shadow"
                         >
-                          <Bookmark className={cn("w-4 h-4", isSaved && "fill-[#16A34A] text-[#16A34A]")} />
+                          <Bookmark className={cn("w-4 h-4", isSaved && "fill-slate-900 text-slate-900")} />
                         </button>
                       </div>
 
@@ -813,10 +985,15 @@ export function InteractiveTerminal() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <h3 className="font-bold text-base text-[#111827] line-clamp-1">{listing.address}</h3>
-                            <p className="text-xs text-[#6B7280]">{listing.city}, {listing.state} · {listing.county} Co.</p>
+                            <p className="text-xs text-[#6B7280]">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
+                            {sourceRecordCountAtAddress && (
+                              <p className="mt-1 text-xs font-semibold text-slate-900">
+                                {sourceRecordCountAtAddress} source records at this address
+                              </p>
+                            )}
                           </div>
-                          <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#16A34A] shrink-0">
-                            {listing.dealScore}/100
+                          <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 shrink-0">
+                            {knownNumber(listing.dealScore) === null ? "Not modeled" : `${listing.dealScore}/100`}
                           </span>
                         </div>
 
@@ -824,23 +1001,23 @@ export function InteractiveTerminal() {
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E5E7EB] text-xs">
                           <div>
                             <span className="text-[#6B7280] block">Opening Bid:</span>
-                            <span data-testid="listing-opening-bid" className="font-bold text-[#111827] text-sm">${listing.openingBid.toLocaleString()}</span>
+                            <span data-testid="listing-opening-bid" className="font-bold text-[#111827] text-sm">{displayMoney(listing.openingBid)}</span>
                           </div>
                           <div>
-                            <span className="text-[#16A34A] font-semibold block">Est. Equity Spread:</span>
-                            <span className="font-bold text-[#16A34A] text-sm">+${listing.equity.toLocaleString()}</span>
+                            <span className="text-emerald-800 font-semibold block">Modeled Bid Spread:</span>
+                            <span className="font-bold text-emerald-800 text-sm">{knownNumber(listing.equity) === null ? "Not modeled" : `+${listing.equity?.toLocaleString()}`}</span>
                           </div>
                         </div>
 
                         <p className="text-xs text-[#6B7280] flex items-center gap-1 pt-1">
                           <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                          Auction: <span className="font-semibold text-[#111827]">{listing.saleDate}</span>
+                          Auction: <span className="font-semibold text-[#111827]">{displayDate(listing.saleDate)}</span>
                         </p>
                       </div>
                     </div>
 
                     {/* Card Action */}
-                    <div className="grid grid-cols-2 gap-2 px-5 pb-5 pt-1">
+                    <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
                         className="w-full inline-flex h-10 items-center justify-center rounded-xl bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition gap-1 shadow-sm"
@@ -849,7 +1026,7 @@ export function InteractiveTerminal() {
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <Link
-                        href={`/listings/${encodeURIComponent(listing.id)}`}
+                        href={`/listings/${listing.id}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
                         className="w-full inline-flex h-10 items-center justify-center rounded-xl border border-[#D1D5DB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F3F4F6] transition gap-1 shadow-sm"
@@ -857,6 +1034,7 @@ export function InteractiveTerminal() {
                         <span>Listing page</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Link>
+                      <CaseAction listingId={listing.id} />
                     </div>
                   </div>
                 );
@@ -889,6 +1067,15 @@ export function InteractiveTerminal() {
         isOpen={isAlertsOpen}
         onClose={() => setIsAlertsOpen(false)}
         availableStates={availableStates}
+        listings={inventory}
+        onApply={(search: SavedSearch) => {
+          resetFilters();
+          setSelectedState(search.state === "All" ? "all" : search.state);
+          setMinDealScore(search.minScore);
+          setMaxOpeningBid(search.maxBid > 0 ? search.maxBid : null);
+          setActiveView("grid");
+          setIsAlertsOpen(false);
+        }}
       />
     </section>
   );

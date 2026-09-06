@@ -16,9 +16,9 @@
 //   id, siteName, propertyName, propertyType, saleDate, state, price,
 //   userId, lastUpdateDate
 //
-// We treat `propertyName` as the street address (it is for most rows),
-// parse the 2-letter state directly, and use `price` as the opening bid
-// for the normalize filter. Volume target: ≥ 1 listing (we get hundreds).
+// This endpoint is historical closed-sale data, not a live opportunity feed.
+// The collector is retained for explicit archival jobs but excluded from the
+// production scheduler; closed sale price is never labeled as an opening bid.
 //
 // Per docs/sources-to-scrape.md #6: small volume per year (~50-100 REO
 // sales), but it's a NEW federal source not in v0 today.
@@ -34,7 +34,7 @@ function classifyPropType(raw) {
   if (t.includes('commercial')) return 'Commercial';
   if (t.includes('land') || t.includes('lot')) return 'Land';
   if (t.includes('bank premises') || t.includes('bank premise')) return 'Commercial';
-  return 'Single Family';
+  return null;
 }
 
 // Converts an ISO date ("2021-03-02T00:00:00.000Z") to YYYY-MM-DD.
@@ -55,6 +55,7 @@ class FdicScraper extends BaseScraper {
     this.pageUrl = 'https://www.fdic.gov/asset-sales/real-estate-and-property-sales';
     this.maxListings = 50; // cap for build-data.js timeout
     this.delayMs = 500; // JSON API, no real need for 1s
+    this.historicalOnly = true;
   }
 
   async scrapeFeed() {
@@ -64,7 +65,7 @@ class FdicScraper extends BaseScraper {
         `[${this.name}] API returned ${records.length} FDIC closed real-estate records; taking first ${this.maxListings}`
       );
       const limited = records.slice(0, this.maxListings);
-      const allListings = limited.map((rec, idx) => this.toListing(rec, idx));
+      const allListings = limited.map((rec) => this.toListing(rec)).filter(Boolean);
       console.log(
         `[${this.name}] Scraped ${allListings.length} FDIC real-estate records`
       );
@@ -75,22 +76,13 @@ class FdicScraper extends BaseScraper {
   }
 
   async fetchText(url, timeoutMs = 30000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
-          Accept: 'application/json,text/html',
-        },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: {
+        'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+        Accept: 'application/json,text/html'
+      }
+    });
   }
 
   async fetchApi() {
@@ -107,43 +99,60 @@ class FdicScraper extends BaseScraper {
     return data;
   }
 
-  toListing(rec, idx) {
+  toListing(rec) {
     const propertyName = (rec.propertyName || '').trim();
     const state = (rec.state || '').toUpperCase();
-    const openingBid = Number(rec.price) || 0;
-    const id = rec.id != null ? `FDIC-${rec.id}` : `FDIC-ROW-${idx + 1}`;
+    const salePriceNumber = Number(rec.price);
+    const salePrice = Number.isFinite(salePriceNumber) && salePriceNumber > 0 ? salePriceNumber : null;
+    const id = rec.id != null ? `FDIC-${rec.id}` : null;
     const propType = classifyPropType(rec.propertyType);
-    const siteName = (rec.siteName || 'FDIC').trim();
+    const siteName = (rec.siteName || '').trim() || null;
+    const observedUrl = rec.sourceUrl || rec.propertyUrl || rec.detailUrl || rec.url || null;
+    const sourceUrl = observedUrl
+      ? (String(observedUrl).startsWith('http') ? String(observedUrl) : new URL(String(observedUrl), this.baseUrl).toString())
+      : null;
+
+    if (!id || !/^[A-Z]{2}$/.test(state) || propertyName.length < 8 || !sourceUrl) return null;
 
     return {
       id,
       source: 'fdic',
-      state: state || 'US',
-      county: siteName.replace(/\s+Regional Office$/i, '').trim() || 'Unknown',
-      city: 'Unknown',
-      zip: '00000',
-      address: propertyName || 'FDIC REO property',
-      lat: 0,
-      lng: 0,
-      beds: 0,
-      baths: 0,
-      sqft: 0,
+      state,
+      county: null,
+      city: null,
+      zip: null,
+      address: propertyName,
+      lat: null,
+      lng: null,
+      beds: null,
+      baths: null,
+      sqft: null,
       year: null,
       propType,
-      openingBid,
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
+      openingBid: null,
+      price: salePrice,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate: parseSaleDate(rec.saleDate),
-      plaintiff: 'FDIC as Receiver',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'FDIC Asset Marketing',
-      occupancy: 'Unknown',
-      deposit: 'See FDIC asset sales terms',
-      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
-      sourceUrl: this.pageUrl,
-      raw: `FDIC closed real estate #${rec.id} | ${siteName} | ${propType} | $${openingBid} | ${rec.saleDate || 'no date'}`.substring(0, 500),
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: null,
+      occupancy: null,
+      deposit: null,
+      photo: rec.photoUrl ?? rec.imageUrl ?? null,
+      status: 'closed',
+      sourceUrl,
+      raw: JSON.stringify(rec),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'Federal Deposit Insurance Corporation',
+        recordId: String(rec.id),
+        dataset: 'closed-real-estate',
+        sourceFacts: { siteName }
+      },
     };
   }
 
@@ -152,7 +161,7 @@ class FdicScraper extends BaseScraper {
     if (!/^FDIC-/.test(item.id || '')) return false;
     if (!/^[A-Z]{2}$/.test(item.state || '')) return false;
     if ((item.address || '').length < 8) return false;
-    if (!(item.openingBid > 0)) return false;
+    if (!item.sourceUrl) return false;
     return true;
   }
 

@@ -1,28 +1,6 @@
-import { LISTINGS } from "@/data/listings";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 export function SeoSchema() {
-  const schemaListings = LISTINGS.slice(0, 10).map((l) => ({
-    "@type": "RealEstateListing",
-    "name": `Distressed Property: ${l.address}, ${l.city}, ${l.state}`,
-    "description": `Judicial foreclosure auction. Opening bid $${l.openingBid.toLocaleString()} vs estimated value band $${l.estLow.toLocaleString()} - $${l.estHigh.toLocaleString()}. Calculated Deal Score: ${l.dealScore}/100.`,
-    "url": `https://perfectproperty.ai/property/${l.id}`,
-    "address": {
-      "@type": "PostalAddress",
-      "streetAddress": l.address,
-      "addressLocality": l.city,
-      "addressRegion": l.state,
-      "postalCode": l.zip,
-      "addressCountry": "US"
-    },
-    "offers": {
-      "@type": "AggregateOffer",
-      "priceCurrency": "USD",
-      "lowPrice": l.openingBid,
-      "highPrice": l.estHigh,
-      "offerCount": 1
-    }
-  }));
-
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -40,15 +18,14 @@ export function SeoSchema() {
         "url": "https://perfectproperty.ai",
         "name": "PerfectProperty",
         "publisher": { "@id": "https://perfectproperty.ai/#organization" }
-      },
-      ...schemaListings
+      }
     ]
   };
 
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
     />
   );
 }

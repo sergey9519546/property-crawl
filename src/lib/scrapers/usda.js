@@ -35,7 +35,6 @@ class UsdaResalesScraper extends BaseScraper {
   constructor() {
     super({ name: 'UsdaResalesCollector', sourceKey: 'usda' });
     this.baseUrl = 'https://www.resales.usda.gov';
-    this.delayMs = 1000; // 1 req/sec
   }
 
   async scrapeFeed() {
@@ -54,7 +53,7 @@ class UsdaResalesScraper extends BaseScraper {
             const listing = this.rowToListing(row);
             if (listing) listings.push(listing);
           }
-          await this.sleep(this.delayMs);
+          await this.crawlJitter();
         } catch (err) {
           console.warn(`[${this.name}] Failed state ${code}: ${err.message}`);
         }
@@ -123,41 +122,52 @@ class UsdaResalesScraper extends BaseScraper {
     const baths = this.firstInt(cells[9]);
     const sqft = this.firstInt(cells[10]);
 
-    const state = STATE_NAME_TO_CODE[stateName] || 'US';
-    if (state === 'US' || !/^\d/.test(address) || !openingBid) return null;
+    const state = STATE_NAME_TO_CODE[stateName] || null;
+    if (!state || !/^\d/.test(address)) return null;
 
-    const detailId = detailMatch ? (detailMatch[1].match(/id=(\d+)/) || [])[1] : null;
-    const sourceUrl = detailMatch ? `${this.baseUrl}${detailMatch[1]}` : null;
-    const photo = photoMatch ? photoMatch[1] : 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70';
+    const detailHref = detailMatch ? detailMatch[1].replace(/&amp;/g, '&') : null;
+    const detailId = detailHref ? (detailHref.match(/[?&]id=(\d+)/) || [])[1] : null;
+    const sourceUrl = detailHref ? new URL(detailHref, this.baseUrl).toString() : null;
+    const photo = photoMatch
+      ? new URL(photoMatch[1].replace(/&amp;/g, '&'), this.baseUrl).toString()
+      : null;
+    if (!detailId || !sourceUrl) return null;
 
     return {
-      id: `USDA-${state}-${detailId || address.replace(/\D/g, '').slice(0, 8)}`,
+      id: `USDA-${state}-${detailId}`,
       state,
       county,
       city,
       zip,
       address: `${address}, ${city}, ${state} ${zip}`,
-      lat: 0,
-      lng: 0,
-      beds,
-      baths,
-      sqft,
+      lat: null,
+      lng: null,
+      beds: beds || null,
+      baths: baths || null,
+      sqft: sqft || null,
       year: null,
       propType: 'Single Family',
       openingBid,
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate: null,
-      plaintiff: 'U.S. Dept of Agriculture — Rural Development',
-      defendant: '—',
-      judgment: 0,
-      attorney: listingType === 'Foreclosure' ? 'USDA-RD servicing office' : 'USDA-RD listing agent',
-      occupancy: 'Unknown',
-      deposit: 'See USDA RD/FSA purchase terms',
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: null,
+      occupancy: null,
+      deposit: null,
       photo,
       sourceUrl,
-      raw: `USDA ${listingType} — ${address}, ${city}, ${stateName} ${zip}`
+      raw: cells.map((cell) => this.text(cell)).join(' | ').slice(0, 2000),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'USDA Rural Development',
+        recordId: detailId,
+        sourceFacts: { listingType: listingType || null }
+      }
     };
   }
 
@@ -167,38 +177,27 @@ class UsdaResalesScraper extends BaseScraper {
 
   firstInt(cellHtml) {
     const m = this.text(cellHtml).match(/(\d[\d,]*)/);
-    return m ? parseInt(m[1].replace(/[^\d]/g, ''), 10) || 0 : 0;
+    return m ? parseInt(m[1].replace(/[^\d]/g, ''), 10) || null : null;
   }
 
   parseMoney(s) {
-    if (!s) return 0;
-    return Math.round(parseFloat(s.replace(/[,$]/g, '')) || 0);
+    if (!s) return null;
+    const parsed = parseFloat(s.replace(/[,$]/g, ''));
+    return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
   }
 
   async fetchText(url, timeoutMs = 30000, method = 'GET', body = null) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const opts = {
-        method,
-        headers: {
-          'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
-          ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {})
-        },
-        signal: controller.signal
-      };
-      if (body) opts.body = body;
-      const res = await fetch(url, opts);
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+    return super.fetchText(url, {
+      timeoutMs,
+      method,
+      body,
+      headers: {
+        'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+        ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {})
+      }
+    });
   }
 
-  sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
 }
 
 module.exports = new UsdaResalesScraper();

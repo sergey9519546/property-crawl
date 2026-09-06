@@ -9,9 +9,11 @@
 // Per docs/STRATEGY.md (ex-blueprint) §2 Tier A: "legacy static HTML —
 // trivially parseable; contractor CWS Marketing, ~13 auctions".
 //
-// Rate limit: 1 req/sec. Be polite — this is a US government site.
+// Detail fetches are capped at two in flight and receive 250–750ms jitter.
 
 const BaseScraper = require('./base');
+const { mapWithConcurrency } = require('./http');
+const { extractDetailImages } = require('./media-policy');
 
 // Full US state / territory name → 2-letter code map.
 // Used by parseAddress to handle Treasury's "City, StateName 12345" format.
@@ -31,15 +33,14 @@ const STATE_NAME_TO_CODE = {
 };
 
 class TreasuryForfeitureScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'TreasuryForfeitureCollector', sourceKey: 'treasury' });
+  constructor(options = {}) {
+    super({ ...options, name: 'TreasuryForfeitureCollector', sourceKey: 'treasury' });
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
-    this.delayMs = 1000; // 1 req/sec
+    this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
   }
 
   async scrapeFeed() {
-    try {
-      return await this.executeWithRetry(async () => {
+    return this.executeWithRetry(async () => {
 
       const listHtml = await this.fetchText(`${this.baseUrl}/realprop.shtml`);
 
@@ -51,42 +52,34 @@ class TreasuryForfeitureScraper extends BaseScraper {
 
       console.log(`[${this.name}] Found ${slugs.length} property links on listing page`);
 
-      const listings = [];
-      const targetSlugs = slugs.slice(0, 8);
-      const detailResults = await Promise.allSettled(targetSlugs.map(async (slug) => {
-        try {
-          const detail = await this.fetchDetail(slug);
-          if (detail) listings.push(detail);
-        } catch (err) {
-          console.warn(`[${this.name}] Failed ${slug}: ${err.message}`);
+      const targetSlugs = slugs;
+      const detailResults = await mapWithConcurrency(
+        targetSlugs,
+        this.detailConcurrency,
+        async (slug) => {
+          await this.crawlJitter();
+          return this.fetchDetail(slug);
         }
-      }));
+      );
+      const listings = [];
+      detailResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          if (result.value) listings.push(result.value);
+        } else {
+          console.warn(`[${this.name}] Failed ${targetSlugs[index]}: ${result.reason.message}`);
+        }
+      });
 
       console.log(`[${this.name}] Scraped ${listings.length} Treasury properties`);
       return listings.map(item => this.standardizeListing(item));
     });
-    } catch (err) {
-      console.warn(`[${this.name}] Live scrape failed, falling back to verified inventory: ${err.message}`);
-      const fallback = this.getVerifiedInventory();
-      return fallback.map(item => this.standardizeListing(item));
-    }
   }
 
-  async fetchText(url, timeoutMs = 4000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)'
-        },
-        signal: controller.signal
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+  async fetchText(url, timeoutMs = this.timeoutMs) {
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' }
+    });
   }
 
   async fetchDetail(slug) {
@@ -121,8 +114,8 @@ class TreasuryForfeitureScraper extends BaseScraper {
     const openingBid = this.parseMoney(get(/Starting Bid:\s*\$([\d,]+)/));
     const sqft = this.parseInt0(get(/Living Area:\s*([\d,]+)/));
     const year = this.parseInt0(get(/Year Built:\s*(\d{4})/));
-    const acres = parseFloat(get(/Site Area:\s*([\d.]+)/) || '0') || 0;
-    const landSqft = acres > 0 ? Math.round(acres * 43560) : 0;
+    const acres = parseFloat(get(/Site Area:\s*([\d.]+)/) || '');
+    const landSqft = Number.isFinite(acres) && acres > 0 ? Math.round(acres * 43560) : null;
     const deposit = get(/Deposit:\s*([^.]+?)(?:\.|Inspection|$)/);
     const saleDateRaw = get(/Auction Date and Time:\s*([^I]+?)(?=Inspection|$)/);
     const parcelNo = get(/Parcel No:\s*(\S+)/);
@@ -134,35 +127,47 @@ class TreasuryForfeitureScraper extends BaseScraper {
     const addrParts = this.parseAddress(fullAddress);
     const baseName = slug.replace('.shtml', '');
     const saleDate = this.parseSaleDate(saleDateRaw);
+    const gallery = extractDetailImages({ source: 'treasury', html: detailHtml, sourceUrl: detailUrl, address: fullAddress });
 
     return {
       id: saleNumber ? `TRSY-${saleNumber}` : `TRSY-${baseName.toUpperCase()}`,
       state: addrParts.state,
-      county: addrParts.county || 'Unknown',
+      county: addrParts.county || null,
       city: addrParts.city,
       zip: addrParts.zip,
       address: fullAddress,
-      lat: 0, // populated by geocoder (Phase 3)
-      lng: 0,
-      beds,
-      baths,
-      sqft: sqft || landSqft || 0,
+      lat: null,
+      lng: null,
+      beds: beds || null,
+      baths: baths || null,
+      sqft: sqft || landSqft || null,
       year: year || null,
       propType: this.classifyPropertyType(body),
-      openingBid: openingBid || 0,
-      estLow: 0, // populated by enrichment (Phase 3)
-      estHigh: 0,
-      assessed: 0,
+      openingBid: openingBid || null,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate,
-      plaintiff: 'U.S. Department of the Treasury',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'CWS Marketing Group, Inc',
-      occupancy: 'Unknown',
-      deposit: deposit || 'See listing',
-      photo: `${this.baseUrl}/images/${baseName}01.gif`,
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: null,
+      occupancy: null,
+      deposit: deposit || null,
+      photo: gallery[0]?.url || null,
       sourceUrl: detailUrl,
-      raw: body.substring(0, 800)
+      raw: body.substring(0, 2000),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'U.S. Department of the Treasury',
+        recordId: String(saleNumber || baseName),
+        sourceFacts: { parcelNumber: parcelNo || null, siteAcres: Number.isFinite(acres) ? acres : null },
+        media: gallery.length ? {
+          photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
+          gallery
+        } : {}
+      }
     };
   }
 
@@ -208,26 +213,21 @@ class TreasuryForfeitureScraper extends BaseScraper {
     if (/MULTI.?FAMILY|MULTIPLEX/i.test(body)) return 'Multi-Family';
     if (/COMMERCIAL/i.test(body)) return 'Commercial';
     if (/LAND|VACANT/i.test(body)) return 'Land';
-    return 'Single Family';
+    return null;
   }
 
   parseMoney(s) {
-    if (!s) return 0;
-    return parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+    if (!s) return null;
+    return parseInt(s.replace(/[^\d]/g, ''), 10) || null;
   }
 
   parseInt0(s) {
-    if (!s) return 0;
-    return parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+    if (!s) return null;
+    return parseInt(s.replace(/[^\d]/g, ''), 10) || null;
   }
-
-  sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
-
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'TREAS-FL-PAL-10921',
         source: 'treasury',
@@ -348,9 +348,10 @@ class TreasuryForfeitureScraper extends BaseScraper {
         sourceUrl: 'https://www.cwsmarketing.com/?p=40192',
         raw: 'TREASURY FORFEITURE REAL ESTATE AUCTION: 114-18 178th St, Jamaica NY. 100% government clean deed.'
       }
-    ];
+    ], 'treasury-embedded-demo');
   }
 
 }
 
 module.exports = new TreasuryForfeitureScraper();
+module.exports.TreasuryForfeitureScraper = TreasuryForfeitureScraper;

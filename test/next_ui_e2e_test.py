@@ -1,7 +1,10 @@
 import os
+import base64
 import re
 import unittest
 from collections import Counter
+from copy import deepcopy
+from datetime import datetime, timezone
 
 from playwright.sync_api import sync_playwright
 
@@ -44,12 +47,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page = self.context.new_page()
         self.page.set_default_timeout(5_000)
         self.page.goto(BASE_URL, wait_until="domcontentloaded")
-        listings_response = self.page.request.get(f"{BASE_URL}/api/listings")
-        self.assertTrue(listings_response.ok, "the Next UI must be connected to its listings API")
+        listings_response = self.page.request.get(f"{BASE_URL}/api/listings?limit=1000")
+        self.assertTrue(listings_response.ok, f"listing API returned {listings_response.status}: {listings_response.text()[:300]}")
         self.listings = listings_response.json()["listings"]
         self.assertGreater(len(self.listings), 0)
         self.live_count = len(self.listings)
         self.primary_listing = self.listings[0]
+        self.market_listing = next(listing for listing in self.listings
+            if listing.get("city") and listing["city"].lower() != "unknown"
+            and listing.get("zip") and listing["zip"] != "00000"
+            and listing.get("county") and listing["county"].lower() != "unknown")
 
     def tearDown(self):
         self.page.close()
@@ -57,24 +64,71 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def wait_for_live_feed(self):
         self.page.get_by_role(
-            "button", name=f"Deal Grid ({self.live_count})"
+            "button", name=f"Deal Grid ({self.live_count} records)"
         ).wait_for(state="visible")
 
     def geocoded_listings(self, listings=None):
+        # Positive map tests declare their qualified fixture records explicitly.
+        # Finite coordinates in the application's snapshot data are not evidence.
         candidates = self.listings if listings is None else listings
-        return [
-            listing
-            for listing in candidates
-            if isinstance(listing.get("lat"), (int, float))
-            and isinstance(listing.get("lng"), (int, float))
-            and listing["lat"] != 0
-            and listing["lng"] != 0
-        ]
+        return [listing for listing in candidates if listing["id"] in self.verified_map_ids]
+
+    def install_map_fixture(self, page=None, snapshots_only=False, coincident=False, tiles_available=True):
+        target = page or self.page
+        if tiles_available:
+            # A local valid style exercises MapLibre's real camera and markers
+            # without depending on third-party tile uptime. The failure test
+            # deliberately skips this route and blocks all external requests.
+            target.route("https://tiles.openfreemap.org/styles/positron", lambda route: route.fulfill(json={
+                "version": 8, "sources": {}, "layers": [{"id": "test-background", "type": "background",
+                    "paint": {"background-color": "#eef2f6"}}]}))
+        observed_at = datetime.now(timezone.utc).isoformat()
+        records = []
+        for index, (city, state, zip_code, lat, lng) in enumerate([
+            ("Park Ridge", "NJ", "07656", 41.03, -74.04),
+            ("Pittsburgh", "PA", "15219", 40.44, -79.99),
+            ("Akron", "OH", "44308", 41.08, -81.51),
+        ]):
+            # Synthetic fixtures are confined to browser interception; no API data
+            # or persisted collection evidence is modified by the suite.
+            record_id = str(90001 + index)
+            source_url = f"https://salesweb.civilview.com/Sales/SaleDetails?PropertyId={record_id}"
+            listing = deepcopy(self.primary_listing)
+            listing.update(id=f"map-fixture-{record_id}", source="civilview", sourceUrl=source_url,
+                address=f"{10 + index} Test Avenue, {city}, {state} {zip_code}",
+                city=city, county="Fixture", state=state, zip=zip_code, lat=lat, lng=lng,
+                photo=None, sourceObservedAt=observed_at,
+                provenance={"origin": "live", "observed": True, "recordKind": "source_record",
+                    "publisher": "CivilView test fixture", "recordId": record_id, "observedAt": observed_at,
+                    "coordinates": {"lat": lat, "lng": lng, "observedAt": observed_at,
+                        "sourceRecordUrl": source_url, "origin": "publisher_record", "verification": "source_extracted"}})
+            records.append(listing)
+        self.verified_map_ids = {listing["id"] for listing in records}
+        snapshot = deepcopy(records[0])
+        snapshot.update(id="map-snapshot", address="99 Snapshot Road", provenance={"origin": "snapshot", "observed": False})
+        unqualified = deepcopy(records[1])
+        unqualified["id"] = "map-unverified-coordinate"
+        unqualified["provenance"].pop("coordinates")
+        records.extend([snapshot, unqualified])
+        if coincident:
+            duplicate = deepcopy(records[0])
+            duplicate["id"] = "map-coincident-record"
+            duplicate["provenance"]["recordId"] = "90004"
+            duplicate["sourceUrl"] = "https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=90004"
+            duplicate["provenance"]["coordinates"]["sourceRecordUrl"] = duplicate["sourceUrl"]
+            self.verified_map_ids.add(duplicate["id"])
+            records.append(duplicate)
+        if snapshots_only:
+            records = [snapshot, unqualified]
+            self.verified_map_ids = set()
+        self.listings = records
+        self.live_count = len(records)
+        target.route("**/api/listings?**", lambda route: route.fulfill(json={"listings": records, "total": len(records)}))
 
     def open_live_market_map(self, page=None, result_count=None):
         target_page = page or self.page
         count = self.live_count if result_count is None else result_count
-        target_page.get_by_role("button", name=f"Map ({count})").click()
+        target_page.get_by_role("button", name=f"Map ({count} records)").click()
         market_map = target_page.get_by_test_id("market-map")
         market_map.wait_for(state="visible")
         return market_map
@@ -104,6 +158,26 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Resources").press("Escape")
         self.page.get_by_test_id("desktop-mega-menu").wait_for(state="hidden")
 
+    def test_navigation_avoids_brand_overlap_at_compact_breakpoints(self):
+        for width in (320, 390, 1024, 1200, 1280, 1440):
+            with self.subTest(width=width):
+                self.page.set_viewport_size({"width": width, "height": 900})
+                header = self.page.locator("header").first
+                brand = header.get_by_role("link", name="PerfectProperty home").bounding_box()
+                self.assertIsNotNone(brand)
+                if width < 1280:
+                    self.assertFalse(header.locator("nav").is_visible())
+                    menu = header.get_by_role("button", name="Open menu").bounding_box()
+                    self.assertIsNotNone(menu)
+                    self.assertLessEqual(brand["x"] + brand["width"], menu["x"])
+                else:
+                    nav = header.locator("nav").bounding_box()
+                    sign_in = header.get_by_role("link", name="Sign in", exact=True).bounding_box()
+                    self.assertIsNotNone(nav)
+                    self.assertIsNotNone(sign_in)
+                    self.assertLessEqual(brand["x"] + brand["width"], nav["x"])
+                    self.assertLessEqual(nav["x"] + nav["width"], sign_in["x"])
+
     def test_every_feed_card_links_to_its_exact_listing_page(self):
         self.wait_for_live_feed()
         links = self.page.get_by_test_id("listing-detail-link")
@@ -127,6 +201,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(exact_link.count() + unavailable.count(), 1)
 
     def test_live_map_uses_maplibre_tracks_filters_and_opens_the_listing_workflow(self):
+        self.install_map_fixture()
+        self.page.reload(wait_until="domcontentloaded")
         self.wait_for_live_feed()
         market_map = self.open_live_market_map()
         geocoded = self.geocoded_listings()
@@ -194,11 +270,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
         self.assertEqual(self.page.get_by_test_id("map-marker").count(), expected)
         self.assertIn(
-            f"{expected} geocoded {'listing' if expected == 1 else 'listings'}",
+            f"{expected} records with verified locations",
             market_map.inner_text(),
         )
 
     def test_live_map_zoom_keyboard_pan_and_reset_controls_update_the_real_camera(self):
+        self.install_map_fixture()
+        self.page.reload(wait_until="domcontentloaded")
         self.wait_for_live_feed()
         market_map = self.open_live_market_map()
         self.page.get_by_test_id("live-market-maplibre").wait_for(state="visible")
@@ -232,6 +310,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "canvas.maplibregl-canvas"
         )
         did_pan = market_map.get_attribute("data-map-ready") == "true"
+        self.assertTrue(did_pan, "the deterministic valid style must enable real keyboard camera interaction")
         if did_pan:
             before_pan = market_map.get_attribute("data-map-center")
             map_canvas.evaluate("element => element.focus()")
@@ -269,10 +348,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         reduced_page = self.browser.new_page(viewport={"width": 390, "height": 844})
         reduced_page.set_default_timeout(10_000)
         reduced_page.emulate_media(reduced_motion="reduce")
+        self.install_map_fixture(reduced_page)
         try:
             reduced_page.goto(BASE_URL, wait_until="domcontentloaded")
             reduced_page.get_by_role(
-                "button", name=f"Deal Grid ({self.live_count})"
+                "button", name=f"Deal Grid ({self.live_count} records)"
             ).wait_for(state="visible")
             market_map = self.open_live_market_map(reduced_page)
             reduced_page.wait_for_function(
@@ -339,10 +419,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 route.abort()
 
         offline_page.route("**/*", block_external_requests)
+        self.install_map_fixture(offline_page, tiles_available=False)
         try:
             offline_page.goto(BASE_URL, wait_until="domcontentloaded")
             offline_page.get_by_role(
-                "button", name=f"Deal Grid ({self.live_count})"
+                "button", name=f"Deal Grid ({self.live_count} records)"
             ).wait_for(state="visible")
             market_map = self.open_live_market_map(offline_page)
             self.assertEqual(market_map.get_attribute("data-map-engine"), "maplibre")
@@ -356,6 +437,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             )
             fallback_status.wait_for(state="visible", timeout=12_000)
             self.assertIn("listing coordinates", fallback_status.inner_text())
+            zoom_before = float(market_map.get_attribute("data-map-zoom"))
+            offline_page.get_by_role("button", name="Zoom map in", exact=True).click()
+            self.assertGreater(float(market_map.get_attribute("data-map-zoom")), zoom_before,
+                "unavailable styles must not leave a stale claimed camera position")
 
             geocoded = self.geocoded_listings()
             fallback_list = offline_page.get_by_test_id("map-fallback-list")
@@ -375,6 +460,37 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             )
         finally:
             offline_page.close()
+
+    def test_live_map_never_plots_snapshot_or_unverified_coordinates(self):
+        self.install_map_fixture(snapshots_only=True)
+        self.page.reload(wait_until="domcontentloaded")
+        self.wait_for_live_feed()
+        market_map = self.open_live_market_map()
+        market_map.get_by_text("No verified property locations match these filters.", exact=True).wait_for(state="visible")
+        self.assertEqual(self.page.get_by_test_id("map-marker").count(), 0)
+        self.assertIn("0 records with verified locations", market_map.inner_text())
+        self.assertIn("2 records need verified coordinates", market_map.inner_text())
+        self.page.get_by_role("button", name="Deal Grid (2 records)", exact=True).click()
+        self.assertEqual(self.page.get_by_test_id("listing-detail-link").count(), 2)
+
+    def test_live_map_keeps_coincident_records_selectable_at_one_location(self):
+        self.install_map_fixture(coincident=True)
+        self.page.reload(wait_until="domcontentloaded")
+        self.wait_for_live_feed()
+        market_map = self.open_live_market_map()
+        self.page.wait_for_function("document.querySelectorAll('[data-testid=map-marker]').length === 3")
+        self.assertIn("4 records with verified locations · 3 map locations", market_map.inner_text())
+        first = self.listings[0]
+        marker = self.page.get_by_role("button", name=f"Show 2 source records at {first['address']}", exact=True)
+        self.assertEqual(marker.get_attribute("data-record-count"), "2")
+        # Exercise the real marker event even if external map tiles are unavailable.
+        marker.dispatch_event("click")
+        preview = self.page.get_by_test_id("map-listing-preview")
+        preview.wait_for(state="visible")
+        preview.get_by_role("button", name="map-coincident-record", exact=True).click()
+        self.assertEqual(preview.get_by_role("link", name="Listing page").get_attribute("href"), "/listings/map-coincident-record")
+        self.assertEqual(preview.get_by_role("button", name="map-coincident-record", exact=True).get_attribute("aria-pressed"), "true")
+        self.assertEqual(marker.get_attribute("aria-pressed"), "true")
 
     def test_linked_information_pages_resolve(self):
         routes = [
@@ -408,8 +524,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertGreater(self.page.get_by_role("button", name="Underwrite Deal").count(), 0)
 
     def test_hero_suggests_and_selects_real_markets_as_user_types(self):
-        city = self.primary_listing["city"]
-        state = self.primary_listing["state"]
+        self.wait_for_live_feed()
+        city = self.market_listing["city"]
+        state = self.market_listing["state"]
         city_result_count = sum(listing["city"] == city for listing in self.listings)
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         hero_input.fill(city)
@@ -429,8 +546,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
 
     def test_hero_can_launch_a_county_market(self):
-        county = self.primary_listing["county"]
-        state = self.primary_listing["state"]
+        self.wait_for_live_feed()
+        county = self.market_listing["county"]
+        state = self.market_listing["state"]
         county_result_count = sum(listing["county"] == county for listing in self.listings)
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         hero_input.fill(county)
@@ -447,13 +565,14 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
 
     def test_hero_supports_state_country_zip_and_address_scopes(self):
+        self.wait_for_live_feed()
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         state_counts = Counter(listing["state"] for listing in self.listings)
         state, state_result_count = state_counts.most_common(1)[0]
         state_name = STATE_NAMES.get(state, state)
-        address = self.primary_listing["address"]
-        city = self.primary_listing["city"]
-        zip_code = self.primary_listing["zip"]
+        address = self.market_listing["address"]
+        city = self.market_listing["city"]
+        zip_code = self.market_listing["zip"]
 
         hero_input.fill(state_name)
         self.page.get_by_role("option", name=f"{state_name} State").click()
@@ -670,7 +789,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "none",
         )
 
-        city = self.primary_listing["city"]
+        city = self.market_listing["city"]
         search.fill(city)
         self.page.get_by_role("option").first.wait_for(state="visible")
         search.evaluate("element => { element.blur(); element.focus(); }")
@@ -691,6 +810,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
 
     def test_beta_marketing_copy_does_not_present_unverified_claims_as_fact(self):
+        self.assertEqual(self.page.get_by_text("Jake Martinez", exact=True).count(), 0)
+        self.assertEqual(self.page.get_by_text("Saved searches with instant alerts", exact=True).count(), 0)
         self.assertEqual(self.page.get_by_text("Verified", exact=True).count(), 0)
         self.assertEqual(self.page.get_by_text(re.compile(r"2k flippers", re.I)).count(), 0)
         self.assertTrue(self.page.get_by_text("Beta snapshot", exact=True).first.is_visible())
@@ -910,11 +1031,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_live_feed_loads_backend_data_and_refreshes_honestly(self):
         self.wait_for_live_feed()
-        self.assertTrue(self.page.get_by_text("Connected to live data API").is_visible())
+        self.assertTrue(self.page.get_by_text("Unverified or demo feed — no source-observed records").is_visible())
         self.assertEqual(self.page.get_by_text("Live Ingestion Engine Active").count(), 0)
 
         self.page.get_by_role("button", name="Refresh live feed").click()
-        self.page.get_by_text(f"{self.live_count} properties loaded").wait_for(state="visible")
+        self.page.get_by_text(f"0 observed · {self.live_count} demo/unverified").wait_for(state="visible")
         self.assertEqual(
             self.page.get_by_role("button", name="Underwrite Deal").count(),
             self.live_count,
@@ -982,37 +1103,30 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_property_underwrite_watchlist_and_export_journey(self):
         address = self.primary_listing["address"]
-        city = self.primary_listing["city"]
         self.wait_for_live_feed()
-        self.page.get_by_placeholder("Search address, county, court docket...").fill(city)
+        self.page.get_by_placeholder("Search address, county, court docket...").fill(address)
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
 
-        self.assertTrue(self.page.get_by_role("heading", name=address, level=2).is_visible())
+        self.page.get_by_role("heading", name=address, level=2).wait_for(state="visible")
         self.assertTrue(self.page.get_by_role("button", name="Puter AI").is_visible())
         self.page.get_by_role("button", name="Analyze Deal").click()
-        self.page.get_by_text(re.compile(r"Primary catch", re.IGNORECASE)).wait_for(state="visible")
+        self.page.get_by_text(re.compile(r"Evidence summary.*unverified")).wait_for(state="visible")
 
         self.page.get_by_role("button", name="3D Lot & Elevation").click()
-        self.assertTrue(self.page.get_by_text("3D Terrain & Contour Insights:").is_visible())
-        
-        # Test 3D layer and wireframe buttons
-        self.page.get_by_role("button", name="Zoning", exact=True).click()
-        self.page.get_by_role("button", name="Lot Boundary", exact=True).click()
-        self.page.get_by_role("button", name="Elevation", exact=True).click()
-        self.page.get_by_title("Toggle Wireframe Topography").click()
-        self.page.get_by_title("Toggle Wireframe Topography").click()
+        self.page.get_by_role("region", name="Parcel geometry reference").wait_for(state="visible")
+        self.assertEqual(self.page.get_by_title("Toggle Wireframe Topography").count(), 0)
 
         # Test Bidding Simulator tab & MAO calculations
         self.page.get_by_role("button", name="Bidding Simulator").click()
-        self.assertTrue(self.page.get_by_text("Max Allowable Offer (MAO)").is_visible())
-        self.assertTrue(self.page.get_by_text("Win Probability").is_visible())
+        self.assertTrue(self.page.get_by_role("heading", name="Max Allowable Offer (MAO) Simulator").is_visible())
+        self.assertEqual(self.page.get_by_text("Win Probability", exact=True).count(), 0)
 
         # Test Deal Video Teaser generator
-        self.page.get_by_role("button", name="Generate 15s Deal Video Reel").click()
+        self.page.get_by_role("button", name="Build storyboard preview").click()
         self.page.get_by_text("OPPORTUNITY REVEAL").wait_for(state="visible", timeout=6000)
-        self.assertTrue(self.page.get_by_text("Reel generated").is_visible())
+        self.assertTrue(self.page.get_by_text("Storyboard ready").is_visible())
         self.page.get_by_role("button", name="Re-generate").click()
-        self.assertTrue(self.page.get_by_role("button", name="Generate 15s Deal Video Reel").is_visible())
+        self.assertTrue(self.page.get_by_role("button", name="Build storyboard preview").is_visible())
 
         self.page.get_by_role("button", name="Add to Watchlist").click()
         self.page.get_by_role("button", name="Close drawer").click()
@@ -1034,17 +1148,44 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         address = "1248 W 76th St, Cleveland, OH 44102"
         self.page.get_by_role("button", name="Notice Parser").click()
         self.page.get_by_role("button", name="Paste sample notice").click()
-        self.page.get_by_role("button", name="Parse Notice").click()
+        self.page.get_by_role("button", name="Extract stated facts").click()
 
-        self.page.get_by_text(re.compile(r"fields extracted .* Deal Score"), exact=False).wait_for(state="visible")
+        self.page.get_by_text("Unverified extraction — source review required", exact=True).wait_for(state="visible")
         self.assertTrue(self.page.get_by_text(address, exact=True).is_visible())
-        self.page.get_by_role("button", name="Add to Watchlist").click()
+        self.page.get_by_role("button", name="Add extraction").click()
 
         self.assertTrue(self.page.get_by_role("dialog", name=address).is_visible())
         self.page.get_by_role("button", name="Close drawer").click()
         self.page.get_by_role("button", name="Watchlist (1)").click()
         watchlist = self.page.get_by_role("dialog", name="Saved Watchlist (1)")
         self.assertTrue(watchlist.get_by_text(address, exact=True).is_visible())
+
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.get_by_role("button", name="Watchlist (1)").click()
+        self.assertTrue(self.page.get_by_role("dialog", name="Saved Watchlist (1)").get_by_text(address, exact=True).is_visible())
+
+    def test_saved_search_persists_and_opens_matching_inventory(self):
+        self.wait_for_live_feed()
+        chosen_state = self.primary_listing["state"]
+        expected = sum(item["state"] == chosen_state for item in self.listings)
+        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        self.page.get_by_label("Search name", exact=True).fill("My acquisition market")
+        self.page.get_by_label("State market", exact=True).select_option(chosen_state)
+        self.page.get_by_role("button", name="Save search", exact=True).click()
+        self.page.get_by_text("Search saved on this browser.").wait_for(state="visible")
+        self.page.reload(wait_until="domcontentloaded")
+        self.wait_for_live_feed()
+        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        self.page.get_by_role("heading", name="My acquisition market", exact=True).wait_for(state="visible")
+        self.page.get_by_role("button", name=f"View {expected} matches", exact=True).click()
+        self.page.get_by_role("button", name=f"Deal Grid ({expected} records)", exact=True).wait_for(state="visible")
+        self.assertEqual(self.page.get_by_role("combobox", name="State filter").input_value(), chosen_state)
+
+    def test_account_entry_does_not_collect_credentials_for_a_nonexistent_service(self):
+        for path in ["sign-in", "register"]:
+            self.page.goto(f"{BASE_URL}/{path}", wait_until="domcontentloaded")
+            self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
+            self.page.wait_for_url(re.compile(rf"{re.escape(BASE_URL)}/(?:#live-feed|listings)"))
 
     def test_watchlist_modal_is_escape_closeable(self):
         self.page.get_by_role("button", name="Watchlist (0)").click()
@@ -1087,9 +1228,18 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(source_count, expected_source_count)
 
         self.page.get_by_role("combobox", name="Sort listings").select_option("bid")
-        bids = self.page.locator("[data-testid='listing-opening-bid']").all_inner_texts()
-        bid_values = [int(re.sub(r"[^0-9]", "", bid)) for bid in bids]
-        self.assertEqual(bid_values, sorted(bid_values))
+        bids = self.page.locator("[data-testid='listing-opening-bid']").all_text_contents()
+        bid_values = [int(re.sub(r"[^0-9]", "", bid)) if re.search(r"\d", bid) else None for bid in bids]
+        known = [value for value in bid_values if value is not None]
+        self.assertEqual(bid_values, sorted(known) + [None] * (len(bid_values) - len(known)))
+
+    def test_source_observed_filter_excludes_demo_and_unverified_records(self):
+        self.wait_for_live_feed()
+        self.page.get_by_role("button", name="Source-observed only").click()
+        self.assertEqual(self.page.get_by_role("button", name="Source-observed only").get_attribute("aria-pressed"), "true")
+        self.assertEqual(self.page.get_by_text("Demo / unverified", exact=True).count(), 0)
+        self.page.get_by_role("button", name="Reset all filters", exact=True).click()
+        self.wait_for_live_feed()
 
     def test_preview_opens_as_an_accessible_escape_closeable_dialog(self):
         play = self.page.get_by_role("button", name="Play preview")
@@ -1111,11 +1261,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_listings_directory_route_renders_and_loads_inventory(self):
         self.page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
-        heading = self.page.get_by_role("heading", name="Live National Distressed Property Inventory")
+        heading = self.page.get_by_role("heading", name="Distressed property records, without hidden assumptions")
         heading.wait_for(state="visible")
         self.assertTrue(heading.is_visible())
-        self.assertTrue(self.page.get_by_text("Live Auction Directory").is_visible())
-        self.page.get_by_role("button", name=f"Deal Grid ({self.live_count})").wait_for(state="visible")
+        self.assertTrue(self.page.get_by_text("Property Evidence Directory").is_visible())
+        self.page.get_by_role("button", name=f"Deal Grid ({self.live_count} records)").wait_for(state="visible")
 
     def test_not_found_page_renders_with_recovery_actions(self):
         self.page.goto(f"{BASE_URL}/non-existent-route-audit-404", wait_until="domcontentloaded")
@@ -1132,7 +1282,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         dialog = self.page.get_by_role("dialog", name="Deal Alerts Manager")
         dialog.wait_for(state="visible")
         self.assertTrue(dialog.is_visible())
-        self.assertTrue(self.page.get_by_text("Automated Deal Alerts").is_visible())
+        self.assertTrue(self.page.get_by_role("heading", name="Saved searches", exact=True).is_visible())
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)
 
@@ -1141,22 +1291,20 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
         dialog = self.page.get_by_role("dialog").first
         dialog.wait_for(state="visible")
-        self.assertTrue(self.page.get_by_text("Live County Docket & Title Agent").is_visible())
-        # Select Deterministic API for sub-second offline test stability
-        self.page.get_by_role("combobox", name="Agent Engine").select_option("api")
-        self.page.get_by_role("button", name="Verify Live Docket").click()
-        verified_badge = self.page.get_by_text("Docket Verified: Case #")
-        verified_badge.wait_for(state="visible", timeout=5000)
-        self.assertTrue(verified_badge.is_visible())
+        self.assertTrue(self.page.get_by_text("Court-record evidence check").is_visible())
+        self.page.get_by_role("button", name="Check official evidence").click()
+        unverified_badge = self.page.get_by_text("Not verified from official records")
+        unverified_badge.wait_for(state="visible", timeout=5000)
+        self.assertTrue(unverified_badge.is_visible())
 
     def test_custom_address_deep_check_opens_drawer(self):
         self.wait_for_live_feed()
         search_input = self.page.get_by_label("Search listings")
         search_input.fill("9999 Unlisted Blvd, Cleveland, OH")
-        verify_prompt = self.page.get_by_text("On-Demand Address Verification")
+        verify_prompt = self.page.get_by_text("Address research workspace")
         verify_prompt.wait_for(state="visible", timeout=3000)
         self.assertTrue(verify_prompt.is_visible())
-        self.page.get_by_role("button", name="Deep Check \"9999 Unlisted Blvd, Cleveland, OH\" with Live Agent").click()
+        self.page.get_by_role("button", name="Open evidence checklist for \"9999 Unlisted Blvd, Cleveland, OH\"").click()
         dialog = self.page.get_by_role("dialog").first
         dialog.wait_for(state="visible")
         heading = self.page.get_by_role("heading", name="9999 Unlisted Blvd")
@@ -1164,17 +1312,132 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(heading.is_visible())
 
     def test_listing_detail_page_renders_docket_agent_and_can_verify(self):
-        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
-        agent_heading = self.page.get_by_text("Live County Docket & Title Agent")
+        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        research = self.page.locator("details#modeled-research")
+        self.assertIsNone(research.get_attribute("open"), "modeled research should start collapsed")
+        research.locator("summary").click()
+        agent_heading = self.page.get_by_text("Court-record evidence check")
         agent_heading.wait_for(state="visible", timeout=5000)
         self.assertTrue(agent_heading.is_visible())
-        self.page.get_by_role("combobox", name="Agent Engine").select_option("api")
-        self.page.get_by_role("button", name="Verify Live Docket").click()
-        verified_badge = self.page.get_by_text("Docket Verified: Case #")
-        verified_badge.wait_for(state="visible", timeout=5000)
-        self.assertTrue(verified_badge.is_visible())
-        copy_btn = self.page.get_by_role("button", name="Copy Certificate")
-        self.assertTrue(copy_btn.is_visible())
+        self.page.get_by_role("button", name="Check official evidence").click()
+        unverified_badge = self.page.get_by_text("Not verified from official records")
+        unverified_badge.wait_for(state="visible", timeout=5000)
+        self.assertTrue(unverified_badge.is_visible())
+        self.assertEqual(self.page.get_by_text("Docket Verified: Case #").count(), 0)
+
+    def test_detail_mobile_content_and_media_controls_are_not_clipped(self):
+        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        for width in (375, 390):
+            with self.subTest(width=width):
+                self.page.set_viewport_size({"width": width, "height": 812})
+                for element in [self.page.locator("h1"), self.page.get_by_test_id("listing-media"),
+                    self.page.get_by_test_id("demo-listing-disclosure")]:
+                    box = element.bounding_box()
+                    self.assertGreaterEqual(box["x"], 0)
+                    self.assertLessEqual(box["x"] + box["width"], width)
+                media_button = self.page.get_by_role("button", name="Check Street View", exact=True).bounding_box()
+                tabs = self.page.get_by_role("tablist", name="Property media").bounding_box()
+                self.assertLessEqual(media_button["y"] + media_button["height"], tabs["y"])
+                auction = self.page.get_by_role("heading", name="Auction details", exact=True).filter(visible=True).bounding_box()
+                overview = self.page.get_by_role("heading", name="Property overview", exact=True).bounding_box()
+                self.assertLess(auction["y"], overview["y"], "auction actions must precede research on mobile")
+        save = self.page.get_by_role("button", name="Save to watchlist", exact=True).filter(visible=True)
+        save.click()
+        saved = self.page.get_by_role("button", name="Saved to watchlist", exact=True).filter(visible=True)
+        self.assertEqual(saved.get_attribute("aria-pressed"), "true")
+        saved.click()
+        self.assertEqual(save.get_attribute("aria-pressed"), "false")
+
+    def test_street_view_uses_same_origin_images_and_explicit_context_disclosure(self):
+        # Deterministic transport fixture: browser tests never spend Google API quota.
+        image_requests = []
+        tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
+
+        def media_response(route):
+            if "mode=metadata" in route.request.url:
+                route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Google", "captureDate": "2026-05", "distanceMeters": 12})
+            else:
+                image_requests.append(route.request.url)
+                route.fulfill(content_type="image/png", body=tiny_png)
+
+        self.page.route("**/api/property-image?**", media_response)
+        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        disclosure = self.page.get_by_test_id("street-view-disclosure")
+        self.assertEqual(image_requests, [])
+        self.page.get_by_role("button", name="Check Street View", exact=True).click()
+        disclosure.wait_for(state="visible")
+        self.assertIn("Street-level context only", disclosure.inner_text())
+        self.assertIn("May 2026", disclosure.inner_text())
+        self.assertIn("12 m", disclosure.inner_text())
+        self.assertTrue(image_requests)
+        self.assertTrue(all(url.startswith(f"{BASE_URL}/api/property-image?") and "key=" not in url for url in image_requests))
+        image = self.page.get_by_test_id("street-view-panel").locator("img")
+        self.assertEqual(image.evaluate("node => getComputedStyle(node).objectFit"), "contain")
+        tab = self.page.get_by_role("tab", name="Street View", exact=True)
+        tab.focus()
+        tab.press("End")
+        # The snapshot fixture has no qualified coordinate evidence. Its last
+        # available tab is Street View, not a fabricated property map.
+        self.assertEqual(self.page.get_by_role("tab", name="Map", exact=True).count(), 0)
+        self.assertEqual(tab.get_attribute("aria-selected"), "true")
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        tab.click()
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
+
+    def test_feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure(self):
+        fixture = dict(self.primary_listing, id="CIV-NJ-7-1234", source="civilview",
+            address="19 West Park Avenue, Park Ridge, NJ 07656", photo=None,
+            sourceUrl="https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1234",
+            sourceObservedAt="2026-09-04T12:00:00Z",
+            provenance={"origin": "live", "observed": True, "recordKind": "source_record", "publisher": "CivilView", "recordId": "1234"})
+        self.page.route("**/api/listings?**", lambda route: route.fulfill(json={"listings": [fixture], "total": 1}))
+        requests = []
+        tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
+        def media_response(route):
+            requests.append(route.request.url)
+            if len(requests) == 1:
+                route.fulfill(json={"available": False, "reason": "Coverage temporarily unavailable"})
+            elif "mode=metadata" in route.request.url:
+                route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Test provider attribution", "captureDate": "2012-09", "distanceMeters": 24})
+            else:
+                route.fulfill(content_type="image/png", body=tiny_png)
+        self.page.route("**/api/property-image?**", media_response)
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.get_by_role("button", name="Deal Grid (1 records)", exact=True).wait_for(state="visible")
+        self.assertEqual(requests, [], "feed must not bill for imagery before the user requests it")
+        button = self.page.get_by_role("button", name=f"Load Street View for {fixture['address']}")
+        button.click()
+        self.page.get_by_text("Coverage temporarily unavailable", exact=True).wait_for(state="visible")
+        self.assertEqual(self.page.get_by_test_id("listing-thumbnail-streetview").count(), 0)
+        button.click()
+        preview = self.page.get_by_test_id("listing-thumbnail-streetview")
+        preview.wait_for(state="visible")
+        self.assertIn("September 2012", preview.inner_text())
+        self.assertIn("Test provider attribution", preview.inner_text())
+        self.assertIn("Context, not condition evidence", preview.inner_text())
+        self.assertEqual(preview.locator("img").evaluate("el => getComputedStyle(el).objectFit"), "contain")
+        self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in requests))
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
+
+    def test_street_view_image_failure_can_retry_without_substituting_stock_photos(self):
+        attempts = []
+
+        def media_response(route):
+            if "mode=metadata" in route.request.url:
+                route.fulfill(json={"available": True, "provider": "Google Maps", "distanceMeters": 10})
+            else:
+                attempts.append(route.request.url)
+                route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
+
+        self.page.route("**/api/property-image?**", media_response)
+        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        self.page.get_by_role("button", name="Check Street View", exact=True).click()
+        self.page.get_by_text("Street View image is temporarily unavailable", exact=True).wait_for(state="visible")
+        self.page.get_by_role("button", name="Retry image").click()
+        self.page.get_by_text("Street View image is temporarily unavailable", exact=True).wait_for(state="visible")
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(self.page.get_by_test_id("listing-media").locator('img[src*="unsplash"]').count(), 0)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,13 @@
+# Property intelligence workflow
+
+Open a property detail page or the terminal's underwriting drawer. The evidence dossier connects the exact publisher observation, comparison history, public-record investigation, and the next questions to resolve. It supports research; it does not establish title, occupancy, investment return, or a recommended bid.
+
+1. **Read the evidence.** GET `/api/property-intelligence?listingId=...` uses the canonical listing API database and stored observations. It performs no outbound lookup. A stale publisher observation is marked with a refresh warning and a research question.
+2. **Find a supported change.** Price, date, status, terms, and address comparisons retain both original observation dates and publisher URLs. Only the same validated publisher identity can contribute a change. First observations establish a baseline; disappearance never implies a sale.
+3. **Investigate official records.** POST `/api/property-intelligence` with `{ "listingId": "..." }` requests the fixed official-record adapters. A Florida point intersection is a candidate until its scoped parcel identity matches. Census estimates describe an area and retain the dataset vintage and survey margins of error.
+4. **Understand the catch.** Missing bid, occupancy, payment terms, valuation, debt, and title evidence remain unresolved. A missing debt balance never becomes zero. An area difference is a research lead only when the parcel identity matches and both values are supported observations.
+5. **Keep the dossier.** Export preserves the underlying evidence as JSON, including source URLs, timestamps, limitations, parcel geometry when returned, and the original publisher identity. Customer-facing display labels are independent of internal provenance.
+
+The lookup route accepts only validated source-observed listings, refuses future captures, coalesces duplicate requests, limits concurrent investigations to two, and caches at most 100 exact evidence inputs for one hour. Changing source identity or any lookup input invalidates that cached result. Public-record research is not persisted to the property inventory; the JSON export is the portable research artifact. Source observation history is durable in the local observation store.
+
+Set `CENSUS_API_KEY` on the API server to enable ACS data queries. Without it the dossier reports that missing capability and can still query supported Florida parcel evidence. See [public-records-workflow.md](public-records-workflow.md) for fixed hosts, bounds, and source restrictions. See [hunts-workflow.md](hunts-workflow.md) for saving criteria and comparing matching records.

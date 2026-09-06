@@ -11,8 +11,8 @@
 //   to its listings API". Production builds are immutable and deterministic.
 // - The UI always runs on its own port (default 3100) so an existing dev
 //   server on 3001 is left untouched.
-// - The Node listing API on :3000 is reused if already healthy, otherwise
-//   booted and torn down with the suite.
+// - A fresh Node listing API runs on :3102, never a potentially stale dev API.
+// - Verification uses .next-verify, leaving the active .next dev output alone.
 
 const { spawn, spawnSync } = require('child_process');
 const http = require('http');
@@ -20,8 +20,9 @@ const path = require('path');
 const fs = require('fs');
 
 const ROOT = path.resolve(__dirname, '..');
-const API_PORT = 3000;
+const API_PORT = process.env.UI_SUITE_API_PORT ? Number(process.env.UI_SUITE_API_PORT) : 3102;
 const UI_PORT = process.env.UI_SUITE_PORT ? Number(process.env.UI_SUITE_PORT) : 3100;
+process.env.NEXT_VERIFY_BUILD = '1';
 
 function probe(port, route = '/') {
   return new Promise((resolve) => {
@@ -70,16 +71,24 @@ async function main() {
   const owned = [];
 
   try {
-    if (await probe(API_PORT, '/api/health') && await probe(API_PORT, '/api/listings')) {
-      console.log('[ui-suite] reusing existing Node API on :3000');
+    if (await probe(API_PORT, '/api/health')) {
+      throw new Error(`[ui-suite] API test port :${API_PORT} is already in use; choose UI_SUITE_API_PORT.`);
     } else {
-      console.log('[ui-suite] booting Node API (server/server.js) on :3000...');
-      const api = startCmd(process.execPath, ['server/server.js'], { PORT: String(API_PORT) });
+      console.log(`[ui-suite] booting isolated Node API on :${API_PORT}...`);
+      const api = startCmd(process.execPath, ['server/server.js'], {
+        PORT: String(API_PORT),
+        NODE_ENV: 'test',
+        RUN_REAL_SCRAPERS: '0',
+        // Forty-five journeys share one proxy socket. Test the default budget
+        // separately; keep this isolated load run below its explicit ceiling.
+        PROPERTY_API_RATE_LIMIT: '1000',
+        DATABASE_URL: ''
+      });
       owned.push(api);
       await waitFor(api, API_PORT, '/api/health', 'Node API');
     }
 
-    if (!fs.existsSync(path.join(ROOT, '.next', 'BUILD_ID'))) {
+    if (!fs.existsSync(path.join(ROOT, '.next-verify', 'BUILD_ID'))) {
       console.log('[ui-suite] no production build found — running next build...');
       const build = spawnSync('npx', ['next', 'build'], {
         cwd: ROOT,
@@ -93,6 +102,8 @@ async function main() {
     console.log(`[ui-suite] booting Next production server on :${UI_PORT}...`);
     const ui = startCmd(process.execPath, [nextBin, 'start', '-p', String(UI_PORT)], {
       PROPERTY_API_URL: `http://localhost:${API_PORT}`,
+      GOOGLE_MAPS_API_KEY: '',
+      GOOGLE_GEOCODING_API_KEY: '',
     });
     owned.push(ui);
     await waitFor(ui, UI_PORT, '/', 'Next production server', 60_000);
@@ -100,13 +111,19 @@ async function main() {
     const py = process.platform === 'win32'
       ? 'python'
       : (spawnSync('python3', ['--version']).status === 0 ? 'python3' : 'python');
-    const result = spawnSync(py, [path.join('test', 'next_ui_e2e_test.py')], {
-      cwd: ROOT,
-      stdio: 'inherit',
-      env: { ...process.env, NEXT_UI_URL: `http://localhost:${UI_PORT}` },
-    });
-    if (result.error) throw result.error;
-    process.exitCode = result.status === 0 ? 0 : 1;
+    process.exitCode = 0;
+    for (const suite of ['next_ui_e2e_test.py', 'detail_media_recovery_e2e_test.py']) {
+      const result = spawnSync(py, [path.join('test', suite)], {
+        cwd: ROOT,
+        stdio: 'inherit',
+        env: { ...process.env, NEXT_UI_URL: `http://localhost:${UI_PORT}` },
+      });
+      if (result.error) throw result.error;
+      if (result.status !== 0) {
+        for (const child of owned) console.error(child.logs.join('').slice(-12000));
+        process.exitCode = 1;
+      }
+    }
   } finally {
     for (const child of owned) {
       if (process.platform === 'win32') {

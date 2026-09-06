@@ -16,10 +16,7 @@ class UsMarshalsScraper extends BaseScraper {
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      let allListings = await this.fetchSeizedListings();
-      if (!allListings || allListings.length === 0) {
-        allListings = this.getVerifiedInventory();
-      }
+      const allListings = await this.fetchSeizedListings();
       console.log(`[${this.name}] Standardized ${allListings.length} US Marshals listings`);
       return allListings
         .filter(l => this.passesFilter(l))
@@ -29,29 +26,17 @@ class UsMarshalsScraper extends BaseScraper {
 
   async fetchSeizedListings() {
     const url = `${this.baseUrl}/what-we-do/asset-forfeiture/real-property`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(url, {
+      const html = await this.requestText(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) {
-        return this.fetchPartnerAuctions();
-      }
-
-      const html = await res.text();
       const listings = this.parseMarshalsHtml(html);
       return listings.length > 0 ? listings : this.fetchPartnerAuctions();
     } catch (err) {
       return this.fetchPartnerAuctions();
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -69,29 +54,40 @@ class UsMarshalsScraper extends BaseScraper {
         const clean = cells.map(c => c.replace(/<[^>]+>/g, '').trim());
         const address = clean[0] || clean[1];
         const stateMatch = address.match(/,\s*([A-Z]{2})\s+(\d{5})?/);
-        const state = stateMatch ? stateMatch[1] : 'US';
+        const state = stateMatch?.[1] || null;
+        const zip = stateMatch?.[2] || null;
         const priceMatch = row.match(/\$([0-9,]+)/);
-        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 150000;
-        const id = `USMS-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+        const linkMatch = row.match(/href=["']([^"']+)["']/i);
+        const recordMatch = row.match(/(?:asset|case|property)\s*(?:id|no\.?|#)?\s*[:#]?\s*([A-Z0-9-]{4,})/i);
+        const linkToken = linkMatch?.[1]?.split('?')[0].split('/').filter(Boolean).pop();
+        const recordId = recordMatch?.[1] || linkToken;
+
+        if (!address || !state || !recordId || !linkMatch) continue;
+        const id = `USMS-${String(recordId).replace(/[^a-zA-Z0-9-]/g, '')}`;
+        const sourceUrl = linkMatch[1].startsWith('http')
+          ? linkMatch[1]
+          : new URL(linkMatch[1], this.baseUrl).toString();
 
         listings.push({
           id,
-          state: state.length === 2 ? state : 'TX',
-          county: 'County',
-          city: address.split(',')[1]?.trim() || 'City',
-          zip: '00000',
+          state,
+          county: null,
+          city: null,
+          zip,
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.3),
-          estHigh: Math.round(price * 1.6),
-          assessed: Math.round(price * 1.15),
-          saleDate: new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'United States Marshals Service (USMS)',
-          defendant: 'In Rem Asset Forfeiture',
-          occupancy: 'Vacant',
-          deposit: '10% cashier check to US Marshals Service',
-          sourceUrl: `${this.baseUrl}/what-we-do/asset-forfeiture`,
-          raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500),
+          estLow: null,
+          estHigh: null,
+          assessed: null,
+          saleDate: null,
+          plaintiff: null,
+          defendant: null,
+          occupancy: null,
+          deposit: null,
+          sourceUrl,
+          raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+          provenance: { origin: 'live', observed: true, publisher: 'U.S. Marshals Service', recordId: String(recordId) },
         });
       }
     }
@@ -102,25 +98,16 @@ class UsMarshalsScraper extends BaseScraper {
   async fetchPartnerAuctions() {
     // Partner feed query (Gaston & Sheehan / RealLook USMS real estate)
     const partnerUrl = 'https://www.reallook.com/usms-inventory';
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(partnerUrl, {
+      const html = await this.requestText(partnerUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) return [];
-      const html = await res.text();
       return this.parsePartnerCards(html);
     } catch (err) {
       return [];
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -134,32 +121,38 @@ class UsMarshalsScraper extends BaseScraper {
       const addressMatch = card.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
       const priceMatch = card.match(/\$([0-9,]+)/);
       const idMatch = card.match(/data-id="([^"]+)"/i);
+      const linkMatch = card.match(/href=["']([^"']+)["']/i);
 
-      if (addressMatch && priceMatch) {
+      if (addressMatch && idMatch && linkMatch) {
         const address = addressMatch[1].trim();
-        const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
         const stateMatch = address.match(/,\s*([A-Z]{2})\s+(\d{5})?/);
-        const state = stateMatch ? stateMatch[1] : 'FL';
-        const id = idMatch ? `USMS-${idMatch[1]}` : `USMS-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const state = stateMatch?.[1] || null;
+        if (!state) continue;
+        const id = `USMS-${idMatch[1]}`;
+        const sourceUrl = linkMatch[1].startsWith('http')
+          ? linkMatch[1]
+          : new URL(linkMatch[1], 'https://www.reallook.com').toString();
 
         listings.push({
           id,
           state,
-          county: 'County',
-          city: address.split(',')[1]?.trim() || 'City',
-          zip: '00000',
+          county: null,
+          city: null,
+          zip: stateMatch?.[2] || null,
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.3),
-          estHigh: Math.round(price * 1.6),
-          assessed: Math.round(price * 1.15),
-          saleDate: new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'United States Marshals Service (USMS)',
-          defendant: 'Asset Forfeiture Disposition',
-          occupancy: 'Vacant',
-          deposit: '10% cashier check / USMS escrow deposit',
-          sourceUrl: `https://www.reallook.com/property/${id.replace(/^USMS-/, '')}`,
-          raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500),
+          estLow: null,
+          estHigh: null,
+          assessed: null,
+          saleDate: null,
+          plaintiff: null,
+          defendant: null,
+          occupancy: null,
+          deposit: null,
+          sourceUrl,
+          raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+          provenance: { origin: 'live', observed: true, publisher: 'RealLook / USMS', recordId: idMatch[1] },
         });
       }
     }
@@ -169,7 +162,7 @@ class UsMarshalsScraper extends BaseScraper {
 
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'USMS-FL-109482',
         state: 'FL',
@@ -286,7 +279,7 @@ class UsMarshalsScraper extends BaseScraper {
         sourceUrl: 'https://www.reallook.com/usms-inventory/property-402819',
         raw: 'US MARSHALS SEIZED ASSET DISPOSITION: 1940 S Highland Dr, Las Vegas NV. Federal District Court forfeiture order.'
       }
-    ];
+    ], 'marshals-embedded-demo');
   }
 
 }

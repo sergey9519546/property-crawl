@@ -191,9 +191,11 @@ test('Scenario 7: Graceful scrape failure', () => {
   const rZero = breaker.validateResponse({ status: 200, body: '' });
   assert.strictEqual(rZero.isValid, false, 'zero-byte payload must fail');
 
-  // valid response must pass
+  // A late response must not close a circuit tripped by an earlier challenge.
   const rOk = breaker.validateResponse({ status: 200, body: 'x'.repeat(100) });
-  assert.ok(rOk.isValid, 'valid response must pass');
+  assert.strictEqual(rOk.isValid, false, 'late success must not reopen a tripped source');
+  breaker.reset();
+  assert.ok(breaker.validateResponse({ status: 200, body: 'x'.repeat(100) }).isValid, 'fresh response after an explicit reset must pass');
 });
 
 // --- Scenario 8: Schema-boundary drift is caught ---

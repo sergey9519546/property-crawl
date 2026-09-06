@@ -17,10 +17,10 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Deal Stacks", href: "#live-feed" },
+      { label: "Property workspace", href: "/listings" },
       { label: "Shadow Mode", href: "#product" },
       { label: "Prophecy", href: "#product" },
-      { label: "Monitoring", href: "#live-feed" },
+      { label: "Second Look", href: "/research" },
       { label: "Accuracy", href: "#proof" },
       { label: "Integrations", href: "#integrations" },
     ],

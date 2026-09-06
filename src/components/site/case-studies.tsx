@@ -15,7 +15,7 @@ const METRICS: Metric[] = [
     value: "Live",
     label: "Connected property feed",
     desc: "A transparent beta dataset for exercising market search, filters, underwriting, and exports.",
-    tint: "#DBEAFE",
+    tint: "#E2E8F0",
   },
   {
     value: "11",
@@ -42,13 +42,13 @@ const CASES = [
     metric: "Parse",
     text: "Structured extraction for supported court notice formats",
     company: "Notice parser",
-    href: "#live-feed",
+    href: "/listings",
   },
   {
     metric: "Export",
     text: "Persistent watchlists with CSV and JSON downloads",
     company: "Watchlist workflow",
-    href: "#live-feed",
+    href: "/research",
   },
 ];
 

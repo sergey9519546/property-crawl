@@ -13,6 +13,7 @@
 // Rate limit: 1 req/sec between detail pages. Be polite — US government site.
 
 const BaseScraper = require('./base');
+const { extractDetailImages } = require('./media-policy');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -32,7 +33,6 @@ class GsaSurplusScraper extends BaseScraper {
   constructor() {
     super({ name: 'GsaSurplusCollector', sourceKey: 'gsa' });
     this.baseUrl = 'https://realestatesales.gov';
-    this.delayMs = 1000; // 1 req/sec
   }
 
   async scrapeFeed() {
@@ -60,7 +60,7 @@ class GsaSurplusScraper extends BaseScraper {
           const detail = await this.fetchDetail(id, listBids.get(id) || 0);
           if (detail) {
             listings.push(detail);
-            await this.sleep(this.delayMs);
+            await this.crawlJitter();
           }
         } catch (err) {
           console.warn(`[${this.name}] Failed property_id=${id}: ${err.message}`);
@@ -73,18 +73,10 @@ class GsaSurplusScraper extends BaseScraper {
   }
 
   async fetchText(url, timeoutMs = 60000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' },
-        signal: controller.signal
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' }
+    });
   }
 
   async fetchDetail(id, listBid) {
@@ -108,16 +100,16 @@ class GsaSurplusScraper extends BaseScraper {
     // --- Current bid: prefer the clean token parsed from the list page; fall
     // back to the detail page where the amount is split across markup, so we
     // strip whitespace from a window after "Current Bid" before matching. ---
-    let openingBid = listBid;
-    if (!openingBid) {
+    let currentBid = listBid;
+    if (!currentBid) {
       const win = html.slice(html.indexOf('Current Bid'), html.indexOf('Current Bid') + 400)
         .replace(/\s+/g, '');
       const bm = win.match(/\$(\d[\d,]*)/);
-      openingBid = bm ? this.parseMoney(bm[1]) : 0;
+      currentBid = bm ? this.parseMoney(bm[1]) : null;
     }
 
     // --- Photo ---
-    const photoMatch = html.match(/slide-img"\s+src="([^"]+)"/);
+    const gallery = extractDetailImages({ source: 'gsa', html, sourceUrl: detailUrl, address: street });
 
     // --- beds/baths/sqft from descriptive prose (guard against false positives) ---
     const desc = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
@@ -131,31 +123,40 @@ class GsaSurplusScraper extends BaseScraper {
     return {
       id: listingId,
       state,
-      county: 'Unknown',
+      county: null,
       city,
       zip,
       address: fullAddress,
-      lat: 0,
-      lng: 0,
-      beds,
-      baths,
-      sqft,
+      lat: null,
+      lng: null,
+      beds: beds || null,
+      baths: baths || null,
+      sqft: sqft || null,
       year: null,
       propType: this.classifyPropertyType(desc),
-      openingBid,
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
+      openingBid: null,
+      price: currentBid || null,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate: null,
-      plaintiff: 'U.S. General Services Administration',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'GSA Office of Real Property Disposal',
-      occupancy: 'Unknown',
-      deposit: 'See GSA auction terms',
-      photo: photoMatch ? photoMatch[1] : 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: null,
+      occupancy: null,
+      deposit: null,
+      photo: gallery[0]?.url || null,
       sourceUrl: detailUrl,
-      raw: `GSA surplus real property ${caseNo || ''} — ${fullAddress}`.trim()
+      raw: desc.slice(0, 2000),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'U.S. General Services Administration',
+        recordId: String(saleNo || caseNo || id),
+        sourceFacts: { caseNumber: caseNo || null, saleNumber: saleNo || null, currentBid: currentBid || null },
+        media: { gallery, photo: gallery[0] ? { sourceRecordUrl: detailUrl, extraction: gallery[0] } : null }
+      }
     };
   }
 
@@ -164,7 +165,7 @@ class GsaSurplusScraper extends BaseScraper {
     if (/condo/i.test(desc)) return 'Condo';
     if (/multi.?family|duplex/i.test(desc)) return 'Multi-Family';
     if (/vacant land|land only|raw land|acreage/i.test(desc)) return 'Land';
-    return 'Single Family';
+    return null;
   }
 
   // Extract the value="..." from a hidden input named `name`.
@@ -194,9 +195,6 @@ class GsaSurplusScraper extends BaseScraper {
     return parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
   }
 
-  sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
 }
 
 module.exports = new GsaSurplusScraper();

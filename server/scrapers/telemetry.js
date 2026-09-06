@@ -3,6 +3,8 @@
  * Monitors scraper yield and circuit-breaker states across executions.
  */
 
+const { inspectPublisherPhoto } = require('./media-policy');
+
 class ScraperTelemetry {
   constructor() {
     // In-memory store for scraper run telemetry
@@ -16,14 +18,22 @@ class ScraperTelemetry {
    * @param {number} latencyMs
    * @param {Error} error
    */
-  recordRun(sourceName, listings = [], latencyMs = 0, error = null) {
+  recordRun(sourceName, listings = [], latencyMs = 0, error = null, metadata = {}) {
     if (!this.history[sourceName]) {
       this.history[sourceName] = {
         runs: 0,
         lastRunAt: null,
         successes: 0,
         failures: 0,
+        consecutiveFailures: 0,
+        zeroYieldRuns: 0,
+        consecutiveZeroYieldRuns: 0,
+        hasNonZeroBaseline: false,
+        lastYieldCount: null,
+        rejectedListings: 0,
+        lastRejectedCount: 0,
         circuitBreakerTripped: false,
+        circuitBreakerReason: null,
         yieldMetrics: {
           totalListings: 0,
           addressYield: 0,
@@ -32,43 +42,71 @@ class ScraperTelemetry {
           photoYield: 0
         },
         driftDetected: false,
-        lastError: null
+        lastError: null,
+        lastErrorCode: null
       };
     }
 
     const state = this.history[sourceName];
     state.runs += 1;
     state.lastRunAt = new Date().toISOString();
+    const rejectedCount = Number.isFinite(Number(metadata.rejectedCount))
+      ? Math.max(0, Number(metadata.rejectedCount))
+      : 0;
+    state.lastRejectedCount = rejectedCount;
+    state.rejectedListings += rejectedCount;
 
     if (error) {
       state.failures += 1;
+      state.consecutiveFailures += 1;
       state.lastError = error.message;
-      if (state.failures >= 3) {
+      state.lastErrorCode = metadata.errorCode || error.code || error.name || 'SCRAPER_ERROR';
+      state.circuitBreakerReason = metadata.circuitReason || null;
+      if (metadata.circuitOpen || error.haltScraper || state.consecutiveFailures >= 3) {
         state.circuitBreakerTripped = true;
       }
       return;
     }
 
     state.successes += 1;
+    state.consecutiveFailures = 0;
     state.circuitBreakerTripped = false;
+    state.circuitBreakerReason = null;
     state.lastError = null;
+    state.lastErrorCode = null;
 
     if (listings.length === 0) {
+      state.zeroYieldRuns += 1;
+      state.consecutiveZeroYieldRuns += 1;
+      state.lastYieldCount = 0;
+      if (state.hasNonZeroBaseline) state.driftDetected = true;
       return;
     }
+
+    state.hasNonZeroBaseline = true;
+    state.consecutiveZeroYieldRuns = 0;
+    state.lastYieldCount = listings.length;
 
     // Calculate yield for this run
     let addressCount = 0;
     let openingBidCount = 0;
     let dateCount = 0;
     let photoCount = 0;
+    const mediaReasons = {};
 
     for (const listing of listings) {
       if (listing.address && listing.address.trim() !== "") addressCount++;
       if (listing.openingBid && listing.openingBid > 0) openingBidCount++;
       if (listing.saleDate && listing.saleDate.trim() !== "") dateCount++;
-      if (listing.photo && listing.photo.trim() !== "") photoCount++;
+      const photo = inspectPublisherPhoto(listing);
+      if (photo.accepted) photoCount++;
+      else {
+        const reason = listing.provenance?.media?.photoStatus?.reason || photo.reason;
+        mediaReasons[reason] = (mediaReasons[reason] || 0) + 1;
+      }
     }
+
+    state.media = { accepted: photoCount, unavailable: listings.length - photoCount, reasons: mediaReasons };
 
     // Rolling average approach for simple telemetry tracking
     const total = listings.length;

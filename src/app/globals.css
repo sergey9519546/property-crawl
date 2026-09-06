@@ -749,14 +749,14 @@
   }
 }
 
-/* Text fields use a quiet blue halo instead of the browser-like black outline. */
+/* Text fields use a quiet slate halo instead of the browser-like black outline. */
 .hero-search-shell {
   box-shadow: 0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.7);
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 .hero-search-shell:focus-within {
   border-color: rgba(255,255,255,0.95) !important;
-  box-shadow: 0 0 0 4px rgba(37,99,235,0.22), 0 12px 36px rgba(0,43,176,0.18), inset 0 1px 0 rgba(255,255,255,0.85);
+  box-shadow: 0 0 0 4px rgba(15,23,42,0.18), 0 12px 36px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.85);
 }
 .hero-search-shell input:focus-visible {
   border-color: transparent;

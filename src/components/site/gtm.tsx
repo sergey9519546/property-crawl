@@ -59,7 +59,7 @@ const TEAMS: Team[] = [
       { label: "Prophecy", icon: Sparkles },
       { label: "Monitoring", icon: Radar },
     ],
-    tint: "#DBEAFE",
+    tint: "#E2E8F0",
   },
   {
     key: "disposition",
@@ -210,7 +210,7 @@ function GtmVisual({ team }: { team: string }) {
       <div className="w-full max-w-[300px] space-y-2">
         {[
           { r: "Listed", a: "123 Main St", s: 88, c: "#e7faef" },
-          { r: "Off-market", a: "88 Oak Ave", s: 81, c: "#DBEAFE" },
+          { r: "Off-market", a: "88 Oak Ave", s: 81, c: "#E2E8F0" },
           { r: "Predicted", a: "404 Pine Rd", s: 74, c: "#E9D5FF" },
         ].map((row) => (
           <div

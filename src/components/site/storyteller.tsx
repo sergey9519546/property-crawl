@@ -276,7 +276,7 @@ export function Storyteller() {
                   </button>
                 ) : (
                   <a
-                    href="#live-feed"
+                    href="/listings"
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
                   >
                     Open live workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -555,7 +555,7 @@ function ActionPanel() {
             </div>
           ))}
         </div>
-        <a href="#live-feed" className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
+        <a href="/listings" className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
           Open opportunity workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
       </article>

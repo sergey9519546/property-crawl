@@ -25,10 +25,6 @@ class FannieMaeScraper extends BaseScraper {
         }
       }
 
-      if (allListings.length === 0) {
-        allListings.push(...this.getVerifiedInventory());
-      }
-
       console.log(`[${this.name}] Standardized ${allListings.length} Fannie Mae listings`);
       return allListings
         .filter(l => this.passesFilter(l))
@@ -38,53 +34,33 @@ class FannieMaeScraper extends BaseScraper {
 
   async fetchStateHomePath(state) {
     const url = `${this.baseUrl}/search-service/v1/properties?state=${encodeURIComponent(state)}&pageSize=25`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(url, {
+      const payload = await this.requestText(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json, text/plain, */*',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) {
-        return this.fetchStateHtml(state);
-      }
-
-      const data = await res.json();
+      const data = JSON.parse(payload);
       const items = Array.isArray(data) ? data : (data.properties || data.listings || data.content || []);
-      return items.map(p => this.mapJsonItem(p, state));
+      return items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
     } catch (err) {
       return this.fetchStateHtml(state);
-    } finally {
-      clearTimeout(timer);
     }
   }
 
   async fetchStateHtml(state) {
     const searchUrl = `${this.baseUrl}/listing/search?q=${state}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(searchUrl, {
+      const html = await this.requestText(searchUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) return [];
-      const html = await res.text();
       return this.parseHtmlCards(html, state);
     } catch (err) {
       return [];
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -99,29 +75,30 @@ class FannieMaeScraper extends BaseScraper {
       const priceMatch = card.match(/\$([0-9,]+)/);
       const idMatch = card.match(/data-property-id="([^"]+)"/i) || card.match(/href="\/property\/([^"]+)"/i);
 
-      if (addressMatch && priceMatch) {
+      if (addressMatch && idMatch) {
         const address = addressMatch[1].trim();
-        const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
-        const id = idMatch ? `FNMA-${idMatch[1]}` : `FNMA-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+        const id = `FNMA-${idMatch[1]}`;
 
         listings.push({
           id,
           state,
-          county: 'County',
-          city: address.split(',')[1]?.trim() || 'City',
-          zip: '00000',
+          county: null,
+          city: address.split(',')[1]?.trim() || null,
+          zip: null,
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.25),
-          estHigh: Math.round(price * 1.5),
-          assessed: Math.round(price * 1.1),
-          saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'Fannie Mae HomePath',
-          defendant: '—',
-          occupancy: 'Vacant',
-          deposit: 'Standard HomePath purchase agreement',
+          estLow: null,
+          estHigh: null,
+          assessed: null,
+          saleDate: null,
+          plaintiff: null,
+          defendant: null,
+          occupancy: null,
+          deposit: null,
           sourceUrl: `${this.baseUrl}/property/${id.replace(/^FNMA-/, '')}`,
           raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500),
+          provenance: { origin: 'live', observed: true, publisher: 'Fannie Mae HomePath', recordId: idMatch[1] },
         });
       }
     }
@@ -130,42 +107,48 @@ class FannieMaeScraper extends BaseScraper {
   }
 
   mapJsonItem(p, state) {
-    const price = p.listPrice || p.price || p.openingBid || 120000;
-    const propId = p.id || p.propertyId || p.listingId || `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
-    const address = p.address || `${p.streetAddress || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
+    const rawPrice = p.listPrice ?? p.price ?? p.openingBid;
+    const parsedPrice = Number(rawPrice);
+    const price = Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
+    const propId = p.id ?? p.propertyId ?? p.listingId;
+    const streetAddress = p.address || p.streetAddress;
+    if (propId == null || !String(streetAddress || '').trim()) return null;
+    const address = p.address || [p.streetAddress, p.city, p.state || state, p.zip || p.postalCode].filter(Boolean).join(', ');
 
     return {
       id: `FNMA-${propId}`,
       state: p.state || state,
-      county: p.county || 'County',
-      city: p.city || 'City',
-      zip: p.zip || p.postalCode || '00000',
-      address: address || `HomePath Property in ${state}`,
-      lat: p.lat || p.latitude || null,
-      lng: p.lng || p.longitude || null,
-      beds: p.bedrooms || p.beds || 3,
-      baths: p.bathrooms || p.baths || 2,
-      sqft: p.sqft || p.squareFeet || 1550,
-      year: p.yearBuilt || 1975,
+      county: p.county ?? null,
+      city: p.city ?? null,
+      zip: p.zip ?? p.postalCode ?? null,
+      address,
+      lat: p.lat ?? p.latitude ?? null,
+      lng: p.lng ?? p.longitude ?? null,
+      beds: p.bedrooms ?? p.beds ?? null,
+      baths: p.bathrooms ?? p.baths ?? null,
+      sqft: p.sqft ?? p.squareFeet ?? null,
+      year: p.yearBuilt ?? null,
       openingBid: price,
-      estLow: Math.round(price * 1.3),
-      estHigh: Math.round(price * 1.6),
-      assessed: Math.round(price * 1.15),
-      saleDate: p.auctionDate || p.listDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      plaintiff: 'Fannie Mae HomePath',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'HomePath Realty Team',
-      occupancy: 'Vacant',
-      deposit: 'Standard HomePath contract',
+      estLow: p.estimatedValueLow ?? null,
+      estHigh: p.estimatedValueHigh ?? null,
+      assessed: p.assessedValue ?? null,
+      saleDate: p.auctionDate ?? p.listDate ?? null,
+      plaintiff: p.plaintiff ?? null,
+      defendant: p.defendant ?? null,
+      judgment: p.judgment ?? null,
+      attorney: p.attorney ?? null,
+      occupancy: p.occupancy ?? null,
+      deposit: p.deposit ?? null,
+      photo: p.photo ?? p.image ?? p.imageUrl ?? null,
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
-      raw: `HOMEPATH REO PROPERTY: ${address}. List $${price.toLocaleString()}. First Look window active.`,
+      raw: JSON.stringify(p).slice(0, 2000),
+      provenance: { origin: 'live', observed: true, publisher: 'Fannie Mae HomePath', recordId: String(propId) },
     };
   }
 
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'FNMA-1049281',
         state: 'TX',
@@ -340,7 +323,7 @@ class FannieMaeScraper extends BaseScraper {
         sourceUrl: 'https://www.homepath.fanniemae.com/property-details/6039182',
         raw: 'HOMEPATH PROPERTY: 1735 Wynnton Rd, Columbus GA. List $55,000. First Look owner occupant period active.'
       }
-    ];
+    ], 'fannie-embedded-demo');
   }
 
 }

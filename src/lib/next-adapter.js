@@ -126,7 +126,7 @@ function buildResponse(mockRes) {
  * @param {Function} handler - v1-style handler
  * @param {Object} [options]
  * @param {boolean} [options.securityHeaders] - apply the standard security headers
- * @param {boolean} [options.cors] - apply permissive CORS (dev preview only)
+ * @param {boolean} [options.cors] - allow same-origin and explicitly configured CORS origins
  */
 export function adapt(handler, options = {}) {
   return async function route(request) {
@@ -142,10 +142,25 @@ export function adapt(handler, options = {}) {
     if (options.securityHeaders) {
       for (const [k, v] of Object.entries(SECURITY_HEADERS)) mockRes.setHeader(k, v);
     }
+    let corsAllowed = true;
     if (options.cors) {
-      mockRes.setHeader('Access-Control-Allow-Origin', '*');
+      const origin = request.headers.get('origin');
+      const requestOrigin = new URL(request.url).origin;
+      const configured = new Set(String(process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean));
+      corsAllowed = !origin || origin === requestOrigin || configured.has(origin);
+      if (origin && corsAllowed) mockRes.setHeader('Access-Control-Allow-Origin', origin);
       mockRes.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-      mockRes.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-User-Id, Authorization');
+      mockRes.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      mockRes.setHeader('Vary', 'Origin');
+    }
+
+    if (!corsAllowed) {
+      return new Response(JSON.stringify({ error: 'Cross-origin request denied' }), {
+        status: 403, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      });
     }
 
     let mockReq;
@@ -160,14 +175,17 @@ export function adapt(handler, options = {}) {
     }
 
     if (mockReq.method === 'OPTIONS') {
-      return new Response('', { status: 204, headers: Object.fromEntries(mockRes.headers) });
+      return new Response(
+        null,
+        { status: corsAllowed ? 204 : 403, headers: Object.fromEntries(mockRes.headers) },
+      );
     }
 
     try {
       await handler(mockReq, mockRes);
     } catch (err) {
       if (!mockRes._ended) {
-        mockRes.status(500).json({ error: 'Internal server error', message: err && err.message });
+        mockRes.status(500).json({ error: 'Internal server error' });
       }
     }
     return buildResponse(mockRes);

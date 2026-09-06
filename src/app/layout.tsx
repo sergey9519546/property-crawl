@@ -17,9 +17,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "PerfectProperty — Every distressed deal in America, in one feed",
+  title: "PerfectProperty — Find the opportunity that changed",
   description:
-    "11 federal, GSE, and county sources — HUD, Fannie, Freddie, VA, USDA, IRS, Treasury, sheriff sales, and more. AI reads the legal notice, scores the deal, and tells you what the catch is before you put up the deposit.",
+    "A private property-research workspace that connects source observations, evidence conflicts, saved criteria, Second Look reconsideration, and reproducible decision packets.",
   keywords: [
     "PerfectProperty",
     "distressed property",
@@ -46,17 +46,17 @@ export const metadata: Metadata = {
     apple: "/logo-icon.png",
   },
   openGraph: {
-    title: "PerfectProperty — Every distressed deal in America, in one feed",
+    title: "PerfectProperty — Find the opportunity that changed",
     description:
-      "11 federal, GSE, and county sources. AI reads the legal notice, scores the deal, and tells you what the catch is — before you put up the deposit.",
+      "Follow source evidence, understand what changed, and bring passed properties back when the facts meet your rules.",
     siteName: "PerfectProperty",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PerfectProperty — Every distressed deal in America, in one feed",
+    title: "PerfectProperty — Find the opportunity that changed",
     description:
-      "11 federal, GSE, and county sources. AI reads the legal notice, scores the deal, and tells you what the catch is — before you put up the deposit.",
+      "Follow source evidence, understand what changed, and bring passed properties back when the facts meet your rules.",
   },
 };
 

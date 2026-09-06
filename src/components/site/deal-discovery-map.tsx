@@ -12,6 +12,7 @@ import type {
   Map as MapLibreMap,
   Marker as MapLibreMarker,
 } from "maplibre-gl";
+import { sourceDisplayText } from "@/lib/source-display";
 
 type Opportunity = {
   id: string;
@@ -662,7 +663,7 @@ export function DealDiscoveryMap() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-900">
-              {activeDeal.source}
+              {sourceDisplayText(activeDeal.source)}
             </p>
             <h3 className="mt-1 truncate text-[20px] font-bold tracking-[-0.02em] text-[#111827]">
               {activeDeal.address}
@@ -687,7 +688,7 @@ export function DealDiscoveryMap() {
         </div>
 
         <a
-          href="#live-feed"
+          href="/listings"
           className="opportunity-primary-action mt-3 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white"
         >
           Explore live deals <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -723,7 +724,7 @@ export function DealDiscoveryMap() {
                       {deal.address}
                     </span>
                     <span className="block truncate text-[10px] font-medium text-[#94A3B8]">
-                      {deal.source}
+                      {sourceDisplayText(deal.source)}
                     </span>
                   </span>
                   <span className="text-[12px] font-extrabold tabular-nums text-[#334155]">

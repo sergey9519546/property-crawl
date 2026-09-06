@@ -22,6 +22,7 @@ type InfoSection = {
   id?: string;
   title: string;
   body: string;
+  link?: { label: string; href: string };
 };
 
 type InfoPage = {
@@ -100,6 +101,7 @@ const INFO_PAGES: Record<string, InfoPage> = {
     sections: [
       { title: "Informational use", body: "PerfectProperty provides research and workflow tools. It does not provide legal, tax, title, appraisal, brokerage, lending, or investment advice." },
       { title: "Verify every source", body: "Users must confirm sale status, bid requirements, liens, occupancy, redemption rights, and all property details with the official source and qualified professionals." },
+      { title: "Maps and street imagery", body: "Google Street View may be shown as street-level context when a source-backed property lacks a publisher photo. A nearby panorama is not proof that the pictured facade is the subject property; users must verify the address and property identity independently. Google attribution remains visible." },
       { title: "Beta availability", body: "Features and data may change, be incomplete, or become unavailable. Do not rely on the beta as the sole basis for a financial decision." },
     ],
   },
@@ -108,8 +110,9 @@ const INFO_PAGES: Record<string, InfoPage> = {
     title: "Privacy notice — beta draft",
     intro: "Effective August 31, 2026. The local beta uses browser state for interactive demonstrations and may use hosting logs when deployed.",
     sections: [
-      { title: "Data used by the interface", body: "Search terms, filters, and watchlist state are used to operate the product. Sensitive personal information should not be pasted into the beta notice parser." },
-      { title: "Service providers", body: "A production privacy notice will identify hosting, authentication, analytics, email, and AI providers before those services are enabled for public users." },
+      { title: "Data used by the interface", body: "Search terms, filters, and watchlist state are used to operate the product. When Street View fallback is enabled, source-observed property coordinates are sent server-to-server to Google to locate nearby imagery. Sensitive personal information should not be pasted into the beta notice parser." },
+      { title: "Google Maps Platform", body: "The property media viewer may use Google Street View Static API content. Google receives the requested property coordinates and standard request metadata, and its handling of that information is governed by the Google Privacy Policy. PerfectProperty does not persist or re-host Street View image files.", link: { label: "Read the Google Privacy Policy", href: "https://policies.google.com/privacy" } },
+      { title: "Other service providers", body: "A production privacy notice will identify hosting, authentication, analytics, email, and AI providers before those services are enabled for public users." },
       { title: "Retention and deletion", body: "Production retention periods and deletion controls will be documented before account-based persistence is launched." },
     ],
   },
@@ -201,6 +204,17 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
                   <div className="flex-1 p-6 sm:p-7">
                     <h2 className="text-lg font-bold text-[#111827]">{section.title}</h2>
                     <p className="mt-2.5 leading-7 text-[#475569]">{section.body}</p>
+                    {section.link && (
+                      <a
+                        href={section.link.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-slate-900 underline hover:text-slate-700"
+                      >
+                        {section.link.label}
+                        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                      </a>
+                    )}
                   </div>
                 </div>
               </section>
@@ -224,7 +238,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
           {/* CTA */}
           <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <Link
-              href="/#live-feed"
+              href="/listings"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 text-sm font-bold text-white transition-colors hover:bg-[#1E293B]"
             >
               Open the live feed

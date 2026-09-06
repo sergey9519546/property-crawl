@@ -7,6 +7,7 @@ import { AuroraDivider } from "@/components/site/aurora-divider";
 import { SocialProof } from "@/components/site/social-proof";
 import { Storyteller } from "@/components/site/storyteller";
 import { InteractiveTerminal } from "@/components/terminal/interactive-terminal";
+import { SecondLookShowcase } from "@/components/site/second-look-showcase";
 import { AiComparison } from "@/components/site/ai-comparison";
 import { Testimonial } from "@/components/site/testimonial";
 import { AiKnows } from "@/components/site/ai-knows";
@@ -39,6 +40,10 @@ export default function PerfectPropertyPage() {
       {/* Live Interactive Property Triage Terminal */}
       <AuroraDivider index={2} />
       <InteractiveTerminal />
+
+      {/* Product workflow preview */}
+      <AuroraDivider index={3} />
+      <SecondLookShowcase />
 
       <AuroraDivider index={3} />
       <AiComparison />

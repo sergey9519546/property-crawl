@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS sources (
 
 -- Seed the 15 verified sources into PostgreSQL
 INSERT INTO sources (key, label, tier, color, note, website_url) VALUES
+  ('servicelink', 'Public Auction Network', 'B', '#0369a1', 'Public auction listings; sale status and terms require confirmation', 'https://www.servicelinkauction.com'),
   ('sheriff', 'Sheriff Sale', 'B', '#0f766e', 'Foreclosure sale notice published under state law', 'https://www.cuyahogasheriff.org'),
   ('trustee', 'Trustee''s Sale', 'B', '#0ea5e9', 'Non-judicial foreclosure auction', 'https://www.clarkcountynv.gov'),
   ('hud', 'HUD Home', 'A', '#1d4ed8', 'hudhomestore.gov — owner-occupant window applies', 'https://www.hudhomestore.gov'),
@@ -43,43 +44,63 @@ CREATE TABLE IF NOT EXISTS listings (
     id VARCHAR(64) PRIMARY KEY,
     source_key VARCHAR(32) NOT NULL REFERENCES sources(key) ON DELETE RESTRICT,
     state VARCHAR(2) NOT NULL,
-    county VARCHAR(64) NOT NULL,
-    city VARCHAR(64) NOT NULL,
-    zip VARCHAR(10) NOT NULL,
+    county VARCHAR(64),
+    city VARCHAR(64),
+    zip VARCHAR(10),
     address TEXT NOT NULL,
-    latitude DOUBLE PRECISION NOT NULL,
-    longitude DOUBLE PRECISION NOT NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
     geog GEOGRAPHY(Point, 4326),
-    beds INT DEFAULT 0,
-    baths INT DEFAULT 0,
-    sqft INT DEFAULT 0,
+    beds INT,
+    baths NUMERIC(4, 1),
+    sqft INT,
     year_built INT,
-    prop_type VARCHAR(64) NOT NULL DEFAULT 'Single Family',
-    opening_bid NUMERIC(14, 2) NOT NULL,
-    est_low NUMERIC(14, 2) NOT NULL,
-    est_high NUMERIC(14, 2) NOT NULL,
+    prop_type VARCHAR(64),
+    opening_bid NUMERIC(14, 2),
+    est_low NUMERIC(14, 2),
+    est_high NUMERIC(14, 2),
     assessed_value NUMERIC(14, 2),
-    mid_value NUMERIC(14, 2) GENERATED ALWAYS AS ((est_low + est_high) / 2) STORED,
-    deal_score INT NOT NULL CHECK (deal_score BETWEEN 1 AND 99),
-    equity_spread NUMERIC(14, 2) GENERATED ALWAYS AS (GREATEST(0, ((est_low + est_high) / 2) - opening_bid)) STORED,
-    sale_date DATE NOT NULL,
-    plaintiff VARCHAR(255) DEFAULT '—',
-    defendant VARCHAR(255) DEFAULT '—',
-    judgment_amount NUMERIC(14, 2) DEFAULT 0,
-    attorney VARCHAR(255) DEFAULT '—',
-    occupancy VARCHAR(64) DEFAULT 'Unknown',
-    deposit_terms TEXT NOT NULL DEFAULT 'Certified funds',
+    mid_value NUMERIC(14, 2) GENERATED ALWAYS AS (
+      CASE
+        WHEN est_low IS NULL OR est_high IS NULL OR est_low <= 0 OR est_high < est_low THEN NULL
+        ELSE (est_low + est_high) / 2
+      END
+    ) STORED,
+    deal_score INT CHECK (deal_score BETWEEN 1 AND 99),
+    equity_spread NUMERIC(14, 2) GENERATED ALWAYS AS (
+      CASE
+        WHEN est_low IS NULL OR est_high IS NULL OR opening_bid IS NULL
+          OR est_low <= 0 OR est_high < est_low OR opening_bid <= 0 THEN NULL
+        ELSE GREATEST(0, ((est_low + est_high) / 2) - opening_bid)
+      END
+    ) STORED,
+    sale_date DATE,
+    plaintiff VARCHAR(255),
+    defendant VARCHAR(255),
+    judgment_amount NUMERIC(14, 2),
+    attorney VARCHAR(255),
+    occupancy VARCHAR(64),
+    deposit_terms TEXT,
     photo_url TEXT,
     images TEXT[],
     source_url TEXT,
     raw_notice TEXT,
+    provenance JSONB,
+    source_observed_at TIMESTAMPTZ,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     price NUMERIC(14, 2),
     listing_date DATE,
-    redemption_days INT DEFAULT 0,
+    redemption_days INT,
     redemption_warning TEXT,
-    senior_lien_risk VARCHAR(16) DEFAULT 'normal',
+    senior_lien_risk VARCHAR(16),
     senior_lien_warning TEXT,
     cash_to_close NUMERIC(14, 2),
+    cash_to_close_details JSONB CONSTRAINT chk_listings_cash_to_close_details_bounded CHECK (
+      cash_to_close_details IS NULL OR (
+        jsonb_typeof(cash_to_close_details) = 'object'
+        AND octet_length(cash_to_close_details::text) <= 65536
+      )
+    ),
     status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending', 'sold', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -128,8 +149,9 @@ CREATE TABLE IF NOT EXISTS ingestion_logs (
 CREATE INDEX IF NOT EXISTS idx_listings_source ON listings(source_key);
 CREATE INDEX IF NOT EXISTS idx_listings_state ON listings(state);
 CREATE INDEX IF NOT EXISTS idx_listings_sale_date ON listings(sale_date);
-CREATE INDEX IF NOT EXISTS idx_listings_deal_score ON listings(deal_score DESC);
-CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC);
+CREATE INDEX IF NOT EXISTS idx_listings_deal_score ON listings(deal_score DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_listings_equity_spread ON listings(equity_spread DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
 CREATE INDEX IF NOT EXISTS idx_listings_listing_date ON listings(listing_date);
 -- GiST spatial index: required for ST_DWithin radius queries to use index scan.

@@ -102,8 +102,8 @@ test('SOURCES block exists in both layers', () => {
   assert.ok(v2 && typeof v2 === 'object', 'v2 SOURCES is missing');
 });
 
-test('SOURCES have the same 15 keys across all sources (no rename/add/remove drift)', () => {
-  assert.strictEqual(v0Keys.length, 15, `Expected 15 sources in v0, found ${v0Keys.length}`);
+test('SOURCES have the same 16 keys across all sources (no rename/add/remove drift)', () => {
+  assert.strictEqual(v0Keys.length, 16, `Expected 16 sources in v0, found ${v0Keys.length}`);
   assert.deepStrictEqual(v2Keys, v0Keys, `Keys differ.\n  v0: ${v0Keys.join(', ')}\n  v2: ${v2Keys.join(', ')}`);
 });
 

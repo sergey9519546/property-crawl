@@ -1,76 +1,232 @@
-// Client-safe statutory underwriting helpers (pure functions, no CJS imports).
-// Mirrors the server-side `server/ai/legal-rules.js` computeCashToClose so the
-// marketing UI and watchlist export produce the same cash-to-close figures the
-// scraper-derived feed already carries as `listing.cashToClose`.
+// Client-safe underwriting helpers (pure functions, no CJS imports).
+//
+// These helpers deliberately distinguish source evidence from buyer-supplied
+// scenarios. A missing fact is never converted into an actionable deal term or
+// a favorable legal conclusion.
+
+function sourceDisplayText(value: string): string {
+  return value.replace(/servicelink(?:\s+auction)?/gi, "Public Auction Network");
+}
 
 export interface CashToClose {
-  openingBid: number;
-  buyersPremium: number;
-  sheriffPoundage: number;
-  transferTax: number;
-  deedFees: number;
-  total: number;
+  openingBid: number | null;
+  purchasePrice: number | null;
+  registrationFunds: number | null;
+  creditedDeposit: number | null;
+  buyersPremium: number | null;
+  sheriffPoundage: number | null;
+  transferTax: number | null;
+  delinquentTaxes: number | null;
+  settlementCosts: number | null;
+  /** Compatibility alias; it never introduces a default recording fee. */
+  deedFees: number | null;
+  totalAcquisitionCost: number | null;
+  totalCashToClose: number | null;
+  total: number | null;
+  cashDueAtSettlement: number | null;
+  modelStatus: "complete_scenario" | "insufficient_inputs";
+  acquisitionCostStatus: "complete" | "unresolved";
+  fundingTimingStatus: "complete" | "unresolved";
+  model: "explicit-cash-requirements-v2";
+  verified: boolean;
+  isModeled: boolean;
+  basis: Record<CashAmountField, CashInputBasis | null>;
+  assumptions: string[];
+  missingInputs: string[];
+  missingAcquisitionInputs: string[];
 }
 
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, value);
+export type CashInputBasis = "published" | "assumption";
+export type CashAmountField =
+  | "openingBid"
+  | "purchasePrice"
+  | "registrationFunds"
+  | "creditedDeposit"
+  | "buyersPremium"
+  | "sheriffPoundage"
+  | "transferTax"
+  | "delinquentTaxes"
+  | "settlementCosts";
+
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.replace(/[$,%x,]/gi, ""));
+    return Number.isFinite(parsed) ? parsed : null;
   }
-  if (typeof value === "string") {
-    const parsed = parseFloat(value.replace(/[^0-9.-]/g, ""));
-    return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
-  }
-  return fallback;
+  return null;
 }
 
-export function computeCashToClose(params: {
-  openingBid: number;
-  state: string;
-  source: string;
-  deedFees?: number;
-}): CashToClose {
-  const bid = toNumber(params.openingBid);
-  const src = (params.source || "").toLowerCase();
-  const st = (params.state || "OH").toUpperCase().trim();
-  const deedFees = toNumber(params.deedFees, 500);
-
-  // Buyer's Premium (typically 5% for online marketplaces).
-  const buyersPremiumRate =
-    src.includes("bid4assets") || src.includes("govdeals") || src.includes("auction")
-      ? 0.05
-      : 0;
-  const buyersPremium = Math.round(bid * buyersPremiumRate);
-
-  // Sheriff Poundage / Statutory Commission (2-3%).
-  const isSheriffSale =
-    src.includes("sheriff") ||
-    src.includes("civilview") ||
-    src.includes("trustee") ||
-    (src.includes("bid4assets") && (st === "PA" || st === "OH"));
-  const poundageRate = isSheriffSale
-    ? st === "OH"
-      ? 0.02
-      : st === "NJ"
-        ? 0.025
-        : st === "PA"
-          ? 0.02
-          : 0.02
-    : 0;
-  const sheriffPoundage = Math.round(bid * poundageRate);
-
-  // Transfer Tax ($1-$4 per $1,000 depending on state).
-  const transferTaxRate =
-    st === "NJ" ? 0.005 : st === "PA" ? 0.02 : st === "OH" ? 0.004 : 0.002;
-  const transferTax = Math.round(bid * transferTaxRate);
-
-  const total = bid + buyersPremium + sheriffPoundage + transferTax + deedFees;
-
-  return { openingBid: bid, buyersPremium, sheriffPoundage, transferTax, deedFees, total };
+function nonNegativeNumber(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && parsed >= 0 ? parsed : null;
 }
 
-export function redemptionLabel(days: number): string {
-  const d = Math.max(0, Math.round(Number(days) || 0));
-  if (d === 0) return "No post-sale redemption";
+function positiveNumber(value: unknown): number | null {
+  const parsed = finiteNumber(value);
+  return parsed !== null && parsed > 0 ? parsed : null;
+}
+
+function formatMoney(value: number | null): string {
+  return value === null
+    ? "Unavailable — supporting evidence or an explicit buyer assumption is required"
+    : `$${Math.round(value).toLocaleString()} USD`;
+}
+
+function cleanLabel(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export interface CashToCloseInput {
+  openingBid?: number | string | null;
+  purchasePrice?: number | string | null;
+  registrationFunds?: number | string | null;
+  creditedDeposit?: number | string | null;
+  buyersPremium?: number | string | null;
+  sheriffPoundage?: number | string | null;
+  transferTax?: number | string | null;
+  delinquentTaxes?: number | string | null;
+  settlementCosts?: number | string | null;
+  /** Deprecated compatibility input, interpreted as explicit settlement costs. */
+  deedFees?: number | string | null;
+  basis?: Partial<Record<CashAmountField, CashInputBasis>>;
+  // Retained only so older callers compile. These fields never select fees.
+  state?: string;
+  source?: string;
+}
+
+const acquisitionCostFields = [
+  "buyersPremium",
+  "sheriffPoundage",
+  "transferTax",
+  "delinquentTaxes",
+  "settlementCosts",
+] as const;
+
+export function computeCashToClose(params: CashToCloseInput = {}): CashToClose {
+  const openingBid = positiveNumber(params.openingBid);
+  const suppliedPurchasePrice = positiveNumber(params.purchasePrice);
+  const purchasePrice = suppliedPurchasePrice ?? openingBid;
+  const registrationFunds = nonNegativeNumber(params.registrationFunds);
+  const creditedDeposit = nonNegativeNumber(params.creditedDeposit);
+  const buyersPremium = nonNegativeNumber(params.buyersPremium);
+  const sheriffPoundage = nonNegativeNumber(params.sheriffPoundage);
+  const transferTax = nonNegativeNumber(params.transferTax);
+  const delinquentTaxes = nonNegativeNumber(params.delinquentTaxes);
+  const settlementCosts = nonNegativeNumber(params.settlementCosts ?? params.deedFees);
+  const values = { buyersPremium, sheriffPoundage, transferTax, delinquentTaxes, settlementCosts };
+  const missingAcquisitionInputs = [
+    purchasePrice === null ? "purchasePrice" : null,
+    ...acquisitionCostFields.filter((field) => values[field] === null),
+  ].filter((field): field is string => field !== null);
+  const missingInputs = [
+    ...missingAcquisitionInputs,
+    creditedDeposit === null ? "creditedDeposit" : null,
+    registrationFunds === null ? "registrationFunds" : null,
+  ].filter((field): field is string => field !== null);
+  const hasCompleteAcquisitionCost = missingAcquisitionInputs.length === 0;
+  const totalAcquisitionCost = hasCompleteAcquisitionCost
+    ? purchasePrice! + buyersPremium! + sheriffPoundage! + transferTax! + delinquentTaxes! + settlementCosts!
+    : null;
+  const cashDueAtSettlement = totalAcquisitionCost !== null && creditedDeposit !== null
+    ? Math.max(0, totalAcquisitionCost - creditedDeposit)
+    : null;
+  const basis: Record<CashAmountField, CashInputBasis | null> = {
+    openingBid: openingBid === null ? null : (params.basis?.openingBid ?? "published"),
+    purchasePrice: purchasePrice === null ? null : (params.basis?.purchasePrice ?? "assumption"),
+    registrationFunds: registrationFunds === null ? null : (params.basis?.registrationFunds ?? "assumption"),
+    creditedDeposit: creditedDeposit === null ? null : (params.basis?.creditedDeposit ?? "assumption"),
+    buyersPremium: buyersPremium === null ? null : (params.basis?.buyersPremium ?? "assumption"),
+    sheriffPoundage: sheriffPoundage === null ? null : (params.basis?.sheriffPoundage ?? "assumption"),
+    transferTax: transferTax === null ? null : (params.basis?.transferTax ?? "assumption"),
+    delinquentTaxes: delinquentTaxes === null ? null : (params.basis?.delinquentTaxes ?? "assumption"),
+    settlementCosts: settlementCosts === null ? null : (params.basis?.settlementCosts ?? "assumption"),
+  };
+  const suppliedBasis = Object.values(basis).filter((value): value is CashInputBasis => value !== null);
+  const verified = hasCompleteAcquisitionCost
+    && creditedDeposit !== null
+    && registrationFunds !== null
+    && suppliedBasis.every((value) => value === "published");
+  const assumptions = Object.entries(basis)
+    .filter(([, value]) => value === "assumption")
+    .map(([field]) => `${field} is an explicit scenario assumption.`);
+
+  return {
+    openingBid,
+    purchasePrice,
+    registrationFunds,
+    creditedDeposit,
+    buyersPremium,
+    sheriffPoundage,
+    transferTax,
+    delinquentTaxes,
+    settlementCosts,
+    deedFees: settlementCosts,
+    totalAcquisitionCost,
+    totalCashToClose: totalAcquisitionCost,
+    total: totalAcquisitionCost,
+    cashDueAtSettlement,
+    modelStatus: missingInputs.length === 0 ? "complete_scenario" : "insufficient_inputs",
+    acquisitionCostStatus: hasCompleteAcquisitionCost ? "complete" : "unresolved",
+    fundingTimingStatus: creditedDeposit !== null && registrationFunds !== null ? "complete" : "unresolved",
+    model: "explicit-cash-requirements-v2",
+    verified,
+    isModeled: assumptions.length > 0,
+    basis,
+    assumptions,
+    missingInputs,
+    missingAcquisitionInputs,
+  };
+}
+
+export interface TargetPriceScenario {
+  maxPurchasePrice: number;
+  priceReductionNeeded: number;
+  maxOtherAcquisitionCostsAtCurrentPrice: number;
+  costReductionNeeded: number;
+  targetProfit: number;
+}
+
+/** Answers the reverse question: which price or cost change satisfies a target. */
+export function computeTargetPriceScenario(params: {
+  estimatedValue: number | string | null;
+  targetMarginPct: number | string | null;
+  rehabBudget: number | string | null;
+  currentPrice: number | string | null;
+  otherAcquisitionCosts: number | string | null;
+}): TargetPriceScenario | null {
+  const estimatedValue = positiveNumber(params.estimatedValue);
+  const targetMarginPct = nonNegativeNumber(params.targetMarginPct);
+  const rehabBudget = nonNegativeNumber(params.rehabBudget);
+  const currentPrice = positiveNumber(params.currentPrice);
+  const otherAcquisitionCosts = nonNegativeNumber(params.otherAcquisitionCosts);
+  if (
+    estimatedValue === null
+    || targetMarginPct === null
+    || targetMarginPct >= 100
+    || rehabBudget === null
+    || currentPrice === null
+    || otherAcquisitionCosts === null
+  ) return null;
+
+  const targetProfit = Math.round(estimatedValue * (targetMarginPct / 100));
+  const availableAcquisitionBudget = Math.max(0, estimatedValue - targetProfit - rehabBudget);
+  const maxPurchasePrice = Math.max(0, Math.floor(availableAcquisitionBudget - otherAcquisitionCosts));
+  const maxOtherAcquisitionCostsAtCurrentPrice = Math.max(0, Math.floor(availableAcquisitionBudget - currentPrice));
+  return {
+    maxPurchasePrice,
+    priceReductionNeeded: Math.max(0, currentPrice - maxPurchasePrice),
+    maxOtherAcquisitionCostsAtCurrentPrice,
+    costReductionNeeded: Math.max(0, otherAcquisitionCosts - maxOtherAcquisitionCostsAtCurrentPrice),
+    targetProfit,
+  };
+}
+
+export function redemptionLabel(days: number | null | undefined): string {
+  const parsed = nonNegativeNumber(days);
+  if (parsed === null) return "Unknown — official sale terms required";
+  const d = Math.round(parsed);
+  if (d === 0) return "0 days reported — verify official sale terms";
   if (d === 365) return "1 Year";
   if (d === 730) return "2 Years";
   if (d === 180) return "6 Months";
@@ -87,31 +243,56 @@ export interface CreUnderwritingMetrics {
   maxAllowableOffer: number;
 }
 
-export function computeCreMetrics(params: {
+export interface CreUnderwritingAssumptions {
   sqft?: number;
   openingBid: number;
   estimatedValue?: number;
   propType?: string;
+  /** Annual market rent in dollars per square foot. */
   marketRentPerSqftAnnual?: number;
+  /** Operating expenses as a decimal ratio, e.g. 0.4 for 40%. */
   expenseRatio?: number;
+  /** Economic vacancy/credit loss as a decimal ratio, e.g. 0.05 for 5%. */
+  vacancyRate?: number;
+  /** Retained for source compatibility; DSCR still requires annualDebtService. */
   ltv?: number;
-}): CreUnderwritingMetrics {
-  const sqft = toNumber(params.sqft, 2400);
-  const bid = toNumber(params.openingBid, 100000);
-  const isCommercial = (params.propType || "").toLowerCase().includes("commercial") || (params.propType || "").toLowerCase().includes("multi");
+  /** Explicit annual debt service from a buyer-supplied financing scenario. */
+  annualDebtService?: number;
+  /** Buyer's target cap rate as a decimal, e.g. 0.08 for 8%. */
+  targetCapitalizationRate?: number;
+}
 
-  const rentPerSqft = toNumber(params.marketRentPerSqftAnnual, isCommercial ? 15 : 18);
+export function computeCreMetrics(params: CreUnderwritingAssumptions): CreUnderwritingMetrics | null {
+  const sqft = positiveNumber(params.sqft);
+  const bid = positiveNumber(params.openingBid);
+  const rentPerSqft = positiveNumber(params.marketRentPerSqftAnnual);
+  const expenseRatio = nonNegativeNumber(params.expenseRatio);
+  const vacancyRate = nonNegativeNumber(params.vacancyRate);
+  const annualDebtService = positiveNumber(params.annualDebtService);
+  const targetCapitalizationRate = positiveNumber(params.targetCapitalizationRate);
+
+  // Property type, an opening bid, or square footage does not establish rent,
+  // expenses, financing, or a target yield. Do not manufacture those inputs.
+  if (
+    sqft === null ||
+    bid === null ||
+    rentPerSqft === null ||
+    expenseRatio === null || expenseRatio >= 1 ||
+    vacancyRate === null || vacancyRate >= 1 ||
+    annualDebtService === null ||
+    targetCapitalizationRate === null || targetCapitalizationRate >= 1
+  ) {
+    return null;
+  }
+
   const grossPotentialRent = Math.round(sqft * rentPerSqft);
-  const effectiveGrossIncome = Math.round(grossPotentialRent * 0.95);
-  const opexRatio = toNumber(params.expenseRatio, 0.40);
-  const operatingExpenses = Math.round(effectiveGrossIncome * opexRatio);
+  const effectiveGrossIncome = Math.round(grossPotentialRent * (1 - vacancyRate));
+  const operatingExpenses = Math.round(effectiveGrossIncome * expenseRatio);
   const netOperatingIncome = Math.max(0, effectiveGrossIncome - operatingExpenses);
 
-  const capitalizationRate = bid > 0 ? Number(((netOperatingIncome / bid) * 100).toFixed(2)) : 0;
-  const loanAmount = bid * (params.ltv || 0.75);
-  const annualDebtService = Math.round(loanAmount * 0.077);
-  const estimatedDscr = annualDebtService > 0 ? Number((netOperatingIncome / annualDebtService).toFixed(2)) : 1.5;
-  const maxAllowableOffer = Math.max(0, Math.round((netOperatingIncome / 0.08) * 0.85));
+  const capitalizationRate = Number(((netOperatingIncome / bid) * 100).toFixed(2));
+  const estimatedDscr = Number((netOperatingIncome / annualDebtService).toFixed(2));
+  const maxAllowableOffer = Math.max(0, Math.round(netOperatingIncome / targetCapitalizationRate));
 
   return {
     grossPotentialRent,
@@ -126,24 +307,28 @@ export function computeCreMetrics(params: {
 
 export interface RentRollUnit {
   unit: string;
-  tenant: string;
-  status: 'Occupied' | 'Vacant';
-  sqft: number;
-  monthlyRent: number;
-  annualRent: number;
+  tenant: string | null;
+  status: 'Occupied' | 'Vacant' | 'Unknown';
+  sqft: number | null;
+  monthlyRent: number | null;
+  annualRent: number | null;
   leaseEnd: string | null;
 }
 
 export interface RentRollSchedule {
   unitCount: number;
   units: RentRollUnit[];
-  totalSqft: number;
-  totalAnnualRent: number;
-  occupancyRate: number;
-  inPlaceNoi: number;
+  totalSqft: number | null;
+  totalAnnualRent: number | null;
+  occupancyRate: number | null;
+  inPlaceNoi: number | null;
+  evidenceGaps: string[];
 }
 
-export function parseRentRollSchedule(rawNotice = ''): RentRollSchedule {
+export function parseRentRollSchedule(
+  rawNotice = '',
+  assumptions: { expenseRatio?: number } = {},
+): RentRollSchedule {
   const text = String(rawNotice || '');
   const units: RentRollUnit[] = [];
   const lines = text.split(/[\r\n]+/);
@@ -155,40 +340,60 @@ export function parseRentRollSchedule(rawNotice = ''): RentRollSchedule {
     const unit = unitMatch[1].trim();
     const rest = unitMatch[2].trim();
 
-    let tenant = 'Occupied';
+    let tenant: string | null = null;
     const firstSegment = rest.split(/,|\s-\s/)[0].trim();
-    if (firstSegment) tenant = firstSegment;
-    if (/vacant|empty|unoccupied/i.test(rest)) {
-      tenant = 'Vacant';
-    }
+    if (firstSegment && !/^(?:vacant|empty|unoccupied)$/i.test(firstSegment)) tenant = firstSegment;
+
+    const isVacant = /\b(?:vacant|empty|unoccupied)\b/i.test(rest);
 
     const sqftMatch = rest.match(/(\d[\d,]*)\s*(?:sqft|sf|sq\s*ft)/i);
-    const sqft = sqftMatch ? parseInt(sqftMatch[1].replace(/,/g, ''), 10) : 0;
+    const sqft = sqftMatch ? parseInt(sqftMatch[1].replace(/,/g, ''), 10) : null;
 
     const rentMatch = rest.match(/(?:rent|\$)\s*[:\$]?\s*(\d[\d,]*)/i);
-    const rent = rentMatch ? parseInt(rentMatch[1].replace(/,/g, ''), 10) : 0;
+    const rent = rentMatch ? parseInt(rentMatch[1].replace(/,/g, ''), 10) : (isVacant ? 0 : null);
 
     const leaseMatch = rest.match(/(?:exp|expires|lease\s*end)\s*[:\s]?\s*([0-9\/\-]+)/i);
     const leaseEnd = leaseMatch ? leaseMatch[1].trim() : null;
 
-    const isVacant = tenant === 'Vacant';
+    const status: RentRollUnit['status'] = isVacant
+      ? 'Vacant'
+      : rent !== null && rent > 0
+        ? 'Occupied'
+        : 'Unknown';
     units.push({
       unit,
       tenant,
-      status: isVacant ? 'Vacant' : 'Occupied',
+      status,
       sqft,
       monthlyRent: rent,
-      annualRent: rent * 12,
+      annualRent: rent === null ? null : rent * 12,
       leaseEnd
     });
   }
 
-  const totalSqft = units.reduce((acc, u) => acc + u.sqft, 0);
-  const occupiedSqft = units.filter(u => u.status === 'Occupied').reduce((acc, u) => acc + u.sqft, 0);
-  const totalAnnualRent = units.reduce((acc, u) => acc + u.annualRent, 0);
-  const occupancyRate = totalSqft > 0
+  const hasCompleteSqft = units.length > 0 && units.every(unit => unit.sqft !== null);
+  const hasCompleteRent = units.length > 0 && units.every(unit => unit.annualRent !== null);
+  const hasCompleteOccupancy = hasCompleteSqft && units.every(unit => unit.status !== 'Unknown');
+  const totalSqft = hasCompleteSqft
+    ? units.reduce((sum, unit) => sum + (unit.sqft ?? 0), 0)
+    : null;
+  const totalAnnualRent = hasCompleteRent
+    ? units.reduce((sum, unit) => sum + (unit.annualRent ?? 0), 0)
+    : null;
+  const occupiedSqft = hasCompleteOccupancy
+    ? units.filter(unit => unit.status === 'Occupied').reduce((sum, unit) => sum + (unit.sqft ?? 0), 0)
+    : null;
+  const occupancyRate = totalSqft !== null && totalSqft > 0 && occupiedSqft !== null
     ? Number(((occupiedSqft / totalSqft) * 100).toFixed(1))
-    : (units.length > 0 ? Number(((units.filter(u => u.status === 'Occupied').length / units.length) * 100).toFixed(1)) : 100);
+    : null;
+  const expenseRatio = nonNegativeNumber(assumptions.expenseRatio);
+  const inPlaceNoi = totalAnnualRent !== null && expenseRatio !== null && expenseRatio < 1
+    ? Math.round(totalAnnualRent * (1 - expenseRatio))
+    : null;
+  const evidenceGaps: string[] = [];
+  if (!hasCompleteSqft) evidenceGaps.push('Complete unit square footage is required for occupancy by area.');
+  if (!hasCompleteRent) evidenceGaps.push('A complete reported rent schedule is required for annual rent.');
+  if (expenseRatio === null || expenseRatio >= 1) evidenceGaps.push('A buyer-supplied operating-expense ratio is required for NOI.');
 
   return {
     unitCount: units.length,
@@ -196,8 +401,30 @@ export function parseRentRollSchedule(rawNotice = ''): RentRollSchedule {
     totalSqft,
     totalAnnualRent,
     occupancyRate,
-    inPlaceNoi: Math.round(totalAnnualRent * 0.60)
+    inPlaceNoi,
+    evidenceGaps,
   };
+}
+
+export interface LetterOfIntentOptions {
+  buyerEntity?: string | null;
+  recipient?: string | null;
+  offerPrice?: number | null;
+  depositAmount?: number | null;
+  depositPct?: number | null;
+  inspectionDays?: number | null;
+  closingDays?: number | null;
+  closingCosts?: {
+    registrationFunds?: number | null;
+    creditedDeposit?: number | null;
+    buyersPremium?: number | null;
+    sheriffPoundage?: number | null;
+    transferTax?: number | null;
+    delinquentTaxes?: number | null;
+    settlementCosts?: number | null;
+    /** Deprecated alias for settlementCosts. */
+    deedFees?: number | null;
+  } | null;
 }
 
 export function generateLetterOfIntent(listing: {
@@ -211,51 +438,86 @@ export function generateLetterOfIntent(listing: {
   source?: string | null;
   raw?: string | null;
   [key: string]: any;
-}, options: {
-  buyerEntity?: string;
-  offerPrice?: number;
-  depositPct?: number;
-  inspectionDays?: number;
-  closingDays?: number;
-} = {}): string {
-  const buyer = options.buyerEntity || 'Institutional Acquisition Partner LLC';
-  const price = options.offerPrice || Number(listing.openingBid) || 100000;
-  const deposit = Math.round(price * (options.depositPct || 0.10));
-  const inspectionDays = options.inspectionDays || 10;
-  const closingDays = options.closingDays || 30;
-  const cashToClose = computeCashToClose({
-    openingBid: price,
-    state: listing.state || 'OH',
-    source: listing.source || 'sheriff'
-  });
+}, options: LetterOfIntentOptions = {}): string {
+  const buyer = cleanLabel(options.buyerEntity);
+  const recipient = cleanLabel(options.recipient);
+  const price = positiveNumber(options.offerPrice);
+  const suppliedDeposit = nonNegativeNumber(options.depositAmount);
+  const depositPct = nonNegativeNumber(options.depositPct);
+  const validDepositPct = depositPct !== null && depositPct <= 1 ? depositPct : null;
+  const deposit = suppliedDeposit ?? (
+    price !== null && validDepositPct !== null
+      ? Math.round(price * validDepositPct)
+      : null
+  );
+  const inspectionDays = nonNegativeNumber(options.inspectionDays);
+  const closingDays = nonNegativeNumber(options.closingDays);
+  const address = cleanLabel(listing.address);
+  const city = cleanLabel(listing.city);
+  const state = cleanLabel(listing.state)?.toUpperCase() ?? null;
+  const zip = cleanLabel(listing.zip);
+  const county = cleanLabel(listing.county);
+  const source = cleanLabel(listing.source);
+  const reference = cleanLabel(listing.id);
+  const location = [address, city, state, zip].filter(Boolean).join(', ');
+  const costs = options.closingCosts ?? null;
+  const registrationFunds = nonNegativeNumber(costs?.registrationFunds);
+  const creditedDeposit = nonNegativeNumber(costs?.creditedDeposit);
+  const buyersPremium = nonNegativeNumber(costs?.buyersPremium);
+  const sheriffPoundage = nonNegativeNumber(costs?.sheriffPoundage);
+  const transferTax = nonNegativeNumber(costs?.transferTax);
+  const delinquentTaxes = nonNegativeNumber(costs?.delinquentTaxes);
+  const settlementCosts = nonNegativeNumber(costs?.settlementCosts ?? costs?.deedFees);
+  const hasCompleteCostScenario = price !== null && [
+    buyersPremium,
+    sheriffPoundage,
+    transferTax,
+    delinquentTaxes,
+    settlementCosts,
+  ].every(value => value !== null);
+  const modeledCashRequired = hasCompleteCostScenario
+    ? price + buyersPremium! + sheriffPoundage! + transferTax! + delinquentTaxes! + settlementCosts!
+    : null;
+  const cashDueAtSettlement = modeledCashRequired !== null && creditedDeposit !== null
+    ? Math.max(0, modeledCashRequired - creditedDeposit)
+    : null;
+  const depositBasis = suppliedDeposit !== null
+    ? 'buyer-supplied amount'
+    : validDepositPct !== null
+      ? `buyer-supplied ${(validDepositPct * 100).toFixed(2).replace(/\.00$/, '')}% assumption`
+      : 'not supplied';
 
-  return `CONFIDENTIAL LETTER OF INTENT (LOI)
-ACQUISITION OF DISTRESSED REAL ASSET
+  return `DRAFT — NON-BINDING LETTER OF INTENT SCENARIO
+NOT READY FOR SUBMISSION — MISSING TERMS REQUIRE BUYER AND COUNSEL REVIEW
 
 DATE: ${new Date().toISOString().split('T')[0]}
-TO: Trustee / Foreclosing Counsel / Special Servicer
-REGARDING: ${listing.address || 'Property'}, ${listing.city || ''}, ${listing.state || ''} ${listing.zip || ''}
-COURT DOCKET / CASE: ${listing.id || 'N/A'}
-SOURCE PORTAL: ${(listing.source || 'AUCTION').toUpperCase()}
+TO: ${recipient ?? '[RECIPIENT NOT SUPPLIED — CONFIRM AUTHORIZED COUNTERPARTY]'}
+REGARDING: ${location || '[PROPERTY ADDRESS NOT AVAILABLE IN SOURCE RECORD]'}
+LISTING / DOCKET REFERENCE: ${reference ?? '[NOT AVAILABLE IN SOURCE RECORD]'}
+SOURCE CHANNEL: ${source ? sourceDisplayText(source.toUpperCase()) : '[SOURCE NOT AVAILABLE]'}
 
-1. PURCHASER: ${buyer}, or its designated special purpose entity (SPE).
-2. PROPERTY: Real property situated in ${listing.county || 'County'} County, State of ${listing.state || 'OH'}, commonly known as ${listing.address || 'Property'}.
-3. PURCHASE PRICE: $${price.toLocaleString()} USD (all cash at closing).
-4. EARNEST MONEY DEPOSIT: $${deposit.toLocaleString()} USD (10% earnest funds), deposited into escrow within two (2) business days of mutual execution.
-5. DUE DILIGENCE PERIOD: ${inspectionDays} calendar days from receipt of preliminary title commitment and docket filings.
-6. STATUTORY CASH-TO-CLOSE & ESTIMATED CLOSING COSTS:
-   - Base Offering Bid: $${price.toLocaleString()}
-   - Estimated Buyer's Premium: $${cashToClose.buyersPremium.toLocaleString()}
-   - Statutory Sheriff Poundage (${listing.state || 'OH'}): $${cashToClose.sheriffPoundage.toLocaleString()}
-   - State Transfer Tax: $${cashToClose.transferTax.toLocaleString()}
-   - Estimated Deed Recording Fees: $${cashToClose.deedFees.toLocaleString()}
-   - Net Estimated Cash to Close: $${cashToClose.total.toLocaleString()}
-7. CLOSING DATE: On or before ${closingDays} calendar days following expiration of the Due Diligence Period, subject to statutory confirmation and redemption rules under ${listing.state || 'OH'} law.
-8. CONDITION: "As-Is, Where-Is", subject to insurable title free and clear of un-extinguished senior encumbrances.
+1. PURCHASER: ${buyer ?? '[NOT SUPPLIED — BUYER INPUT REQUIRED]'}.
+2. PROPERTY: ${location || '[ADDRESS EVIDENCE REQUIRED]'}${county ? `; reported county: ${county}` : '; county not reported'}.
+3. PROPOSED PURCHASE PRICE: ${formatMoney(price)}${price !== null ? ' (buyer-supplied scenario; not inferred from the opening bid)' : ''}.
+4. EARNEST MONEY DEPOSIT: ${formatMoney(deposit)} (${depositBasis}). Deposit timing and refundability are not supplied and must be confirmed from the official sale terms.
+5. DUE DILIGENCE PERIOD: ${inspectionDays === null ? '[NOT SUPPLIED — BUYER INPUT REQUIRED]' : `${Math.round(inspectionDays)} calendar days (buyer-supplied scenario)`}. Any applicable auction restrictions must be confirmed.
+6. CLOSING-COST SCENARIO (ONLY EXPLICITLY SUPPLIED INPUTS ARE SHOWN):
+   - Registration Funds (separate liquidity requirement): ${formatMoney(registrationFunds)}
+   - Deposit Credited Toward Purchase Price: ${formatMoney(creditedDeposit)}
+   - Proposed Purchase Price: ${formatMoney(price)}
+   - Buyer's Premium: ${formatMoney(buyersPremium)}
+   - Sheriff / Trustee Fee or Poundage: ${formatMoney(sheriffPoundage)}
+   - Transfer Tax: ${formatMoney(transferTax)}
+   - Delinquent Taxes Assumed by Buyer: ${formatMoney(delinquentTaxes)}
+   - Other Settlement / Recording Costs: ${formatMoney(settlementCosts)}
+   - Total Acquisition Cash (credited deposit is included once): ${formatMoney(modeledCashRequired)}
+   - Remaining Cash Due at Settlement: ${formatMoney(cashDueAtSettlement)}
+7. CLOSING TIMELINE: ${closingDays === null ? '[NOT SUPPLIED — BUYER INPUT REQUIRED]' : `${Math.round(closingDays)} calendar days (buyer-supplied scenario)`}. The triggering event, confirmation process, and any objection or redemption rights require official verification.
+8. TITLE / LEGAL STATUS: NOT DETERMINED. Obtain a current title search or commitment, foreclosure docket, lien-priority analysis, and the controlling sale terms. This draft makes no representation about surviving liens, insurability, redemption, possession, or seller authority.
 
-AGREED & SUBMITTED:
+DRAFT FOR REVIEW — NOT AGREED OR SUBMITTED
 By: ___________________________
-Authorized Representative, ${buyer}`;
+Authorized Representative, ${buyer ?? '[BUYER ENTITY REQUIRED]'}`;
 }
 
 export function generateInvestmentCommitteeMemo(listing: {
@@ -275,35 +537,71 @@ export function generateInvestmentCommitteeMemo(listing: {
   seniorLienWarning?: string | null;
   occupancy?: string | null;
   [key: string]: any;
-}, creMetrics?: Partial<CreUnderwritingMetrics>): string {
-  const bid = Number(listing.openingBid) || 0;
-  const estMid = ((Number(listing.estLow) || bid) + (Number(listing.estHigh) || bid)) / 2;
-  const equity = Math.max(0, estMid - bid);
-  const discountPct = estMid > 0 ? ((equity / estMid) * 100).toFixed(1) : '0.0';
-  const metrics = creMetrics || {};
+}, creMetrics?: Partial<CreUnderwritingMetrics> | null): string {
+  const bid = positiveNumber(listing.openingBid);
+  const estLow = positiveNumber(listing.estLow);
+  const estHigh = positiveNumber(listing.estHigh);
+  const hasValuationRange = estLow !== null && estHigh !== null && estHigh >= estLow;
+  const estMid = hasValuationRange ? (estLow + estHigh) / 2 : null;
+  const spread = bid !== null && estMid !== null ? estMid - bid : null;
+  const discountPct = spread !== null && estMid !== null && estMid > 0
+    ? Number(((spread / estMid) * 100).toFixed(1))
+    : null;
+  const dealScoreValue = finiteNumber(listing.dealScore);
+  const dealScore = dealScoreValue !== null && dealScoreValue >= 1 && dealScoreValue <= 99
+    ? Math.round(dealScoreValue)
+    : null;
+  const redemptionDays = nonNegativeNumber(listing.redemptionDays);
+  const seniorLienRisk = cleanLabel(listing.seniorLienRisk);
+  const occupancy = cleanLabel(listing.occupancy);
+  const netOperatingIncome = nonNegativeNumber(creMetrics?.netOperatingIncome);
+  const capitalizationRate = nonNegativeNumber(creMetrics?.capitalizationRate);
+  const estimatedDscr = nonNegativeNumber(creMetrics?.estimatedDscr);
+  const maxAllowableOffer = nonNegativeNumber(creMetrics?.maxAllowableOffer);
+  const asset = [cleanLabel(listing.address), cleanLabel(listing.city), cleanLabel(listing.state)?.toUpperCase(), cleanLabel(listing.zip)]
+    .filter(Boolean)
+    .join(', ');
+  const evidenceGaps: string[] = [];
+  if (bid === null) evidenceGaps.push('published opening amount');
+  if (estMid === null) evidenceGaps.push('supported valuation range');
+  if (dealScore === null) evidenceGaps.push('computed triage score inputs');
+  if (redemptionDays === null) evidenceGaps.push('official redemption or objection terms');
+  if (seniorLienRisk === null) evidenceGaps.push('current title and lien-priority evidence');
+  if (occupancy === null) evidenceGaps.push('verified occupancy evidence');
+  if ([netOperatingIncome, capitalizationRate, estimatedDscr, maxAllowableOffer].some(value => value === null)) {
+    evidenceGaps.push('complete buyer-supplied operating and financing assumptions');
+  }
+  const gapSummary = evidenceGaps.length > 0
+    ? evidenceGaps.map(gap => `- ${gap}`).join('\n')
+    : '- Official sale terms, title, lien priority, property condition, and authority to bid still require verification.';
 
   return `# INVESTMENT COMMITTEE (IC) ACQUISITION MEMORANDUM
 
-## EXECUTIVE SUMMARY
-- **Asset**: ${listing.address || 'Subject Property'}, ${listing.city || ''}, ${listing.state || ''} ${listing.zip || ''}
-- **Asset Class**: ${listing.propType || 'Residential / Commercial'}
-- **Source Channel**: ${(listing.source || 'Sheriff').toUpperCase()}
-- **Deal Score**: ${listing.dealScore || 85}/100
-- **Opening / Target Bid**: $${bid.toLocaleString()}
-- **Estimated Fair Market Value**: $${Math.round(estMid).toLocaleString()}
-- **Gross Built-In Equity**: +$${equity.toLocaleString()} (${discountPct}% below market)
+**STATUS: EVIDENCE REVIEW DRAFT — NOT BID AUTHORITY**
 
-## TITLE RISK & STATUTORY ANALYSIS
-- **Statutory Redemption Period**: ${listing.redemptionDays || 0} Days (${listing.redemptionWarning || 'Clean / No post-sale statutory redemption'})
-- **Senior Lien Risk**: ${listing.seniorLienRisk ? listing.seniorLienRisk.toUpperCase() : 'LOW'} (${listing.seniorLienWarning || 'No surviving prior senior encumbrance detected'})
-- **Occupancy Status**: ${listing.occupancy || 'Unknown (Drive-by inspection recommended)'}
+## EXECUTIVE SUMMARY
+- **Asset**: ${asset || 'Unavailable — property identity evidence required'}
+- **Asset Class**: ${cleanLabel(listing.propType) ?? 'Unknown — source evidence required'}
+- **Source Channel**: ${sourceDisplayText(cleanLabel(listing.source)?.toUpperCase() ?? 'Unknown — source evidence required')}
+- **Deal Score**: ${dealScore === null ? 'Unavailable — published bid and supported valuation inputs are required' : `${dealScore}/99 (triage indicator only; not an appraisal)`}
+- **Published Opening Amount**: ${formatMoney(bid)}
+- **Supported Valuation-Range Midpoint**: ${formatMoney(estMid)}
+- **Bid Spread (valuation midpoint minus opening amount)**: ${spread === null || discountPct === null ? 'Unavailable — opening amount and both valuation bounds are required' : `${formatMoney(spread)} (${discountPct}% modeled spread; not equity and not an appraisal)`}
+
+## TITLE / SALE-TERMS EVIDENCE
+- **Redemption / Objection Period**: ${redemptionDays === null ? 'Unknown — official sale terms and current law review required' : `${Math.round(redemptionDays)} days recorded in this dataset; verify the triggering event, exceptions, and current official terms`}${cleanLabel(listing.redemptionWarning) ? ` (unverified record note: ${cleanLabel(listing.redemptionWarning)})` : ''}
+- **Senior Lien Signal**: ${seniorLienRisk === null ? 'Unknown — current title and docket evidence required' : `${seniorLienRisk.toUpperCase()} (unverified risk signal; not a title conclusion)`}${cleanLabel(listing.seniorLienWarning) ? ` (record note: ${cleanLabel(listing.seniorLienWarning)})` : ''}
+- **Occupancy Status**: ${occupancy ?? 'Unknown — inspection or other authorized evidence required'}
 
 ## FINANCIAL & RETURN METRICS
-- **Net Operating Income (NOI)**: $${(metrics.netOperatingIncome || Math.round(bid * 0.085)).toLocaleString()} / year
-- **Capitalization Rate**: ${metrics.capitalizationRate || '8.50'}%
-- **Debt Service Coverage Ratio (DSCR)**: ${metrics.estimatedDscr || '1.45'}x
-- **Target Yield Max Allowable Offer (MAO)**: $${(metrics.maxAllowableOffer || Math.round(bid * 1.15)).toLocaleString()}
+- **Net Operating Income (NOI)**: ${netOperatingIncome === null ? 'Unavailable — verified rent roll and explicit expense assumptions required' : `${formatMoney(netOperatingIncome)} / year (modeled)`}
+- **Capitalization Rate**: ${capitalizationRate === null ? 'Unavailable — NOI and acquisition-cost basis required' : `${capitalizationRate}% (modeled)`}
+- **Debt Service Coverage Ratio (DSCR)**: ${estimatedDscr === null ? 'Unavailable — NOI and explicit annual debt service required' : `${estimatedDscr}x (modeled)`}
+- **Max Allowable Offer (MAO)**: ${maxAllowableOffer === null ? 'Unavailable — explicit target-yield assumptions required' : `${formatMoney(maxAllowableOffer)} (buyer-supplied model output; not a bid recommendation)`}
+
+## EVIDENCE REQUIRED BEFORE A BID DECISION
+${gapSummary}
 
 ## UNDERWRITING RECOMMENDATION
-Proceed with pre-auction title search and deposit placement. Target maximum bid of $${(metrics.maxAllowableOffer || Math.round(bid * 1.15)).toLocaleString()} preserves an institutional yield floor above 8.00% Cap Rate.`;
+NO BID RECOMMENDATION. Do not place a deposit or authorize a bid from this draft. Confirm the exact source listing, current sale status and terms, title and lien priority, redemption or objection rights, occupancy, property condition, and every buyer-supplied financial assumption with qualified professionals.`;
 }

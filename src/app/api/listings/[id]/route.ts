@@ -1,5 +1,3 @@
-import { adapt } from "@/lib/next-adapter";
-import handleListings from "@/lib/server-routes/listings";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const GET = adapt(handleListings, { securityHeaders: true, cors: true });
-export const POST = GET;
+export const GET = (request: Request) => proxyPropertyApi(request);

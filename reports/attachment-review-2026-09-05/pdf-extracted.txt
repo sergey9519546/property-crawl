@@ -1,0 +1,795 @@
+=== PAGE 1 ===
+T  E  C  H  N  I  C  A  L    R  E  C  O  N  N  A  I  S  S  A  N  C  E    D  O  S  S  I  E  R
+ServiceLink Auction
+Platform
+Full-Stack Public-Surface Reverse-Engineering Analysis Report
+Target: www.servicelinkauction.com (Exos.AuctionSpa)
+Entry Point: 749 Portola Ave, Glendale, CA 91206
+Method: Public HTML / JS bundle / anonymous API probing
+Date of Analysis: September 5, 2026
+Public-surface analysis - no authenticated access performed                                        Evidence corpus preserved
+
+=== PAGE 2 ===
+I
+Table of Contents
+1. Executive Summary........................................................................................................ 1
+2. Background, Objectives and Scope................................................................................. 2
+2.1 Engagement Background...............................................................................................2
+2.2 Objectives.......................................................................................................................2
+2.3 Scope and Method Boundaries......................................................................................2
+3. Methodology and Evidence Sources............................................................................... 3
+4. Delivery Platform and Frontend Architecture..................................................................3
+4.1 Hosting and Edge Delivery..............................................................................................3
+4.2 The Application Shell and Build Pipeline........................................................................4
+4.3 Frontend Stack Identification.........................................................................................4
+5. Environment Configuration Registry............................................................................... 4
+6. Backend Microservice Architecture.................................................................................5
+7. Public API Surface and Endpoint Registry........................................................................6
+7.1 Anonymous Data Plane (Verified Live)...........................................................................6
+7.2 Authenticated Plane (401 Boundary).............................................................................6
+7.3 Search Filter DSL.............................................................................................................7
+8. Listing Data Model and Business Taxonomy....................................................................7
+8.1 Record Schema...............................................................................................................7
+8.2 Program Taxonomy........................................................................................................8
+8.3 Salesforce as System of Record......................................................................................8
+9. Real-Time Bidding and Auction Algorithms..................................................................... 8
+9.1 SignalR Transport Layer..................................................................................................8
+9.2 Auction Lifecycle State Machine....................................................................................8
+9.3 Bid Pricing Rules.............................................................................................................9
+
+=== PAGE 3 ===
+II
+9.4 Countdown Clock Synchronization.................................................................................9
+9.5 Funds and Payments Flow..............................................................................................9
+10. Third-Party Integration Matrix......................................................................................9
+11. SEO and Content Delivery Strategy............................................................................. 10
+11.1 Crawler Rendering Pipeline........................................................................................10
+11.2 Sitemap Architecture and URL Design.......................................................................10
+12. Target Property Case Study: 749 Portola Ave, Glendale.............................................. 11
+13. Security Posture Observations.................................................................................... 11
+14. Conclusions and Reconstruction Assessment.............................................................. 12
+Appendix A. Extracted Constants Registry (Selection).......................................................12
+Appendix B. Angular Route Table..................................................................................... 12
+Note: This Table of Contents is generated via field codes. To ensure page number accuracy after editing, please right-
+click the TOC and select "Update Field."
+
+=== PAGE 4 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+1
+1. Executive Summary
+This  report  documents  a  complete,  evidence-driven  reverse-engineering  analysis  of  
+ServiceLink Auction (www.servicelinkauction.com) , the real-estate auction marketplace  
+operated by ServiceLink, an FNF (Fidelity National Financial) company, and built on the Exos 
+Technology auction platform. The investigation was performed exclusively against publicly 
+accessible resources: static HTML, the deployed JavaScript application bundle, public API  
+endpoints that respond to anonymous requests, and the site's declared sitemap files. No  
+authentication was bypassed, no protected endpoint was accessed, and all probing was  
+performed at a polite, rate-limited pace in accordance with the site's fully permissive  
+robots.txt policy.
+The analysis reveals a modern, well-architected platform: an Angular 21.2.17 single-page 
+application (internal product name Exos.AuctionSpa, build 2026.07.31.0956) served as a 
+static website from Azure Blob Storage, fronted by a Prerender.io middleware that supplies 
+fully rendered HTML to search-engine crawlers. Application data flows through a REST  
+microservice  layer  of  thirteen  ASP.NET  Core  services  exposed  at  
+https://ui.exostechnology.com/api/*/v1/ and  a  mirror  gateway  at  
+https://www.servicelinkauction.com/api/*/v1/,  with  a  fourteenth  SignalR  
+service providing real-time auction push messaging. Salesforce operates as the system of  
+record: listing identifiers carry Salesforce record-ID prefixes and custom detail fields retain 
+the platform's __c suffix convention.
+Key quantitative findings include a live public catalog of 5,900 searchable listings, a sitemap 
+index of 16,358 property URLs, 26 active auction events, 52 state licensing disclosures, and 
+a fully anonymous-accessible property data model covering pricing terms, bid increments,  
+auction windows, photographs, and downloadable property reports. The report maps the  
+complete anonymous-versus-authenticated API boundary, decodes the real-time bidding  
+protocol, reconstructs the auction lifecycle state machine, and catalogs more than 240  
+business-logic  constants  extracted  from  the  application  bundle.  All  evidence  files  
+referenced throughout are preserved in the analysis workspace for verification.
+2. Background, Objectives and Scope
+2.1 Engagement Background
+The subject of this analysis is the public real-estate auction platform ServiceLink Auction,  
+with the designated entry point being the property details page for 749 Portola Ave,  
+
+=== PAGE 5 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+2
+Glendale,  CA  91206  ( property-details/749-portola-ave-glendale-91206-ca-
+united-states-tps).  ServiceLink  Auction  liquidates  bank-owned  (REO),  newly  
+foreclosed (CWCOT/HUD), third-party-sale (TPS), and short-sale properties on behalf of  
+institutional  sellers.  The  platform's  parent,  ServiceLink,  sits  within  the  FNF  family  of  
+companies, and its auction technology is developed under the Exos Technology brand, a  
+fact confirmed repeatedly by environment configuration, API host names, and third-party  
+API attribution strings discovered during this investigation.
+2.2 Objectives
+The  objective  of  this  engagement  was  to  reconstruct,  from  public  evidence  alone,  a  
+complete blueprint of how the platform is built and how it operates: the technology stack, 
+hosting and delivery architecture, frontend framework and build pipeline, backend service 
+decomposition, the complete API surface with its authentication boundary, the data model, 
+the search and filtering system, the real-time bidding and auction-control protocols, third-
+party  integrations,  SEO  and  content  strategy,  and  the  business  rules  encoded  in  the 
+application bundle. A secondary objective was to produce a reusable evidence corpus (raw 
+HTTP responses, the full application bundle, and structured JSON records) so that every  
+claim in this report can be independently re-verified.
+2.3 Scope and Method Boundaries
+The analysis is strictly limited to what an anonymous public visitor or an authorized user's  
+browser can observe. The following boundaries were observed at all times: only robots.txt-
+permitted paths were requested (the file contains no Disallow directives); only HTTP GET  
+requests  were  issued  against  public  data  endpoints,  with  the  single  exception  of  
+documented POST shapes which were not executed against authenticated resources; no  
+login, MFA, CAPTCHA, or rate-limit circumvention was attempted; no authenticated user  
+account was created or used; and all requests were spaced with deliberate delays to remain 
+a polite client. All findings below are therefore descriptions of the platform's externally  
+visible, publicly served surface.
+3. Methodology and Evidence Sources
+The investigation proceeded in six phases. Phase one fingerprinted the delivery layer:  
+robots.txt, both sitemap files, HTTP response headers, and the homepage document. Phase 
+two acquired the complete frontend asset set: the 1,053-byte application shell, the 5.49 MB 
+main JavaScript bundle, the vendor script bundle, the runtime loader, polyfills, and the  
+
+=== PAGE 6 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+3
+production  stylesheet.  Phase  three  statically  reverse-engineered  the  minified  bundle,  
+extracting the production environment configuration object, the microservice registry,  
+every REST call site (grouped by HTTP verb), the Angular route table, enum and constant  
+registries, and the SignalR hub wiring.
+Phase four probed the discovered API surface anonymously, mapping which endpoints  
+return data, which return structured 401 authentication errors, and which do not exist.  
+Phase five exercised the public data plane end-to-end, including the full search/filter DSL,  
+the property-details resolution algorithm, and the media/document storage layer. Phase  
+six validated cross-cutting behaviors: bot prerendering (by requesting the same URL with a 
+Googlebot user agent), the blog and help-center technology stacks, and the Google Tag  
+Manager container configuration. Every response of analytical value was saved to the  
+evidence workspace; key artifacts are listed in the table below.
+Table 1: Primary evidence artifacts
+Artifact Description
+home.html Raw 1,053-byte Angular SPA shell served to normal 
+browsers
+main.308e562e04bf022f.js 5,489,235-byte production application bundle (all 
+lazy modules inlined)
+scripts.71f4e0c662202949.js 421,970-byte vendor bundle (jQuery, Popper, 
+Moment.js)
+styles.098b5f464e1f65ff.css 243,465-byte production stylesheet
+sitemap.xml / sitemap2.xml 327 static and help URLs; 16,358 property-detail 
+URLs
+target_property.json Complete API record for 749 Portola Ave, Glendale 
+CA (7,937 bytes)
+listings_sample.json / 
+search_ca.json
+Live search responses demonstrating the query 
+DSL
+googlebot_property.html 468,819-byte prerendered page served to crawler 
+user agents
+robots.txt / gtm.js Crawler policy; 861,895-byte GTM container with 
+tag registry
+
+=== PAGE 7 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+4
+4. Delivery Platform and Frontend Architecture
+4.1 Hosting and Edge Delivery
+The production frontend is hosted as an  Azure Blob Storage static website . Response  
+headers from every static asset carry the unambiguous Blob service fingerprint:  x-ms-
+version: 2009-09-19, x-ms-blob-type: BlockBlob, x-ms-request-id, and Azure-
+formatted ETags (0x8DEF4277D18039B). Static content is served over HTTP/2 with a one-
+year  strict-transport-security policy. Property photography and PDF reports are  
+stored  in  dedicated  blob  containers  under  the  /auction-photos/ and  /auction-
+documents/ virtual paths; images carry custom blob metadata (x-ms-meta-name, x-ms-
+meta-mime, x-ms-meta-created, and a GUID-valued x-ms-meta-version), indicating 
+an automated ingestion pipeline. Source maps are correctly stripped from production (all  
+.js.map requests return 404), which is the right hardening posture for a production  
+bundle.
+4.2 The Application Shell and Build Pipeline
+Normal visitors receive a 1,053-byte shell document. Its metadata declares the application 
+identity:  <meta  name="application-name"  content="Exos.AuctionSpa" with  
+data-buildnumber="2026.07.31.0956" and  data-deploytime="2026-08-
+07T01:57:49Z". The shell bootstraps a standard Angular CLI webpack production build  
+(runtime / polyfills / scripts / main  hashed chunks; global webpack chunk  
+registry webpackChunkAuctionSpa; Trusted Types policy  angular#bundler). Notably, 
+all lazily-loaded feature modules are inlined into the single 5.49 MB main bundle rather  
+than emitted as separate chunk files, which is why the runtime chunk-name function exists 
+but no on-demand chunks are fetched at runtime. The Google Maps JavaScript API is loaded 
+synchronously in the shell with the places library. One build-pipeline defect was observed: 
+the CSP nonce placeholder token CSP_NONCE is emitted literally into the shell rather than  
+being  replaced  per-response,  so  the  GTM  script  tag  carries  a  literal  nonce  value  of  
+"CSP_NONCE".
+4.3 Frontend Stack Identification
+The application core is Angular 21.2.17 (confirmed via the framework's ng-version attribute 
+emitter in the bundle). The UI layer supplements Angular with jQuery and Bootstrap-style  
+modal  and  dropdown  components  (Bootstrap  event  names  show.bs.modal  / 
+hide.bs.dropdown appear  in  the  vendor  bundle),  Popper.js  1.13.3,  and  Moment.js  
+2.30.1. Mapping is implemented with the Angular Google Maps wrapper (@agm) and the  
+
+=== PAGE 8 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+5
+Google  Maps  marker-clusterer  utility  library.  Input  masking  uses  ngx-mask.  A  legacy  
+jQuery-to-Angular  bridge  
+(window.angularComponentReference.zone.run(...externalLogin(...)) 
+exposed as a global logMeIn function) survives in the vendor bundle for private-label login 
+flows. The full identification is summarized below.
+Table 2: Frontend technology stack
+Component Identifier / Version Evidence Role
+SPA framework Angular 21.2.17 (ng-
+version emitter)
+Application core
+Build system Angular CLI + webpack, 
+chunk hash e654e54a...
+Production bundling
+Product identity Exos.AuctionSpa, build 
+2026.07.31.0956
+App metadata
+CI/CD source refs/heads/release, 
+commit 
+0592aef...aceb65
+Azure DevOps pipeline
+DOM utilities jQuery + Bootstrap 
+modal/dropdown events
+Legacy UI components
+Positioning Popper.js 1.13.3 Tooltips / dropdowns
+Dates Moment.js 2.30.1 Countdown & formatting
+Maps @agm + Google Maps JS 
+API (places lib)
+Search & property maps
+Input masks ngx-mask Phone / bid inputs
+Telemetry Application Insights 
+JS SDK, MS Clarity
+UX & error telemetry
+Deployment telemetry embedded in the bundle records sourceBranch "refs/heads/release" and a 
+40-hex-character sourceVersion, exposing the CI branch and commit hash of the running release - 
+standard transparency for a CDN-served client, but a useful fingerprint for build archaeology.
+5. Environment Configuration Registry
+The bundle ships a single production environment object, extracted verbatim during static 
+analysis. It defines both API gateways, the tracking identifiers, the Salesforce chat wiring,  
+and session policy. The platform operates  a  dual-root API strategy: the primary  Exos  
+gateway (ui.exostechnology.com) and a same-domain mirror described by the internal 
+shorthand "HAM" ( apiRootHAMProd on www.servicelinkauction.com/api/), with a  
+staging equivalent on uistage-s3.servicelinkauction.com. A URL-builder helper in  
+
+=== PAGE 9 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+6
+the code switches document-streaming URLs to the HAM root in stage and production.  
+Environment names observed for the blog subdomain confirm a five-stage pipeline: dev2,  
+uat2 (QA), perf, stage, and production.
+Table 3: Production environment configuration (extracted verbatim)
+Configuration Key Production Value
+production true
+apiRoot https://ui.exostechnology.com/api/
+apiVersion /v1/
+apiRootHAMProd https://www.servicelinkauction.com/api/
+apiRootHAMStage https://uistage-s3.servicelinkauction.com/api/
+sessionWarningInMinutes 29 (session-timeout warning threshold)
+instrumentationKey bbeac077-db2f-4ee6-ae2a-d954e56b3781 (App 
+Insights)
+GTM_ID / GA4_MEASUREMENT_ID GTM-53F5CP / B7SZ157EL8 (gtag prefix G-)
+agmCoreApiKey AIzaSyAv4MApaj7BvaFRIRkpVikcWXpyHe8-EGY
+auctionsChatId 00D3k000000tR3f (Salesforce org ID)
+auctionsChatScrt https://servicelinkauction.my.salesforce-scrt.com
+auctionsChatURL https://servicelinkauction.my.site.com/ESWSLA...
+applyAcl true (server-side ACL enforced)
+sourceBranch / sourceVersion refs/heads/release / 0592aef...aceb65
+The environment  object  also  embeds  Google  Tag  Manager  server-side  authentication  
+parameters (gtm_auth=dXceMs8-sF5w4wPF_H4d8Q, environment env-13). Fetching the 
+public GTM  container revealed the full measurement estate: five GA4  properties ( G-
+B7SZ157EL8,  G-39BQ6MXTWS,  G-HF55YQVD7S,  G-HNMR8Q9VTS,  G-T1W0147X1E),  an  
+AdWords  conversion  account  ( AW-1060621771),  and  two  legacy  Universal  Analytics  
+trackers  ( UA-2965872-1/-4),  indicating  long-running  campaign  measurement  
+consolidated in a single container.
+6. Backend Microservice Architecture
+All data access is funneled through a generic client wrapper ( getEndPoint(service, 
+endpoint, options) and verb-specific siblings) that concatenates the environment's API 
+root, a service prefix, the version segment  /v1/, and a controller path. Thirteen REST  
+microservices plus a dedicated SignalR hub service were extracted from the bundle; every  
+
+=== PAGE 10 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+7
+service name below was verified against live endpoint behavior. The naming convention  
+(lowercase service prefix + PascalCase controller) mirrors ASP.NET Core controller routing, 
+and the SignalR client references Microsoft's official @microsoft/signalr JavaScript SDK,  
+confirming  the  .NET  backend  stack.  The  salesforcedatasyncsvc and  
+salesforcezillowexportsvc services  are  the  integration  seams  through  which  
+Salesforce record changes propagate to the search layer and syndication feeds (the latter  
+redirects anonymous callers to a gateway login, consistent with a protected feed-generator 
+role).
+Table 4: Microservice registry (14 services)
+Service Prefix Domain Responsibility Representative Controllers
+listingsvc Property listings, search, media, 
+server clock
+Listings, listings, CurrentDTTM
+auctionrunsvc Auction events (runs), calendar AuctionRuns, auctionruns
+biddingsvc Bids, offers, bidder funds, 
+auctioneer ops
+Biddings, Offers, Funds, 
+BidderProfiles, AuctioneerSales
+offersvc Offer lifecycle incl. MAB quick 
+bids
+Offers, Offers/mab
+auctionusersvc Identity, profiles, MFA, 
+documents, e-sign
+AuctionUsers, 
+AuctionUserAuthentication, 
+AuctionUserProfiles, 
+Documents/HelloSign
+auctionrunregistration
+svc
+Auction event registration AuctionRunRegistrations
+savedsearchsvc Saved searches (alerts) SavedSearches
+userfavoritessvc Favorites / bookmarks UserFavorites, userfavorites
+usernotificationsvc Notification templates & delivery NotificationTemplates
+auctiongatewaysvc Aggregation gateway: content, 
+banners, schools, walk scores, 
+licensing
+Contents, BannerConfigurations, 
+GreatSchools, WalkScores, 
+LicensingDisclosures, 
+AuctionData
+usersvc User profile utilities profile, password
+salesforcedatasyncsvc Salesforce record sync (listing 
+changes)
+SalesForceData/listingchanges
+salesforcezillowexport
+svc
+Zillow/Trulia listing syndication 
+feed
+SalesForceZillowExport
+signalrsvc (hub) Real-time push: bids & auction 
+control
+AuctionNotificationsHub
+
+=== PAGE 11 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+8
+The backend data plane returns a consistent envelope: successful collections wrap records 
+as  {searchResultCount, currentDTTM, model: "list", continuationToken,  
+data[]} (a Cosmos DB-style continuation-token paging model with server clock embedded 
+in every response), while errors return a structured envelope {model: "error", type, 
+timestamp, trackingId, message} with a correlation ID. Every response observed  
+during  probing  honored  this  contract  exactly,  which  materially  simplified  endpoint  
+verification.
+7. Public API Surface and Endpoint Registry
+7.1 Anonymous Data Plane (Verified Live)
+The  listing  discovery  plane  is  fully  anonymous.  The  search  endpoint  GET 
+/api/listingsvc/v1/listings?{filters} returns  the  entire  active  catalog  
+(searchResultCount: 5,900 at analysis time) with complete listing records, including pricing 
+terms, auction windows, photographs, document links, and salesperson license text. A  
+single listing resolves through the same endpoint using ?websiteUrl= with the full page  
+URL - exactly the algorithm the property details page itself uses (the SPA executes  search("?
+websiteUrl=" + location.href) on route activation). The auction calendar, banner  
+configuration, state licensing disclosures, and the third-party enrichment endpoints (walk  
+scores, school ratings) are likewise anonymous. Both gateways (Exos and same-domain  
+HAM root) serve identical data.
+Table 5: Verified anonymous endpoints (HTTP 200, live data)
+Endpoint (GET) Verified Result
+listingsvc/v1/listings?
+limit=N{&filters}
+5,900 listings; full record; continuationToken 
+paging
+listingsvc/v1/listings?
+websiteUrl={full PDP URL}
+Single-property resolution (target property 
+fetched)
+listingsvc/v1/Listings/{listingId} Direct record fetch by listing ID
+listingsvc/v1/CurrentDTTM Server UTC clock (auction countdown sync source)
+listingsvc/v1/listings?
+auctionId={id}
+All listings in one auction event
+auctionrunsvc/v1/auctionruns?
+limit=N
+26 auction events with per-program listing counts
+auctiongatewaysvc/v1/WalkScores?
+Lat=&Lon=
+Walk/bike/transit scores (Walk Score partner API)
+
+=== PAGE 12 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+9
+Endpoint (GET) Verified Result
+auctiongatewaysvc/v1/GreatSchools?
+Lat=&Lon=
+Nearby schools with GreatSchools ratings
+auctiongatewaysvc/v1/
+BannerConfigurations
+Banner campaigns with route-targeting map
+auctiongatewaysvc/v1/
+LicensingDisclosures
+52-state broker/auctioneer license registry
+/auction-photos/*.jpg, /auction-
+documents/*.pdf
+Public blob media (no auth; ETag+metadata)
+7.2 Authenticated Plane (401 Boundary)
+User-scoped  services  correctly  reject  anonymous  access  with  the  structured  
+authenticationError envelope. The 401 boundary is clean and consistent: everything  
+on the listing-discovery side is public by design (it is the marketing catalog), while anything 
+that  touches  an  account  -  offers,  saved  searches,  favorites,  registrations,  notification 
+templates, the content gateway, and state-restriction compliance data - requires a bearer  
+token. Bid submission and bid-history retrieval require authentication as well, which is the 
+correct posture for financial actions. The Zillow export service responds with a 301 to the  
+gateway login, marking it as a protected internal feed generator rather than a public  
+resource.
+Table 6: Authenticated endpoints (verified 401 / redirect)
+Endpoint Boundary Behavior
+offersvc/v1/Offers (+ /mab) 401 authenticationError envelope
+savedsearchsvc/v1/SavedSearches 401 authenticationError envelope
+userfavoritessvc/v1/userfavorites 401 authenticationError envelope
+auctionrunregistrationsvc/v1/
+auctionrunregistrations
+401 authenticationError envelope
+usernotificationsvc/v1/
+NotificationTemplates
+401 authenticationError envelope
+auctiongatewaysvc/v1/contents 401 authenticationError envelope
+auctiongatewaysvc/v1/AuctionData/
+staterestrictionstatuses
+401 authenticationError envelope
+auctionusersvc/v1/* (profiles, 
+MFA, documents)
+401 for all account-scoped calls
+salesforcezillowexportsvc/v1/
+SalesForceZillowExport
+301 to gateway /login
+
+=== PAGE 13 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+10
+7.3 Search Filter DSL
+Search requests are flat key-value query strings built by flattenObjectToQueryString 
+and  mirrored  into  the  browser  URL  for  shareable  search  states.  The  complete  filter  
+vocabulary was extracted from the criteria model and the constants registry: location  
+(state, city, county, postalCode), property facts (propertyType, beds, baths, 
+yearBuilt, InteriorSquareFeetMin/Max, LotSizeMin/Max, occupancyStatus), 
+program (auctionProgram, listingProgramWebsite, showOnly, auctionPeriod, 
+bidType),  auction  timing  ( AuctionStartDate, AuctionEndDate ),  direct  lookups  
+(websiteUrl, globalPropertyId, auctionId, auctionNumber ),  special  modes  
+(fdicAuctionsSearch=true for  FDIC-disposition  inventory  and  an  auction-calendar  
+mode  keyed  by  auctionNumber),  and  pagination  ( limit, pageNum, pageSize,  
+ContinuationToken). Sorts are driven by precomputed composite keys returned with  
+each record: endingSoonest / endingLatest / recentlyListed  (with dashboard  
+variants), each encoded as a rank-prefixed string such as "1_2026-09-16 11:00:00_3" - 
+a faceted sort-key pattern typical of Azure search/cosmos indexing.
+Every search result embeds currentDTTM (server clock) alongside the data, letting the SPA 
+recompute countdown offsets on each page render without an extra round-trip to CurrentDTTM.
+8. Listing Data Model and Business Taxonomy
+8.1 Record Schema
+Each  listing  record  spans  roughly  fifty  top-level  fields  organized  into  nested  groups.  
+propertyInfo carries the physical asset (address, coordinates, beds/baths, interior and  
+lot square footage, year built, occupancy, asset number, and both current and legacy  
+website URLs).  auctionRunInfo carries the commercial  envelope: the auction event  
+identity  (Salesforce  auctionId,  the  operational  awxId and  human  auctionNumber),  
+program and method, start/end windows, starting bid, earnest-money percentage and  
+minimum,  buyer's  premium,  co-op  commission,  and  long-text  transaction  terms.  
+customDetail is  the  raw  Salesforce  custom-field  projection  -  bid  increment  tiers  
+(increment_1__c through  increment_3__c),  funds  type  and  percentage,  proxy-bid  
+toggle, and bid-count - which proves the system of record. listingStatus is a server-
+computed  lifecycle  snapshot  (detailed  in  9.2).  Media  arrays  ( images,  documents) 
+reference the public blob containers.
+
+=== PAGE 14 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+11
+8.2 Program Taxonomy
+The slug suffix visible in every property URL encodes the sales program. The mapping,  
+reconstructed from constants, search results, and the help center, is:  trd = Traditional  
+bank-owned REO online auctions (website label "Bank-Owned", with BULK and Total Debt  
+sub-modes); cwt = CWCOT (HUD Claim Without Concession on Title, website label "Newly  
+Foreclosed"); tps = Third-Party Sale foreclosure auctions (website label "Foreclosure Sale"), 
+conducted on-site at courthouses with live simulcast; plus Short Sale and buyer-exclusive 
+programs.  Each  program  carries  its  own  license  blocks,  buyer-premium  rules,  and  
+inspection-access policies, all of which flow through the same record schema.
+8.3 Salesforce as System of Record
+Three independent fingerprints converge on Salesforce. First, identifier formats: listing IDs 
+such  as  a1cDo0000011DTCIA2 and  property  IDs  such  as  a1lVO000004YfI5YAK are  
+Salesforce record IDs (the a1c/a1l prefixes denote custom objects; the VO/Do segments  
+encode pod and org). Second, the customDetail group retains raw API names with the __c 
+custom-field suffix and a systemModStamp field. Third, dedicated services sync Salesforce 
+data  changes  ( salesforcedatasyncsvc)  and  export  syndication  feeds  
+(salesforcezillowexportsvc). The microservice layer therefore operates as a search-
+and-transaction  mid-tier  over  Salesforce,  while  the  public  search  index  serves  
+denormalized  snapshots  (each  record  includes  lastUpdated and  timestamp fields  
+evidencing scheduled refresh, with listing snapshots flagged via listingSnapshot).
+9. Real-Time Bidding and Auction Algorithms
+9.1 SignalR Transport Layer
+Real-time  messaging  rides  a  dedicated  SignalR  service  at  
+https://svclnk.exostechnology.com/signalrsvc/v1/AuctionNotificationsH
+ub (the URL builder swaps the ui. host prefix for svclnk. to route the WebSocket domain).  
+The hub authenticates with a JWT access-token factory, falling back to the standard SignalR 
+access_token query parameter for transports that cannot set headers. Clients subscribe  
+to  three  server-push  events  -  BroadcastMessage,  SendMessage,  and  
+SendAuctionGenericNotification -  with  TPS  broadcast  payloads  typed  as  
+TPS_AUCTION_BROADCAST_TYPE_START_BID, ..._BID_STATUS, ..._AUCTION_STATUS
+, ..._AUCTION_COMPLETE, and ..._AUCTION_CANCELLATION. This is the live-auctioneer 
+control channel: an operator console drives on-site TPS sales while web bidders receive bid-
+state  pushes  in  real  time  -  a  simulcast  architecture  also  visible  in  the  
+
+=== PAGE 15 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+12
+AuctioneerSales/bidauctions?BiddingId={awxId}
+&IncludePausedWithStart=true endpoint  used  to  fetch  auction  lots  with  their  
+pause/start state.
+9.2 Auction Lifecycle State Machine
+Each record's listingStatus object is a server-computed lifecycle snapshot with boolean 
+gates the UI consumes directly:  isCountdownToPreAuction / isInPreAuction /  
+isCountdownToAuction  /  isInAuction  /  isCountdownToPostAuction  /  
+isInPostAuction  /  isAuctionClosed  /  isComingSoon,  plus  feature  gates  
+showRegisterToBid,  showSubmitOffer,  showEstimatedOpeningBid,  
+showLastAndHighestBid, showQuickBid and a UI status-text set for search results,  
+PDP, and dashboard contexts. The eBid console adds auction-level control states (Start / 
+Pause / Resume / Stop / End / Complete), confirming that auction runs - not just  
+listings  -  are  remote-controllable.  Outbid  windows  are  tracked  via  
+outbidPeriodExpirationDateWebsite, and an extended-bidding period is exposed to  
+users (help center documents the anti-sniping rule), with the PDP subscribing to PDP  
+refresh triggers through localStorage signaling between components.
+9.3 Bid Pricing Rules
+Bid increments are per-listing and tiered: the quick-increment UI offers +$100, +$500, and +
+$1,000 buttons sourced from  increment_1__c/2/3 (the values observed on both the  
+target property and sampled listings). Proxy (maximum) bidding is supported: bidders  
+submit a ceiling and the system bids on their behalf only when outbid, notifying them by  
+email when the ceiling is reached; a proxy ceiling cannot be lowered (server rejection code 
+CANTLOWERPROXYBID), and low bids are rejected with BIDAMOUNTTOOLOW. Sellers reserve 
+the right to bid up to the reserve price themselves (disclosed in transaction terms), and  
+reserve-met state is displayed on the PDP. The MAB (Minimum Acceptable Bid) windows -  
+slaMABStartDateTime through  slaMABEndDateTime - gate the Quick Bid feature on  
+qualifying listings.
+9.4 Countdown Clock Synchronization
+Auction countdowns defend against client clock skew with a server-sync offset algorithm  
+extracted  from  the  countdown  service:  on  PDP  load  the  service  fetches  server  time  
+(CurrentDTTM or  the  embedded  currentDTTM of  the  search  response),  computes  
+serverClockOffset = serverTime - clientNow , persists it to localStorage under  
+serverClockOffset,  then  ticks  every  100  milliseconds  applying  displayNow =  
+
+=== PAGE 16 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+13
+clientNow + offset . The same session machinery maintains a 29-minute inactivity  
+warning, keep-alive signaling, an activity tracker, and forced-logout notifications, matching 
+the documented 30-minute session window.
+9.5 Funds and Payments Flow
+Registration deposits are configurable per auction as a funds type of Percentage or flat  
+amount  (the  target  property's  program  uses  funds_type__c: Percentage  with  
+funds_percentage__c: 0.1 for a 10% registration deposit on bid-authorizing funds).  
+Funds are managed as deposit/allocation/disbursement records with statuses (Deposit / 
+Allocation / Hold-Issue / Posted ), refund transactions are submitted through  
+Funds/refundtransactions,  wire  instructions  are  fetched  per  bidder  profile  
+(AuctionData/wireinstructions?bidderProfileId=),  and  users  upload  proof-of-
+funds, wire receipts, and escrow receipts as document types. Unverified bidder profiles are 
+blocked from fund allocation with an explicit "Bidder profile not verified" error 
+path.
+10. Third-Party Integration Matrix
+The application bundle hard-wires integrations with twelve external service families. The  
+richest cluster is the Salesforce ecosystem: the record system already described, a live  
+agent chat deployed on Salesforce Experience Cloud (embedded agent SLA_Agent_Chat, 
+org  00D3k000000tR3f, real-time chat transport via  salesforce-scrt.com), and both  
+the public blog and the help center running on Salesforce Experience Cloud Sites (the blog  
+responds  with  server: sfdcedge  and  standard  LSKey-c$CookieConsentPolicy 
+cookies;  help  articles  use  the  Intercom-style  /en/articles/  URL  pattern  on  the  help  
+subdomain).  E-signature  is  Dropbox-owned  HelloSign,  opened  through  the  official  
+embedded SDK.
+Table 7: Third-party integration registry
+Domain Integration Evidence Function
+Maps & geocoding Google Maps JS API key 
+AIzaSyAv4...-EGY; 
+places lib
+Search autocomplete, PDP maps, 
+clustering
+Neighborhood data WalkScores gateway 
+(utm_source=exostechno
+logy.com)
+Walk/bike/transit scores on PDP
+School data GreatSchools gateway 
+proxy
+School ratings on PDP
+
+=== PAGE 17 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+14
+Domain Integration Evidence Function
+E-signature hellosign-embedded 
+SDK; POST 
+Documents/HelloSign
+Contracts, amendments, vesting 
+docs
+Record system Salesforce record IDs 
++ __c custom fields
+Listings, auctions, offers
+Live chat Salesforce SCRT + 
+my.site.com agent
+Customer support chat
+Content & help Salesforce Experience 
+Cloud sites
+Blog CMS and help center
+Syndication salesforcezillowexport
+svc
+Zillow/Trulia listing feed export
+Foreclosure data evoinfo.mccallaraymer.
+com reference
+Default-servicing data source 
+(McCalla Raymer)
+Telemetry App Insights ikey + MS 
+Clarity 0.7.8
+Errors, funnels, session replay
+SEO rendering Prerender.io (x-
+prerender-* headers)
+Crawler HTML rendering
+Mobile apps iOS id1225274125; 
+Android 
+com.servicink.auction
+Native app distribution
+Analytics flows through GTM container GTM-53F5CP with events pushed from application 
+code: SignIn (with userID), SubmittedBid (with listing/auction/offer context and money 
+fields  TPP,  BP,  EMD),  RegisteredForAuction,  RegisteredForeBidAuction, 
+SubmittedeBidProfile,  UserInfo (buyer type and login state), and  finalPage for  
+funnel exits. Telemetry masking is applied client-side for sensitive keys (password, SSN,  
+tokens, nonce), and an Application Insights session cookie is forwarded as an X-AI-Session 
+request header to correlate server logs with client sessions.
+11. SEO and Content Delivery Strategy
+11.1 Crawler Rendering Pipeline
+The platform solves the SPA-indexability problem with Prerender.io middleware. Requests 
+carrying crawler user agents receive a fully rendered page instead of the 1 KB shell - for the 
+target  property,  a  468,819-byte  document  containing  the  complete  listing  view.  The  
+responses are unambiguous: headers  x-prerender-requestid and  x-prerender-user-
+id, a rate-limit budget of 100 requests per window ( x-ratelimit-limit: 100), in-
+document  meta  markers  x-prerender-render-id/render-at,  and  cache  freshness 
+
+=== PAGE 18 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+15
+visible via render timestamps (the fetched copy was rendered hours before request time). 
+The prerendered page includes a fully materialized title (749 Portola Ave, Glendale, CA 
+91206 | ServiceLink Auction) and a generated meta description ("This Foreclosure 
+Sale Single Family Home property is located at 749 Portola Ave..." ). 
+Notably absent are Open Graph, Twitter Card, and JSON-LD structured data - a genuine SEO 
+gap on an otherwise strong technical foundation.
+11.2 Sitemap Architecture and URL Design
+Two  sitemaps  are  declared  in  robots.txt.  The  first  (327  URLs)  covers  the  homepage,  
+marketing landing routes, and every help-center article; the second is a pure property  
+catalog of 16,358 property-detail URLs refreshed daily. Property slugs are generated from 
+the  address  ( 749-portola-ave-glendale-91206-ca-united-states)  plus  the  
+program code suffix, with the pre-program legacy URL preserved in oldWebsiteUrl for 
+redirection. Marketing SEO routes map programs to dedicated directories: /bank-owned/, 
+/foreclosures/,  /newly-foreclosed/,  /short-sale/,  and  /hud-home,  each  
+internally rewriting to the same search plane with a program filter. A Facebook/Meta ads  
+domain-verification  route  ( 5c1wk59cl5z9wgd34uyr73ca2bukf5.html)  exists  in  the  
+router although the backing blob is no longer present, and email unsubscribes route  
+through /fcl-unsubscribe for the foreclosure listing newsletter.
+12. Target Property Case Study: 749 Portola Ave, Glendale
+The designated entry-point property demonstrates the full data pipeline end to end. The  
+page  resolves  anonymously  through  listings?websiteUrl=... to  record  
+a1cVO00000B7fZtYAJ (property  a1lVO000004YfI5YAK,  global  property  
+bd666b008f57). It is a TPS Foreclosure Sale single-family home: 4 bedrooms, 3 full baths, 
+2,283 interior square feet on a 6,492 sq ft lot, built 1935, occupied, cash-only, no financing, 
+no interior access. The foreclosure sale is scheduled for September 16, 2026 at 11:00 AM at 
+the courtyard of 400 Civic Center Plaza, Pomona, CA - an on-site courthouse sale with online 
+simulcast - under auction event  AuctionTPS_CA ("California Foreclosure Homes"). The  
+record  carries  full  default-servicing  context:  foreclosure  attorney  Clear  Recon  Corp  
+(Aldridge & Pitte LLP, San Diego), attorney reference 143076-CA, possession date, and sale 
+status flags ( clearedForSale: No, hmCryingTheSale: Yes - the auctioneer term for  
+conducting the public sale).
+Commercial terms attach through the auction-run envelope: reserve auction subject to  
+seller confirmation, as-is sale, no inspection or financing contingencies, earnest money  
+
+=== PAGE 19 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+16
+terms from the program, and tiered bid increments of $100/$500/$1,000. Five property  
+photographs are served from the public /auction-photos/ blob container, and a 1.38 MB 
+PDF  property  report  is  publicly  downloadable  from  
+/auction-documents/749portolaaveglendaleca91206.pdf.  The  bid-history  field  
+shows ten bids recorded against the sale with proxy bidding enabled, and the countdown  
+targets the on-site sale time rather than an online closing window. This single record thus  
+exercises the search API, the record schema, the media pipeline, the PDF report pipeline,  
+the licensing disclosures, and the TPS simulcast program simultaneously - a complete  
+vertical slice of the platform.
+13. Security Posture Observations
+The  public  surface  is  well-disciplined.  Authentication  is  consistently  enforced  on  the  
+account-scoped API plane (clean 401 envelopes with tracking IDs); no protected data was  
+observed leaking through the anonymous endpoints - the anonymous data is the marketing 
+catalog itself, including bid counts and current-bid polling, which the platform deliberately 
+publicizes to drive auction participation. Client-embedded credentials are all public-by-
+design browser keys (Google Maps, GTM, App Insights instrumentation key), which cannot 
+authenticate anything. Transport security is strict: HSTS with includeSubDomains on the API 
+hosts, Trusted Types on the SPA, and OAuth-style bearer handling with refresh machinery  
+and telemetry masking of credential-shaped strings.
+Two observations merit engineering follow-up (both are hygiene, not vulnerabilities). First, 
+the CSP nonce pipeline defect: the shell emits the literal placeholder CSP_NONCE as both 
+the script nonce attribute and the global value, indicating the deploy step that should mint 
+a per-response nonce is not active on the static host - a consequence of static blob hosting 
+that a small edge function could remedy. Second, the SPA fallback returns HTTP 200 for  
+every  arbitrary  path  (including  the  removed  Meta  verification  file),  delegating  404  
+semantics entirely to the client router; combined with prerender caching, stale URLs can  
+linger in indexes. The Prerender.io tier itself enforces only a 100-request budget, which is a 
+crawler-fairness limit rather than an application control.
+All probing in this engagement stayed within anonymous GET semantics. No authentication, rate 
+limit, or access control was circumvented, and no user account data was requested or collected.
+14. Conclusions and Reconstruction Assessment
+The platform decomposes cleanly into five layers, each fully reconstructed from public  
+evidence: an Angular 21.2.17 single-page client inlined into one 5.5 MB bundle; an Azure  
+
+=== PAGE 20 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+17
+static delivery tier with blob-backed media and documents; a Prerender.io crawler tier for  
+SEO; a thirteen-service ASP.NET Core REST mid-tier with a SignalR real-time channel; and  
+Salesforce as the transactional system of record with syndication feeds outward to Zillow  
+and marketing measurement inward from GA4/GTM/Clarity. The business logic - program  
+taxonomy, auction lifecycle state machine, tiered increments, proxy and quick bids, MAB  
+windows, funds flows, e-signature workflows, and MFA-gated identity - is entirely resident 
+in the client bundle and the public API responses, which is why a patient public-surface  
+analysis can reconstruct it completely.
+Three conclusions follow for anyone assessing this platform. First, its architecture is current 
+and competently operated: a recent Angular major version, stripped source maps, a clean  
+401 boundary, and structured error envelopes with correlation IDs are markers of a mature 
+engineering  organization.  Second,  its  data  exposure  posture  is  deliberate:  the  entire  
+marketing catalog, including live bid telemetry, is designed to be anonymously consumable, 
+and the engineering boundary is drawn precisely at account scope. Third, the reverse-
+engineering surface is unusually complete because of the single-bundle deployment choice 
+-  there  are  no  separate  lazy  chunks  to  chase,  and  the  bundle  retains  environment  
+configuration, constants, and service wiring in analyzable form. Nothing observed in this  
+analysis required anything beyond a browser, patience, and the robots.txt-permitted public 
+surface.
+Appendix A. Extracted Constants Registry (Selection)
+The bundle defines a string-enum registry exceeding 240 entries. The selection below lists  
+the  most  analytically  significant  groups  verbatim,  as  evidence  of  the  business  rules  
+described in sections 8 and 9. Bid rejection codes, eBid console states, offer lifecycle names, 
+funds statuses, onboarding codes, and MFA/OTP result codes together form the complete  
+server-client contract vocabulary.
+Table 8: Selected constant groups (verbatim from bundle)
+Group Constants
+Bid rejection codes BIDAMOUNTTOOLOW; CANTLOWERPROXYBID; 
+REJECTCOMMONPASSWORD
+Bid types Direct; Proxy; LiveDirect (BID_TYPE_*)
+eBid console states Start; Pause; Resume; Stop; End; Complete 
+(EBID_AUCTION_STATUS_*)
+Offer types PreAuction; InAuction (EBID_OFFER_TYPE_*)
+Offer deactivation RECALLBID; OPENBID (price change)
+
+=== PAGE 21 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+18
+Group Constants
+Funds types/status Deposit; Allocation; Hold/Issue; Posted; 
+disbursement reason User Request
+Registration states Pending; Registered; BIDDER_PROFILE_ACTIVE; 
+funds error Bidder profile not verified
+MFA / OTP results OTPEXPIRED; OTPNOTFOUND; 
+OTPNOTMATACHED; OTPVERIFIED; MFA Token is 
+expired
+Onboarding codes LOGINSUCCESS; LOGINFAIL; USERLOCKEDOUT; 
+USERUNVERIFIED; RESETPASSWORDREQUIRED; 
+RETURNTOPREVIOUSPAGE; ROUTETOHOMEPAGE
+Pending-sale steps Contracting; Submission; Closing 
+(PENDING_SALE_STEP_*)
+Pending-sale subjects Purchase and Sale Agreement Contract; 
+Amendment; Extension; Cancellation; Vesting
+Document types Proof of Funds; Wire receipt; Escrow Company 
+receipt
+Program keys TPS (foreclosure); CWCOT (newly foreclosed); 
+Short Sale; Traditional; BULK; Total Debt
+LQ reserve fields LQTHRESHOLD; LQRSV; LQSAAR (seller-adjusted 
+reserve) with notes fields
+Storage keys searchPayload; serverClockOffset; SLUser; 
+auctionCalendarData; fundsChanged; 
+offerRecalled; DashboardRedirect; isAutoRefresh
+SignalR broadcast types TPS_AUCTION_BROADCAST_TYPE_START_BID / 
+_BID_STATUS / _AUCTION_STATUS / 
+_AUCTION_COMPLETE / 
+_AUCTION_CANCELLATION; SendBidHistory; 
+SendMessage; SendAuctionGenericNotification
+Appendix B. Angular Route Table
+The complete client route registry (48 routes) was extracted from the router configuration. 
+Public marketing routes (about, contact-us, financing, how-to-bid, hud-home, licensing,  
+privacy, terms, ca-privacy), program landing directories (bank-owned, foreclosures, newly-
+foreclosed, short-sale, properties, listings-in-auction, upcoming-auctions, auctionended,  
+closedlistings),  the  property  details  module  (lazy-loaded  ListingModule),  the  identity  
+cluster  (sign-in,  sign-up,  registration,  forgot-password,  change-password,  resend-
+verification, email, session-expired), the account cluster (dashboard, my-auctions, my-
+
+=== PAGE 22 ===
+ServiceLink Auction — Platform Reverse-Engineering Analysis
+19
+funds, my-funds/wiring-instruction, my-documents, my-profile, personal-info, edit-profile, 
+create-profile,  delete-profile,  saved-searches, bookmarked,  pendingoffers, alert-center,  
+support-cases, change-password), administrative routes (admin, admin-utils), and utility  
+routes (fcl-unsubscribe, the Meta verification file path, and the wildcard 404 handler). The 
+route data model tags pages for analytics ( data:{page:"Property Details"}), wiring 
+the analytics taxonomy to navigation.

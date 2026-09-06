@@ -19,26 +19,20 @@
 //   - source    = "landbank"
 //   - address   = "0 Ruby Ave, Cleveland, OH" (from card alt + city/state)
 //   - state     = 2-letter (from /data row, also confirmed in card)
-//   - openingBid= parsed "$X" price (0 if "Make offer" -> filtered out)
+//   - openingBid= parsed "$X" price (null when the source says "Make offer")
 //   - photo     = card <img src> (satellite or real photo from source bank)
 //   - sourceUrl = https://www.landbanksearch.com/p/{uuid}
-//   - propType  = "Single Family" if Structure badge, else "Vacant Lot"
-//   - occupancy = "Vacant" (land bank default)
+//   - propType  = mapped only when the source publishes a type badge
 //
 // Safety:
 //   - AbortController timeout = 30s per fetch (modeled on treasury.js)
-//   - 1s polite delay between land-bank page fetches
+//   - randomized 250-750ms polite delay between land-bank page fetches
 //   - 5 land banks x ~12 cards = ~60 listings per run (well under
 //     the 180s build-data.js timeout)
 //   - maxListingsPerBank cap = 100 (defensive)
 //
-// Coordinates:
-//   LandBankSearch listing cards do not contain per-property lat/lng. We use
-//   the land bank's city centroid (from /explore?lng=&lat= URL) for every
-//   listing from that bank, then apply a small pseudorandom offset (±0.05°,
-//   ~5.5 km) per listing so map markers don't all stack on the same point.
-//   Geocoding individual cards would require the Google Maps API or similar;
-//   this jitter is the best approximation without that dependency.
+// Coordinates are left null because listing cards do not publish parcel-level
+// coordinates. A city centroid must never masquerade as an observed geocode.
 
 const BaseScraper = require('./base');
 
@@ -46,7 +40,6 @@ class LandBankSearchScraper extends BaseScraper {
   constructor() {
     super({ name: 'LandBankSearchScraper', sourceKey: 'landbank' });
     this.baseUrl = 'https://www.landbanksearch.com';
-    this.delayMs = 1000;
     this.maxLandBanks = 5;
     this.maxListingsPerBank = 100;
   }
@@ -80,7 +73,7 @@ class LandBankSearchScraper extends BaseScraper {
             `[${this.name}] Failed ${bank.slug} (${bank.state}): ${err.message}`
           );
         }
-        await this.sleep(this.delayMs);
+        await this.crawlJitter();
       }
 
       console.log(
@@ -94,22 +87,13 @@ class LandBankSearchScraper extends BaseScraper {
   }
 
   async fetchText(url, timeoutMs = 30000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent':
-            'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
-          Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: {
+        'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+        Accept: 'text/html,application/xhtml+xml'
+      }
+    });
   }
 
   async fetchLandBanks() {
@@ -138,16 +122,6 @@ class LandBankSearchScraper extends BaseScraper {
   async fetchBankListings(bank) {
     const html = await this.fetchText(`${this.baseUrl}/land-banks/${bank.slug}`);
 
-    let defaultLat = 39.5;
-    let defaultLng = -83.0;
-    const mapMatch = html.match(
-      /href="\/explore\?lng=([-\d.]+)&amp;lat=([-\d.]+)/
-    );
-    if (mapMatch) {
-      defaultLng = parseFloat(mapMatch[1]);
-      defaultLat = parseFloat(mapMatch[2]);
-    }
-
     const uuidRegex = /href="\/p\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"/g;
     const seen = new Set();
     const uuids = [];
@@ -166,13 +140,13 @@ class LandBankSearchScraper extends BaseScraper {
       const endIdx = nextIdx === -1 ? html.length : nextIdx;
       const cardHtml = html.substring(startIdx, endIdx);
 
-      const listing = this.parseCardHtml(uuid, cardHtml, bank, defaultLat, defaultLng);
+      const listing = this.parseCardHtml(uuid, cardHtml, bank);
       if (listing) listings.push(listing);
     }
     return listings;
   }
 
-  parseCardHtml(uuid, cardHtml, bank, defaultLat, defaultLng) {
+  parseCardHtml(uuid, cardHtml, bank) {
     const altMatch = cardHtml.match(/alt="([^"]+)"/);
     if (!altMatch) return null;
     const street = altMatch[1].trim();
@@ -191,15 +165,15 @@ class LandBankSearchScraper extends BaseScraper {
     const priceMatch = cardHtml.match(
       /class="[^"]*font-display[^"]*"[^>]*>\s*([^<]*?)\s*<\/div>/
     );
-    let openingBid = 0;
+    let openingBid = null;
     if (priceMatch) {
       const pt = priceMatch[1].trim();
       if (pt.startsWith('$')) {
-        openingBid = parseInt(pt.replace(/[^\d]/g, ''), 10) || 0;
+        openingBid = parseInt(pt.replace(/[^\d]/g, ''), 10) || null;
       }
     }
 
-    let propType = 'Vacant Lot';
+    let propType = null;
     if (/>Structure<\/span>/.test(cardHtml)) {
       propType = 'Single Family';
     } else if (/>Vacant lot<\/span>/.test(cardHtml)) {
@@ -214,32 +188,23 @@ class LandBankSearchScraper extends BaseScraper {
       .replace(/&#x27;/g, "'");
 
     const address = `${street}, ${city}, ${state}`;
-    const county = bank.name.replace(/ Land Bank.*$/i, '').trim() || city;
-
-    // Apply a small pseudorandom jitter (±0.05°, ~5.5 km) so map markers
-    // from the same land bank don't all overlap on the city centroid.
-    // Seed derived from the UUID for reproducibility across runs.
-    const hash = uuid.replace(/-/g, '');
-    const seed1 = parseInt(hash.slice(0, 4), 16) || 0;
-    const seed2 = parseInt(hash.slice(4, 8), 16) || 0;
-    const jitterLat = ((seed1 % 1000) / 10000) - 0.05;   // -0.05 to +0.049
-    const jitterLng = ((seed2 % 1000) / 10000) - 0.05;
 
     return {
       id: `LB-${uuid}`,
       state,
-      county,
+      county: null,
       city,
-      zip: '00000',
+      zip: null,
       address,
-      lat: +(defaultLat + jitterLat).toFixed(6),
-      lng: +(defaultLng + jitterLng).toFixed(6),
+      lat: null,
+      lng: null,
       propType,
       openingBid,
-      occupancy: 'Vacant',
+      occupancy: null,
       sourceUrl: `${this.baseUrl}/p/${uuid}`,
       photo,
-      raw: `${address} | ${bank.name} | ${propType} | ${openingBid ? '$' + openingBid : 'Make offer'}`,
+      raw: cardHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+      provenance: { origin: 'live', observed: true, publisher: bank.name, recordId: uuid },
     };
   }
 
@@ -248,12 +213,8 @@ class LandBankSearchScraper extends BaseScraper {
     if (!/^LB-/.test(item.id || '')) return false;
     if (!/^[A-Z]{2}$/.test(item.state || '')) return false;
     if ((item.address || '').length < 8) return false;
-    if (!(item.openingBid > 0)) return false;
+    if (item.openingBid != null && !(Number(item.openingBid) > 0)) return false;
     return true;
-  }
-
-  sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
   }
 }
 

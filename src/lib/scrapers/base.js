@@ -1,84 +1,30 @@
-const { ScraperCircuitBreaker } = require('./circuit-breaker');
-const { getRedemptionRule, detectSeniorLienSurvival, computeCashToClose } = require('../ai/legal-rules');
-
-const STATE_CENTROIDS = {
-  AK: { lat: 64.2008, lng: -149.4937 },
-  AL: { lat: 32.3182, lng: -86.9023 },
-  AR: { lat: 35.2010, lng: -91.8318 },
-  AZ: { lat: 33.4484, lng: -112.0740 },
-  CA: { lat: 36.7783, lng: -119.4179 },
-  CO: { lat: 39.5501, lng: -105.7821 },
-  CT: { lat: 41.6032, lng: -73.0877 },
-  DC: { lat: 38.9072, lng: -77.0369 },
-  DE: { lat: 38.9108, lng: -75.5277 },
-  FL: { lat: 27.9944, lng: -81.7603 },
-  GA: { lat: 32.1656, lng: -82.9001 },
-  HI: { lat: 19.8968, lng: -155.5828 },
-  IA: { lat: 41.8780, lng: -93.0977 },
-  ID: { lat: 44.0682, lng: -114.7420 },
-  IL: { lat: 40.0417, lng: -89.1965 },
-  IN: { lat: 39.7684, lng: -86.1581 },
-  KS: { lat: 38.5266, lng: -96.7265 },
-  KY: { lat: 37.8393, lng: -84.2700 },
-  LA: { lat: 30.9843, lng: -91.9623 },
-  MA: { lat: 42.4072, lng: -71.3824 },
-  MD: { lat: 39.0458, lng: -76.6413 },
-  ME: { lat: 45.2538, lng: -69.4455 },
-  MI: { lat: 44.3148, lng: -85.6024 },
-  MN: { lat: 46.7296, lng: -94.6859 },
-  MO: { lat: 38.5739, lng: -92.6038 },
-  MS: { lat: 32.3547, lng: -89.3985 },
-  MT: { lat: 46.8797, lng: -110.3626 },
-  NC: { lat: 35.7596, lng: -79.0193 },
-  ND: { lat: 47.5515, lng: -101.0020 },
-  NE: { lat: 41.4925, lng: -99.9018 },
-  NH: { lat: 43.1939, lng: -71.5724 },
-  NJ: { lat: 40.0583, lng: -74.4057 },
-  NM: { lat: 34.5199, lng: -105.8701 },
-  NV: { lat: 38.8026, lng: -116.4194 },
-  NY: { lat: 42.1657, lng: -74.9481 },
-  OH: { lat: 40.4173, lng: -82.9071 },
-  OK: { lat: 35.4676, lng: -97.5164 },
-  OR: { lat: 43.8041, lng: -120.5542 },
-  PA: { lat: 40.9699, lng: -77.7278 },
-  PR: { lat: 18.2208, lng: -66.5901 },
-  RI: { lat: 41.5801, lng: -71.4774 },
-  SC: { lat: 33.8361, lng: -81.1637 },
-  SD: { lat: 43.9695, lng: -99.9018 },
-  TN: { lat: 35.5175, lng: -86.5804 },
-  TX: { lat: 31.9686, lng: -99.9018 },
-  UT: { lat: 39.3210, lng: -111.0937 },
-  VA: { lat: 37.4316, lng: -78.6569 },
-  VT: { lat: 44.5588, lng: -72.5778 },
-  WA: { lat: 47.7511, lng: -120.7401 },
-  WI: { lat: 43.7844, lng: -88.7879 },
-  WV: { lat: 38.5976, lng: -80.4549 },
-  WY: { lat: 43.0759, lng: -107.2903 }
-};
-
-const COUNTY_CENTROIDS = {
-  'bergen-nj':   { lat: 40.9263, lng: -74.0770 },
-  'hudson-nj':   { lat: 40.7323, lng: -74.0755 },
-  'monmouth-nj': { lat: 40.2974, lng: -74.2499 },
-  'passaic-nj':  { lat: 41.0324, lng: -74.2995 },
-  'berks-pa':    { lat: 40.4147, lng: -75.9267 },
-  'adams-pa':    { lat: 39.8732, lng: -77.2185 },
-  'bedford-pa':  { lat: 40.0105, lng: -78.4917 },
-  'cuyahoga-oh': { lat: 41.4993, lng: -81.6944 },
-  'franklin-oh': { lat: 39.9612, lng: -82.9988 },
-  'genesee-mi':  { lat: 43.0234, lng: -83.6931 },
-  'wayne-mi':    { lat: 42.3314, lng: -83.0458 },
-  'st. louis-mo': { lat: 38.6270, lng: -90.1994 },
-  'cook-il':     { lat: 41.8781, lng: -87.6298 }
-};
-
+const { ScraperCircuitBreaker, ScraperResponseError } = require('./circuit-breaker');
+const {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  crawlJitter,
+  fetchJsonWithPolicy,
+  fetchTextWithPolicy,
+  normalizeRequestTimeout
+} = require('./http');
+const { standardizeListingRecord } = require('./normalization');
 class BaseScraper {
-  constructor({ name, sourceKey, timeoutMs = 15000, maxRetries = 3 } = {}) {
+  constructor({
+    name,
+    sourceKey,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+    maxRetries = 3,
+    fetchImpl = globalThis.fetch,
+    random = Math.random,
+    sleep
+  } = {}) {
     this.name = name;
     this.sourceKey = sourceKey;
-    this.timeoutMs = timeoutMs;
+    this.timeoutMs = normalizeRequestTimeout(timeoutMs);
     this.maxRetries = maxRetries;
     this.circuitBreaker = new ScraperCircuitBreaker();
+    this.fetchImpl = fetchImpl;
+    this.random = random;
+    this.sleepImpl = sleep;
   }
 
   async executeWithRetry(fn) {
@@ -93,136 +39,84 @@ class BaseScraper {
       } catch (err) {
         lastError = err;
         console.warn(`[${this.name}] Attempt ${attempt} failed: ${err.message}`);
+        if (err instanceof ScraperResponseError && err.haltScraper) {
+          throw err;
+        }
+        if (!err.circuitRecorded) {
+          this.circuitBreaker.trip(err.message || 'Scraper request failed');
+          err.circuitRecorded = true;
+        }
+        if (this.circuitBreaker.isOpen()) {
+          throw err;
+        }
         if (attempt < this.maxRetries) {
-          await new Promise(r => setTimeout(r, attempt * 1000));
+          await this.crawlJitter({ minMs: 250, maxMs: 750 });
         }
       }
     }
-    this.circuitBreaker.trip(lastError ? lastError.message : 'Max retries exhausted');
     throw lastError;
   }
 
-  standardizeListing(raw) {
-    const rawBid = Number(raw.openingBid);
-    const openingBid = Number.isFinite(rawBid) && rawBid > 0 ? rawBid : 50000;
-
-    let estLow = Number(raw.estLow);
-    let estHigh = Number(raw.estHigh);
-
-    if (!estLow || !estHigh || estLow <= 0 || estHigh <= estLow || !Number.isFinite(estLow) || !Number.isFinite(estHigh)) {
-      const seedStr = (raw.id || raw.address || 'seed') + (raw.city || '');
-      let hash = 0;
-      for (let i = 0; i < seedStr.length; i++) {
-        hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
-        hash |= 0;
-      }
-      const unit = Math.abs(hash % 1000) / 1000;
-
-      let minMult = 1.4;
-      let maxMult = 2.4;
-      if (this.sourceKey === 'bid4assets' || this.sourceKey === 'landbank') {
-        minMult = 1.8;
-        maxMult = 3.4;
-      } else if (this.sourceKey === 'civilview' || this.sourceKey === 'sheriff' || this.sourceKey === 'trustee') {
-        minMult = 1.5;
-        maxMult = 2.8;
-      }
-
-      const multMid = minMult + unit * (maxMult - minMult);
-      const estMid = Math.round(openingBid * multMid);
-      estLow = Math.round(estMid * 0.88);
-      estHigh = Math.round(estMid * 1.12);
-    }
-
-    const mid = (estLow + estHigh) / 2;
-    const ratio = mid > 0 ? (openingBid / mid) : 1;
-    const equity = Math.max(0, mid - openingBid);
-    const dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)));
-    const state = (raw.state || 'OH').toUpperCase();
-
-    const redemption = getRedemptionRule(state);
-    const seniorLien = detectSeniorLienSurvival(raw.plaintiff || '', raw.raw || '');
-    const cashToClose = computeCashToClose({
-      openingBid,
-      state,
-      source: this.sourceKey
+  async requestText(url, options = {}) {
+    return fetchTextWithPolicy(url, {
+      ...options,
+      timeoutMs: options.timeoutMs ?? this.timeoutMs,
+      circuitBreaker: this.circuitBreaker,
+      fetchImpl: options.fetchImpl || this.fetchImpl
     });
+  }
 
-    const seedStr = (raw.id || raw.address || 'seed') + (raw.city || '');
-    let hash = 0;
-    for (let i = 0; i < seedStr.length; i++) {
-      hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
-      hash |= 0;
-    }
-    const unit = Math.abs(hash % 1000) / 1000;
+  async requestJson(url, options = {}) {
+    return fetchJsonWithPolicy(url, {
+      ...options,
+      timeoutMs: options.timeoutMs ?? this.timeoutMs,
+      circuitBreaker: this.circuitBreaker,
+      fetchImpl: options.fetchImpl || this.fetchImpl
+    });
+  }
 
-    let lat = Number(raw.lat);
-    let lng = Number(raw.lng);
+  async fetchText(url, timeoutOrOptions = this.timeoutMs, method = 'GET', body = null) {
+    const options = typeof timeoutOrOptions === 'object' && timeoutOrOptions !== null
+      ? { ...timeoutOrOptions }
+      : { timeoutMs: timeoutOrOptions, method, body };
+    return this.requestText(url, options);
+  }
 
-    if (!lat || !lng || !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 39.5 && lng === -83.0 && state !== 'OH')) {
-      const countyKey = `${(raw.county || '').toLowerCase().replace(/\s+county$/, '').trim()}-${state.toLowerCase()}`;
-      const center = COUNTY_CENTROIDS[countyKey] || STATE_CENTROIDS[state] || { lat: 39.5, lng: -83.0 };
+  async crawlJitter(options = {}) {
+    return crawlJitter({
+      minMs: 250,
+      maxMs: 750,
+      random: this.random,
+      sleep: this.sleepImpl,
+      ...options
+    });
+  }
 
-      const latOffset = ((unit) - 0.5) * 0.08;
-      const lngOffset = ((((Math.abs(hash >> 3) % 1000) / 1000)) - 0.5) * 0.08;
-
-      lat = Number((center.lat + latOffset).toFixed(5));
-      lng = Number((center.lng + lngOffset).toFixed(5));
-    }
-
-    const beds = Number(raw.beds) || (2 + (Math.abs(hash % 3)));
-    const baths = Number(raw.baths) || (1.5 + ((Math.abs(hash >> 2) % 3) * 0.5));
-    const sqft = Number(raw.sqft) || (1150 + ((Math.abs(hash >> 4) % 12) * 110));
-    const year = Number(raw.year) || (1965 + (Math.abs(hash >> 6) % 50));
-
-    return {
-      id: raw.id || `${state}-${Date.now().toString(36).toUpperCase()}`,
-      source: this.sourceKey,
-      state,
-      county: raw.county || 'County',
-      city: raw.city || 'City',
-      zip: raw.zip || '00000',
-      address: raw.address || `${raw.city}, ${raw.state}`,
-      lat,
-      lng,
-      beds,
-      baths,
-      sqft,
-      year,
-      propType: raw.propType || 'Single Family',
-      openingBid,
-      estLow,
-      estHigh,
-      assessed: Number(raw.assessed) || Math.round(mid * 0.85),
-      mid,
-      ratio,
-      equity,
-      dealScore,
-      redemptionDays: redemption.days,
-      redemptionWarning: redemption.warning,
-      seniorLienRisk: seniorLien.riskLevel,
-      seniorLienWarning: seniorLien.warning,
-      cashToClose: cashToClose.totalCashToClose,
-      cashToCloseDetails: cashToClose,
-      saleDate: raw.saleDate || new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-      plaintiff: raw.plaintiff || '—',
-      defendant: raw.defendant || '—',
-      judgment: Number(raw.judgment) || openingBid,
-      attorney: raw.attorney || '—',
-      occupancy: raw.occupancy || (unit > 0.45 ? 'Occupied (drive-by only)' : 'Vacant'),
-      deposit: raw.deposit || '10% day of sale by certified funds',
-      photo: raw.photo || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
-      sourceUrl: raw.sourceUrl || null,
-      raw: raw.raw || 'Scraped property record'
-    };
+  standardizeListing(raw) {
+    return standardizeListingRecord(raw, { sourceKey: this.sourceKey });
   }
 
   passesFilter(item) {
     if (!item) return false;
     if (!item.state || item.state === 'US' || item.state.length !== 2) return false;
     if (!item.address || item.address.length < 8) return false;
-    if (!item.openingBid || Number(item.openingBid) <= 0) return false;
+    if (item.openingBid != null && (!Number.isFinite(Number(item.openingBid)) || Number(item.openingBid) <= 0)) return false;
     return true;
+  }
+
+  markFixtureInventory(listings, fixtureName = 'embedded-demo-inventory') {
+    if (!Array.isArray(listings)) return [];
+    return listings.map((listing) => ({
+      ...listing,
+      provenance: {
+        ...(listing && listing.provenance && typeof listing.provenance === 'object'
+          ? listing.provenance
+          : {}),
+        origin: 'fixture',
+        observed: false,
+        fixtureName
+      }
+    }));
   }
 
   getVerifiedInventory() {
@@ -234,7 +128,9 @@ class BaseScraper {
         const payload = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'));
         const listings = Array.isArray(payload) ? payload : (payload.listings || []);
         const filtered = listings.filter(l => l.source === this.sourceKey);
-        if (filtered.length > 0) return filtered;
+        if (filtered.length > 0) {
+          return this.markFixtureInventory(filtered, 'data/listings.snapshot.json');
+        }
       }
     } catch (_) {}
     return [];

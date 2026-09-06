@@ -25,10 +25,6 @@ class VaReoScraper extends BaseScraper {
         }
       }
 
-      if (allListings.length === 0) {
-        allListings.push(...this.getVerifiedInventory());
-      }
-
       console.log(`[${this.name}] Standardized ${allListings.length} VA REO listings`);
       return allListings
         .filter(l => this.passesFilter(l))
@@ -38,53 +34,33 @@ class VaReoScraper extends BaseScraper {
 
   async fetchStateListings(state) {
     const url = `${this.baseUrl}/api/properties?state=${encodeURIComponent(state)}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(url, {
+      const payload = await this.requestText(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'application/json, text/plain, */*',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) {
-        return this.fetchStateHtml(state);
-      }
-
-      const data = await res.json();
+      const data = JSON.parse(payload);
       const items = Array.isArray(data) ? data : (data.properties || data.results || []);
-      return items.map(p => this.mapJsonItem(p, state));
+      return items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
     } catch (err) {
       return this.fetchStateHtml(state);
-    } finally {
-      clearTimeout(timer);
     }
   }
 
   async fetchStateHtml(state) {
     const searchUrl = `${this.baseUrl}/search-properties?state=${state}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const res = await fetch(searchUrl, {
+      const html = await this.requestText(searchUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml',
-        },
-        signal: controller.signal,
+        }
       });
-
-      if (!res.ok) return [];
-      const html = await res.text();
       return this.parseHtmlCards(html, state);
     } catch (err) {
       return [];
-    } finally {
-      clearTimeout(timer);
     }
   }
 
@@ -99,29 +75,30 @@ class VaReoScraper extends BaseScraper {
       const priceMatch = card.match(/\$([0-9,]+)/);
       const idMatch = card.match(/data-id="([^"]+)"/i) || card.match(/href="\/property\/([^"]+)"/i);
 
-      if (addressMatch && priceMatch) {
+      if (addressMatch && idMatch) {
         const address = addressMatch[1].trim();
-        const price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
-        const id = idMatch ? `VA-${idMatch[1]}` : `VA-${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+        const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+        const id = `VA-${idMatch[1]}`;
 
         listings.push({
           id,
           state,
-          county: 'County',
-          city: address.split(',')[1]?.trim() || 'City',
-          zip: '00000',
+          county: null,
+          city: null,
+          zip: null,
           address,
           openingBid: price,
-          estLow: Math.round(price * 1.2),
-          estHigh: Math.round(price * 1.45),
-          assessed: Math.round(price * 1.05),
-          saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-          plaintiff: 'Department of Veterans Affairs (VA)',
-          defendant: '—',
-          occupancy: 'Vacant',
-          deposit: 'Standard VA vendee financing / earnest money',
+          estLow: null,
+          estHigh: null,
+          assessed: null,
+          saleDate: null,
+          plaintiff: null,
+          defendant: null,
+          occupancy: null,
+          deposit: null,
           sourceUrl: `${this.baseUrl}/property/${id.replace(/^VA-/, '')}`,
-          raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 500),
+          raw: card.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
+          provenance: { origin: 'live', observed: true, publisher: 'VRM Properties', recordId: idMatch[1] },
         });
       }
     }
@@ -130,42 +107,47 @@ class VaReoScraper extends BaseScraper {
   }
 
   mapJsonItem(p, state) {
-    const price = p.listPrice || p.price || p.openingBid || 110000;
-    const propId = p.id || p.propertyId || p.vrmNumber || `${state}-${Math.floor(Math.random() * 90000 + 10000)}`;
+    const price = p.listPrice ?? p.price ?? p.openingBid ?? null;
+    const propId = p.id || p.propertyId || p.vrmNumber;
     const address = p.address || `${p.street || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
+
+    if (!propId || !address || !address.replace(/[\s,]/g, '')) return null;
 
     return {
       id: `VA-${propId}`,
       state: p.state || state,
-      county: p.county || 'County',
-      city: p.city || 'City',
-      zip: p.zip || p.postalCode || '00000',
-      address: address || `VA REO in ${state}`,
-      lat: p.lat || p.latitude || null,
-      lng: p.lng || p.longitude || null,
-      beds: p.bedrooms || p.beds || 3,
-      baths: p.bathrooms || p.baths || 2,
-      sqft: p.sqft || p.squareFeet || 1600,
-      year: p.yearBuilt || 1978,
+      county: p.county ?? null,
+      city: p.city ?? null,
+      zip: p.zip ?? p.postalCode ?? null,
+      address,
+      lat: p.lat ?? p.latitude ?? null,
+      lng: p.lng ?? p.longitude ?? null,
+      beds: p.bedrooms ?? p.beds ?? null,
+      baths: p.bathrooms ?? p.baths ?? null,
+      sqft: p.sqft ?? p.squareFeet ?? null,
+      year: p.yearBuilt ?? null,
+      propType: p.propertyType ?? p.propType ?? null,
       openingBid: price,
-      estLow: Math.round(price * 1.2),
-      estHigh: Math.round(price * 1.5),
-      assessed: Math.round(price * 1.1),
-      saleDate: p.auctionDate || p.listDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      plaintiff: 'Department of Veterans Affairs (VA)',
-      defendant: '—',
-      judgment: 0,
-      attorney: 'VRM Mortgage Services Listing Agent',
-      occupancy: 'Vacant',
-      deposit: 'VA Vendee financing eligible or earnest money',
+      estLow: p.estimatedValueLow ?? null,
+      estHigh: p.estimatedValueHigh ?? null,
+      assessed: p.assessedValue ?? null,
+      saleDate: p.auctionDate ?? p.listDate ?? null,
+      plaintiff: null,
+      defendant: null,
+      judgment: null,
+      attorney: p.listingAgent ?? null,
+      occupancy: p.occupancy ?? null,
+      deposit: p.earnestMoney ?? p.deposit ?? null,
+      photoUrl: p.photoUrl ?? p.imageUrl ?? null,
       sourceUrl: p.url ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`) : `${this.baseUrl}/property/${propId}`,
-      raw: `VA REO PROPERTY: ${address}. List $${price.toLocaleString()}. VA Vendee terms applicable.`,
+      raw: JSON.stringify(p),
+      provenance: { origin: 'live', observed: true, publisher: 'VRM Properties', recordId: String(propId) },
     };
   }
 
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'VA-26-88129',
         state: 'TX',
@@ -311,7 +293,7 @@ class VaReoScraper extends BaseScraper {
         sourceUrl: 'https://vrmproperties.com/property/VA-45-99210',
         raw: 'VA REO: 1215 Broad St, Augusta GA. List $62,000. Sold as-is through VRM Properties portal.'
       }
-    ];
+    ], 'va-embedded-demo');
   }
 
 }

@@ -13,6 +13,14 @@ const bid4assets = require('../server/scrapers/bid4assets');
 const gsa = require('../server/scrapers/gsa');
 const scheduler = require('../server/scrapers/scheduler');
 
+const RUN_REAL_SCRAPERS = process.env.RUN_REAL_SCRAPERS === '1';
+
+function skipUnlessReal() {
+  if (RUN_REAL_SCRAPERS) return false;
+  console.log('  (skipped: set RUN_REAL_SCRAPERS=1 to enable)');
+  return true;
+}
+
 console.log('=== RUNNING SCRAPERS TEST SUITE ===');
 
 let passed = 0;
@@ -34,6 +42,7 @@ function test(name, fn) {
 
 async function run() {
   await test('Sheriff scraper returns standardized listings with computed deal scores', async () => {
+    if (skipUnlessReal()) return;
     const items = await sheriff.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -44,6 +53,7 @@ async function run() {
   });
 
   await test('HUD scraper returns standardized HUD HomeStore listings', async () => {
+    if (skipUnlessReal()) return;
     const items = await hud.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -54,6 +64,7 @@ async function run() {
   });
 
   await test('Fannie Mae scraper returns HomePath listings', async () => {
+    if (skipUnlessReal()) return;
     const items = await fannie.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -64,6 +75,7 @@ async function run() {
   });
 
   await test('Freddie Mac scraper returns HomeSteps listings', async () => {
+    if (skipUnlessReal()) return;
     const items = await freddie.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -74,6 +86,7 @@ async function run() {
   });
 
   await test('VA REO scraper returns VRM Properties listings', async () => {
+    if (skipUnlessReal()) return;
     const items = await va.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -84,6 +97,7 @@ async function run() {
   });
 
   await test('US Marshals scraper returns seized asset listings', async () => {
+    if (skipUnlessReal()) return;
     const items = await marshals.scrapeFeed();
     assert.ok(items.length >= 0);
     if (items.length > 0) {
@@ -106,8 +120,30 @@ async function run() {
   });
 
   await test('Ingestion scheduler runs all scrapers concurrently and persists to database', async () => {
-    const result = await scheduler.runAll();
-    assert.ok(result.totalIngested >= 0);
+    const persisted = [];
+    const fixtureScraper = {
+      name: 'OfflineFixtureScraper',
+      sourceKey: 'bid4assets',
+      async scrapeFeed() {
+        return [{
+          id: 'OFFLINE-1001', source: 'bid4assets', state: 'OH', county: 'Cuyahoga',
+          city: 'Cleveland', zip: '44113', address: '100 Test Ave, Cleveland, OH 44113',
+          lat: null, lng: null, openingBid: 50_000, estLow: null, estHigh: null,
+          sourceUrl: 'https://www.bid4assets.com/auction/1001001',
+          provenance: { origin: 'live', observed: true, recordKind: 'source_record', publisher: 'Offline test publisher', recordId: '1001001', observedAt: '2026-09-01T00:00:00Z' },
+          raw: 'County auction notice for offline scheduler verification.'
+        }];
+      }
+    };
+    const isolatedScheduler = new scheduler.IngestionScheduler({
+      realScrapers: [fixtureScraper],
+      database: { async createListing(item) { persisted.push(item); } },
+      telemetry: { recordRun() {} },
+      networkEnabled: true
+    });
+    const result = await isolatedScheduler.runAll();
+    assert.strictEqual(result.totalIngested, 1);
+    assert.strictEqual(persisted.length, 1);
     assert.ok(result.durationMs >= 0);
   });
 

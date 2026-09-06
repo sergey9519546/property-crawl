@@ -11,20 +11,16 @@ class TrusteeSaleScraper extends BaseScraper {
   constructor() {
     super({ name: 'TrusteeSaleScraper', sourceKey: 'trustee' });
     this.timeoutMs = 15000;
+    this.fixtureOnly = true;
   }
 
   async scrapeFeed() {
-    return this.executeWithRetry(async () => {
-      const allListings = this.getVerifiedInventory();
-      console.log(`[${this.name}] Standardized ${allListings.length} Trustee's Sale listings`);
-      return allListings
-        .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
-    });
+    console.warn(`[${this.name}] No live collector is implemented; fixture inventory is excluded from ingestion.`);
+    return [];
   }
 
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'TRUSTEE-NV-CLA-10182',
         source: 'trustee',
@@ -175,7 +171,7 @@ class TrusteeSaleScraper extends BaseScraper {
         sourceUrl: 'https://www.riverside.courts.ca.gov/foreclosures',
         raw: 'CALIFORNIA NOTICE OF TRUSTEES SALE TS No. CA-24-001928: 5410 University Ave. Civil Code § 2924f non-judicial sale. Minimum bid $195,000.'
       }
-    ];
+    ], 'trustee-embedded-demo');
   }
 }
 

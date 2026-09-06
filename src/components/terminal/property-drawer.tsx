@@ -28,14 +28,42 @@ import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
 import { DealVideoGenerator } from "./deal-video-generator";
 import { DocketAgent } from "./docket-agent";
+import { PropertyIntelligence } from "@/components/listings/property-intelligence";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
+import { displayDate, displayMoney, displayText, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
+import { sourceDisplayText } from "@/lib/source-display";
 import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo } from "@/lib/underwriting";
+import type { CashAmountField, CashInputBasis } from "@/lib/underwriting";
 
 interface PropertyDrawerProps {
   listing: Listing | null;
   onClose: () => void;
   isSaved: boolean;
   onToggleSave: (id: string) => void;
+}
+
+function explicitCashScenario(listing: Listing, openingBid: number | null) {
+  if (openingBid === null || !listing.cashToCloseDetails || typeof listing.cashToCloseDetails !== "object") return null;
+  const details = listing.cashToCloseDetails;
+  if (details.model !== "explicit-cash-requirements-v2") return null;
+  const rawBasis = details.basis && typeof details.basis === "object"
+    ? details.basis as Record<string, unknown>
+    : {};
+  const basis = Object.fromEntries(
+    Object.entries(rawBasis).filter((entry): entry is [string, CashInputBasis] => entry[1] === "published" || entry[1] === "assumption"),
+  ) as Partial<Record<CashAmountField, CashInputBasis>>;
+  return computeCashToClose({
+    openingBid,
+    purchasePrice: knownNumber(details.purchasePrice),
+    registrationFunds: knownNumber(details.registrationFunds),
+    creditedDeposit: knownNumber(details.creditedDeposit),
+    buyersPremium: knownNumber(details.buyersPremium),
+    sheriffPoundage: knownNumber(details.sheriffPoundage),
+    transferTax: knownNumber(details.transferTax),
+    delinquentTaxes: knownNumber(details.delinquentTaxes),
+    settlementCosts: knownNumber(details.settlementCosts ?? details.deedPrepAndRecording),
+    basis,
+  });
 }
 
 export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: PropertyDrawerProps) {
@@ -64,30 +92,34 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   if (!listing) return null;
 
   const source = SOURCES[listing.source] || {
-    label: listing.source,
+    label: sourceDisplayText(listing.source),
     color: "#64748B",
-    tier: 'A',
-    note: "Public listing",
+    tier: 'Unrated',
+    note: "Source not classified",
     websiteUrl: "#"
   };
   const exactSourceUrl = getExactSourceListingUrl(listing, source.websiteUrl);
+  const openingBid = positiveNumber(listing.openingBid);
+  const estLow = positiveNumber(listing.estLow);
+  const estHigh = positiveNumber(listing.estHigh);
+  const mid = positiveNumber(listing.mid);
+  const sqft = positiveNumber(listing.sqft);
+  const dealScore = knownNumber(listing.dealScore);
+  const bidSpread = knownNumber(listing.equity);
+  const photoUrl = safeImageUrl(listing.photo);
 
-  const cashToClose = computeCashToClose({
-    openingBid: listing.openingBid,
-    state: listing.state,
-    source: listing.source
-  });
+  const cashToClose = explicitCashScenario(listing, openingBid);
 
   const isCommercialOrMulti = (
     (listing.propType || "").toLowerCase().includes("commercial") ||
     (listing.propType || "").toLowerCase().includes("multi")
   );
 
-  const creMetrics = isCommercialOrMulti ? computeCreMetrics({
-    sqft: listing.sqft,
-    openingBid: listing.openingBid,
-    estimatedValue: listing.mid,
-    propType: listing.propType
+  const creMetrics = isCommercialOrMulti && openingBid !== null && sqft !== null ? computeCreMetrics({
+    sqft,
+    openingBid,
+    estimatedValue: mid ?? undefined,
+    propType: listing.propType ?? undefined
   }) : null;
 
   const handleRunAi = async () => {
@@ -121,19 +153,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
       try {
         const prompt = `You are an institutional real estate underwriting AI analyzing a distressed foreclosure auction asset:
 Address: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Source Agency: ${listing.source.toUpperCase()}
-Opening Bid: $${listing.openingBid ? listing.openingBid.toLocaleString() : 'TBD'}
-Estimated Market Value: $${listing.estLow ? listing.estLow.toLocaleString() : 'N/A'} - $${listing.estHigh ? listing.estHigh.toLocaleString() : 'N/A'} (Deal Score: ${listing.dealScore || 'N/A'}/100)
-Property Type: ${listing.propType || 'Residential'}
-Deposit Terms: ${listing.deposit || 'Certified funds'}
+Source Agency: ${sourceDisplayText(listing.source).toUpperCase()}
+Opening Bid: ${displayMoney(listing.openingBid)}
+Estimated Market Value: ${displayMoney(listing.estLow)} - ${displayMoney(listing.estHigh)} (Modeled deal score: ${dealScore ?? 'not available'})
+Property Type: ${displayText(listing.propType)}
+Deposit Terms: ${displayText(listing.deposit)}
 Occupancy Status: ${listing.occupancy || 'Unknown'}
 Foreclosing Plaintiff: ${listing.plaintiff || '—'}
-Statutory Redemption: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'None'}
-Senior Lien Survival: ${listing.seniorLienRisk === 'high' ? 'HIGH HAZARD - Junior foreclosure; senior mortgage survives' : 'Clean senior foreclosure'}
+Redemption evidence: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'Not published in the current record'}
+Title-risk signal: ${listing.seniorLienRisk === 'high' ? 'Possible senior-lien risk; unverified' : 'No conclusive source evidence; official title work required'}
 
-Provide a rigorous 2-paragraph institutional deal breakdown:
+Use only the facts above. Treat every missing value as unknown and do not invent liens, title status, comps, condition, costs, or legal conclusions. Provide a rigorous 2-paragraph institutional deal breakdown:
 Paragraph 1 - **Valuation Spread & Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
-Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and suggested maximum bid ceiling.`;
+Paragraph 2 - **Title Caveats & Next Checks**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and evidence required before the buyer sets a maximum price.`;
 
         const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
         const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
@@ -151,8 +183,11 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
   };
 
   const handleDownloadLoi = () => {
-    if (!listing) return;
-    const text = generateLetterOfIntent(listing, { offerPrice: listing.openingBid });
+    if (!listing || openingBid === null) {
+      setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
+      return;
+    }
+    const text = generateLetterOfIntent(listing, { offerPrice: openingBid });
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -163,18 +198,21 @@ Paragraph 2 - **Title Caveats & Bidding Recommendation**: Statutory redemption d
   };
 
   const handleGenerateAiLoi = async () => {
-    if (!listing) return;
+    if (!listing || openingBid === null) {
+      setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
+      return;
+    }
     setGeneratingAiLoi(true);
     try {
       if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
         const prompt = `You are a distressed asset acquisitions attorney drafting a formal Letter of Intent (LOI) to purchase an auction asset:
 Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Opening Bid: $${listing.openingBid.toLocaleString()}
-Deposit Required: ${listing.deposit}
-Occupancy: ${listing.occupancy}
+Opening Bid: ${displayMoney(openingBid)}
+Deposit Required: ${displayText(listing.deposit)}
+Occupancy: ${displayText(listing.occupancy)}
 Plaintiff / Docket: ${listing.plaintiff || 'County Court Foreclosure'}
 
-Draft a complete, formal Letter of Intent (LOI) with purchase terms, deposit escrow provisions, clear title deed contingencies, and closing timeline.`;
+Draft a non-binding due-diligence LOI scenario. Do not claim clear title, verified occupancy, published fees, or seller acceptance. Label assumed terms explicitly.`;
 
         const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
         const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
@@ -198,13 +236,16 @@ Draft a complete, formal Letter of Intent (LOI) with purchase terms, deposit esc
   };
 
   const handleDownloadIcMemo = () => {
-    if (!listing) return;
-    const creMetrics = computeCreMetrics({
-      sqft: listing.sqft,
-      openingBid: listing.openingBid,
-      propType: listing.propType,
-    });
-    const text = generateInvestmentCommitteeMemo(listing, creMetrics);
+    if (!listing || openingBid === null || estHigh === null) {
+      setAiAnalysis("A source-published opening amount and valuation evidence are required before an investment memo can be generated.");
+      return;
+    }
+    const memoMetrics = isCommercialOrMulti && sqft !== null ? computeCreMetrics({
+      sqft,
+      openingBid,
+      propType: listing.propType ?? undefined,
+    }) : undefined;
+    const text = generateInvestmentCommitteeMemo(listing, memoMetrics);
     const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -215,25 +256,28 @@ Draft a complete, formal Letter of Intent (LOI) with purchase terms, deposit esc
   };
 
   const handleGenerateAiMemo = async () => {
-    if (!listing) return;
+    if (!listing || openingBid === null || estHigh === null) {
+      setAiAnalysis("A source-published opening amount and valuation evidence are required before an investment memo can be generated.");
+      return;
+    }
     setGeneratingAiMemo(true);
     try {
       if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-        const creMetrics = computeCreMetrics({
-          sqft: listing.sqft,
-          openingBid: listing.openingBid,
-          propType: listing.propType,
-        });
+        const memoMetrics = isCommercialOrMulti && sqft !== null ? computeCreMetrics({
+          sqft,
+          openingBid,
+          propType: listing.propType ?? undefined,
+        }) : null;
         const prompt = `You are an acquisitions director preparing an Investment Committee (IC) acquisition memorandum for this asset:
 Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Opening Bid: $${listing.openingBid.toLocaleString()}
-Estimated ARV: $${listing.estHigh.toLocaleString()}
-Deal Score: ${listing.dealScore}/100
-NOI: $${creMetrics ? creMetrics.netOperatingIncome.toLocaleString() : 'N/A'}/yr
-Target Yield MAO: $${creMetrics ? creMetrics.maxAllowableOffer.toLocaleString() : 'N/A'}
+Opening Bid: ${displayMoney(openingBid)}
+Estimated value ceiling: ${displayMoney(estHigh)}
+Modeled deal score: ${dealScore ?? 'not available'}
+Modeled NOI: ${memoMetrics ? displayMoney(memoMetrics.netOperatingIncome) : 'not modeled'}
+Modeled target-yield MAO: ${memoMetrics ? displayMoney(memoMetrics.maxAllowableOffer) : 'not modeled'}
 Senior Lien Risk: ${listing.seniorLienRisk}
 
-Draft an executive 1-page Investment Committee Acquisition Memorandum covering Executive Summary, Valuation Spread & Downside Protections, Title & Lien Risk Analysis, and Final Investment Recommendation.`;
+Use only the supplied evidence. Never invent comps, title status, property condition, rent, fees, or legal conclusions. Label every calculation and assumption. Draft an executive 1-page Investment Committee Acquisition Memorandum covering Executive Summary, evidence gaps, modeled valuation, title-review requirements, and a conditional recommendation.`;
 
         const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
         const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
@@ -357,11 +401,18 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
         {/* Property Hero Media */}
         {activeTab === "underwrite" && (
           <div className="relative h-56 sm:h-64 w-full bg-[#F5F6F7] overflow-hidden">
-            <img src={listing.photo} alt={listing.address} className="w-full h-full object-cover" />
-            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/80 shadow-md">
-              <span className="text-xs text-[#6B7280] font-semibold uppercase">Deal Score: </span>
-              <span className="text-sm font-extrabold text-[#111827]">{listing.dealScore}/100</span>
-            </div>
+            {photoUrl ? (
+              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm font-semibold text-[#6B7280]">No source photo published</div>
+            )}
+            {dealScore !== null && (
+              <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/80 shadow-md">
+                <span className="text-xs text-[#6B7280] font-semibold uppercase">Modeled score: </span>
+                <span className="text-sm font-extrabold text-[#111827]">{dealScore}/99</span>
+                <span className="block text-[9px] text-[#6B7280]">Bid-to-midpoint triage only</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -371,7 +422,7 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
             <h2 id="property-drawer-title" className="text-2xl font-bold text-[#111827]">{listing.address}</h2>
             <p className="text-sm text-[#6B7280] flex items-center gap-1.5 mt-1">
               <MapPin className="w-4 h-4 text-[#9CA3AF]" />
-              {listing.city}, {listing.state} {listing.zip} · {listing.county} County
+              {displayText(listing.city)}, {listing.state} {displayText(listing.zip, "")} · {displayText(listing.county, "County not published")}
             </p>
           </div>
 
@@ -382,23 +433,24 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-[#F5F6F7] rounded-2xl border border-[#E5E7EB]">
                 <div>
                   <p className="text-[11px] font-bold text-[#6B7280] uppercase">Opening Bid</p>
-                  <p className="text-lg font-extrabold text-[#111827]">${listing.openingBid.toLocaleString()}</p>
+                  <p className="text-lg font-extrabold text-[#111827]">{displayMoney(openingBid)}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-[#6B7280] uppercase">Est. Low / High</p>
                   <p className="text-sm font-bold text-[#374151]">
-                    ${(listing.estLow / 1000).toFixed(0)}k–${(listing.estHigh / 1000).toFixed(0)}k
+                    {estLow !== null && estHigh !== null ? `${displayMoney(estLow)}–${displayMoney(estHigh)}` : "Not published"}
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#16A34A] uppercase">Built-in Equity</p>
-                  <p className="text-lg font-extrabold text-[#16A34A]">+${listing.equity.toLocaleString()}</p>
+                  <p className="text-[11px] font-bold text-[#16A34A] uppercase">Bid Spread</p>
+                  <p className="text-lg font-extrabold text-[#16A34A]">{bidSpread === null ? "Not modeled" : displayMoney(bidSpread)}</p>
+                  <p className="text-[9px] text-[#6B7280]">Valuation midpoint minus opening amount</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-[#6B7280] uppercase">Sale Date</p>
                   <p className="text-sm font-bold text-[#111827] flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    {listing.saleDate}
+                    {displayDate(listing.saleDate)}
                   </p>
                 </div>
               </div>
@@ -466,7 +518,7 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                 </div>
 
                 {aiLoading && (
-                  <p className="text-xs text-[#6B7280] animate-pulse">Running neural title & comps audit...</p>
+                  <p className="text-xs text-[#6B7280] animate-pulse">Reviewing available listing evidence...</p>
                 )}
 
                 {aiAnalysis ? (
@@ -476,62 +528,55 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                 ) : (
                   !aiLoading && (
                     <p className="text-xs text-[#6B7280]">
-                      Click Analyze Deal to synthesize docket gotchas, senior tax liens, and occupancy risks.
+                      Analyze the available source record and surface evidence gaps. Official title, lien, docket, and occupancy checks remain separate.
                     </p>
                   )
                 )}
               </div>
 
-              {/* On-Demand Live Court Docket & Title Agent */}
+              {/* Fail-closed official-record evidence check. */}
+              <PropertyIntelligence key={listing.id} listingId={listing.id} />
               <DocketAgent listing={listing} />
 
-              {/* Title Risk & Senior Lien Survival Arbitration */}
+              {/* Modeled title-risk signal; not a completed title search. */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
                     <Scale className="w-4 h-4 text-[#0F172A]" />
-                    <span>Title Risk & Lien Survival</span>
+                    <span>Modeled title-risk signal</span>
                   </h3>
                   <span className={cn(
                     "text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-md",
                     listing.seniorLienRisk === "high"
                       ? "bg-red-100 text-red-700"
-                      : "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-800"
                   )}>
-                    {listing.seniorLienRisk === "high" ? "Senior Lien Survival Hazard" : "Clean Senior Foreclosure"}
+                    {listing.seniorLienRisk === "high" ? "Possible senior-lien risk" : "Official review required"}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-white space-y-3 text-xs">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-[#6B7280] block text-[11px]">Foreclosing Plaintiff Rank:</span>
-                      <span className="font-bold text-[#111827]">
-                        {listing.source === 'sheriff' ? 'Judicial 1st Mortgagee' : listing.source === 'irs' ? 'IRS Tax Seizure' : 'County/Court Appointed Trustee'}
-                      </span>
+                      <span className="text-[#6B7280] block text-[11px]">Normalized source category:</span>
+                      <span className="font-bold text-[#111827]">{source.label}</span>
                     </div>
                     <div>
-                      <span className="text-[#6B7280] block text-[11px]">Senior Mortgage Status:</span>
-                      <span className={cn("font-bold", listing.seniorLienRisk === "high" ? "text-red-700" : "text-emerald-700")}>
-                        {listing.seniorLienRisk === "high" ? "Survives Sale (Buyer Assumes)" : "Extinguished by Sale"}
-                      </span>
+                      <span className="text-[#6B7280] block text-[11px]">Lien-priority status:</span>
+                      <span className="font-bold text-amber-800">Unverified</span>
                     </div>
                   </div>
                   <div className={cn(
                     "p-2.5 rounded-xl border text-[11px] flex items-start gap-2",
                     listing.seniorLienRisk === "high"
                       ? "border-red-200 bg-red-50 text-red-800"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-amber-200 bg-amber-50 text-amber-900"
                   )}>
-                    {listing.seniorLienRisk === "high" ? (
-                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
-                    ) : (
-                      <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                    )}
+                    <AlertTriangle className={cn("w-4 h-4 shrink-0 mt-0.5", listing.seniorLienRisk === "high" ? "text-red-600" : "text-amber-600")} />
                     <p>
                       {listing.seniorLienRisk === "high"
-                        ? "CRITICAL WARNING: This proceeding was initiated by a junior claimant. Recorded first mortgage survives foreclosure and encumbers the deed."
-                        : "Senior foreclosure action. Recorded junior liens, judgments, and mechanics liens are extinguished upon court confirmation of sale."}
+                        ? "The normalized notice contains a possible junior-claimant signal. Confirm lien priority and surviving encumbrances from official recorder and court documents."
+                        : "No senior-lien warning was detected in the normalized source fields. This does not establish lien priority or extinguishment."}
                     </p>
                   </div>
                 </div>
@@ -543,86 +588,81 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                   <div className="flex items-center justify-between">
                     <span className="font-bold flex items-center gap-1.5 text-amber-950">
                       <Clock className="w-4 h-4 text-amber-600" />
-                      Statutory Redemption Period
+                      Modeled redemption review
                     </span>
                     <span className="font-extrabold text-[10px] uppercase px-2 py-0.5 rounded bg-amber-200/80 text-amber-950">
-                      {listing.state === 'AL' ? '180 Days' : listing.state === 'MI' ? '6 Months' : listing.state === 'NJ' ? '10 Days' : '120 Days'}
+                      Official terms required
                     </span>
                   </div>
                   <p className="leading-relaxed">
-                    {listing.redemptionWarning || (listing.state === 'AL' ? 'Alabama Ala. Code § 6-5-248: 180-day statutory redemption applies. Debtor may redeem within 180 days upon reimbursing purchaser for purchase price + 7.5% interest + verified improvements.' : listing.state === 'MI' ? 'Michigan MCL 600.3240: 6-month statutory redemption applies (shortened to 30 days if abandoned).' : listing.state === 'NJ' ? 'New Jersey Rule 4:65-5: 10-day objection and redemption window prior to sheriff deed delivery.' : 'Federal IRS 120-day right of redemption under 28 U.S.C. § 2410(c).')}
+                    This listing may be subject to a redemption or objection period. Confirm the exact duration, triggering event, exceptions, and possession timeline in current official documents before bidding.
                   </p>
-                  <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] text-amber-900 border-t border-amber-200/60">
-                    <div><strong>Auction:</strong> {listing.saleDate}</div>
-                    <div><strong>Confirmation:</strong> +10–30 days</div>
-                    <div><strong>Writ of Possession:</strong> Post-redemption</div>
+                  <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-amber-900 border-t border-amber-200/60">
+                    <div><strong>Feed auction date:</strong> {displayDate(listing.saleDate)}</div>
+                    <div><strong>Jurisdiction:</strong> {listing.state} · {source.label}</div>
                   </div>
                 </div>
               )}
 
-              {/* Cash to Close Breakdown */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
-                    <DollarSign className="w-4 h-4 text-[#0F172A]" />
-                    <span>Statutory Cash-to-Close Fee Schedule</span>
-                  </h3>
-                  <span className="text-xs font-extrabold text-emerald-700">
-                    Total Est. ${cashToClose.total.toLocaleString()}
-                  </span>
-                </div>
-                <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Opening Bid (Purchase Price)</span>
-                    <span className="font-semibold text-[#111827]">${cashToClose.openingBid.toLocaleString()}</span>
+              {/* Evidence-backed cash requirement. */}
+              {cashToClose ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-[#0F172A]" />
+                      <span>Cash requirement evidence</span>
+                    </h3>
+                    <span className="text-xs font-extrabold text-emerald-700">{displayMoney(cashToClose.totalAcquisitionCost)}</span>
                   </div>
-                  {cashToClose.buyersPremium > 0 && (
-                    <div className="p-3 flex justify-between">
-                      <span className="text-[#6B7280]">Buyer's Premium (Auction Platform)</span>
-                      <span className="font-semibold text-[#374151]">${cashToClose.buyersPremium.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Sheriff / Trustee Statutory Poundage</span>
-                    <span className="font-semibold text-[#374151]">${cashToClose.sheriffPoundage.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">State / County Transfer Conveyance</span>
-                    <span className="font-semibold text-[#374151]">${cashToClose.transferTax.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 flex justify-between">
-                    <span className="text-[#6B7280]">Deed Recording & Filing Costs</span>
-                    <span className="font-semibold text-[#374151]">${cashToClose.deedFees.toLocaleString()}</span>
-                  </div>
-                  <div className="p-3 flex justify-between bg-[#F8FAFC]">
-                    <span className="font-bold text-[#111827]">Total Liquid Cash Required to Close</span>
-                    <span className="font-extrabold text-[#16A34A]">${cashToClose.total.toLocaleString()}</span>
+                  <p className="text-[11px] leading-relaxed text-[#6B7280]">Every amount below is tagged as published evidence or an explicit scenario assumption. Missing terms remain unresolved.</p>
+                  <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
+                    {([
+                      ["Purchase-price scenario", "purchasePrice", cashToClose.purchasePrice],
+                      ["Registration funds (separate)", "registrationFunds", cashToClose.registrationFunds],
+                      ["Deposit credited to purchase", "creditedDeposit", cashToClose.creditedDeposit],
+                      ["Buyer’s premium", "buyersPremium", cashToClose.buyersPremium],
+                      ["Sheriff / trustee fee", "sheriffPoundage", cashToClose.sheriffPoundage],
+                      ["Transfer tax", "transferTax", cashToClose.transferTax],
+                      ["Taxes or surviving debt", "delinquentTaxes", cashToClose.delinquentTaxes],
+                      ["Other settlement costs", "settlementCosts", cashToClose.settlementCosts],
+                    ] as const).map(([label, field, amount]) => (
+                      <div key={field} className="p-3 flex items-center justify-between gap-3">
+                        <span className="text-[#6B7280]">{label}<span className="ml-1 text-[9px] uppercase">({cashToClose.basis[field] ?? "unresolved"})</span></span>
+                        <span className="font-semibold text-[#374151]">{displayMoney(amount)}</span>
+                      </div>
+                    ))}
+                    <div className="p-3 flex justify-between bg-[#F8FAFC]"><span className="font-bold text-[#111827]">Total acquisition cash</span><span className="font-extrabold text-[#16A34A]">{displayMoney(cashToClose.totalAcquisitionCost)}</span></div>
+                    <div className="p-3 flex justify-between bg-[#F8FAFC]"><span className="font-bold text-[#111827]">Cash remaining at settlement</span><span className="font-extrabold text-[#111827]">{displayMoney(cashToClose.cashDueAtSettlement)}</span></div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-4 text-xs text-[#475569]">
+                  Cash requirements are unresolved. No fee is inferred from the source name or state. Open the Price Scenario tab to enter published terms or explicit assumptions.
+                </div>
+              )}
 
               {/* Commercial & Multi-Family CRE Underwriting */}
               {creMetrics && (
-                <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/50 space-y-3">
+                <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <Scale className="w-4 h-4 text-blue-900" />
-                      <h3 className="text-sm font-bold text-blue-950 uppercase tracking-wide">CRE / Multi-Family Underwriting</h3>
+                      <Scale className="w-4 h-4 text-slate-800" />
+                      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">CRE / Multi-Family Underwriting</h3>
                     </div>
-                    <span className="text-xs font-extrabold text-blue-800">
+                    <span className="text-xs font-extrabold text-slate-800">
                       Cap Rate: {creMetrics.capitalizationRate}%
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                       <p className="text-[#6B7280] text-[10px] uppercase font-bold">Net Operating Income</p>
                       <p className="font-extrabold text-sm text-[#111827]">${creMetrics.netOperatingIncome.toLocaleString()}/yr</p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                       <p className="text-[#6B7280] text-[10px] uppercase font-bold">Estimated DSCR</p>
                       <p className="font-extrabold text-sm text-slate-800">{creMetrics.estimatedDscr}x</p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-white border border-blue-100">
+                    <div className="p-2.5 rounded-xl bg-white border border-slate-200">
                       <p className="text-emerald-700 text-[10px] uppercase font-bold">Target Yield MAO</p>
                       <p className="font-extrabold text-sm text-emerald-700">${creMetrics.maxAllowableOffer.toLocaleString()}</p>
                     </div>
@@ -630,78 +670,22 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                 </div>
               )}
 
-              {/* Quick MAO Underwriting (70% Rule) */}
-              <div className="p-4 rounded-2xl border border-[#0F172A]/15 bg-[#F8FAFC] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Calculator className="w-4 h-4 text-[#0F172A]" />
-                    <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide">Quick MAO (70% Rule)</h3>
-                  </div>
-                  <span className="text-xs font-bold text-[#6B7280]">Mid ARV: ${(listing.mid).toLocaleString()}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2.5 rounded-xl bg-white border border-[#E5E7EB]">
-                    <p className="text-[#6B7280] text-[10px] uppercase font-bold">70% ARV Baseline</p>
-                    <p className="font-extrabold text-sm text-[#111827]">${Math.round(listing.mid * 0.7).toLocaleString()}</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white border border-[#E5E7EB]">
-                    <p className="text-[#6B7280] text-[10px] uppercase font-bold">Est. Rehab Budget</p>
-                    <p className="font-extrabold text-sm text-slate-700">$25,000</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white border border-[#E5E7EB]">
-                    <p className="text-[#16A34A] text-[10px] uppercase font-bold">Max Allowable Bid</p>
-                    <p className="font-extrabold text-sm text-[#16A34A]">
-                      ${Math.max(0, Math.round(listing.mid * 0.7 - 25000 - (cashToClose.total - listing.openingBid))).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#6B7280] flex items-center justify-between pt-1">
-                  <span>Opening Bid Spread:</span>
-                  <span className={cn(
-                    "font-bold",
-                    (listing.mid * 0.7 - 25000) > listing.openingBid ? "text-[#16A34A]" : "text-amber-600"
-                  )}>
-                    {(listing.mid * 0.7 - 25000) > listing.openingBid ? "Pencils for Institutional Rehab" : "Requires Adjusted Rehab Scope"}
-                  </span>
-                </div>
-              </div>
+              <button type="button" onClick={() => setActiveTab("bidding")} className="w-full rounded-2xl border border-[#0F172A]/15 bg-[#F8FAFC] p-4 text-left transition hover:border-[#0F172A]">
+                <span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-[#111827]"><Calculator className="h-4 w-4" />Price and cost reverse scenario</span>
+                <span className="mt-1 block text-xs leading-relaxed text-[#6B7280]">Enter the costs you can support, then see the maximum price or cost reduction that meets your target. Unknown fees and debt stay unresolved.</span>
+              </button>
 
-              {/* Recent Verified Comps Matrix */}
+              {/* Comparable-sale evidence */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
                     <Home className="w-4 h-4 text-[#0F172A]" />
-                    <span>Recent Neighborhood Comps</span>
+                    <span>Comparable-sale evidence</span>
                   </h3>
-                  <span className="text-xs text-[#6B7280]">{listing.city}, {listing.state} radius</span>
+                  <span className="text-xs text-[#6B7280]">{displayText(listing.city)}, {listing.state}</span>
                 </div>
-                <div className="border border-[#E5E7EB] rounded-2xl bg-white overflow-hidden text-xs">
-                  <div className="grid grid-cols-4 p-2.5 bg-[#F8FAFC] border-b border-[#E5E7EB] font-bold text-[#6B7280] text-[10px] uppercase">
-                    <span>Address</span>
-                    <span className="text-center">Bed/Bath</span>
-                    <span className="text-center">Sqft</span>
-                    <span className="text-right">Sale Price</span>
-                  </div>
-                  <div className="divide-y divide-[#E5E7EB]">
-                    <div className="grid grid-cols-4 p-2.5 items-center">
-                      <span className="truncate font-medium text-[#111827]">0.3 mi · Nearby Model</span>
-                      <span className="text-center text-[#6B7280]">{listing.beds}b / {listing.baths}ba</span>
-                      <span className="text-center text-[#6B7280]">{listing.sqft || 1450}</span>
-                      <span className="text-right font-bold text-[#111827]">${Math.round(listing.mid * 0.94).toLocaleString()}</span>
-                    </div>
-                    <div className="grid grid-cols-4 p-2.5 items-center">
-                      <span className="truncate font-medium text-[#111827]">0.5 mi · Fully Renovated</span>
-                      <span className="text-center text-[#6B7280]">{listing.beds}b / {listing.baths}ba</span>
-                      <span className="text-center text-[#6B7280]">{(listing.sqft || 1450) + 120}</span>
-                      <span className="text-right font-bold text-[#16A34A]">${Math.round(listing.estHigh).toLocaleString()}</span>
-                    </div>
-                    <div className="grid grid-cols-4 p-2.5 items-center">
-                      <span className="truncate font-medium text-[#111827]">0.8 mi · As-Is Distress</span>
-                      <span className="text-center text-[#6B7280]">{listing.beds}b / {listing.baths}ba</span>
-                      <span className="text-center text-[#6B7280]">{listing.sqft || 1450}</span>
-                      <span className="text-right font-bold text-[#374151]">${Math.round(listing.estLow).toLocaleString()}</span>
-                    </div>
-                  </div>
+                <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-4 text-xs leading-relaxed text-[#475569]">
+                  No verified comparable-sale records were captured with this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
                 </div>
               </div>
 
@@ -711,19 +695,19 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                 <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
                   <div className="p-3.5 flex justify-between">
                     <span className="text-[#6B7280] font-semibold">Plaintiff</span>
-                    <span className="font-medium text-[#111827]">{listing.plaintiff}</span>
+                    <span className="font-medium text-[#111827]">{displayText(listing.plaintiff)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
                     <span className="text-[#6B7280] font-semibold">Defendant</span>
-                    <span className="font-medium text-[#111827]">{listing.defendant}</span>
+                    <span className="font-medium text-[#111827]">{displayText(listing.defendant)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
                     <span className="text-[#6B7280] font-semibold">Attorney of Record</span>
-                    <span className="font-medium text-[#111827]">{listing.attorney}</span>
+                    <span className="font-medium text-[#111827]">{displayText(listing.attorney)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
                     <span className="text-[#6B7280] font-semibold">Deposit Terms</span>
-                    <span className="font-medium text-[#111827]">{listing.deposit}</span>
+                    <span className="font-medium text-[#111827]">{displayText(listing.deposit)}</span>
                   </div>
                 </div>
               </div>
@@ -734,7 +718,8 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
                     onClick={handleDownloadLoi}
-                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#0F172A] bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm"
+                    disabled={openingBid === null}
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#0F172A] bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Standard LOI</span>
@@ -742,7 +727,7 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
 
                   <button
                     onClick={handleGenerateAiLoi}
-                    disabled={generatingAiLoi}
+                    disabled={generatingAiLoi || openingBid === null}
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-emerald-600 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
@@ -751,7 +736,8 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
 
                   <button
                     onClick={handleDownloadIcMemo}
-                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#E5E7EB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F8FAFC] transition shadow-sm"
+                    disabled={openingBid === null || estHigh === null}
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-[#E5E7EB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F8FAFC] transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     <span>Export Standard IC Memo</span>
@@ -759,13 +745,16 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
 
                   <button
                     onClick={handleGenerateAiMemo}
-                    disabled={generatingAiMemo}
-                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-blue-600 bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition shadow-sm disabled:opacity-50"
+                    disabled={generatingAiMemo || openingBid === null || estHigh === null}
+                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm disabled:opacity-50"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>{generatingAiMemo ? "Synthesizing Memo..." : "✨ AI Investment Memo"}</span>
                   </button>
                 </div>
+                {(openingBid === null || estHigh === null) && (
+                  <p className="text-[11px] leading-relaxed text-[#6B7280]">Documents remain disabled until the source record includes the financial evidence each template requires.</p>
+                )}
               </div>
             </div>
           )}
@@ -775,9 +764,8 @@ Draft an executive 1-page Investment Committee Acquisition Memorandum covering E
             <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" className="space-y-4 animate-in fade-in">
               <Parcel3DVisualizer listing={listing} />
               <div className="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] text-xs text-[#6B7280] space-y-1.5">
-                <span className="font-bold text-[#111827] block">3D Terrain & Contour Insights:</span>
-                <p>• Estimated building setback: 25ft front / 15ft rear.</p>
-                <p>• Zero floodplain overlap detected (FEMA Zone X minimal hazard).</p>
+                <span className="font-bold text-[#111827] block">Concept visualization only</span>
+                <p>This view is not a boundary survey, elevation certificate, zoning determination, or FEMA flood finding. Attach official parcel geometry and hazard records before relying on dimensions or setbacks.</p>
               </div>
             </div>
           )}

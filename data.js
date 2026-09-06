@@ -5,6 +5,14 @@
 // via test/sync.test.js.
 
 window.SOURCES = {
+  "servicelink": {
+    "key": "servicelink",
+    "label": "Public Auction Network",
+    "tier": "B",
+    "color": "#0369a1",
+    "note": "Public auction listings; sale status and terms require confirmation",
+    "websiteUrl": "https://www.servicelinkauction.com"
+  },
   "sheriff": {
     "key": "sheriff",
     "label": "Sheriff Sale",
@@ -34,8 +42,8 @@ window.SOURCES = {
     "label": "Fannie Mae REO",
     "tier": "A",
     "color": "#2563eb",
-    "note": "homepath.com — First Look window",
-    "websiteUrl": "https://www.homepath.com"
+    "note": "HomePath by Fannie Mae — First Look window",
+    "websiteUrl": "https://www.homepath.fanniemae.com"
   },
   "freddie": {
     "key": "freddie",

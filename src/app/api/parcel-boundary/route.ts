@@ -1,5 +1,4 @@
-import { adapt } from "@/lib/next-adapter";
-import handleParcelBoundary from "@/lib/server-routes/parcel-boundary";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const POST = adapt(handleParcelBoundary, { securityHeaders: true, cors: true });
+export const POST = (request: Request) => proxyPropertyApi(request);
 export const GET = POST;

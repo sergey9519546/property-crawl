@@ -10,9 +10,11 @@
 // Personal-property auctions (boats, watches, safes) are filtered out by
 // requiring a street-number Asset Address.
 //
-// Rate limit: 1 req/sec between detail pages. Be polite — US government site.
+// Detail fetches are capped at two in flight and receive 250–750ms jitter.
 
 const BaseScraper = require('./base');
+const { mapWithConcurrency } = require('./http');
+const { extractDetailImages } = require('./media-policy');
 
 // Title substrings that mark an IRS auction as personal property, not real
 // estate (these auctions are hosted at a venue address, so a street-number
@@ -38,15 +40,14 @@ const STATE_NAME_TO_CODE = {
 };
 
 class IrsSeizedScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'IrsAuctionCollector', sourceKey: 'irs' });
+  constructor(options = {}) {
+    super({ ...options, name: 'IrsAuctionCollector', sourceKey: 'irs' });
     this.baseUrl = 'https://www.irsauctions.gov';
-    this.delayMs = 1000; // 1 req/sec
+    this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
   }
 
   async scrapeFeed() {
-    try {
-      return await this.executeWithRetry(async () => {
+    return this.executeWithRetry(async () => {
 
       const listHtml = await this.fetchText(`${this.baseUrl}/auction/items`);
 
@@ -68,39 +69,33 @@ class IrsSeizedScraper extends BaseScraper {
       }
       console.log(`[${this.name}] Found ${cards.length} real-estate auction cards on list page`);
 
-      const listings = [];
-      await Promise.allSettled(cards.map(async ({ slug }) => {
-        try {
-          const detail = await this.fetchDetail(slug);
-          if (detail) listings.push(detail);
-        } catch (err) {
-          console.warn(`[${this.name}] Failed /ad/${slug}: ${err.message}`);
+      const detailResults = await mapWithConcurrency(
+        cards,
+        this.detailConcurrency,
+        async ({ slug }) => {
+          await this.crawlJitter();
+          return this.fetchDetail(slug);
         }
-      }));
+      );
+      const listings = [];
+      detailResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          if (result.value) listings.push(result.value);
+        } else {
+          console.warn(`[${this.name}] Failed /ad/${cards[index].slug}: ${result.reason.message}`);
+        }
+      });
 
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       return listings.map(item => this.standardizeListing(item));
     });
-    } catch (err) {
-      console.warn(`[${this.name}] Live scrape failed, falling back to verified inventory: ${err.message}`);
-      const fallback = this.getVerifiedInventory();
-      return fallback.map(item => this.standardizeListing(item));
-    }
   }
 
-  async fetchText(url, timeoutMs = 4000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' },
-        signal: controller.signal
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-      return await res.text();
-    } finally {
-      clearTimeout(timer);
-    }
+  async fetchText(url, timeoutMs = this.timeoutMs) {
+    return super.fetchText(url, {
+      timeoutMs,
+      headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' }
+    });
   }
 
   async fetchDetail(slug) {
@@ -145,7 +140,7 @@ class IrsSeizedScraper extends BaseScraper {
 
     // --- Minimum bid: <div content="110665.00" class="field__item">110,665.00</div> ---
     const bidMatch = html.match(/content="([\d,]+\.\d+)"\s+class="field__item"/);
-    const openingBid = bidMatch ? this.parseMoney(bidMatch[1]) : 0;
+    const openingBid = bidMatch ? this.parseMoney(bidMatch[1]) : null;
 
     // --- Date of Auction: first <time datetime="2026-09-08T17:30:00Z"> ---
     const timeMatch = html.match(/<time datetime="([^"]+)"/);
@@ -153,39 +148,47 @@ class IrsSeizedScraper extends BaseScraper {
 
     // --- Defendant / taxpayer: "...seized ... due from Albert W Sperry." ---
     const defMatch = html.match(/due from ([^.]+?)\./i);
-    const defendant = defMatch ? defMatch[1].trim() : '—';
+    const defendant = defMatch ? defMatch[1].trim() : null;
 
     const id = `IRS-${state}-${slug.toUpperCase().slice(0, 18)}`;
     const fullAddress = `${street}, ${city}, ${state} ${zip}`;
+    const gallery = extractDetailImages({ source: 'irs', html, sourceUrl: detailUrl, address: fullAddress });
 
     return {
       id,
       state,
-      county: 'Unknown',
+      county: null,
       city,
       zip,
       address: fullAddress,
-      lat: 0,
-      lng: 0,
-      beds,
-      baths,
-      sqft,
+      lat: null,
+      lng: null,
+      beds: beds || null,
+      baths: baths || null,
+      sqft: sqft || null,
       year,
       propType: this.classifyPropertyType(desc),
       openingBid,
-      estLow: 0,
-      estHigh: 0,
-      assessed: 0,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
       saleDate,
-      plaintiff: 'Internal Revenue Service (PALS)',
+      plaintiff: null,
       defendant,
-      judgment: 0,
-      attorney: 'IRS Property Appraisal & Liquidation Specialist',
-      occupancy: 'Unknown',
-      deposit: '20% certified check day of auction',
-      photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
+      judgment: null,
+      attorney: null,
+      occupancy: null,
+      deposit: null,
+      photo: gallery[0]?.url || null,
       sourceUrl: detailUrl,
-      raw: desc.substring(0, 800) || 'IRS seized property auction'
+      raw: (desc || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 2000),
+      provenance: {
+        origin: 'live', observed: true, publisher: 'Internal Revenue Service', recordId: slug,
+        media: gallery.length ? {
+          photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
+          gallery
+        } : {}
+      }
     };
   }
 
@@ -194,7 +197,7 @@ class IrsSeizedScraper extends BaseScraper {
     if (/condo/i.test(desc)) return 'Condo';
     if (/multi.?family|duplex|triplex/i.test(desc)) return 'Multi-Family';
     if (/land|vacant|lot|acre/i.test(desc)) return 'Land';
-    return 'Single Family';
+    return null;
   }
 
   firstInt(str, re) {
@@ -220,13 +223,8 @@ class IrsSeizedScraper extends BaseScraper {
       .replace(/&hellip;/g, '\u2026')
   }
 
-  sleep(ms) {
-    return new Promise(r => setTimeout(r, ms));
-  }
-
-
   getVerifiedInventory() {
-    return [
+    return this.markFixtureInventory([
       {
         id: 'IRS-NV-CLA-40551',
         source: 'irs',
@@ -347,9 +345,10 @@ class IrsSeizedScraper extends BaseScraper {
         sourceUrl: 'https://www.irsauctions.gov/auction/1410-e-12th-st',
         raw: 'IRS TAX LIQUIDATION SALE: 1410 E 12th St, Austin TX. Sold under Title 26, United States Code.'
       }
-    ];
+    ], 'irs-embedded-demo');
   }
 
 }
 
 module.exports = new IrsSeizedScraper();
+module.exports.IrsSeizedScraper = IrsSeizedScraper;

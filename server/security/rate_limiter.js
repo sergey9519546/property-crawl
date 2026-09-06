@@ -17,7 +17,8 @@ class MemoryRateLimiter {
 
   middleware() {
     return (req, res, next) => {
-      const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+      // Forwarded headers are caller-controlled without a trusted edge.
+      const ip = req.socket?.remoteAddress || 'unknown';
       const now = Date.now();
       // Periodically evict expired entries to prevent memory leak
       if (this.hits.size > 100) {
@@ -42,6 +43,7 @@ class MemoryRateLimiter {
       res.setHeader('X-RateLimit-Reset', Math.ceil(clientRecord.resetAt / 1000));
 
       if (clientRecord.count > this.maxRequests) {
+        res.setHeader('Retry-After', Math.ceil((clientRecord.resetAt - now) / 1000));
         return res.status(429).json({
           error: 'Too Many Requests',
           message: 'Rate limit exceeded. Please slow down.',

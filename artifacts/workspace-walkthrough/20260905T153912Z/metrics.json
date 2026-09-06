@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-09-05T15:39:12.590728+00:00",
+  "baseUrl": "http://localhost:3001",
+  "journey": [
+    "discovery",
+    "evidence",
+    "decision",
+    "second_look",
+    "export"
+  ],
+  "usefulReconsiderationEvents": 0,
+  "consoleErrors": [
+    "Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED",
+    "Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED",
+    "Failed to load resource: net::ERR_NETWORK_ACCESS_DENIED"
+  ],
+  "pageErrors": [],
+  "serverErrors": [],
+  "caseId": "rcase_f1e02ecf264378cb43138019",
+  "listingId": "GSA-726LA058501",
+  "completed": false,
+  "error": "evidence intake failed with HTTP 400: {\"error\":\"Evidence packet needs corrections\",\"details\":[\"capturedAt must be an ISO-8601 timestamp\",\"customSource metadata is required for a source not present in the catalog\"]}",
+  "completedAt": "2026-09-05T15:39:28.011720+00:00",
+  "completionMs": 15421,
+  "video": "workspace-walkthrough.webm"
+}
