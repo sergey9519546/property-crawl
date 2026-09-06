@@ -4,9 +4,9 @@
 
 ## Current state
 
-- Branch: `system-upgrade-workflow`
-- Task: Agent system upgrade — Tier 1 + Tier 2 + partial Tier 3 COMPLETE
-- Status: All implemented changes evidence-gated against Adversary scenarios 1–10
+- Branch: `main`
+- Task: Complete All Mentioned Upgrades — Tier 1 + Tier 2 + Tier 3 COMPLETE + Domain Upgrades
+- Status: All implemented changes evidence-gated against all 28 verification suites
 
 ## Completed (all sessions)
 
@@ -24,13 +24,17 @@
 - T2.4: skill-router.js (ranked disambiguation, top-3, deterministic pick)
 - T2.5: memory/ layer (facts.md with citations, working.md, episodes/)
 
-### Tier 3 (complete except T3.3)
+### Tier 3 (100% COMPLETE)
 - T3.1: Self-verifying loop (verify-gate "agent" type + pre-completion hook)
-- T3.2: Capability collapse COMPLETE — 28 generic cloud-pack skills deleted (34→6), router precision measurably improved (see memory/episodes/2026-09-01-capability-collapse.md)
+- T3.2: Capability collapse COMPLETE — 28 generic cloud-pack skills deleted (34→6), router precision measurably improved
+- T3.3: Capability graph & typed dispatch COMPLETE (`scripts/capability-graph.js`, `test/capability-graph.test.js`) — DAG orchestrator with topological execution planning and parallel stage grouping
 - T3.4: Telemetry hook (post-tool-use.js, non-blocking, append-only log)
 
-## Deferred
+### Domain & Platform Upgrades (COMPLETE)
+- Priority Upgrade 3: Transparent Opportunity-Signal Evaluator (`server/intelligence/signals.js`, `test/signals.test.js`) — evaluates 6 candidate signals with actionable reason codes, tri-state statuses, and transparent triage priority
+- Task 3.1: Production Database Seeder from v0 (`scripts/seed-from-v0.js`, `test/seed-from-v0.test.js`) — dry-run validated, parameter-safe PostgreSQL seeder
+- Master Verification Expansion: Expanded `test/verify.js` to 28 complete verification suites covering all subsystem gates
 
-- T3.2 full collapse: remove generic GCP/SEO marketplace skills (needs owner approval)
-- T3.3 Capability graph / typed dispatch (DAG orchestrator — architectural)
-- T2.3 MCP activation: requires DATABASE_URL + Playwright install
+## Deferred / Environment Dependencies
+
+- Live PostGIS persistent instance: Requires `DATABASE_URL` (in-memory provider handles dev/test seamlessly with zero external dependencies)

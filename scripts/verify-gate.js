@@ -65,6 +65,7 @@ function classifyChange(files) {
     f.startsWith('scripts/hooks/') ||
     f.startsWith('scripts/skill-router') ||
     f.startsWith('scripts/gen-skills-index') ||
+    f.startsWith('scripts/capability-graph') ||
     f.startsWith('scripts/verify-gate')
   );
 
@@ -103,6 +104,7 @@ function getGate(changeType) {
         'node --test test/agent-system.test.js',
         'node --test test/commands.test.js',
         'node --test test/agents.test.js',
+        'node --test test/capability-graph.test.js',
         'node scripts/gen-skills-index.js --check',
         'node scripts/gen-context.js --check'
       ],

@@ -31,7 +31,11 @@ const suites = [
   { name: '14. Scraper Telemetry & Drift Detection', cmd: 'node test/telemetry.test.js' },
   { name: '15. Agent System Acceptance (Adversary Scenarios 1–10)', cmd: 'node --test test/agent-system.test.js' },
   { name: '16. Commands Config-under-Test', cmd: 'node --test test/commands.test.js' },
-  { name: '17. Agents Config-under-Test', cmd: 'node --test test/agents.test.js' }
+  { name: '17. Agents Config-under-Test', cmd: 'node --test test/agents.test.js' },
+  { name: '18. Source Network, Catalog & Live Ingestion Suite', cmd: 'npm run test:sources' },
+  { name: '19. Property Intelligence & Saved Hunts Suite', cmd: 'npm run test:intelligence' },
+  { name: '20. Capability Graph & Typed Dispatch Suite (Tier 3.3)', cmd: 'node --test test/capability-graph.test.js' },
+  { name: '21. Opportunity Signals & v0 DB Seeder Suite (Priority Upgrade 3 & Task 3.1)', cmd: 'node --test test/signals.test.js test/seed-from-v0.test.js' }
 ];
 
 let totalPassed = 0;

@@ -46,7 +46,11 @@
     "sources:public-records": "node scripts/collect-public-records.js",
     "sources:taxonomy": "node scripts/sync-source-taxonomy.js",
     "test:intelligence": "node --test test/public-records.test.js test/property-intelligence.test.js test/hunts.test.js test/hunts-http.test.js test/source-operator.test.js",
-    "sources:setup": "node scripts/setup-source-operator.js"
+    "sources:setup": "node scripts/setup-source-operator.js",
+    "skills:graph": "node scripts/capability-graph.js",
+    "db:seed": "node scripts/seed-from-v0.js",
+    "test:signals": "node --test test/signals.test.js",
+    "test:graph": "node --test test/capability-graph.test.js"
   },
   "keywords": [
     "real-estate",

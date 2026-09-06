@@ -14,6 +14,7 @@ const handleParcelBoundary = require('./routes/parcel-boundary');
 const handlePropertyImage = require('./routes/property-image');
 const handleSourceNetwork = require('./routes/source-network');
 const handlePropertyIntelligence = require('./routes/property-intelligence');
+const handlePropertySignals = require('./routes/property-signals');
 const handleHunts = require('./routes/hunts');
 const handleWorkspace = require('./routes/workspace');
 const scheduler = require('./scrapers/scheduler');
@@ -157,6 +158,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/parcel-boundary') return handleParcelBoundary(req, res);
     if (url.pathname === '/api/property-image') return handlePropertyImage(req, res);
     if (url.pathname === '/api/property-intelligence') return handlePropertyIntelligence(req, res);
+    if (url.pathname === '/api/signals' || url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
     if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
     if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return handleWorkspace(req, res, url);
     if (url.pathname === '/api/source-network' || url.pathname.startsWith('/api/source-network/')) return handleSourceNetwork(req, res);

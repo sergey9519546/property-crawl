@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { seedProvenance } = require('./seed-provenance');
-const { loadLiveRecords } = require('./live-record-store');
+const { seedProvenance } = require('../../../server/db/seed-provenance');
+const { loadLiveRecords } = require('../../../server/db/live-record-store');
 
-const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
+const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../../.cache/live-listings.json');
 
 // Canonical camelCase projection for listings. The in-memory provider emits
 // camelCase (dealScore, openingBid, propType, ...) and the UUID-style record
@@ -282,7 +282,7 @@ class DatabaseClient {
 
   seedInMemory() {
     try {
-      const dataJsPath = path.resolve(__dirname, '../../data.js');
+      const dataJsPath = path.resolve(__dirname, '../../../data.js');
       if (fs.existsSync(dataJsPath)) {
         const vm = require('vm');
         const sandbox = { window: {}, Math };
