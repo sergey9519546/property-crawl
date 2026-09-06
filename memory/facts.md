@@ -27,10 +27,12 @@
 
 ## Data
 
-- 11 source types (A/B tier): fannie, freddie, gsa, hud, irs, marshals, sheriff, treasury, trustee, usda, va.
+- 16 source types (A/B tier): bid4assets, civilview, fannie, fdic, freddie, gsa, hud, irs, landbank, marshals, servicelink, sheriff, treasury, trustee, usda, va.
   - Source: `CONTEXT.md`, `data.js`
-- 560 listings across 27 states.
+- 585 listings across 28 states.
   - Source: `CONTEXT.md`, `data.js`
+- 14 Server API route modules: alerts, enrich, export, hunts, listings, parcel-boundary, parse, property-image, property-intelligence, property-signals, scrapers, source-network, verify-docket, workspace.
+  - Source: `CONTEXT.md`, `server/routes/`
 
 ## Agent system
 
@@ -48,3 +50,9 @@
   - Source: `scripts/gen-context.js`, `test/context.test.js`
 - Skills doctor at `scripts/skills-doctor.js` — flags duplicates, empty dirs, epoch files, stale bundles.
   - Source: `scripts/skills-doctor.js`, `test/skills-doctor.test.js`
+- Capability Graph at `scripts/capability-graph.js` — typed DAG orchestrator with input/output validation, cycle detection, topological sort, and stratified parallel stage execution.
+  - Source: `scripts/capability-graph.js`, `test/capability-graph.test.js`
+- Opportunity Signal Evaluator at `server/intelligence/signals.js` — 6 deterministic candidate signals with tri-state status, published component weights, and triage priority.
+  - Source: `server/intelligence/signals.js`, `test/signals.test.js`
+- Database Seeder at `scripts/seed-from-v0.js` — parameter-safe PostgreSQL seeder from v0 `data.js` with dry-run validation.
+  - Source: `scripts/seed-from-v0.js`, `test/seed-from-v0.test.js`
