@@ -250,26 +250,50 @@ async function run() {
     }
   });
 
-  await test('POST /api/alerts and GET /api/alerts manages user watchlist', async () => {
+await test('POST /api/alerts and GET /api/alerts scope watchlist to device or workspace without id spoofing', async () => {
     const previousToken = process.env.SCRAPER_ADMIN_TOKEN;
-    process.env.SCRAPER_ADMIN_TOKEN = 'watchlist-test-secret';
+    delete process.env.SCRAPER_ADMIN_TOKEN;
     try {
-      const unauthorized = await request('/api/alerts?userId=forged-user');
-      assert.strictEqual(unauthorized.status, 401);
-
       const postRes = await request('/api/alerts?userId=forged-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-scraper-token': 'watchlist-test-secret', 'x-user-id': 'forged-user' },
+        headers: { 'Content-Type': 'application/json' },
         body: { listingId: primaryListing.id }
       });
       assert.strictEqual(postRes.status, 201);
+      const setCookie = Array.isArray(postRes.headers['set-cookie']) ? postRes.headers['set-cookie'][0] : postRes.headers['set-cookie'];
+      const deviceId = (setCookie || '').match(/pp_watchlist=([^;]+)/);
+      assert.ok(deviceId && deviceId[1].length >= 16, 'server must issue an opaque device cookie');
 
-      const getRes = await request('/api/alerts?userId=another-forged-user', {
-        headers: { 'x-scraper-token': 'watchlist-test-secret', 'x-user-id': 'another-forged-user' }
+      const deviceGet = await request('/api/alerts?userId=forged-user', {
+        headers: { cookie: `pp_watchlist=${deviceId[1]}` }
       });
-      assert.strictEqual(getRes.status, 200);
-      assert.strictEqual(getRes.body.savedCount, 1);
-      assert.strictEqual(getRes.body.deals[0].id, primaryListing.id);
+      assert.strictEqual(deviceGet.status, 200);
+      assert.strictEqual(deviceGet.body.savedCount, 1, 'the issuing device reads its own saved deal');
+      assert.strictEqual(deviceGet.body.deals[0].id, primaryListing.id);
+
+      const otherGet = await request('/api/alerts?userId=forged-user', {
+        headers: { cookie: 'pp_watchlist=dev_OTHERDEVICEabcdef123456' }
+      });
+      assert.strictEqual(otherGet.body.savedCount, 0, 'a client-supplied userId cannot cross devices or impersonate another watchlist');
+    } finally {
+      if (previousToken === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
+      else process.env.SCRAPER_ADMIN_TOKEN = previousToken;
+    }
+  });
+
+  await test('POST /api/alerts uses workspace identity when the operator unlocks', async () => {
+    const previousToken = process.env.SCRAPER_ADMIN_TOKEN;
+    process.env.SCRAPER_ADMIN_TOKEN = 'watchlist-test-secret';
+    try {
+      const wsGet = await request('/api/alerts', {
+        headers: { Authorization: 'Bearer watchlist-test-secret' }
+      });
+      assert.strictEqual(wsGet.status, 200);
+      assert.strictEqual(wsGet.body.savedCount, 0, 'workspace watchlist is separate from a device watchlist');
+      const badToken = await request('/api/alerts', {
+        headers: { Authorization: 'Bearer wrong-token' }
+      });
+      assert.strictEqual(badToken.status, 401, 'a presented-but-wrong operator token fails closed');
     } finally {
       if (previousToken === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
       else process.env.SCRAPER_ADMIN_TOKEN = previousToken;

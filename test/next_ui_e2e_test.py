@@ -1112,12 +1112,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Analyze Deal").click()
         self.page.get_by_text(re.compile(r"Evidence summary.*unverified")).wait_for(state="visible")
 
-        self.page.get_by_role("button", name="3D Lot & Elevation").click()
+        self.page.get_by_role("tab", name="3D Lot & Elevation").click()
         self.page.get_by_role("region", name="Parcel geometry reference").wait_for(state="visible")
         self.assertEqual(self.page.get_by_title("Toggle Wireframe Topography").count(), 0)
 
         # Test Bidding Simulator tab & MAO calculations
-        self.page.get_by_role("button", name="Bidding Simulator").click()
+        self.page.get_by_role("tab", name="Bidding Simulator").click()
         self.assertTrue(self.page.get_by_role("heading", name="Max Allowable Offer (MAO) Simulator").is_visible())
         self.assertEqual(self.page.get_by_text("Win Probability", exact=True).count(), 0)
 

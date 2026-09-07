@@ -1,9 +1,9 @@
 const db = require('../db/client');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { resolveWatchlistIdentity } = require('../security/workspace-identity');
 
 async function handleAlerts(req, res) {
   const method = req.method;
-  const userId = requireWorkspaceIdentity(req, res);
+  const userId = resolveWatchlistIdentity(req, res);
   if (!userId) return;
   res.setHeader('Cache-Control', 'no-store');
 

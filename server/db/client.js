@@ -5,6 +5,11 @@ const { loadLiveRecords } = require('./live-record-store');
 
 const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
 
+// A canonical STATE-COUNTY-NUMBER id (e.g. "OH-CUY-10231") is an unambiguous
+// alias for the source-namespaced record "SHERIFF-OH-CUY-10231". It is resolved
+// only when exactly one record matches — never a partial or numeric fragment.
+const NAMESPACED_ID = /^[A-Z]{2,3}-[A-Z]{2,3}-\d{2,6}$/;
+
 // Canonical camelCase projection for listings. The in-memory provider emits
 // camelCase (dealScore, openingBid, propType, ...) and the UUID-style record
 // shape is what the API + Next.js UI consume. The Postgres schema stores
@@ -563,15 +568,23 @@ class DatabaseClient {
     return { total, listings: paginated };
   }
 
-  async getListingById(id) {
+async getListingById(id) {
     if (this.isPg) {
       const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return res.rows[0];
+      if (NAMESPACED_ID.test(id)) {
+        const alias = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE $1`, [`%-${id}`]);
+        if (alias.rows.length === 1) return alias.rows[0];
+      }
       return null;
     }
     this.refreshLiveCache();
     const exact = this.inMemoryData.listings.find(l => l.id === id);
     if (exact) return exact;
+    if (NAMESPACED_ID.test(id)) {
+      const alias = this.inMemoryData.listings.filter(l => typeof l.id === 'string' && l.id.endsWith(`-${id}`));
+      if (alias.length === 1) return alias[0];
+    }
     return null;
   }
 

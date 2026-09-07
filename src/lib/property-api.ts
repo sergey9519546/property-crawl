@@ -42,6 +42,11 @@ export async function proxyPropertyApi(request: Request, dependencies: {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  const watchlistCookie = (request.headers.get("cookie") || "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("pp_watchlist="));
+  if (watchlistCookie) headers.set("cookie", watchlistCookie);
   if (dependencies.operatorToken) headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
   else {
     const authorization = request.headers.get("authorization");
@@ -66,7 +71,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20_000),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"]) {
+    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }

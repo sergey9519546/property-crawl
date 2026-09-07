@@ -2,19 +2,13 @@
 
 import * as React from "react";
 import { Bookmark } from "lucide-react";
-import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
-  const session = useWorkspaceSession();
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
-    if (!session.authenticated) {
-      setSaved(false);
-      return;
-    }
     let active = true;
     void fetch("/api/alerts", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
@@ -38,13 +32,9 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
     return () => {
       active = false;
     };
-  }, [listingId, session.authenticated]);
+  }, [listingId]);
 
   async function toggle() {
-    if (!session.authenticated) {
-      session.requestUnlock();
-      return;
-    }
     setBusy(true);
     setError("");
     try {

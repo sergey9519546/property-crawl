@@ -382,6 +382,23 @@ async function run() {
     process.stdout.write('  ⓘ DATABASE_URL not set — skipping live Postgres round-trip\n');
   }
 
+  await test('canonical STATE-COUNTY-NUMBER id resolves uniquely and never as a fragment', async () => {
+    const db = require('../server/db/client');
+    const base = 'ZZ-AAA-88734';
+    const full = `AUDIT-${base}`;
+    await db.createListing({
+      source: 'civilview',
+      state: 'ZZ',
+      county: 'AAA',
+      address: '9 Alias Evidence Ave',
+      id: full,
+    });
+    const viaCanonical = await db.getListingById(base);
+    assert.strictEqual(viaCanonical?.id, full, 'canonical id resolves to its unique namespaced record');
+    assert.strictEqual(await db.getListingById('88734'), null, 'a numeric fragment must never resolve to a listing');
+    assert.strictEqual(await db.getListingById('ZZ'), null, 'a partial state code must never resolve to a listing');
+  });
+
   process.stdout.write(`--- DB TEST SUMMARY: ${passed} Passed, ${failed} Failed ---\n`);
   if (failed > 0) process.exit(1);
 }
