@@ -191,18 +191,32 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(status, 400);
   });
 
-  test('overpay ratio (bid above midpoint) is reported but contributes no ratio points', () => {
-    // openingBid 390000 vs mid 300000 -> ratio 1.3 (overpay), 0 discount fraction
+  test('overpay ratio (bid above midpoint) is contradicted and contributes no ratio points', () => {
+    // openingBid 390000 vs mid 300000 -> ratio 1.3 (overpay)
     const evaluation = evaluateOpportunitySignals(sampleListing({ openingBid: 390000 }));
     const ratioSig = evaluation.signals.find((s) => s.key === 'bid_to_value_ratio');
-    assert.equal(ratioSig.status, 'supported');
+    assert.equal(ratioSig.status, 'contradicted');
     assert.ok(ratioSig.reason.includes('130.0%'));
 
-    // Reconstruct the ratio-only priority contribution: with a >100% ratio the
-    // discount fraction clamps to zero, so the bidToValueRatio component is 0.
+    // Below-midpoint bid is supported and earns ratio points; at-midpoint / overpay do not.
     const noDiscount = evaluateOpportunitySignals(sampleListing({ openingBid: 300000 })); // exactly at midpoint
     const discount = evaluateOpportunitySignals(sampleListing({ openingBid: 150000 }));
+    assert.equal(noDiscount.signals.find((s) => s.key === 'bid_to_value_ratio').status, 'supported');
     assert.ok(discount.triagePriority > noDiscount.triagePriority);
+  });
+
+  test('area corroboration earns points; an area discrepancy never raises the score', () => {
+    const matching = { parcel: { status: 'matched', properties: { livingAreaSqft: 2050 }, source: { url: 'https://x.gov/1' } } };
+    const conflicting = { parcel: { status: 'matched', properties: { livingAreaSqft: 2800 }, source: { url: 'https://x.gov/2' } } };
+
+    const base = evaluateOpportunitySignals(sampleListing(), { publicRecords: null });
+    const verified = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), { publicRecords: matching });
+    const contradicted = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), { publicRecords: conflicting });
+
+    // Verified square footage must score higher than unverified baseline.
+    assert.ok(verified.triagePriority > base.triagePriority);
+    // A contradicted record must never exceed the verified listing's score.
+    assert.ok(contradicted.triagePriority <= verified.triagePriority);
   });
 
   test('building area boundary at exactly 10% is treated as verified (not contradicted)', () => {

@@ -46,7 +46,7 @@ const WEIGHT_DETAILS: Record<string, { label: string; desc: string }> = {
   bidReduction: { label: 'Bid Reduction', desc: 'Detects same-record opening bid drops in source observation history.' },
   areaDiscrepancy: { label: 'Building Area Discrepancy', desc: 'Flags discrepancies between publisher sqft and official cadastral records.' },
   returnedToMarket: { label: 'Returned to Market', desc: 'Detects relisting notices, auction restarts, or back-on-market tags.' },
-  dataCompleteness: { label: 'Data Completeness', desc: 'Measures presence of verified title, occupancy, and deposit facts.' },
+  dataCompleteness: { label: 'Data Completeness', desc: 'Measures how many of the six candidate signals resolved to supported evidence.' },
 };
 
 function weightPercent(value: number): string {
@@ -135,13 +135,14 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         </div>
 
         {/* Score Dial / Badge */}
-        <div className="flex items-center gap-3 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700">
+<div className="flex items-center gap-3 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700">
           <div className="text-right">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Triage Priority</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Opportunity Triage</p>
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-2xl font-black text-white">{priority}</span>
               <span className="text-xs font-semibold text-slate-400">/99</span>
             </div>
+            <p className="text-[9px] text-slate-500 mt-0.5">6-signal · independent of modeled Deal Score</p>
           </div>
           <div
             className={cn(

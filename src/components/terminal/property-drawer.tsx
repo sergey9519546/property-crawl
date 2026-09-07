@@ -439,7 +439,7 @@ Use only the supplied evidence. Never invent comps, title status, property condi
               <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/80 shadow-md">
                 <span className="text-xs text-[#6B7280] font-semibold uppercase">Modeled score: </span>
                 <span className="text-sm font-extrabold text-[#111827]">{dealScore}/99</span>
-                <span className="block text-[9px] text-[#6B7280]">Bid-to-midpoint triage only</span>
+                <span className="block text-[9px] text-[#6B7280]">Bid-to-midpoint triage · see Signals tab</span>
               </div>
             )}
           </div>

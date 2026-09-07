@@ -137,16 +137,29 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   if (bid > 0 && mid > 0) {
     const ratio = bid / mid;
     const discountPct = Math.round((1 - ratio) * 100);
-    signals.push({
-      key: 'bid_to_value_ratio',
-      label: 'Bid-to-supported-value ratio established',
-      status: 'supported',
-      evidenceClass: 'calculated_ratio',
-      sourceUrl,
-      observedAt,
-      reason: `Opening bid ($${bid.toLocaleString()}) represents ${(ratio * 100).toFixed(1)}% of valuation midpoint ($${mid.toLocaleString()}) — ${discountPct}% spread.`,
-      nextAction: 'Calculate Max Allowable Offer (MAO) incorporating repair and holding allowances.',
-    });
+    if (ratio <= 1) {
+      signals.push({
+        key: 'bid_to_value_ratio',
+        label: 'Bid-to-supported-value ratio established',
+        status: 'supported',
+        evidenceClass: 'calculated_ratio',
+        sourceUrl,
+        observedAt,
+        reason: `Opening bid ($${bid.toLocaleString()}) represents ${(ratio * 100).toFixed(1)}% of valuation midpoint ($${mid.toLocaleString()}) — ${discountPct}% spread.`,
+        nextAction: 'Calculate Max Allowable Offer (MAO) incorporating repair and holding allowances.',
+      });
+    } else {
+      signals.push({
+        key: 'bid_to_value_ratio',
+        label: 'Opening bid exceeds supported valuation midpoint',
+        status: 'contradicted',
+        evidenceClass: 'calculated_ratio',
+        sourceUrl,
+        observedAt,
+        reason: `Opening bid ($${bid.toLocaleString()}) is ${(ratio * 100).toFixed(1)}% of valuation midpoint ($${mid.toLocaleString()}) — ${-discountPct}% above.`,
+        nextAction: 'Re-verify the valuation band and comparable sales before modeling this as an opportunity.',
+      });
+    }
   } else {
     signals.push({
       key: 'bid_to_value_ratio',
@@ -210,12 +223,12 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   if (hasSeniorRisk && hasRedemption && hasCashToClose) {
     signals.push({
       key: 'title_equity_unresolved',
-      label: 'Core title and settlement facts known',
+      label: 'Core title and settlement facts available',
       status: 'supported',
-      evidenceClass: 'legal_rules_verified',
+      evidenceClass: 'derived_unverified',
       sourceUrl,
       observedAt,
-      reason: `Statutory redemption (${listing.redemptionDays} days), lien risk (${listing.seniorLienRisk}), and estimated cash-to-close are recorded.`,
+      reason: `Statutory redemption (${listing.redemptionDays} days), lien-risk signal (${listing.seniorLienRisk}), and estimated cash-to-close are available but not docket-verified.`,
       nextAction: 'Confirm payoff figures and certificate of sale requirements.',
     });
   } else {
@@ -253,12 +266,13 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     priorityScore += 100 * SIGNAL_WEIGHTS.bidReduction;
   }
 
-  // 4. Area discrepancy component (up to 10 pts: a discrepancy is a high-value diligence lead)
+  // 4. Area corroboration component (up to 10 pts). A matched cadastral record
+  //    that agrees with the publisher proves the advertised square footage and is
+  //    rewarded. A conflicting ("contradicted") record is a flag surfaced in the
+  //    ledger, not a score bonus — red flags never raise the triage score.
   const areaSignal = signals.find((s) => s.key === 'building_area_discrepancy');
-  if (areaSignal?.status === 'contradicted') {
+  if (areaSignal?.status === 'supported') {
     priorityScore += 100 * SIGNAL_WEIGHTS.areaDiscrepancy;
-  } else if (areaSignal?.status === 'supported') {
-    priorityScore += 50 * SIGNAL_WEIGHTS.areaDiscrepancy;
   }
 
   // 5. Return to market (up to 10 pts)
