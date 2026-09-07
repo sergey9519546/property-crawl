@@ -26,6 +26,14 @@
       },
       "condition": "Used for 7-factor title risk arbitration, encumbrance scoring, and lien survival analysis across distressed properties.",
       "disabled": false
+    },
+    "veer-hanuman-1-zillw-us-real-state-listings": {
+      "url": "https://prod.api.market/api/mcp/veer-hanuman-1/zillw-us-real-state-listings",
+      "headers": {
+        "x-api-market-key": "${ZILLOW_MCP_API_KEY:-cmjgtcjea0001jr04c5ckyyk0}"
+      },
+      "condition": "Used for Zillow property search (for-sale, for-rent, sold), property details, location autocomplete, and school district lookups. Client module: server/intelligence/zillow-mcp.js.",
+      "disabled": false
     }
   },
   "gracefulDegradation": {
