@@ -18,6 +18,14 @@
       "condition": "Optional. Used for UI verification of the Next.js marketing site. Requires Playwright browsers installed.",
       "disabled": true,
       "disabledReason": "Playwright browsers are not installed in the current environment. Install with 'npx playwright install' to enable."
+    },
+    "nicheapi-llc-1-propertytitle": {
+      "url": "https://prod.api.market/api/mcp/nicheapi-llc-1/propertytitle",
+      "headers": {
+        "x-api-market-key": "${PROPERTY_TITLE_API_KEY:-cmjgtcjea0001jr04c5ckyyk0}"
+      },
+      "condition": "Used for 7-factor title risk arbitration, encumbrance scoring, and lien survival analysis across distressed properties.",
+      "disabled": false
     }
   },
   "gracefulDegradation": {
@@ -25,7 +33,8 @@
     "fallbacks": {
       "postgres": "server/db/client.js in-memory provider seeded from data.js",
       "playwright": "DOM inspection via test/e2e.test.js and test/hardening.test.js",
-      "github": "git CLI commands"
+      "github": "git CLI commands",
+      "propertytitle": "Local heuristic rules in server/intelligence/property-title.js and foreclosure-title-intelligence skill"
     }
   }
 }
