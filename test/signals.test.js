@@ -183,18 +183,82 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     };
 
     // Valid query
-    await handler({ method: 'GET', url: '/api/signals?listingId=MOCK-1' }, res);
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
     assert.equal(status, 200);
     assert.equal(body.listingId, 'MOCK-1');
     assert.equal(body.signals.length, 6);
     assert.equal(typeof body.triagePriority, 'number');
 
     // Missing listing
-    await handler({ method: 'GET', url: '/api/signals?listingId=DOES-NOT-EXIST' }, res);
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=DOES-NOT-EXIST' }, res);
     assert.equal(status, 404);
 
     // Missing ID
-    await handler({ method: 'GET', url: '/api/signals' }, res);
+    await handler({ method: 'GET', url: '/api/property-signals' }, res);
     assert.equal(status, 400);
+  });
+
+  test('HTTP route handler resolves listingId from POST body', async () => {
+    const mockDb = {
+      getListingById: async (id) => id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null
+    };
+    const handler = createPropertySignalsHandler({ database: mockDb, loadObservations: () => ({ records: {}, signals: [] }) });
+
+    let status = 200;
+    let body = null;
+    const res = {
+      setHeader: () => {},
+      status: (code) => { status = code; return res; },
+      json: (data) => { body = data; return res; }
+    };
+
+    await handler({ method: 'POST', url: '/api/property-signals', body: { listingId: 'MOCK-1' } }, res);
+    assert.equal(status, 200);
+    assert.equal(body.listingId, 'MOCK-1');
+
+    await handler({ method: 'POST', url: '/api/property-signals', body: {} }, res);
+    assert.equal(status, 400);
+  });
+
+  test('overpay ratio (bid above midpoint) is contradicted and contributes no ratio points', () => {
+    // openingBid 390000 vs mid 300000 -> ratio 1.3 (overpay)
+    const evaluation = evaluateOpportunitySignals(sampleListing({ openingBid: 390000 }));
+    const ratioSig = evaluation.signals.find((s) => s.key === 'bid_to_value_ratio');
+    assert.equal(ratioSig.status, 'contradicted');
+    assert.ok(ratioSig.reason.includes('130.0%'));
+
+    // Below-midpoint bid is supported and earns ratio points; at-midpoint / overpay do not.
+    const noDiscount = evaluateOpportunitySignals(sampleListing({ openingBid: 300000 })); // exactly at midpoint
+    const discount = evaluateOpportunitySignals(sampleListing({ openingBid: 150000 }));
+    assert.equal(noDiscount.signals.find((s) => s.key === 'bid_to_value_ratio').status, 'supported');
+    assert.ok(discount.triagePriority > noDiscount.triagePriority);
+  });
+
+  test('area corroboration earns points; an area discrepancy never raises the score', () => {
+    const matching = { parcel: { status: 'matched', properties: { livingAreaSqft: 2050 }, source: { url: 'https://x.gov/1' } } };
+    const conflicting = { parcel: { status: 'matched', properties: { livingAreaSqft: 2800 }, source: { url: 'https://x.gov/2' } } };
+
+    const base = evaluateOpportunitySignals(sampleListing(), { publicRecords: null });
+    const verified = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), { publicRecords: matching });
+    const contradicted = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), { publicRecords: conflicting });
+
+    // Verified square footage must score higher than unverified baseline.
+    assert.ok(verified.triagePriority > base.triagePriority);
+    // A contradicted record must never exceed the verified listing's score.
+    assert.ok(contradicted.triagePriority <= verified.triagePriority);
+  });
+
+  test('building area boundary at exactly 10% is treated as verified (not contradicted)', () => {
+    // 2000 vs 2200 -> 200 / 2200 = 9.09% -> supported
+    const within = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), {
+      publicRecords: { parcel: { status: 'matched', properties: { livingAreaSqft: 2200 }, source: { url: 'https://x.gov/1' } } }
+    });
+    assert.equal(within.signals.find((s) => s.key === 'building_area_discrepancy').status, 'supported');
+
+    // 2000 vs 2223 -> 223 / 2223 = 10.03% -> contradicted
+    const beyond = evaluateOpportunitySignals(sampleListing({ sqft: 2000 }), {
+      publicRecords: { parcel: { status: 'matched', properties: { livingAreaSqft: 2223 }, source: { url: 'https://x.gov/2' } } }
+    });
+    assert.equal(beyond.signals.find((s) => s.key === 'building_area_discrepancy').status, 'contradicted');
   });
 });

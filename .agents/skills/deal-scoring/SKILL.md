@@ -55,3 +55,20 @@ same numbers — `test/suite.test.js` [Suite 2] verifies this.
   `src/components/` (v2 Next.js). `test/sync.test.js` guards cross-surface drift.
 - The worked example score must match the formula output. `test/suite.test.js`
   [Suite 2] verifies: `app.js SCORE_EXAMPLE_PLACEHOLDER score matches formula (77)`.
+
+## Relationship to Opportunity-Signal `triagePriority`
+
+Deal Score is a **single-factor, price-only** triage: it measures only the spread
+between the opening bid and the valuation midpoint (`ratio = openingBid / mid`).
+
+The Opportunity Signal Engine (`server/intelligence/signals.js`) produces a separate
+`triagePriority` (also bounded 1–99) that aggregates **six** evidence signals — the
+bid-to-value ratio is only one of them (weighted 30%). The two numbers are intentionally
+different metrics and must never be presented as the same score:
+
+- `dealScore` = "how deep is the discount" (pure price triage).
+- `triagePriority` = "how actionable/verified is this listing" (multi-signal triage).
+
+Do not re-tune the `×130` multiplier to match `triagePriority`'s linear ratio mapping
+and do not collapse the two into one number; the `×130` calibration and `SCORE_BANDS`
+are a documented, test-guarded decision (`test/sync.test.js`, `test/suite.test.js`).

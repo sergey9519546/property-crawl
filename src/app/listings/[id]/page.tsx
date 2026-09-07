@@ -128,7 +128,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = [
     isDemo ? `Demonstration property profile for ${listing.address}.` : `Auction-source record for ${listing.address}.`,
     positiveNumber(listing.openingBid) !== null ? `Published opening amount: ${formatMoney(listing.openingBid)}.` : null,
-    finiteNumber(listing.dealScore) !== null ? `Modeled Deal Score: ${finiteNumber(listing.dealScore)}/100.` : null,
+    finiteNumber(listing.dealScore) !== null ? `Modeled Deal Score: ${finiteNumber(listing.dealScore)}/99.` : null,
     "Verify every auction term with the upstream record before bidding.",
   ].filter(Boolean).join(" ");
 
