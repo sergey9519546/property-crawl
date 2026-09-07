@@ -50,7 +50,7 @@ export function DealVideoGenerator({ listing }: DealVideoProps) {
   const slides = [
     {
       title: "OPPORTUNITY REVEAL",
-      badge: dealScore === null ? "SOURCE RECORD" : `MODELED SCORE ${Math.round(dealScore)}/100`,
+      badge: dealScore === null ? "SOURCE RECORD" : `MODELED SCORE ${Math.round(dealScore)}/99`,
       content: `${listing.address}${location ? `, ${location}` : ""}`,
       stat: `$${openingBid.toLocaleString()} Opening Bid`,
       color: "bg-[#16A34A]"

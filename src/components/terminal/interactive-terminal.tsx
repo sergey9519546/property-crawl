@@ -1013,7 +1013,7 @@ export function InteractiveTerminal() {
                             )}
                           </div>
                           <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 shrink-0">
-                            {knownNumber(listing.dealScore) === null ? "Not modeled" : `${listing.dealScore}/100`}
+                            {knownNumber(listing.dealScore) === null ? "Not modeled" : `${listing.dealScore}/99`}
                           </span>
                         </div>
 

@@ -27,7 +27,8 @@ export type OpportunitySignal = {
 export type OpportunitySignalsData = {
   triagePriority: number;
   signals: OpportunitySignal[];
-  evaluatedAt?: string;
+  weights?: Record<string, number>;
+  summary?: { supported: number; unknown: number; contradicted: number };
   disclaimer?: string;
 };
 
@@ -37,14 +38,20 @@ interface Props {
   compact?: boolean;
 }
 
-const WEIGHT_EXPLANATIONS = [
-  { component: 'Bid-to-Value Ratio', weight: '30%', desc: 'Compares confirmed opening bid to estimated valuation midpoint.' },
-  { component: 'Published Sale Date', weight: '20%', desc: 'Validates that a future active auction date is publisher-confirmed.' },
-  { component: 'Bid Reduction', weight: '20%', desc: 'Detects same-record opening bid drops in source observation history.' },
-  { component: 'Building Area Discrepancy', weight: '10%', desc: 'Flags discrepancies between publisher sqft and official cadastral records.' },
-  { component: 'Returned to Market', weight: '10%', desc: 'Detects relisting notices, auction restarts, or back-on-market tags.' },
-  { component: 'Data Completeness', weight: '10%', desc: 'Measures presence of verified title, occupancy, and deposit facts.' },
-];
+// Descriptions live with the UI; the numeric weights are single-sourced from
+// the backend evaluation payload (data.weights) so they can never drift.
+const WEIGHT_DETAILS: Record<string, { label: string; desc: string }> = {
+  bidToValueRatio: { label: 'Bid-to-Value Ratio', desc: 'Compares confirmed opening bid to estimated valuation midpoint.' },
+  saleDateKnown: { label: 'Published Sale Date', desc: 'Validates that a future active auction date is publisher-confirmed.' },
+  bidReduction: { label: 'Bid Reduction', desc: 'Detects same-record opening bid drops in source observation history.' },
+  areaDiscrepancy: { label: 'Building Area Discrepancy', desc: 'Flags discrepancies between publisher sqft and official cadastral records.' },
+  returnedToMarket: { label: 'Returned to Market', desc: 'Detects relisting notices, auction restarts, or back-on-market tags.' },
+  dataCompleteness: { label: 'Data Completeness', desc: 'Measures presence of verified title, occupancy, and deposit facts.' },
+};
+
+function weightPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
 
 export function OpportunitySignalsCard({ listingId, initialData = null, compact = false }: Props) {
   const [data, setData] = useState<OpportunitySignalsData | null>(initialData);
@@ -108,8 +115,9 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
   const isHigh = priority >= 70;
   const isMed = priority >= 50 && priority < 70;
 
-  const supportedCount = data.signals.filter((s) => s.status === 'supported').length;
-  const contradictedCount = data.signals.filter((s) => s.status === 'contradicted').length;
+const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.status === 'supported').length;
+  const contradictedCount = data.summary?.contradicted ?? data.signals.filter((s) => s.status === 'contradicted').length;
+  const weights = data.weights ?? {};
 
   return (
     <div className={cn("bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-slate-900", compact && "p-4")}>
@@ -121,8 +129,8 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
             <span>Opportunity Signal Engine</span>
           </div>
           <h3 className="text-base font-bold text-white">Triage Priority & Signal Verification</h3>
-          <p className="text-xs text-slate-300">
-            Deterministic evaluation with published weights. Not an appraisal or predictive distress score.
+<p className="text-xs text-slate-300">
+            {data.disclaimer || 'Deterministic evaluation with published weights. Not an appraisal or predictive distress score.'}
           </p>
         </div>
 
@@ -132,7 +140,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Triage Priority</p>
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-2xl font-black text-white">{priority}</span>
-              <span className="text-xs font-semibold text-slate-400">/100</span>
+              <span className="text-xs font-semibold text-slate-400">/99</span>
             </div>
           </div>
           <div
@@ -162,17 +170,21 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
           {showWeights ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
         </button>
 
-        {showWeights && (
+{showWeights && (
           <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            {WEIGHT_EXPLANATIONS.map((item) => (
-              <div key={item.component} className="p-2 rounded-lg bg-white border border-slate-200 flex flex-col justify-between">
-                <div className="flex items-center justify-between font-semibold text-slate-900">
-                  <span>{item.component}</span>
-                  <span className="text-emerald-700 font-extrabold">{item.weight}</span>
+            {Object.entries(weights).map(([key, value]) => {
+              const detail = WEIGHT_DETAILS[key];
+              if (!detail) return null;
+              return (
+                <div key={key} className="p-2 rounded-lg bg-white border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between font-semibold text-slate-900">
+                    <span>{detail.label}</span>
+                    <span className="text-emerald-700 font-extrabold">{weightPercent(value)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">{detail.desc}</p>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1 leading-snug">{item.desc}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

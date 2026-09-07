@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { sourceDisplayText } from '@/lib/source-display';
 import { ArrowRight, Download, ExternalLink, Fingerprint, Loader2, Radar } from 'lucide-react';
-import { OpportunitySignalsCard, OpportunitySignal } from '@/components/listings/opportunity-signals-card';
+import { OpportunitySignalsCard } from '@/components/listings/opportunity-signals-card';
+import type { OpportunitySignal } from '@/components/listings/opportunity-signals-card';
 
 type Dossier = {
   listingId: string; address: string; generatedAt: string; historyUnavailable: boolean;
@@ -15,6 +16,9 @@ type Dossier = {
   history: { firstObservedAt: string; observations: number } | null;
   opportunitySignals?: OpportunitySignal[];
   triagePriority?: number;
+  opportunityWeights?: Record<string, number>;
+  opportunitySummary?: { supported: number; unknown: number; contradicted: number };
+  opportunityDisclaimer?: string;
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
     parcel: { status: string; rawParcelId?: string; properties: Record<string, unknown>; source?: { url: string } } | null;
@@ -80,7 +84,9 @@ export function PropertyIntelligence({ listingId }: { listingId: string }) {
             initialData={{
               triagePriority: dossier.triagePriority ?? 0,
               signals: dossier.opportunitySignals,
-              evaluatedAt: dossier.generatedAt,
+              weights: dossier.opportunityWeights,
+              summary: dossier.opportunitySummary,
+              disclaimer: dossier.opportunityDisclaimer,
             }}
           />
         )}

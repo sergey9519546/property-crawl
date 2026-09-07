@@ -1,5 +1,14 @@
 {
-  "worktrees": {},
+  "worktrees": {
+    "wt-1788742603802-1": {
+      "branch": "gaudy-asterisk",
+      "path": "c:\\users\\serge\\.minimax\\sessions\\mvs_33469e4a8e48472faf25c6f55a29c489\\workspace\\property-crawl\\.kilo\\worktrees\\gaudy-asterisk",
+      "parentBranch": "main",
+      "createdAt": "2026-09-07T00:56:43.802Z",
+      "remote": "origin",
+      "branchOwned": true
+    }
+  },
   "sessions": {
     "ses_fa65b00a7ffeihM78bLDDG5IJQ": {
       "worktreeId": null,
@@ -12,16 +21,19 @@
     "ses_f9880856affepufRNj3e0ylP1i": {
       "worktreeId": null,
       "createdAt": "2026-09-03T13:40:02.862Z"
+    },
+    "ses_f86a1e6a9ffeheN2QJEFHKHlFC": {
+      "worktreeId": "wt-1788742603802-1",
+      "createdAt": "2026-09-07T00:56:45.143Z"
     }
   },
   "tabOrder": {
     "local": [
-      "pending:209515db-f6bc-425a-bbcb-85c86221c390",
-      "ses_fa65b00a7ffeihM78bLDDG5IJQ",
-      "ses_f99f896a0ffeQ2MjAlkaanGtFj",
-      "ses_f9880856affepufRNj3e0ylP1i"
+      "pending:b278a485-b723-4a5f-8790-63069aa7dbf6"
     ]
   },
-  "sessionsCollapsed": true,
-  "sidebarCollapsed": true
+  "worktreeOrder": [
+    "wt-1788742603802-1"
+  ],
+  "sessionsCollapsed": true
 }

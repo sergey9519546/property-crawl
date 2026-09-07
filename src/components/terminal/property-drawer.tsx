@@ -352,9 +352,12 @@ Use only the supplied evidence. Never invent comps, title status, property condi
         </div>
 
         {/* Tab Navigation */}
-        <div aria-label="Property inspection tabs" className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
+        <div role="tablist" aria-label="Property inspection tabs" className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
           <button
             id="tab-underwrite"
+            role="tab"
+            aria-selected={activeTab === "underwrite"}
+            tabIndex={activeTab === "underwrite" ? 0 : -1}
             aria-controls="panel-underwrite"
             onClick={() => setActiveTab("underwrite")}
             className={cn(
@@ -370,6 +373,9 @@ Use only the supplied evidence. Never invent comps, title status, property condi
 
           <button
             id="tab-3d"
+            role="tab"
+            aria-selected={activeTab === "3d"}
+            tabIndex={activeTab === "3d" ? 0 : -1}
             aria-controls="panel-3d"
             onClick={() => setActiveTab("3d")}
             className={cn(
@@ -385,6 +391,9 @@ Use only the supplied evidence. Never invent comps, title status, property condi
 
           <button
             id="tab-bidding"
+            role="tab"
+            aria-selected={activeTab === "bidding"}
+            tabIndex={activeTab === "bidding" ? 0 : -1}
             aria-controls="panel-bidding"
             onClick={() => setActiveTab("bidding")}
             className={cn(
@@ -400,6 +409,9 @@ Use only the supplied evidence. Never invent comps, title status, property condi
 
           <button
             id="tab-signals"
+            role="tab"
+            aria-selected={activeTab === "signals"}
+            tabIndex={activeTab === "signals" ? 0 : -1}
             aria-controls="panel-signals"
             onClick={() => setActiveTab("signals")}
             className={cn(

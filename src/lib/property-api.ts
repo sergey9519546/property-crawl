@@ -1,7 +1,7 @@
 // Server-only transport to the canonical Node API. Never consult a second
 // in-memory snapshot for mutations or listing-backed enrichment.
 const MAX_BYTES = 2 * 1024 * 1024;
-const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-intelligence|property-signals|signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?)$/;
+const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-intelligence|property-signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?)$/;
 
 function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });

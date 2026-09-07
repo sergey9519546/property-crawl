@@ -527,7 +527,7 @@ export function DiscoveryWorkbench() {
                       <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
                         {knownNumber(listing.dealScore) === null
                           ? "Not modeled"
-                          : `${listing.dealScore}/100`}
+                          : `${listing.dealScore}/99`}
                       </span>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3 text-xs">

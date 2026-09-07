@@ -76,6 +76,9 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     source, facts, signals, contradictions, gaps,
     opportunitySignals: opportunityEvaluation.signals,
     triagePriority: opportunityEvaluation.triagePriority,
+    opportunityWeights: opportunityEvaluation.weights,
+    opportunitySummary: opportunityEvaluation.summary,
+    opportunityDisclaimer: opportunityEvaluation.disclaimer,
     identityGroups: {
       publisher: publisherIdentity,
       parcel: parcelIdentity,
