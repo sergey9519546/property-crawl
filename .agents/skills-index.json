@@ -25,28 +25,21 @@
     {
       "name": "foreclosure-title-intelligence",
       "description": "",
-      "domain": "real-estate-intelligence",
+      "domain": "general",
       "version": "v1",
       "trigger": [
-        "foreclosure-title-intelligence"
+        "undefined"
       ],
       "dir": ".agents/skills/foreclosure-title-intelligence",
       "file": ".agents/skills/foreclosure-title-intelligence/SKILL.md"
     },
     {
       "name": "google-cloud-auth-verification",
-      "description": "Mandatory Step 0 pre-flight execution order and authentication verification",
+      "description": "",
       "domain": "general",
-      "version": "v2",
+      "version": "v1",
       "trigger": [
-        "authentication",
-        "execution",
-        "google-cloud-auth-verification",
-        "mandatory",
-        "order",
-        "pre-flight",
-        "step",
-        "verification"
+        "undefined"
       ],
       "dir": ".agents/skills/google-cloud-auth-verification",
       "file": ".agents/skills/google-cloud-auth-verification/SKILL.md"
@@ -65,27 +58,21 @@
     {
       "name": "property-scraper-engineering",
       "description": "",
-      "domain": "data-engineering",
+      "domain": "general",
       "version": "v1",
       "trigger": [
-        "property-scraper-engineering"
+        "undefined"
       ],
       "dir": ".agents/skills/property-scraper-engineering",
       "file": ".agents/skills/property-scraper-engineering/SKILL.md"
     },
     {
       "name": "schema-mapping",
-      "description": "Guides the process of analyzing, mapping, and documenting transformations",
+      "description": "",
       "domain": "general",
       "version": "v1",
       "trigger": [
-        "analyzing",
-        "documenting",
-        "guides",
-        "mapping",
-        "process",
-        "schema-mapping",
-        "transformations"
+        "undefined"
       ],
       "dir": ".agents/skills/schema-mapping",
       "file": ".agents/skills/schema-mapping/SKILL.md"
@@ -96,11 +83,11 @@
       "domain": "general",
       "version": "v1",
       "trigger": [
-        "skill-repair"
+        "undefined"
       ],
       "dir": ".agents/skills/skill-repair",
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "8ab745c87e8a06107499fbc90c2ec4771d935cd8173d62262361f55d9e4d59df"
+  "digest": "7a039b4a8da9b5abe73a726969064a54e2c6118b18a88c9acb168489f4116bff"
 }
