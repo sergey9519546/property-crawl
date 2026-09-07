@@ -57,21 +57,19 @@ class ZillowMcpClient {
         res.setEncoding('utf8');
         res.on('data', chunk => { body += chunk; });
         res.on('end', () => {
-          // Strip SSE framing if the server returns "data: {...}\n\n"
-          const stripped = body
-            .split('\n')
-            .filter(line => line.startsWith('data:'))
-            .map(line => line.slice(5).trim())
-            .join('') || body.trim();
+          // Strip SSE framing: "data: {...}\n\n"
+          const lines = body.split('\n');
+          const dataLine = lines.find(l => l.startsWith('data:'));
+          const stripped = dataLine ? dataLine.slice(5).trim() : body.trim();
 
           let parsed;
           try { parsed = JSON.parse(stripped); }
           catch { parsed = { raw: body, parseError: true }; }
 
+          // JSON-RPC protocol error
           if (parsed.error) {
             return resolve({
-              ok: false,
-              id,
+              ok: false, id,
               error: parsed.error.message || JSON.stringify(parsed.error),
               code:  parsed.error.code,
               data:  parsed
@@ -79,16 +77,35 @@ class ZillowMcpClient {
           }
 
           if (parsed.result !== undefined) {
-            // Unwrap tool call content array → first text item
             const result = parsed.result;
+
+            // MCP isError flag — tool call was rejected by the server
+            if (result.isError === true) {
+              const text = Array.isArray(result.content) && result.content[0]
+                ? result.content[0].text : JSON.stringify(result);
+              return resolve({ ok: false, id, error: text, code: 422, data: result });
+            }
+
+            // Unwrap tool call content array → first text item
             let content = result;
-            if (Array.isArray(result?.content)) {
+            if (Array.isArray(result.content)) {
               const textItem = result.content.find(c => c.type === 'text');
               if (textItem) {
                 try { content = JSON.parse(textItem.text); }
                 catch { content = textItem.text; }
               }
             }
+
+            // Upstream REST API returned success:true but data.error:true (rate limit, bad field, etc.)
+            if (content && typeof content === 'object' && content.data && content.data.error === true) {
+              return resolve({
+                ok: false, id,
+                error: content.data.message || 'Upstream API error',
+                code:  422,
+                data:  content
+              });
+            }
+
             return resolve({ ok: true, id, result: content, raw: parsed });
           }
 
@@ -139,115 +156,113 @@ class ZillowMcpClient {
   }
 
   // ─── Search tools ─────────────────────────────────────────────────────────
+  //
+  // All post_* tools wrap arguments under { body: { ... } }.
+  // Bounding-box coords use snake_case: north_latitude, south_latitude, etc.
+  // get_school_district_details uses { query: { school_district_ids: "id,..." } }.
 
   /**
    * Autocomplete a location query (city, neighborhood, zip, address).
    * @param {string} query - e.g. "Miami, FL"
-   * @returns {Promise<{ok,result?,error?}>}
+   * @param {"FOR_SALE"|"FOR_RENT"} [context]
    */
-  async autocomplete(query) {
+  async autocomplete(query, context = 'FOR_SALE') {
     if (!query || typeof query !== 'string') {
       return { ok: false, error: 'query must be a non-empty string', code: 400 };
     }
-    return this._callTool('post_autocomplete', { query });
+    // Flat args confirmed working — no body wrapper needed for autocomplete
+    return this._callTool('post_autocomplete', { query, user_search_context: context });
   }
 
   /**
    * Search homes for sale within a lat/lng bounding box.
    * @param {{ north, south, east, west }} bbox
-   * @param {object} [options] - Optional filters: minPrice, maxPrice, beds, baths, etc.
+   * @param {object} [options] - page, page_size, etc.
    */
   async searchForSale(bbox, options = {}) {
-    if (!bbox || !bbox.north || !bbox.south || !bbox.east || !bbox.west) {
+    if (!bbox || bbox.north == null || bbox.south == null || bbox.east == null || bbox.west == null) {
       return { ok: false, error: 'bbox must include north, south, east, west', code: 400 };
     }
     return this._callTool('post_search_homes_sale', {
-      north: bbox.north,
-      south: bbox.south,
-      east:  bbox.east,
-      west:  bbox.west,
-      ...options
+      body: { north_latitude: bbox.north, south_latitude: bbox.south,
+               east_longitude: bbox.east, west_longitude: bbox.west, ...options }
     });
   }
 
-  /**
-   * Search homes for rent within a lat/lng bounding box.
-   */
+  /** Search homes for rent within a lat/lng bounding box. */
   async searchForRent(bbox, options = {}) {
-    if (!bbox || !bbox.north || !bbox.south || !bbox.east || !bbox.west) {
+    if (!bbox || bbox.north == null || bbox.south == null || bbox.east == null || bbox.west == null) {
       return { ok: false, error: 'bbox must include north, south, east, west', code: 400 };
     }
     return this._callTool('post_search_homes_rent', {
-      north: bbox.north,
-      south: bbox.south,
-      east:  bbox.east,
-      west:  bbox.west,
-      ...options
+      body: { north_latitude: bbox.north, south_latitude: bbox.south,
+               east_longitude: bbox.east, west_longitude: bbox.west, ...options }
     });
   }
 
-  /**
-   * Search recently sold homes within a lat/lng bounding box.
-   */
+  /** Search recently sold homes within a lat/lng bounding box. */
   async searchSold(bbox, options = {}) {
-    if (!bbox || !bbox.north || !bbox.south || !bbox.east || !bbox.west) {
+    if (!bbox || bbox.north == null || bbox.south == null || bbox.east == null || bbox.west == null) {
       return { ok: false, error: 'bbox must include north, south, east, west', code: 400 };
     }
     return this._callTool('post_search_homes_sold', {
-      north: bbox.north,
-      south: bbox.south,
-      east:  bbox.east,
-      west:  bbox.west,
-      ...options
+      body: { north_latitude: bbox.north, south_latitude: bbox.south,
+               east_longitude: bbox.east, west_longitude: bbox.west, ...options }
     });
   }
 
   /**
-   * Get full property details by Zillow Property ID (zpid) or canonical Zillow URL.
-   * At least one of zpid or zillowUrl must be provided.
+   * Get full property details.
+   * Pass a canonical Zillow URL or a zpid (will be converted to URL form).
    */
   async getPropertyDetails({ zpid, zillowUrl } = {}) {
     if (!zpid && !zillowUrl) {
       return { ok: false, error: 'Either zpid or zillowUrl is required', code: 400 };
     }
-    const args = {};
-    if (zpid) args.zpid = String(zpid);
-    if (zillowUrl) args.zillow_url = zillowUrl;
-    return this._callTool('post_property_details', args);
+    const url = zillowUrl || `https://www.zillow.com/homedetails/${zpid}_zpid/`;
+    return this._callTool('post_property_details', { body: { zillow_url: url } });
   }
 
   /**
    * Resolve a Zillow search URL to canonical form.
+   * Tool name on server: post_resolve_url
    */
   async resolveZillowUrl(url) {
     if (!url || typeof url !== 'string') {
       return { ok: false, error: 'url must be a non-empty string', code: 400 };
     }
-    return this._callTool('post_resolve_zillow_url', { url });
+    return this._callTool('post_resolve_url', { body: { url } });
   }
 
   /**
-   * Get school district details by district IDs.
-   * @param {string[]} schoolDistrictIds
+   * Get school district details.
+   * @param {string[]} schoolDistrictIds - e.g. ['10427']
    */
   async getSchoolDistrictDetails(schoolDistrictIds) {
     if (!Array.isArray(schoolDistrictIds) || schoolDistrictIds.length === 0) {
       return { ok: false, error: 'schoolDistrictIds must be a non-empty array', code: 400 };
     }
     return this._callTool('get_school_district_details', {
-      school_district_ids: schoolDistrictIds
+      query: { school_district_ids: schoolDistrictIds.join(',') }
     });
   }
 
-  // ─── Convenience helpers ──────────────────────────────────────────────────
+  /** Zestimate deep dive for a property. */
+  async getZestimate({ zpid, zillowUrl } = {}) {
+    if (!zpid && !zillowUrl) {
+      return { ok: false, error: 'Either zpid or zillowUrl is required', code: 400 };
+    }
+    const url = zillowUrl || `https://www.zillow.com/homedetails/${zpid}_zpid/`;
+    return this._callTool('post_zestimate_deep_dive', { body: { zillow_url: url } });
+  }
 
-  /**
-   * Search for sale listings in a named city by resolving a Zillow URL first.
-   * @param {string} citySlug - e.g. "miami_fl" (Zillow city slug format)
-   * @param {object} bbox - bounding box coordinates
-   */
-  async searchCityForSale(bbox, options = {}) {
-    return this.searchForSale(bbox, options);
+  /** Walk / transit / bike score. */
+  async getWalkScore({ zpid, zillowUrl } = {}) {
+    if (!zpid && !zillowUrl) {
+      return { ok: false, error: 'Either zpid or zillowUrl is required', code: 400 };
+    }
+    const url = zillowUrl || `https://www.zillow.com/homedetails/${zpid}_zpid/`;
+    return this._callTool('post_walk_transit_bike_score', { body: { zillow_url: url } });
   }
 }
 
