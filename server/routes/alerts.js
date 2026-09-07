@@ -1,14 +1,15 @@
 const db = require('../db/client');
+const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 async function handleAlerts(req, res) {
   const method = req.method;
-  const url = new URL(req.url, 'http://localhost');
-  const userId = req.headers['x-user-id'] || url.searchParams.get('userId') || 'guest_user';
+  const userId = requireWorkspaceIdentity(req, res);
+  if (!userId) return;
   res.setHeader('Cache-Control', 'no-store');
 
   if (method === 'GET') {
     const saved = await db.getSavedDeals(userId);
-    return res.json({ userId, savedCount: saved.length, deals: saved });
+    return res.json({ savedCount: saved.length, deals: saved });
   }
 
   if (method === 'POST') {

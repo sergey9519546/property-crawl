@@ -251,18 +251,29 @@ async function run() {
   });
 
   await test('POST /api/alerts and GET /api/alerts manages user watchlist', async () => {
-    const userId = 'test_user_42';
-    const postRes = await request('/api/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-      body: { listingId: primaryListing.id }
-    });
-    assert.strictEqual(postRes.status, 201);
+    const previousToken = process.env.SCRAPER_ADMIN_TOKEN;
+    process.env.SCRAPER_ADMIN_TOKEN = 'watchlist-test-secret';
+    try {
+      const unauthorized = await request('/api/alerts?userId=forged-user');
+      assert.strictEqual(unauthorized.status, 401);
 
-    const getRes = await request(`/api/alerts?userId=${userId}`);
-    assert.strictEqual(getRes.status, 200);
-    assert.strictEqual(getRes.body.savedCount, 1);
-    assert.strictEqual(getRes.body.deals[0].id, primaryListing.id);
+      const postRes = await request('/api/alerts?userId=forged-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-scraper-token': 'watchlist-test-secret', 'x-user-id': 'forged-user' },
+        body: { listingId: primaryListing.id }
+      });
+      assert.strictEqual(postRes.status, 201);
+
+      const getRes = await request('/api/alerts?userId=another-forged-user', {
+        headers: { 'x-scraper-token': 'watchlist-test-secret', 'x-user-id': 'another-forged-user' }
+      });
+      assert.strictEqual(getRes.status, 200);
+      assert.strictEqual(getRes.body.savedCount, 1);
+      assert.strictEqual(getRes.body.deals[0].id, primaryListing.id);
+    } finally {
+      if (previousToken === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
+      else process.env.SCRAPER_ADMIN_TOKEN = previousToken;
+    }
   });
 
   await test('GET /api/export?format=csv returns valid CSV stream', async () => {

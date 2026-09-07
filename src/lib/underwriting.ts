@@ -184,6 +184,7 @@ export interface TargetPriceScenario {
   priceReductionNeeded: number;
   maxOtherAcquisitionCostsAtCurrentPrice: number;
   costReductionNeeded: number;
+  targetAchievableAtCurrentPrice: boolean;
   targetProfit: number;
 }
 
@@ -217,7 +218,10 @@ export function computeTargetPriceScenario(params: {
     maxPurchasePrice,
     priceReductionNeeded: Math.max(0, currentPrice - maxPurchasePrice),
     maxOtherAcquisitionCostsAtCurrentPrice,
-    costReductionNeeded: Math.max(0, otherAcquisitionCosts - maxOtherAcquisitionCostsAtCurrentPrice),
+    costReductionNeeded: currentPrice <= availableAcquisitionBudget
+      ? Math.max(0, otherAcquisitionCosts - maxOtherAcquisitionCostsAtCurrentPrice)
+      : 0,
+    targetAchievableAtCurrentPrice: currentPrice <= availableAcquisitionBudget,
     targetProfit,
   };
 }
@@ -349,15 +353,23 @@ export function parseRentRollSchedule(
     const sqftMatch = rest.match(/(\d[\d,]*)\s*(?:sqft|sf|sq\s*ft)/i);
     const sqft = sqftMatch ? parseInt(sqftMatch[1].replace(/,/g, ''), 10) : null;
 
-    const rentMatch = rest.match(/(?:rent|\$)\s*[:\$]?\s*(\d[\d,]*)/i);
-    const rent = rentMatch ? parseInt(rentMatch[1].replace(/,/g, ''), 10) : (isVacant ? 0 : null);
+    const rentMatch = rest.match(/(?:rent\s*[:=]?\s*)?\$\s*(\d[\d,]*(?:\.\d+)?)\s*(\/\s*(?:mo(?:nth)?|yr|year|annual)|(?:per\s+)?(?:mo(?:nth)?|yr|year|annual))?/i)
+      || rest.match(/rent\s*[:=]?\s*(\d[\d,]*(?:\.\d+)?)\s*(\/\s*(?:mo(?:nth)?|yr|year|annual)|(?:per\s+)?(?:mo(?:nth)?|yr|year|annual))/i);
+    const rentAmount = rentMatch ? Number(rentMatch[1].replace(/,/g, '')) : null;
+    const rentPeriod = rentMatch?.[2]?.toLowerCase().replace(/\s+/g, '') || null;
+    const rent = rentAmount !== null && Number.isFinite(rentAmount) && rentPeriod
+      ? rentAmount
+      : (isVacant ? 0 : null);
+    const isAnnualRent = /yr|year|annual/.test(rentPeriod || '');
+    const monthlyRent = rent === null ? null : isAnnualRent ? rent / 12 : rent;
+    const annualRent = rent === null ? null : isAnnualRent ? rent : rent * 12;
 
     const leaseMatch = rest.match(/(?:exp|expires|lease\s*end)\s*[:\s]?\s*([0-9\/\-]+)/i);
     const leaseEnd = leaseMatch ? leaseMatch[1].trim() : null;
 
     const status: RentRollUnit['status'] = isVacant
       ? 'Vacant'
-      : rent !== null && rent > 0
+      : monthlyRent !== null && monthlyRent > 0
         ? 'Occupied'
         : 'Unknown';
     units.push({
@@ -365,8 +377,8 @@ export function parseRentRollSchedule(
       tenant,
       status,
       sqft,
-      monthlyRent: rent,
-      annualRent: rent === null ? null : rent * 12,
+      monthlyRent,
+      annualRent,
       leaseEnd
     });
   }

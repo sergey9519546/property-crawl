@@ -101,13 +101,18 @@ function optionalText(value) {
   return text || null;
 }
 function canonicalStatus(value) {
-  const raw=optionalText(value); if(!raw)return 'active';
-  if (/cancel|withdraw/i.test(raw)) return 'cancelled';
-  if (/postpon/i.test(raw)) return 'postponed';
-  if (/adjourn/i.test(raw)) return 'adjourned';
-  if (/scheduled|coming soon|pre.?auction/i.test(raw)) return 'scheduled';
-  if (/pending|closed|post.?auction|auctioned/i.test(raw)) return 'pending';
-  return ['active','stayed','STAYED_BANKRUPTCY','ACTIVE_SCHEDULED'].includes(raw) ? raw : 'active';
+  const raw = optionalText(value);
+  if (!raw) return 'unknown';
+  const normalized = raw.toLowerCase();
+  if (/cancel|withdraw/.test(normalized)) return 'cancelled';
+  if (/postpon/.test(normalized)) return 'postponed';
+  if (/adjourn/.test(normalized)) return 'adjourned';
+  if (/stay/.test(normalized)) return 'stayed';
+  if (/sold|closed|auctioned|post.?auction/.test(normalized)) return 'sold';
+  if (/scheduled|coming soon|pre.?auction/.test(normalized)) return 'scheduled';
+  if (/pending/.test(normalized)) return 'pending';
+  if (normalized === 'active') return 'active';
+  return 'unknown';
 }
 
 function normalizeProvenance(value) {
@@ -212,10 +217,22 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
   if (existing.provenance || incoming.provenance) {
     merged.provenance = { ...(existing.provenance || {}), ...(incoming.provenance || {}) };
   }
-  for (const field of ['baths', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'redemptionDays', 'seniorLienRisk', 'cashToCloseDetails', 'sourceObservedAt']) {
+  for (const field of [
+    'county', 'city', 'zip', 'beds', 'baths', 'sqft', 'year', 'assessed',
+    'openingBid', 'saleDate', 'deposit', 'occupancy', 'redemptionDays',
+    'seniorLienRisk', 'cashToClose', 'cashToCloseDetails', 'price',
+    'listingDate', 'sourceObservedAt', 'auctionProgram', 'lifecycleStatus',
+    'transactionOutcome',
+  ]) {
     if (incoming[field] === null && existing[field] !== null && existing[field] !== undefined) {
       merged[field] = existing[field];
     }
+  }
+  if (incoming.status === 'unknown' && existing.status && existing.status !== 'unknown') {
+    merged.status = existing.status;
+  }
+  if (incoming.hasDocuments !== true && existing.hasDocuments === true) {
+    merged.hasDocuments = true;
   }
   return prepareListingForPersistence(merged);
 }
@@ -231,8 +248,9 @@ function compareNumbersUnknownLast(left, right, descending = true) {
 class DatabaseClient {
   constructor(options = {}) {
     this.env = options.env || process.env;
-    this.isPg = false;
-    this.pool = null;
+    this.isPg = Boolean(options.pool);
+    this.pool = options.pool || null;
+    this.externalPool = Boolean(options.pool);
     this.listingSelect = LISTING_SELECT;
     const explicitLiveCachePath = Object.prototype.hasOwnProperty.call(options, 'liveCachePath')
       ? options.liveCachePath
@@ -254,6 +272,7 @@ class DatabaseClient {
   }
 
   init() {
+    if (this.externalPool) return;
     if (this.env.DISCOVERY_MODE === 'advanced' && !this.env.DATABASE_URL) {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
@@ -470,7 +489,7 @@ class DatabaseClient {
         params.push(occupancy);
       }
       if (seniorLien === 'clean') {
-        sql += ` AND senior_lien_risk IS NOT NULL AND senior_lien_risk != 'high'`;
+        sql += ` AND senior_lien_risk IS NOT NULL AND senior_lien_risk NOT IN ('high', 'unknown')`;
       } else if (seniorLien === 'risk') {
         sql += ` AND senior_lien_risk = 'high'`;
       }
@@ -515,7 +534,7 @@ class DatabaseClient {
       if (minEquity && l.equity < Number(minEquity)) return false;
       if (maxBid && (l.openingBid == null || l.openingBid > Number(maxBid))) return false;
       if (occupancy !== 'all' && l.occupancy !== occupancy) return false;
-      if (seniorLien === 'clean' && (!l.seniorLienRisk || l.seniorLienRisk === 'high')) return false;
+      if (seniorLien === 'clean' && (!l.seniorLienRisk || ['high', 'unknown'].includes(l.seniorLienRisk))) return false;
       if (seniorLien === 'risk' && l.seniorLienRisk !== 'high') return false;
       if (redemption === 'immediate' && l.redemptionDays !== 0) return false;
       if (redemption === 'redemption_active' && (!l.redemptionDays || l.redemptionDays <= 0)) return false;
@@ -548,15 +567,11 @@ class DatabaseClient {
     if (this.isPg) {
       const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return res.rows[0];
-      const aliasRes = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE '%' || $1 OR $1 LIKE '%' || id LIMIT 1`, [id]);
-      if (aliasRes.rows[0]) return aliasRes.rows[0];
       return null;
     }
     this.refreshLiveCache();
     const exact = this.inMemoryData.listings.find(l => l.id === id);
     if (exact) return exact;
-    const aliased = this.inMemoryData.listings.find(l => l.id.endsWith(id) || id.endsWith(l.id));
-    if (aliased) return aliased;
     return null;
   }
 
@@ -581,10 +596,7 @@ class DatabaseClient {
         CASE WHEN $8::float8 IS NOT NULL AND $9::float8 IS NOT NULL
           THEN ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography ELSE NULL END,
         $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,
-        NULLIF($31::jsonb #>> '{sourceFacts,auctionProgram}',''), $42,
-        NULLIF($31::jsonb #>> '{sourceFacts,transactionOutcome}',''),
-        CASE WHEN jsonb_typeof($31::jsonb #> '{sourceFacts,documents}')='array'
-          THEN jsonb_array_length($31::jsonb #> '{sourceFacts,documents}') > 0 ELSE FALSE END
+        $43,$44,$45,$46
       )
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -661,7 +673,9 @@ class DatabaseClient {
         enriched.price ?? null, enriched.listingDate ?? null,
         enriched.redemptionDays, enriched.redemptionWarning || null,
         enriched.seniorLienRisk, enriched.seniorLienWarning || null,
-        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'active'
+        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'unknown',
+        enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
+        enriched.hasDocuments === true
       ];
       const result = await this.pool.query(sql, params);
       return result.rows[0];

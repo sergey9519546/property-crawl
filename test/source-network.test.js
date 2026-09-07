@@ -430,11 +430,11 @@ test('collection jobs expose a bounded activity list, exact job status, and sour
     catalog: [catalogEntry('hud-homestore', 'hud')], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
   });
-  const list = await invoke(handler, { url: '/api/source-network/jobs?limit=50' });
+  const list = await invoke(handler, { url: '/api/source-network/jobs?limit=50', token: 'operator-secret' });
   assert.equal(list.statusCode, 200);
   assert.equal(list.body.total, 1);
   assert.equal(list.body.available, true);
-  const detail = await invoke(handler, { url: `/api/source-network/jobs/${job.id}` });
+  const detail = await invoke(handler, { url: `/api/source-network/jobs/${job.id}`, token: 'operator-secret' });
   assert.equal(detail.statusCode, 200);
   assert.equal(detail.body.job.id, job.id);
   const startedRun = await invoke(handler, {
@@ -444,6 +444,18 @@ test('collection jobs expose a bounded activity list, exact job status, and sour
   assert.equal(startedRun.statusCode, 202);
   assert.equal(startedRun.body.job.id, job.id);
   assert.deepEqual(started, [{ sourceIds: ['hud'], trigger: 'source_network', idempotencyKey: 'hud-run-20260905' }]);
+});
+
+test('collection job list and detail reject missing operator credentials', async () => {
+  const job = { id: 'job_0123456789abcdef01234567', status: 'queued', revision: 1, stages: {}, errors: [] };
+  const handler = createSourceNetworkHandler({
+    database: { getListings: async () => ({ listings: [], total: 0 }) },
+    scheduler: { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true },
+    coordinator: { store: { list: () => ({ items: [job], total: 1 }), get: () => job } },
+    env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
+  });
+  assert.equal((await invoke(handler, { url: '/api/source-network/jobs' })).statusCode, 401);
+  assert.equal((await invoke(handler, { url: `/api/source-network/jobs/${job.id}` })).statusCode, 401);
 });
 
 test('an authorized all-source run starts one unscoped coordinator job', async () => {

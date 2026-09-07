@@ -63,11 +63,14 @@ function parseBbox(v) {
 function queryFromUrl(url) {
   const get = (n) => url.searchParams.get(n);
   const limit = Number(get("limit") || 50);
+  const offset = Number(get("offset") || 0);
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT)
     throw new DiscoveryQueryError(
       400,
       "limit must be an integer from 1 to 1000",
     );
+  if (!Number.isInteger(offset) || offset < 0 || offset > 100000)
+    throw new DiscoveryQueryError(400, "offset must be an integer from 0 to 100000");
   const maxBid = get("maxBid") == null ? null : Number(get("maxBid"));
   if (maxBid !== null && (!Number.isFinite(maxBid) || maxBid < 0))
     throw new DiscoveryQueryError(400, "Invalid maxBid");
@@ -75,6 +78,15 @@ function queryFromUrl(url) {
   const minEquity = get("minEquity") == null ? null : Number(get("minEquity"));
   if (minScore !== null && (!Number.isFinite(minScore) || minScore < 0 || minScore > 100)) throw new DiscoveryQueryError(400, "Invalid minScore");
   if (minEquity !== null && (!Number.isFinite(minEquity) || minEquity < 0)) throw new DiscoveryQueryError(400, "Invalid minEquity");
+  const lat = get("lat") == null ? null : Number(get("lat"));
+  const lng = get("lng") == null ? null : Number(get("lng"));
+  const radiusKm = get("radiusKm") == null ? 100 : Number(get("radiusKm"));
+  if ((lat === null) !== (lng === null) || (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)))
+    throw new DiscoveryQueryError(400, "lat and lng must be valid coordinates supplied together");
+  if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 20000)
+    throw new DiscoveryQueryError(400, "radiusKm must be between 0 and 20000");
+  const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "score");
+  if (!['score', 'date', 'bid-asc', 'equity'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
   return {
     q: text(get("q")),
     state: text(get("state")),
@@ -94,9 +106,13 @@ function queryFromUrl(url) {
     redemption: text(get("redemption")),
     hasDocuments: parseBool(get("hasDocuments"), "hasDocuments"),
     bbox: parseBbox(get("bbox")),
-    sort: get("sort") || "score",
+    sort,
     cursor: get("cursor"),
     limit,
+    offset,
+    lat,
+    lng,
+    radiusKm,
     zoom: get("zoom") == null ? null : Number(get("zoom")),
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
@@ -147,17 +163,17 @@ function matches(row, f) {
   if (f.saleFrom && (!row.saleDate || row.saleDate < f.saleFrom)) return false;
   if (f.saleTo && (!row.saleDate || row.saleDate > f.saleTo)) return false;
   if (
-    f.maxBid !== null &&
+    f.maxBid != null &&
     (row.openingBid == null || Number(row.openingBid) > f.maxBid)
   )
     return false;
-  if (f.minScore !== null && (row.dealScore == null || Number(row.dealScore) < f.minScore)) return false;
-  if (f.minEquity !== null && (row.equity == null || Number(row.equity) < f.minEquity)) return false;
-  if (f.seniorLien === "clean" && (!row.seniorLienRisk || row.seniorLienRisk === "high")) return false;
+  if (f.minScore != null && (row.dealScore == null || Number(row.dealScore) < f.minScore)) return false;
+  if (f.minEquity != null && (row.equity == null || Number(row.equity) < f.minEquity)) return false;
+  if (f.seniorLien === "clean" && (!row.seniorLienRisk || ["high", "unknown"].includes(row.seniorLienRisk))) return false;
   if (f.seniorLien === "risk" && row.seniorLienRisk !== "high") return false;
   if (f.redemption === "immediate" && row.redemptionDays !== 0) return false;
   if (f.redemption === "redemption_active" && !(row.redemptionDays > 0)) return false;
-  if (f.hasDocuments !== null && d.hasDocuments !== f.hasDocuments)
+  if (f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
     return false;
   if (f.bbox) {
     const [w, s, e, n] = f.bbox,
@@ -171,6 +187,13 @@ function matches(row, f) {
       (w <= e ? lng < w || lng > e : lng < w && lng > e)
     )
       return false;
+  }
+  if (f.lat != null && f.lng != null) {
+    const dLat = (Number(row.lat) - f.lat) * Math.PI / 180;
+    const dLng = (Number(row.lng) - f.lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(f.lat * Math.PI / 180) * Math.cos(Number(row.lat) * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    if (!Number.isFinite(distanceKm) || distanceKm > f.radiusKm) return false;
   }
   return true;
 }
@@ -255,14 +278,14 @@ function pgWhere(f, start = 1) {
   }
   if (f.saleFrom) add("sale_date>=?", f.saleFrom);
   if (f.saleTo) add("sale_date<=?", f.saleTo);
-  if (f.maxBid !== null) add("opening_bid<=?", f.maxBid);
-  if (f.minScore !== null) add("deal_score>=?", f.minScore);
-  if (f.minEquity !== null) add("equity_spread>=?", f.minEquity);
-  if (f.seniorLien === "clean") w.push("senior_lien_risk IS NOT NULL AND senior_lien_risk<>'high'");
+  if (f.maxBid != null) add("opening_bid<=?", f.maxBid);
+  if (f.minScore != null) add("deal_score>=?", f.minScore);
+  if (f.minEquity != null) add("equity_spread>=?", f.minEquity);
+  if (f.seniorLien === "clean") w.push("senior_lien_risk IS NOT NULL AND senior_lien_risk NOT IN ('high','unknown')");
   else if (f.seniorLien === "risk") w.push("senior_lien_risk='high'");
   if (f.redemption === "immediate") w.push("redemption_days=0");
   else if (f.redemption === "redemption_active") w.push("redemption_days>0");
-  if (f.hasDocuments !== null) add("has_documents=?", f.hasDocuments);
+  if (f.hasDocuments != null) add("has_documents=?", f.hasDocuments);
   if (f.freshness && f.freshness !== "all") {
     if (f.freshness === "observed") w.push("provenance->>'origin'='live'");
     else if (f.freshness === "unverified")
@@ -281,6 +304,11 @@ function pgWhere(f, start = 1) {
       p.push(west, east);
       w.push(`(longitude>=$${first} OR longitude<=$${first + 1})`);
     }
+  }
+  if (f.lat != null && f.lng != null) {
+    const first = start + p.length;
+    w.push(`ST_DWithin(geog, ST_SetSRID(ST_MakePoint($${first},$${first + 1}),4326)::geography,$${first + 2})`);
+    p.push(f.lng, f.lat, f.radiusKm * 1000);
   }
   return { sql: w.length ? ` WHERE ${w.join(" AND ")}` : "", params: p };
 }
@@ -320,7 +348,7 @@ async function pgSearch(database, f) {
     params.push(c.value, c.id);
     cursorClause = `${where.sql ? " AND" : " WHERE"} (${sort.expr},id) ${sort.dir === "ASC" ? ">" : "<"} ($${params.length - 1},$${params.length})`;
   }
-  params.push(f.limit + 1);
+  params.push(f.limit + 1, f.offset || 0);
   const select = database.listingSelect;
   if (!select)
     throw new DiscoveryQueryError(
@@ -329,7 +357,7 @@ async function pgSearch(database, f) {
     );
   const rows = (
     await database.pool.query(
-      `SELECT ${select}, ${sort.expr}::float8 AS "cursorValue" FROM listings${where.sql}${cursorClause} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length}`,
+       `SELECT ${select}, ${sort.expr}::float8 AS "cursorValue" FROM listings${where.sql}${cursorClause} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     )
   ).rows;
@@ -442,6 +470,7 @@ async function search(database, f) {
   let start = after ? filtered.findIndex((r) => r.id === after) + 1 : 0;
   if (after && start === 0)
     throw new DiscoveryQueryError(409, "Cursor is stale; restart the search");
+  start += f.offset || 0;
   const listings = filtered.slice(start, start + f.limit),
     hasMore = start + listings.length < filtered.length;
   return {

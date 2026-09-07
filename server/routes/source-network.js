@@ -4,6 +4,7 @@ const { presentedRunToken, tokensMatch } = require('./scrapers');
 const { loadObservations, recordSourceRun } = require('../sources/observations');
 const { buildSourceNetwork, enrolledSources } = require('../sources/network');
 const { attachDiscoveryCoverage } = require('../sources/discovery-coverage');
+const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 function createSourceNetworkHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -40,13 +41,16 @@ function createSourceNetworkHandler(dependencies = {}) {
         return res.json({ ...discoveryNetwork, inventoryTruncated: !database.pool && inventory.total > inventory.listings.length, evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200, evidenceQueueError, historyUnavailable, collectionRunning: collector.isRunning || evidenceJobs.size > 0 });
       }
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {
+        if (!requireWorkspaceIdentity(req, res, env)) return;
         if (!coordinator) return res.json({ items: [], total: 0, available: false });
-        return res.json({ ...coordinator.store.list(url.searchParams.get('limit')), available: true });
+        const jobs = await coordinator.store.list(url.searchParams.get('limit'));
+        return res.json({ ...jobs, available: true });
       }
       const jobMatch = url.pathname.match(/^\/api\/source-network\/jobs\/(job_[a-f0-9]{24})$/);
       if (req.method === 'GET' && jobMatch) {
+        if (!requireWorkspaceIdentity(req, res, env)) return;
         if (!coordinator) return res.status(404).json({ error: 'Collection jobs are unavailable' });
-        const job = coordinator.store.get(jobMatch[1]);
+        const job = await coordinator.store.get(jobMatch[1]);
         return job ? res.json({ job }) : res.status(404).json({ error: 'Collection job was not found' });
       }
       // Raw evidence and operational mutations use the existing operator credential.

@@ -97,11 +97,15 @@ async function seedFromV0(options = {}) {
       }
 
       // Seed listings via DatabaseClient projection
-      const dbClient = require('../server/db/client');
+      const { DatabaseClient } = require('../server/db/client');
+      const dbClient = new DatabaseClient({
+        env: { DATABASE_URL: databaseUrl, NODE_ENV: 'production' },
+        pool: client,
+        liveCachePath: null,
+      });
       let listingsSeeded = 0;
       for (const listing of listings) {
-        const prepared = dbClient.prepareListingForPersistence(listing);
-        await dbClient.createListing(prepared);
+        await dbClient.createListing(listing);
         listingsSeeded++;
       }
 

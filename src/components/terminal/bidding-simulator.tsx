@@ -145,7 +145,7 @@ Explain the target-price math in three short points. Treat title, debt, property
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3 sm:col-span-2">
               <p className="text-[11px] font-bold uppercase text-[#6B7280]">Cost alternative</p>
               <p className="mt-1 text-sm font-bold text-[#111827]">At the opening amount, other acquisition costs may total at most {displayMoney(reverseScenario.maxOtherAcquisitionCostsAtCurrentPrice)}.</p>
-              <p className="mt-1 text-xs text-[#6B7280]">Required cost reduction: {displayMoney(reverseScenario.costReductionNeeded)}. Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
+              <p className="mt-1 text-xs text-[#6B7280]">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
             </div>
           </div>
         ) : (

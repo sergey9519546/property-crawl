@@ -99,6 +99,7 @@ export function DiscoveryWorkbench() {
   const [cursorStack, setCursorStack] = React.useState<string[]>([]);
   const [cursor, setCursor] = React.useState<string | undefined>();
   const [saved, setSaved] = React.useState<Set<string>>(new Set());
+  const requestRef = React.useRef<{ id: number; controller: AbortController } | null>(null);
 
   const setFilters = React.useCallback(
     (change: Partial<DiscoveryFilters>) => {
@@ -109,16 +110,20 @@ export function DiscoveryWorkbench() {
     [filters, router],
   );
   const refresh = React.useCallback(async () => {
+    requestRef.current?.controller.abort();
+    const request = { id: (requestRef.current?.id || 0) + 1, controller: new AbortController() };
+    requestRef.current = request;
     setLoading(true);
     setError("");
     try {
       const params = discoverySearchParams(filters, {
         limit: 48,
-        facets: true,
+         facets: "state,county,source,type,program,lifecycle",
         cursor,
       });
       const response = await fetch(`/api/listings?${params}`, {
         cache: "no-store",
+        signal: request.controller.signal,
       });
       const result = (await response.json()) as Payload;
       if (response.status === 409) {
@@ -132,19 +137,23 @@ export function DiscoveryWorkbench() {
         throw new Error(
           result.error || "Discovery records could not be loaded.",
         );
-      setPayload(result);
+      if (requestRef.current?.id === request.id) setPayload(result);
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
+      if (requestRef.current?.id !== request.id) return;
       setError(
         caught instanceof Error
           ? caught.message
           : "Discovery records could not be loaded.",
       );
     } finally {
-      setLoading(false);
+      if (requestRef.current?.id === request.id) setLoading(false);
     }
   }, [filters, cursor]);
   React.useEffect(() => {
-    void refresh();
+    const delay = filters.q ? 250 : 0;
+    const timer = window.setTimeout(() => void refresh(), delay);
+    return () => window.clearTimeout(timer);
   }, [refresh]);
   React.useEffect(() => {
     if (!session.authenticated) {
@@ -335,7 +344,7 @@ export function DiscoveryWorkbench() {
           >
             <option value="score">Modeled score</option>
             <option value="date">Sale date</option>
-            <option value="bid">Opening amount</option>
+             <option value="bid-asc">Opening amount</option>
           </select>
         </div>
         {hasFilters && (
