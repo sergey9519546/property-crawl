@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowUpRight,
-  Download
+  Download,
+  Activity
 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ import { BiddingSimulator } from "./bidding-simulator";
 import { DealVideoGenerator } from "./deal-video-generator";
 import { DocketAgent } from "./docket-agent";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
+import { OpportunitySignalsCard } from "@/components/listings/opportunity-signals-card";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, displayMoney, displayText, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
@@ -67,7 +69,7 @@ function explicitCashScenario(listing: Listing, openingBid: number | null) {
 }
 
 export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: PropertyDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"underwrite" | "3d" | "bidding">("underwrite");
+  const [activeTab, setActiveTab] = useState<"underwrite" | "signals" | "3d" | "bidding">("underwrite");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [aiSource, setAiSource] = useState<string | null>(null);
@@ -394,6 +396,21 @@ Use only the supplied evidence. Never invent comps, title status, property condi
           >
             <Sparkles className="w-3.5 h-3.5 text-[#0F172A]" />
             <span>Bidding Simulator</span>
+          </button>
+
+          <button
+            id="tab-signals"
+            aria-controls="panel-signals"
+            onClick={() => setActiveTab("signals")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
+              activeTab === "signals"
+                ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
+                : "text-[#6B7280] hover:text-[#111827]"
+            )}
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Signals</span>
           </button>
         </div>
 
@@ -775,6 +792,13 @@ Use only the supplied evidence. Never invent comps, title status, property condi
             <div id="panel-bidding" role="tabpanel" aria-labelledby="tab-bidding" className="space-y-6 animate-in fade-in">
               <BiddingSimulator listing={listing} />
               <DealVideoGenerator listing={listing} />
+            </div>
+          )}
+
+          {/* TAB 4: Opportunity Signals & Triage Priority */}
+          {activeTab === "signals" && (
+            <div id="panel-signals" role="tabpanel" aria-labelledby="tab-signals" className="space-y-6 animate-in fade-in">
+              <OpportunitySignalsCard listingId={listing.id} />
             </div>
           )}
 

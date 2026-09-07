@@ -26,7 +26,9 @@ import {
   ChevronDown,
   Building2,
   Filter,
-  Scale
+  Scale,
+  Crosshair,
+  Radio
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { displayDate, displayMoney, displayText, knownNumber } from "@/lib/listing-display";
@@ -492,6 +494,24 @@ export function InteractiveTerminal() {
               <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
               <span>Saved searches</span>
             </button>
+
+            <Link
+              href="/hunts"
+              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-emerald-700 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              title="Durable saved hunts criteria engine"
+            >
+              <Crosshair className="w-4 h-4 text-emerald-700" />
+              <span>Saved Hunts</span>
+            </Link>
+
+            <Link
+              href="/sources"
+              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-slate-800 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              title="Source network intake and collector radar"
+            >
+              <Radio className="w-4 h-4 text-slate-700" />
+              <span>Source Radar</span>
+            </Link>
           </div>
         </div>
 

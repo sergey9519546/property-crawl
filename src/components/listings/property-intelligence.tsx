@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { sourceDisplayText } from '@/lib/source-display';
 import { ArrowRight, Download, ExternalLink, Fingerprint, Loader2, Radar } from 'lucide-react';
+import { OpportunitySignalsCard, OpportunitySignal } from '@/components/listings/opportunity-signals-card';
 
 type Dossier = {
   listingId: string; address: string; generatedAt: string; historyUnavailable: boolean;
@@ -12,6 +13,8 @@ type Dossier = {
   contradictions: { id: string; title: string; listingValue: number; publicRecordValue: number; unit: string; explanation: string; nextAction: string }[];
   gaps: { id: string; title: string; reason: string; nextAction: string }[];
   history: { firstObservedAt: string; observations: number } | null;
+  opportunitySignals?: OpportunitySignal[];
+  triagePriority?: number;
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
     parcel: { status: string; rawParcelId?: string; properties: Record<string, unknown>; source?: { url: string } } | null;
@@ -71,6 +74,16 @@ export function PropertyIntelligence({ listingId }: { listingId: string }) {
       {dossier && <>
         {dossier.source.freshness === 'stale' && <p className="rounded-lg bg-amber-50 p-4 text-xs leading-6 text-amber-900">The saved publisher observation needs refreshing. Confirm current availability and terms at the publisher. New public-record research has its own observation date.</p>}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><p>{sourceDisplayText(dossier.source.publisher)} · {dossier.source.observedAt ? `Observed ${date(dossier.source.observedAt)}` : 'Snapshot requires source verification'}</p>{dossier.source.url && <a href={dossier.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-slate-900 underline hover:text-slate-700">Publisher record <ExternalLink size={12} /></a>}</div>
+        {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
+          <OpportunitySignalsCard
+            listingId={listingId}
+            initialData={{
+              triagePriority: dossier.triagePriority ?? 0,
+              signals: dossier.opportunitySignals,
+              evaluatedAt: dossier.generatedAt,
+            }}
+          />
+        )}
         <div className="rounded-xl bg-slate-100 p-5"><h3 className="text-sm font-bold text-slate-950">The angle</h3>
           {dossier.signals.length || dossier.contradictions.length ? <div className="mt-3 space-y-4">
             {dossier.signals.slice(0, 3).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-slate-600">{valueLabel(signal.before, signal.field)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field)}</p><p className="mt-1 text-xs text-slate-500">Observed {date(signal.observedAt)}. Confirm the current offering.</p></div>)}

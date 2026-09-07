@@ -73,3 +73,19 @@ test('rate limits preserve retry guidance through the UI proxy', async () => {
   assert.equal(response.headers.get('retry-after'), '45');
   assert.equal(response.headers.get('x-ratelimit-limit'), '120');
 });
+
+test('opportunity signals routes proxy through to canonical backend', async () => {
+  for (const route of ['property-signals', 'signals']) {
+    let calledUrl = '';
+    const response = await proxyPropertyApi(new Request(`https://app.example/api/${route}?listingId=FL-100`), {
+      apiUrl: 'http://127.0.0.1:3102',
+      fetchImpl: async (url) => {
+        calledUrl = url;
+        return Response.json({ triagePriority: 85, signals: [] });
+      },
+    });
+    assert.equal(calledUrl, `http://127.0.0.1:3102/api/${route}?listingId=FL-100`);
+    const data = await response.json();
+    assert.equal(data.triagePriority, 85);
+  }
+});
