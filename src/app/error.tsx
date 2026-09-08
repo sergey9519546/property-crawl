@@ -6,10 +6,10 @@ import { RefreshCw, Home, AlertOctagon } from "lucide-react";
 
 export default function GlobalError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     console.error("Uncaught application error:", error);
@@ -23,23 +23,23 @@ export default function GlobalError({
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-red-400">System Interruption</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-red-400">Page unavailable</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Terminal Engine Recovering
+            This page couldn’t load
           </h1>
           <p className="text-sm text-slate-400 leading-relaxed">
-            An unexpected error occurred while processing auction feeds or rendering components. You can retry the operation or reset to the home terminal.
+            Try loading the page again, or return to property search. Your saved work remains in the workspace.
           </p>
           {error.digest && (
             <p className="text-[11px] font-mono text-slate-500 pt-1">
-              Error Digest: {error.digest}
+              Error reference: {error.digest}
             </p>
           )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
           <button
-            onClick={() => reset()}
+            onClick={() => retry()}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 text-[#0F172A] text-xs font-bold hover:bg-emerald-400 transition shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
@@ -47,11 +47,11 @@ export default function GlobalError({
           </button>
 
           <Link
-            href="/"
+            href="/listings"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition shadow-sm"
           >
             <Home className="w-4 h-4" />
-            <span>Return to Terminal</span>
+            <span>Return to properties</span>
           </Link>
         </div>
       </div>

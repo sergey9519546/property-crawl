@@ -154,7 +154,7 @@ class IngestionScheduler {
           if (this.discoveryStore) {
             const checkpoint=await this.discoveryStore.getCheckpoint(scraper.sourceKey);
             if(typeof scraper.setCheckpoint==='function')scraper.setCheckpoint(checkpoint?.cursor||{});
-            discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope:{collector:scraper.name},idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null});
+            discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope:{collector:scraper.name},idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null});
           }
           const items = await scraper.scrapeFeed();
           if (!Array.isArray(items)) {
@@ -182,7 +182,7 @@ class IngestionScheduler {
             if(this.discoveryStore&&discoveryRun){
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return validation.listing;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
-              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);});
+              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);});
             }else await this.database.createListing(validation.listing);
             accepted.push(validation.listing);
             totalIngested++;
@@ -217,7 +217,8 @@ class IngestionScheduler {
             circuitOpen: Boolean(scraper.circuitBreaker && scraper.circuitBreaker.isOpen()),
             circuitReason: scraper.circuitBreaker && scraper.circuitBreaker.lastFailureReason
           });
-          sourceResults.push({ sourceId: scraper.sourceKey, accepted: 0, rejected: rejectedForScraper, error: err.message });
+          const errorDetails=err&&err.transportCode?{code:err.transportCode,hostname:err.hostname||null,retryable:err.retryable===true}:null;
+          sourceResults.push({ sourceId: scraper.sourceKey, accepted: 0, rejected: rejectedForScraper, error: err.message, ...(errorDetails?{errorDetails}:{}) });
           if(this.discoveryStore&&discoveryRun)try{await this.discoveryStore.finishRun(discoveryRun.id,{status:'failed',rejected:rejectedForScraper,error:err.message});}catch(_){}
           try { await this.onSourceRun(scraper.sourceKey, { listings: [], error: err.message, durationMs: latency, rejectedCount: rejectedForScraper }); }
           catch (historyError) { console.error('[Scheduler] Could not persist source history:', historyError.message); }
@@ -245,7 +246,15 @@ const scheduler = new IngestionScheduler({
     const { mergeLiveRecords } = require('../db/live-record-store');
     const { recordSourceRun } = require('../sources/observations');
     if (!run.error && run.listings.length) {
-      mergeLiveRecords(process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'), run.listings);
+      try {
+        mergeLiveRecords(process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'), run.listings);
+      } catch (error) {
+        // Advanced discovery has already committed each listing and its raw
+        // publisher snapshot atomically.  The bounded JSON cache is only a
+        // compatibility projection and must not invalidate durable evidence.
+        if (!(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) throw error;
+        console.warn('[Scheduler] Live compatibility cache was not updated:', error.message);
+      }
     }
     recordSourceRun(sourceId, run);
   },

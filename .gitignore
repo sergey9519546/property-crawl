@@ -14,6 +14,7 @@ pnpm-debug.log*
 
 # --- Build output ---
 .next/
+.next-discovery-preview/
 .next-sources-verify/
 .next-verify/
 .next-verify/

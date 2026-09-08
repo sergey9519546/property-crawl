@@ -3,6 +3,7 @@
 const db = require('../db/client');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const hunts = require('../intelligence/hunts');
+const discoveryQuery = require('../discovery/query');
 
 const MAX_INVENTORY = 10000;
 
@@ -11,13 +12,19 @@ function createHuntsHandler(dependencies = {}) {
   const env = dependencies.env || process.env;
   const filePath = dependencies.filePath;
   const now = () => typeof dependencies.now === 'function' ? dependencies.now() : dependencies.now;
+  const discovery = dependencies.discoveryQuery || discoveryQuery;
   const durable = dependencies.durableStore || (database.isPg && env.DISCOVERY_MODE === 'advanced' ? require('../discovery/hunt-store').createPgHuntStore(database) : null);
   async function evaluateDurableInventory(hunt) {
-    let baseline=await durable.baseline(hunt.id),evaluated=null,offset=0,total=Infinity;
-    const initial=!baseline,events=[];
-    while(offset<total){const inventory=await database.getListings({limit:1000,offset});const page=Array.isArray(inventory)?inventory:inventory?.listings;total=Array.isArray(inventory)?page?.length:Number(inventory?.total);if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');evaluated=hunts.evaluateInventory(hunt,page,{now:now(),previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});baseline=evaluated.baseline;events.push(...evaluated.events);offset+=page.length;if(!page.length||Array.isArray(inventory))break;}
-    if(!evaluated)evaluated=hunts.evaluateInventory(hunt,[],{now:now(),previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});
-    evaluated.events=events;evaluated.response.newEvents=events.slice(0,200);evaluated.response.eventsTruncated=events.length>200;
+    let baseline=await durable.baseline(hunt.id),evaluated=null,cursor=null;
+    const previousBaseline=baseline,observedKeys=new Set();
+    const initial=!baseline,events=[],results=[];
+    const evaluatedAt=now()||new Date().toISOString();
+    const counts={accepted:0,rejected:0,match:0,unknown:0,noMatch:0,notObserved:0,olderIgnored:0,newMatch:0,materialChange:0,noLongerMatches:0,evaluationUnknown:0};
+    const baseQuery=discovery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));
+    do{const inventory=await discovery.search(database,{...baseQuery,cursor});const page=inventory?.listings;if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');for(const listing of page){const recordId=listing?.provenance?.recordId;if(listing?.source&&recordId)observedKeys.add(hunts.identityKey(listing.source,String(recordId)));}evaluated=hunts.evaluateInventory(hunt,page,{now:evaluatedAt,previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});baseline=evaluated.baseline;events.push(...evaluated.events);for(const [key,value]of Object.entries(evaluated.response.counts||{}))if(!['notObserved','newMatch','materialChange','noLongerMatches','evidenceUnknown'].includes(key))counts[key]=(counts[key]||0)+Number(value||0);if(results.length<500)results.push(...(evaluated.response.results||[]).slice(0,500-results.length));cursor=inventory.page?.nextCursor||null;}while(cursor);
+    if(!evaluated)evaluated=hunts.evaluateInventory(hunt,[],{now:evaluatedAt,previousBaseline:baseline,baselineLimit:Infinity,suppressEvents:initial});
+    counts.notObserved=Object.keys(previousBaseline?.records||{}).filter((key)=>!observedKeys.has(key)).length;counts.newMatch=events.filter((event)=>event.type==='new_match').length;counts.materialChange=events.filter((event)=>event.type==='material_change').length;counts.noLongerMatches=events.filter((event)=>event.type==='no_longer_matches').length;counts.evidenceUnknown=events.filter((event)=>event.type==='evaluation_unknown').length;
+    evaluated.events=events;evaluated.response={...evaluated.response,evaluatedAt,baselineCreated:initial,counts,results,resultsTruncated:counts.accepted+counts.rejected>results.length,newEvents:events.slice(0,200),eventsTruncated:events.length>200};
     return durable.saveEvaluation(hunt,evaluated);
   }
 
@@ -80,6 +87,7 @@ function createHuntsHandler(dependencies = {}) {
             : error.code === 'HUNT_LIMIT' || error.code === 'HUNT_BASELINE_LIMIT' || error.code === 'HUNT_INVENTORY_LIMIT' ? 409 : 400;
         return res.status(status).json({ error: error.message, code: error.code, ...(error.details ? { details: error.details } : {}) });
       }
+      if (error?.status === 409) return res.status(409).json({ error: error.message, code: error.code || 'DISCOVERY_REVISION_CONFLICT' });
       console.error('[Saved Hunts]', error.message);
       return res.status(503).json({ error: 'Saved hunts are temporarily unavailable. Existing definitions and baselines were preserved.' });
     }

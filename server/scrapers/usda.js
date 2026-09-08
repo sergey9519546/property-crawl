@@ -65,7 +65,7 @@ class UsdaResalesScraper extends BaseScraper {
         }
       }
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/resales/public/searchSFH', inventoryStates: states.map(({ code }) => code) }, statesDiscovered: states.length, statesCompleted: completedStates, recordsEmitted: listings.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family', states: 'publisher_inventory_options' } }, statesDiscovered: states.length, discoveredStates: states.map(({ code }) => code), statesCompleted: completedStates, recordsEmitted: listings.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
       return listings.map(item => this.standardizeListing(item));
     });

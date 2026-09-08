@@ -43,7 +43,14 @@ function request(path, options = {}) {
   });
 }
 
+function operatorRequest(path, options = {}) {
+  return request(path, { ...options, headers: { ...(options.headers || {}), authorization: 'Bearer server-test-operator-token' } });
+}
+
 async function run() {
+  const previousAdminToken = process.env.SCRAPER_ADMIN_TOKEN;
+  const operatorToken = 'server-test-operator-token';
+  process.env.SCRAPER_ADMIN_TOKEN = operatorToken;
   await new Promise((resolve) => server.listen(3999, resolve));
   await db.createListing({
     id: "TEST-1",
@@ -113,6 +120,13 @@ async function run() {
     res.body.listings.forEach(l => assert.strictEqual(l.state, 'OH'));
   });
 
+  await test('GET /api/listings accepts the unknown document-evidence bucket', async () => {
+    const res = await request('/api/listings?hasDocuments=unknown&limit=5');
+    assert.strictEqual(res.status, 200);
+    assert.ok(Array.isArray(res.body.listings));
+    res.body.listings.forEach((listing) => assert.ok(listing.hasDocuments == null));
+  });
+
   await test('GET /api/listings/:id returns single listing', async () => {
     const res = await request(`/api/listings/${encodeURIComponent(primaryListing.id)}`);
     assert.strictEqual(res.status, 200);
@@ -149,8 +163,14 @@ async function run() {
     }
   });
 
-  await test('POST /api/parse extracts structured notice and caches result', async () => {
+  await test('POST /api/parse requires the private operator credential', async () => {
     const res = await request('/api/parse', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { noticeText: 'Test notice' }
+    });
+    assert.strictEqual(res.status, 401);
+  });
+  await test('POST /api/parse extracts structured notice and caches result', async () => {
+    const res = await operatorRequest('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: { noticeText: 'SHERIFF SALE: 3841 E 55th St, Cleveland, OH 44105. Judgment $71,340.' }
@@ -170,7 +190,7 @@ async function run() {
   });
 
   await test('POST /api/parse keeps appraisal-only notices nullable instead of inventing a bid or valuation band', async () => {
-    const res = await request('/api/parse', {
+    const res = await operatorRequest('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: { noticeText: 'Case No. TRUTH-APPRAISAL-1. Property located at 21 Oak St, Dayton, OH 45402. Appraised at $150,000.' }
@@ -187,7 +207,7 @@ async function run() {
   });
 
   await test('POST /api/parse derives a bid only from an appraisal plus an explicit notice fraction', async () => {
-    const res = await request('/api/parse', {
+    const res = await operatorRequest('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: { noticeText: 'Case No. TRUTH-FRACTION-1. Property located at 22 Oak St, Dayton, OH 45402. Appraised at $150,000. The minimum opening bid shall be two-thirds of the appraised value.' }
@@ -201,7 +221,7 @@ async function run() {
   });
 
   await test('POST /api/parse does not mistake the fraction base appraisal for a stated bid', async () => {
-    const res = await request('/api/parse', {
+    const res = await operatorRequest('/api/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: { noticeText: 'Case No. TRUTH-FRACTION-BASE-1. The property shall be sold at a minimum opening bid of two-thirds of the appraised value of $150,000.' }
@@ -231,7 +251,7 @@ async function run() {
     });
 
     try {
-      const res = await request('/api/parse', {
+      const res = await operatorRequest('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: { noticeText: 'NOTICE REF LLM-SEPARATION-2026. California is mentioned without a property locality or price.', forceLlm: true }
@@ -250,23 +270,35 @@ async function run() {
     }
   });
 
-  await test('POST /api/alerts and GET /api/alerts manages user watchlist', async () => {
-    const userId = 'test_user_42';
-    const postRes = await request('/api/alerts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-      body: { listingId: primaryListing.id }
-    });
-    assert.strictEqual(postRes.status, 201);
-
-    const getRes = await request(`/api/alerts?userId=${userId}`);
-    assert.strictEqual(getRes.status, 200);
-    assert.strictEqual(getRes.body.savedCount, 1);
-    assert.strictEqual(getRes.body.deals[0].id, primaryListing.id);
+  await test('watchlists require authentication and use the server workspace instead of caller IDs', async () => {
+    const previousToken = process.env.SCRAPER_ADMIN_TOKEN;
+    const previousWorkspace = process.env.PROPERTY_WORKSPACE_ID;
+    process.env.SCRAPER_ADMIN_TOKEN = 'test-server-watchlist-key';
+    process.env.PROPERTY_WORKSPACE_ID = 'test-server-suite';
+    const headers = { 'Content-Type': 'application/json', authorization: 'Bearer test-server-watchlist-key', 'x-user-id': 'spoofed-user' };
+    try {
+      assert.strictEqual((await request('/api/alerts?userId=spoofed-user', { headers: { 'x-user-id': 'spoofed-user' } })).status, 401);
+      const postRes = await request('/api/alerts', { method: 'POST', headers, body: { listingId: primaryListing.id, userId: 'spoofed-user' } });
+      assert.strictEqual(postRes.status, 201);
+      const getRes = await request('/api/alerts?userId=another-spoof', { headers });
+      assert.strictEqual(getRes.status, 200);
+      assert.strictEqual(getRes.body.userId, 'workspace:test-server-suite');
+      assert.ok(getRes.body.deals.some((deal) => deal.id === primaryListing.id));
+    } finally {
+      await request('/api/alerts', { method: 'DELETE', headers, body: { listingId: primaryListing.id } });
+      if (previousToken === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
+      else process.env.SCRAPER_ADMIN_TOKEN = previousToken;
+      if (previousWorkspace === undefined) delete process.env.PROPERTY_WORKSPACE_ID;
+      else process.env.PROPERTY_WORKSPACE_ID = previousWorkspace;
+    }
   });
 
+  await test('GET /api/export requires the private operator credential', async () => {
+    const res = await request('/api/export?format=json');
+    assert.strictEqual(res.status, 401);
+  });
   await test('GET /api/export?format=csv returns valid CSV stream', async () => {
-    const res = await request('/api/export?format=csv');
+    const res = await operatorRequest('/api/export?format=csv');
     assert.strictEqual(res.status, 200);
     assert.ok(res.headers['content-type'].includes('text/csv'));
     assert.ok(res.raw.includes('Opening Bid,Est Low,Est High,Bid Spread,Deal Score (1-99, triage only),Cash Requirement Status'));
@@ -369,6 +401,8 @@ async function run() {
   });
 
   await new Promise((resolve) => server.close(resolve));
+  if (previousAdminToken === undefined) delete process.env.SCRAPER_ADMIN_TOKEN;
+  else process.env.SCRAPER_ADMIN_TOKEN = previousAdminToken;
   console.log(`--- SERVER TEST SUMMARY: ${passed} Passed, ${failed} Failed ---`);
   if (failed > 0) process.exit(1);
 }

@@ -1414,7 +1414,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         preview.wait_for(state="visible")
         self.assertIn("September 2012", preview.inner_text())
         self.assertIn("Test provider attribution", preview.inner_text())
-        self.assertIn("Context, not condition evidence", preview.inner_text())
+        self.assertIn("Street context only", preview.inner_text())
         self.assertEqual(preview.locator("img").evaluate("el => getComputedStyle(el).objectFit"), "contain")
         self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in requests))
         self.page.set_viewport_size({"width": 390, "height": 844})

@@ -1,5 +1,3 @@
-import { adapt } from "@/lib/next-adapter";
-import handleParse from "@/lib/server-routes/parse";
+import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
 
-export const POST = adapt(handleParse, { securityHeaders: true, cors: true });
-export const GET = POST;
+export const POST = (request: Request) => proxyPrivatePropertyApi(request);

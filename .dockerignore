@@ -1,4 +1,11 @@
 node_modules
+.env
+.env.*
+!.env.example
+.cache
+artifacts
+test-results
+playwright-report
 npm-debug.log
 .git
 .gitignore
@@ -6,6 +13,7 @@ audit
 scratch
 test
 .next
+.next-*
 upload
 test_output
 *.log

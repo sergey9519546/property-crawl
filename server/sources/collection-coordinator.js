@@ -205,8 +205,10 @@ class CollectionCoordinator {
     let inventory;
     try {
       const safeSources=new Set(safety.completeSourceIds), listings=(result.sourceResults||[]).flatMap(source=>sourceRunUnsafe(source)?[]:(source.acceptedListings||[]));
-      let offset=0,total=Infinity;
-      while(offset<total){inventory=await this.database.getListings({limit:1000,offset});const page=Array.isArray(inventory)?inventory:inventory?.listings;total=Array.isArray(inventory)?page.length:Number(inventory?.total);if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||(!this.durableHunts&&!item.source)));offset+=page.length;if(!page.length||Array.isArray(inventory))break;}
+      // Advanced jobs evaluate evidence accepted by this exact run. Cached rows
+      // from the same publisher are retained in the baseline, but cannot become
+      // fresh positive evidence merely because a sweep reported completeness.
+      if(!this.durableHunts){if(this.database?.isPg){const discoveryQuery=require('../discovery/query'),baseQuery=discoveryQuery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));let cursor=null;do{inventory=await discoveryQuery.search(this.database,{...baseQuery,cursor});const page=inventory?.listings;if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||!item.source));cursor=inventory.page?.nextCursor||null;}while(cursor);}else{let offset=0,total=Infinity;while(offset<total){inventory=await this.database.getListings({limit:1000,offset});const page=Array.isArray(inventory)?inventory:inventory?.listings;total=Array.isArray(inventory)?page.length:Number(inventory?.total);if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||!item.source));offset+=page.length;if(!page.length||Array.isArray(inventory))break;}}}
       const enabled = (this.durableHunts ? await this.durableHunts.list() : this.hunts.listHunts({ filePath: this.huntFilePath })).filter((hunt) => hunt.enabled);
       const evaluations = [];
       for (const hunt of enabled) {

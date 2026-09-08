@@ -39,20 +39,20 @@ function createSourceNetworkHandler(dependencies = {}) {
         const discoveryNetwork = await attachDiscoveryCoverage(network, database, env);
         return res.json({ ...discoveryNetwork, inventoryTruncated: !database.pool && inventory.total > inventory.listings.length, evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200, evidenceQueueError, historyUnavailable, collectionRunning: collector.isRunning || evidenceJobs.size > 0 });
       }
+      const jobMatch = url.pathname.match(/^\/api\/source-network\/jobs\/(job_[a-f0-9]{24})$/);
+      // Raw evidence and operational mutations use the existing operator credential.
+      const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+      if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
+      if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {
         if (!coordinator) return res.json({ items: [], total: 0, available: false });
         return res.json({ ...await coordinator.store.list(url.searchParams.get('limit')), available: true });
       }
-      const jobMatch = url.pathname.match(/^\/api\/source-network\/jobs\/(job_[a-f0-9]{24})$/);
       if (req.method === 'GET' && jobMatch) {
         if (!coordinator) return res.status(404).json({ error: 'Collection jobs are unavailable' });
         const job = await coordinator.store.get(jobMatch[1]);
         return job ? res.json({ job }) : res.status(404).json({ error: 'Collection job was not found' });
       }
-      // Raw evidence and operational mutations use the existing operator credential.
-      const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
-      if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
-      if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
       if (url.pathname === '/api/source-network/intake') {
         if (req.method === 'GET') return res.json({ items: intake.listEvidence({ sourceId: url.searchParams.get('sourceId') || undefined, includeContent: url.searchParams.get('includeContent') === 'true', limit: 50 }) });
         if (req.method === 'POST') {
@@ -72,7 +72,13 @@ function createSourceNetworkHandler(dependencies = {}) {
           if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
           if (!collector.networkEnabled) return res.status(503).json({ error: 'Network collection is disabled in this environment' });
           if (!coordinator) return res.status(503).json({ error: 'Collection jobs are unavailable' });
-          const job = await coordinator.start({ trigger: 'source_network', idempotencyKey: req.body?.idempotencyKey });
+          let sourceIds;
+          if (env.DISCOVERY_MODE === 'advanced') {
+            const rolloutStore = dependencies.discoveryStore || require('../discovery/store').createDiscoveryStore(database);
+            sourceIds = await rolloutStore.promotedSources();
+            if (!sourceIds.length) return res.status(409).json({ error: 'No sources have passed the collection release gate. Review individual sources before enabling a full cycle.' });
+          }
+          const job = await coordinator.start({ ...(sourceIds ? { sourceIds } : {}), trigger: 'source_network', idempotencyKey: req.body?.idempotencyKey });
           return res.status(202).json({ status: 'collecting', sourceId: null, accepted: true, job });
         }
         const source = catalog.find((item) => item.id === req.body?.sourceId);

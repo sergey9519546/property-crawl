@@ -430,11 +430,14 @@ test('collection jobs expose a bounded activity list, exact job status, and sour
     catalog: [catalogEntry('hud-homestore', 'hud')], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
   });
-  const list = await invoke(handler, { url: '/api/source-network/jobs?limit=50' });
+  const unauthorizedList = await invoke(handler, { url: '/api/source-network/jobs?limit=50' });
+  assert.equal(unauthorizedList.statusCode, 401);
+  const list = await invoke(handler, { url: '/api/source-network/jobs?limit=50', token: 'operator-secret' });
   assert.equal(list.statusCode, 200);
   assert.equal(list.body.total, 1);
   assert.equal(list.body.available, true);
-  const detail = await invoke(handler, { url: `/api/source-network/jobs/${job.id}` });
+  assert.equal((await invoke(handler, { url: `/api/source-network/jobs/${job.id}` })).statusCode, 401);
+  const detail = await invoke(handler, { url: `/api/source-network/jobs/${job.id}`, token: 'operator-secret' });
   assert.equal(detail.statusCode, 200);
   assert.equal(detail.body.job.id, job.id);
   const startedRun = await invoke(handler, {

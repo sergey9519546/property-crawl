@@ -89,7 +89,7 @@ class IrsSeizedScraper extends BaseScraper {
         }
       });
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auction/items', realEstateCardsDiscovered: cards.length }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected: cards.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected: cards.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       return listings.map(item => this.standardizeListing(item));
     });

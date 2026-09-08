@@ -73,7 +73,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
         }
       });
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', detailLinksDiscovered: slugs.length }, recordsDiscovered: slugs.length, recordsEmitted: listings.length, recordsRejected: slugs.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', filters: { assetClass: 'real_property' } }, recordsDiscovered: slugs.length, recordsEmitted: listings.length, recordsRejected: slugs.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} Treasury properties`);
       return listings.map(item => this.standardizeListing(item));
     });

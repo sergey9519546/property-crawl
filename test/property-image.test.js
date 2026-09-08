@@ -100,7 +100,7 @@ function jpegResponse() {
   });
 }
 
-function serviceFor({ listing = liveListing(), fetchImpl, env = {} } = {}) {
+function serviceFor({ listing = liveListing(), fetchImpl, env = {}, now = () => Date.parse('2026-09-04T12:00:00.000Z') } = {}) {
   return createPropertyImageService({
     db: { async getListingById(id) { return id === listing.id ? listing : null; } },
     fetchImpl,
@@ -110,7 +110,7 @@ function serviceFor({ listing = liveListing(), fetchImpl, env = {} } = {}) {
       GOOGLE_STREETVIEW_MAX_DISTANCE_METERS: '35',
       ...env,
     },
-    now: () => Date.parse('2026-09-04T12:00:00.000Z'),
+    now,
   });
 }
 
@@ -140,9 +140,17 @@ test('metadata lookup is source-gated, proximity-checked, and never exposes the 
   assert.equal(result.body.available, true);
   assert.equal(result.body.provider, 'Google Maps');
   assert.equal(result.body.captureDate, '2025-10');
-  assert.equal(result.body.panoId, undefined);
+  assert.equal(result.body.panoramaId, 'safe_pano-id_12345');
+  assert.deepEqual(result.body.panoramaLocation, { lat: 40.9501, lng: -74.03 });
+  assert.equal(result.body.targetHeading, result.body.heading);
+  const launch=new URL(result.body.mapsLaunchUrl);
+  assert.equal(launch.origin,'https://www.google.com');
+  assert.equal(launch.searchParams.get('map_action'),'pano');
+  assert.equal(launch.searchParams.get('pano'),'safe_pano-id_12345');
+  assert.equal(result.body.interactiveReady,false);
+  assert.equal(result.body.interactive.reason,'public_browser_key_not_configured');
   assert.equal(result.body.provenance.recordId, undefined);
-  assert.equal(result.body.provenance.panoramaReference, 'ephemeral_not_disclosed');
+  assert.equal(result.body.provenance.panoramaReference, 'provider_identifier');
   assert.ok(result.body.distanceMeters > 10 && result.body.distanceMeters < 12);
   assert.equal(result.body.provenance.exactPropertyVerified, false);
   assert.equal(result.body.provenance.matchBasis, 'source_coordinates_and_panorama_distance');
@@ -151,6 +159,63 @@ test('metadata lookup is source-gated, proximity-checked, and never exposes the 
   assert.match(requestedUrls[0], /radius=50/);
   assert.ok(!serializedResponse(result).includes(TEST_KEY));
   assert.ok(!serializedResponse(result).includes('maps.googleapis.com'));
+});
+
+test('metadata lookups coalesce and a restricted public browser key only changes readiness',async()=>{
+  let requests=0,release;const pending=new Promise(resolve=>{release=resolve;});
+  const service=serviceFor({env:{NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:'public-browser-key'},fetchImpl:async()=>{requests++;await pending;return metadataResponse();}});
+  const first=service.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));const second=service.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));release();
+  const [a,b]=await Promise.all([first,second]);assert.equal(requests,1);assert.equal(a.body.interactiveReady,true);assert.equal(b.body.panoramaId,a.body.panoramaId);
+  assert.ok(!serializedResponse(a).includes('public-browser-key'));assert.ok(!serializedResponse(a).includes(TEST_KEY));
+});
+
+test('completed panorama metadata is released and subsequent requests resolve current provider evidence',async()=>{
+  let requests=0;const service=serviceFor({fetchImpl:async()=>{requests++;return metadataResponse();}});
+  await service.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(service.panoramaInFlight.size, 0);
+  await service.resolve(request('listingId=CIV-NJ-7-53&mode=metadata'));
+  assert.equal(requests,2);
+  assert.equal(service.panoramaInFlight.size, 0);
+});
+
+test('an archive record uses only an exact address rooftop match for context',async()=>{
+  const listing=liveListing({lat:40.95,lng:-74.03,provenance:{...liveListing().provenance,origin:'archive',snapshotKind:'imported_snapshot'}});const urls=[];
+  const service=serviceFor({listing,fetchImpl:async url=>{urls.push(String(url));return String(url).includes('/geocode/json?')?geocodeResponse():metadataResponse();}});
+  const result=await service.resolve(request(`listingId=${listing.id}&mode=metadata`));assert.equal(result.status,200);assert.equal(urls.length,2);assert.match(urls[0],/\/geocode\/json\?/);assert.match(result.body.provenance.matchBasis,/source_observed_address_rooftop_geocode/);
+});
+
+test('walkthrough finds a nearby street without weakening the static image distance gate', async () => {
+  const radii = [];
+  const service = serviceFor({ env: { NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY: 'public-embed-test' }, fetchImpl: async url => {
+    const radius = new URL(url).searchParams.get('radius'); radii.push(radius);
+    return radius === '50' ? metadataResponse({status: 'ZERO_RESULTS'}) : metadataResponse({location: {lat: 40.952, lng: -74.03}});
+  }});
+  const result = await service.resolve(request('listingId=CIV-NJ-7-53&mode=walkthrough'));
+  assert.equal(result.status, 200);
+  assert.equal(result.body.coverage, 'nearby_street');
+  assert.equal(result.body.targetLabel, 'Nearby street walkthrough');
+  assert.ok(result.body.distanceMeters > 200 && result.body.distanceMeters < 250);
+  assert.equal(result.body.provenance.exactPropertyVerified, false);
+  assert.equal(result.body.interactive.provider, 'google_maps_embed');
+  assert.equal(result.body.interactiveReady, true);
+  assert.deepEqual(radii, ['50', '500']);
+  assert.ok(!serializedResponse(result).includes('public-embed-test'));
+  const image = await service.resolve(request('listingId=CIV-NJ-7-53&mode=image'));
+  assert.equal(image.status, 404);
+  assert.deepEqual(radii, ['50', '500', '50']);
+});
+
+test('walkthrough never expands beyond 500m or retries a provider denial', async () => {
+  const far = serviceFor({env: {GOOGLE_WALKTHROUGH_RADIUS_METERS: '99999'}, fetchImpl: async url => {
+    assert.ok(Number(new URL(url).searchParams.get('radius')) <= 500);
+    return metadataResponse({location: {lat: 40.96, lng: -74.03}});
+  }});
+  const rejected = await far.resolve(request('listingId=CIV-NJ-7-53&mode=walkthrough'));
+  assert.equal(rejected.status, 422);
+  let calls = 0;
+  const denied = serviceFor({fetchImpl: async () => {calls++; return metadataResponse({status: 'REQUEST_DENIED'});}});
+  assert.equal((await denied.resolve(request('listingId=CIV-NJ-7-53&mode=walkthrough'))).status, 503);
+  assert.equal(calls, 1);
 });
 
 test('image mode verifies metadata first, points the camera at the listing, and streams bounded image bytes', async () => {
@@ -232,6 +297,25 @@ test('publisher photos, demo records, incomplete locations, and generic photos a
     assert.equal(result.body.error, expectedCode);
     assert.equal(fetched, false);
   }
+});
+
+test('requested walkthrough complements publisher photos while automatic imagery still prefers them', async () => {
+  let calls = 0;
+  const listing = publisherPhotoListing();
+  const service = serviceFor({ listing, fetchImpl: async () => { calls++; return metadataResponse(); } });
+  for (const mode of ['metadata', 'image']) {
+    const result = await service.resolve(request(`listingId=${listing.id}&mode=${mode}`));
+    assert.equal(result.status, 409);
+    assert.equal(result.body.error, 'publisher_photo_available');
+  }
+  assert.equal(calls, 0);
+  const walkthrough = await service.resolve(request(`listingId=${listing.id}&mode=walkthrough`));
+  assert.equal(walkthrough.status, 200);
+  assert.equal(walkthrough.body.available, true);
+  assert.equal(calls, 1);
+  const unverified = publisherPhotoListing({ provenance: { origin: 'snapshot', observed: false } });
+  const blocked = serviceFor({ listing: unverified, fetchImpl: async () => { throw new Error('Must not fetch for unverified records'); } });
+  assert.equal((await blocked.resolve(request(`listingId=${unverified.id}&mode=walkthrough`))).body.error, 'listing_not_source_observed');
 });
 
 test('a missing source coordinate can use one ephemeral exact ROOFTOP address match', async () => {

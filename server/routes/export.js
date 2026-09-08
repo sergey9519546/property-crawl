@@ -63,14 +63,42 @@ function exportedCashRequirement(listing) {
 
 function publicExportListing(listing) {
   const presented = presentListing(listing);
-  const { equity, cashToClose, cashToCloseDetails, source, ...rest } = presented;
+  const fields = [
+    'id', 'address', 'city', 'state', 'zip', 'county', 'sourceUrl', 'sourceObservedAt', 'fetchedAt',
+    'openingBid', 'estLow', 'estHigh', 'assessed', 'saleDate', 'saleTime', 'saleTimezone', 'status', 'lifecycleStatus', 'lifecycle',
+    'auctionProgram', 'program', 'transactionOutcome', 'auctionMethod', 'occupancy', 'interiorAccessAvailable', 'isCashOnly', 'isFinancible',
+    'deposit', 'plaintiff', 'defendant', 'attorney', 'judgment', 'redemptionDays', 'seniorLienRisk',
+    'propType', 'beds', 'baths', 'sqft', 'lotSize', 'year', 'yearBuilt', 'apn', 'parcelId', 'parcelNumber', 'caseNumber', 'lat', 'lng', 'photo',
+    'hasDocuments', 'bidSpread', 'dealScore', 'sourceFreshness', 'discoveryStatus', 'evidenceCompleteness',
+  ];
+  const exported = {};
+  for (const field of fields) if (Object.hasOwn(presented, field)) exported[field] = presented[field];
+  const provenance = presented.provenance && typeof presented.provenance === 'object'
+    ? presented.provenance : {};
+  const exportedProvenance = {};
+  for (const field of ['origin', 'observed', 'recordKind', 'publisher', 'recordId', 'observedAt', 'exactSourceUrl']) {
+    if (Object.hasOwn(provenance, field)) exportedProvenance[field] = provenance[field];
+  }
+  if (provenance.derivedFields && typeof provenance.derivedFields === 'object' && !Array.isArray(provenance.derivedFields)) {
+    exportedProvenance.derivedFields = Object.fromEntries(Object.entries(provenance.derivedFields).slice(0, 100).map(([key, value]) => {
+      if (value === true || typeof value === 'string') return [key, value];
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return [key, true];
+      const detail = {};
+      for (const field of ['model', 'method', 'provider', 'basis', 'note']) {
+        if (typeof value[field] === 'string') detail[field] = value[field];
+      }
+      if (Array.isArray(value.inputs)) detail.inputs = value.inputs.filter(item => typeof item === 'string').slice(0, 50);
+      return [key, Object.keys(detail).length ? detail : true];
+    }));
+  }
   return {
-    ...rest,
-    source: neutralSource(source),
-    bidSpread: numberOrNull(presented.bidSpread ?? equity),
+    ...exported,
+    source: neutralSource(presented.source),
+    bidSpread: numberOrNull(presented.bidSpread ?? presented.equity),
     dealScore: numberOrNull(presented.dealScore),
     dealScoreMeaning: 'Opening amount versus supported valuation-range midpoint; triage only, not an appraisal.',
-    cashRequirement: exportedCashRequirement({ ...presented, cashToClose, cashToCloseDetails })
+    cashRequirement: exportedCashRequirement(presented),
+    provenance: exportedProvenance,
   };
 }
 
@@ -131,9 +159,9 @@ async function handleExport(req, res) {
   const format = url.searchParams.get('format') || 'csv';
   if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to export discovery results' });
   if (!['csv','json'].includes(format)) return res.status(400).json({ error: 'Choose csv or json format' });
+  const userId = requireWorkspaceIdentity(req, res);
+  if (!userId) return;
   const saved = url.searchParams.get('saved') === 'true' || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
-  const userId = saved ? requireWorkspaceIdentity(req, res) : null;
-  if (saved && !userId) return;
   let directory, file;
   try {
     const base=path.resolve(__dirname,'../../.cache/discovery-exports');
@@ -143,7 +171,7 @@ async function handleExport(req, res) {
     file=await fs.promises.open(filename,'wx',0o600);
     await file.writeFile(format==='json'?'[':CSV_HEADERS.join(','));
     let count=0, bytes=0;
-    for await (const page of exportPages(url,userId)) {
+    for await (const page of exportPages(url,saved ? userId : null)) {
       if(req.aborted) throw new Error('Export request was aborted');
       const content=format==='json'
         ? (count && page.length?',':'')+page.map(item=>JSON.stringify(publicExportListing(item))).join(',')

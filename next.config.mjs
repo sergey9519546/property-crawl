@@ -2,7 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   // Keep production verification separate from an active development server.
-  distDir: process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'
+  distDir: process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview'
+    : process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'
     : process.env.NEXT_VERIFY_BUILD === '1' ? '.next-verify' : '.next',
   experimental: {
     turbopackFileSystemCacheForBuild: !process.env.NEXT_VERIFY_BUILD,

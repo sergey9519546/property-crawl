@@ -1,4 +1,4 @@
 'use strict';
-const { discoveryReadiness } = require('../server/discovery-readiness');
-async function main(){let pool;const result=await discoveryReadiness({databaseProbe:async()=>{const {Pool}=require('pg');pool=new Pool({connectionString:process.env.DATABASE_URL,max:1,connectionTimeoutMillis:5000});const probe=await pool.query(`SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis') AS postgis,ARRAY(SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('listings','discovery_source_runs','discovery_snapshots','discovery_checkpoints','discovery_jobs','discovery_leases')) AS tables`);await pool.query('SELECT 1 FROM listings LIMIT 1');return probe.rows[0];}});if(pool)await pool.end();console.log(JSON.stringify(result,null,2));if(!result.ready)process.exitCode=1;}
+const {discoveryReadiness,probeDiscoveryDatabase}=require('../server/discovery-readiness');
+async function main(){let pool;try{const result=await discoveryReadiness({databaseProbe:async()=>{const {Pool}=require('pg');pool=new Pool({connectionString:process.env.DATABASE_URL,max:1,connectionTimeoutMillis:5000});return probeDiscoveryDatabase(pool);}});console.log(JSON.stringify(result,null,2));if(!result.ready)process.exitCode=1;}finally{if(pool)await pool.end();}}
 main().catch(e=>{console.error(e.message);process.exitCode=1;});

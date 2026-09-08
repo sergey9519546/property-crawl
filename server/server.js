@@ -18,7 +18,7 @@ const handlePropertySignals = require('./routes/property-signals');
 const handleHunts = require('./routes/hunts');
 const handleWorkspace = require('./routes/workspace');
 const scheduler = require('./scrapers/scheduler');
-const { discoveryReadiness } = require('./discovery-readiness');
+const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
 const PORT = process.env.PORT || 3000;
 const configuredApiLimit = Number(process.env.PROPERTY_API_RATE_LIMIT);
@@ -137,11 +137,7 @@ async function handleRequest(req, res) {
     await parseJsonBody(req);
 
     if (url.pathname === '/api/health/ready') {
-      const readiness = await discoveryReadiness({ databaseProbe: async () => {
-        if (!db.pool) throw new Error('PostgreSQL is not configured');
-        await db.pool.query('SELECT 1 FROM discovery_source_runs LIMIT 1');
-        await db.pool.query('SELECT 1 FROM discovery_atlas_sources LIMIT 1');
-      } });
+      const readiness = await discoveryReadiness({ databaseProbe: () => probeDiscoveryDatabase(db.pool) });
       return res.status(readiness.ready ? 200 : 503).json(readiness);
     }
     if (process.env.DISCOVERY_MODE === 'advanced' && !db.pool && url.pathname !== '/api/health') {

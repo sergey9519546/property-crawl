@@ -13,7 +13,9 @@ test('source failure cannot be promoted to hunt evaluation', () => {
   assert.equal(result.reason, 'source_failed');
 });
 
-test('partial or rejected discovery cycles remain unsafe', () => {
+test('rejected records block evaluation while partial clean records remain positive-only safe', () => {
   assert.equal(huntSafety({ skipped: false, completeCycle: true, totalRejected: 1, sourceResults: [{ sourceId: 'servicelink', accepted: 2, rejected: 1 }] }).safe, false);
-  assert.equal(huntSafety({ skipped: false, completeCycle: true, totalRejected: 0, sourceResults: [{ sourceId: 'servicelink', accepted: 2, report: { complete: false } }] }).safe, false);
+  const partial=huntSafety({ skipped: false, completeCycle: true, totalRejected: 0, sourceResults: [{ sourceId: 'servicelink', accepted: 2, rejected:0, report: { complete: false } }] });
+  assert.equal(partial.safe, true);
+  assert.deepEqual(partial.completeSourceIds, []);
 });

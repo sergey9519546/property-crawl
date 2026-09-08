@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { sourceDisplayText } from "@/lib/source-display";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -21,7 +21,9 @@ type Hunt = {
   name: string;
   version: number;
   enabled: boolean;
-  criteria: { mode: "all" | "any"; rules: Rule[] };
+  criteria:
+    | { mode: "all" | "any"; rules: Rule[]; discoveryFilters?: never }
+    | { discoveryFilters: Record<string, string>; mode?: never; rules?: never };
 };
 type Clause = {
   field: string;
@@ -102,6 +104,13 @@ const display = (value: unknown) =>
     : typeof value === "object"
       ? sourceDisplayText(JSON.stringify(value))
       : sourceDisplayText(String(value));
+const discoveryFilterLabels: Record<string, string> = {
+  q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
+  program: "Program", lifecycle: "Lifecycle", saleFrom: "Sale from", saleTo: "Sale through",
+  maxBid: "Maximum bid", minScore: "Minimum score", minEquity: "Minimum equity",
+  occupancy: "Occupancy", freshness: "Freshness", hasDocuments: "Documents",
+  seniorLien: "Senior lien", redemption: "Redemption",
+};
 const inputClass =
   "w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm outline-slate-900";
 const huntTemplates: {
@@ -183,6 +192,7 @@ export function SavedHunts() {
     "Vacant land in Alachua County under $150k within 30 days",
   );
   const [missingDependencies, setMissingDependencies] = useState<string[]>([]);
+  const selectedSectionRef = useRef<HTMLElement>(null);
   async function api(path = "", method = "GET", body?: unknown) {
     if (!session.authenticated) {
       session.requestUnlock();
@@ -210,6 +220,18 @@ export function SavedHunts() {
     void run(async () => {
       const data = await api();
       setHunts(data.items);
+      const requestedId = new URLSearchParams(window.location.search).get("hunt");
+      const requested = data.items.find((hunt: Hunt) => hunt.id === requestedId);
+      if (requested) {
+        const detail = await api(`/${requested.id}`);
+        setSelected(detail.hunt);
+        setEvaluation(null);
+        setEvents(detail.recentEvents || []);
+        requestAnimationFrame(() => {
+          selectedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          selectedSectionRef.current?.focus({ preventScroll: true });
+        });
+      }
       const batches = await Promise.all(
         data.items.map(async (hunt: Hunt) => {
           const response = await fetch(
@@ -648,6 +670,8 @@ export function SavedHunts() {
               </div>
             </aside>
             <section
+              ref={selectedSectionRef}
+              tabIndex={-1}
               className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"
               aria-label="Hunt evidence"
             >
@@ -662,8 +686,9 @@ export function SavedHunts() {
                         {selected.name}
                       </h2>
                       <p className="mt-2 text-xs text-[#6B7280]">
-                        {selected.criteria.mode === "all" ? "Every" : "Any"}{" "}
-                        criterion must match.
+                        {"discoveryFilters" in selected.criteria
+                          ? "Matches the filters saved from Discover."
+                          : `${selected.criteria.mode === "all" ? "Every" : "Any"} criterion must match.`}
                       </p>
                     </div>
                     <button
@@ -692,11 +717,17 @@ export function SavedHunts() {
                       ) : (
                         <Crosshair size={15} />
                       )}
-                      Run hunt
+                      Check for changes
                     </button>
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {selected.criteria.rules.map((rule, index) => (
+                    {"discoveryFilters" in selected.criteria
+                      ? Object.entries(selected.criteria.discoveryFilters ?? {}).map(([key, value]) => (
+                        <span key={key} className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]">
+                          {discoveryFilterLabels[key] || key.replaceAll("_", " ")}: {value === "unknown" ? "Unknown" : display(value)}
+                        </span>
+                      ))
+                      : selected.criteria.rules.map((rule, index) => (
                       <span
                         key={index}
                         className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]"
@@ -706,6 +737,9 @@ export function SavedHunts() {
                           display(rule.value)}
                       </span>
                     ))}
+                    {"discoveryFilters" in selected.criteria && !Object.keys(selected.criteria.discoveryFilters ?? {}).length && (
+                      <span className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]">All discovered properties</span>
+                    )}
                   </div>
                   <button
                     disabled={busy}
@@ -726,6 +760,9 @@ export function SavedHunts() {
                   >
                     {selected.enabled ? "Pause this hunt" : "Enable this hunt"}
                   </button>
+                  <p className="mt-3 text-xs leading-5 text-[#6B7280]">
+                    Enabled searches are also checked as new source collections finish.
+                  </p>
                   {evaluation ? (
                     <>
                       <div className="mt-6 grid grid-cols-3 gap-3">

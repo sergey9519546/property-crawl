@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Camera, Image as ImageIcon, Map as MapIcon, MapPin, RefreshCw } from "lucide-react";
+import { Camera, ExternalLink, Image as ImageIcon, Map as MapIcon, MapPin } from "lucide-react";
 import type { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import { safeImageUrl } from "@/lib/listing-display";
-import { requestStreetViewMetadata, formatCaptureDate, type StreetViewMetadata } from "@/lib/street-view-client";
+import { requestStreetViewMetadata, formatCaptureDate, streetViewLaunchUrl, type StreetViewMetadata } from "@/lib/street-view-client";
 import { PropertyEvidenceVisual } from "@/components/listings/property-evidence-visual";
+import { InteractiveStreetView } from "@/components/listings/interactive-street-view";
 
 type ListingMediaProps = {
   listingId?: string | null;
@@ -18,6 +19,7 @@ type ListingMediaProps = {
   photoOrigin?: "publisher" | "secondary";
   photoProvider?: string | null;
   photoSourceUrl?: string | null;
+  sourceLabel?: string | null;
 };
 
 type MediaMode = "photo" | "streetview" | "map";
@@ -29,14 +31,17 @@ type StreetViewState =
   | { status: "unavailable"; reason: string };
 
 function hasCoordinates(lat: number | null | undefined, lng: number | null | undefined) {
-  return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
+  return typeof lat === "number" && typeof lng === "number"
+    && Number.isFinite(lat) && Number.isFinite(lng)
+    && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    && !(lat === 0 && lng === 0);
 }
 
 function publisherPhotoUrl(photo: string | null | undefined) {
   return safeImageUrl(photo) || null;
 }
 
-export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl }: ListingMediaProps) {
+export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng, locationDisclosure, photoOrigin = "publisher", photoProvider, photoSourceUrl, sourceLabel }: ListingMediaProps) {
   const canMap = hasCoordinates(lat, lng);
   const publisherPhoto = publisherPhotoUrl(photo);
   const photos = [...new Set([publisherPhoto, ...gallery.map(safeImageUrl)].filter((url): url is string => Boolean(url)))].slice(0, 12);
@@ -49,24 +54,18 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   const normalizedListingId = typeof listingId === "string" ? listingId.trim() : "";
   const [mode, setMode] = React.useState<MediaMode>(canShowPhoto ? "photo" : "map");
   const [streetView, setStreetView] = React.useState<StreetViewState>({ status: "idle" });
-  const [streetViewImageState, setStreetViewImageState] = React.useState<"loading" | "loaded" | "error">("loading");
-  const [streetViewImageAttempt, setStreetViewImageAttempt] = React.useState(0);
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<MapLibreMap | null>(null);
   const markerRef = React.useRef<MapLibreMarker | null>(null);
-  const userSelectedModeRef = React.useRef(false);
   const streetViewRequestGeneration = React.useRef(0);
   const tabsId = React.useId().replace(/:/g, "");
 
   React.useEffect(() => {
     streetViewRequestGeneration.current++;
-    userSelectedModeRef.current = false;
     setPhotoIndex(0);
     setFailedPhotoUrls(new Set());
-    setStreetViewImageState("loading");
-    setStreetViewImageAttempt(0);
     setStreetView({ status: "idle" });
 
     // Always begin in the photo slot. A map is useful context, but it must not
@@ -136,25 +135,22 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
     };
   }, [address, canMap, lat, lng, mode]);
 
-  const streetViewAvailable = streetView.status === "available";
   const availableModes: MediaMode[] = [
     "photo",
-    ...(streetViewAvailable ? ["streetview" as const] : []),
+    "streetview",
     ...(canMap ? ["map" as const] : []),
   ];
   const hasAnyMedia = availableModes.length > 0;
 
   const selectMode = React.useCallback((nextMode: MediaMode) => {
-    userSelectedModeRef.current = true;
     setMode(nextMode);
   }, []);
 
   const loadStreetView = React.useCallback(() => {
     if (!normalizedListingId || streetView.status === "loading") return;
     const requestGeneration = ++streetViewRequestGeneration.current;
-    userSelectedModeRef.current = true;
     setStreetView({ status: "loading" });
-    void requestStreetViewMetadata(normalizedListingId)
+    void requestStreetViewMetadata(normalizedListingId,{walkthrough:true})
       .then((result) => {
         if (requestGeneration !== streetViewRequestGeneration.current) return;
         if (!result.available) {
@@ -162,8 +158,6 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           return;
         }
         setStreetView({ status: "available", metadata: result.metadata });
-        setStreetViewImageState("loading");
-        setStreetViewImageAttempt(0);
         setMode("streetview");
       })
       .catch(() => {
@@ -207,8 +201,9 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
     const nextMode = availableModes[nextIndex];
     if (!nextMode) return;
     selectMode(nextMode);
+    if (nextMode === "streetview" && streetView.status === "idle") loadStreetView();
     window.requestAnimationFrame(() => document.getElementById(`${tabsId}-${nextMode}-tab`)?.focus());
-  }, [availableModes, selectMode, tabsId]);
+  }, [availableModes, loadStreetView, selectMode, streetView.status, tabsId]);
 
   const renderTab = (tabMode: MediaMode, label: string, icon: React.ReactNode) => (
     <button
@@ -219,7 +214,10 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
       aria-selected={mode === tabMode}
       aria-controls={`${tabsId}-${tabMode}-panel`}
       tabIndex={mode === tabMode ? 0 : -1}
-      onClick={() => selectMode(tabMode)}
+      onClick={() => {
+        selectMode(tabMode);
+        if (tabMode === "streetview" && streetView.status === "idle") loadStreetView();
+      }}
       onKeyDown={(event) => handleTabKeyDown(event, tabMode)}
       className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 ${
         mode === tabMode ? "border-slate-900 text-slate-950" : "border-transparent text-slate-600 hover:text-slate-950"
@@ -232,7 +230,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   return (
     <div
       data-testid="listing-media"
-      className="relative h-[320px] overflow-hidden bg-slate-50 sm:h-[460px]"
+      className={`relative overflow-hidden bg-slate-50 sm:h-[460px] ${mode === "streetview" ? "h-[440px]" : "h-[320px]"}`}
     >
       {hasAnyMedia ? (
         <div
@@ -241,7 +239,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           className="absolute inset-x-0 bottom-0 z-20 flex border-t border-slate-200 bg-white px-4 py-2"
         >
           {renderTab("photo", canShowPhoto ? photoLabel : "Photos", <ImageIcon className="h-3.5 w-3.5" aria-hidden />)}
-          {streetViewAvailable ? renderTab("streetview", "Street View", <Camera className="h-3.5 w-3.5" aria-hidden />) : null}
+          {renderTab("streetview", "Exterior Walkthrough", <Camera className="h-3.5 w-3.5" aria-hidden />)}
           {canMap ? renderTab("map", "Map", <MapIcon className="h-3.5 w-3.5" aria-hidden />) : null}
         </div>
       ) : null}
@@ -284,7 +282,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           </div> : null}
           {photoOrigin === "secondary" && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noreferrer" className="absolute bottom-16 right-4 z-10 rounded-xl bg-white/90 px-3 py-2 text-[11px] font-semibold text-slate-900 underline shadow-sm hover:text-slate-700">Source record</a> : null}
         </div>
-      ) : mode === "streetview" && streetView.status === "available" ? (
+      ) : mode === "streetview" ? (
         <div
           id={`${tabsId}-streetview-panel`}
           role="tabpanel"
@@ -292,67 +290,23 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
           data-testid="street-view-panel"
           className="flex h-[calc(100%-56px)] w-full flex-col bg-slate-200"
         >
-          <div className="relative min-h-0 flex-1">
-            {streetViewImageState !== "error" ? (
-              <img
-                key={streetViewImageAttempt}
-                src={`/api/property-image?listingId=${encodeURIComponent(normalizedListingId)}&mode=image`}
-                alt={`Google Street View street-level context near ${address}`}
-                className={`h-full w-full object-contain transition-opacity duration-300 ${streetViewImageState === "loaded" ? "opacity-100" : "opacity-0"}`}
-                onLoad={() => setStreetViewImageState("loaded")}
-                onError={() => setStreetViewImageState("error")}
-              />
-            ) : null}
-            {streetViewImageState === "loading" ? (
-              <div className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-100 text-sm font-semibold text-slate-500">
-                Loading verified Street View context…
-              </div>
-            ) : null}
-            {streetViewImageState === "error" ? (
-              <div className="absolute inset-0 grid place-items-center bg-slate-100 px-6 text-center">
-                <div>
-                  <Camera className="mx-auto h-8 w-8 text-slate-400" aria-hidden />
-                  <p className="mt-3 text-sm font-bold text-slate-800">Street View image is temporarily unavailable</p>
-                  <p className="mt-1 text-xs text-slate-500">The panorama metadata was verified, but the image could not be loaded.</p>
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStreetViewImageState("loading");
-                        setStreetViewImageAttempt((attempt) => attempt + 1);
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Retry image
-                    </button>
-                    {canMap ? (
-                      <button
-                        type="button"
-                        onClick={() => selectMode("map")}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2"
-                      >
-                        Open map
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </div>
-          {streetViewImageState === "loaded" ? (
+          {streetView.status === "available" ? <>
+            <div className="relative min-h-0 flex-1">
+              <InteractiveStreetView address={address} sourceLabel={sourceLabel} metadata={streetView.metadata} />
+            </div>
             <div data-testid="street-view-disclosure" className="shrink-0 border-t border-slate-800 bg-slate-950 px-4 py-3 text-white">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px]">
                 <strong>{streetView.metadata.provider} · {streetView.metadata.attribution}</strong>
-                <span>{formatCaptureDate(streetView.metadata.captureDate)}</span>
+                <span>Starting panorama: {formatCaptureDate(streetView.metadata.captureDate)}</span>
                 <span>{streetView.metadata.distanceMeters !== null
-                  ? `Distance: ${Math.round(streetView.metadata.distanceMeters)} m from matched property location`
-                  : "Panorama distance unavailable"}</span>
+                  ? `Starting point: ${Math.round(streetView.metadata.distanceMeters)} m from matched property location`
+                  : "Starting-point distance unavailable"}</span>
               </div>
               <p className="mt-1 text-[11px] leading-relaxed text-slate-200">
-                Street-level context only — verify the facade and parcel against the publisher record before relying on this image.
+                {streetView.metadata.coverage === "nearby_street" ? "Nearby street coverage; this is not verified property frontage. " : "Street-level context only. "}Verify the facade and parcel against the publisher record before relying on this imagery.
               </p>
             </div>
-          ) : null}
+          </> : <div className="grid min-h-0 flex-1 place-items-center px-5 py-4 text-center"><div><Camera className="mx-auto h-7 w-7 text-slate-400" aria-hidden/><p className="mt-2 text-sm font-bold text-slate-900">Exterior walkthrough</p>{streetView.status === "unavailable" ? <p role="status" className="mt-2 max-w-md text-xs leading-relaxed text-slate-600">{streetView.reason}</p> : <p className="mt-2 max-w-md text-xs leading-relaxed text-slate-600">Check for available outdoor street imagery near this property.</p>}<div className="mt-3 flex flex-wrap justify-center gap-2">{normalizedListingId?<button type="button" disabled={streetView.status === "loading"} onClick={loadStreetView} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white disabled:opacity-60"><Camera className="h-3.5 w-3.5" aria-hidden/>{streetView.status === "loading" ? "Checking…" : streetView.status === "unavailable" ? "Check again" : "Check panorama"}</button>:null}{streetView.status === "unavailable" ? <a href={streetViewLaunchUrl(address)} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-900">Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden/></a> : null}{streetView.status === "unavailable" && canMap ? <button type="button" onClick={()=>selectMode("map")} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-900"><MapIcon className="h-3.5 w-3.5" aria-hidden/>Property map</button> : null}</div></div></div>}
         </div>
       ) : mode === "map" && canMap ? (
         <div

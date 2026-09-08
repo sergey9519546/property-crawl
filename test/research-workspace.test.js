@@ -223,6 +223,14 @@ test('corrupt and locked stores fail closed without replacing retained bytes', (
   assert.equal(JSON.parse(fs.readFileSync(filePath, 'utf8')).cases.length, 0);
 });
 
+test('Windows transient rename locks retry without deleting the retained workspace', (t) => {
+  const filePath=tempStore(t),temporary=`${filePath}.replacement.tmp`;fs.writeFileSync(filePath,'old','utf8');fs.writeFileSync(temporary,'new','utf8');
+  const original=fs.renameSync;let calls=0,waits=0;
+  t.mock.method(fs,'renameSync',(from,to)=>{calls++;if(calls<3){const error=new Error('temporarily locked');error.code='EPERM';throw error;}return original(from,to);});
+  store.replaceFileWithRetry(temporary,filePath,{platform:'win32',attempts:4,wait:()=>{waits++;assert.equal(fs.readFileSync(filePath,'utf8'),'old');}});
+  assert.equal(calls,3);assert.equal(waits,2);assert.equal(fs.readFileSync(filePath,'utf8'),'new');
+});
+
 test('HTTP browser import requires an unchanged preview and never imports snapshots', async (t) => {
   const filePath = tempStore(t);
   const snapshot = listing({ id: 'snapshot-1', provenance: { origin: 'snapshot', observed: false } });

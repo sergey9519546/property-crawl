@@ -19,7 +19,7 @@ const SOURCE_HOSTS = Object.freeze({
   fannie: ['homepath.fanniemae.com'],
   freddie: ['homesteps.com'],
   gsa: ['realestatesales.gov'],
-  hud: ['hudhomestore.gov'],
+  hud: ['hudhomestore.gov', 'egis.hud.gov'],
   irs: ['irsauctions.gov'],
   landbank: ['landbanksearch.com'],
   marshals: ['usmarshals.gov', 'reallook.com'],
@@ -64,6 +64,17 @@ function hasSourceRecordShape(source, url) {
     case 'gsa':
       return path === '/asset-details' && url.searchParams.has('property_id');
     case 'hud':
+      if (url.hostname.toLowerCase() === 'egis.hud.gov') {
+        const allowed = new Set(['where', 'outFields', 'f', 'returnGeometry', 'outSR']);
+        const entries = [...url.searchParams.keys()];
+        return path === '/arcgis/rest/services/cpdmaps/hudsfreo/mapserver/1/query'
+          && /^CASE_NUM\s*=\s*'[0-9]{3}-[0-9]{6}'$/.test(url.searchParams.get('where') || '')
+          && entries.every((key) => allowed.has(key)) && new Set(entries).size === entries.length
+          && ['json', 'pjson'].includes(url.searchParams.get('f') || '')
+          && (url.searchParams.get('outFields') || '*') === '*'
+          && (!url.searchParams.has('returnGeometry') || ['true', 'false'].includes(url.searchParams.get('returnGeometry')))
+          && (!url.searchParams.has('outSR') || url.searchParams.get('outSR') === '4326');
+      }
       return path === '/property/propertydetails' && url.searchParams.has('caseNumber');
     case 'irs':
       return /^\/(ad|auction)\/[^/]+$/.test(path) && (hasStablePathToken(url) || path.split('/').at(-1).split('-').length >= 3);

@@ -2,13 +2,20 @@
 
 import * as React from "react";
 import { Bookmark } from "lucide-react";
+import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
+  const session = useWorkspaceSession();
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
+    if (!session.authenticated) {
+      setSaved(false);
+      setError("");
+      return;
+    }
     let active = true;
     void fetch("/api/alerts", { credentials: "same-origin", cache: "no-store" })
       .then(async (response) => {
@@ -32,9 +39,14 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
     return () => {
       active = false;
     };
-  }, [listingId]);
+  }, [listingId, session.authenticated]);
 
   async function toggle() {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -45,6 +57,10 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
         body: JSON.stringify({ listingId }),
       });
       const data = await response.json();
+      if (response.status === 401) {
+        void session.refresh();
+        session.requestUnlock();
+      }
       if (!response.ok) throw new Error(data.error || "Watchlist could not be updated.");
       setSaved(!saved);
     } catch (caught) {

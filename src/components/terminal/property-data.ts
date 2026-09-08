@@ -59,7 +59,6 @@ export interface PropertyListing {
   lifecycleStatus?: string | null;
   /** Discovery pipeline state, distinct from publisher lifecycle facts. */
   discoveryStatus?: string | null;
-  hasDocuments?: boolean | null;
   evidenceCompleteness?: { known: number; total: number; missing: string[] };
   sourceFreshness?: { observedAt: string | null; ageHours: number | null; cadenceHours: number; status: string };
   /** Whether publisher documents were observed; document contents remain evidence-backed. */

@@ -6,6 +6,8 @@ const { createIsolatedDatabase, seedListings } = require('./discovery-acceptance
 const { createDiscoveryStore } = require('../server/discovery/store');
 const discovery = require('../server/discovery/query');
 const { DatabaseClient } = require('../server/db/client');
+const { createHuntsHandler } = require('../server/routes/hunts');
+const { createPgHuntStore } = require('../server/discovery/hunt-store');
 
 let isolated;
 test.before(async () => { isolated = await createIsolatedDatabase(); });
@@ -85,6 +87,17 @@ test('PostgreSQL search cursor rejects inventory mutation and map uses PostGIS',
 test('unknown categorical facets select null and blank values with PG/memory parity', async () => {
   await isolated.pool.query("INSERT INTO listings(id,source_key,state,address,prop_type,auction_program,occupancy,status) VALUES ('unknown-null','hud','CA','Null Category',NULL,NULL,NULL,'active'),('unknown-blank','hud','CA','Blank Category','','','','active'),('known-category','hud','CA','Known Category','Land','TPS','vacant','active')");
   const pgDatabase=new DatabaseClient({env:{NODE_ENV:'test'}});pgDatabase.pool=isolated.pool;pgDatabase.isPg=true;
-  for(const parameter of ['type','program','occupancy']){const parsed=discovery.queryFromUrl(new URL(`http://localhost/api/listings?${parameter}=unknown&limit=10&facets=${parameter}`));const result=await discovery.search(pgDatabase,parsed);assert.deepEqual(result.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);assert.deepEqual(result.facets[parameter],[{value:'unknown',count:2}]);
+  for(const parameter of ['type','program','occupancy']){const parsed=discovery.queryFromUrl(new URL(`http://localhost/api/listings?q=category&${parameter}=unknown&limit=10&facets=${parameter}`));const result=await discovery.search(pgDatabase,parsed);assert.deepEqual(result.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);assert.deepEqual(result.facets[parameter],[{value:'unknown',count:2}]);
     const memory={isPg:false,getListings:async()=>({total:3,listings:[{id:'unknown-null',source:'hud',state:'CA',address:'Null Category',propType:null,auctionProgram:null,occupancy:null,status:'active'},{id:'unknown-blank',source:'hud',state:'CA',address:'Blank Category',propType:'',auctionProgram:'',occupancy:'',status:'active'},{id:'known-category',source:'hud',state:'CA',address:'Known Category',propType:'Land',auctionProgram:'TPS',occupancy:'vacant',status:'active'}]})};const memoryResult=await discovery.search(memory,parsed);assert.deepEqual(memoryResult.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);}
+});
+
+test('advanced hunt route pages and persists a baseline beyond 10000 PostgreSQL listings',{timeout:60000},async()=>{
+  await isolated.pool.query('DELETE FROM listings');await seedListings(isolated.pool,10050);
+  await isolated.pool.query(`UPDATE listings SET id='HUD-CA-'||substring(id from '[0-9]+'),source_key='hud',state='CA',source_url='https://www.hudhomestore.gov/property/propertydetails?caseNumber='||substring(id from '[0-9]+'),raw_notice='Official HUD publisher record '||substring(id from '[0-9]+'),source_observed_at='2026-09-05T18:00:00Z',provenance=jsonb_build_object('origin','live','observed',true,'recordKind','source_record','publisher','HUD','recordId',substring(id from '[0-9]+'),'observedAt','2026-09-05T18:00:00Z')`);
+  const database=new DatabaseClient({env:{NODE_ENV:'test'}});database.pool=isolated.pool;database.isPg=true;
+  const durable=createPgHuntStore(database);const hunt=await durable.create({name:'All CA acceptance',enabled:true,criteria:{mode:'all',rules:[{field:'state',operator:'eq',value:'CA'}]}});
+  const handler=createHuntsHandler({database,durableStore:durable,env:{DISCOVERY_MODE:'advanced',SCRAPER_ADMIN_TOKEN:'acceptance-token'},now:()=> '2026-09-07T20:00:00.000Z'});
+  const invoke=async()=>{const req={method:'POST',url:`/api/hunts/${hunt.id}/evaluate`,headers:{authorization:'Bearer acceptance-token'},body:{}};const res={statusCode:200,setHeader(){},status(code){this.statusCode=code;return this;},json(value){this.body=value;return value;}};await handler(req,res,new URL(req.url,'http://localhost'));assert.equal(res.statusCode,200);return res.body.evaluation;};
+  const first=await invoke();const count=Number((await isolated.pool.query('SELECT count(*)::int AS count FROM discovery_hunt_baselines WHERE hunt_id=$1',[hunt.id])).rows[0].count);assert.equal(count,10050);assert.equal(first.newEvents.length,0);
+  const second=await invoke();assert.equal(second.newEvents.length,0);assert.equal(Number((await isolated.pool.query('SELECT count(*)::int AS count FROM discovery_hunt_baselines WHERE hunt_id=$1',[hunt.id])).rows[0].count),10050);
 });

@@ -4,6 +4,14 @@ const {
 } = require('./circuit-breaker');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const RETRYABLE_TRANSPORT_CODES = new Set(['EAI_AGAIN','ECONNRESET','ECONNREFUSED','ENETDOWN','ENETUNREACH','EHOSTUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','UND_ERR_SOCKET']);
+function safeTransportDetails(error, url, timedOut = false) {
+  let code=null;const queue=[error];
+  for(let visited=0;queue.length&&visited<12;visited++){const current=queue.shift();if(!current)continue;const candidate=String(current.code||'').toUpperCase();if(/^[A-Z][A-Z0-9_]{1,63}$/.test(candidate)){code=candidate;break;}if(current.cause)queue.push(current.cause);if(Array.isArray(current.errors))queue.push(...current.errors);}
+  let hostname='upstream';try{hostname=new URL(String(url)).hostname||hostname;}catch{}
+  const transportCode=timedOut?'UPSTREAM_TIMEOUT':code||'UPSTREAM_TRANSPORT_ERROR';
+  return {hostname,transportCode,retryable:timedOut||RETRYABLE_TRANSPORT_CODES.has(transportCode),message:`${timedOut?'Request timed out':'Upstream transport failed'} (${transportCode}) for host ${hostname}; retryable=${timedOut||RETRYABLE_TRANSPORT_CODES.has(transportCode)}`};
+}
 const DEFAULT_JITTER_MIN_MS = 250;
 const DEFAULT_JITTER_MAX_MS = 750;
 
@@ -110,14 +118,16 @@ async function fetchTextWithPolicy(url, options = {}) {
     if (error instanceof ScraperResponseError) throw error;
 
     const timedOut = controller.signal.aborted && !(externalSignal && externalSignal.aborted);
+    const detail=safeTransportDetails(error,url,timedOut);
     const wrapped = new ScraperResponseError(
-      timedOut ? `Request timed out after ${effectiveTimeoutMs}ms for ${url}` : error.message,
+      detail.message,
       {
         code: timedOut ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_TRANSPORT_ERROR',
         haltScraper: false,
         circuitRecorded: true
       }
     );
+    wrapped.transportCode=detail.transportCode;wrapped.hostname=detail.hostname;wrapped.retryable=detail.retryable;
     circuitBreaker.trip(wrapped.message);
     throw wrapped;
   } finally {
@@ -148,6 +158,7 @@ module.exports = {
   crawlJitter,
   fetchJsonWithPolicy,
   fetchTextWithPolicy,
+  safeTransportDetails,
   mapWithConcurrency,
   normalizeRequestTimeout,
   randomJitterMs

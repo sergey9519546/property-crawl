@@ -33,7 +33,8 @@ function parseBool(v, name) {
   if (v == null || v === "") return null;
   if (v === "true") return true;
   if (v === "false") return false;
-  throw new DiscoveryQueryError(400, `${name} must be true or false`);
+  if (v === "unknown") return "unknown";
+  throw new DiscoveryQueryError(400, `${name} must be true or false, or unknown`);
 }
 function parseDate(v, name) {
   if (!v) return null;
@@ -136,14 +137,15 @@ function queryFromUrl(url) {
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
 }
-function derived(row) {
+function derived(row, now = Date.now()) {
   const documents = row.provenance?.sourceFacts?.documents;
   const hasDocuments = row.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
     ? true
     : row.hasDocuments === false || Array.isArray(documents) ? false : null;
   const observedAt = row.sourceObservedAt || row.provenance?.observedAt || row.fetchedAt;
   const observedMs = Date.parse(observedAt || "");
-  const ageDays = Number.isFinite(observedMs) ? Math.max(0, (Date.now() - observedMs) / 86400000) : null;
+  const nowMs = now instanceof Date ? now.getTime() : Number.isFinite(Number(now)) ? Number(now) : Date.parse(String(now));
+  const ageDays = Number.isFinite(observedMs) && Number.isFinite(nowMs) ? Math.max(0, (nowMs - observedMs) / 86400000) : null;
   return {
     program:
       row.auctionProgram || row.provenance?.sourceFacts?.auctionProgram || null,
@@ -153,8 +155,8 @@ function derived(row) {
     freshness: row.provenance?.origin !== "live" ? "unverified" : ageDays === null ? "unknown" : ageDays <= 7 ? "fresh" : ageDays <= 30 ? "aging" : "stale",
   };
 }
-function matches(row, f) {
-  const d = derived(row);
+function matches(row, f, options = {}) {
+  const d = derived(row, options.now ?? Date.now());
   if (
     f.q &&
     !text(
@@ -201,7 +203,7 @@ function matches(row, f) {
   if (f.seniorLien === "risk" && row.seniorLienRisk !== "high") return false;
   if (f.redemption === "immediate" && row.redemptionDays !== 0) return false;
   if (f.redemption === "redemption_active" && !(row.redemptionDays > 0)) return false;
-  if (f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
+  if (f.hasDocuments === "unknown" ? d.hasDocuments !== null : f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
     return false;
   if (f.bbox) {
     const [w, s, e, n] = f.bbox,
@@ -282,13 +284,15 @@ function pgWhere(f, start = 1) {
     w.push(sql.replace("?", `$${start + p.length}`));
     p.push(v);
   };
+  const programExpr="coalesce(nullif(btrim(auction_program),''),nullif(btrim(provenance#>>'{sourceFacts,auctionProgram}'),''))";
+  const lifecycleExpr="coalesce(nullif(btrim(lifecycle_status),''),nullif(btrim(status),''))";
   for (const [col, v] of [
     ["state", f.state],
     ["lower(county)", f.county],
     ["source_key", f.source],
     ["lower(prop_type)", f.type],
-    ["lower(auction_program)", f.program],
-    ["lower(coalesce(lifecycle_status,status))", f.lifecycle],
+    [`lower(${programExpr})`, f.program],
+    [`lower(${lifecycleExpr})`, f.lifecycle],
     ["lower(occupancy)", f.occupancy],
   ])
     if (v && v !== "all") {
@@ -297,7 +301,7 @@ function pgWhere(f, start = 1) {
     }
   if (f.q) {
     add(
-      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program,'')||' '||coalesce(provenance->>'recordId','')||' '||coalesce(provenance#>>'{sourceFacts,apn}','')||' '||coalesce(provenance#>>'{sourceFacts,parcelId}','')||' '||coalesce(provenance#>>'{sourceFacts,caseNumber}','')) ILIKE ?`,
+      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(${programExpr},'')||' '||coalesce(provenance->>'recordId','')||' '||coalesce(provenance#>>'{sourceFacts,apn}','')||' '||coalesce(provenance#>>'{sourceFacts,parcelId}','')||' '||coalesce(provenance#>>'{sourceFacts,caseNumber}','')) ILIKE ?`,
       `%${f.q}%`,
     );
   }
@@ -311,7 +315,8 @@ function pgWhere(f, start = 1) {
   if (f.redemption === "immediate") w.push("redemption_days=0");
   else if (f.redemption === "redemption_active") w.push("redemption_days>0");
   if (f.hasDocuments === true) w.push("(has_documents=TRUE OR jsonb_array_length(CASE WHEN jsonb_typeof(provenance#>'{sourceFacts,documents}')='array' THEN provenance#>'{sourceFacts,documents}' ELSE '[]'::jsonb END)>0)");
-  else if (f.hasDocuments === false) w.push("has_documents=FALSE");
+  else if (f.hasDocuments === false) w.push("(has_documents IS DISTINCT FROM TRUE AND jsonb_array_length(CASE WHEN jsonb_typeof(provenance#>'{sourceFacts,documents}')='array' THEN provenance#>'{sourceFacts,documents}' ELSE '[]'::jsonb END)=0 AND (has_documents=FALSE OR jsonb_typeof(provenance#>'{sourceFacts,documents}')='array'))");
+  else if (f.hasDocuments === "unknown") w.push("(has_documents IS NULL AND jsonb_typeof(provenance#>'{sourceFacts,documents}') IS DISTINCT FROM 'array')");
   if (f.freshness && f.freshness !== "all") {
     if (f.freshness === "fresh") w.push("provenance->>'origin'='live' AND coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '7 days'");
     else if (f.freshness === "aging") w.push("provenance->>'origin'='live' AND coalesce(source_observed_at,fetched_at)<NOW()-INTERVAL '7 days' AND coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '30 days'");
@@ -359,8 +364,8 @@ async function pgSummary(client, where, requestedFacets) {
   const expressions = {
     state: "coalesce(nullif(btrim(state::text),''),'unknown')", county: "coalesce(nullif(btrim(county::text),''),'unknown')",
     source: "coalesce(nullif(btrim(source_key::text),''),'unknown')", type: "coalesce(nullif(btrim(prop_type::text),''),'unknown')",
-    occupancy: "coalesce(nullif(btrim(occupancy::text),''),'unknown')", program: "coalesce(nullif(btrim(auction_program::text),''),'unknown')",
-    lifecycle: "coalesce(nullif(btrim(coalesce(lifecycle_status,status)::text),''),'unknown')",
+    occupancy: "coalesce(nullif(btrim(occupancy::text),''),'unknown')", program: "coalesce(nullif(btrim(auction_program::text),''),nullif(btrim(provenance#>>'{sourceFacts,auctionProgram}'),''),'unknown')",
+    lifecycle: "coalesce(nullif(btrim(lifecycle_status::text),''),nullif(btrim(status::text),''),'unknown')",
     freshness: `CASE WHEN coalesce(provenance->>'origin','')<>'live' THEN 'unverified' WHEN coalesce(source_observed_at,fetched_at) IS NULL THEN 'unknown' WHEN coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '7 days' THEN 'fresh' WHEN coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '30 days' THEN 'aging' ELSE 'stale' END`,
   };
   const fields = [...new Set(requestedFacets)].filter((field) => expressions[field]);
@@ -466,7 +471,8 @@ async function pgMap(database, f) {
     grid = Math.max(0.0001, 360 / Math.pow(2, zoom + 4)),
     limit = Math.min(f.limit, 2000),
     params = [...where.params, grid, limit + 1];
-  const sql = `SELECT ST_X(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lng,ST_Y(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lat,count(*)::int AS count,min(id) AS id,CASE WHEN count(DISTINCT source_key)=1 THEN min(source_key) ELSE 'multiple' END AS source,CASE WHEN count(DISTINCT lifecycle_status)=1 THEN min(lifecycle_status) ELSE 'mixed' END AS status FROM listings${where.sql}${where.sql ? " AND" : " WHERE"} geog IS NOT NULL GROUP BY ST_SnapToGrid(geog::geometry,$${where.params.length + 1}) ORDER BY count(*) DESC,min(id) LIMIT $${where.params.length + 2}`;
+  const lifecycleExpr="coalesce(nullif(btrim(lifecycle_status),''),nullif(btrim(status),'') )";
+  const sql = `SELECT ST_X(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lng,ST_Y(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lat,count(*)::int AS count,min(id) AS id,CASE WHEN count(DISTINCT source_key)=1 THEN min(source_key) ELSE 'multiple' END AS source,CASE WHEN count(DISTINCT ${lifecycleExpr})=1 THEN min(${lifecycleExpr}) ELSE 'mixed' END AS status FROM listings${where.sql}${where.sql ? " AND" : " WHERE"} geog IS NOT NULL GROUP BY ST_SnapToGrid(geog::geometry,$${where.params.length + 1}) ORDER BY count(*) DESC,min(id) LIMIT $${where.params.length + 2}`;
   const rows = (await client.query(sql, params)).rows,
     more = rows.length > limit;
   if (more) rows.pop();
@@ -578,5 +584,6 @@ module.exports = {
   map,
   matches,
   parseBbox,
+  pgWhere,
   revisionOf,
 };

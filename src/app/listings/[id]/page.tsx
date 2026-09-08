@@ -1,9 +1,9 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Scale, Clock, DollarSign } from "lucide-react";
-import { Listing, LISTINGS, SOURCES } from "@/data/listings";
+import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
-import { safeImageUrl } from "@/lib/listing-display";
+import { displayDate, safeImageUrl } from "@/lib/listing-display";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { redemptionLabel } from "@/lib/underwriting";
 import { DocketAgent } from "@/components/terminal/docket-agent";
@@ -16,7 +16,6 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
 import { SaleMechanics } from "@/components/listings/sale-mechanics";
-import { Logo } from "@/components/site/logo";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -41,6 +40,15 @@ function formatMoney(value: unknown, fallback = "Not published") {
 
 function publishedText(value: unknown, fallback = "Not published") {
   return typeof value === "string" && value.trim() && !/^(?:—|unknown|n\/a|00000)$/i.test(value.trim()) ? value.trim() : fallback;
+}
+
+function optionalPublishedText(value: unknown): string | null {
+  const rendered = publishedText(value, "");
+  return rendered || null;
+}
+
+function observedBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function formatObservedAt(value: unknown) {
@@ -94,20 +102,7 @@ async function getListing(id: string): Promise<Listing | null> {
       return (await res.json()) as Listing;
     }
   } catch (_) {}
-
-  const localMatch = LISTINGS.find((item) => item.id === listingId);
-  return localMatch
-    ? {
-        ...localMatch,
-        sourceUrl: null,
-        status: "demo",
-        provenance: {
-          ...(localMatch.provenance ?? {}),
-          publisher: "PerfectProperty demo fixture",
-          recordKind: "demo",
-        },
-      }
-    : null;
+  return null;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -117,7 +112,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!listing) {
     return {
       title: "Listing Unavailable | PerfectProperty",
-      description: "This distressed property record is no longer present in the active feed."
+      description: "This property record is currently unavailable from the listing service."
     };
   }
 
@@ -164,7 +159,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
       <main className="grid min-h-screen place-items-center bg-[#F5F6F7] px-6 text-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-950">Listing unavailable</h1>
-          <p className="mt-3 text-slate-600">This record is no longer present in the live feed.</p>
+          <p className="mt-3 text-slate-600">The listing service could not provide this record. Try again or return to results.</p>
           <Link href={returnTo} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">
             <ArrowLeft className="h-4 w-4" /> Back to results
           </Link>
@@ -183,6 +178,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const seniorLienRisk = (listing.seniorLienRisk || "").toLowerCase();
   const isHighRisk = seniorLienRisk === "high";
   const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
+  const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
   // Secondary media is allowed only when the publisher did not supply a
@@ -191,7 +187,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
     ? { accepted: false, url: null, gallery: [], provider: null, sourceRecordUrl: null }
     : inspectSecondaryMedia(listing);
   const sourceIdentifiers = [
-    ["Property ID", provenance.propertyId],
+    ["Property ID", provenance.propertyId ?? sourceFacts.propertyId],
     ["Sheriff / sale number", provenance.sheriffNumber],
     ["Court case", provenance.courtCaseNumber],
     ["Parcel", provenance.parcelNumber],
@@ -209,6 +205,20 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const detailGallery = publisherPhoto ? gallery : (secondaryMedia.accepted ? secondaryMedia.gallery : []);
   const mapLocation = inspectMapLocation(listing);
   const observedAt = isDemo ? null : formatObservedAt(listing.sourceObservedAt ?? provenance.observedAt);
+  const saleTime = optionalPublishedText(sourceFacts.tpsSaleTime ?? sourceFacts.saleTime);
+  const saleTimezone = optionalPublishedText(sourceFacts.publisherTimeZone ?? sourceFacts.saleTimezone);
+  const saleLocation = optionalPublishedText(sourceFacts.tpsSaleLocation ?? sourceFacts.saleLocation);
+  const reportedSaleSchedule = [displayDate(listing.saleDate), [saleTime, saleTimezone].filter(Boolean).join(" ")].filter(Boolean).join(" · ");
+  const occupancy = optionalPublishedText(listing.occupancy);
+  const interiorAccessAvailable = observedBoolean(sourceFacts.interiorAccessAvailable);
+  const hasPublishedAccessState = Boolean(occupancy) || interiorAccessAvailable !== null;
+  const accessNeedsAttention = interiorAccessAvailable === false || Boolean(occupancy && /occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy));
+  const accessHeadline = [occupancy, interiorAccessAvailable === null ? null : interiorAccessAvailable ? "Interior access available" : "No interior access"].filter(Boolean).join(" · ");
+  const statusLabel = isDemo ? "Verify at source" : publishedText(listing.lifecycleStatus || listing.status, "Verify at source").replace(/^Status:\s*/i, "");
+  const statusClass = /postponed/i.test(statusLabel) ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-800";
+  const citySuffix = optionalPublishedText(listing.city);
+  const addressParts = listing.address.split(",").map((part) => part.trim());
+  const headlineAddress = citySuffix && addressParts.length >= 3 && addressParts[1]?.toLowerCase() === citySuffix.toLowerCase() ? addressParts[0] : listing.address;
   const propertyFacts = [
     ["Property type", publishedText(listing.propType)],
     ["Occupancy", publishedText(listing.occupancy)],
@@ -263,25 +273,26 @@ export default async function ListingPage({ params, searchParams }: Props) {
         />
       )}
 
-      <header className="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4">
-          <Link href="/" aria-label="PerfectProperty home"><Logo className="text-[18px]" /></Link>
-          <Link href={returnTo} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-slate-700">
+      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-6 px-5 py-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.9fr)] lg:gap-8 lg:px-8 lg:py-12">
+        <div className="min-w-0 lg:col-span-2">
+          <Link href={returnTo} className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950">
             <ArrowLeft className="h-4 w-4" /> Back to results
           </Link>
-        </div>
-      </header>
-
-      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-8 px-5 py-10 lg:grid-cols-[minmax(0,2fr)_minmax(320px,0.9fr)] lg:px-8 lg:py-12">
-        <div className="min-w-0 lg:col-span-2">
           {isDemo && (
             <div data-testid="demo-listing-disclosure" className="mb-5 border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-950">
               <strong>Unverified snapshot record. </strong>This stored record has no verified collection evidence. Confirm status, location, and terms at the upstream record.
             </div>
           )}
-          <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">{listing.address}</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">{headlineAddress}</h1>
           <p className="mt-2 flex min-w-0 items-start gap-2 text-lg text-slate-600"><MapPin className="mt-1 h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{[publishedText(listing.city, ""), publishedText(listing.state, ""), publishedText(listing.zip, ""), publishedText(listing.county, "") ? `${publishedText(listing.county, "").replace(/\s+county$/i, "")} County` : null].filter(Boolean).join(" · ") || "Location not published"}</span></p>
           <p className="mt-2 text-sm text-slate-600"><span className="font-semibold text-slate-900">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}</span>{observedAt ? <> <span aria-hidden>·</span> Source observed {observedAt} UTC</> : null}</p>
+          {(openingBid !== null || optionalPublishedText(listing.saleDate) || saleTime) && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-3 text-sm lg:hidden">
+              {openingBid !== null ? <p><span className="text-slate-600">Opening amount </span><strong className="text-slate-950">{formatMoney(openingBid)}</strong></p> : null}
+              {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-slate-600">Reported sale </span><strong className="text-slate-950">{reportedSaleSchedule}</strong></p> : null}
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
+            </div>
+          )}
         </div>
         <section className="min-w-0">
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -293,27 +304,33 @@ export default async function ListingPage({ params, searchParams }: Props) {
               photoOrigin={publisherPhoto ? "publisher" : secondaryMedia.accepted ? "secondary" : undefined}
               photoProvider={secondaryMedia.accepted ? secondaryMedia.provider : undefined}
               photoSourceUrl={secondaryMedia.accepted ? secondaryMedia.sourceRecordUrl : undefined}
+              sourceLabel={publishedText(provenance.publisher, source?.label ?? listing.source)}
               lat={mapLocation.accepted ? finiteNumber(listing.lat) : null}
               lng={mapLocation.accepted ? finiteNumber(listing.lng) : null}
               locationDisclosure={isDemo ? "Unverified snapshot location — confirm the parcel at the source." : undefined}
             />
           </div>
 
+          {hasPublishedAccessState && (
+            <div data-testid="publisher-access-notice" className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm leading-relaxed ${accessNeedsAttention ? "border-amber-300 bg-amber-50 text-amber-950" : "border-slate-200 bg-white text-slate-700"}`}>
+              <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${accessNeedsAttention ? "text-amber-700" : "text-slate-500"}`} />
+              <p><strong className="text-slate-950">{accessHeadline}</strong><span className="block text-xs">Publisher reported. Confirm current access and inspection rules on the exact listing.</span></p>
+            </div>
+          )}
+
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm lg:hidden">
-            <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span className="text-sm font-medium text-emerald-700">{isDemo ? "Verify at source" : publishedText(listing.status, "Verify at source")}</span></div>
-            <p className="mt-4 text-3xl font-bold tracking-tight">{formatMoney(openingBid)}</p><p className="mt-1 text-sm text-slate-600">Published opening amount</p>
-            <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200"><div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Reported sale date</dt><dd className="text-right font-semibold">{publishedText(listing.saleDate)}</dd></div><div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Status</dt><dd className="text-right font-semibold">{isDemo ? "Verify at source" : publishedText(listing.status, "Verify at source")}</dd></div></dl>
+            <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
+            <p className="mt-4 text-3xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
+            <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Reported sale</dt><dd className="text-right font-semibold">{reportedSaleSchedule}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Opening amount</dt><dd className="font-semibold text-slate-700">Not published</dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-slate-600">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
             {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B]">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
-            <div className="mt-2"><CaseAction listingId={listing.id} label="Open research case" /></div>
+            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
           </div>
 
           <nav aria-label="Property record sections" className="mt-7 flex max-w-full gap-7 overflow-x-auto border-b border-slate-200 text-sm font-semibold text-slate-600">
             <a href="#property-facts" className="whitespace-nowrap border-b-2 border-slate-950 px-1 pb-3 text-slate-950">Overview</a>
-            <a href="#auction-details" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Auction &amp; terms</a>
-            <a href="#documents-title" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Documents &amp; evidence</a>
-            <a href="#evidence-dossier" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Evidence dossier</a>
-            <a href="#modeled-research" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Research tools</a>
+            <a href="#auction-details" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Auction</a>
+            <a href="#evidence-dossier" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Research &amp; history</a>
           </nav>
 
           <div id="property-facts" className="mt-6 scroll-mt-6 py-5">
@@ -329,52 +346,27 @@ export default async function ListingPage({ params, searchParams }: Props) {
             {missingOptionalPropertyFacts.length ? <p className="mt-3 text-sm text-slate-500">Not published: {missingOptionalPropertyFacts.join(", ")}.</p> : null}
           </div>
 
-          <div id="auction-details" className="mt-8 scroll-mt-6 border-t border-slate-200 pt-6">
-            <h2 className="text-xl font-bold">Auction &amp; terms</h2>
-            <dl className="mt-4 grid gap-x-10 gap-y-4 text-sm sm:grid-cols-2">
-              <div><dt className="text-slate-500">Plaintiff</dt><dd className="mt-1 font-semibold">{publishedText(listing.plaintiff)}</dd></div>
-              <div><dt className="text-slate-500">Defendant</dt><dd className="mt-1 font-semibold">{publishedText(listing.defendant)}</dd></div>
-              <div><dt className="text-slate-500">Attorney</dt><dd className="mt-1 font-semibold">{publishedText(listing.attorney)}</dd></div>
-              <div><dt className="text-slate-500">Deposit terms</dt><dd className="mt-1 font-semibold">{publishedText(listing.deposit)}</dd></div>
-            </dl>
-          </div>
-
-          <div id="documents-title" className="mt-8 border-t border-slate-200 pt-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold">Source record</h2>
-              </div>
-              <span className={`text-xs font-semibold ${exactSourceUrl ? "text-emerald-700" : "text-amber-800"}`}>
-                {exactSourceUrl ? "Exact publisher page" : "Exact URL unavailable"}
-              </span>
-            </div>
-            <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200 text-sm">
-              {sourceIdentifiers.map(([label, value]) => <div key={label} className="flex justify-between gap-4 py-3"><dt className="text-slate-600">{label}</dt><dd className="break-words text-right font-semibold text-slate-950">{String(value)}</dd></div>)}
-              {exactSourceUrl && <div className="flex justify-between gap-4 py-3"><dt className="text-slate-600">Exact publisher page</dt><dd><a href={exactSourceUrl} target="_blank" rel="noreferrer" className="text-slate-900 hover:text-slate-700" aria-label="Open exact publisher page"><ExternalLink className="h-5 w-5" /></a></dd></div>}
-            </dl>
-            {listing.source === "civilview" && provenance.detailUrlRequiresCountySession === true && (
-              <p className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-900">
-                CivilView detail pages use a county browser session. If the exact link redirects to the source index, open the county search first and then return to the exact record link.
-              </p>
-            )}
-          </div>
-
           <SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} />
 
-          <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
-            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-sky-700">Decision evidence</p>
-            <h2 className="mt-1 text-xl font-bold">Market evidence</h2>
-            {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
+          <details id="documents-title" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-slate-950"><span>Publisher record and identifiers</span><span className={`text-xs font-semibold ${exactSourceUrl ? "text-emerald-700" : "text-amber-800"}`}>{exactSourceUrl ? "Exact page linked" : "Exact URL unavailable"}</span></summary>
+            <div className="border-t border-slate-200 pb-5 pt-3">
+              {sourceIdentifiers.length ? <dl className="divide-y divide-slate-200 text-sm">{sourceIdentifiers.map(([label, identifier]) => <div key={label} className="flex justify-between gap-4 py-3"><dt className="text-slate-600">{label}</dt><dd className="break-words text-right font-semibold text-slate-950">{String(identifier)}</dd></div>)}</dl> : <p className="py-3 text-sm text-slate-600">No additional publisher identifiers were supplied.</p>}
+              {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-900 underline hover:text-slate-700">Open exact publisher page <ExternalLink className="h-4 w-4" /></a> : null}
+              {listing.source === "civilview" && provenance.detailUrlRequiresCountySession === true ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-900">CivilView detail pages use a county browser session. If the exact link redirects to the source index, open the county search first and then return to the exact record link.</p> : null}
+            </div>
+          </details>
+
+          {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
+            <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
+              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-sky-700">Decision evidence</p>
+              <h2 className="mt-1 text-xl font-bold">Market evidence</h2>
               <dl className="mt-5 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Reported assessed value</dt><dd className="mt-1 text-lg font-bold text-slate-950">{formatMoney(positiveNumber(listing.assessed))}</dd><p className="mt-1 text-xs text-slate-500">Shown only when present in the normalized source record.</p></div>
                 <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Valuation range</dt><dd className="mt-1 text-lg font-bold text-slate-950">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "Not modeled"}</dd><p className="mt-1 text-xs text-slate-500">No comparable-sale claims are shown until exact comp evidence is captured.</p></div>
               </dl>
-            ) : (
-              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                No source-backed assessment, valuation range, or comparable-sale evidence has been captured for this record.
-              </div>
-            )}
-          </div>
+            </div>
+          ) : <details id="market-evidence" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-slate-950"><span>Market evidence</span><span className="text-xs font-medium text-slate-500">Not captured</span></summary><p className="border-t border-slate-200 py-4 text-sm leading-relaxed text-slate-600">No source-backed assessment, valuation range, or comparable sales have been captured for this record.</p></details>}
 
           <div id="evidence-dossier" className="mt-8 scroll-mt-6">
             <PropertyIntelligence key={listing.id} listingId={listing.id} />
@@ -461,13 +453,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-950 shadow-sm sm:p-7">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">Auction details</h2>
-              <span className="text-sm font-medium text-emerald-700">{isDemo ? "Verify at source" : publishedText(listing.status, "Verify at source")}</span>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
             </div>
-            <p className="mt-5 text-4xl font-bold tracking-tight">{formatMoney(openingBid)}</p><p className="mt-1 text-sm text-slate-600">Published opening amount</p>
+            <p className="mt-5 text-4xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200 py-1 space-y-0">
-              <div className="flex items-center justify-between gap-4 py-4"><dt className="flex items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> Reported sale date</dt><dd className="text-right font-semibold">{publishedText(listing.saleDate)}</dd></div>
-              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Status</dt><dd className="text-right font-semibold">{isDemo ? "Verify at source" : publishedText(listing.status, "Verify at source")}</dd></div>
-              <div className="flex items-center justify-between gap-4"><dt className="text-slate-400">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold">{publishedText(listing.deposit)}</dd></div>
+              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-4"><dt className="flex shrink-0 items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold">{reportedSaleSchedule}</dd></div> : <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Opening amount</dt><dd className="text-sm font-semibold text-slate-700">Not published</dd></div>}
+              {saleLocation ? <div className="py-4"><dt className="flex items-center gap-2 text-slate-600"><MapPin className="h-4 w-4" /> Sale location</dt><dd className="mt-2 text-sm font-semibold leading-relaxed">{saleLocation}</dd></div> : null}
+              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold">{publishedText(listing.deposit)}</dd></div>
             </dl>
             <p className="mt-5 text-xs leading-relaxed text-slate-500">Confirm current sale terms with the publisher.</p>
             {exactSourceUrl ? (
@@ -478,7 +470,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <p data-testid="exact-source-listing-unavailable" className="mt-5 border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>
             )}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
-            <div className="mt-2"><CaseAction listingId={listing.id} label="Open research case" /></div>
+            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
           </div>
         </aside>
       </div>

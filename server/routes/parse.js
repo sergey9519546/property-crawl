@@ -6,6 +6,7 @@ const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
 const { CostTracker } = require('../ai/cost_tracker');
 const { normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
+const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 const CACHE_VERSION = 'notice-evidence-v2';
 
@@ -308,6 +309,7 @@ async function callLlmExtraction(cleanNotice, model) {
 
 async function handleParse(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!requireWorkspaceIdentity(req, res)) return;
 
   let { noticeText, pdfBase64, forceLlm } = req.body || {};
   if (pdfBase64) {

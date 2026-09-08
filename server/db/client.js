@@ -491,11 +491,11 @@ class DatabaseClient {
         params.push(lng, lat, radiusKm * 1000);
       }
 
-      if (sort === 'equity') sql += ' ORDER BY equity_spread DESC NULLS LAST';
-      else if (sort === 'bid-asc') sql += ' ORDER BY opening_bid ASC NULLS LAST';
-      else if (sort === 'date') sql += ' ORDER BY sale_date ASC NULLS LAST';
-      else if (sort === 'images') sql += ' ORDER BY COALESCE(array_length(images, 1), 0) DESC NULLS LAST';
-      else sql += ' ORDER BY deal_score DESC NULLS LAST';
+      if (sort === 'equity') sql += ' ORDER BY equity_spread DESC NULLS LAST, id ASC';
+      else if (sort === 'bid-asc') sql += ' ORDER BY opening_bid ASC NULLS LAST, id ASC';
+      else if (sort === 'date') sql += ' ORDER BY sale_date ASC NULLS LAST, id ASC';
+      else if (sort === 'images') sql += ' ORDER BY COALESCE(array_length(images, 1), 0) DESC NULLS LAST, id ASC';
+      else sql += ' ORDER BY deal_score DESC NULLS LAST, id ASC';
 
       sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
       params.push(Number(limit), Number(offset));

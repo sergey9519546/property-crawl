@@ -33,6 +33,21 @@ test('canonical API failure returns unavailable, never a different snapshot reco
   assert.match(body.error, /No substitute records/);
 });
 
+test('walkthrough and property images use the canonical metadata gate and preserve media attribution', async () => {
+  const response = await proxyPropertyApi(new Request('https://app.example/api/property-image?listingId=NEW-123&mode=walkthrough'), {
+    apiUrl: 'http://127.0.0.1:3102',
+    fetchImpl: async (url) => {
+      assert.equal(url, 'http://127.0.0.1:3102/api/property-image?listingId=NEW-123&mode=walkthrough');
+      return Response.json({available: true, coverage: 'nearby_street'}, {headers: {
+        'x-property-image-attribution': 'Google Maps', 'referrer-policy': 'no-referrer', 'cross-origin-resource-policy': 'same-origin',
+      }});
+    },
+  });
+  assert.equal((await response.json()).coverage, 'nearby_street');
+  assert.equal(response.headers.get('x-property-image-attribution'), 'Google Maps');
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+});
+
 test('evidence audit and exports preserve request bodies and download headers', async () => {
   const response = await proxyPropertyApi(new Request('https://app.example/api/verify-docket', { method: 'POST', body: JSON.stringify({ listingId: 'NEW-123' }), headers: { 'content-type': 'application/json' } }), {
     fetchImpl: async (_, options) => {

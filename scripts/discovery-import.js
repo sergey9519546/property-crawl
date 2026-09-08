@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { ServiceLinkScraper } = require('../server/scrapers/servicelink');
 const { createDiscoveryStore, hash } = require('../server/discovery/store');
+const ARCHIVE_PROJECTION_VERSION = 2;
 
 async function* records(file) {
   const input = fs.createReadStream(file, { encoding: 'utf8' });
@@ -19,7 +20,7 @@ function archiveListing(raw, manifest, scraper = new ServiceLinkScraper()) {
   if (!listing) return null;
   listing.provenance = { ...listing.provenance, origin: 'archive', observed: true,
     liveVerified: false, captureTimeBasis: manifest.observedAtBasis,
-    datasetSha256: manifest.inputs.catalog.sha256, snapshotKind: 'imported_snapshot',
+    datasetSha256: manifest.inputs.catalog.sha256, snapshotKind: 'imported_snapshot', archiveProjectionVersion: ARCHIVE_PROJECTION_VERSION,
     sourceFacts: { ...listing.provenance.sourceFacts,
       saleTime: raw.tpsSaleTime || null, saleTimezone: null,
       documents: Array.isArray(raw.documents) ? raw.documents : [],
@@ -63,7 +64,7 @@ async function importStage(stage, options = {}) {
       scope: { kind: 'archive', dataset: manifest.inputs.catalog.sha256, observedAt: manifest.observedAt } });
     const prior = await database.pool.query('SELECT source_record_id,payload_sha256 FROM discovery_snapshots WHERE source_key=$1 AND observed_at=$2', ['servicelink',manifest.observedAt]);
     for (const row of prior.rows) existingSnapshots.add(`${row.source_record_id}:${row.payload_sha256}`);
-    const current = await database.pool.query('SELECT id FROM listings WHERE source_key=$1', ['servicelink']);
+    const current = await database.pool.query("SELECT id FROM listings WHERE source_key=$1 AND (provenance->>'origin'='live' OR provenance->>'archiveProjectionVersion'=$2)", ['servicelink',String(ARCHIVE_PROJECTION_VERSION)]);
     for (const row of current.rows) existingListings.add(row.id);
   }
   try {

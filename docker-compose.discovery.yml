@@ -18,6 +18,7 @@ services:
       retries: 12
 
   discovery-api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
@@ -32,7 +33,12 @@ services:
       PROPERTY_COLLECTION_JOBS_PATH: /var/lib/property-crawl/jobs.json
       PROPERTY_LIVE_CACHE_PATH: /var/lib/property-crawl/live-listings.json
       PROPERTY_MEDIA_CACHE_PATH: /var/lib/property-crawl/property-media.json
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY:-}
+      NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
     depends_on:
+      discovery-state-init:
+        condition: service_completed_successfully
       discovery-migrate:
         condition: service_completed_successfully
       discovery-db:
@@ -60,7 +66,16 @@ services:
       discovery-db:
         condition: service_healthy
 
+  discovery-state-init:
+    image: alpine:3.20
+    command: ["sh", "-c", "chown 1000:1000 /state /media"]
+    user: "0:0"
+    volumes:
+      - discovery_state:/state
+      - discovery_media:/media
+
   discovery-worker:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
@@ -75,7 +90,12 @@ services:
       PROPERTY_COLLECTION_JOBS_PATH: /var/lib/property-crawl/jobs.json
       PROPERTY_LIVE_CACHE_PATH: /var/lib/property-crawl/live-listings.json
       PROPERTY_MEDIA_CACHE_PATH: /var/lib/property-crawl/property-media.json
+      DISCOVERY_POLL_MS: ${DISCOVERY_POLL_MS:-30000}
+      SERVICELINK_MAX_PAGES: ${SERVICELINK_MAX_PAGES:-100}
+      SERVICELINK_PAGE_SIZE: ${SERVICELINK_PAGE_SIZE:-100}
     depends_on:
+      discovery-state-init:
+        condition: service_completed_successfully
       discovery-migrate:
         condition: service_completed_successfully
       discovery-db:
@@ -85,9 +105,13 @@ services:
       - discovery_media:/var/lib/property-crawl/media
 
   discovery-web:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile.discovery
+      args:
+        NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY:-}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
     environment:
       NODE_ENV: production
       SCRAPER_ADMIN_TOKEN: ${SCRAPER_ADMIN_TOKEN:?set SCRAPER_ADMIN_TOKEN}

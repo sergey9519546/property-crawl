@@ -262,7 +262,7 @@ sessionWarningInMinutes 29 (session-timeout warning threshold)
 instrumentationKey bbeac077-db2f-4ee6-ae2a-d954e56b3781 (App 
 Insights)
 GTM_ID / GA4_MEASUREMENT_ID GTM-53F5CP / B7SZ157EL8 (gtag prefix G-)
-agmCoreApiKey AIzaSyAv4MApaj7BvaFRIRkpVikcWXpyHe8-EGY
+agmCoreApiKey [REDACTED_GOOGLE_API_KEY]
 auctionsChatId 00D3k000000tR3f (Salesforce org ID)
 auctionsChatScrt https://servicelinkauction.my.salesforce-scrt.com
 auctionsChatURL https://servicelinkauction.my.site.com/ESWSLA...

@@ -147,6 +147,10 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const sourceObservedAt = observationTimestamp(
     input.sourceObservedAt ?? input.observedAt ?? baseProvenance.observedAt ?? options.observedAt
   );
+  const auctionProgram = cleanText(input.auctionProgram);
+  const lifecycleStatus = cleanText(input.lifecycleStatus);
+  const transactionOutcome = cleanText(input.transactionOutcome);
+  const hasDocuments = typeof input.hasDocuments === 'boolean' ? input.hasDocuments : null;
   const provenance = {
     origin: 'live',
     observed: true,
@@ -233,6 +237,10 @@ function standardizeListingRecord(raw = {}, options = {}) {
     price: numberOrNull(input.price, { min: 0 }),
     listingDate: cleanText(input.listingDate),
     status: cleanText(input.status),
+    auctionProgram,
+    lifecycleStatus,
+    transactionOutcome,
+    hasDocuments,
     provenance,
     sourceObservedAt
   };

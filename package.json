@@ -50,7 +50,15 @@
     "skills:graph": "node scripts/capability-graph.js",
     "db:seed": "node scripts/seed-from-v0.js",
     "test:signals": "node --test test/signals.test.js",
-    "test:graph": "node --test test/capability-graph.test.js"
+    "test:graph": "node --test test/capability-graph.test.js",
+    "discovery:migrate": "node scripts/discovery-migrate.js",
+    "discovery:import": "node scripts/discovery-import.js",
+    "discovery:import:legacy": "node scripts/discovery-import-legacy.js",
+    "discovery:worker": "node scripts/discovery-worker.js",
+    "discovery:ready": "node scripts/discovery-readiness.js",
+    "discovery:benchmark": "node scripts/benchmark-discovery.js",
+    "test:discovery": "node --test test/discovery-backend.test.js test/discovery-import.test.js test/discovery-acceptance.test.js test/discovery-acceptance-contract.test.js test/discovery-acceptance-source-failure.test.js test/discovery-acceptance-readiness.test.js test/discovery-evidence-db.test.js test/discovery-acceptance-store.test.js test/discovery-acceptance-restart.test.js test/discovery-acceptance-query.test.js test/discovery-acceptance-hunts.test.js test/discovery-worker.test.js test/discovery-coverage.test.js test/hunt-store-pg-concurrency.test.js test/discovery-documents-pg-parity.test.js test/hunts-paged-aggregate.test.js test/source-network-release-gate.test.js test/scraper-transport-errors.test.js",
+    "test:ui:discovery": "python test/discovery_ui_regression_test.py -v"
   },
   "keywords": [
     "real-estate",

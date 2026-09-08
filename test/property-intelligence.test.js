@@ -40,14 +40,24 @@ function response() {
   };
 }
 
-async function invoke(handler, method, id = publisherFixture().id) {
+async function invoke(handler, method, id = publisherFixture().id, options = {}) {
   const res = response();
-  await handler({ method, url: `/api/property-intelligence?listingId=${encodeURIComponent(id)}`, body: { listingId: id } }, res);
+  const token = Object.hasOwn(options, 'token') ? options.token : method === 'POST' ? 'operator-secret' : null;
+  const snapshot = options.snapshotId ? `&snapshotId=${encodeURIComponent(options.snapshotId)}` : '';
+  await handler({
+    method,
+    url: `/api/property-intelligence?listingId=${encodeURIComponent(id)}${snapshot}`,
+    body: { listingId: id },
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  }, res);
   return res;
 }
 
 function handlerFor(getListing, buildEvidence = async () => ({ parcel: null, areaContext: null, issues: [], sources: [] }), readHistory = emptyHistory) {
-  return createPropertyIntelligenceHandler({ database: { getListingById: getListing }, buildPublicRecordEvidence: buildEvidence, loadObservations: readHistory });
+  return createPropertyIntelligenceHandler({
+    database: { getListingById: getListing }, buildPublicRecordEvidence: buildEvidence,
+    loadObservations: readHistory, env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+  });
 }
 
 const nextTurn = () => new Promise(resolve => setImmediate(resolve));
@@ -71,6 +81,29 @@ test('GET reads publisher evidence without invoking enrichment or outbound fetch
   assert.equal(result.body.facts.find(fact => fact.key === 'openingBid').value, 100000);
 });
 
+test('normalized dossier reads stay public while research and raw snapshots require the operator', async () => {
+  let researchCalls = 0;
+  const listing = publisherFixture();
+  const publicHandler = handlerFor(async () => listing, async () => { researchCalls++; return {}; });
+  assert.equal((await invoke(publicHandler, 'GET')).statusCode, 200);
+  assert.equal((await invoke(publicHandler, 'POST', listing.id, { token: null })).statusCode, 401);
+  assert.equal(researchCalls, 0);
+
+  const snapshotId = '11111111-1111-4111-8111-111111111111';
+  let snapshotReads = 0;
+  const snapshotHandler = createPropertyIntelligenceHandler({
+    database: { isPg: true, pool: {}, getListingById: async () => listing },
+    env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+    durableEvidence: {
+      readSnapshot: async () => { snapshotReads++; return { snapshotId, rawValues: { source: 'test-only' } }; },
+    },
+  });
+  assert.equal((await invoke(snapshotHandler, 'GET', listing.id, { snapshotId, token: null })).statusCode, 401);
+  const authorized = await invoke(snapshotHandler, 'GET', listing.id, { snapshotId, token: 'operator-secret' });
+  assert.equal(authorized.statusCode, 200);
+  assert.equal(authorized.body.snapshotId, snapshotId);
+  assert.equal(snapshotReads, 1);
+});
 test('POST rejects snapshot, missing observation, future, and wrong publisher URL records before enrichment', async () => {
   const rejected = [
     publisherFixture({ provenance: { origin: 'snapshot', observed: false } }),

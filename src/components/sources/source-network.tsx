@@ -21,12 +21,24 @@ import {
   type SourceAtlasData,
 } from "@/components/sources/source-atlas";
 
+type SourceRunCoverage = {
+  scope?: unknown;
+  discovered?: number;
+  accepted?: number;
+  rejected?: number;
+  complete?: boolean;
+  lastRunAt?: string;
+  trigger?: string;
+  error?: string | null;
+  scopeHash?: string;
+};
+
 type Source = {
   id: string;
   label: string;
   category: string;
   role: string;
-  coverage: string;
+  coverage: string | SourceRunCoverage | null;
   organization?: string;
   propertyLookup?: boolean;
   discoveryUrl: string;
@@ -73,6 +85,7 @@ type Network = {
   sources: Source[];
   signals: Signal[];
   collectionRunning: boolean;
+  collectionHealth?: { status: "healthy" | "stale" | "not_started" | "disabled"; degraded: boolean; lastSeenAt: string | null; lastLoopStatus: string | null; currentJobId: string | null; backlog: { queued: number; expiredRunning: number } };
   inventoryTruncated: boolean;
   evidenceQueueError: boolean;
   historyUnavailable: boolean;
@@ -98,7 +111,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
     color: "bg-emerald-100 text-emerald-900",
   },
   awaiting_run: {
-    label: "Ready to collect",
+    label: "Collector registered · not run",
     color: "bg-slate-100 text-slate-900",
   },
   import_available: {
@@ -119,6 +132,30 @@ const STATUS: Record<string, { label: string; color: string }> = {
     label: "History unavailable",
     color: "bg-amber-100 text-amber-900",
   },
+  manual: {
+    label: "Manual lookup only",
+    color: "bg-stone-100 text-stone-700",
+  },
+  blocked: {
+    label: "Access blocked",
+    color: "bg-amber-100 text-amber-900",
+  },
+  operational: {
+    label: "Recent collection succeeded",
+    color: "bg-emerald-100 text-emerald-900",
+  },
+  collecting: {
+    label: "Collection in progress",
+    color: "bg-sky-100 text-sky-900",
+  },
+  partial: {
+    label: "Partial collection",
+    color: "bg-amber-100 text-amber-900",
+  },
+  archived: {
+    label: "Archive only",
+    color: "bg-stone-100 text-stone-700",
+  },
 };
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -132,6 +169,49 @@ const moneyOrText = (signal: Signal, value: string | number) =>
         maximumFractionDigits: 0,
       })
     : String(value);
+
+function coverageSummary(source: Source) {
+  if (source.observedRecords) return `${source.observedRecords} observed records · ${source.observedStates.join(", ") || "state not published"}`;
+  if (source.evidencePackets) return `${source.evidencePackets} evidence packets · review required`;
+  const status = source.discoveryStatus || source.status;
+  if (status === "awaiting_run") return "Collector registered; no successful collection has been recorded.";
+  if (status === "manual" || status === "lookup_available") return "Manual lookup; no collected property records are claimed.";
+  if (status === "blocked") return "Latest collection was blocked; review the access path before retrying.";
+  if (status === "attention" || status === "partial") return "Collection needs review before relying on its coverage.";
+  if (status === "import_available") return "Requires a reviewed import; no live coverage is claimed.";
+  return "Open the workflow to review access and evidence requirements.";
+}
+
+function runScopeLabel(scope: unknown) {
+  if (typeof scope === "string" && scope.trim()) return `Scope: ${sourceDisplayText(scope.trim())}`;
+  if (!scope || typeof scope !== "object" || Array.isArray(scope)) return "Scope not recorded";
+  const values = scope as Record<string, unknown>;
+  const fields: [string, string][] = [
+    ["state", "State"],
+    ["stateCode", "State"],
+    ["county", "County"],
+    ["region", "Region"],
+    ["kind", "Type"],
+  ];
+  const parts = fields.flatMap(([key, title]) => {
+    const value = values[key];
+    return typeof value === "string" && value.trim() ? [`${title}: ${sourceDisplayText(value.trim())}`] : [];
+  });
+  return parts.length ? parts.join(" · ") : "Configured source scope";
+}
+
+function coverageDescription(coverage: Source["coverage"]) {
+  if (coverage == null) return "No operational collection coverage recorded.";
+  if (typeof coverage === "string") return sourceDisplayText(coverage);
+  const discovered = Number.isFinite(coverage.discovered) ? coverage.discovered : null;
+  const accepted = Number.isFinite(coverage.accepted) ? coverage.accepted : null;
+  const rejected = Number.isFinite(coverage.rejected) ? coverage.rejected : null;
+  const completion = coverage.error ? "Collection error" : coverage.complete === true ? "Collection completed" : "Collection incomplete";
+  const counts = discovered !== null || accepted !== null || rejected !== null
+    ? `${accepted ?? 0} accepted · ${rejected ?? 0} rejected · ${discovered ?? 0} discovered`
+    : "Record counts not reported";
+  return `${completion} · ${counts} · ${runScopeLabel(coverage.scope)}`;
+}
 
 export function SourceNetwork() {
   const session = useWorkspaceSession();
@@ -208,7 +288,7 @@ export function SourceNetwork() {
         (source) =>
           (category === "all" || source.category === category) &&
           (role === "all" || source.role === role) &&
-          `${source.label} ${source.coverage} ${source.category}`
+          `${source.label} ${coverageDescription(source.coverage)} ${source.category}`
             .toLowerCase()
             .includes(query.toLowerCase()),
       ),
@@ -320,62 +400,58 @@ export function SourceNetwork() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f0] text-[#182c29]">
-      <div className="mx-auto max-w-[1440px] px-5 py-10 sm:px-10">
-        <div className="grid gap-7 lg:grid-cols-[1.4fr_1fr] lg:items-end">
+    <main className="min-h-screen bg-[#F5F6F7] text-slate-950">
+      <div className="mx-auto max-w-[1440px] px-5 py-7 sm:px-10">
+        <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>
-            <p className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">
-              <Radar size={17} /> Follow the paper trail
-            </p>
-            <h1 className="max-w-2xl text-4xl font-semibold leading-[1.1] tracking-tight sm:text-6xl">
-              The overlooked starts
-              <br />
-              at the source.
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+              Source coverage
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-[#6B7280]">
-              Government notices. County sales. Lender inventory. One place to
-              follow the sources, capture the evidence, and see what changed.
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+              Review collection results, recent changes, and sources that still need a manual check.
             </p>
           </div>
-          <div className="rounded-2xl bg-[#0F172A] p-6 text-white">
-            <p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
-              Your research network
-            </p>
-            <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="grid grid-cols-3 gap-3">
               {[
                 [data?.summary.catalogSources, "Source workflows"],
                 [data?.summary.automatedCollectors, "Collectors registered"],
                 [data?.summary.trackedRecords, "Records tracked"],
               ].map(([value, text]) => (
                 <div key={String(text)}>
-                  <p className="text-3xl font-semibold tabular-nums">
-                    {value ?? "—"}
+                  <p className="text-2xl font-semibold tabular-nums">
+                    {typeof value === "number" ? value.toLocaleString() : "—"}
                   </p>
-                  <p className="mt-2 text-xs leading-5 text-slate-200/80">
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
                     {text}
                   </p>
                 </div>
               ))}
             </div>
-            <p className="mt-5 border-t border-white/15 pt-4 text-xs leading-5 text-slate-200/70">
-              Coverage is measured by collected evidence. Every source has a
-              next step, including those that need an import or local access.
+            <div className="mt-3 border-t border-slate-100 pt-3" role="status" aria-label="Collection worker status">
+              <p className={`text-xs font-semibold ${data?.collectionHealth?.degraded ? "text-amber-800" : "text-slate-700"}`}>
+                Collection worker: {data?.collectionHealth?.status === "healthy" ? "Healthy" : data?.collectionHealth?.status === "stale" ? "Needs attention" : data?.collectionHealth?.status === "disabled" ? "Disabled" : "Not started"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                {data?.collectionHealth?.status === "healthy" ? `Last check ${date(data.collectionHealth.lastSeenAt)}${data.collectionHealth.backlog.queued ? ` · ${data.collectionHealth.backlog.queued} queued` : ""}` : data?.collectionHealth?.status === "stale" ? `Automation has not checked in recently. ${data.collectionHealth.backlog.queued} queued job${data.collectionHealth.backlog.queued === 1 ? "" : "s"}.` : "Database availability is reported separately from collection automation."}
+              </p>
+            </div>            <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+              A registered collector is not proof of complete coverage. Review each source’s latest result below.
             </p>
           </div>
         </div>
 
-        <SourceAtlas atlas={data?.atlas} storageMode={data?.storageMode} />
         <section
-          className="mt-10 rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"
+          className="mt-6 rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"
           aria-labelledby="changes-heading"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">
-                The second look
+                Source collection changes
               </p>
               <h2 id="changes-heading" className="mt-1 text-xl font-semibold">
-                What changed since we last looked
+                What changed in collected records
               </h2>
             </div>
             <button
@@ -448,6 +524,8 @@ export function SourceNetwork() {
             </div>
           )}
         </section>
+
+        <SourceAtlas atlas={data?.atlas} storageMode={data?.storageMode} />
 
         <section className="mt-9" aria-labelledby="network-heading">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -556,7 +634,7 @@ export function SourceNetwork() {
                       {source.label}
                     </h3>
                     <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#6B7280]">
-                      {source.coverage}
+                      {coverageDescription(source.coverage)}
                     </p>
                     <div className="mt-4 flex items-center justify-between gap-2">
                       <span
@@ -566,13 +644,7 @@ export function SourceNetwork() {
                       </span>
                       <ArrowRight size={16} />
                     </div>
-                    <p className="mt-3 text-xs text-[#6B7280]">
-                      {source.observedRecords
-                        ? `${source.observedRecords} observed records · ${source.observedStates.join(", ")}`
-                        : source.evidencePackets
-                          ? `${source.evidencePackets} evidence packets · review required`
-                          : "Open workflow and evidence requirements"}
-                    </p>
+                    <p className="mt-3 text-xs leading-5 text-[#6B7280]">{coverageSummary(source)}</p>
                   </button>
                 ))}
                 {!sources.length && !error && (

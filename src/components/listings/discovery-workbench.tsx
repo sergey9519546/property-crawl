@@ -3,7 +3,6 @@
 import Link from "next/link";
 import * as React from "react";
 import {
-  Bookmark,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -19,19 +18,16 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CaseAction } from "@/components/research/case-action";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
-import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
+import { DiscoveryCard } from "@/components/listings/discovery-card";
 import { DiscoveryMap } from "@/components/listings/discovery-map";
+import { SaveSearchButton } from "@/components/hunts/save-search-button";
 import {
   SOURCES,
   type PropertyListing,
 } from "@/components/terminal/property-data";
 import {
   displayDate,
-  displayMoney,
-  displayText,
-  knownNumber,
 } from "@/lib/listing-display";
 import {
   discoverySearchParams,
@@ -52,6 +48,7 @@ type Payload = {
 };
 const defaults: Record<string, string> = {
   state: "All states",
+  county: "All counties",
   source: "All sources",
   type: "All property types",
   program: "All programs",
@@ -59,26 +56,12 @@ const defaults: Record<string, string> = {
   occupancy: "All occupancy",
   freshness: "Any freshness",
 };
-const filterFields = [
-  "state",
-  "source",
-  "type",
-  "program",
-  "lifecycle",
-  "occupancy",
-  "freshness",
-] as const;
-
-function observed(listing: PropertyListing) {
-  return (
-    listing.provenance?.origin === "live" &&
-    listing.provenance?.observed === true
-  );
-}
-function docs(listing: PropertyListing) {
-  return listing.hasDocuments === true;
-}
-
+const filterLabels: Record<string, string> = {
+  q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
+  program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
+  saleFrom: "From", saleTo: "Until", maxBid: "Max opening amount", minScore: "Min score",
+  minEquity: "Min spread", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption",
+};
 export function DiscoveryWorkbench() {
   const router = useRouter();
   const session = useWorkspaceSession();
@@ -88,12 +71,25 @@ export function DiscoveryWorkbench() {
     () => readDiscoveryFilters(new URLSearchParams(search.toString())),
     [search],
   );
-  const [payload, setPayload] = React.useState<Payload | null>(null);
+  const queryKey = discoverySearchParams(filters).toString();
+  const [loadedResult, setLoadedResult] = React.useState<{ key: string; payload: Payload } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [cursorStack, setCursorStack] = React.useState<string[]>([]);
-  const [cursor, setCursor] = React.useState<string | undefined>();
+  const [paging, setPaging] = React.useState<{ key: string; cursor?: string }>({ key: queryKey });
+  const cursor = paging.key === queryKey ? paging.cursor : undefined;
+  const setCursor = React.useCallback((value?: string) => setPaging({ key: queryKey, cursor: value }), [queryKey]);
+  const requestKey = `${queryKey}\n${cursor || ""}`;
+  const payload = loadedResult?.key === requestKey ? loadedResult.payload : null;
   const [saved, setSaved] = React.useState<Set<string>>(new Set());
+  const [queryDraft, setQueryDraft] = React.useState(filters.q || "");
+  const [moreFiltersOpen, setMoreFiltersOpen] = React.useState(false);
+  const requestRef = React.useRef<{ controller: AbortController; id: number } | null>(null);
+  const pendingSaves = React.useRef(new Set<string>());
+  const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
+  const [watchlistError, setWatchlistError] = React.useState("");
+  React.useEffect(() => setQueryDraft(filters.q || ""), [filters.q]);
+  React.useEffect(() => setCursorStack([]), [queryKey]);
 
   const setFilters = React.useCallback(
     (change: Partial<DiscoveryFilters>) => {
@@ -101,9 +97,12 @@ export function DiscoveryWorkbench() {
       setCursorStack([]);
       router.replace(discoveryUrl({ ...filters, ...change }));
     },
-    [filters, router],
+    [filters, router, setCursor],
   );
   const refresh = React.useCallback(async () => {
+    requestRef.current?.controller.abort();
+    const request = { controller: new AbortController(), id: (requestRef.current?.id || 0) + 1 };
+    requestRef.current = request;
     setLoading(true);
     setError("");
     try {
@@ -114,8 +113,10 @@ export function DiscoveryWorkbench() {
       });
       const response = await fetch(`/api/listings?${params}`, {
         cache: "no-store",
+        signal: request.controller.signal,
       });
       const result = (await response.json()) as Payload;
+      if (request.controller.signal.aborted || requestRef.current?.id !== request.id) return;
       if (response.status === 409) {
         setCursor(undefined);
         setCursorStack([]);
@@ -127,23 +128,26 @@ export function DiscoveryWorkbench() {
         throw new Error(
           result.error || "Discovery records could not be loaded.",
         );
-      setPayload(result);
+      if (requestRef.current?.id === request.id) setLoadedResult({ key: requestKey, payload: result });
     } catch (caught) {
+      if (request.controller.signal.aborted) return;
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "Discovery records could not be loaded.",
+        caught instanceof TypeError
+          ? "Property search could not be reached. Try again."
+          : caught instanceof Error ? caught.message : "Properties could not be loaded.",
       );
     } finally {
-      setLoading(false);
+      if (requestRef.current?.id === request.id) setLoading(false);
     }
-  }, [filters, cursor]);
+  }, [filters, cursor, requestKey, setCursor]);
   React.useEffect(() => {
     void refresh();
+    return () => requestRef.current?.controller.abort();
   }, [refresh]);
   React.useEffect(() => {
     if (!session.authenticated) {
       setSaved(new Set());
+      setWatchlistError("");
       return;
     }
     let active = true;
@@ -162,10 +166,10 @@ export function DiscoveryWorkbench() {
               )
               .filter((id: unknown): id is string => typeof id === "string")
           : [];
-        if (active) setSaved(new Set(ids));
+        if (active) { setSaved(new Set(ids)); setWatchlistError(""); }
       })
       .catch(() => {
-        if (active) setSaved(new Set());
+        if (active) setWatchlistError("Saved properties could not be checked. Your watchlist has not been changed.");
       });
     return () => {
       active = false;
@@ -176,6 +180,10 @@ export function DiscoveryWorkbench() {
       session.requestUnlock();
       return;
     }
+    if (pendingSaves.current.has(id)) return;
+    pendingSaves.current.add(id);
+    setSavingIds(new Set(pendingSaves.current));
+    setWatchlistError("");
     const wasSaved = saved.has(id);
     try {
       const response = await fetch("/api/alerts", {
@@ -185,6 +193,10 @@ export function DiscoveryWorkbench() {
         body: JSON.stringify({ listingId: id }),
       });
       const result = await response.json();
+      if (response.status === 401) {
+        void session.refresh();
+        session.requestUnlock();
+      }
       if (!response.ok)
         throw new Error(result.error || "Watchlist could not be updated.");
       setSaved((items) => {
@@ -193,16 +205,25 @@ export function DiscoveryWorkbench() {
         return next;
       });
     } catch (caught) {
-      setError(
+      setWatchlistError(
         caught instanceof Error
           ? caught.message
           : "Watchlist could not be updated.",
       );
+    } finally {
+      pendingSaves.current.delete(id);
+      setSavingIds(new Set(pendingSaves.current));
     }
   };
   const facets = payload?.facets || {};
+  const facetOptions = (field: keyof DiscoveryFilters) => {
+    const options = facets[field] || [];
+    const selected = filters[field];
+    return selected && selected !== "all" && !options.some((option) => option.value === selected)
+      ? [{ value: selected, count: payload ? 0 : null }, ...options] : options;
+  };
   const hasFilters = Object.entries(filters).some(
-    ([key, value]) => key !== "view" && value,
+    ([key, value]) => key !== "view" && key !== "sort" && value,
   );
   const next = () => {
     const n = payload?.page?.nextCursor;
@@ -221,123 +242,87 @@ export function DiscoveryWorkbench() {
     setFilters({
       [field]: value === "all" ? undefined : value,
     } as Partial<DiscoveryFilters>);
-  const openMapListing = (id: string) =>
+  const openMapListing = React.useCallback((id: string) =>
     router.push(
-      `/listings/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(`${pathname}?${search}`)}`,
-    );
+      `/listings/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`,
+    ), [router, filters]);
   const exportCurrent = () => {
+    if (!session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
     const params = discoverySearchParams(filters, { format: "csv" });
     window.location.assign(`/api/export?${params}`);
   };
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
-      <div className="rounded-3xl bg-slate-950 px-6 py-8 text-white shadow-xl sm:px-9">
-        <p className="text-xs font-bold uppercase tracking-[.18em] text-slate-400">
-          Property Evidence Directory
-        </p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-          Distressed property records, without hidden assumptions
-        </h1>
-        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          Publisher-observed records and labeled demonstrations stay separate.
-          PerfectProperty helps you decide what to verify; it does not operate
-          auctions or accept bids.
-        </p>
-      </div>
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row">
-          <label className="flex flex-1 items-center gap-2 rounded-xl border border-slate-300 px-3">
+      <header className="mb-4">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Find properties</h1>
+        <p className="mt-1 text-sm text-slate-600">Search by address, parcel, publisher ID, or keyword.</p>
+      </header>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <form
+          className="flex gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setFilters({ q: queryDraft.trim() || undefined });
+          }}
+        >
+          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 px-3 focus-within:border-slate-500">
+            <span className="sr-only">Search properties</span>
             <Search size={17} className="text-slate-400" />
             <input
-              value={filters.q || ""}
-              onChange={(event) =>
-                setFilters({ q: event.target.value || undefined })
-              }
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
               placeholder="Address, parcel, court case, or keyword"
               className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
             />
           </label>
-          <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-3 text-xs font-semibold">
-            Sale window{" "}
-            <input
-              type="date"
-              value={filters.saleFrom || ""}
-              onChange={(event) =>
-                setFilters({ saleFrom: event.target.value || undefined })
-              }
-              className="bg-transparent py-2 outline-none"
-            />{" "}
-            <span>to</span>{" "}
-            <input
-              type="date"
-              value={filters.saleTo || ""}
-              onChange={(event) =>
-                setFilters({ saleTo: event.target.value || undefined })
-              }
-              className="bg-transparent py-2 outline-none"
-            />
-          </label>
-          <label className="flex items-center gap-2 rounded-xl border border-slate-300 px-3 text-xs font-semibold">
-            Max published amount{" "}
-            <input
-              inputMode="numeric"
-              value={filters.maxBid || ""}
-              onChange={(event) =>
-                setFilters({ maxBid: event.target.value || undefined })
-              }
-              placeholder="$"
-              className="w-24 bg-transparent py-3 outline-none"
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {filterFields.map((field) => (
+          <button type="submit" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white">Search</button>
+        </form>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {(["state", "county", "type"] as const).map((field) => (
             <select
               key={field}
-              aria-label={field}
+              aria-label={filterLabels[field]}
               value={filters[field] || "all"}
               onChange={(event) => selectValue(field, event.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+              className={`min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm ${field === "type" ? "col-span-2 sm:col-span-1" : ""}`}
             >
               <option value="all">{defaults[field]}</option>
-              {(facets[field] || []).map((facet) => (
+              {facetOptions(field).map((facet) => (
                 <option key={facet.value} value={facet.value}>
-                  {sourceDisplayText(facet.value)} ({facet.count})
+                  {facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}
                 </option>
               ))}
             </select>
           ))}
-          <button
-            type="button"
-            aria-pressed={filters.hasDocuments === "true"}
-            onClick={() =>
-              setFilters({
-                hasDocuments:
-                  filters.hasDocuments === "true" ? undefined : "true",
-              })
-            }
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold"
-          >
-            <FileText size={14} />
-            Documents
-          </button>
-          <select
-            aria-label="Sort results"
-            value={filters.sort || "score"}
-            onChange={(event) => setFilters({ sort: event.target.value })}
-            className="rounded-lg border border-slate-200 px-3 py-2 text-xs"
-          >
-            <option value="score">Modeled score</option>
-            <option value="date">Sale date</option>
-            <option value="bid-asc">Opening amount</option>
-          </select>
         </div>
+        <button type="button" aria-expanded={moreFiltersOpen} onClick={() => setMoreFiltersOpen((open) => !open)} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold">
+          <SlidersHorizontal size={15} /> More filters
+        </button>
+        {moreFiltersOpen && (
+          <div className="mt-3 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(["source", "program", "lifecycle", "occupancy", "freshness"] as const).map((field) => (
+              <select key={field} aria-label={filterLabels[field]} value={filters[field] || "all"} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+                <option value="all">{defaults[field]}</option>
+                {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
+              </select>
+            ))}
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Max published amount<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+              <option value="all">Any document status</option><option value="true">Documents available</option><option value="false">No documents reported</option><option value="unknown">Document status unknown</option>
+            </select>
+          </div>
+        )}
         {hasFilters && (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
             <Filter size={14} className="text-slate-500" />
             {Object.entries(filters)
-              .filter(([key, value]) => key !== "view" && value)
+              .filter(([key, value]) => key !== "view" && key !== "sort" && value)
               .map(([key, value]) => (
                 <button
                   key={key}
@@ -348,7 +333,7 @@ export function DiscoveryWorkbench() {
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-900"
                 >
-                  {key}: {sourceDisplayText(value!)}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None reported" : "Unknown" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}
@@ -368,40 +353,43 @@ export function DiscoveryWorkbench() {
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-slate-500">
-            {loading
-              ? "Updating evidence…"
-              : `${payload?.total ?? 0} matching records`}{" "}
-            {payload?.revision ? `· Revision ${payload.revision}` : ""}
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            Unknown and stale values remain visible for review.
+            {loading || (!payload && !error)
+              ? "Updating results…"
+              : payload ? `${payload.total.toLocaleString()} ${payload.total === 1 ? "property" : "properties"}` : "Results unavailable"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link
-            href="/hunts"
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
+          <select
+            aria-label="Sort results"
+            value={filters.sort || "score"}
+            onChange={(event) => setFilters({ sort: event.target.value })}
+            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
           >
-            Save or review hunts
-          </Link>
-          <Link
-            href="/sources"
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
-          >
-            Change inbox
-          </Link>
+            <option value="score">Modeled score</option>
+            <option value="date">Sale date</option>
+            <option value="bid-asc">Opening amount</option>
+          </select>
+          <SaveSearchButton filters={filters} />
+          <details className="relative">
+            <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold">More</summary>
+            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-slate-50">Saved searches &amp; changes</Link>
+              <button onClick={exportCurrent} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export results</button>
+            </div>
+          </details>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">
           <button
             onClick={() => setFilters({ view: "grid" })}
             aria-pressed={(filters.view || "grid") === "grid"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
           >
             <ListFilter size={14} />
-            <span>Deal Grid ({payload?.total ?? 0} records)</span>
+            <span>Grid</span>
           </button>
           <button
             onClick={() => setFilters({ view: "map" })}
             aria-pressed={filters.view === "map"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
           >
             <MapIcon size={14} />
             Map
@@ -409,7 +397,7 @@ export function DiscoveryWorkbench() {
           <button
             onClick={() => setFilters({ view: "calendar" })}
             aria-pressed={filters.view === "calendar"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
           >
             <CalendarDays size={14} />
             Calendar
@@ -421,6 +409,7 @@ export function DiscoveryWorkbench() {
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
+          </div>
         </div>
       </div>
       {error && (
@@ -438,11 +427,13 @@ export function DiscoveryWorkbench() {
           </button>
         </div>
       )}
+      {error && payload ? <p role="status" className="mt-3 text-sm text-slate-600">Showing previously loaded results. Refresh to check for updates.</p> : null}
+      {watchlistError ? <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{watchlistError}</p> : null}
       {filters.view === "map" ? (
         <div className="mt-5">
           <DiscoveryMap filters={filters} onOpenListing={openMapListing} />
         </div>
-      ) : filters.view === "calendar" ? (
+      ) : !payload && error ? null : filters.view === "calendar" && payload ? (
         <DiscoveryCalendar
           listings={payload?.listings || []}
           filters={filters}
@@ -450,154 +441,38 @@ export function DiscoveryWorkbench() {
         />
       ) : (
         <>
-          {loading && !payload ? (
+          {!payload ? (
             <div className="mt-5 grid place-items-center rounded-2xl border border-slate-200 bg-white p-16 text-sm text-slate-500">
               <Loader2 className="mb-3 animate-spin" />
-              Loading a bounded result page…
+              Loading properties…
             </div>
           ) : !payload?.listings.length ? (
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
               <SlidersHorizontal className="mx-auto text-slate-400" />
               <h2 className="mt-4 text-lg font-bold">
-                No records match this evidence query.
+                No listings match your filters.
               </h2>
               <p className="mt-2 text-sm text-slate-600">
-                Broaden a filter or review source coverage for records that have
-                not been observed yet.
+                Try a different location or fewer filters.
               </p>
               <Link
                 href="/sources"
                 className="mt-4 inline-block text-sm font-semibold text-slate-900 underline"
               >
-                Inspect source coverage
+                View source coverage
               </Link>
             </div>
           ) : (
-            <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            <div aria-busy={loading} className={`mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>
               {payload.listings.map((listing) => (
-                <article
+                <DiscoveryCard
                   key={listing.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                >
-                  <div className="relative h-44 bg-slate-100">
-                    <ListingThumbnail
-                      listingId={listing.id}
-                      address={listing.address}
-                      photo={listing.photo}
-                      observed={observed(listing)}
-                    />
-                    <div className="absolute left-3 top-3 flex gap-1">
-                      <span className="rounded bg-slate-950/90 px-2 py-1 text-[10px] font-bold text-white">
-                        {sourceDisplayText(
-                          SOURCES[listing.source]?.label || listing.source,
-                        )}
-                      </span>
-                      <span
-                        className={`rounded px-2 py-1 text-[10px] font-bold ${observed(listing) ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-950"}`}
-                      >
-                        {observed(listing) ? "Observed" : listing.provenance?.origin === 'archive' ? 'Dated archive' : "Demo / unverified"}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => toggleSaved(listing.id)}
-                      aria-label={`${saved.has(listing.id) ? 'Remove from' : 'Add to'} watchlist: ${listing.address}`}
-                      aria-pressed={saved.has(listing.id)}
-                      className="absolute right-3 top-3 rounded-full bg-white p-2 shadow"
-                    >
-                      <Bookmark
-                        size={15}
-                        className={
-                          saved.has(listing.id)
-                            ? "fill-slate-900 text-slate-900"
-                            : ""
-                        }
-                      />
-                    </button>
-                  </div>
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h2 className="font-bold text-slate-950">
-                          {listing.address}
-                        </h2>
-                        <p className="mt-1 text-xs text-slate-500">
-                          {displayText(listing.city)}, {listing.state} ·{" "}
-                          {displayText(listing.county, "County not published")}
-                        </p>
-                      </div>
-                      <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-800">
-                        {knownNumber(listing.dealScore) === null
-                          ? "Not modeled"
-                          : `${listing.dealScore}/99`}
-                      </span>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3 text-xs">
-                      <div>
-                        <p className="text-slate-500">Published amount</p>
-                        <p className="mt-1 font-bold">
-                          {displayMoney(listing.openingBid)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500">Sale date</p>
-                        <p className="mt-1 font-bold">
-                          {displayDate(listing.saleDate)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
-                      {listing.program || listing.auctionProgram ? (
-                        <span className="rounded bg-slate-100 px-2 py-1">
-                          Program:{" "}
-                          {sourceDisplayText(
-                            listing.program || listing.auctionProgram || "",
-                          )}
-                        </span>
-                      ) : (
-                        <span className="rounded bg-amber-50 px-2 py-1 text-amber-900">
-                          Program not captured
-                        </span>
-                      )}
-                      {listing.lifecycle || listing.lifecycleStatus ? (
-                        <span className="rounded bg-slate-100 px-2 py-1">
-                          {sourceDisplayText(
-                            listing.lifecycle || listing.lifecycleStatus || "",
-                          )}
-                        </span>
-                      ) : (
-                        <span className="rounded bg-amber-50 px-2 py-1 text-amber-900">
-                          Lifecycle not captured
-                        </span>
-                      )}
-                      {docs(listing) && (
-                        <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-900">
-                          Publisher documents
-                        </span>
-                      )}
-                      <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
-                        {sourceDisplayText(
-                          listing.discoveryStatus ||
-                            "Discovery status not established",
-                        )}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-[11px] text-slate-500">
-                      {listing.sourceObservedAt
-                        ? `Observed ${displayDate(listing.sourceObservedAt)}`
-                        : "Observation time not established"}
-                    </p>
-                    {listing.evidenceCompleteness && <p className="mt-1 text-[11px] text-slate-500">Evidence fields: {listing.evidenceCompleteness.known}/{listing.evidenceCompleteness.total} known</p>}
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <Link
-                        href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
-                        className="inline-flex h-10 items-center justify-center rounded-xl bg-slate-950 px-3 text-xs font-bold text-white"
-                      >
-                        Review dossier
-                      </Link>
-                      <CaseAction listingId={listing.id} label="Open case" />
-                    </div>
-                  </div>
-                </article>
+                  listing={listing}
+                  href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
+                  saved={saved.has(listing.id)}
+                  saving={savingIds.has(listing.id)}
+                  onSave={() => void toggleSaved(listing.id)}
+                />
               ))}
             </div>
           )}
@@ -611,7 +486,7 @@ export function DiscoveryWorkbench() {
               Previous
             </button>
             <span className="text-xs text-slate-500">
-              Cursor pagination · no full inventory download
+              Page {cursorStack.length + 1}
             </span>
             <button
               disabled={!payload?.page?.hasMore || loading}

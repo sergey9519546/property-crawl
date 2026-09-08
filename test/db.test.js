@@ -294,14 +294,19 @@ async function run() {
         openingBid: 50000,
         cashToClose: 52500,
         cashToCloseDetails,
+        auctionProgram: 'TPS',
+        lifecycleStatus: 'postponed',
+        transactionOutcome: null,
+        hasDocuments: false,
       });
 
       assert.match(capturedSql, /cash_to_close_details/);
       assert.match(capturedSql, /baths::float8\s+AS "baths"/);
-      assert.strictEqual(capturedParams.length, 42, 'INSERT parameter count must match the 42 source parameters');
+      assert.strictEqual(capturedParams.length, 46, 'INSERT retains the 42 source parameters and adds four discovery fields');
       assert.strictEqual(capturedParams[10], 2.5, 'fractional baths must occupy the baths parameter');
       assert.deepStrictEqual(capturedParams[40], cashToCloseDetails, 'cash details must occupy the JSONB parameter');
-      assert.strictEqual(capturedParams[41], 'active', 'status must remain the final parameter');
+      assert.strictEqual(capturedParams[41], 'active', 'legacy status keeps its canonical slot');
+      assert.deepStrictEqual(capturedParams.slice(42), ['TPS', 'postponed', null, false], 'program, lifecycle, unknown outcome and explicit document absence remain separate');
     } finally {
       db.isPg = originalIsPg;
       db.pool = originalPool;

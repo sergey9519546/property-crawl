@@ -8,14 +8,18 @@
 
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
-const { inspectSourceRecordUrl } = require('./source-policy');
+const { inspectImageUrl } = require('./media-policy');
+const { inspectSourceRecordUrl, hostnameMatches } = require('./source-policy');
 
 const SOURCE_KEY = 'servicelink';
 const PUBLISHER = 'ServiceLink Auction';
 const API_ORIGIN = 'https://www.servicelinkauction.com';
 const LISTINGS_PATH = '/api/listingsvc/v1/Listings';
 const DEFAULT_MAX_PAGES = 1;
-const MAX_PAGES = 5;
+// Manual/canary sweeps may explicitly request a larger bounded segment. The
+// default remains one page; 100 pages caps one process run at 2,500 records at
+// the default page size and every page still observes crawl jitter.
+const MAX_PAGES = 100;
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
 const rawPublisherRecords = new WeakMap();
@@ -89,6 +93,19 @@ function formatAddress(property) {
   return [street, city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 }
 
+function publisherGallery(record, sourceUrl, observedAt) {
+  if (!Array.isArray(record?.images) || !inspectSourceRecordUrl(SOURCE_KEY, sourceUrl).isValid) return [];
+  const gallery = [];
+  for (let index = 0; index < record.images.length && gallery.length < 12; index++) {
+    const image = record.images[index];
+    const field = ['mediaUrl', 'fileUrl', 'url', 'thumbnailUrl'].find((name) => typeof image?.[name] === 'string' && image[name].trim());
+    if (!field) continue;
+    const inspected = inspectImageUrl(image[field]);
+    if (!inspected.accepted || !hostnameMatches(new URL(inspected.url).hostname, 'servicelinkauction.com') || gallery.some((item) => item.url === inspected.url)) continue;
+    gallery.push({ url: inspected.url, sourceRecordUrl: sourceUrl, origin: 'publisher_record', verification: 'source_extracted', observedAt, extraction: { field: 'images[' + index + '].' + field, association: 'exact_publisher_listing_payload' } });
+  }
+  return gallery;
+}
 function compactRawRecord(record, sourceUrl) {
   const property = record?.propertyInfo || {};
   const run = record?.auctionRunInfo || {};
@@ -211,6 +228,10 @@ class ServiceLinkScraper extends BaseScraper {
       || cleanText(record?.foreclosureSaleStatusWebsite, 240)
       || cleanText(record?.foreclosureSaleStatus, 240);
     const raw = compactRawRecord(record, sourceUrl);
+    const gallery = publisherGallery(record, sourceUrl, observedAt);
+    const latitude = finiteNumber(property.latitude), longitude = finiteNumber(property.longitude);
+    const coordinates = latitude !== null && latitude >= -90 && latitude <= 90 && longitude !== null && longitude >= -180 && longitude <= 180 && !(latitude === 0 && longitude === 0)
+      ? { lat: latitude, lng: longitude, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: sourceUrl, observedAt } : undefined;
     const provenance = {
       origin: 'live',
       observed: true,
@@ -219,6 +240,7 @@ class ServiceLinkScraper extends BaseScraper {
       publisher: PUBLISHER,
       exactSourceUrl: sourceUrl,
       observedAt,
+      ...(coordinates ? { coordinates } : {}),
       sourceFacts: {
         listingId,
         propertyId: cleanText(property.propertyId, 160),
@@ -243,6 +265,9 @@ class ServiceLinkScraper extends BaseScraper {
         tpsSaleLocation: cleanText(record?.tpsSaleLocation, 500),
         tpsSaleTime: cleanText(record?.tpsSaleTime, 80),
         clearedForSale: cleanText(record?.clearedForSale, 80),
+        isCashOnly: observedBoolean(record?.isCashOnly),
+        isFinancible: observedBoolean(record?.isFinancible),
+        interiorAccessAvailable: observedBoolean(record?.interiorAccessAvailable),
         listingStatus: {
           statusText: cleanText(status.statusText, 240),
           statusTextSRP: cleanText(status.statusTextSRP, 240),
@@ -253,7 +278,7 @@ class ServiceLinkScraper extends BaseScraper {
           isComingSoon: observedBoolean(status.isComingSoon),
         },
       },
-      media: { photo: null, photoStatus: { state: 'not_collected', reason: 'public_listing_media_not_collected_by_this_adapter', observedAt } },
+      media: gallery.length ? { gallery, photo: { ...gallery[0] } } : { photo: null, photoStatus: { state: 'not_supplied', reason: 'publisher_payload_has_no_accepted_image', observedAt } },
     };
 
     const listing = this.standardizeListing({
@@ -282,7 +307,7 @@ class ServiceLinkScraper extends BaseScraper {
       attorney: null,
       occupancy: cleanText(property.occupancyStatus, 120),
       deposit: null,
-      photo: null,
+      photo: gallery[0]?.url || null,
       sourceUrl,
       raw,
       price: null,
@@ -395,6 +420,7 @@ module.exports.SOURCE_KEY = SOURCE_KEY;
 module.exports.ServiceLinkScraper = ServiceLinkScraper;
 module.exports.collectServiceLink = collectServiceLink;
 module.exports.compactRawRecord = compactRawRecord;
+module.exports.publisherGallery = publisherGallery;
 module.exports.observedOpeningBid = observedOpeningBid;
 module.exports.observedBoolean = observedBoolean;
 module.exports.sourceUrlFromRecord = sourceUrlFromRecord;

@@ -100,6 +100,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
   const [isParsing, setIsParsing] = useState(false);
   const [parseResponse, setParseResponse] = useState<ParseResponse | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [needsUnlock, setNeedsUnlock] = useState(false);
 
   const parsedResult = parseResponse?.parsed ?? null;
   const missingReviewFields = useMemo(() => {
@@ -113,6 +114,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
     if (!rawText.trim()) return;
     setIsParsing(true);
     setParseError(null);
+    setNeedsUnlock(false);
     setParseResponse(null);
     try {
       const response = await fetch("/api/parse", {
@@ -121,6 +123,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         body: JSON.stringify({ noticeText: rawText })
       });
       const body = await response.json().catch(() => null);
+      if (response.status === 401) { setNeedsUnlock(true); throw new Error("Unlock your workspace, then return here to extract the notice. Your text will stay on this page."); }
       if (!response.ok || !body?.parsed) throw new Error(body?.error || "The notice could not be parsed.");
       setParseResponse(body as ParseResponse);
     } catch (error) {
@@ -228,7 +231,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
       {parseError ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{parseError}</span>
+          <span>{parseError}{needsUnlock ? <a href="/listings" target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold underline underline-offset-2">Open workspace in a new tab</a> : null}</span>
         </div>
       ) : null}
 

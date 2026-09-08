@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { validateListingForIngestion } = require('../scrapers/validation');
+const { queryFromUrl, matches: matchesDiscoveryQuery } = require('../discovery/query');
 const {
   HUNT_ID, MAX_BASELINE_RECORDS, MAX_EVENTS, MAX_HUNTS, loadStore, mutateStore,
 } = require('./hunt-store');
@@ -105,6 +106,38 @@ function validateCriteria(criteria, errors = []) {
   if (!criteria || typeof criteria !== 'object' || Array.isArray(criteria)) {
     errors.push('criteria must be an object');
     return null;
+  }
+  if (Object.hasOwn(criteria, 'discoveryFilters')) {
+    if (Object.keys(criteria).some((key) => key !== 'discoveryFilters')) {
+      errors.push('discovery criteria cannot be combined with rule criteria');
+      return null;
+    }
+    if (!criteria.discoveryFilters || typeof criteria.discoveryFilters !== 'object' || Array.isArray(criteria.discoveryFilters)) {
+      errors.push('criteria.discoveryFilters must be an object');
+      return null;
+    }
+    const allowed = new Set(['q', 'state', 'county', 'source', 'type', 'program', 'lifecycle', 'saleFrom', 'saleTo', 'maxBid', 'minScore', 'minEquity', 'occupancy', 'freshness', 'hasDocuments', 'seniorLien', 'redemption']);
+    const params = new URLSearchParams();
+    for (const [key, raw] of Object.entries(criteria.discoveryFilters)) {
+      if (!allowed.has(key)) { errors.push(`criteria.discoveryFilters.${key} is not supported`); continue; }
+      if (typeof raw !== 'string' || raw.length > 256) { errors.push(`criteria.discoveryFilters.${key} must be a string`); continue; }
+      if (raw.trim()) params.set(key, raw.trim());
+    }
+    if (errors.length) return null;
+    try {
+      const parsed = queryFromUrl(new URL(`http://localhost/api/listings?${params}`));
+      const normalized = {};
+      for (const key of allowed) {
+        const value = parsed[key];
+        if (value !== null && value !== '' && value !== 'all') normalized[key] = typeof value === 'boolean' ? String(value) : String(value);
+      }
+      const value = { discoveryFilters: normalized };
+      if (Buffer.byteLength(canonicalJson(value), 'utf8') > MAX_CRITERIA_BYTES) errors.push(`criteria exceed the ${MAX_CRITERIA_BYTES}-byte limit`);
+      return errors.length ? null : value;
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : 'criteria.discoveryFilters are invalid');
+      return null;
+    }
   }
   if (!['all', 'any'].includes(criteria.mode)) errors.push('criteria.mode must be all or any');
   if (!Array.isArray(criteria.rules) || criteria.rules.length < 1 || criteria.rules.length > MAX_RULES) {
@@ -411,6 +444,20 @@ function evaluateListing(listing, hunt, options = {}) {
       validationErrors: observed.errors,
     };
   }
+  if (hunt.criteria.discoveryFilters) {
+    const params = new URLSearchParams(hunt.criteria.discoveryFilters);
+    const query = queryFromUrl(new URL(`http://localhost/api/listings?${params}`));
+    const status = matchesDiscoveryQuery(observed.listing, query, { now: Date.parse(now) }) ? 'match' : 'no_match';
+    return {
+      listingId: observed.listing.id, status, observedAt: new Date(observed.observedAt).toISOString(),
+      address: observed.listing.address, sourceId: observed.listing.source, sourceUrl: observed.listing.sourceUrl,
+      recordId: String(observed.listing.provenance.recordId),
+      clauseResults: [{ field: 'discoveryFilters', operator: 'matches', expected: hunt.criteria.discoveryFilters,
+        actual: status === 'match', status, evidenceClass: 'canonical_discovery_query',
+        reason: status === 'match' ? 'The record matches the saved discovery filters.' : 'The record does not match the saved discovery filters.' }],
+      reasons: status === 'match' ? [] : ['The record does not match the saved discovery filters.'], validationErrors: [],
+    };
+  }
   const clauseResults = hunt.criteria.rules.map((rule) => {
     const definition = FIELD_DEFINITIONS[rule.field];
     const { actual, evidenceClass } = actualEvidence(observed.listing, rule.field, definition);
@@ -433,11 +480,24 @@ function evaluateListing(listing, hunt, options = {}) {
 }
 
 function compactMaterialSnapshot(listing, hunt) {
-  const fields = new Set([...MATERIAL_FIELDS, ...hunt.criteria.rules.map((rule) => rule.field)]);
+  const discoveryMaterialFields = hunt.criteria.discoveryFilters ? [
+    'id', 'address', 'city', 'county', 'state', 'source', 'propType', 'auctionProgram',
+    'lifecycleStatus', 'occupancy', 'saleDate', 'openingBid', 'dealScore', 'equity',
+    'seniorLienRisk', 'redemptionDays', 'hasDocuments',
+  ] : [];
+  const fields = new Set([...MATERIAL_FIELDS, ...discoveryMaterialFields, ...(hunt.criteria.rules || []).map((rule) => rule.field)]);
   const snapshot = {};
   for (const field of fields) {
     if (field === 'sourceObservedAt') continue;
-    if (FIELD_DEFINITIONS[field]) snapshot[field] = actualValue(listing, field, FIELD_DEFINITIONS[field]);
+    if (field === 'hasDocuments') {
+      const documents = listing.provenance?.sourceFacts?.documents;
+      snapshot[field] = listing.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
+        ? true : listing.hasDocuments === false || Array.isArray(documents) ? false : null;
+      snapshot.documentIds = Array.isArray(documents)
+        ? documents.map((document) => document?.id || document?.url || document?.sourceUrl).filter(Boolean).sort()
+        : [];
+    }
+    else if (FIELD_DEFINITIONS[field]) snapshot[field] = actualValue(listing, field, FIELD_DEFINITIONS[field]);
     else {
       const value = listing[field];
       snapshot[field] = known(value) ? String(value).replace(/\s+/g, ' ').trim().slice(0, field === 'address' ? 500 : 200) : null;

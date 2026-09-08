@@ -9,7 +9,6 @@ import {
   HelpCircle,
   Loader2,
   Scale,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -98,7 +97,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
     return (
       <div className="flex items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-slate-700" />
-        <span>Evaluating opportunity signals & triage priority…</span>
+        <span>Checking research signals…</span>
       </div>
     );
   }
@@ -124,11 +123,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
       {/* Header Banner */}
       <div className="bg-[#0F172A] p-5 text-white flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Opportunity Signal Engine</span>
-          </div>
-          <h3 className="text-base font-bold text-white">Triage Priority & Signal Verification</h3>
+          <h3 className="text-base font-bold text-white">Research priority</h3>
 <p className="text-xs text-slate-300">
             {data.disclaimer || 'Deterministic evaluation with published weights. Not an appraisal or predictive distress score.'}
           </p>
@@ -137,7 +132,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         {/* Score Dial / Badge */}
 <div className="flex items-center gap-3 bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-700">
           <div className="text-right">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Opportunity Triage</p>
+            <p className="text-xs font-semibold text-slate-400">Priority score</p>
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-2xl font-black text-white">{priority}</span>
               <span className="text-xs font-semibold text-slate-400">/99</span>
@@ -166,7 +161,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         >
           <span className="flex items-center gap-1.5">
             <Scale className="w-3.5 h-3.5 text-slate-500" />
-            <span>Published Component Weights ({supportedCount} supported · {contradictedCount} contradicted)</span>
+            <span>How this score works ({supportedCount} supported · {contradictedCount} conflicting)</span>
           </span>
           {showWeights ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
         </button>
@@ -193,7 +188,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
       {/* Candidate Signals List */}
       <div className="p-5 space-y-3">
         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-          Candidate Signal Ledger ({data.signals.length} evaluated)
+          Evidence checks ({data.signals.length})
         </h4>
 
         <div className="space-y-2.5">
@@ -231,7 +226,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                       !isSupported && !isContradicted && "bg-slate-200 text-slate-700"
                     )}
                   >
-                    {signal.status}
+                    {signal.status === 'unknown' ? 'Needs checking' : signal.status === 'contradicted' ? 'Conflicting' : 'Supported'}
                   </span>
                 </div>
 
@@ -244,7 +239,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                   </div>
 
                   <div className="text-slate-400 flex items-center gap-2">
-                    <span className="font-mono text-[10px]">evidence: {signal.evidenceClass}</span>
+                    <span className="text-xs">{signal.evidenceClass.replace(/_/g, ' ')}</span>
                     {signal.observedAt && (
                       <span className="text-[10px]">
                         observed {new Date(signal.observedAt).toLocaleDateString()}

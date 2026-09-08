@@ -1,7 +1,7 @@
 // Server-only transport to the canonical Node API. Never consult a second
 // in-memory snapshot for mutations or listing-backed enrichment.
 const MAX_BYTES = 2 * 1024 * 1024;
-const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-intelligence|property-signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?)$/;
+const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-image|property-intelligence|property-signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?)$/;
 
 function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -66,7 +66,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20_000),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset"]) {
+    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }

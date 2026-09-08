@@ -6,6 +6,7 @@ const test = require('node:test');
 const defaultScraper = require('../server/scrapers/servicelink');
 const {
   ServiceLinkScraper,
+  MAX_PAGES,
   sourceUrlFromRecord,
   validContinuationToken,
 } = require('../server/scrapers/servicelink');
@@ -104,7 +105,12 @@ test('ServiceLink follows only a bounded opaque continuation token on its fixed 
   assert.equal(listings[0].provenance.recordKind, 'source_record');
   assert.equal(listings[0].provenance.recordId, first.listingId);
   assert.equal(listings[0].provenance.publisher, 'ServiceLink Auction');
-  assert.equal(listings[0].photo, null);
+  assert.equal(listings[0].photo, first.images[0].mediaUrl);
+  assert.equal(listings[0].provenance.media.photo.sourceRecordUrl, first.propertyInfo.websiteUrl);
+  assert.equal(listings[0].provenance.media.photo.verification, 'source_extracted');
+  assert.deepEqual(listings[0].provenance.coordinates, { lat: 33.35, lng: -111.75, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: first.propertyInfo.websiteUrl, observedAt: '2026-09-05T12:00:00.000Z' });
+  assert.equal(listings[0].provenance.sourceFacts.isCashOnly, true);
+  assert.equal(listings[0].provenance.sourceFacts.isFinancible, false);
   assert.doesNotMatch(listings[0].raw, /auction-photos|auction-documents/);
   assert.deepEqual(validateListingForIngestion(listings[0], { expectedSource: 'servicelink' }).errors, []);
   assert.equal(subject.lastRunReport.outcome, 'success');
@@ -173,4 +179,10 @@ test('ServiceLink only accepts bounded opaque continuation tokens', () => {
   assert.equal(validContinuationToken(''), null);
   assert.equal(validContinuationToken(`x${'x'.repeat(2048)}`), null);
   assert.equal(validContinuationToken('abc\nnext'), null);
+});
+
+test('explicit sweep budgets can exceed five pages but remain hard bounded', () => {
+  assert.equal(new ServiceLinkScraper({maxPages:20}).maxPages,20);
+  assert.equal(new ServiceLinkScraper({maxPages:1000}).maxPages,MAX_PAGES);
+  assert.equal(MAX_PAGES,100);
 });

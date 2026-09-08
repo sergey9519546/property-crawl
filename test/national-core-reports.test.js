@@ -23,7 +23,7 @@ test('Treasury and IRS detail failures make an otherwise bounded index sweep inc
   irs.fetchDetail = async (slug) => slug === 'one' ? { id: 'one' } : Promise.reject(new Error('detail failed'));
   await irs.scrapeFeed();
   assert.equal(irs.lastRunReport.fullSweepComplete, false);
-  assert.deepEqual(irs.lastRunReport.scope, { endpoint: '/auction/items', realEstateCardsDiscovered: 2 });
+  assert.deepEqual(irs.lastRunReport.scope, { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } });
 });
 
 test('USDA and GSA declare the publisher-discovered scope and never use fixtures', async () => {
@@ -32,7 +32,7 @@ test('USDA and GSA declare the publisher-discovered scope and never use fixtures
   usda.searchState = async () => [];
   await usda.scrapeFeed();
   assert.equal(usda.lastRunReport.complete, true);
-  assert.deepEqual(usda.lastRunReport.scope.inventoryStates, ['13']);
+  assert.deepEqual(usda.lastRunReport.discoveredStates, ['13']);
   assert.equal(usda.lastRunReport.fixtureFallbackUsed, false);
 
   const gsa = bypassRetries(new GsaSurplusScraper());
@@ -41,7 +41,7 @@ test('USDA and GSA declare the publisher-discovered scope and never use fixtures
   await gsa.scrapeFeed();
   assert.equal(gsa.lastRunReport.complete, true);
   assert.equal(gsa.lastRunReport.recordsRejected, 1);
-  assert.deepEqual(gsa.lastRunReport.scope, { endpoint: '/our-listing', propertyIdsDiscovered: 1 });
+  assert.deepEqual(gsa.lastRunReport.scope, { endpoint: '/our-listing', filters: { assetClass: 'real_estate' } });
 });
 
 test('HUD configured jurisdiction and page caps are explicitly truncated', () => {

@@ -72,6 +72,15 @@ function loadStore(filePath) {
   return assertStoreShape(JSON.parse(fs.readFileSync(resolved, 'utf8')));
 }
 
+function replaceFileWithRetry(temporary,resolved,options={}) {
+  const attempts=Math.max(1,Math.min(10,Number(options.attempts)||9));
+  const wait=typeof options.wait==='function'?options.wait:(milliseconds)=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,milliseconds);
+  for(let attempt=0;attempt<attempts;attempt+=1){
+    try{fs.renameSync(temporary,resolved);return;}
+    catch(error){const retryable=(options.platform||process.platform)==='win32'&&['EPERM','EACCES','EBUSY'].includes(error.code);if(!retryable||attempt===attempts-1)throw error;wait(Math.min(250,10*(2**attempt)));}
+  }
+}
+
 function mutateStore(filePath, mutate, options = {}) {
   if (typeof mutate !== 'function') throw new TypeError('Research-workspace mutation must be a function');
   const resolved = resolveStorePath(filePath);
@@ -95,7 +104,7 @@ function mutateStore(filePath, mutate, options = {}) {
     const body = JSON.stringify(store);
     if (Buffer.byteLength(body, 'utf8') > MAX_STORE_BYTES) throw new Error('Research workspace exceeds its safe size limit');
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
-    fs.renameSync(temporary, resolved);
+    replaceFileWithRetry(temporary, resolved, options.replaceOptions);
     return result.value;
   } finally {
     if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
@@ -115,4 +124,5 @@ module.exports = {
   loadStore,
   mutateStore,
   resolveStorePath,
+  replaceFileWithRetry,
 };

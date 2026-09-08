@@ -241,15 +241,24 @@ function hasSourceObservedProvenance(listing) {
   return true;
 }
 
-function validateListingForStreetView(listing) {
-  if (hasUsablePublisherPhoto(listing)) {
+function hasSourceIdentifiedArchive(listing) {
+  const provenance=listing?.provenance;
+  return Boolean(provenance&&typeof provenance==='object'&&provenance.origin==='archive'&&provenance.observed===true
+    &&safeText(provenance.publisher,256)&&safeText(provenance.recordId,256)&&sourceObservedAddress(listing));
+}
+
+function validateListingForStreetView(listing, mode = 'metadata') {
+  // A requested interactive tour complements publisher photos. Automatic
+  // image fallback still prefers those photos and avoids unnecessary calls.
+  if (mode !== 'walkthrough' && hasUsablePublisherPhoto(listing)) {
     throw new PropertyImageError(409, 'publisher_photo_available', 'The publisher already supplies a usable property photo.');
   }
-  if (!hasSourceObservedProvenance(listing)) {
+  const liveObserved=hasSourceObservedProvenance(listing),archiveIdentified=hasSourceIdentifiedArchive(listing);
+  if (!liveObserved && !archiveIdentified) {
     throw new PropertyImageError(
       422,
       'listing_not_source_observed',
-      'Street View fallback requires a current source-observed listing record and coordinates.'
+      'Street View requires a source-identified record with verified target geometry or an exact address.'
     );
   }
 
@@ -262,7 +271,7 @@ function validateListingForStreetView(listing) {
     );
   }
 
-  return { sourceUrl: sourceInspection.url };
+  return { sourceUrl: sourceInspection.url, identityBasis: liveObserved?'current_source_record':'archived_source_record' };
 }
 
 function hasDerivedCoordinates(listing) {
@@ -389,6 +398,12 @@ function googleUrl(pathname, params) {
   const url = new URL(`https://${GOOGLE_MAPS_HOST}${pathname}`);
   url.search = new URLSearchParams(params).toString();
   return url;
+}
+
+function mapsLaunchUrl({panoId,targetLat,targetLng,heading,config}) {
+  const url=new URL('https://www.google.com/maps/@');
+  url.search=new URLSearchParams({api:'1',map_action:'pano',viewpoint:`${targetLat.toFixed(7)},${targetLng.toFixed(7)}`,pano:panoId,heading:String(heading),pitch:String(config.pitch),fov:String(config.fov)}).toString();
+  return url.toString();
 }
 
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
@@ -664,6 +679,10 @@ async function resolvePanorama({ fetchImpl, config, listing, coordinates, circui
     captureDate,
     distanceMeters: distance,
     heading,
+    panoramaId: panoId,
+    panoramaLocation: { lat: panoramaLat, lng: panoramaLng },
+    targetHeading: heading,
+    mapsLaunchUrl: mapsLaunchUrl({panoId,targetLat:coordinates.lat,targetLng:coordinates.lng,heading,config}),
     provenance: {
       origin: 'google_street_view',
       observed: true,
@@ -673,7 +692,7 @@ async function resolvePanorama({ fetchImpl, config, listing, coordinates, circui
       listingId: String(listing.id),
       matchBasis: `${coordinates.basis}_and_panorama_distance`,
       exactPropertyVerified: false,
-      panoramaReference: 'ephemeral_not_disclosed',
+      panoramaReference: 'provider_identifier',
       ...(coordinates.resolution ? { coordinateResolution: coordinates.resolution } : {}),
     },
     // Kept server-side for the immediately following image request. This is
@@ -792,6 +811,16 @@ function createPropertyImageService(options = {}) {
     concurrency: env.PROPERTY_IMAGE_CONCURRENCY,
     maxQueue: env.PROPERTY_IMAGE_MAX_QUEUE,
   });
+  const panoramaInFlight = new Map();
+
+  async function coalescedPanorama(listing,coordinates,config){
+    const key=`${listing.id}\n${listing.sourceObservedAt||listing.provenance?.observedAt||''}\n${coordinates.lat},${coordinates.lng}\n${config.radiusMeters}:${config.maximumDistanceMeters}`;
+    // Only share concurrent work. Google permits caching panorama IDs, but
+    // completed metadata and image content are not retained by this service.
+    if(panoramaInFlight.has(key))return panoramaInFlight.get(key);
+    const pending=resolvePanorama({fetchImpl,config,listing,coordinates,circuit,now}).finally(()=>panoramaInFlight.delete(key));
+    panoramaInFlight.set(key,pending);return pending;
+  }
 
   async function resolve(req) {
     try {
@@ -806,26 +835,38 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_listing_id', 'listingId is invalid.');
       }
       const mode = safeText(url.searchParams.get('mode') || 'metadata', 16)?.toLowerCase();
-      if (mode !== 'metadata' && mode !== 'image') {
-        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata or image.');
+      if (!['metadata', 'walkthrough', 'image'].includes(mode)) {
+        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, or image.');
       }
 
       limiter.consume();
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
-      validateListingForStreetView(listing);
+      const identity=validateListingForStreetView(listing, mode);
       const config = runtimeConfig(env);
 
       return await gate.run(async () => {
-        const coordinates = sourceCoordinates(listing)
+        const coordinates = (identity.identityBasis==='current_source_record'?sourceCoordinates(listing):null)
           || await resolveEphemeralCoordinates({ fetchImpl, config, listing, circuit: geocodingCircuit });
-        const panorama = await resolvePanorama({ fetchImpl, config, listing, coordinates, circuit, now });
-        if (mode === 'metadata') {
+        let panorama;
+        try { panorama = await coalescedPanorama(listing, coordinates, config); }
+        catch (error) {
+          if (mode !== 'walkthrough' || !['street_view_unavailable', 'panorama_mismatch'].includes(error.code)) throw error;
+          // A street tour may start farther away; static property imagery keeps
+          // its stricter gate. The response discloses this distinction.
+          const radius = clampInteger(env.GOOGLE_WALKTHROUGH_RADIUS_METERS, 100, 500, 500);
+          panorama = await coalescedPanorama(listing, coordinates, {...config, radiusMeters: radius, maximumDistanceMeters: radius});
+        }
+        if (mode === 'metadata' || mode === 'walkthrough') {
           const { _panoId, ...publicMetadata } = panorama;
+          const embedReady = Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY, 1024));
+          const interactiveReady=embedReady || Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,1024));
+          const coverage = panorama.distanceMeters <= config.maximumDistanceMeters ? 'near_property' : 'nearby_street';
           return {
             status: 200,
             headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
-            body: publicMetadata,
+            body: {...publicMetadata, coverage, targetLabel: coverage === 'nearby_street' ? 'Nearby street walkthrough' : 'Exterior walkthrough',
+              interactiveReady, interactive:{ready:interactiveReady,provider:embedReady?'google_maps_embed':'google_maps_javascript',reason:interactiveReady?null:'public_browser_key_not_configured'}},
           };
         }
 
@@ -852,7 +893,7 @@ function createPropertyImageService(options = {}) {
     }
   }
 
-  return { resolve, circuit, geocodingCircuit, limiter, gate };
+  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight };
 }
 
 function writeResult(res, result) {
@@ -880,6 +921,7 @@ module.exports.createPropertyImageService = createPropertyImageService;
 module.exports.distanceMeters = distanceMeters;
 module.exports.exactRooftopGeocode = exactRooftopGeocode;
 module.exports.hasSourceObservedProvenance = hasSourceObservedProvenance;
+module.exports.hasSourceIdentifiedArchive = hasSourceIdentifiedArchive;
 module.exports.hasUsablePublisherPhoto = hasUsablePublisherPhoto;
 module.exports.resolveEphemeralCoordinates = resolveEphemeralCoordinates;
 module.exports.resolveRequest = defaultService.resolve;
