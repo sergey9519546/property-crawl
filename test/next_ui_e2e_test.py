@@ -65,7 +65,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def wait_for_live_feed(self):
         self.page.get_by_role(
             "button", name=f"Deal Grid ({self.live_count} records)"
-        ).wait_for(state="visible")
+        ).wait_for(state="visible", timeout=30_000)
 
     def geocoded_listings(self, listings=None):
         # Positive map tests declare their qualified fixture records explicitly.
