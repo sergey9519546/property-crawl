@@ -16,7 +16,7 @@ function temporaryStore() {
 function fullResult(overrides = {}) {
   return {
     skipped: false, completeCycle: true, totalIngested: 2, totalRejected: 0,
-    sourceResults: [{ sourceId: 'hud', accepted: 2, rejected: 0, error: null, observationError: null, report: { outcome: 'success', complete: true } }],
+    sourceResults: [{ sourceId: 'hud', accepted: 2, rejected: 0, error: null, observationError: null, report: { outcome: 'success', complete: true, fullSweepComplete: true, truncated: false, scope: { endpoint: '/complete-hud-feed' } } }],
     ...overrides,
   };
 }
@@ -64,16 +64,17 @@ test('a complete clean cycle evaluates enabled hunts once and hands results to t
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('failed, empty, and truncated sources are unsafe while a complete scoped source permits positive evaluation', async () => {
+test('failed and empty sources are unsafe while partial clean records permit positive evaluation', async () => {
   const unsafe = [
     fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 0, rejected: 0, error: null }] }),
     fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 1, rejected: 0, error: 'upstream unavailable' }] }),
-    fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 1, rejected: 0, report: { truncated: true } }] }),
   ];
   for (const result of unsafe) assert.equal(huntSafety(result).safe, false);
   const scoped = huntSafety(fullResult({ completeCycle: false }));
   assert.equal(scoped.safe, true);
   assert.deepEqual(scoped.safePositiveSourceIds, ['hud']);
+  const partial=huntSafety(fullResult({sourceResults:[{sourceId:'hud',accepted:1,rejected:0,report:{truncated:true}}]}));
+  assert.equal(partial.safe,true);assert.deepEqual(partial.completeSourceIds,[]);
 
   const { directory, filePath } = temporaryStore();
   try {
@@ -118,7 +119,7 @@ test('an unrelated source failure still evaluates positive matches from the comp
   try {
     let evaluatedIds=[];
     const result=fullResult({completeCycle:true,sourceResults:[
-      {sourceId:'hud',accepted:1,rejected:0,error:null,observationError:null,report:{outcome:'success',complete:true}},
+      {sourceId:'hud',accepted:1,rejected:0,error:null,observationError:null,report:{outcome:'success',complete:true,fullSweepComplete:true,truncated:false,scope:{endpoint:'/complete-hud-feed'}}},
       {sourceId:'irs',accepted:0,rejected:0,error:'upstream unavailable'},
     ]});
     const coordinator=createCollectionCoordinator({
@@ -131,4 +132,9 @@ test('an unrelated source failure still evaluates positive matches from the comp
     assert.deepEqual(evaluatedIds,['HUD']);
     const final=coordinator.store.get(job.id);assert.equal(final.result.huntSafety.safe,true);assert.deepEqual(final.result.huntSafety.unsafeSourceIds,[{sourceId:'irs',reason:'source_failed'}]);
   } finally { fs.rmSync(directory,{recursive:true,force:true}); }
+});
+
+test('partial clean observations remain safe for positive matching but never claim complete scope', () => {
+  const safety=huntSafety({ skipped: false, sourceResults: [{ sourceId: 'treasury', accepted: 16, rejected: 0, report: null }] });
+  assert.equal(safety.safe,true);assert.deepEqual(safety.safePositiveSourceIds,['treasury']);assert.deepEqual(safety.completeSourceIds,[]);
 });

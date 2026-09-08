@@ -37,6 +37,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
     super({ ...options, name: 'TreasuryForfeitureCollector', sourceKey: 'treasury' });
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
@@ -62,14 +63,17 @@ class TreasuryForfeitureScraper extends BaseScraper {
         }
       );
       const listings = [];
+      const failures = [];
       detailResults.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           if (result.value) listings.push(result.value);
         } else {
           console.warn(`[${this.name}] Failed ${targetSlugs[index]}: ${result.reason.message}`);
+          failures.push({ slug: targetSlugs[index], error: result.reason.message });
         }
       });
 
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auctions/treasury/rp/realprop.shtml', detailLinksDiscovered: slugs.length }, recordsDiscovered: slugs.length, recordsEmitted: listings.length, recordsRejected: slugs.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} Treasury properties`);
       return listings.map(item => this.standardizeListing(item));
     });

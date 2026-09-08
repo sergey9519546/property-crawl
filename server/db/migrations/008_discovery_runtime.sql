@@ -1,0 +1,12 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+ALTER TABLE discovery_jobs ADD COLUMN IF NOT EXISTS idempotency_scope_hash CHAR(64);
+ALTER TABLE discovery_jobs ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE discovery_jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+ALTER TABLE discovery_jobs ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0;
+UPDATE discovery_jobs SET idempotency_scope_hash = encode(digest(coalesce(kind,'') || E'\n' || coalesce(trigger,'') || E'\n' || coalesce(array_to_string(source_keys,','),'') || E'\n' || coalesce(payload::text,'{}'), 'sha256'), 'hex') WHERE idempotency_scope_hash IS NULL;
+ALTER TABLE discovery_jobs ALTER COLUMN idempotency_scope_hash SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_discovery_jobs_claimable ON discovery_jobs(status, created_at);
+ALTER TABLE discovery_source_rollouts ADD COLUMN IF NOT EXISTS canary_scope_hash CHAR(64);
+ALTER TABLE discovery_source_rollouts ADD COLUMN IF NOT EXISTS last_clean_run_id UUID REFERENCES discovery_source_runs(id);
+ALTER TABLE discovery_checkpoints ADD COLUMN IF NOT EXISTS sweep_started_at TIMESTAMPTZ;
+ALTER TABLE discovery_checkpoints ADD COLUMN IF NOT EXISTS pages_committed INT NOT NULL DEFAULT 0;

@@ -164,6 +164,9 @@ class ServiceLinkScraper extends BaseScraper {
     this.maxPages = boundedPositiveInt(options.maxPages ?? process.env.SERVICELINK_MAX_PAGES, DEFAULT_MAX_PAGES, MAX_PAGES);
     this.limit = boundedPositiveInt(options.limit ?? process.env.SERVICELINK_PAGE_SIZE, DEFAULT_LIMIT, MAX_LIMIT);
     this.now = options.now || (() => new Date());
+    this.resumeToken = null;
+    this.sweepStartedAt = null;
+    this.pagesCommitted = 0;
     this.lastRunReport = null;
   }
 
@@ -199,6 +202,11 @@ class ServiceLinkScraper extends BaseScraper {
 
     const opening = observedOpeningBid(record);
     const status = record?.listingStatus || {};
+    const auctionProgram = cleanText(record?.auctionProgram, 120);
+    const isTrusteeProgram = /(^|\b)tps(\b|$)|trustee/i.test(auctionProgram || '');
+    const publisherSaleDate = isTrusteeProgram
+      ? dateOnly(record?.foreclosureSaleDate)
+      : dateOnly(record?.auctionRunInfo?.startDate) || dateOnly(record?.auctionRunInfo?.endDate);
     const sourceStatus = cleanText(status.statusText, 240)
       || cleanText(record?.foreclosureSaleStatusWebsite, 240)
       || cleanText(record?.foreclosureSaleStatus, 240);
@@ -215,7 +223,7 @@ class ServiceLinkScraper extends BaseScraper {
         listingId,
         propertyId: cleanText(property.propertyId, 160),
         globalPropertyId: cleanText(property.globalPropertyId, 160),
-        auctionProgram: cleanText(record?.auctionProgram, 120),
+        auctionProgram,
         listingProgramWebsite: cleanText(record?.listingProgramWebsite, 240),
         sourceStatus,
         foreclosureSaleStatus: cleanText(record?.foreclosureSaleStatus, 240),
@@ -225,6 +233,11 @@ class ServiceLinkScraper extends BaseScraper {
         timestamp: cleanText(record?.timestamp, 80),
         auctionRunStartDate: cleanText(record?.auctionRunInfo?.startDate, 80),
         auctionRunEndDate: cleanText(record?.auctionRunInfo?.endDate, 80),
+        foreclosureSaleDate: cleanText(record?.foreclosureSaleDate, 80),
+        saleDateSourceField: isTrusteeProgram
+          ? (record?.foreclosureSaleDate ? 'foreclosureSaleDate' : null)
+          : (record?.auctionRunInfo?.startDate ? 'auctionRunInfo.startDate' : (record?.auctionRunInfo?.endDate ? 'auctionRunInfo.endDate' : null)),
+        publisherTimeZone: cleanText(record?.timeZone || record?.timezone || record?.auctionRunInfo?.timeZone || record?.auctionRunInfo?.timezone, 120),
         auctionMethod: cleanText(record?.auctionRunInfo?.auctionMethod, 120),
         openingBidField: opening.field,
         tpsSaleLocation: cleanText(record?.tpsSaleLocation, 500),
@@ -262,7 +275,7 @@ class ServiceLinkScraper extends BaseScraper {
       estLow: null,
       estHigh: null,
       assessed: null,
-      saleDate: dateOnly(record?.foreclosureSaleDate),
+      saleDate: publisherSaleDate,
       plaintiff: null,
       defendant: null,
       judgment: null,
@@ -295,6 +308,9 @@ class ServiceLinkScraper extends BaseScraper {
       limit: this.limit,
       continuationStopped: false,
       failures: [],
+      scope: { endpoint: LISTINGS_PATH, filters: {} },
+      sweepStartedAt: this.sweepStartedAt || new Date(this.now()).toISOString(),
+      pagesPreviouslyCommitted: this.pagesCommitted,
     };
     this.lastRunReport = report;
 
@@ -343,6 +359,7 @@ class ServiceLinkScraper extends BaseScraper {
       report.outcome = listings.length ? 'success' : 'empty';
       report.truncated = report.continuationStopped;
       report.complete = !report.continuationStopped;
+      report.fullSweepComplete = report.complete && Boolean(report.sweepStartedAt);
       return listings;
     } catch (error) {
       report.outcome = 'failed';
@@ -353,6 +370,8 @@ class ServiceLinkScraper extends BaseScraper {
 
   setCheckpoint(checkpoint) {
     this.resumeToken = validContinuationToken(checkpoint?.continuationToken);
+    this.sweepStartedAt = typeof checkpoint?.sweepStartedAt === 'string' ? checkpoint.sweepStartedAt : null;
+    this.pagesCommitted = Math.max(0, Math.floor(Number(checkpoint?.pagesCommitted) || 0));
     return this;
   }
 }

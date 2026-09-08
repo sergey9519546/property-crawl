@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createDiscoveryStore } = require('../server/discovery/store');
+const { createDiscoveryStore, hash } = require('../server/discovery/store');
 
 async function migrateLegacy(database, directory, apply = false) {
   const root = path.resolve(directory);
@@ -51,12 +51,12 @@ async function migrateLegacy(database, directory, apply = false) {
       if (payload.version !== 1 || !Array.isArray(payload.jobs)) throw new Error('Invalid legacy jobs');
       for (const job of payload.jobs) {
         report.jobs++;
-        if (apply) await database.pool.query(`INSERT INTO discovery_jobs(id,kind,status,source_keys,payload,result,error_message,created_at,started_at,completed_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING`,
+        if (apply) await database.pool.query(`INSERT INTO discovery_jobs(id,kind,status,source_keys,payload,result,error_message,created_at,started_at,completed_at,idempotency_scope_hash,stages,errors)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) ON CONFLICT(id) DO NOTHING`,
         [job.id,job.kind || 'property', ['running','queued'].includes(job.status)?'failed':job.status,job.sourceIds || [],
           {...job,migrationNote:'Original retained; incomplete legacy jobs require a fresh trigger.'},job.result || null,
           ['running','queued'].includes(job.status)?'Interrupted legacy job preserved; not replayed automatically':null,
-          job.createdAt,job.startedAt || null,job.completedAt || null]);
+          job.createdAt,job.startedAt || null,job.completedAt || null,hash({legacyDigest:digest,jobId:job.id}),job.stages || {},JSON.stringify(job.errors || [])]);
       }
     }
     if (apply) await database.pool.query('INSERT INTO discovery_legacy_imports(content_sha256,kind,original_path,payload) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[digest,kind,file,payload]);

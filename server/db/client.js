@@ -187,7 +187,9 @@ function prepareListingForPersistence(listing = {}) {
     auctionProgram: optionalText(listing.auctionProgram ?? listing.provenance?.sourceFacts?.auctionProgram),
     lifecycleStatus: optionalText(listing.lifecycleStatus ?? listing.status),
     transactionOutcome: optionalText(listing.transactionOutcome),
-    hasDocuments: listing.hasDocuments === true,
+    hasDocuments: typeof listing.hasDocuments === 'boolean' ? listing.hasDocuments
+      : Array.isArray(listing.documents ?? listing.provenance?.sourceFacts?.documents)
+        ? (listing.documents ?? listing.provenance.sourceFacts.documents).length > 0 : null,
     status: canonicalStatus(listing.status),
     provenance: normalizeProvenance(listing.provenance),
     sourceObservedAt: normalizeTimestamp(listing.sourceObservedAt ?? listing.observedAt),
@@ -581,10 +583,7 @@ class DatabaseClient {
         CASE WHEN $8::float8 IS NOT NULL AND $9::float8 IS NOT NULL
           THEN ST_SetSRID(ST_MakePoint($9,$8), 4326)::geography ELSE NULL END,
         $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,
-        NULLIF($31::jsonb #>> '{sourceFacts,auctionProgram}',''), $42,
-        NULLIF($31::jsonb #>> '{sourceFacts,transactionOutcome}',''),
-        CASE WHEN jsonb_typeof($31::jsonb #> '{sourceFacts,documents}')='array'
-          THEN jsonb_array_length($31::jsonb #> '{sourceFacts,documents}') > 0 ELSE FALSE END
+        $43, $44, $45, $46
       )
       ON CONFLICT (id) DO UPDATE SET
         source_key = EXCLUDED.source_key,
@@ -644,7 +643,7 @@ class DatabaseClient {
         auction_program = COALESCE(EXCLUDED.auction_program, listings.auction_program),
         lifecycle_status = COALESCE(EXCLUDED.lifecycle_status, listings.lifecycle_status),
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
-        has_documents = listings.has_documents OR EXCLUDED.has_documents,
+        has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         updated_at = NOW()
       WHERE listings.source_observed_at IS NULL
          OR (EXCLUDED.source_observed_at IS NOT NULL AND EXCLUDED.source_observed_at >= listings.source_observed_at)
@@ -661,7 +660,8 @@ class DatabaseClient {
         enriched.price ?? null, enriched.listingDate ?? null,
         enriched.redemptionDays, enriched.redemptionWarning || null,
         enriched.seniorLienRisk, enriched.seniorLienWarning || null,
-        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'active'
+        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'active',
+        enriched.auctionProgram, enriched.lifecycleStatus, enriched.transactionOutcome, enriched.hasDocuments
       ];
       const result = await this.pool.query(sql, params);
       return result.rows[0];

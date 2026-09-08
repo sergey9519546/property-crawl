@@ -36,6 +36,7 @@ class UsdaResalesScraper extends BaseScraper {
   constructor() {
     super({ name: 'UsdaResalesCollector', sourceKey: 'usda' });
     this.baseUrl = 'https://www.resales.usda.gov';
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
@@ -47,6 +48,8 @@ class UsdaResalesScraper extends BaseScraper {
 
       // 2. POST a search for each state → parse the summary table.
       const listings = [];
+      const completedStates = [];
+      const failures = [];
       for (const { code } of states) {
         try {
           const rows = await this.searchState(code);
@@ -54,12 +57,15 @@ class UsdaResalesScraper extends BaseScraper {
             const listing = this.rowToListing(row);
             if (listing) listings.push(listing);
           }
+          completedStates.push(code);
           await this.crawlJitter();
         } catch (err) {
           console.warn(`[${this.name}] Failed state ${code}: ${err.message}`);
+          failures.push({ state: code, error: err.message });
         }
       }
 
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/resales/public/searchSFH', inventoryStates: states.map(({ code }) => code) }, statesDiscovered: states.length, statesCompleted: completedStates, recordsEmitted: listings.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
       return listings.map(item => this.standardizeListing(item));
     });
@@ -219,3 +225,4 @@ class UsdaResalesScraper extends BaseScraper {
 }
 
 module.exports = new UsdaResalesScraper();
+module.exports.UsdaResalesScraper = UsdaResalesScraper;

@@ -12,6 +12,8 @@ export function DiscoveryMap({ filters, onOpenListing }: { filters: DiscoveryFil
   const ref = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<any>(null);
   const markerRef = React.useRef<any[]>([]);
+  const requestRef = React.useRef<AbortController | null>(null);
+  const loadRef = React.useRef<() => void>(() => {});
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("Loading visible map area…");
 
@@ -19,13 +21,19 @@ export function DiscoveryMap({ filters, onOpenListing }: { filters: DiscoveryFil
     const map = mapRef.current;
     if (!map) return;
     const bounds = map.getBounds();
-    const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].map((value: number) => value.toFixed(5)).join(",");
-    const params = discoverySearchParams(filters, { bbox, limit: 500 });
+    const wrap = (value: number) => ((value + 180) % 360 + 360) % 360 - 180;
+    const world = bounds.getEast() - bounds.getWest() >= 360;
+    const bbox = [world ? -180 : wrap(bounds.getWest()), Math.max(-90, bounds.getSouth()), world ? 180 : wrap(bounds.getEast()), Math.min(90, bounds.getNorth())].map((value: number) => value.toFixed(5)).join(",");
+    const params = discoverySearchParams(filters, { bbox, zoom: Math.floor(map.getZoom()), limit: 500 });
+    requestRef.current?.abort();
+    const controller = new AbortController(); requestRef.current = controller;
     try {
       setError(""); setNotice("Loading visible map area…");
-      const response = await fetch(`/api/listings/map?${params}`, { cache: "no-store" });
+      const response = await fetch(`/api/listings/map?${params}`, { cache: "no-store", signal: controller.signal });
       const payload = await response.json() as MapResponse;
       if (!response.ok) throw new Error((payload as any).error || "Map records are unavailable.");
+      const { Marker } = await import("maplibre-gl");
+      if (controller.signal.aborted) return;
       markerRef.current.forEach((marker) => marker.remove()); markerRef.current = [];
       for (const feature of payload.features || []) {
         const point = feature.geometry?.coordinates;
@@ -35,12 +43,16 @@ export function DiscoveryMap({ filters, onOpenListing }: { filters: DiscoveryFil
         button.type = "button"; button.className = "live-market-marker";
         button.setAttribute("aria-label", props.count && props.count > 1 ? `${props.count} records in this area` : `Open property record`);
         button.textContent = props.count && props.count > 1 ? String(props.count) : "•";
-        button.onclick = () => { if (props.id) onOpenListing(props.id); };
-        markerRef.current.push(new (await import("maplibre-gl")).Marker({ element: button }).setLngLat([point[0], point[1]]).addTo(map));
+        button.onclick = () => {
+          if (props.count && props.count > 1) map.easeTo({ center: [point[0], point[1]], zoom: Math.min(20, map.getZoom() + 2) });
+          else if (props.id) onOpenListing(props.id);
+        };
+        markerRef.current.push(new Marker({ element: button }).setLngLat([point[0], point[1]]).addTo(map));
       }
       setNotice(`${payload.features?.length || 0} visible map ${payload.truncated ? "clusters (coverage capped)" : "records"}.`);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Map records are unavailable."); setNotice(""); }
+    } catch (caught) { if (!controller.signal.aborted) { setError(caught instanceof Error ? caught.message : "Map records are unavailable."); setNotice(""); } }
   }, [filters, onOpenListing]);
+  loadRef.current = () => void load();
 
   React.useEffect(() => {
     let disposed = false;
@@ -48,10 +60,10 @@ export function DiscoveryMap({ filters, onOpenListing }: { filters: DiscoveryFil
       if (disposed || !ref.current) return;
       const map = new Map({ container: ref.current, style: "https://tiles.openfreemap.org/styles/positron", center: [-98.5795, 39.8283], zoom: 3.25, attributionControl: false });
       map.addControl(new NavigationControl(), "top-right"); mapRef.current = map;
-      map.once("load", () => void load()); map.on("moveend", () => void load());
+      map.once("load", () => loadRef.current()); map.on("moveend", () => loadRef.current());
     }).catch(() => setError("Map engine could not load. Use the ranked grid to continue research."));
-    return () => { disposed = true; markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
-  }, [load]);
+    return () => { disposed = true; requestRef.current?.abort(); markerRef.current.forEach((marker) => marker.remove()); mapRef.current?.remove(); mapRef.current = null; };
+  }, []);
 
   React.useEffect(() => { if (mapRef.current?.loaded()) void load(); }, [load]);
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Map results">

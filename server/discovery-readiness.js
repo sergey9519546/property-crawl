@@ -26,8 +26,12 @@ async function discoveryReadiness(options = {}) {
   }
 
   try {
-    await options.databaseProbe();
-    result.checks.database = { ready: true };
+    const details = await options.databaseProbe();
+    result.checks.database = { ready: true, ...(details && typeof details === 'object' ? details : {}) };
+    const requiredTables = ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'];
+    const missing = requiredTables.filter((name) => details?.tables && !details.tables.includes(name));
+    if (missing.length) throw new Error(`required discovery tables are missing: ${missing.join(', ')}`);
+    if (details?.postgis === false) throw new Error('PostGIS extension is unavailable');
     result.ready = true;
   } catch (error) {
     result.checks.database = {

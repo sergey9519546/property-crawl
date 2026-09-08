@@ -33,6 +33,7 @@ class GsaSurplusScraper extends BaseScraper {
   constructor() {
     super({ name: 'GsaSurplusCollector', sourceKey: 'gsa' });
     this.baseUrl = 'https://realestatesales.gov';
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
@@ -55,6 +56,7 @@ class GsaSurplusScraper extends BaseScraper {
       console.log(`[${this.name}] Found ${ids.length} GSA properties on list page (${listBids.size} with a current bid)`);
 
       const listings = [];
+      const failures = [];
       for (const id of ids) {
         try {
           const detail = await this.fetchDetail(id, listBids.get(id) || 0);
@@ -64,9 +66,11 @@ class GsaSurplusScraper extends BaseScraper {
           }
         } catch (err) {
           console.warn(`[${this.name}] Failed property_id=${id}: ${err.message}`);
+          failures.push({ propertyId: id, error: err.message });
         }
       }
 
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/our-listing', propertyIdsDiscovered: ids.length }, recordsDiscovered: ids.length, recordsEmitted: listings.length, recordsRejected: ids.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} GSA properties`);
       return listings.map(item => this.standardizeListing(item));
     });
@@ -198,3 +202,4 @@ class GsaSurplusScraper extends BaseScraper {
 }
 
 module.exports = new GsaSurplusScraper();
+module.exports.GsaSurplusScraper = GsaSurplusScraper;

@@ -139,6 +139,7 @@ class IngestionScheduler {
         let rejectedForScraper = 0;
         let discoveryRun = null;
         try {
+          if (options.leaseGuard && !await options.leaseGuard()) throw new Error('Collection job lease was lost before source execution');
           if (scraper.fixtureOnly === true) {
             const error = new Error(`${scraper.name} is fixture-only and cannot run in production ingestion`);
             error.code = 'FIXTURE_ONLY_SCRAPER';
@@ -165,6 +166,7 @@ class IngestionScheduler {
 
           const accepted = [];
           for (const item of items) {
+            if (options.leaseGuard && !await options.leaseGuard()) throw new Error('Collection job lease was lost; refusing further writes');
             const originalPublisherRecord = typeof scraper.getRawPublisherRecord === 'function' ? scraper.getRawPublisherRecord(item) : null;
             const validation = validateListingForIngestion(item, {
               expectedSource: scraper.sourceKey
@@ -179,7 +181,8 @@ class IngestionScheduler {
             }
             if(this.discoveryStore&&discoveryRun){
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return validation.listing;}})();
-              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.provenance?.sourceFacts?.auctionProgram??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);});
+              const sourceFacts=validation.listing.provenance?.sourceFacts||{};
+              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);});
             }else await this.database.createListing(validation.listing);
             accepted.push(validation.listing);
             totalIngested++;
@@ -198,10 +201,12 @@ class IngestionScheduler {
             console.error('[Scheduler] Could not persist source history:', error.message);
           }
           const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
-            ? { outcome: scraper.lastRunReport.outcome || null, truncated: scraper.lastRunReport.truncated === true, complete: scraper.lastRunReport.complete }
+            ? { outcome: scraper.lastRunReport.outcome || null, truncated: scraper.lastRunReport.truncated === true, complete: scraper.lastRunReport.complete, fullSweepComplete: scraper.lastRunReport.fullSweepComplete === true, scope: scraper.lastRunReport.scope || null }
             : null;
-          if(this.discoveryStore&&discoveryRun){await this.discoveryStore.finishRun(discoveryRun.id,{status:report?.truncated||report?.complete===false?'partial':'complete',discovered:items.length,accepted:accepted.length,rejected:rejectedForScraper});if(scraper.lastRunReport?.nextContinuationToken)await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{continuationToken:scraper.lastRunReport.nextContinuationToken},{collector:scraper.name});else await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{}, {collector:scraper.name});}
-          sourceResults.push({ sourceId: scraper.sourceKey, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report });
+          if(this.discoveryStore&&discoveryRun){await this.discoveryStore.finishRun(discoveryRun.id,{status:report?.truncated||report?.complete===false?'partial':'complete',discovered:items.length,accepted:accepted.length,rejected:rejectedForScraper});if(scraper.lastRunReport?.nextContinuationToken)await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{continuationToken:scraper.lastRunReport.nextContinuationToken,sweepStartedAt:scraper.lastRunReport.sweepStartedAt,pagesCommitted:(scraper.lastRunReport.pagesPreviouslyCommitted||0)+(scraper.lastRunReport.pagesFetched||0)},{collector:scraper.name});else await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{}, {collector:scraper.name});}
+          const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
+          Object.defineProperty(sourceResult,'acceptedListings',{value:accepted,enumerable:false});
+          sourceResults.push(sourceResult);
           console.log(`[Scheduler] ${scraper.name} completed successfully (${accepted.length} accepted, ${items.length - accepted.length} rejected)`);
           return accepted.length;
         } catch (err) {

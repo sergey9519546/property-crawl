@@ -41,12 +41,12 @@ function createSourceNetworkHandler(dependencies = {}) {
       }
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {
         if (!coordinator) return res.json({ items: [], total: 0, available: false });
-        return res.json({ ...coordinator.store.list(url.searchParams.get('limit')), available: true });
+        return res.json({ ...await coordinator.store.list(url.searchParams.get('limit')), available: true });
       }
       const jobMatch = url.pathname.match(/^\/api\/source-network\/jobs\/(job_[a-f0-9]{24})$/);
       if (req.method === 'GET' && jobMatch) {
         if (!coordinator) return res.status(404).json({ error: 'Collection jobs are unavailable' });
-        const job = coordinator.store.get(jobMatch[1]);
+        const job = await coordinator.store.get(jobMatch[1]);
         return job ? res.json({ job }) : res.status(404).json({ error: 'Collection job was not found' });
       }
       // Raw evidence and operational mutations use the existing operator credential.

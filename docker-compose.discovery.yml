@@ -18,7 +18,9 @@ services:
       retries: 12
 
   discovery-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -40,9 +42,16 @@ services:
       - discovery_media:/var/lib/property-crawl/media
     ports:
       - "${DISCOVERY_API_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   discovery-migrate:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     command: ["node", "scripts/discovery-migrate.js"]
     environment:
       NODE_ENV: production
@@ -52,7 +61,9 @@ services:
         condition: service_healthy
 
   discovery-worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     command: ["node", "scripts/discovery-worker.js"]
     environment:
       NODE_ENV: production
@@ -84,7 +95,7 @@ services:
       PROPERTY_API_URL: http://discovery-api:3000
     depends_on:
       discovery-api:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${DISCOVERY_WEB_PORT:-3001}:3001"
 

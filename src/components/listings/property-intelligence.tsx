@@ -5,8 +5,9 @@ import { sourceDisplayText } from '@/lib/source-display';
 import { ArrowRight, Download, ExternalLink, Fingerprint, Loader2, Radar } from 'lucide-react';
 import { OpportunitySignalsCard } from '@/components/listings/opportunity-signals-card';
 import type { OpportunitySignal } from '@/components/listings/opportunity-signals-card';
+import { DiscoveryEvidence, type DiscoveryEvidenceData } from '@/components/listings/discovery-evidence';
 
-type Dossier = {
+type Dossier = DiscoveryEvidenceData & {
   listingId: string; address: string; generatedAt: string; historyUnavailable: boolean;
   source: { status: string; publisher: string; url: string | null; observedAt: string | null; freshness: string; refreshDueAt: string | null };
   facts: { key: string; title: string; value: unknown; evidenceClass: string }[];
@@ -76,6 +77,7 @@ export function PropertyIntelligence({ listingId }: { listingId: string }) {
       {error && <p role="alert" className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900">{error}</p>}
       {!dossier && !error && <p className="text-sm text-slate-500">Loading the source evidence…</p>}
       {dossier && <>
+        {dossier.source.status === 'archived_publisher_snapshot' && <p className="rounded-lg bg-amber-50 p-4 text-xs leading-6 text-amber-900">This is a dated archive snapshot. Importing it does not verify current inventory, sale terms, bidding, or a completed sale.</p>}
         {dossier.source.freshness === 'stale' && <p className="rounded-lg bg-amber-50 p-4 text-xs leading-6 text-amber-900">The saved publisher observation needs refreshing. Confirm current availability and terms at the publisher. New public-record research has its own observation date.</p>}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><p>{sourceDisplayText(dossier.source.publisher)} · {dossier.source.observedAt ? `Observed ${date(dossier.source.observedAt)}` : 'Snapshot requires source verification'}</p>{dossier.source.url && <a href={dossier.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-slate-900 underline hover:text-slate-700">Publisher record <ExternalLink size={12} /></a>}</div>
         {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
@@ -103,6 +105,7 @@ export function PropertyIntelligence({ listingId }: { listingId: string }) {
           {dossier.publicRecords.issues.length > 0 && <details open={!dossier.publicRecords.parcel && !dossier.publicRecords.areaContext} className="text-xs text-slate-600"><summary className="cursor-pointer font-semibold">Research coverage and unresolved lookups</summary><ul className="mt-3 space-y-2">{dossier.publicRecords.issues.map((issue) => <li key={issue}>{sourceDisplayText(issue)}</li>)}</ul></details>}
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-900 underline hover:text-slate-700">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </>}
+        <DiscoveryEvidence evidence={dossier} />
         <details className="rounded-xl border border-slate-200 p-4"><summary className="cursor-pointer text-sm font-bold text-slate-950">The catch and the next move · {dossier.gaps.length} research questions</summary><div className="mt-4 space-y-4">{dossier.gaps.map((gap) => <div key={gap.id}><h4 className="text-xs font-bold">{gap.title}</h4><p className="mt-1 text-xs leading-6 text-slate-500">{gap.reason}</p><p className="mt-1 text-xs leading-6 text-emerald-800">Next: {gap.nextAction}</p></div>)}</div></details>
       </>}
     </div>

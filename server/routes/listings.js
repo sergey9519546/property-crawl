@@ -17,6 +17,18 @@ function neutralCustomerText(value) {
 function presentListing(listing) {
   if (!listing || typeof listing !== 'object') return listing;
   const presented = { ...listing };
+  const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
+  const time = Date.parse(timestamp || '');
+  const cadenceHours = require('../sources/catalog').SOURCE_CATALOG.find(source => source.adapterKey === listing.source)?.workflow.cadenceHours || 24;
+  const origin = listing.provenance?.origin;
+  const ageHours = Number.isFinite(time) ? Math.max(0,(Date.now()-time)/3600000) : null;
+  presented.sourceFreshness = { observedAt: timestamp || null, ageHours, cadenceHours,
+    status: origin === 'archive' ? 'archive' : origin !== 'live' || ageHours === null ? 'unknown' : ageHours > cadenceHours ? 'stale' : 'current' };
+  presented.discoveryStatus = origin === 'archive' ? 'Dated archive snapshot' : presented.sourceFreshness.status === 'current'
+    ? 'Within source refresh window' : presented.sourceFreshness.status === 'stale' ? 'Source refresh due' : 'Observation unresolved';
+  const evidenceFields=['sourceUrl','sourceObservedAt','auctionProgram','lifecycleStatus','saleDate','openingBid','occupancy','hasDocuments'];
+  const missing=evidenceFields.filter(field=>listing[field]===null || listing[field]===undefined || listing[field]==='');
+  presented.evidenceCompleteness={known:evidenceFields.length-missing.length,total:evidenceFields.length,missing};
   for (const field of ['raw', 'plaintiff', 'defendant', 'attorney', 'deposit', 'description', 'notes', 'photoProvider']) {
     if (typeof presented[field] === 'string') presented[field] = neutralCustomerText(presented[field]);
   }

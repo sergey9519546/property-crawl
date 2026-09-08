@@ -44,6 +44,7 @@ class IrsSeizedScraper extends BaseScraper {
     super({ ...options, name: 'IrsAuctionCollector', sourceKey: 'irs' });
     this.baseUrl = 'https://www.irsauctions.gov';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
@@ -78,14 +79,17 @@ class IrsSeizedScraper extends BaseScraper {
         }
       );
       const listings = [];
+      const failures = [];
       detailResults.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           if (result.value) listings.push(result.value);
         } else {
           console.warn(`[${this.name}] Failed /ad/${cards[index].slug}: ${result.reason.message}`);
+          failures.push({ slug: cards[index].slug, error: result.reason.message });
         }
       });
 
+      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auction/items', realEstateCardsDiscovered: cards.length }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected: cards.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       return listings.map(item => this.standardizeListing(item));
     });

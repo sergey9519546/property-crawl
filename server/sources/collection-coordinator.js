@@ -88,25 +88,29 @@ class CollectionJobStore {
   }
 }
 class PgCollectionJobStore {
-  constructor(discoveryStore){this.discoveryStore=discoveryStore;}
+  constructor(discoveryStore){this.discoveryStore=discoveryStore;this.claimOwners=new Map();}
   createOrReuse(input){return this.discoveryStore.createOrReuseJob(input);}
   get(id){return this.discoveryStore.getJob(id);}
   list(limit){return this.discoveryStore.listJobs(limit);}
-  update(id,update){return this.discoveryStore.updateJob(id,update);}
+  update(id,update){return this.discoveryStore.updateJob(id,update,{ownerId:this.claimOwners.get(id)});}
+  async claim(id,owner,ttl){const job=await this.discoveryStore.claimJob(id,owner,ttl);if(job)this.claimOwners.set(id,owner);return job;}
+  renewClaim(id,owner,ttl){return this.discoveryStore.renewJobClaim(id,owner,ttl);}
+  bindClaim(id,owner){this.claimOwners.set(id,owner);}
 }
 
 function sourceRunUnsafe(result) {
   if (!result || result.error || result.observationError || result.accepted === 0 || result.rejected > 0) return true;
-  const report = result.report || {};
-  return report.truncated === true || report.complete === false || ['failed', 'partial', 'partial_failure', 'truncated', 'empty'].includes(report.outcome);
+  return ['failed', 'empty'].includes(result.report?.outcome);
 }
+
+function sourceScopeComplete(result) { const report=result?.report||{};return report.complete===true&&report.fullSweepComplete===true&&report.truncated!==true&&report.scope&&typeof report.scope==='object'&&!Array.isArray(report.scope)&&Object.keys(report.scope).length>0; }
 
 function huntSafety(result = {}) {
   if (result.skipped) return { safe: false, reason: 'scheduler_skipped', safePositiveSourceIds: [], unsafeSourceIds: [] };
   if (!Array.isArray(result.sourceResults) || !result.sourceResults.length) return { safe: false, reason: 'no_source_results', safePositiveSourceIds: [], unsafeSourceIds: [] };
-  const safePositiveSourceIds=[], unsafeSourceIds=[];
-  for(const source of result.sourceResults){if(sourceRunUnsafe(source))unsafeSourceIds.push({sourceId:source.sourceId,reason:source.error?'source_failed':source.accepted===0?'source_empty':'source_incomplete'});else safePositiveSourceIds.push(source.sourceId);}
-  return {safe:safePositiveSourceIds.length>0,reason:safePositiveSourceIds.length?'source_scoped':unsafeSourceIds[0]?.reason||'no_safe_sources',safePositiveSourceIds,unsafeSourceIds};
+  const safePositiveSourceIds=[], completeSourceIds=[], unsafeSourceIds=[];
+  for(const source of result.sourceResults){if(sourceRunUnsafe(source))unsafeSourceIds.push({sourceId:source.sourceId,reason:source.error?'source_failed':source.accepted===0?'source_empty':'source_incomplete'});else{safePositiveSourceIds.push(source.sourceId);if(sourceScopeComplete(source))completeSourceIds.push(source.sourceId);}}
+  return {safe:safePositiveSourceIds.length>0,reason:safePositiveSourceIds.length?'source_scoped':unsafeSourceIds[0]?.reason||'no_safe_sources',safePositiveSourceIds,completeSourceIds,unsafeSourceIds};
 }
 
 function optionalCaseSink() {
@@ -168,15 +172,19 @@ class CollectionCoordinator {
     if (!this.scheduler?.runAll) throw new Error('Collection scheduler is unavailable');
     const job = await this.store.createOrReuse(input);
     if (['completed', 'partial', 'failed'].includes(job.status) || this.inFlight.has(job.id)) return job;
-    const running = this.execute(job.id, input).catch(() => {});
+    const owner = `coordinator:${process.pid}:${crypto.randomUUID()}`;
+    const claimed = this.store.claim ? await this.store.claim(job.id, owner, 300) : job;
+    if (!claimed) return this.store.get(job.id);
+    const running = this.execute(job.id, input, { owner }).catch(() => {});
     this.inFlight.set(job.id, running);
     running.finally(() => this.inFlight.delete(job.id));
     return this.store.get(job.id);
   }
-  async execute(id, input = {}) {
+  async execute(id, input = {}, claim = {}) {
+    if(claim.owner&&this.store.bindClaim)this.store.bindClaim(id,claim.owner);
     await this.store.update(id, { status: 'running', started: true, stage: { name: 'collection', value: { status: 'running' } } });
     try {
-      const result = await this.scheduler.runAll({ ...(input.sourceIds?.length ? { sourceIds: input.sourceIds } : {}), jobId: id, trigger: input.trigger || 'manual' });
+      const result = await this.scheduler.runAll({ ...(input.sourceIds?.length ? { sourceIds: input.sourceIds } : {}), jobId: id, trigger: input.trigger || 'manual', ...(claim.owner ? { leaseGuard: async () => this.store.renewClaim(id, claim.owner, 300) } : {}) });
       return this.finalize(id, result);
     } catch (error) {
       await this.store.update(id, { status: 'failed', completed: true, error: { stage: 'collection', message: error }, stage: { name: 'collection', value: { status: 'failed' } } });
@@ -196,16 +204,16 @@ class CollectionCoordinator {
     }
     let inventory;
     try {
-      inventory = await this.database.getListings({ limit: MAX_INVENTORY, offset: 0 });
-      const allListings = Array.isArray(inventory) ? inventory : inventory?.listings;
-      const total = Array.isArray(inventory) ? inventory.length : Number(inventory?.total);
-      if (!Array.isArray(allListings) || (Number.isFinite(total) && total > allListings.length)) throw new Error('Complete inventory is unavailable for automatic hunt evaluation');
-      const safeSources=new Set(safety.safePositiveSourceIds); const listings=allListings.filter(item=>!item.source||safeSources.has(item.source));
+      const safeSources=new Set(safety.completeSourceIds), listings=(result.sourceResults||[]).flatMap(source=>sourceRunUnsafe(source)?[]:(source.acceptedListings||[]));
+      let offset=0,total=Infinity;
+      while(offset<total){inventory=await this.database.getListings({limit:1000,offset});const page=Array.isArray(inventory)?inventory:inventory?.listings;total=Array.isArray(inventory)?page.length:Number(inventory?.total);if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||(!this.durableHunts&&!item.source)));offset+=page.length;if(!page.length||Array.isArray(inventory))break;}
       const enabled = (this.durableHunts ? await this.durableHunts.list() : this.hunts.listHunts({ filePath: this.huntFilePath })).filter((hunt) => hunt.enabled);
       const evaluations = [];
       for (const hunt of enabled) {
         if (this.durableHunts) {
-          const evaluated=this.hunts.evaluateInventory(hunt,listings,{previousBaseline:await this.durableHunts.baseline(hunt.id),now:this.now&&iso(this.now)});
+          let baseline=await this.durableHunts.baseline(hunt.id),evaluated=null;const initial=!baseline,events=[];
+          for(let pageOffset=0;pageOffset<listings.length||(!listings.length&&pageOffset===0);pageOffset+=1000){evaluated=this.hunts.evaluateInventory(hunt,listings.slice(pageOffset,pageOffset+1000),{previousBaseline:baseline,now:this.now&&iso(this.now),baselineLimit:Infinity,suppressEvents:initial});baseline=evaluated.baseline;events.push(...evaluated.events);}
+          evaluated.events=events;evaluated.response.newEvents=events.slice(0,200);evaluated.response.eventsTruncated=events.length>200;
           evaluations.push({hunt,evaluation:await this.durableHunts.saveEvaluation(hunt,evaluated)});
         } else evaluations.push({ hunt, evaluation: this.hunts.runHunt(hunt.id, listings, { filePath: this.huntFilePath, now: this.now && iso(this.now) }) });
       }

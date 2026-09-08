@@ -74,6 +74,7 @@ class HudHomeScraper extends BaseScraper {
           report.pagesAttempted += stateResult.pagesAttempted;
           report.pagesFetched += stateResult.pagesFetched;
           report.fallbackStates += stateResult.usedHtmlFallback ? 1 : 0;
+          report.truncated = report.truncated || stateResult.truncated === true;
           allListings.push(...stateResult.listings);
           if (stateResult.listings.length) report.statesWithListings += 1;
           else report.statesEmpty += 1;
@@ -94,6 +95,9 @@ class HudHomeScraper extends BaseScraper {
           : standardized.length === 0
             ? 'empty'
             : 'success';
+      report.complete = report.statesFailed === 0 && !report.truncated && states.length === this.states.length;
+      report.fullSweepComplete = report.complete;
+      report.fixtureFallbackUsed = false;
       this.lastRunReport = Object.freeze(report);
 
       if (report.outcome === 'failed') {
@@ -114,15 +118,16 @@ class HudHomeScraper extends BaseScraper {
         const page = await this.fetchDataGridPage(state, pageNo);
         pagesFetched += 1;
         listings.push(...page.items.map((item) => this.mapJsonItem(item, state)).filter(Boolean));
-        if (!page.hasMore) break;
+        if (!page.hasMore) return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: false };
+        if (pageNo === this.maxPagesPerState) return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: true };
         await this.crawlJitter();
       }
-      return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false };
+      return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: false };
     } catch (error) {
       if (error instanceof ScraperResponseError && error.haltScraper) throw error;
       if (this.circuitBreaker.isOpen()) throw error;
       const html = await this.fetchStateHtml(state, error);
-      return { state, listings: html, pagesAttempted, pagesFetched, usedHtmlFallback: true };
+      return { state, listings: html, pagesAttempted, pagesFetched, usedHtmlFallback: true, truncated: false };
     }
   }
 
@@ -187,7 +192,7 @@ class HudHomeScraper extends BaseScraper {
   }
 
   createRunReport(states) {
-    return { source: 'hud', startedAt: new Date().toISOString(), configuredStates: states, statesAttempted: 0, statesWithListings: 0, statesEmpty: 0, statesFailed: 0, fallbackStates: 0, pagesAttempted: 0, pagesFetched: 0, listingsParsed: 0, listingsEmitted: 0, failures: [], outcome: 'running' };
+    return { source: 'hud', startedAt: new Date().toISOString(), configuredStates: states, scope: { endpoint: '/Home/DataGrid', states, pageSize: this.pageSize, maxPagesPerState: this.maxPagesPerState }, statesAttempted: 0, statesWithListings: 0, statesEmpty: 0, statesFailed: 0, fallbackStates: 0, pagesAttempted: 0, pagesFetched: 0, listingsParsed: 0, listingsEmitted: 0, failures: [], outcome: 'running', truncated: states.length < this.states.length };
   }
 
   errorSummary(error) {

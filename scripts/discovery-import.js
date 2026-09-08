@@ -50,8 +50,9 @@ async function importStage(stage, options = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json'), 'utf8'));
   if (!Number.isFinite(Date.parse(manifest.observedAt))) throw new Error('A valid captured observation timestamp is required');
   const scraper = new ServiceLinkScraper();
-  const report = { mode: options.apply ? 'applied' : 'dry_run', ...manifest, accepted: 0, rejected: [], snapshotsWritten: 0 };
+  const report = { mode: options.apply ? 'applied' : 'dry_run', ...manifest, accepted: 0, rejected: [], snapshotsWritten: 0, snapshotsReused: 0 };
   let database, store, run;
+  const existingSnapshots = new Set(), existingListings = new Set();
   if (options.apply) {
     database = options.database || require('../server/db/client');
     if (!database.pool) throw new Error('Applying an import requires PostgreSQL; demo inventory is never substituted');
@@ -60,6 +61,10 @@ async function importStage(stage, options = {}) {
     run = await store.beginRun({ sourceKey: 'servicelink', trigger: 'archive_import',
       idempotencyKey: `archive:${manifest.inputs.catalog.sha256}`,
       scope: { kind: 'archive', dataset: manifest.inputs.catalog.sha256, observedAt: manifest.observedAt } });
+    const prior = await database.pool.query('SELECT source_record_id,payload_sha256 FROM discovery_snapshots WHERE source_key=$1 AND observed_at=$2', ['servicelink',manifest.observedAt]);
+    for (const row of prior.rows) existingSnapshots.add(`${row.source_record_id}:${row.payload_sha256}`);
+    const current = await database.pool.query('SELECT id FROM listings WHERE source_key=$1', ['servicelink']);
+    for (const row of current.rows) existingListings.add(row.id);
   }
   try {
     for await (const raw of records(path.join(stage, 'catalog.jsonl'))) {
@@ -67,11 +72,13 @@ async function importStage(stage, options = {}) {
       if (!listing) { report.rejected.push({ id: raw.listingId || null, reason: 'Missing valid identity, source URL, state, or address' }); continue; }
       report.accepted++;
       if (store) {
+        const alreadyImported = existingSnapshots.has(`${raw.listingId}:${hash(raw)}`);
+        if (alreadyImported && existingListings.has(listing.id)) { report.snapshotsReused++; continue; }
         await store.ingestSnapshot({ runId: run.id, sourceKey: 'servicelink', sourceRecordId: raw.listingId,
           observedAt: manifest.observedAt, rawPayload: raw, provenance: listing.provenance,
           observations: { auctionProgram: listing.auctionProgram, transactionOutcome: { value: null, evidenceClass: 'unknown' },
             sourceStatus: listing.status, saleDate: listing.saleDate, saleTime: listing.saleTime,
-            openingBid: listing.openingBid, documents: listing.documents,
+            openingBid: listing.openingBid, address: listing.address, deposit: listing.deposit, documents: listing.documents,
             sourceReportedBidCount: { value: raw.customDetail?.of_bids__c ?? null, evidenceClass: 'unreliable_source_field' } } },
         async client => { const transactionDb = Object.create(database); transactionDb.pool = client; await transactionDb.createListing(listing); });
         report.snapshotsWritten++;

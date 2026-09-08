@@ -76,12 +76,7 @@ function observed(listing: PropertyListing) {
   );
 }
 function docs(listing: PropertyListing) {
-  const media = listing.provenance?.media;
-  return Boolean(
-    media &&
-    typeof media === "object" &&
-    (media as Record<string, unknown>).documents,
-  );
+  return listing.hasDocuments === true;
 }
 
 export function DiscoveryWorkbench() {
@@ -113,8 +108,8 @@ export function DiscoveryWorkbench() {
     setError("");
     try {
       const params = discoverySearchParams(filters, {
-        limit: 48,
-        facets: true,
+        limit: filters.view === "calendar" ? 1000 : 48,
+        facets: "state,county,source,type,program,lifecycle,occupancy,freshness",
         cursor,
       });
       const response = await fetch(`/api/listings?${params}`, {
@@ -335,7 +330,7 @@ export function DiscoveryWorkbench() {
           >
             <option value="score">Modeled score</option>
             <option value="date">Sale date</option>
-            <option value="bid">Opening amount</option>
+            <option value="bid-asc">Opening amount</option>
           </select>
         </div>
         {hasFilters && (
@@ -358,7 +353,11 @@ export function DiscoveryWorkbench() {
                 </button>
               ))}
             <button
-              onClick={() => setFilters({})}
+              onClick={() => {
+                setCursor(undefined);
+                setCursorStack([]);
+                router.replace(pathname);
+              }}
               className="text-xs font-semibold text-slate-600 underline"
             >
               Clear all
@@ -447,6 +446,7 @@ export function DiscoveryWorkbench() {
         <DiscoveryCalendar
           listings={payload?.listings || []}
           filters={filters}
+          truncated={Boolean(payload?.page?.hasMore)}
         />
       ) : (
         <>
@@ -495,11 +495,12 @@ export function DiscoveryWorkbench() {
                       <span
                         className={`rounded px-2 py-1 text-[10px] font-bold ${observed(listing) ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-950"}`}
                       >
-                        {observed(listing) ? "Observed" : "Demo / unverified"}
+                        {observed(listing) ? "Observed" : listing.provenance?.origin === 'archive' ? 'Dated archive' : "Demo / unverified"}
                       </span>
                     </div>
                     <button
                       onClick={() => toggleSaved(listing.id)}
+                      aria-label={`${saved.has(listing.id) ? 'Remove from' : 'Add to'} watchlist: ${listing.address}`}
                       aria-pressed={saved.has(listing.id)}
                       className="absolute right-3 top-3 rounded-full bg-white p-2 shadow"
                     >
@@ -585,6 +586,7 @@ export function DiscoveryWorkbench() {
                         ? `Observed ${displayDate(listing.sourceObservedAt)}`
                         : "Observation time not established"}
                     </p>
+                    {listing.evidenceCompleteness && <p className="mt-1 text-[11px] text-slate-500">Evidence fields: {listing.evidenceCompleteness.known}/{listing.evidenceCompleteness.total} known</p>}
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <Link
                         href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
@@ -629,9 +631,11 @@ export function DiscoveryWorkbench() {
 function DiscoveryCalendar({
   listings,
   filters,
+  truncated,
 }: {
   listings: PropertyListing[];
   filters: DiscoveryFilters;
+  truncated: boolean;
 }) {
   const groups = new Map<string, PropertyListing[]>();
   for (const listing of listings) {
@@ -657,6 +661,11 @@ function DiscoveryCalendar({
         </span>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {truncated && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 md:col-span-2 xl:col-span-3">
+            More than 1,000 records match this calendar. Narrow the sale window or other filters to review every matching date.
+          </p>
+        )}
         {[...groups.entries()]
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, items]) => (

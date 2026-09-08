@@ -7,18 +7,22 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = listing.provenance?.origin === 'live'
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
+  const archived = listing.provenance?.origin === 'archive' && listing.provenance?.observed === true
+    && /^[a-f0-9]{64}$/i.test(listing.provenance?.datasetSha256 || '')
+    && listing.provenance?.recordId && Number.isFinite(Date.parse(timestamp)) && Date.parse(timestamp) <= now + 300_000;
+  const capturedEvidence = publisherObserved || archived;
   const source = {
     id: listing.source, publisher: listing.provenance?.publisher || listing.source,
-    url: publisherObserved ? listing.sourceUrl : null, observedAt: publisherObserved ? timestamp : null,
-    status: publisherObserved ? 'source_observed' : 'unverified_snapshot',
+    url: capturedEvidence ? listing.sourceUrl : null, observedAt: capturedEvidence ? timestamp : null,
+    status: publisherObserved ? 'source_observed' : archived ? 'archived_publisher_snapshot' : 'unverified_snapshot',
   };
   const cadenceHours = require('../sources/catalog').SOURCE_CATALOG.find((entry) => entry.adapterKey === listing.source)?.workflow.cadenceHours || 24;
   source.refreshDueAt = publisherObserved ? new Date(Date.parse(timestamp) + cadenceHours * 3600_000).toISOString() : null;
-  source.freshness = !publisherObserved ? 'unverified' : Date.parse(source.refreshDueAt) < now ? 'stale' : 'within_refresh_window';
+  source.freshness = archived ? 'historical_snapshot' : !publisherObserved ? 'unverified' : Date.parse(source.refreshDueAt) < now ? 'stale' : 'within_refresh_window';
   const derived = (key) => Boolean(listing.provenance?.derivedFields?.[key]);
   const claim = (key, title) => ({
     key, title, value: known(listing[key]) ? listing[key] : null,
-    evidenceClass: !known(listing[key]) ? 'unknown' : !publisherObserved ? 'unverified_snapshot' : derived(key) ? 'model_derived' : 'publisher_reported',
+    evidenceClass: !known(listing[key]) ? 'unknown' : derived(key) ? 'model_derived' : archived ? 'archived_publisher_reported' : !publisherObserved ? 'unverified_snapshot' : 'publisher_reported',
     sourceUrl: source.url, observedAt: source.observedAt,
   });
   const facts = [
@@ -28,14 +32,15 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     claim('auctionProgram', 'Published auction program'), claim('lifecycleStatus', 'Published lifecycle status'),
     claim('transactionOutcome', 'Verified transaction outcome'),
   ];
-  const tracked = publisherObserved ? Object.values(observations.records).find((record) => record.latest?.listingId === listing.id && record.latest.source === listing.source && record.latest.recordId === String(listing.provenance?.recordId)) : null;
+  const tracked = capturedEvidence ? Object.values(observations.records).find((record) => record.latest?.listingId === listing.id && record.latest.source === listing.source && record.latest.recordId === String(listing.provenance?.recordId)) : null;
   const recordUrls = new Set(tracked ? [...tracked.history, tracked.latest].map((record) => record.sourceUrl) : []);
   const signals = tracked ? observations.signals.filter((signal) => signal.listingId === listing.id && signal.sourceId === listing.source
     && (!signal.recordId || signal.recordId === String(listing.provenance?.recordId))
     && signal.evidence?.every((point) => recordUrls.has(point.sourceUrl))).slice(0, 10) : [];
   const gaps = [];
   function gap(id, title, reason, nextAction) { gaps.push({ id, title, reason, nextAction }); }
-  if (!publisherObserved) gap('source_identity', 'Source evidence is missing', 'This record has not passed the source-observation checks.', 'Locate and capture the exact publisher record before relying on its property facts.');
+  if (!capturedEvidence) gap('source_identity', 'Source evidence is missing', 'This record has not passed the source-observation checks.', 'Locate and capture the exact publisher record before relying on its property facts.');
+  if (archived) gap('archive_snapshot', 'Archive snapshot requires a current observation', 'The attachment preserves a dated publisher record. Import time does not verify current availability or terms.', 'Collect the exact publisher record to establish current evidence.');
   if (source.freshness === 'stale') gap('source_stale', 'The publisher observation needs refreshing', 'The saved observation is older than this source’s planned refresh interval. Its current availability and terms are unresolved.', 'Refresh this source in Source Radar or verify the exact publisher record. Public-record lookups are separate evidence with their own dates.');
   if (!known(listing.openingBid)) gap('opening_bid', 'Opening bid is not published here', 'A judgment, assessment, or deposit cannot substitute for the published bid.', 'Obtain the current offering terms from the publisher.');
   if (!known(listing.deposit)) gap('payment_terms', 'Cash requirements need confirmation', 'Deposit deadlines, premiums, fees, and payment forms have not been established.', 'Read the specific offering document and record its payment deadlines.');
@@ -48,7 +53,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   gap('value_and_debt', 'Equity is not established', 'Opening bids and assessed values are not market valuations; a missing mortgage balance is not zero debt.', 'Supply current valuation evidence and supported outstanding debt before modeling equity.');
   const contradictions = [];
   const parcel = publicRecords?.parcel;
-  const publisherIdentity = publisherObserved ? {
+  const publisherIdentity = capturedEvidence ? {
     sourceId: listing.source, recordId: String(listing.provenance?.recordId), listingId: listing.id,
     exactUrl: listing.sourceUrl, observedAt: timestamp,
   } : null;

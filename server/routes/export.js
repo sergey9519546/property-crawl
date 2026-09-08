@@ -2,6 +2,9 @@ const db = require('../db/client');
 const { presentListing } = require('./listings');
 const discovery = require('../discovery/query');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const fs = require('node:fs');
+const path = require('node:path');
+const { pipeline } = require('node:stream/promises');
 
 function csvCell(value) {
   if (value === null || value === undefined || value === '') return '';
@@ -71,42 +74,25 @@ function publicExportListing(listing) {
   };
 }
 
-async function handleExport(req, res) {
-  const url = new URL(req.url, 'http://localhost');
-  const format = url.searchParams.get('format') || 'csv';
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to export discovery results' });
-  if (!['csv','json'].includes(format)) return res.status(400).json({ error: 'Choose csv or json format' });
-  const saved = url.searchParams.get('saved') === 'true' || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
-  const userId = saved ? requireWorkspaceIdentity(req, res) : null;
-  if (saved && !userId) return;
-
-  let items = [];
+async function* exportPages(url, userId) {
   if (userId) {
-    items = await db.getSavedDeals(userId);
+    yield await db.getSavedDeals(userId);
   } else {
     url.searchParams.delete('cursor');
     url.searchParams.delete('offset');
     url.searchParams.set('limit','1000');
-    const query = discovery.queryFromUrl(url);
+    const query = { ...discovery.queryFromUrl(url), facets: [] };
     let page = await discovery.search(db,query);
-    if (page.total > 100000) return res.status(413).json({ error: 'This export exceeds 100,000 records. Narrow the filters.' });
-    items = page.listings;
+    if (page.total > 100000) throw new discovery.DiscoveryQueryError(413, 'This export exceeds 100,000 records. Narrow the filters.');
+    yield page.listings;
     while(page.page.hasMore) {
       page = await discovery.search(db,{...query,cursor:page.page.nextCursor});
-      items.push(...page.listings);
+      yield page.listings;
     }
   }
-  res.setHeader('Cache-Control','no-store');
-
-  if (format === 'json') {
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', 'attachment; filename="perfectproperty_export.json"');
-    return res.send(JSON.stringify(items.map(publicExportListing), null, 2));
-  }
-
-  // CSV
-  const headers = ['ID', 'Address', 'City', 'State', 'ZIP', 'Source', 'Opening Bid', 'Est Low', 'Est High', 'Bid Spread', 'Deal Score (1-99, triage only)', 'Cash Requirement Status', 'Total Acquisition Cash', 'Registration Funds', 'Credited Deposit', "Buyer's Premium", 'Sheriff / Trustee Fee', 'Transfer Tax', 'Delinquent Taxes / Surviving Debt', 'Other Settlement Costs', 'Cash Due at Settlement', 'Unresolved Cash Inputs', 'Redemption Days', 'Senior Lien Risk', 'Sale Date', 'Plaintiff', 'Defendant', 'Deposit Terms'];
-  const rows = items.map((l) => {
+}
+const CSV_HEADERS = ['ID', 'Address', 'City', 'State', 'ZIP', 'Source', 'Opening Bid', 'Est Low', 'Est High', 'Bid Spread', 'Deal Score (1-99, triage only)', 'Cash Requirement Status', 'Total Acquisition Cash', 'Registration Funds', 'Credited Deposit', "Buyer's Premium", 'Sheriff / Trustee Fee', 'Transfer Tax', 'Delinquent Taxes / Surviving Debt', 'Other Settlement Costs', 'Cash Due at Settlement', 'Unresolved Cash Inputs', 'Redemption Days', 'Senior Lien Risk', 'Sale Date', 'Plaintiff', 'Defendant', 'Deposit Terms'];
+function csvRow(l) {
     const cash = exportedCashRequirement(l);
     return [
     l.id,
@@ -138,12 +124,50 @@ async function handleExport(req, res) {
     l.defendant,
     l.deposit,
   ].map(csvCell).join(',');
-  });
+}
 
-  const csvContent = [headers.join(','), ...rows].join('\r\n');
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="perfectproperty_export.csv"');
-  return res.send(csvContent);
+async function handleExport(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const format = url.searchParams.get('format') || 'csv';
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Use GET to export discovery results' });
+  if (!['csv','json'].includes(format)) return res.status(400).json({ error: 'Choose csv or json format' });
+  const saved = url.searchParams.get('saved') === 'true' || url.searchParams.has('userId') || Boolean(req.headers['x-user-id']);
+  const userId = saved ? requireWorkspaceIdentity(req, res) : null;
+  if (saved && !userId) return;
+  let directory, file;
+  try {
+    const base=path.resolve(__dirname,'../../.cache/discovery-exports');
+    await fs.promises.mkdir(base,{recursive:true});
+    directory=await fs.promises.mkdtemp(path.join(base,'request-'));
+    const filename=path.join(directory,'export');
+    file=await fs.promises.open(filename,'wx',0o600);
+    await file.writeFile(format==='json'?'[':CSV_HEADERS.join(','));
+    let count=0, bytes=0;
+    for await (const page of exportPages(url,userId)) {
+      if(req.aborted) throw new Error('Export request was aborted');
+      const content=format==='json'
+        ? (count && page.length?',':'')+page.map(item=>JSON.stringify(publicExportListing(item))).join(',')
+        : page.map(item=>'\r\n'+csvRow(item)).join('');
+      count+=page.length; bytes+=Buffer.byteLength(content);
+      if(count>100000 || bytes>512*1024*1024) throw new discovery.DiscoveryQueryError(413,'Export is too large. Narrow the filters.');
+      await file.writeFile(content);
+    }
+    if(format==='json')await file.writeFile(']');
+    await file.close();file=null;
+    // Spool before headers so a changed revision returns an explicit 409, never
+    // a partially valid download. Memory stays bounded by one query page.
+    res.setHeader('Cache-Control','no-store');
+    res.setHeader('Content-Type',format==='json'?'application/json':'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition',`attachment; filename="perfectproperty_export.${format}"`);
+    if(typeof res.write==='function') await pipeline(fs.createReadStream(filename),res);
+    else return res.send(await fs.promises.readFile(filename,'utf8'));
+  } catch(error) {
+    if(res.headersSent)res.destroy?.(error);
+    else return res.status(error.status || 503).json({error:error.status?error.message:'Export temporarily unavailable. Retry with the current inventory revision.'});
+  } finally {
+    if(file)await file.close();
+    if(directory)await fs.promises.rm(directory,{recursive:true,force:true});
+  }
 }
 
 module.exports = handleExport;

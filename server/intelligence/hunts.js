@@ -538,7 +538,8 @@ function evaluateInventory(hunt, listings, options = {}) {
       }
     }
   }
-  if (Object.keys(nextRecords).length > MAX_BASELINE_RECORDS) throw new HuntError('HUNT_BASELINE_LIMIT', `Hunt baseline cannot exceed ${MAX_BASELINE_RECORDS} records`);
+  const baselineLimit = options.baselineLimit === Infinity ? Infinity : MAX_BASELINE_RECORDS;
+  if (Object.keys(nextRecords).length > baselineLimit) throw new HuntError('HUNT_BASELINE_LIMIT', `Hunt baseline cannot exceed ${MAX_BASELINE_RECORDS} records`);
   const currentStatuses = [...effectiveRecords.values()].map((record) => record.status);
   const eventCounts = Object.fromEntries(['new_match', 'material_change', 'no_longer_matches', 'evaluation_unknown'].map((type) => [type, events.filter((event) => event.type === type).length]));
   const results = [...effectiveRecords.values()].map((record) => ({
@@ -553,7 +554,7 @@ function evaluateInventory(hunt, listings, options = {}) {
   })).concat(invalidResults).slice(0, MAX_RETURNED_RESULTS);
   return {
     baseline: { huntVersion: hunt.version, evaluatedAt, records: nextRecords },
-    events,
+    events: options.suppressEvents ? [] : events,
     response: {
       huntId: hunt.id, huntVersion: hunt.version, evaluatedAt, baselineCreated,
       counts: {
@@ -568,8 +569,8 @@ function evaluateInventory(hunt, listings, options = {}) {
       },
       results,
       resultsTruncated: candidates.size + invalidResults.length > MAX_RETURNED_RESULTS,
-      newEvents: events.slice(0, MAX_RETURNED_EVENTS),
-      eventsTruncated: events.length > MAX_RETURNED_EVENTS,
+      newEvents: options.suppressEvents ? [] : events.slice(0, MAX_RETURNED_EVENTS),
+      eventsTruncated: !options.suppressEvents && events.length > MAX_RETURNED_EVENTS,
       interpretation: baselineCreated
         ? 'Initial evaluation established a comparison baseline and emitted no lifecycle events.'
         : 'Events compare newer observations for the same exact publisher record. Missing inventory never implies a sale or resolution.',
