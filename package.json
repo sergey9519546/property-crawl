@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "start:workspace": "node scripts/workspace-runner.js --production",
+    "start:production": "node scripts/start-production.js",
     "workspace:ready": "node scripts/workspace-readiness.js",
     "workspace:walkthrough": "python scripts/record-workspace-walkthrough.py",
     "dev:api": "node --env-file-if-exists=.env.local server/server.js",
