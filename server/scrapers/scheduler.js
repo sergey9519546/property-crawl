@@ -192,17 +192,17 @@ class IngestionScheduler {
             rejectedCount: rejectedForScraper,
             circuitOpen: false
           });
+          const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
+            ? { outcome: scraper.lastRunReport.outcome || null, truncated: scraper.lastRunReport.truncated === true, complete: scraper.lastRunReport.complete, fullSweepComplete: scraper.lastRunReport.fullSweepComplete === true, scope: scraper.lastRunReport.scope || null }
+            : null;
           let observationError = null;
           try {
             // Listing writes above are awaited before the observation boundary.
-            await this.onSourceRun(scraper.sourceKey, { listings: accepted, error: null, durationMs: latency, rejectedCount: rejectedForScraper });
+            await this.onSourceRun(scraper.sourceKey, { listings: accepted, error: null, durationMs: latency, rejectedCount: rejectedForScraper, report });
           } catch (error) {
             observationError = error.message;
             console.error('[Scheduler] Could not persist source history:', error.message);
           }
-          const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
-            ? { outcome: scraper.lastRunReport.outcome || null, truncated: scraper.lastRunReport.truncated === true, complete: scraper.lastRunReport.complete, fullSweepComplete: scraper.lastRunReport.fullSweepComplete === true, scope: scraper.lastRunReport.scope || null }
-            : null;
           if(this.discoveryStore&&discoveryRun){await this.discoveryStore.finishRun(discoveryRun.id,{status:report?.truncated||report?.complete===false?'partial':'complete',discovered:items.length,accepted:accepted.length,rejected:rejectedForScraper});if(scraper.lastRunReport?.nextContinuationToken)await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{continuationToken:scraper.lastRunReport.nextContinuationToken,sweepStartedAt:scraper.lastRunReport.sweepStartedAt,pagesCommitted:(scraper.lastRunReport.pagesPreviouslyCommitted||0)+(scraper.lastRunReport.pagesFetched||0)},{collector:scraper.name});else await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{}, {collector:scraper.name});}
           const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
           Object.defineProperty(sourceResult,'acceptedListings',{value:accepted,enumerable:false});
@@ -246,8 +246,19 @@ const scheduler = new IngestionScheduler({
     const { mergeLiveRecords } = require('../db/live-record-store');
     const { recordSourceRun } = require('../sources/observations');
     if (!run.error && run.listings.length) {
+      // A run may reconcile (retire records that disappeared from this source)
+      // ONLY when the run completed without error AND was not truncated by
+      // pagination, timeouts, or operator abort. The scheduler surfaces this
+      // through run.report.complete / run.report.truncated. Any other state
+      // — error, partial, truncated, or no report — must NOT retire records.
+      const report = run.report && typeof run.report === 'object' ? run.report : null;
+      const runCompleted = Boolean(report && report.complete === true && report.truncated !== true);
       try {
-        mergeLiveRecords(process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'), run.listings);
+        mergeLiveRecords(
+          process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'),
+          run.listings,
+          { sourceKey: sourceId, runCompleted }
+        );
       } catch (error) {
         // Advanced discovery has already committed each listing and its raw
         // publisher snapshot atomically.  The bounded JSON cache is only a

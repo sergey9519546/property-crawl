@@ -17,7 +17,7 @@ function loadLiveRecords(filePath) {
   });
 }
 
-function mergeLiveRecords(filePath, candidates) {
+function mergeLiveRecords(filePath, candidates, options = {}) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const lockPath = filePath + '.lock';
   let lock;
@@ -26,14 +26,15 @@ function mergeLiveRecords(filePath, candidates) {
     if (error.code === 'EEXIST') throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
     throw error;
   }
-  try { return mergeLocked(filePath, candidates); }
+  try { return mergeLocked(filePath, candidates, options); }
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
 }
 
-function mergeLocked(filePath, candidates) {
+function mergeLocked(filePath, candidates, options = {}) {
   // Never replace a corrupted existing store with a silently empty fallback.
   const records = new Map(loadLiveRecords(filePath).map((record) => [record.id, record]));
   let accepted = 0, rejected = 0;
+  const acceptedIds = new Set();
   for (const record of candidates) {
     const result = validateListingForIngestion(record);
     if (!result.isValid || result.listing.provenance?.origin !== 'live' || result.listing.provenance?.recordKind !== 'source_record') { rejected++; continue; }
@@ -41,9 +42,27 @@ function mergeLocked(filePath, candidates) {
     const observedAt = (item) => Date.parse(item.sourceObservedAt || item.provenance?.observedAt || '');
     if (previous && observedAt(previous) > observedAt(result.listing)) continue;
     records.set(result.listing.id, result.listing);
+    acceptedIds.add(result.listing.id);
     accepted++;
   }
-  if (!accepted) return { accepted, rejected, retained: records.size };
+  // Source-scoped reconciliation. A *complete* run for a given source is
+  // permitted to retire records belonging to that source that were not
+  // re-observed in this run. A failed, partial, or truncated run MUST NOT
+  // retire records — absence of evidence is not evidence of absence, and
+  // retiring on a partial read can permanently drop real inventory.
+  const retireFromSource = (options.runCompleted === true && typeof options.sourceKey === 'string' && options.sourceKey)
+    ? options.sourceKey
+    : null;
+  let retired = 0;
+  if (retireFromSource) {
+    for (const [id, record] of records) {
+      if (record.source === retireFromSource && !acceptedIds.has(id)) {
+        records.delete(id);
+        retired++;
+      }
+    }
+  }
+  if (!accepted && !retired) return { accepted, rejected, retained: records.size, retired };
   const body = JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), listings: [...records.values()] });
   if (Buffer.byteLength(body) > MAX_BYTES) throw new Error('Live record store exceeds size limit');
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -52,7 +71,7 @@ function mergeLocked(filePath, candidates) {
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
     fs.renameSync(temporary, filePath);
   } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
-  return { accepted, rejected, retained: records.size };
+  return { accepted, rejected, retained: records.size, retired };
 }
 
 module.exports = { loadLiveRecords, mergeLiveRecords };

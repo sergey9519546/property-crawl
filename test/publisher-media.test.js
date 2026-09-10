@@ -8,12 +8,18 @@ const { IrsSeizedScraper } = require('../server/scrapers/irs');
 const db = require('../server/db/client');
 const { seedProvenance } = require('../server/db/seed-provenance');
 
-test('restarting from a persisted observed record preserves its evidence, while legacy fixtures stay demo', () => {
+test('restarting from a persisted observed record preserves its evidence; legacy fixtures and snapshot-only records are excluded from current inventory', () => {
   const listing = standardizeListingRecord(record({ raw: 'Exact source property record for this address.' }));
-  assert.equal(seedProvenance(listing).origin, 'live');
-  assert.equal(seedProvenance(listing).observedAt, listing.provenance.observedAt);
-  assert.equal(seedProvenance({ ...listing, sourceUrl: 'https://www.resales.usda.gov/' }).observed, false);
-  assert.equal(seedProvenance({ ...listing, provenance: undefined }).recordKind, 'demo');
+  const live = seedProvenance(listing);
+  assert.equal(live.origin, 'live');
+  assert.equal(live.observedAt, listing.provenance.observedAt);
+  // A record whose sourceUrl points at the publisher homepage (not at an
+  // actual record) is not part of current inventory: there is no observed
+  // record to cite. The function returns null instead of relabelling.
+  assert.equal(seedProvenance({ ...listing, sourceUrl: 'https://www.resales.usda.gov/' }), null);
+  // A record with no provenance is a legacy snapshot/fixture and is excluded
+  // from current inventory — also null, never a relabelled demo record.
+  assert.equal(seedProvenance({ ...listing, provenance: undefined }), null);
 });
 
 function record(overrides = {}) {

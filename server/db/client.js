@@ -291,7 +291,12 @@ class DatabaseClient {
         vm.createContext(sandbox);
         vm.runInContext(fs.readFileSync(dataJsPath, 'utf8'), sandbox);
         this.inMemoryData.sources = sandbox.window.SOURCES || {};
-        this.inMemoryData.listings = Array.from(sandbox.window.LISTINGS || [], l => {
+        // Current inventory is live-only. Snapshots, fixtures, and demos are
+        // kept out — they exist in data/listings.snapshot.json for the build
+        // pipeline, not for the running API.
+        this.inMemoryData.listings = Array.from(sandbox.window.LISTINGS || []).flatMap((l) => {
+          const provenance = seedProvenance(l);
+          if (provenance === null) return [];
           let images = Array.isArray(l.images) && l.images.length > 0 ? l.images : null;
           if (!images) {
             let hash = 0;
@@ -314,18 +319,18 @@ class DatabaseClient {
               images.push(pool[(Math.abs(hash >> (i * 4)) + i) % pool.length]);
             }
           }
-          return {
+          return [{
             ...l,
             images,
-            provenance: seedProvenance(l),
+            provenance,
             sourceObservedAt: l.sourceObservedAt ?? null,
             fetchedAt: l.fetchedAt ?? null,
             price: l.price ?? null,
             listingDate: l.listingDate ?? null,
             status: l.status || 'active',
-          };
+          }];
         });
-        console.log(`[DB] Loaded ${this.inMemoryData.listings.length} persisted records across ${Object.keys(this.inMemoryData.sources).length} sources; provenance retained per record`);
+        console.log(`[DB] Loaded ${this.inMemoryData.listings.length} live records (snapshots excluded) across ${Object.keys(this.inMemoryData.sources).length} sources`);
       }
     } catch (err) {
       console.error('[DB] Failed to seed in-memory provider:', err);

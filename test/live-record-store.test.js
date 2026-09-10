@@ -55,3 +55,53 @@ test('a corrupt live store is never silently overwritten', (t) => {
   assert.throws(() => mergeLiveRecords(target, [record()]));
   assert.equal(fs.readFileSync(target, 'utf8'), '{incomplete');
 });
+
+test('a complete source run retires records that disappeared from that source only', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-live-store-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'records.json');
+  const civilviewA = record({ id: 'CIV-NJ-7-1001', sourceObservedAt: '2026-09-01T00:00:00Z' });
+  const civilviewB = record({ id: 'CIV-NJ-7-1002', sourceObservedAt: '2026-09-01T00:00:00Z' });
+  const otherSource = record({
+    id: 'TREAS-NY-QUE-9001', source: 'treasury', sourceObservedAt: '2026-09-01T00:00:00Z',
+    sourceUrl: 'https://www.treasury.gov/auctions/treasury/rp/9001.shtml',
+    provenance: { origin: 'live', recordKind: 'source_record', observed: true, publisher: 'Treasury', recordId: '9001' },
+  });
+  assert.equal(mergeLiveRecords(target, [civilviewA, civilviewB, otherSource]).accepted, 3);
+
+  // Complete civilview run sees only A (B disappeared). A stays, B is retired.
+  // Other-source record is untouched because its source key is different.
+  const result = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-1001', sourceObservedAt: '2026-09-08T00:00:00Z' })],
+    { sourceKey: 'civilview', runCompleted: true });
+  assert.equal(result.accepted, 1);
+  assert.equal(result.retired, 1);
+  const retained = loadLiveRecords(target);
+  assert.deepEqual(retained.map((r) => r.id).sort(), ['CIV-NJ-7-1001', 'TREAS-NY-QUE-9001']);
+});
+
+test('a partial or failed run never retires records, even for the same source', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-live-store-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'records.json');
+  const a = record({ id: 'CIV-NJ-7-2001', sourceObservedAt: '2026-09-01T00:00:00Z' });
+  const b = record({ id: 'CIV-NJ-7-2002', sourceObservedAt: '2026-09-01T00:00:00Z' });
+  assert.equal(mergeLiveRecords(target, [a, b]).accepted, 2);
+
+  // No runCompleted flag — defensive default: do not retire.
+  const noFlag = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-2001', sourceObservedAt: '2026-09-08T00:00:00Z' })],
+    { sourceKey: 'civilview' });
+  assert.equal(noFlag.retired, 0);
+  assert.equal(loadLiveRecords(target).length, 2);
+
+  // runCompleted: false — explicit partial: do not retire.
+  const partial = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-2001', sourceObservedAt: '2026-09-08T00:00:00Z' })],
+    { sourceKey: 'civilview', runCompleted: false });
+  assert.equal(partial.retired, 0);
+  assert.equal(loadLiveRecords(target).length, 2);
+
+  // runCompleted: true but no sourceKey — do not retire (no scope).
+  const noScope = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-2001', sourceObservedAt: '2026-09-08T00:00:00Z' })],
+    { runCompleted: true });
+  assert.equal(noScope.retired, 0);
+  assert.equal(loadLiveRecords(target).length, 2);
+});

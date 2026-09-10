@@ -77,7 +77,12 @@ async function collect(source, options = {}) {
     }
     throw error;
   }
-  const result = mergeLiveRecords(storePath, records);
+  // A collect-source run is treated as a partial observation unless
+  // --reconcile is passed: the absence of a record in this call is not
+  // evidence the record was withdrawn. Operators explicitly opt into
+  // reconciliation when they have confirmed a complete source sweep.
+  const reconcile = process.argv.includes('--reconcile');
+  const result = mergeLiveRecords(storePath, records, { sourceKey: source, runCompleted: reconcile });
   const previousIds = new Set(previous.map((record) => record.id));
   console.log(JSON.stringify({ source, ...result, newRecordCandidates: records.filter((record) => !previousIds.has(record.id)).length, recordsWithPhotos: records.filter((record) => record.photo).length, recordsWithZip: records.filter((record) => record.zip).length, coverage: scraper.lastRunReport || null }));
   return result;

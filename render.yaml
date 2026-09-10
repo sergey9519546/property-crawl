@@ -5,11 +5,26 @@ services:
     dockerfilePath: ./Dockerfile.production
     plan: free
     region: oregon
-    healthCheckPath: /api/health
+    # /api/health is a liveness probe (always 200 while the process runs).
+    # /api/health/ready is the readiness probe — it returns 503 until the
+    # database, the required tables, and the operator secret are all present.
+    # Pointing the Render health check at /api/health/ready ensures Render
+    # does not route traffic to an instance that is up but not ready.
+    healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV
         value: production
       - key: SCRAPER_BACKGROUND_ENABLED
         value: "0"
+      # Database is required. Render will refuse to deploy without it.
       - key: DATABASE_URL
+        required: true
+        sync: false
+      # Operator secret gates write paths (collection jobs, observation
+      # records, intake submissions). Render auto-generates it on the first
+      # deploy if unset and treats it as required thereafter. sync: false
+      # keeps it out of any non-Render environment.
+      - key: PROPERTY_OPERATOR_SECRET
+        required: true
+        generateValue: true
         sync: false

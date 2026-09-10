@@ -343,6 +343,42 @@ function emit(sources, listings) {
   return header + sourcesJs + listingsJs;
 }
 
+// Publication gate. Decides whether the gathered payload is fit to replace
+// data.js. The thresholds adapt to live vs. dev mode:
+//
+//   live (RUN_REAL=1): A production publication must show real breadth.
+//     20+ listings, 3+ distinct sources observed live, and ZERO records
+//     that look like fixtures/demos/snapshots — those have no place in
+//     published current inventory.
+//
+//   dev (RUN_REAL=0): The build is a snapshot reproduction. The fixture
+//     rule is relaxed because we *expect* snapshot reproduction in this
+//     mode, but the count and source coverage bars still apply so a build
+//     that comes back empty (every source failed) does not silently wipe
+//     out a working bundle.
+function publicationGate(listings, options = {}) {
+  const live = options.live === true;
+  const violations = [];
+  const minListings = live ? 20 : 1;
+  const minSources = live ? 3 : 1;
+  const distinctSources = new Set();
+  let fixtureLeak = 0;
+  for (const listing of listings) {
+    if (listing && listing.source) distinctSources.add(listing.source);
+    if (live && isFixtureRecord(listing)) fixtureLeak++;
+  }
+  if (listings.length < minListings) {
+    violations.push(`listing count ${listings.length} is below the minimum of ${minListings} for ${live ? 'live' : 'dev'} publication`);
+  }
+  if (distinctSources.size < minSources) {
+    violations.push(`source coverage ${distinctSources.size} is below the minimum of ${minSources} for ${live ? 'live' : 'dev'} publication (saw: ${[...distinctSources].sort().join(', ') || 'none'})`);
+  }
+  if (live && fixtureLeak > 0) {
+    violations.push(`${fixtureLeak} fixture/demo/snapshot record(s) would be published into live inventory — current inventory must be live-only`);
+  }
+  return { passed: violations.length === 0, violations, sourceCount: distinctSources.size };
+}
+
 async function main() {
   console.log(`[build-data] RUN_REAL_SCRAPERS=${RUN_REAL ? '1' : '0'}`);
   const { all, counts } = await gather();
@@ -355,6 +391,21 @@ async function main() {
     else if (info.error) console.log(`  ${key}: ERROR (${info.error})`);
     else console.log(`  ${key}: ${info.count} listings`);
   }
+
+  // Publication gate. Refuses to overwrite data.js with a payload that is too
+  // small, too narrow in source coverage, or contains fixture/demo/snapshot
+  // records that have no business in the published current inventory. The
+  // threshold differs between live and non-live modes: dev (non-live) is a
+  // snapshot reproduction, so the count bar is low; live (RUN_REAL) must
+  // demonstrate real coverage before it replaces the published bundle.
+  const gate = publicationGate(normalized, { live: RUN_REAL });
+  if (gate.violations.length) {
+    console.error('[build-data] PUBLICATION GATE FAILED:');
+    for (const violation of gate.violations) console.error(`  - ${violation}`);
+    console.error('[build-data] data.js was NOT overwritten. Fix the upstream source failures and re-run.');
+    process.exit(1);
+  }
+  console.log(`[build-data] publication gate passed: ${normalized.length} listings across ${gate.sourceCount} sources`);
 
   fs.writeFileSync(DATA_JS_PATH, emit(SOURCES, normalized), 'utf8');
   console.log(`[build-data] wrote ${normalized.length} listings → ${path.relative(PROJECT_ROOT, DATA_JS_PATH)}`);
@@ -395,4 +446,5 @@ module.exports = {
   markLiveObservedRecord,
   markSnapshotRecord,
   normalize,
+  publicationGate,
 };

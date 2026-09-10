@@ -11,7 +11,7 @@ const suites = [
   { name: '1. Client Unit & Formula Suite', cmd: 'node test/suite.test.js' },
   { name: '2. Backend REST API & Server Suite', cmd: 'node test/server.test.js' },
   { name: '3. Data Scrapers & Ingestion Pipeline', cmd: 'node test/scrapers.test.js' },
-  { name: '3a. Scraper Reliability, CivilView & Durable Live Records', cmd: 'node --test test/scraper-reliability.test.js test/civilview.test.js test/live-record-store.test.js' },
+  { name: '3a. Scraper Reliability, CivilView, Durable Live Records & Build-Data Publication Gate', cmd: 'node --test test/scraper-reliability.test.js test/civilview.test.js test/live-record-store.test.js test/build-data-gate.test.js' },
   { name: '3b. Exact Source Links & Structured Data Safety', cmd: 'node --experimental-strip-types --test test/source-integrity.test.mjs' },
   { name: '3c. Evidence-Only Enrichment, Exports, Underwriting, Legal Rules & CORS', cmd: 'node --test test/cors-policy.test.js test/enrich-evidence.test.js test/export-truth.test.js test/underwriting-truth.test.mjs test/legal-rules-truth.test.js' },
   { name: '3d. Verified Property Media & Street View Fallback', cmd: 'node --test test/property-image.test.js test/publisher-media.test.js test/secondary-property-media.test.js test/gsa-usda-publisher-gallery.test.js' },

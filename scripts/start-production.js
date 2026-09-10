@@ -75,7 +75,7 @@ async function boot() {
   start('Backend Listing API', process.execPath, ['server/server.js'], apiEnv);
 
   console.log(`[Production] Awaiting Backend Listing API on 127.0.0.1:${internalApiPort}...`);
-  const apiReady = await waitForHealth(`http://127.0.0.1:${internalApiPort}/api/health`);
+  const apiReady = await waitForHealth(`http://127.0.0.1:${internalApiPort}/api/health/ready`);
   if (!apiReady) {
     console.error('[Production] Backend Listing API failed health check in time.');
     shutdown(1);
@@ -99,7 +99,7 @@ async function boot() {
   );
 
   console.log(`[Production] Awaiting Next.js UI on public port ${publicPort}...`);
-  const uiReady = await waitForHealth(`http://127.0.0.1:${publicPort}/api/health`);
+  const uiReady = await waitForHealth(`http://127.0.0.1:${publicPort}/api/health/ready`);
   if (uiReady) {
     console.log(`========================================================`);
     console.log(`[Production] Property-Crawl Production Stack LIVE!`);
