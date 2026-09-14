@@ -19,6 +19,7 @@ const SOURCE_HOSTS = Object.freeze({
   civilview: ['salesweb.civilview.com'],
   courtlistener: ['www.courtlistener.com'],
   fannie: ['homepath.fanniemae.com'],
+  'fhfa-hpi': ['www.fhfa.gov'],
   'fl-dor-cadastral': ['services9.arcgis.com'],
   freddie: ['homesteps.com'],
   gsa: ['realestatesales.gov'],
@@ -75,6 +76,25 @@ function hasSourceRecordShape(source, url) {
       return /^\/docket\/\d{3,}(?:\/[^/]+)?\/?$/.test(path);
     case 'fannie':
       return /^\/(property|property-details)\/[^/]+$/.test(path) && hasStablePathToken(url);
+    case 'fhfa-hpi': {
+      // FHFA House Price Index published CSV tables (state, metro, division,
+      // national). Per-row URLs identify a single (geo, period) observation
+      // against the public published file. The csv path is the canonical
+      // record; the geo + period query keys identify the row.
+      const csvPath = /^\/datatools\/downloads\/documents\/hpi\/hpi_at_(?:state|metro|division|national)\.csv$/i;
+      if (!csvPath.test(path)) return false;
+      const allowed = new Set(['geo', 'period']);
+      const entries = [...url.searchParams.keys()];
+      const geo = (url.searchParams.get('geo') || '').toUpperCase();
+      return entries.every((key) => allowed.has(key))
+        && new Set(entries).size === entries.length
+        && (
+          entries.length === 0
+          || (entries.length === 2 && entries.includes('geo') && entries.includes('period'))
+        )
+        && /^(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/.test(geo)
+        && /^\d{4}Q[1-4]$/.test(url.searchParams.get('period') || '');
+    }
     case 'fl-dor-cadastral': {
       // Exact FDOR statewide-cadastral feature URL, never the service root or
       // an unbounded whole-inventory query. ArcGIS Online paths include an
