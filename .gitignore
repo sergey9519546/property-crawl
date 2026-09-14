@@ -36,6 +36,12 @@ playwright/.cache/
 .coverage
 .nyc_output/
 
+# --- Python build / cache (used by scripts/crawlers/scrapling_extract.py) ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # --- OS noise ---
 .DS_Store
 Thumbs.db
