@@ -1,4 +1,7 @@
-const { inspectSourceRecordUrl } = require('@server/scrapers/source-policy');
+// Use a relative path here (not @server/scrapers/*) because this file is
+// also exercised by raw `node --test`, which does not resolve Next.js webpack
+// aliases. Next.js still loads this file fine via its own resolver.
+const { inspectSourceRecordUrl } = require('../../server/scrapers/source-policy');
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
