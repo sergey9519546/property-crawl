@@ -1,0 +1,2 @@
+# Optional structural parser. Native Node collection remains the default.
+scrapling==0.4.15
