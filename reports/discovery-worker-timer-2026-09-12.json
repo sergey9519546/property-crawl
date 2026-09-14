@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "mode": "isolated-postgresql-offline-coordinator",
+  "startedAt": "2026-09-12T21:44:58.703Z",
+  "config": {
+    "samples": 1,
+    "durationMs": 150000,
+    "leaseSeconds": 10,
+    "recovery": false,
+    "heartbeat": false,
+    "productionTimer": true,
+    "testEnvFile": ".cache\\discovery-runtime\\test.env"
+  },
+  "samples": [
+    {
+      "kind": "worker-iteration",
+      "index": 0,
+      "jobId": "job_3f302bc68e0386e055a9228c",
+      "status": "completed",
+      "durationMs": 7
+    },
+    {
+      "kind": "production-worker-timer",
+      "jobId": "job_a95cc27b37d112c93ed309f9",
+      "status": "completed",
+      "durationMs": 120140,
+      "heartbeatIntervalMs": 120000,
+      "firstRenewalAfterMs": 120068,
+      "renewCallCount": 1,
+      "renewalTtlSeconds": 300,
+      "initialLeaseExpiresAt": "2026-09-12T21:49:59.000Z",
+      "renewedLeaseExpiresAt": "2026-09-12T21:51:59.123Z",
+      "leaseExtendedMs": 120123
+    }
+  ],
+  "failures": [],
+  "complete": true,
+  "schema": "discovery_worker_soak_836148_646112037f",
+  "inventoryBefore": 0,
+  "inventoryAfter": 0,
+  "schemaDropped": true,
+  "completedAt": "2026-09-12T21:46:59.226Z",
+  "durationMs": 120523
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "ab27d69f-b5df-4c6c-9bb1-12e9a15d7beb",
+    "status": "complete",
+    "scope": {
+      "collector": "CivilViewScraper"
+    },
+    "discovered_count": 24,
+    "accepted_count": 24,
+    "rejected_count": 0,
+    "coverage": {
+      "counts": {
+        "accepted": 24,
+        "parserEmitted": 24,
+        "parserRejected": 0,
+        "ingestionRejected": 0
+      },
+      "outcome": "success",
+      "version": 1,
+      "complete": true,
+      "truncated": false,
+      "acquisitionScope": {
+        "filters": {
+          "state": "NJ",
+          "countyId": "20"
+        },
+        "endpoint": "/Sales/SalesSearch"
+      },
+      "fullSweepComplete": true
+    }
+  },
+  {
+    "id": "54d70e4e-03d6-4bee-961d-862856656b2e",
+    "status": "complete",
+    "scope": {
+      "collector": "CivilViewScraper"
+    },
+    "discovered_count": 24,
+    "accepted_count": 24,
+    "rejected_count": 0,
+    "coverage": {
+      "counts": {
+        "accepted": 24,
+        "parserEmitted": 24,
+        "parserRejected": 0,
+        "ingestionRejected": 0
+      },
+      "outcome": "success",
+      "version": 1,
+      "complete": true,
+      "truncated": false,
+      "acquisitionScope": {
+        "filters": {
+          "state": "NJ",
+          "countyId": "20"
+        },
+        "endpoint": "/Sales/SalesSearch"
+      },
+      "fullSweepComplete": true
+    }
+  }
+]
