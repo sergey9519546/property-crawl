@@ -1,4 +1,8 @@
 /** @type {import('next').NextConfig} */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const nextConfig = {
   reactStrictMode: true,
   // Keep production verification separate from an active development server.
@@ -6,6 +10,8 @@ const nextConfig = {
     : process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'
     : process.env.NEXT_VERIFY_BUILD === '1' ? '.next-verify' : '.next',
   experimental: {
+    // Bound page-generation workers on high-core local machines with limited memory.
+    cpus: 2,
     turbopackFileSystemCacheForBuild: !process.env.NEXT_VERIFY_BUILD,
   },
   // Allow the Base44 preview origin (served through a proxy hostname that
@@ -19,6 +25,16 @@ const nextConfig = {
       { protocol: 'https', hostname: 'cdn.jsdelivr.net' },
       { protocol: 'https', hostname: 'cdn.prod.website-files.com' }
     ]
+  },
+  // @server/* is a runtime alias for ./server/* so Next.js components
+  // can import canonical Node-side modules (not stubs under src/lib/scrapers/).
+  webpack(config) {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@server': path.resolve(__dirname, 'server'),
+    };
+    return config;
   }
 };
 

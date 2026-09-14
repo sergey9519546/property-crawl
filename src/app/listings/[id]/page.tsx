@@ -1,21 +1,23 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Scale, Clock, DollarSign } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { redemptionLabel } from "@/lib/underwriting";
+import { redemptionLabel, computeCashToClose } from "@/lib/underwriting";
 import { DocketAgent } from "@/components/terminal/docket-agent";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
 import { ListingMedia } from "@/components/listings/listing-media";
 import { ListingWatchlistToggle } from "@/components/listings/listing-watchlist-toggle";
-import { inspectSecondaryMedia } from "@/lib/scrapers/secondary-property-media";
+import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
 import { inspectMapLocation } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
 import { SaleMechanics } from "@/components/listings/sale-mechanics";
+import { PropertyDocuments } from "@/components/listings/property-documents";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -91,7 +93,8 @@ function verifiedPublisherPhoto(listing: Listing) {
   return safeImageUrl(listing.photo);
 }
 
-async function getListing(id: string): Promise<Listing | null> {
+// Share one bounded lookup between metadata and content in this render only.
+const getListing = cache(async (id: string): Promise<Listing | null> => {
   const listingId = decodeURIComponent(id);
   try {
     const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
@@ -103,7 +106,7 @@ async function getListing(id: string): Promise<Listing | null> {
     }
   } catch (_) {}
   return null;
-}
+});
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
@@ -204,6 +207,11 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const detailPhoto = publisherPhoto ?? (secondaryMedia.accepted ? secondaryMedia.url : undefined);
   const detailGallery = publisherPhoto ? gallery : (secondaryMedia.accepted ? secondaryMedia.gallery : []);
   const mapLocation = inspectMapLocation(listing);
+  // Surface what the underwriting engine can compute from published fields.
+  const cashScenario = computeCashToClose({ openingBid });
+  const equitySpread = openingBid !== null && positiveNumber(listing.mid) !== null
+    ? positiveNumber(listing.mid)! - openingBid
+    : null;
   const observedAt = isDemo ? null : formatObservedAt(listing.sourceObservedAt ?? provenance.observedAt);
   const saleTime = optionalPublishedText(sourceFacts.tpsSaleTime ?? sourceFacts.saleTime);
   const saleTimezone = optionalPublishedText(sourceFacts.publisherTimeZone ?? sourceFacts.saleTimezone);
@@ -214,7 +222,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const hasPublishedAccessState = Boolean(occupancy) || interiorAccessAvailable !== null;
   const accessNeedsAttention = interiorAccessAvailable === false || Boolean(occupancy && /occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy));
   const accessHeadline = [occupancy, interiorAccessAvailable === null ? null : interiorAccessAvailable ? "Interior access available" : "No interior access"].filter(Boolean).join(" · ");
-  const statusLabel = isDemo ? "Verify at source" : publishedText(listing.lifecycleStatus || listing.status, "Verify at source").replace(/^Status:\s*/i, "");
+  const statusLabel = isDemo ? "Verify at source" : publishedText(listing.lifecycleStatus || listing.status, "Verify at source").replace(/^Status:\s*/i, "").replace(/_/g, " ");
   const statusClass = /postponed/i.test(statusLabel) ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-800";
   const citySuffix = optionalPublishedText(listing.city);
   const addressParts = listing.address.split(",").map((part) => part.trim());
@@ -330,6 +338,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <nav aria-label="Property record sections" className="mt-7 flex max-w-full gap-7 overflow-x-auto border-b border-slate-200 text-sm font-semibold text-slate-600">
             <a href="#property-facts" className="whitespace-nowrap border-b-2 border-slate-950 px-1 pb-3 text-slate-950">Overview</a>
             <a href="#auction-details" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Auction</a>
+            <a href="#property-documents" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Documents</a>
             <a href="#evidence-dossier" className="whitespace-nowrap px-1 pb-3 hover:text-slate-950">Research &amp; history</a>
           </nav>
 
@@ -347,6 +356,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
 
           <SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} />
+          <div className="mt-6"><PropertyDocuments evidence={listing.documentEvidence} publisherUrl={exactSourceUrl} /></div>
 
           <details id="documents-title" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-slate-950"><span>Publisher record and identifiers</span><span className={`text-xs font-semibold ${exactSourceUrl ? "text-emerald-700" : "text-amber-800"}`}>{exactSourceUrl ? "Exact page linked" : "Exact URL unavailable"}</span></summary>
@@ -369,8 +379,37 @@ export default async function ListingPage({ params, searchParams }: Props) {
           ) : <details id="market-evidence" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-slate-950"><span>Market evidence</span><span className="text-xs font-medium text-slate-500">Not captured</span></summary><p className="border-t border-slate-200 py-4 text-sm leading-relaxed text-slate-600">No source-backed assessment, valuation range, or comparable sales have been captured for this record.</p></details>}
 
           <div id="evidence-dossier" className="mt-8 scroll-mt-6">
-            <PropertyIntelligence key={listing.id} listingId={listing.id} />
+            <PropertyIntelligence key={listing.id} listingId={listing.id} documentsShown />
           </div>
+
+          {/* Cross-source bake-off: when multiple sources publish the same parcel. */}
+          {Array.isArray(listing.crossSourceMatches) && listing.crossSourceMatches.length > 0 && (
+            <div className="mt-8 rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5 shadow-sm">
+              <h2 className="text-sm font-bold text-indigo-950">Cross-source observations</h2>
+              <p className="mt-1 text-xs leading-relaxed text-indigo-800">
+                Multiple sources publish records for this parcel. Both observations are retained; the fresher record is preferred.
+              </p>
+              <dl className="mt-4 space-y-3">
+                <div className="rounded-xl border border-indigo-200 bg-white p-3">
+                  <dt className="text-xs font-semibold text-slate-600">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}{listing.bakeOff?.preferredSource === listing.source ? <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">Preferred</span> : null}</dt>
+                  <dd className="mt-1 text-lg font-bold text-slate-950">{formatMoney(listing.openingBid)}</dd>
+                  {observedAt ? <dd className="mt-0.5 text-xs text-slate-500">Observed {observedAt} UTC</dd> : null}
+                </div>
+                {listing.crossSourceMatches.map((match) => (
+                  <div key={match.listingId} className="rounded-xl border border-indigo-200 bg-white p-3">
+                    <dt className="text-xs font-semibold text-slate-600">{sourceDisplayText(match.source)}{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">Preferred</span> : null}</dt>
+                    <dd className="mt-1 text-lg font-bold text-slate-950">{formatMoney(match.openingBid)}</dd>
+                    {match.observedAt ? <dd className="mt-0.5 text-xs text-slate-500">Observed {formatObservedAt(match.observedAt)}</dd> : null}
+                  </div>
+                ))}
+              </dl>
+              {listing.bakeOff?.reason ? (
+                <p className="mt-3 text-xs leading-relaxed text-indigo-900">
+                  <strong>Preferred:</strong> {sourceDisplayText(listing.bakeOff.preferredSource)} — {listing.bakeOff.reason} (confidence {(listing.bakeOff.confidence * 100).toFixed(0)}%)
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {/* Modeled title-risk signal; never presented as a completed title search. */}
             <details id="modeled-research" className="mt-8 rounded-2xl border border-slate-200 bg-white px-5 py-1 shadow-sm">
@@ -406,8 +445,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
               </div>
             </div>
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs leading-relaxed text-slate-600">
-              <strong className="block text-slate-900">Official documents not captured</strong>
-              The app will not invent a title package. Court filings, sale terms, deeds, and lien evidence must be attached from exact official URLs before they can appear here.
+              <strong className="block text-slate-900">Title review requires supporting records</strong>
+              Review the captured documents above, then obtain any missing court filings, deeds, and lien records. Document availability alone does not establish clear title.
             </div>
           </div>
 
@@ -436,13 +475,16 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
 
           <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-xl font-bold"><DollarSign className="h-5 w-5 text-slate-900" /><span>Cash requirement inputs</span></h2><span className="rounded bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-900">Total unresolved</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-xl font-bold"><DollarSign className="h-5 w-5 text-slate-900" /><span>Cash requirement inputs</span></h2><span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${cashScenario.acquisitionCostStatus === "complete" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{cashScenario.acquisitionCostStatus === "complete" ? "Modeled" : "Partially unresolved"}</span></div>
             <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-xs">
               <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Published opening amount</span><span className="font-bold text-slate-950">{formatMoney(openingBid)}</span></div>
+              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Purchase-price scenario</span><span className="font-semibold text-slate-950">{formatMoney(cashScenario.purchasePrice)}</span></div>
               <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Published registration / deposit text</span><span className="max-w-[60%] text-right font-semibold text-slate-700">{publishedText(listing.deposit)}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Deposit credited toward purchase</span><span className="font-semibold text-amber-800">Unknown</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Buyer premium or statutory fee</span><span className="font-semibold text-amber-800">Unknown</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Settlement, transfer, and recording costs</span><span className="font-semibold text-amber-800">Unknown</span></div>
+              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Deposit credited toward purchase</span><span className={cashScenario.creditedDeposit !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.creditedDeposit !== null ? formatMoney(cashScenario.creditedDeposit) : "—"}</span></div>
+              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Buyer premium or statutory fee</span><span className={cashScenario.buyersPremium !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.buyersPremium !== null ? formatMoney(cashScenario.buyersPremium) : "—"}</span></div>
+              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Settlement, transfer, and recording costs</span><span className={cashScenario.settlementCosts !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.settlementCosts !== null ? formatMoney(cashScenario.settlementCosts) : "—"}</span></div>
+              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Equity spread (midpoint − opening)</span><span className={equitySpread !== null ? "font-bold text-emerald-700" : "font-semibold text-amber-800"}>{equitySpread !== null ? formatMoney(equitySpread) : "—"}</span></div>
+              <div className="flex justify-between gap-4 bg-slate-50 p-3.5"><span className="font-bold text-slate-900">Total acquisition cash</span><span className={cashScenario.totalAcquisitionCost !== null ? "font-extrabold text-emerald-700" : "font-semibold text-amber-800"}>{cashScenario.totalAcquisitionCost !== null ? formatMoney(cashScenario.totalAcquisitionCost) : "—"}</span></div>
             </div>
             <p className="text-xs leading-relaxed text-slate-500">Source and state names are not fee evidence. Link published terms or enter explicit assumptions in a research case before calculating a total.</p>
           </div></div>

@@ -17,7 +17,6 @@ pnpm-debug.log*
 .next-discovery-preview/
 .next-sources-verify/
 .next-verify/
-.next-verify/
 out/
 dist/
 build/
@@ -56,7 +55,6 @@ $RECYCLE.BIN/
 *.log
 *.err
 logs/
-.pnpm-debug.log*
 
 # --- PWA / puter runtime artifacts ---
 .puter/
@@ -80,7 +78,6 @@ upload/
 
 # --- Misc ---
 *.local
-.cache/
 .turbo/
 .vercel/
 

@@ -1,4 +1,4 @@
-import { inspectImageUrl } from "@/lib/scrapers/media-policy";
+import { inspectImageUrl } from "@server/scrapers/media-policy";
 
 export function knownNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;

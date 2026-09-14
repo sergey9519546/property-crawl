@@ -1,4 +1,4 @@
-const { inspectSourceRecordUrl } = require('./scrapers/source-policy');
+const { inspectSourceRecordUrl } = require('@server/scrapers/source-policy');
 
 function object(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};

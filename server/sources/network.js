@@ -19,6 +19,11 @@ function buildSourceNetwork({ catalog, adapters, observations, listings = [], ev
     const inventory = counts.get(source.adapterKey || source.id);
     const cadenceHours = source.workflow.cadenceHours || 24;
     const dueAt = run?.lastRunAt ? new Date(Date.parse(run.lastRunAt) + cadenceHours * 3600_000).toISOString() : null;
+    // Capture the catalog taxonomy before the runtime `status` below overwrites it.
+    // The taxonomy is a product claim (VERIFIED_OFFICIAL / DISCOVERY_ONLY / etc.); the
+    // runtime `status` is a scheduler-health signal (awaiting_run / stale / collected).
+    // They are independent and both belong in the API response.
+    const trustStatus = source.status;
     let status = automated ? 'awaiting_run' : source.propertyLookup ? 'lookup_available' : 'import_available';
     if (automated && run) {
       if (run.error) status = 'attention';
@@ -29,7 +34,7 @@ function buildSourceNetwork({ catalog, adapters, observations, listings = [], ev
     if (automatedEvidence && !run && evidenceSummary[source.id]?.count) status = 'evidence_queued';
     if (automatedEvidence && run && !run.error && status !== 'stale') status = run.evidenceCount ? 'evidence_queued' : 'empty';
     return {
-      ...source, automated, automatedEvidence, status, dueAt,
+      ...source, automated, automatedEvidence, status, trustStatus, dueAt,
       evidencePackets: evidenceSummary[source.id]?.count || 0,
       // These are observations in our store, not a claim about total publisher inventory.
       observedRecords: inventory?.observedRecords || 0,

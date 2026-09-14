@@ -35,8 +35,8 @@ import { displayDate, displayMoney, displayText, knownNumber } from "@/lib/listi
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { loadListingInventory } from "@/lib/listing-inventory";
 import { sourceRecordCountsAtAddress } from "@/lib/listing-record-groups";
-import { inspectPublisherPhoto } from "@/lib/scrapers/media-policy";
-import { inspectSecondaryMedia } from "@/lib/scrapers/secondary-property-media";
+import { inspectPublisherPhoto } from "@server/scrapers/media-policy";
+import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
 import { sourceDisplayText } from "@/lib/source-display";
 import type { SavedSearch } from "@/lib/saved-searches";
 import { CaseAction } from "@/components/research/case-action";
