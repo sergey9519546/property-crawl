@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const db = require('./db/client');
-const MemoryRateLimiter = require('./security/rate_limiter');
+const { createApiRatePolicy } = require('./security/api-rate-policy');
 const handleListings = require('./routes/listings');
 const handleParse = require('./routes/parse');
 const handleEnrich = require('./routes/enrich');
@@ -17,16 +17,16 @@ const handlePropertyIntelligence = require('./routes/property-intelligence');
 const handlePropertySignals = require('./routes/property-signals');
 const handleHunts = require('./routes/hunts');
 const handleWorkspace = require('./routes/workspace');
+const handleDocumentReview = require('./routes/document-review');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
 const PORT = process.env.PORT || 3000;
 const configuredApiLimit = Number(process.env.PROPERTY_API_RATE_LIMIT);
-const rateLimiter = new MemoryRateLimiter({
+const apiLimiter = createApiRatePolicy({
   windowMs: 60000,
   maxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
 });
-const apiLimiter = rateLimiter.middleware();
 
 function configuredCorsOrigins(env = process.env) {
   return new Set(String(env.CORS_ALLOWED_ORIGINS || '')
@@ -39,8 +39,10 @@ function isCorsOriginAllowed(origin, req, env = process.env) {
   if (!origin) return true;
   const allowed = configuredCorsOrigins(env);
   try {
-    const requestOrigin = `http://${req.headers.host || 'localhost'}`;
-    return origin === requestOrigin || allowed.has(origin);
+    const host = req.headers.host || 'localhost';
+    const httpOrigin = `http://${host}`;
+    const httpsOrigin = `https://${host}`;
+    return origin === httpOrigin || origin === httpsOrigin || allowed.has(origin);
   } catch (_) {
     return false;
   }
@@ -107,7 +109,8 @@ async function handleRequest(req, res) {
   // Security Headers (Helmet equivalents)
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('X-XSS-Protection', '0');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-src https:;");
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -157,6 +160,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
     if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
     if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return handleWorkspace(req, res, url);
+    if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return handleDocumentReview(req, res);
     if (url.pathname === '/api/source-network' || url.pathname.startsWith('/api/source-network/')) return handleSourceNetwork(req, res);
     if (url.pathname.startsWith('/api/scrapers')) return handleScrapers(req, res);
     if (url.pathname === '/api/sources') {
@@ -220,6 +224,10 @@ const server = http.createServer((req, res) => {
     } else res.end();
   });
 });
+
+server.requestTimeout = 30_000;
+server.headersTimeout = 10_000;
+server.keepAliveTimeout = 5_000;
 
 if (require.main === module) {
   server.listen(PORT, () => {
