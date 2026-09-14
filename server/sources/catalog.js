@@ -7,13 +7,113 @@
  * telemetry and source-observed listings.
  */
 
+const { lifecycleBySourceFromCatalog } = require('../scrapers/source-lifecycle');
+
 const SCHEDULED_ADAPTER_KEYS = Object.freeze([
   'treasury', 'gsa', 'irs', 'usda', 'landbank', 'civilview', 'bid4assets',
-  'sheriff', 'hud', 'fannie', 'freddie', 'va', 'marshals', 'servicelink'
+  'sheriff', 'hud', 'fannie', 'freddie', 'va', 'marshals', 'servicelink',
+  'fl-dor-cadastral', 'courtlistener', 'ca-controller-tax-sale'
 ]);
+
+/**
+ * Competitive-intelligence source status taxonomy.
+ * Each status is a product claim about how far the source can be trusted for
+ * opportunity ingestion, not a live-health ping (that belongs to scheduler
+ * telemetry). Color hints are UI tokens only.
+ */
+const SOURCE_STATUSES = Object.freeze({
+  VERIFIED_OFFICIAL: Object.freeze({
+    label: 'Verified official',
+    description: 'Government first-party publisher with a confirmed working collector.',
+    color: 'green'
+  }),
+  VERIFIED_FIRST_PARTY: Object.freeze({
+    label: 'Verified first-party',
+    description: 'Commercial first-party publisher with a confirmed working collector.',
+    color: 'teal'
+  }),
+  SCOPE_LIMITED: Object.freeze({
+    label: 'Scope limited',
+    description: 'Works, but only for specific jurisdictions or a bounded program.',
+    color: 'amber'
+  }),
+  LOCAL_ROUTE: Object.freeze({
+    label: 'Local route',
+    description: 'Requires per-jurisdiction enrollment and verification before use.',
+    color: 'blue'
+  }),
+  DISCOVERY_ONLY: Object.freeze({
+    label: 'Discovery only',
+    description: 'Catalog entry for investigation; no live collector yet.',
+    color: 'slate'
+  }),
+  INCONCLUSIVE_BLOCKED: Object.freeze({
+    label: 'Blocked',
+    description: 'Access denied by robots, CAPTCHA/Turnstile, or equivalent publisher control.',
+    color: 'red'
+  }),
+  RETIRED: Object.freeze({
+    label: 'Retired',
+    description: 'No longer functional; kept for provenance and migration only.',
+    color: 'gray'
+  })
+});
+
+const SOURCE_STATUS_BY_ID = Object.freeze({
+  'alachua-tax-deeds': 'LOCAL_ROUTE',
+  'alachua-county-parcels': 'SCOPE_LIMITED',
+  'servicelink': 'VERIFIED_FIRST_PARTY',
+  'hud-homestore': 'VERIFIED_OFFICIAL',
+  'fannie-homepath': 'DISCOVERY_ONLY',
+  'freddie-homesteps': 'DISCOVERY_ONLY',
+  'usda-resales': 'VERIFIED_OFFICIAL',
+  'va-vrm': 'DISCOVERY_ONLY',
+  'irs-auctions': 'VERIFIED_OFFICIAL',
+  'treasury-forfeiture': 'VERIFIED_OFFICIAL',
+  'gsa-real-estate-sales': 'VERIFIED_OFFICIAL',
+  'us-marshals': 'DISCOVERY_ONLY',
+  'fdic-asset-sales': 'DISCOVERY_ONLY',
+  'ncua-amac': 'DISCOVERY_ONLY',
+  'blm-public-land-sales': 'DISCOVERY_ONLY',
+  'cws-marketing': 'DISCOVERY_ONLY',
+  'real-look': 'DISCOVERY_ONLY',
+  'civilview': 'SCOPE_LIMITED',
+  'bid4assets': 'INCONCLUSIVE_BLOCKED',
+  'landbanksearch': 'INCONCLUSIVE_BLOCKED',
+  'cuyahoga-land-bank': 'SCOPE_LIMITED',
+  'ohio-sheriff-sale': 'LOCAL_ROUTE',
+  'county-trustee-sale': 'LOCAL_ROUTE',
+  'harris-county-tax-sale': 'LOCAL_ROUTE',
+  'maricopa-tax-deed': 'LOCAL_ROUTE',
+  'county-tax-sale-template': 'LOCAL_ROUTE',
+  'county-surplus-property': 'LOCAL_ROUTE',
+  'state-land-auctions': 'LOCAL_ROUTE',
+  'state-surplus-property': 'LOCAL_ROUTE',
+  'federal-register': 'DISCOVERY_ONLY',
+  'jurisdiction-public-notices': 'DISCOVERY_ONLY',
+  'pacer-bankruptcy': 'DISCOVERY_ONLY',
+  'state-court-dockets': 'LOCAL_ROUTE',
+  'florida-statewide-parcels': 'VERIFIED_OFFICIAL',
+  'census-acs': 'VERIFIED_OFFICIAL',
+  'hud-usps-vacancy': 'DISCOVERY_ONLY',
+  'county-assessor': 'LOCAL_ROUTE',
+  'county-recorder': 'LOCAL_ROUTE',
+  'county-gis': 'LOCAL_ROUTE',
+  'local-zoning': 'LOCAL_ROUTE',
+  'fema-flood-map': 'VERIFIED_OFFICIAL',
+  'epa-envirofacts': 'VERIFIED_OFFICIAL',
+  'usfws-wetlands': 'VERIFIED_OFFICIAL',
+  'auction-dot-com': 'DISCOVERY_ONLY',
+  'hubzu': 'DISCOVERY_ONLY',
+  'xome': 'DISCOVERY_ONLY',
+  'realauction': 'DISCOVERY_ONLY',
+  'govdeals-real-property': 'DISCOVERY_ONLY',
+  'mls-licensed-feed': 'DISCOVERY_ONLY'
+});
 
 const ROLES = new Set(['opportunity', 'evidence', 'discovery']);
 const ACCESS = new Set(['public', 'account', 'licensed', 'jurisdiction']);
+const STATUSES = new Set(Object.keys(SOURCE_STATUSES));
 
 function source(entry) {
   if (!ROLES.has(entry.role)) throw new TypeError(`Invalid source role: ${entry.role}`);
@@ -24,8 +124,13 @@ function source(entry) {
   if (entry.adapterKey !== null && !SCHEDULED_ADAPTER_KEYS.includes(entry.adapterKey)) {
     throw new TypeError(`Unknown scheduled adapter: ${entry.adapterKey}`);
   }
+  const status = entry.status || SOURCE_STATUS_BY_ID[entry.id];
+  if (!status || !STATUSES.has(status)) {
+    throw new TypeError(`Missing or invalid source status: ${entry.id}`);
+  }
   return Object.freeze({
     ...entry,
+    status,
     workflow: Object.freeze({ ...entry.workflow, steps: Object.freeze([...entry.workflow.steps]) }),
     requiredEvidence: Object.freeze([...entry.requiredEvidence])
   });
@@ -83,7 +188,16 @@ const SOURCE_CATALOG = Object.freeze([
   source({ id: 'xome', label: 'Xome Auctions', category: 'marketplace', role: 'opportunity', coverage: 'Marketplace auction and REO inventory; seller coverage varies.', discoveryUrl: 'https://www.xome.com/auctions/', access: 'account', adapterKey: null, workflow: { primary: 'Use exact property/auction record.', fallback: 'Verify through named seller, broker, or public notice.', cadenceHours: 12, steps: ['Search target market.', 'Capture record and auction ID.', 'Verify property terms and issuer.'] }, requiredEvidence: [...recordEvidence, 'issuer or listing-broker evidence'], notes: 'Marketplace listing alone is not title, condition, or legal-sale evidence.' }),
   source({ id: 'realauction', label: 'RealAuction Platform', category: 'tax_sale', role: 'opportunity', coverage: 'Participating county tax, foreclosure, and other online auctions.', discoveryUrl: 'https://www.realauction.com/', access: 'account', adapterKey: null, workflow: { primary: 'Enroll a specific county and use exact auction record.', fallback: 'Use county tax collector/sheriff original notice.', cadenceHours: 12, steps: ['Select participating jurisdiction.', 'Capture exact auction/property ID.', 'Verify sale type, redemption, and bidder rules.'] }, requiredEvidence: [...recordEvidence, 'issuing county authority'], notes: 'The platform is not the issuer; county-specific terms govern.' }),
   source({ id: 'govdeals-real-property', label: 'GovDeals Real Property', category: 'government_surplus', role: 'opportunity', coverage: 'Participating government/school/utility surplus offerings, including occasional real estate.', discoveryUrl: 'https://www.govdeals.com/', access: 'account', adapterKey: null, workflow: { primary: 'Filter to actual real estate and use exact listing.', fallback: 'Verify directly with the disposing public agency.', cadenceHours: 24, steps: ['Confirm offering is real property, not equipment.', 'Capture listing and agency contact.', 'Obtain agency terms and authority.'] }, requiredEvidence: [...recordEvidence, 'disposing-agency evidence'], notes: 'Exclude personal property from property inventory.' }),
-  source({ id: 'mls-licensed-feed', label: 'MLS / Broker-Authorized Feed', category: 'marketplace', role: 'opportunity', coverage: 'Market-specific licensed MLS or broker data, potentially including REO and short sales.', discoveryUrl: 'https://www.nar.realtor/', access: 'licensed', adapterKey: null, workflow: { primary: 'Integrate only under an MLS/IDX or broker authorization.', fallback: 'Use public listing-broker property page.', cadenceHours: 6, steps: ['Obtain data license.', 'Honor display, attribution, and refresh rules.', 'Retain original broker/source URL.'] }, requiredEvidence: ['licensed feed entitlement', 'listing-broker attribution', 'listing ID and observed timestamp'], notes: 'There is no single national MLS feed; this requires market-level licensing.' })
+  source({ id: 'mls-licensed-feed', label: 'MLS / Broker-Authorized Feed', category: 'marketplace', role: 'opportunity', coverage: 'Market-specific licensed MLS or broker data, potentially including REO and short sales.', discoveryUrl: 'https://www.nar.realtor/', access: 'licensed', adapterKey: null, workflow: { primary: 'Integrate only under an MLS/IDX or broker authorization.', fallback: 'Use public listing-broker property page.', cadenceHours: 6, steps: ['Obtain data license.', 'Honor display, attribution, and refresh rules.', 'Retain original broker/source URL.'] }, requiredEvidence: ['licensed feed entitlement', 'listing-broker attribution', 'listing ID and observed timestamp'], notes: 'There is no single national MLS feed; this requires market-level licensing.' }),
+  source({ id: 'fl-dor-cadastral', label: 'FL DOR Statewide Cadastral (ArcGIS REST)', category: 'parcel_evidence', role: 'evidence', coverage: 'Florida statewide cadastral parcels across all 67 counties via a single ArcGIS REST endpoint; assessor attributes plus parcel geometry.', discoveryUrl: 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0', access: 'public', adapterKey: 'fl-dor-cadastral', propertyLookup: true, status: 'DISCOVERY_ONLY', workflow: { primary: 'Query the fixed FeatureServer with APN plus Florida DOR county code; paginate REST results and validate returned parcel identity.', fallback: 'Use the county property appraiser for a parcel-specific record.', cadenceHours: 720, steps: ['Confirm APN and Florida DOR county code before querying.', 'Capture the exact FeatureServer query URL, returned parcel ID, and assessment year.', 'Retain cadastral geometry as screening evidence, not as a boundary survey or valuation.'] }, requiredEvidence: ['Florida DOR parcel identifier and county code', 'official FeatureServer query URL', 'assessment year and source-observed timestamp'], notes: 'Collector adapter registered; status remains DISCOVERY_ONLY until two clean canaries pass. Single ArcGIS endpoint covers all 67 FL counties — assessor + parcel geometry. REST pagination required. Geometry is not a survey and assessed values are not market values. Access style: free public REST API.' }),
+  source({ id: 'tx-cad-bulk', label: 'Texas Central Appraisal District Bulk Rolls', category: 'parcel_evidence', role: 'evidence', coverage: 'Texas county central appraisal district bulk property/tax rolls; multi-county assessor downloads following the Harris CAD pattern.', discoveryUrl: 'https://www.hcad.org/', access: 'public', adapterKey: null, propertyLookup: true, status: 'DISCOVERY_ONLY', workflow: { primary: 'Download the published bulk roll for the target CAD county, then match parcels by account or situs address.', fallback: 'Use the CAD public property-search page for exact account records.', cadenceHours: 720, steps: ['Identify the target Texas CAD and its bulk-download terms.', 'Capture bulk file provenance, extract date, and account identifiers.', 'Keep assessed values distinct from market values and confirm county of jurisdiction.'] }, requiredEvidence: ['CAD bulk-roll provenance and extract date', 'appraisal district account identifier', 'county CAD source URL and observed timestamp'], notes: 'Discovery-only; no collector scheduled. Harris CAD pattern; multi-county assessor/tax rolls via bulk download. Each CAD publishes independently; formats and update cadence vary. Access style: public bulk download.' }),
+  source({ id: 'county-recorder-nod', label: 'County Recorder NOD/NOS Indexes', category: 'title_evidence', role: 'discovery', coverage: 'Selected county recorder grantor/grantee indexes for Notice of Default and Notice of Sale filings: Maricopa AZ, Orange CA (since 1982), Sacramento CA (to 1849), and LA Parish.', discoveryUrl: 'https://www.ocrecorder.com/', access: 'jurisdiction', adapterKey: null, status: 'DISCOVERY_ONLY', workflow: { primary: 'Enroll the official recorder index for the target county and search grantor/grantee or instrument type for NOD/NOS filings.', fallback: 'Use the county clerk counter or certified-records process for missing online years.', cadenceHours: 168, steps: ['Select the enrolled recorder county and verify index date coverage.', 'Capture instrument number, recording date, and parties for each NOD/NOS hit.', 'Resolve each filing to a parcel or legal description before treating it as a pre-foreclosure lead.'] }, requiredEvidence: ['recorder instrument number and recording date', 'grantor/grantee party names', 'parcel or legal description linkage', 'official recorder source URL'], notes: 'Discovery-only; no collector scheduled. Maricopa, Orange CA (since 1982), Sacramento (to 1849), LA Parish. Grantor-grantee indexes for pre-foreclosure discovery. Recorded notices alone do not establish insurable title, lien priority, or sale completion. Access style: per-county public scrape.' }),
+  source({ id: 'courtlistener', label: 'CourtListener / RECAP', category: 'court_record', role: 'discovery', coverage: 'Nationwide federal and state court docket enrichment through the free CourtListener API and RECAP archive; a PACER alternative for docket research.', discoveryUrl: 'https://www.courtlistener.com/', access: 'public', adapterKey: 'courtlistener', status: 'DISCOVERY_ONLY', workflow: { primary: 'Use the CourtListener free API to search party or docket, then resolve RECAP documents to exact court records.', fallback: 'Use PACER or the court clerk where RECAP coverage is incomplete.', cadenceHours: 168, steps: ['Search by party, docket number, or court.', 'Capture docket ID, filed document reference, and RECAP provenance.', 'Do not create a property listing without a sale or asset record.'] }, requiredEvidence: ['CourtListener docket or RECAP document identifier', 'court and case number', 'source-observed timestamp'], notes: 'Collector adapter registered; status remains DISCOVERY_ONLY until two clean canaries pass. Free API for court docket enrichment. PACER alternative. RECAP archive. A bankruptcy or foreclosure filing is not itself a sale; rate limits and coverage vary by court. Access style: free public API.' }),
+  source({ id: 'ca-controller-tax-sale', label: 'CA State Controller Tax-Defaulted Sales Directory', category: 'tax_sale', role: 'discovery', coverage: 'California county-by-county tax-defaulted property sale schedules and parcel lists published by the State Controller.', discoveryUrl: 'https://www.sco.ca.gov/boe_tax_sales.html', access: 'jurisdiction', adapterKey: 'ca-controller-tax-sale', status: 'DISCOVERY_ONLY', workflow: { primary: 'Use the Controller directory to locate the target county tax-sale schedule and linked parcel lists.', fallback: 'Contact the county tax collector named in the Controller listing.', cadenceHours: 168, steps: ['Identify the target California county sale from the Controller directory.', 'Capture the county sale notice, parcel list, and sale date.', 'Verify redemption status and bidder terms with the county before acting.'] }, requiredEvidence: ['Controller directory sale reference', 'county tax-sale notice or parcel list', 'sale date and bidder terms'], notes: 'Collector adapter registered; status remains DISCOVERY_ONLY until two clean canaries pass. County-by-county tax-sale schedule and parcel lists. The Controller directory is a discovery index; county tax-collector notices govern sale terms. Sale dates and minimum bids are never fabricated — only published values are ingested. Access style: public scrape of the Controller directory and linked county pages.' }),
+  source({ id: 'fhfa-hpi', label: 'FHFA House Price Index', category: 'area_context', role: 'evidence', coverage: 'Nationwide monthly house price index by metro, state, and Census division; used for index-adjusted equity estimation, not property valuation.', discoveryUrl: 'https://www.fhfa.gov/data/hpi', access: 'account', adapterKey: null, status: 'DISCOVERY_ONLY', workflow: { primary: 'Use a configured FHFA API key to retrieve the documented HPI series for the target geography and period.', fallback: 'Download published HPI tables when the API is unavailable, preserving series identity and vintage.', cadenceHours: 720, steps: ['Confirm API key entitlement and target geography series.', 'Capture series ID, observation period, and official query URL.', 'Present index values only as area-level context for equity adjustment, never as a property appraisal.'] }, requiredEvidence: ['configured FHFA API key entitlement', 'HPI series identifier and geography', 'observation period and official query URL'], notes: 'Discovery-only; no collector scheduled. Monthly index for index-adjusted equity estimation. Free API key required. HPI is an area repeat-sales index and does not establish this property’s market value. Access style: free public API with key.' }),
+  source({ id: 'census-geocoder', label: 'Census Geocoder + ACS', category: 'area_context', role: 'evidence', coverage: 'Nationwide Census address-to-tract geocoding plus ACS five-year demographic context; estimates describe areas, not individual properties.', discoveryUrl: 'https://geocoding.geo.census.gov/geocoder/', access: 'account', adapterKey: null, propertyLookup: true, status: 'DISCOVERY_ONLY', workflow: { primary: 'Use a configured Census API key to geocode the exact source address to Census geography, then retrieve ACS five-year estimates for the matched tract.', fallback: 'Use county-level ACS context when a tract match is unavailable, preserving the lower geographic precision.', cadenceHours: 720, steps: ['Confirm the source address and state before geocoding.', 'Capture geography match, GEOID, dataset year, period, and query URL.', 'Present vacancy, income, and home-value fields only as area estimates with margins of error.'] }, requiredEvidence: ['configured Census API key entitlement', 'Census geography match and GEOID', 'ACS dataset year and period', 'official Census query URL and source-observed timestamp'], notes: 'Discovery-only; no collector scheduled. Address-to-tract geocoding + ACS 5-year demographics. Free API key mandatory since May 2026. ACS estimates do not establish this property’s occupancy or value. Access style: free public API with mandatory key.' }),
+  source({ id: 'mers-servicerid', label: 'MERS ServicerID', category: 'title_evidence', role: 'evidence', coverage: 'Nationwide mortgage servicer point-of-contact lookup by MIN; identifies the current servicer, not the investor stack or beneficial owner.', discoveryUrl: 'https://www.mersinc.org/', access: 'account', adapterKey: null, status: 'DISCOVERY_ONLY', workflow: { primary: 'Use an authorized MERS ServicerID account to look up the MIN and capture the current servicer contact.', fallback: 'Use the servicer named on the most recent recorded assignment or notice of default.', cadenceHours: 720, steps: ['Confirm MIN and account entitlement.', 'Capture servicer identity, effective date, and lookup provenance.', 'Treat the result as servicer contact only; do not infer investor, trustee, or ownership.'] }, requiredEvidence: ['MERS MIN', 'servicer identity and effective date', 'authorized lookup provenance'], notes: 'Discovery-only; no collector scheduled. Servicer point-of-contact lookup. Not investor stack. Account registration required; ServicerID does not establish lien priority, ownership, or sale authority. Access style: authenticated account lookup.' }),
+  source({ id: 'excess-funds', label: 'Excess Funds / Unclaimed Surplus', category: 'tax_sale', role: 'discovery', coverage: 'Post-tax-sale excess proceeds and unclaimed surplus lists in selected jurisdictions: Orange Co FL Treasurer, Forsyth GA, Salt Lake Co UT, and the NY OSC map.', discoveryUrl: 'https://www.orangecountyfl.net/', access: 'jurisdiction', adapterKey: null, status: 'DISCOVERY_ONLY', workflow: { primary: 'Enroll the official treasurer, clerk, or unclaimed-property publisher for the target jurisdiction and capture surplus parcel lists.', fallback: 'Contact the named treasurer or clerk office for claim procedures.', cadenceHours: 168, steps: ['Identify the surplus-publishing authority for the target county.', 'Capture claimant-facing list, parcel or case reference, and claim deadline.', 'Verify claim eligibility and statutory deadlines with the issuing office before acting.'] }, requiredEvidence: ['official surplus or excess-funds list URL', 'parcel or case identifier', 'claim deadline and issuing authority'], notes: 'Discovery-only; no collector scheduled. Post-sale recovery: Orange Co FL Treasurer, Forsyth GA, Salt Lake Co UT, NY OSC map. Excess-funds discovery is not a purchase of the property; claim rights, deadlines, and priority claimants vary by statute. Access style: per-jurisdiction public scrape.' })
 ]);
 
 function getSource(id) {
@@ -94,13 +208,22 @@ function getSource(id) {
 function summarizeCatalog() {
   const byRole = {};
   const byCategory = {};
+  const byStatus = {};
   const scheduledAdapterKeys = [];
   for (const entry of SOURCE_CATALOG) {
     byRole[entry.role] = (byRole[entry.role] || 0) + 1;
     byCategory[entry.category] = (byCategory[entry.category] || 0) + 1;
+    byStatus[entry.status] = (byStatus[entry.status] || 0) + 1;
     if (entry.adapterKey) scheduledAdapterKeys.push(entry.adapterKey);
   }
-  return Object.freeze({ total: SOURCE_CATALOG.length, byRole: Object.freeze(byRole), byCategory: Object.freeze(byCategory), scheduledAdapterKeys: Object.freeze(scheduledAdapterKeys.sort()) });
+  return Object.freeze({
+    total: SOURCE_CATALOG.length,
+    byRole: Object.freeze(byRole),
+    byCategory: Object.freeze(byCategory),
+    byStatus: Object.freeze(byStatus),
+    lifecycleBySource: Object.freeze(lifecycleBySourceFromCatalog(SOURCE_CATALOG)),
+    scheduledAdapterKeys: Object.freeze(scheduledAdapterKeys.sort())
+  });
 }
 
 function isPrivateIpv4(hostname) {
@@ -120,4 +243,4 @@ function validateJurisdictionDiscoveryUrl(value) {
   return { isValid: true, error: null, url: url.toString() };
 }
 
-module.exports = { SOURCE_CATALOG, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl };
+module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl };
