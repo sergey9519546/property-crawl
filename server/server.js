@@ -18,6 +18,7 @@ const handlePropertySignals = require('./routes/property-signals');
 const handleHunts = require('./routes/hunts');
 const handleWorkspace = require('./routes/workspace');
 const handleDocumentReview = require('./routes/document-review');
+const handleCoverage = require('./routes/coverage');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
@@ -166,6 +167,9 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/sources') {
       const sources = await db.getSources();
       return res.json(sources);
+    }
+    if (url.pathname === '/api/coverage') {
+      return handleCoverage(req, res);
     }
     if (url.pathname === '/api/health') {
       return res.json({
