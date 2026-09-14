@@ -15,11 +15,15 @@ const RECORD_QUERY_KEYS = new Set([
 
 const SOURCE_HOSTS = Object.freeze({
   bid4assets: ['bid4assets.com'],
+  'ca-controller-tax-sale': ['sco.ca.gov'],
   civilview: ['salesweb.civilview.com'],
+  courtlistener: ['www.courtlistener.com'],
   fannie: ['homepath.fanniemae.com'],
+  'fl-dor-cadastral': ['services9.arcgis.com'],
   freddie: ['homesteps.com'],
   gsa: ['realestatesales.gov'],
   hud: ['hudhomestore.gov', 'egis.hud.gov'],
+  'hud-usps-vacancy': ['hudgis-hud.opendata.arcgis.com', 'services.arcgis.com', 'www.huduser.gov'],
   irs: ['irsauctions.gov'],
   landbank: ['landbanksearch.com'],
   marshals: ['usmarshals.gov', 'reallook.com'],
@@ -54,10 +58,42 @@ function hasSourceRecordShape(source, url) {
   switch (source) {
     case 'bid4assets':
       return /^\/auction\/[^/]+$/.test(path) && hasStablePathToken(url);
+    case 'ca-controller-tax-sale': {
+      // Controller tax-defaulted sales directory and SCO-hosted tax-sale
+      // schedule/parcel-list pages. County pages on non-SCO domains stay in
+      // provenance only and are never used as listing sourceUrl values.
+      const last = path.split('/').filter(Boolean).at(-1) || '';
+      if (!last) return false;
+      if (/^boe_tax_sales\.html?$/i.test(last)) return true;
+      if (/^(?:boe|ard|sl)_[a-z0-9_-]*tax[a-z0-9_-]*\.(?:html?|pdf)$/i.test(last)) return true;
+      return false;
+    }
     case 'civilview':
       return path === '/sales/saledetails' && url.searchParams.has('PropertyId');
+    case 'courtlistener':
+      // Exact docket URL: /docket/{numeric_id}/ or /docket/{numeric_id}/{slug}/
+      return /^\/docket\/\d{3,}(?:\/[^/]+)?\/?$/.test(path);
     case 'fannie':
       return /^\/(property|property-details)\/[^/]+$/.test(path) && hasStablePathToken(url);
+    case 'fl-dor-cadastral': {
+      // Exact FDOR statewide-cadastral feature URL, never the service root or
+      // an unbounded whole-inventory query. ArcGIS Online paths include an
+      // org-id segment before /arcgis/rest/.
+      const featureMatch = path.match(
+        /^(?:\/[^/]+)?\/arcgis\/rest\/services\/florida_statewide_cadastral\/featureserver\/0\/(\d+)$/
+      );
+      if (featureMatch && !url.search) return true;
+      const queryPath = /^(?:\/[^/]+)?\/arcgis\/rest\/services\/florida_statewide_cadastral\/featureserver\/0\/query$/;
+      if (!queryPath.test(path)) return false;
+      const allowed = new Set(['where', 'outFields', 'f', 'returnGeometry', 'outSR', 'resultRecordCount', 'resultOffset']);
+      const entries = [...url.searchParams.keys()];
+      const where = (url.searchParams.get('where') || '').replace(/\s+/g, '');
+      return entries.every((key) => allowed.has(key))
+        && new Set(entries).size === entries.length
+        && ['json', 'pjson'].includes(url.searchParams.get('f') || '')
+        && /OBJECTID=\d+/.test(where)
+        && !/OR|UNION|1=1/i.test(where);
+    }
     case 'freddie':
     case 'va':
       return /^\/property\/[^/]+$/.test(path) && hasStablePathToken(url);
@@ -76,6 +112,35 @@ function hasSourceRecordShape(source, url) {
           && (!url.searchParams.has('outSR') || url.searchParams.get('outSR') === '4326');
       }
       return path === '/property/propertydetails' && url.searchParams.has('caseNumber');
+    case 'hud-usps-vacancy': {
+      // HUD GIS Open Data ArcGIS FeatureServer record URLs, never the
+      // service root or an unbounded whole-inventory query. Two accepted
+      // shapes mirror the publisher's public surface:
+      //   1) exact feature URL: .../FeatureServer/0/{objectid}
+      //   2) bounded query URL: .../FeatureServer/0/query with a fixed
+      //      resultOffset pointing at a single OBJECTID (where=OBJECTID=N).
+      const featureMatch = path.match(/^(?:\/[^/]+){0,8}\/featureserver\/0\/(\d+)$/);
+      if (featureMatch && !url.search) return true;
+      const queryPath = /^(?:\/[^/]+){0,8}\/featureserver\/0\/query$/;
+      if (!queryPath.test(path)) return false;
+      const allowed = new Set([
+        'where', 'outFields', 'f', 'returnGeometry', 'outSR',
+        'resultRecordCount', 'resultOffset'
+      ]);
+      const entries = [...url.searchParams.keys()];
+      const where = (url.searchParams.get('where') || '').replace(/\s+/g, '');
+      const outFields = (url.searchParams.get('outFields') || '*');
+      const resultRecordCount = url.searchParams.get('resultRecordCount');
+      const resultOffset = url.searchParams.get('resultOffset');
+      return entries.every((key) => allowed.has(key))
+        && new Set(entries).size === entries.length
+        && ['json', 'pjson'].includes(url.searchParams.get('f') || '')
+        && (outFields === '*' || outFields.split(',').every((f) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(f)))
+        && /OBJECTID=\d+/.test(where)
+        && !/OR|UNION|1\s*=\s*1/i.test(where)
+        && (!resultRecordCount || Number.parseInt(resultRecordCount, 10) === 1)
+        && (!resultOffset || /^\d+$/.test(resultOffset));
+    }
     case 'irs':
       return /^\/(ad|auction)\/[^/]+$/.test(path) && (hasStablePathToken(url) || path.split('/').at(-1).split('-').length >= 3);
     case 'landbank':
