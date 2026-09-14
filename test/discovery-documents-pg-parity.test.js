@@ -11,19 +11,47 @@ let pool;
 before(() => { if (databaseUrl) pool = new Pool({ connectionString: databaseUrl, max: 1 }); });
 after(async () => { if (pool) await pool.end(); });
 
-for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} document bucket matches canonical memory semantics`, { skip: !databaseUrl }, async () => {
-  const cases = [];
-  for (const column of [null, true, false]) for (const documents of ['missing', 'empty', 'nonempty']) {
-    const provenance = documents === 'missing' ? {} : { sourceFacts: { documents: documents === 'empty' ? [] : [{ id: 'doc-1' }] } };
-    cases.push({ id: `${column}-${documents}`, hasDocuments: column, provenance });
+const documentStates = {
+  missing: undefined,
+  empty: [],
+  positive: [{ id: 'doc-1' }],
+  malformed: { id: 'not-an-array' },
+};
+
+function expectedDocumentState(column, sourceState, mediaState) {
+  if (column === true || sourceState === 'positive' || mediaState === 'positive') return true;
+  if (column === false || sourceState === 'empty' || mediaState === 'empty') return false;
+  return null;
+}
+
+const documentCases = [];
+for (const column of [null, true, false]) {
+  for (const sourceState of Object.keys(documentStates)) {
+    for (const mediaState of Object.keys(documentStates)) {
+      const provenance = {};
+      if (sourceState !== 'missing') provenance.sourceFacts = { documents: documentStates[sourceState] };
+      if (mediaState !== 'missing') provenance.media = { documents: documentStates[mediaState] };
+      documentCases.push({
+        id: String(column) + '-' + sourceState + '-' + mediaState,
+        hasDocuments: column,
+        provenance,
+        expected: expectedDocumentState(column, sourceState, mediaState),
+      });
+    }
   }
+}
+
+for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} document bucket matches explicit dual-container semantics`, { skip: !databaseUrl }, async () => {
+  const expectedValue = bucket === 'unknown' ? null : bucket === 'true';
+  const expected = documentCases.filter((item) => item.expected === expectedValue).map((item) => item.id).sort();
   const filter = query.queryFromUrl(new URL(`http://localhost/api/listings?hasDocuments=${bucket}`));
-  const expected = cases.filter((item) => query.matches({ ...item, id: item.id }, filter)).map((item) => item.id).sort();
+  const memory = documentCases.filter((item) => query.matches(item, filter)).map((item) => item.id).sort();
+  assert.deepEqual(memory, expected, 'memory query must match the stated tri-state contract');
   const where = query.pgWhere(filter);
-  const values = cases.map((item, index) => `($${where.params.length + index * 3 + 1},$${where.params.length + index * 3 + 2}::boolean,$${where.params.length + index * 3 + 3}::jsonb)`).join(',');
-  const params = [...where.params, ...cases.flatMap((item) => [item.id, item.hasDocuments, JSON.stringify(item.provenance)])];
+  const values = documentCases.map((item, index) => `($${where.params.length + index * 3 + 1},$${where.params.length + index * 3 + 2}::boolean,$${where.params.length + index * 3 + 3}::jsonb)`).join(',');
+  const params = [...where.params, ...documentCases.flatMap((item) => [item.id, item.hasDocuments, JSON.stringify(item.provenance)])];
   const result = await pool.query(`WITH listings(id,has_documents,provenance) AS (VALUES ${values}) SELECT id FROM listings${where.sql} ORDER BY id`, params);
-  assert.deepEqual(result.rows.map((row) => row.id), expected);
+  assert.deepEqual(result.rows.map((row) => row.id), expected, 'Postgres query must match the stated tri-state contract');
 });
 
 test('Postgres program and lifecycle fallbacks match canonical memory semantics', { skip: !databaseUrl }, async () => {
