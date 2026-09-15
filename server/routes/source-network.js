@@ -79,6 +79,57 @@ function createSourceNetworkHandler(dependencies = {}) {
         });
         return res.json(summary);
       }
+      if (url.pathname === '/api/source-network/unbrowse/intake' && req.method === 'POST') {
+        // HTTP counterpart of `scripts/crawler-tools-unbrowse.cjs intake-candidate`.
+        // Validates the body against the unbrowse route-candidate schema and,
+        // on success, hands it to the same source-intake store the CLI uses.
+        // Auth is required because the intake store mutates evidence packets.
+        const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
+        const intakeAdapter = dependencies.intake || require('../sources/intake');
+        let validated;
+        try { validated = unbrowseTool.validateCandidate(req.body || {}); }
+        catch (validationError) {
+          return res.status(400).json({
+            error: 'Unbrowse route candidate was rejected',
+            reason: validationError.message,
+            provenance: 'unbrowse-route-candidate',
+            candidateSchema: unbrowseTool.CANDIDATE_SCHEMA
+          });
+        }
+        try {
+          const result = unbrowseTool.candidateToIntake(req.body, { intake: intakeAdapter });
+          return res.status(result.deduplicated ? 200 : 201).json({
+            ...result,
+            schemaVersion: validated.schemaVersion,
+            source: validated.source,
+            endpointUrl: validated.evidence.endpointUrl
+          });
+        } catch (intakeError) {
+          return res.status(400).json({
+            error: 'Unbrowse intake could not be saved',
+            reason: intakeError.message,
+            provenance: 'unbrowse-route-candidate'
+          });
+        }
+      }
+      if (url.pathname === '/api/source-network/unbrowse/status' && req.method === 'GET') {
+        // Diagnostics only: the wrapper never executes Unbrowse and never
+        // contacts hosted services from this route. Token still required so
+        // the route does not leak installation probe results to anonymous
+        // callers. The tool reads UNBROWSE_PACKAGE_ROOT from process.env and
+        // falls back to UNBROWSE_CONFIG_DIR for the consent directory; we
+        // forward both so dependency-injected env values drive the probe.
+        const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
+        const previousRoot = process.env.UNBROWSE_PACKAGE_ROOT;
+        const syntheticRoot = env.UNBROWSE_PACKAGE_ROOT;
+        if (syntheticRoot) process.env.UNBROWSE_PACKAGE_ROOT = syntheticRoot;
+        const configDir = env.UNBROWSE_CONFIG_DIR || unbrowseTool.DEFAULT_CONFIG_DIR;
+        try { return res.json(unbrowseTool.inspectInstallation(undefined, configDir)); }
+        finally {
+          if (previousRoot === undefined) delete process.env.UNBROWSE_PACKAGE_ROOT;
+          else process.env.UNBROWSE_PACKAGE_ROOT = previousRoot;
+        }
+      }
       if (url.pathname === '/api/source-network/run' && req.method === 'POST') {
         if (req.body?.scope === 'all') {
           if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
