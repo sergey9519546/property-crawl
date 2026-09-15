@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { sourceDisplayText } from "@/lib/source-display";
 import {
+  formatSourceScope,
+  formatSourceScopeSummary,
+} from "@/lib/source-scope-label";
+import {
   ArrowDownRight,
   ArrowRight,
   Check,
@@ -23,6 +27,7 @@ import {
 
 type SourceRunCoverage = {
   scope?: unknown;
+  acquisitionScope?: unknown;
   discovered?: number;
   accepted?: number;
   rejected?: number;
@@ -31,6 +36,15 @@ type SourceRunCoverage = {
   trigger?: string;
   error?: string | null;
   scopeHash?: string;
+};
+
+type SourceReleaseGate = {
+  state?: string;
+  cleanRuns?: number;
+  requiredRuns?: number;
+  approved?: boolean;
+  evidenceQualified?: boolean;
+  scopeMatchesLatest?: boolean;
 };
 
 type Source = {
@@ -45,6 +59,7 @@ type Source = {
   access: string;
   adapterKey: string | null;
   discoveryStatus?: string;
+  releaseGate?: SourceReleaseGate;
   workflow: {
     primary: string;
     fallback: string;
@@ -157,6 +172,175 @@ const STATUS: Record<string, { label: string; color: string }> = {
     color: "bg-stone-100 text-stone-700",
   },
 };
+
+/** SOURCE_STATUSES taxonomy — mirrors server/sources/catalog.js. */
+const SOURCE_STATUSES: Record<string, { label: string; description: string; color: string }> = {
+  VERIFIED_OFFICIAL: {
+    label: "Verified official",
+    description: "Government first-party publisher with a confirmed working collector.",
+    color: "bg-emerald-100 text-emerald-800",
+  },
+  VERIFIED_FIRST_PARTY: {
+    label: "Verified first-party",
+    description: "Commercial first-party publisher with a confirmed working collector.",
+    color: "bg-blue-100 text-blue-800",
+  },
+  SCOPE_LIMITED: {
+    label: "Scope limited",
+    description: "Works, but only for specific jurisdictions or a bounded program.",
+    color: "bg-amber-100 text-amber-800",
+  },
+  LOCAL_ROUTE: {
+    label: "Local route",
+    description: "Requires per-jurisdiction enrollment and verification before use.",
+    color: "bg-amber-100 text-amber-800",
+  },
+  DISCOVERY_ONLY: {
+    label: "Discovery only",
+    description: "Catalog entry for investigation; no live collector yet.",
+    color: "bg-gray-100 text-gray-600",
+  },
+  INCONCLUSIVE_BLOCKED: {
+    label: "Blocked",
+    description: "Access denied by robots, CAPTCHA/Turnstile, or equivalent publisher control.",
+    color: "bg-red-100 text-red-800",
+  },
+  RETIRED: {
+    label: "Retired",
+    description: "No longer functional; kept for provenance and migration only.",
+    color: "bg-gray-100 text-gray-500",
+  },
+};
+
+function taxonomyBadge(status: string | undefined) {
+  if (!status) return null;
+  return SOURCE_STATUSES[status] ?? null;
+}
+
+function taxonomySummary(sources: Source[]) {
+  let verified = 0, scopeLimited = 0, discoveryOnly = 0, blocked = 0;
+  for (const s of sources) {
+    const st = s.status;
+    if (st === "VERIFIED_OFFICIAL" || st === "VERIFIED_FIRST_PARTY") verified++;
+    else if (st === "SCOPE_LIMITED" || st === "LOCAL_ROUTE") scopeLimited++;
+    else if (st === "DISCOVERY_ONLY") discoveryOnly++;
+    else if (st === "INCONCLUSIVE_BLOCKED") blocked++;
+  }
+  return `${verified} verified · ${scopeLimited} scope-limited · ${discoveryOnly} discovery-only · ${blocked} blocked`;
+}
+/** Known per-county coverage presets keyed by catalog source id or adapterKey. */
+type CoverageDimension =
+  | "assessor"
+  | "recorder"
+  | "foreclosure"
+  | "taxSale"
+  | "parcelMap"
+  | "documentImages";
+
+const COVERAGE_DIMENSIONS: CoverageDimension[] = [
+  "assessor",
+  "recorder",
+  "foreclosure",
+  "taxSale",
+  "parcelMap",
+  "documentImages",
+];
+
+const COVERAGE_DIMENSION_LABELS: Record<CoverageDimension, string> = {
+  assessor: "Assessor",
+  recorder: "Recorder",
+  foreclosure: "Foreclosure",
+  taxSale: "Tax sale",
+  parcelMap: "Parcel map",
+  documentImages: "Document images",
+};
+
+type CoveragePreset = {
+  countyCount: number;
+  countyLabel: string;
+  dimensions: Partial<Record<CoverageDimension, boolean>>;
+};
+
+const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
+  hud: {
+    countyCount: 52,
+    countyLabel: "52 jurisdictions",
+    dimensions: { foreclosure: true, documentImages: true },
+  },
+  "hud-homestore": {
+    countyCount: 52,
+    countyLabel: "52 jurisdictions",
+    dimensions: { foreclosure: true, documentImages: true },
+  },
+  servicelink: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true, documentImages: true },
+  },
+  civilview: {
+    countyCount: 1,
+    countyLabel: "NJ Salem only",
+    dimensions: { foreclosure: true },
+  },
+  "fl-dor-cadastral": {
+    countyCount: 67,
+    countyLabel: "67 FL counties",
+    dimensions: { assessor: true, parcelMap: true },
+  },
+  courtlistener: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  treasury: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  "treasury-forfeiture": {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  irs: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  "irs-auctions": {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  gsa: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  "gsa-real-estate-sales": {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  usda: {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+  "usda-resales": {
+    countyCount: 0,
+    countyLabel: "Nationwide",
+    dimensions: { foreclosure: true },
+  },
+};
+
+function coveragePresetFor(source: Source): CoveragePreset | null {
+  return (
+    COVERAGE_PRESETS[source.id] ??
+    (source.adapterKey ? COVERAGE_PRESETS[source.adapterKey] : null) ??
+    null
+  );
+}
 const label = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 const date = (value: string | null) =>
@@ -182,24 +366,6 @@ function coverageSummary(source: Source) {
   return "Open the workflow to review access and evidence requirements.";
 }
 
-function runScopeLabel(scope: unknown) {
-  if (typeof scope === "string" && scope.trim()) return `Scope: ${sourceDisplayText(scope.trim())}`;
-  if (!scope || typeof scope !== "object" || Array.isArray(scope)) return "Scope not recorded";
-  const values = scope as Record<string, unknown>;
-  const fields: [string, string][] = [
-    ["state", "State"],
-    ["stateCode", "State"],
-    ["county", "County"],
-    ["region", "Region"],
-    ["kind", "Type"],
-  ];
-  const parts = fields.flatMap(([key, title]) => {
-    const value = values[key];
-    return typeof value === "string" && value.trim() ? [`${title}: ${sourceDisplayText(value.trim())}`] : [];
-  });
-  return parts.length ? parts.join(" · ") : "Configured source scope";
-}
-
 function coverageDescription(coverage: Source["coverage"]) {
   if (coverage == null) return "No operational collection coverage recorded.";
   if (typeof coverage === "string") return sourceDisplayText(coverage);
@@ -210,7 +376,70 @@ function coverageDescription(coverage: Source["coverage"]) {
   const counts = discovered !== null || accepted !== null || rejected !== null
     ? `${accepted ?? 0} accepted · ${rejected ?? 0} rejected · ${discovered ?? 0} discovered`
     : "Record counts not reported";
-  return `${completion} · ${counts} · ${runScopeLabel(coverage.scope)}`;
+  return `${completion} · ${counts} · ${formatSourceScopeSummary(coverage.acquisitionScope ?? coverage.scope)}`;
+}
+
+function coverageScopeDetails(coverage: Source["coverage"]) {
+  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage)) {
+    return null;
+  }
+  const scope = coverage.acquisitionScope ?? coverage.scope;
+  const summary = formatSourceScopeSummary(scope);
+  const exact = formatSourceScope(scope);
+  return summary === exact ? null : exact;
+}
+
+function releaseGateMessage(source: Source) {
+  const gate = source.releaseGate;
+  if (!gate || (gate.approved !== false && gate.scopeMatchesLatest !== false)) return null;
+  const coverage = source.coverage;
+  if (!coverage || typeof coverage !== "object" || Array.isArray(coverage) || coverage.complete !== true) {
+    return null;
+  }
+  const cleanRuns = typeof gate.cleanRuns === "number" && Number.isFinite(gate.cleanRuns) ? gate.cleanRuns : 0;
+  const requiredRuns = typeof gate.requiredRuns === "number" && Number.isFinite(gate.requiredRuns) ? gate.requiredRuns : 2;
+  if (gate.scopeMatchesLatest === false) {
+    return "Latest sweep completed, but its scope does not match the recurring collection evidence. Approval remains blocked.";
+  }
+  if (gate.evidenceQualified === true) {
+    return `Latest sweep completed for the recorded scope; recurring collection approval is pending (${cleanRuns}/${requiredRuns} clean runs).`;
+  }
+  if (gate.state !== "canary" || cleanRuns < 1) {
+    return "Latest sweep completed for the recorded scope; recurring collection is not approved.";
+  }
+  return `Latest sweep completed for the recorded scope; recurring collection approval is pending (${cleanRuns}/${requiredRuns} clean runs).`;
+}
+
+function sourceStatus(source: Source) {
+  const gateMessage = releaseGateMessage(source);
+  if (gateMessage) {
+    return {
+      label: source.releaseGate?.scopeMatchesLatest === false ? "Approval blocked" : "Approval pending",
+      color: "bg-amber-100 text-amber-900",
+    };
+  }
+  return STATUS[source.discoveryStatus || source.status] || {
+    label: label(source.discoveryStatus || source.status),
+    color: "bg-stone-100 text-stone-600",
+  };
+}
+
+function collectionProblem(source: Source) {
+  const gateMessage = releaseGateMessage(source);
+  if (gateMessage) return gateMessage;
+  const status = source.discoveryStatus || source.status;
+  const coverageError = source.coverage && typeof source.coverage === "object" && !Array.isArray(source.coverage)
+    && typeof source.coverage.error === "string"
+    ? source.coverage.error.trim()
+    : null;
+  const lastRunError = typeof source.lastRun?.error === "string" ? source.lastRun.error.trim() : null;
+  const error = lastRunError || coverageError;
+  if (error) return `Latest collection failed: ${error}`;
+  if (status === "blocked") return "The publisher could not be accessed. Use the fallback workflow before relying on coverage.";
+  if (status === "attention") return "The latest collection needs review before this source can support coverage claims.";
+  if (status === "partial") return "Only part of the configured source scope was collected. Review the latest run before relying on coverage.";
+  if (status === "empty") return "The collection ran but returned no records. Confirm the publisher scope before treating this as no inventory.";
+  return null;
 }
 
 export function SourceNetwork() {
@@ -234,6 +463,7 @@ export function SourceNetwork() {
   const [customHomepage, setCustomHomepage] = useState("");
   const [customOrganization, setCustomOrganization] = useState("");
   const [customMode, setCustomMode] = useState(false);
+  const [showCoverageMatrix, setShowCoverageMatrix] = useState(false);
   const [reviewItems, setReviewItems] = useState<
     | {
         id: string;
@@ -435,7 +665,8 @@ export function SourceNetwork() {
               <p className="mt-1 text-xs leading-5 text-slate-500">
                 {data?.collectionHealth?.status === "healthy" ? `Last check ${date(data.collectionHealth.lastSeenAt)}${data.collectionHealth.backlog.queued ? ` · ${data.collectionHealth.backlog.queued} queued` : ""}` : data?.collectionHealth?.status === "stale" ? `Automation has not checked in recently. ${data.collectionHealth.backlog.queued} queued job${data.collectionHealth.backlog.queued === 1 ? "" : "s"}.` : "Database availability is reported separately from collection automation."}
               </p>
-            </div>            <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
+            </div>
+            <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
               A registered collector is not proof of complete coverage. Review each source’s latest result below.
             </p>
           </div>
@@ -527,11 +758,136 @@ export function SourceNetwork() {
 
         <SourceAtlas atlas={data?.atlas} storageMode={data?.storageMode} />
 
+        <section className="mt-9" aria-labelledby="coverage-matrix-heading">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 id="coverage-matrix-heading" className="text-xl font-semibold">
+                Per-county coverage matrix
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Known record-type coverage per source. A dash means the dimension is not claimed; "Not mapped" means no coverage data exists for that source yet.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCoverageMatrix((v) => !v)}
+              aria-expanded={showCoverageMatrix}
+              aria-controls="coverage-matrix-table"
+              className="rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold"
+            >
+              {showCoverageMatrix ? "Hide coverage matrix" : "Show coverage matrix"}
+            </button>
+          </div>
+          {showCoverageMatrix && (
+            <div
+              id="coverage-matrix-table"
+              className="overflow-x-auto rounded-2xl border border-[#E5E7EB] bg-white"
+            >
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[#E5E7EB] bg-slate-50">
+                    <th className="px-4 py-3 font-semibold">Source</th>
+                    {COVERAGE_DIMENSIONS.map((dim) => (
+                      <th
+                        key={dim}
+                        className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-600"
+                      >
+                        {COVERAGE_DIMENSION_LABELS[dim]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.sources || []).map((source) => {
+                    const preset = coveragePresetFor(source);
+                    return (
+                      <tr
+                        key={source.id}
+                        className="border-b border-slate-100 last:border-b-0"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{source.label}</span>
+                            {preset ? (
+                              <span
+                                className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                                title={preset.countyLabel}
+                              >
+                                {preset.countyCount > 0
+                                  ? `${preset.countyCount} counties`
+                                  : preset.countyLabel}
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-600">
+                                Not mapped
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {COVERAGE_DIMENSIONS.map((dim) => {
+                          if (!preset) {
+                            return (
+                              <td
+                                key={dim}
+                                className="px-3 py-3 text-center text-stone-400"
+                                aria-label="Not mapped"
+                              >
+                                —
+                              </td>
+                            );
+                          }
+                          const covered = preset.dimensions[dim] === true;
+                          return (
+                            <td
+                              key={dim}
+                              className="px-3 py-3 text-center"
+                              aria-label={
+                                covered
+                                  ? `${COVERAGE_DIMENSION_LABELS[dim]} covered`
+                                  : `${COVERAGE_DIMENSION_LABELS[dim]} not covered`
+                              }
+                            >
+                              {covered ? (
+                                <Check
+                                  size={16}
+                                  className="mx-auto text-emerald-600"
+                                />
+                              ) : (
+                                <span className="text-stone-400">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                  {!data?.sources?.length && (
+                    <tr>
+                      <td
+                        colSpan={COVERAGE_DIMENSIONS.length + 1}
+                        className="px-4 py-6 text-center text-sm text-slate-500"
+                      >
+                        No sources loaded.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
         <section className="mt-9" aria-labelledby="network-heading">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h2 id="network-heading" className="text-2xl font-semibold">
-              Explore the network
-            </h2>
+            <div>
+              <h2 id="network-heading" className="text-2xl font-semibold">
+                Explore the network
+              </h2>
+              {data?.sources?.length ? (
+                <p className="mt-1 text-sm text-slate-600" role="status" aria-label="Source status summary">
+                  {taxonomySummary(data.sources)}
+                </p>
+              ) : null}
+            </div>
             <button
               onClick={() => {
                 setCustomMode(true);
@@ -620,33 +976,71 @@ export function SourceNetwork() {
           ) : (
             <div className="grid items-start gap-6 xl:grid-cols-[1fr_420px]">
               <div className="grid gap-3 sm:grid-cols-2">
-                {sources.map((source) => (
-                  <button
-                    key={source.id}
-                    onClick={() => openSource(source)}
-                    aria-pressed={selectedId === source.id}
-                    className={`rounded-xl border p-5 text-left transition-colors ${selectedId === source.id ? "border-slate-900 bg-slate-100" : "border-[#E5E7EB] bg-white hover:border-slate-900"}`}
-                  >
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#6B7280]">
-                      {label(source.category)}
-                    </p>
-                    <h3 className="mt-2 text-base font-semibold">
-                      {source.label}
-                    </h3>
-                    <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#6B7280]">
-                      {coverageDescription(source.coverage)}
-                    </p>
-                    <div className="mt-4 flex items-center justify-between gap-2">
-                      <span
-                        className={`rounded px-2 py-1 text-[10px] font-semibold ${STATUS[source.discoveryStatus || source.status]?.color || "bg-stone-100 text-stone-600"}`}
+                {sources.map((source) => {
+                  const exactScope = coverageScopeDetails(source.coverage);
+                  const status = sourceStatus(source);
+                  const problem = collectionProblem(source);
+                  return (
+                    <article
+                      key={source.id}
+                      className={`overflow-hidden rounded-xl border transition-colors ${selectedId === source.id ? "border-slate-900 bg-slate-100" : "border-[#E5E7EB] bg-white hover:border-slate-900"}`}
+                    >
+                      <button
+                        onClick={() => openSource(source)}
+                        aria-pressed={selectedId === source.id}
+                        className="w-full p-4 text-left sm:p-5"
                       >
-                        {STATUS[source.discoveryStatus || source.status]?.label || label(source.discoveryStatus || source.status)}
-                      </span>
-                      <ArrowRight size={16} />
-                    </div>
-                    <p className="mt-3 text-xs leading-5 text-[#6B7280]">{coverageSummary(source)}</p>
-                  </button>
-                ))}
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#6B7280]">
+                          {label(source.category)}
+                        </p>
+                        <h3 className="mt-2 text-base font-semibold">
+                          {source.label}
+                        </h3>
+                        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#6B7280]">
+                          {coverageDescription(source.coverage)}
+                        </p>
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`rounded px-2 py-1 text-[10px] font-semibold ${status.color}`}
+                            >
+                              {status.label}
+                            </span>
+                            {taxonomyBadge(source.status) ? (
+                              <span
+                                title={taxonomyBadge(source.status)!.description}
+                                className={`rounded px-2 py-1 text-[10px] font-semibold ${taxonomyBadge(source.status)!.color}`}
+                              >
+                                {taxonomyBadge(source.status)!.label}
+                              </span>
+                            ) : null}
+                          </div>
+                          <ArrowRight size={16} />
+                        </div>
+                        {problem ? (
+                          <p className="mt-3 text-xs leading-5 text-amber-900">
+                            {problem}
+                          </p>
+                        ) : (
+                          <p className="mt-3 text-xs leading-5 text-[#6B7280]">
+                            {coverageSummary(source)}
+                          </p>
+                        )}
+                      </button>
+                      {exactScope && (
+                        <details className="border-t border-[#E5E7EB] px-5 pb-4 text-xs leading-5 text-[#6B7280]">
+                          <summary
+                            aria-label={`Inspect exact recorded scope for ${source.label}`}
+                            className="cursor-pointer pt-3 font-medium text-slate-900"
+                          >
+                            Exact recorded scope
+                          </summary>
+                          <p className="mt-1 break-words">{exactScope}</p>
+                        </details>
+                      )}
+                    </article>
+                  );
+                })}
                 {!sources.length && !error && (
                   <p className="p-5 text-sm text-[#6B7280]">
                     No sources match these filters.
@@ -726,10 +1120,9 @@ export function SourceNetwork() {
                           collection:{" "}
                           {date(selected.lastRun?.lastRunAt || null)}.
                         </p>
-                        {selected.lastRun?.error && (
-                          <p className="mt-2 text-xs text-amber-800">
-                            Latest collection failed. Follow the fallback
-                            workflow or retry.
+                        {collectionProblem(selected) && (
+                          <p role="alert" className="mt-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+                            {collectionProblem(selected)}{releaseGateMessage(selected) ? "" : " Follow the fallback workflow or retry."}
                           </p>
                         )}
                         <div className="mt-5 flex flex-wrap gap-2">

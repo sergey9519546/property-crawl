@@ -23,7 +23,9 @@ test('real HTTP workflow imports, reviews, and enrolls a local publisher without
   try {
     const before = await (await fetch(`${base}/api/source-network`)).json();
     assert.equal(before.summary.catalogSources, require('../server/sources/catalog').SOURCE_CATALOG.length);
-    assert.equal(before.summary.propertyCollectors, 14);
+    // The catalog currently exposes 17 registered property collectors; this count
+    // intentionally excludes the separate evidence collector below.
+    assert.equal(before.summary.propertyCollectors, 17);
     assert.equal(before.summary.evidenceCollectors, 1);
     assert.equal((await fetch(`${base}/api/source-network/intake`)).status, 401);
     const originalInventory = await (await fetch(`${base}/api/listings?limit=1`)).json();
