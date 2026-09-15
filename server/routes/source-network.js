@@ -4,6 +4,11 @@ const { presentedRunToken, tokensMatch } = require('./scrapers');
 const { loadObservations, recordSourceRun } = require('../sources/observations');
 const { buildSourceNetwork, enrolledSources } = require('../sources/network');
 const { attachDiscoveryCoverage } = require('../sources/discovery-coverage');
+// Cached at module load so the per-request path doesn't pay require-resolve cost
+// on every /api/source-network/unbrowse/intake or /unbrowse/status hit. The tool
+// is small but its module-graph walks scripts/, and Node caches modules anyway,
+// so this is mostly about making the dependency obvious in one place.
+const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
 
 function createSourceNetworkHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -84,7 +89,6 @@ function createSourceNetworkHandler(dependencies = {}) {
         // Validates the body against the unbrowse route-candidate schema and,
         // on success, hands it to the same source-intake store the CLI uses.
         // Auth is required because the intake store mutates evidence packets.
-        const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
         const intakeAdapter = dependencies.intake || require('../sources/intake');
         let validated;
         try { validated = unbrowseTool.validateCandidate(req.body || {}); }
@@ -119,7 +123,7 @@ function createSourceNetworkHandler(dependencies = {}) {
         // callers. The tool reads UNBROWSE_PACKAGE_ROOT from process.env and
         // falls back to UNBROWSE_CONFIG_DIR for the consent directory; we
         // forward both so dependency-injected env values drive the probe.
-        const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
+
         const previousRoot = process.env.UNBROWSE_PACKAGE_ROOT;
         const syntheticRoot = env.UNBROWSE_PACKAGE_ROOT;
         if (syntheticRoot) process.env.UNBROWSE_PACKAGE_ROOT = syntheticRoot;

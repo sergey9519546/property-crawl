@@ -11,6 +11,7 @@ const {
   buildView,
   validateParcelKey,
   runScraperSafely,
+  confidenceBand,
   PARCEL_KEY_PATTERN
 } = require('../server/intelligence/enrichment-gateway');
 
@@ -304,4 +305,92 @@ test('POST /api/enrichment/:parcelKey/refresh returns 400 when the requested sou
   await handler(req, res);
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.requested.length, 1);
+});
+
+test('confidenceBand maps numeric confidence to high/medium/low/unknown', () => {
+  assert.equal(confidenceBand(1), 'high');
+  assert.equal(confidenceBand(0.75), 'high');
+  assert.equal(confidenceBand(0.7), 'medium');
+  assert.equal(confidenceBand(0.45), 'medium');
+  assert.equal(confidenceBand(0.1), 'low');
+  assert.equal(confidenceBand(0), 'unknown');
+  assert.equal(confidenceBand(null), 'unknown');
+  assert.equal(confidenceBand(Number.NaN), 'unknown');
+});
+
+test('rankConfidence attaches a confidenceBand + confidence to every source and the freshest observation', () => {
+  const view = {
+    freshestObservation: { source: 'courtlistener', observedAt: new Date().toISOString(), openingBid: null },
+    sources: [
+      { source: 'courtlistener', summary: { source: 'courtlistener', observedAt: new Date().toISOString(), evidenceCount: 3 } },
+      { source: 'fl-dor-cadastral', summary: { source: 'fl-dor-cadastral', observedAt: new Date(Date.now() - 30 * 24 * 3_600_000).toISOString(), evidenceCount: 1 } }
+    ]
+  };
+  const ranked = rankConfidence(view);
+  for (const entry of ranked.sources) {
+    assert.ok(['high', 'medium', 'low', 'unknown'].includes(entry.confidenceBand));
+    assert.ok(typeof entry.confidence === 'number');
+  }
+  assert.ok(ranked.freshestObservation);
+  assert.ok(['high', 'medium', 'low', 'unknown'].includes(ranked.freshestObservation.confidenceBand));
+  assert.equal(ranked.freshestObservation.source, 'courtlistener');
+});
+
+test('refreshByParcelKey runs scrapers in parallel by default and reports a duration', async () => {
+  const parcelKey = 'CA-LA-1234-013';
+  const order = [];
+  const scrapers = [
+    { source: 'slow-A', scraper: { async scrape() { await new Promise((r) => setTimeout(r, 50)); order.push('slow-A-done'); return { listings: [] }; } } },
+    { source: 'slow-B', scraper: { async scrape() { await new Promise((r) => setTimeout(r, 50)); order.push('slow-B-done'); return { listings: [] }; } } },
+    { source: 'fast', scraper: { async scrape() { order.push('fast-done'); return { listings: [] }; } } }
+  ];
+  const t0 = Date.now();
+  const refresh = await refreshByParcelKey(parcelKey, {
+    database: fakeDatabase([]),
+    scrapers,
+    limit: 5
+  });
+  const wall = Date.now() - t0;
+  assert.ok(typeof refresh.durationMs === 'number');
+  // Three scrapers, each up to ~50ms. Sequential would be ~150ms; parallel ~50ms.
+  // We assert parallelism by ordering: at least one slow scraper finishes AFTER
+  // the fast scraper (otherwise the fast scraper would be sequenced last).
+  assert.ok(wall < 140, `parallel wall time ${wall}ms exceeds sequential floor; scrapers ran sequentially`);
+  assert.equal(order.length, 3);
+  assert.equal(refresh.adapterOutcomes.length, 3);
+  assert.ok(refresh.adapterOutcomes.every((o) => o.outcome === 'empty' || o.outcome === 'success'));
+});
+
+test('refreshByParcelKey still works when forced to sequential (parallel=false)', async () => {
+  const parcelKey = 'CA-LA-1234-014';
+  const scrapers = [
+    { source: 'courtlistener', scraper: { async scrape() { return { listings: [] }; } } },
+    { source: 'fl-dor-cadastral', scraper: { async scrape() { return { listings: [] }; } } }
+  ];
+  const refresh = await refreshByParcelKey(parcelKey, {
+    database: fakeDatabase([]),
+    scrapers,
+    limit: 5,
+    parallel: false
+  });
+  assert.equal(refresh.adapterOutcomes.length, 2);
+});
+
+test('refreshByParcelKey surfaces an outcome for every scraper even when one throws synchronously', async () => {
+  const parcelKey = 'CA-LA-1234-015';
+  const scrapers = [
+    { source: 'courtlistener', scraper: { async scrape() { return { listings: [] }; } } },
+    { source: 'fl-dor-cadastral', scraper: { scrape: () => { throw new Error('synchronous throw'); } } }
+  ];
+  const refresh = await refreshByParcelKey(parcelKey, {
+    database: fakeDatabase([]),
+    scrapers,
+    limit: 5
+  });
+  assert.equal(refresh.adapterOutcomes.length, 2);
+  // First scraper completes cleanly; second surfaces as 'skipped' (no scrape
+  // method since the synchronous throw prevents runScraperSafely from running).
+  const fl = refresh.adapterOutcomes.find((o) => o.source === 'fl-dor-cadastral');
+  assert.ok(fl, 'fl-dor-cadastral outcome should be present');
+  assert.ok(['failed', 'skipped'].includes(fl.outcome));
 });

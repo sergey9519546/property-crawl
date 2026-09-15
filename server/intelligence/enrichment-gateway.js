@@ -98,7 +98,7 @@ function scoreSource(sourceSummary, freshestTime, oldestTime) {
 
 function rankConfidence(view) {
   const sources = Array.isArray(view?.sources) ? view.sources : [];
-  if (!sources.length) return view;
+  if (!sources.length) return { ...view, freshestObservation: view.freshestObservation ? { ...view.freshestObservation, confidence: null, confidenceBand: 'unknown' } : null };
   const observedTimes = sources
     .map((s) => s.summary?.observedAt ? Date.parse(s.summary.observedAt) : 0)
     .filter((t) => t > 0);
@@ -114,7 +114,31 @@ function rankConfidence(view) {
     const bTime = Date.parse(b.summary?.observedAt || '') || 0;
     return bTime - aTime;
   });
-  return { ...view, sources: scored.map((entry, index) => ({ ...entry, rank: index + 1 })) };
+  const ranked = scored.map((entry, index) => ({ ...entry, rank: index + 1, confidenceBand: confidenceBand(entry.confidence) }));
+  // Project the freshest observation's confidence: it is the rank-1 source's
+  // confidence when the freshest observation actually comes from that source;
+  // otherwise it carries no confidence. We expose a band so the UI can render
+  // a label without recomputing.
+  const freshestObs = view.freshestObservation;
+  let enrichedFreshest = null;
+  if (freshestObs) {
+    const freshestSource = ranked.find((entry) => entry.source === freshestObs.source);
+    enrichedFreshest = {
+      ...freshestObs,
+      confidence: freshestSource ? freshestSource.confidence : null,
+      confidenceBand: freshestSource ? freshestSource.confidenceBand : 'unknown',
+      rank: freshestSource ? freshestSource.rank : null
+    };
+  }
+  return { ...view, sources: ranked, freshestObservation: enrichedFreshest };
+}
+
+function confidenceBand(confidence) {
+  if (confidence == null || Number.isNaN(confidence)) return 'unknown';
+  if (confidence >= 0.75) return 'high';
+  if (confidence >= 0.45) return 'medium';
+  if (confidence > 0) return 'low';
+  return 'unknown';
 }
 
 async function loadListingsForParcelKey(parcelKey, database) {
@@ -189,32 +213,68 @@ async function runScraperSafely(scraper, options) {
   }
 }
 
+// Sequential adapter runner. Kept as a separate function so the parallel path
+// can stay branchless and the sequential path is easy to read.
+async function sequentialOutcomes(scrapers, adapterOptions, now) {
+  const outcomes = [];
+  for (const entry of scrapers) {
+    const scraper = typeof entry.scraper === 'function' ? entry.scraper() : entry.scraper;
+    const startedAt = now().toISOString();
+    const outcome = await runScraperSafely(scraper, adapterOptions);
+    outcomes.push({ source: entry.source, ...outcome, startedAt });
+  }
+  return outcomes;
+}
+
 async function refreshByParcelKey(parcelKey, {
   database,
   scheduler,
   scrapers = ENRICHMENT_SCRAPERS,
   limit = DEFAULT_REFRESH_LIMIT,
   env = process.env,
-  now = () => new Date()
+  now = () => new Date(),
+  parallel = true
 } = {}) {
   const validKey = validateParcelKey(parcelKey);
   const db = database || require('../db/client');
   // The scrapers accept a `perPage` or `maxRecords` budget; we pass whichever
   // the adapter supports. Each adapter is responsible for rate limiting; the
   // gateway only bounds the per-run budget so a refresh cannot fan out.
-  const outcomes = [];
-  for (const entry of scrapers) {
+  //
+  // We default to parallel execution via Promise.allSettled: one slow or
+  // failing scraper never blocks the others. runScraperSafely already catches
+  // its own errors, so allSettled mostly exists to keep the per-adapter timing
+  // honest even if a future adapter stops catching internally.
+  const startMs = Date.now();
+  const scrapedAt = now().toISOString();
+  const tasks = scrapers.map(async (entry) => {
     const scraper = typeof entry.scraper === 'function' ? entry.scraper() : entry.scraper;
     const adapterOptions = { perPage: limit, maxRecords: limit, searchQuery: validKey };
-    const outcome = await runScraperSafely(scraper, adapterOptions);
-    outcomes.push({ source: entry.source, ...outcome, startedAt: now().toISOString() });
-  }
+    const startedAt = now().toISOString();
+    try {
+      const outcome = await runScraperSafely(scraper, adapterOptions);
+      return { source: entry.source, ...outcome, startedAt };
+    } catch (error) {
+      // runScraperSafely swallows errors; this catch only fires if it ever
+      // stops doing that. We still surface it so the caller knows the
+      // adapter threw rather than completing cleanly.
+      return { source: entry.source, outcome: 'failed', error: error.message, records: [], startedAt };
+    }
+  });
+  const settled = parallel ? await Promise.allSettled(tasks) : [];
+  const outcomes = parallel
+    ? settled.map((result, index) => {
+        if (result.status === 'fulfilled') return result.value;
+        return { source: scrapers[index].source, outcome: 'failed', error: String(result.reason && result.reason.message || result.reason), records: [], startedAt: now().toISOString() };
+      })
+    : await sequentialOutcomes(scrapers, { perPage: limit, maxRecords: limit, searchQuery: validKey }, now);
   // The scraper-side upsert flow inserts any new listings into the inventory
   // before returning, so the next aggregateByParcelKey call sees them. The
   // refresh aggregates the post-refresh view rather than re-reading pre-refresh
   // data, so the response reflects what changed.
   const view = await aggregateByParcelKey(validKey, { database: db });
-  return { parcelKey: validKey, scrapedAt: now().toISOString(), adapterOutcomes: outcomes, view };
+  const durationMs = Date.now() - startMs;
+  return { parcelKey: validKey, scrapedAt, durationMs, adapterOutcomes: outcomes, view };
 }
 
 module.exports = {
@@ -226,5 +286,6 @@ module.exports = {
   buildView,
   loadListingsForParcelKey,
   runScraperSafely,
-  validateParcelKey
+  validateParcelKey,
+  confidenceBand
 };
