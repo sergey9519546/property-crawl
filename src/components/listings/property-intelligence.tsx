@@ -41,7 +41,7 @@ function valueLabel(value: unknown, key?: string): string {
 const humanize = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 const date = (value: string) => new Date(value).toLocaleDateString();
 
-export function PropertyIntelligence({ listingId }: { listingId: string }) {
+export function PropertyIntelligence({ listingId, documentsShown = false }: { listingId: string; documentsShown?: boolean }) {
   const session = useWorkspaceSession();
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [busy, setBusy] = useState(false);
@@ -110,7 +110,7 @@ export function PropertyIntelligence({ listingId }: { listingId: string }) {
           {dossier.publicRecords.issues.length > 0 && <details open={!dossier.publicRecords.parcel && !dossier.publicRecords.areaContext} className="text-xs text-slate-600"><summary className="cursor-pointer font-semibold">Research coverage and unresolved lookups</summary><ul className="mt-3 space-y-2">{dossier.publicRecords.issues.map((issue) => <li key={issue}>{sourceDisplayText(issue)}</li>)}</ul></details>}
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-900 underline hover:text-slate-700">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </div></details>}
-        <DiscoveryEvidence evidence={dossier} />
+        <DiscoveryEvidence evidence={dossier} documentsShown={documentsShown} />
         {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
           <details className="border-b border-slate-200 pb-4">
           <summary className="cursor-pointer text-sm font-semibold text-slate-700">Research priority · how it is calculated</summary>

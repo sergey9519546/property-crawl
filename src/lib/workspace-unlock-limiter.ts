@@ -41,11 +41,12 @@ export class WorkspaceUnlockLimiter {
   }
 }
 
-// A Web Request does not expose a trustworthy socket address. Forwarded IP
-// headers are caller-controlled unless a deployment proxy guarantees otherwise,
-// so the default limiter intentionally uses one bounded workspace-wide bucket.
-export function workspaceUnlockBucket(_request: Request) {
-  return "global";
+// Per-session bucket: the client sends a random x-unlock-sid header so one
+// user's failed attempts do not lock out other users. Falls back to a shared
+// bucket when the header is absent (e.g. non-browser callers).
+export function workspaceUnlockBucket(request: Request) {
+  const sid = request.headers.get("x-unlock-sid");
+  return sid && sid.length <= 64 ? `sid:${sid}` : "global";
 }
 
 export const workspaceUnlockLimiter = new WorkspaceUnlockLimiter();

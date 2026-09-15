@@ -2,8 +2,11 @@
 
 import Link from 'next/link';
 import { useWorkspaceSession } from '@/components/workspace/workspace-shell';
+import { PropertyDocuments } from '@/components/listings/property-documents';
+import type { DocumentEvidence } from '@/lib/document-evidence';
 
 export type DiscoveryEvidenceData = {
+  documentEvidence?: DocumentEvidence;
   evidenceTimeline?: { total: number; truncated: boolean; items: { snapshotId: string; observedAt: string; origin: string; kind: string; payloadSha256: string; evidenceUrl: string }[] };
   linkedPublisherRecords?: { id: string; source: string; parcelId: string; jurisdiction: string; observedAt: string; sourceUrl: string }[];
   identityCandidates?: { id: string; source: string; address: string }[];
@@ -15,7 +18,7 @@ const readable = (value: unknown) => value === null || value === undefined ? 'No
 const date = (value: string) => new Date(value).toLocaleString();
 const url = (value: unknown) => { try { const parsed = new URL(String(value)); return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : null; } catch { return null; } };
 
-export function DiscoveryEvidence({ evidence }: { evidence: DiscoveryEvidenceData }) {
+export function DiscoveryEvidence({ evidence, documentsShown = false }: { evidence: DiscoveryEvidenceData; documentsShown?: boolean }) {
   const session = useWorkspaceSession();
   const { evidenceTimeline: timeline, mediaEvidence: media, saleMechanics: sale } = evidence;
   return <div className="space-y-5 text-xs">
@@ -25,12 +28,8 @@ export function DiscoveryEvidence({ evidence }: { evidence: DiscoveryEvidenceDat
       <div><dt className="text-slate-500">Publisher’s auction window</dt><dd>{readable(sale.windowStart)} → {readable(sale.windowEnd)}</dd></div>
       <div><dt className="text-slate-500">Sale location</dt><dd>{readable(sale.location)}</dd></div>
     </dl></details>}
-    {media && <div className="rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-bold">Documents and media evidence</h3>
-      {media.documents === null ? <p className="mt-2 text-sm text-slate-600">Document links have not been captured. Review the publisher page for current files and access requirements.</p> : !media.documents.length ? <p className="mt-2 text-sm text-slate-600">No documents were listed in the captured record.</p> : <ul className="mt-3 space-y-2">{media.documents.map((document, index) => {
-        const href = url(document.url || document.documentUrl || document.documentURL || document.fileUrl);
-        const title = String(document.title || document.name || document.documentName || `Publisher document ${index + 1}`);
-        return <li key={index}>{href ? <a href={href} target="_blank" rel="noreferrer" className="font-semibold underline">{title}</a> : <span>{title} · link unavailable</span>}</li>;
-      })}</ul>}
+    {!documentsShown && <PropertyDocuments evidence={evidence.documentEvidence} />}
+    {media && (media.references.length > 0 || media.assets.length > 0) && <div className="rounded-xl border border-slate-200 p-4"><h3 className="text-sm font-bold">Media evidence</h3>
       {(media.references.length > 0 || media.assets.length > 0) && <details className="mt-3 text-slate-600"><summary className="cursor-pointer font-semibold">Image sources &amp; file details</summary><p className="mt-2">{media.references.length} image references · {media.assets.length} indexed files. Indexed files may still need display permission.</p><ul className="mt-2 space-y-1">{media.assets.map(asset => <li key={asset.sha256} className="break-all font-mono text-[10px]">{asset.sha256.slice(0, 16)}… · {asset.displayStatus} · rights: {asset.rights}</li>)}</ul></details>}
     </div>}
     {!!evidence.linkedPublisherRecords?.length && <div><h3 className="text-sm font-bold">Linked publisher records</h3><p className="mt-1 text-slate-500">These records share an exact parcel identifier and jurisdiction. Each publisher’s facts remain separate.</p><ul className="mt-3 space-y-2">{evidence.linkedPublisherRecords.map(record => <li key={record.id}><Link href={`/listings/${encodeURIComponent(record.id)}`} className="font-semibold underline">{record.source} · {record.parcelId}</Link><span className="ml-2 text-slate-500">{record.jurisdiction}</span></li>)}</ul></div>}

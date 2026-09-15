@@ -16,8 +16,7 @@ function publishedBoolean(raw: unknown): string | null {
 export function SaleMechanics({ listing, exactSourceUrl }: { listing: PropertyListing; exactSourceUrl: string | null }) {
   const provenance = listing.provenance || {};
   const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
-  const documents = provenance.media && typeof provenance.media === "object" ? (provenance.media as Record<string, unknown>).documents : null;
-  const observedDocumentCount = Array.isArray(documents) ? documents.length : 0;
+  const documents = listing.documentEvidence;
   const factCandidates: [string, unknown][] = [
     ["Program", listing.auctionProgram || listing.program],
     ["Auction method", sourceFacts.auctionMethod],
@@ -26,7 +25,7 @@ export function SaleMechanics({ listing, exactSourceUrl }: { listing: PropertyLi
     ["Interior access available", publishedBoolean(sourceFacts.interiorAccessAvailable)],
     ["Cleared for sale", sourceFacts.clearedForSale],
     ["Deposit / payment terms", listing.deposit],
-    ["Publisher documents", observedDocumentCount > 0 ? `${observedDocumentCount} item${observedDocumentCount === 1 ? "" : "s"} observed` : listing.hasDocuments === true ? "Publisher reports documents available" : listing.hasDocuments === false ? "None reported" : null],
+    ["Publisher documents", documents?.count != null ? `${documents.count} reference${documents.count === 1 ? "" : "s"} captured` : null],
   ];
   const facts = factCandidates.flatMap(([label, raw]) => {
     const rendered = optionalText(raw);

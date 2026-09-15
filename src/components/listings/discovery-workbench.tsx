@@ -21,6 +21,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { DiscoveryCard } from "@/components/listings/discovery-card";
 import { DiscoveryMap } from "@/components/listings/discovery-map";
+import { TriageChips } from "@/components/listings/triage-chips";
 import { SaveSearchButton } from "@/components/hunts/save-search-button";
 import {
   SOURCES,
@@ -55,12 +56,14 @@ const defaults: Record<string, string> = {
   lifecycle: "All lifecycle states",
   occupancy: "All occupancy",
   freshness: "Any freshness",
+  distressStage: "All distress stages",
 };
 const filterLabels: Record<string, string> = {
   q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
   program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
   saleFrom: "From", saleTo: "Until", maxBid: "Max opening amount", minScore: "Min score",
   minEquity: "Min spread", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption",
+  distressStage: "Distress stage",
 };
 export function DiscoveryWorkbench() {
   const router = useRouter();
@@ -88,6 +91,13 @@ export function DiscoveryWorkbench() {
   const pendingSaves = React.useRef(new Set<string>());
   const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
   const [watchlistError, setWatchlistError] = React.useState("");
+  const [triageFilters, setTriageFilters] = React.useState({
+    isNew: false,
+    priceDropped: false,
+    hasDocs: false,
+    stale: false,
+    occupancyKnown: false,
+  });
   React.useEffect(() => setQueryDraft(filters.q || ""), [filters.q]);
   React.useEffect(() => setCursorStack([]), [queryKey]);
 
@@ -216,6 +226,25 @@ export function DiscoveryWorkbench() {
     }
   };
   const facets = payload?.facets || {};
+  const anyTriageActive = Object.values(triageFilters).some(Boolean);
+  const distressStageFilter = filters.distressStage;
+  const filteredListings = React.useMemo(() => {
+    if (!payload?.listings) return [];
+    return payload.listings.filter((listing) => {
+      if (distressStageFilter && distressStageFilter !== "all") {
+        if ((listing.triage?.distressStage || "unknown") !== distressStageFilter) return false;
+      }
+      if (!anyTriageActive) return true;
+      const t = listing.triage;
+      if (!t) return false;
+      if (triageFilters.isNew && !t.isNew) return false;
+      if (triageFilters.priceDropped && !t.priceDropped) return false;
+      if (triageFilters.hasDocs && !t.hasDocs) return false;
+      if (triageFilters.stale && !(t.staleDays > 30)) return false;
+      if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
+      return true;
+    });
+  }, [payload?.listings, triageFilters, anyTriageActive, distressStageFilter]);
   const facetOptions = (field: keyof DiscoveryFilters) => {
     const options = facets[field] || [];
     const selected = filters[field];
@@ -310,9 +339,19 @@ export function DiscoveryWorkbench() {
                 {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
               </select>
             ))}
+            <select aria-label="Distress stage" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+              <option value="all">All distress stages</option>
+              <option value="reo">REO</option>
+              <option value="pre_foreclosure">Pre-foreclosure</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="tax_sale">Tax sale</option>
+              <option value="unknown">Unknown</option>
+            </select>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Max published amount<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min equity ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
               <option value="all">Any document status</option><option value="true">Documents available</option><option value="false">No documents reported</option><option value="unknown">Document status unknown</option>
             </select>
@@ -349,6 +388,34 @@ export function DiscoveryWorkbench() {
             </button>
           </div>
         )}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Triage filters">
+        {([
+          { key: "isNew" as const, label: "New" },
+          { key: "priceDropped" as const, label: "Price dropped" },
+          { key: "hasDocs" as const, label: "Has docs" },
+          { key: "stale" as const, label: "Stale >30d" },
+          { key: "occupancyKnown" as const, label: "Occupancy known" },
+        ]).map(({ key, label: chipLabel }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={triageFilters[key]}
+            onClick={() => setTriageFilters((prev) => ({ ...prev, [key]: !prev[key] }))}
+            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              triageFilters[key]
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+            }`}
+          >
+            {chipLabel}
+          </button>
+        ))}
+        {(anyTriageActive || (distressStageFilter && distressStageFilter !== "all")) ? (
+          <span className="text-xs text-slate-500">
+            {filteredListings.length} of {payload?.listings?.length ?? 0} shown
+          </span>
+        ) : null}
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -435,7 +502,7 @@ export function DiscoveryWorkbench() {
         </div>
       ) : !payload && error ? null : filters.view === "calendar" && payload ? (
         <DiscoveryCalendar
-          listings={payload?.listings || []}
+          listings={filteredListings}
           filters={filters}
           truncated={Boolean(payload?.page?.hasMore)}
         />
@@ -446,7 +513,7 @@ export function DiscoveryWorkbench() {
               <Loader2 className="mb-3 animate-spin" />
               Loading properties…
             </div>
-          ) : !payload?.listings.length ? (
+          ) : !filteredListings.length ? (
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
               <SlidersHorizontal className="mx-auto text-slate-400" />
               <h2 className="mt-4 text-lg font-bold">
@@ -464,7 +531,7 @@ export function DiscoveryWorkbench() {
             </div>
           ) : (
             <div aria-busy={loading} className={`mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>
-              {payload.listings.map((listing) => (
+              {filteredListings.map((listing) => (
                 <DiscoveryCard
                   key={listing.id}
                   listing={listing}
@@ -557,9 +624,11 @@ function DiscoveryCalendar({
                   <Link
                     key={listing.id}
                     href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
+                    prefetch={false}
                     className="block rounded-lg bg-slate-50 p-3 text-sm hover:bg-slate-100"
                   >
                     <strong className="block">{listing.address}</strong>
+                    <TriageChips listing={listing} className="mt-1.5" />
                     <span className="mt-1 block text-xs text-slate-500">
                       {sourceDisplayText(
                         SOURCES[listing.source]?.label || listing.source,

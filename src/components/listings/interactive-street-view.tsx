@@ -14,6 +14,7 @@ type Props = {
   address: string;
   sourceLabel?: string | null;
   metadata: StreetViewMetadata;
+  onUnavailable?: () => void;
 };
 
 type PanoramaHandle = {
@@ -21,7 +22,7 @@ type PanoramaHandle = {
   unbindAll?(): void;
 };
 
-export function InteractiveStreetView({ address, sourceLabel, metadata }: Props) {
+export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavailable }: Props) {
   const container = React.useRef<HTMLDivElement>(null);
   const panorama = React.useRef<PanoramaHandle | null>(null);
   const iframeTimer = React.useRef<number | null>(null);
@@ -85,6 +86,8 @@ export function InteractiveStreetView({ address, sourceLabel, metadata }: Props)
       panorama.current = null;
     };
   }, [attempt, embedUrl, metadata]);
+
+  React.useEffect(() => { if (state === "error") onUnavailable?.(); }, [state, onUnavailable]);
 
   const launch = streetViewLaunchUrl(address, metadata);
   const label = metadata.targetLabel

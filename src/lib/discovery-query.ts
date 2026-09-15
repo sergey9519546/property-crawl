@@ -3,10 +3,11 @@ export type DiscoveryFilters = {
   program?: string; lifecycle?: string; saleFrom?: string; saleTo?: string;
   maxBid?: string; occupancy?: string; freshness?: string; hasDocuments?: string;
   minScore?: string; minEquity?: string; seniorLien?: string; redemption?: string;
+  distressStage?: string;
   sort?: string; view?: string;
 };
 
-const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "seniorLien", "redemption", "sort", "view"] as const;
+const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo", "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "seniorLien", "redemption", "distressStage", "sort", "view"] as const;
 
 export function readDiscoveryFilters(params: URLSearchParams): DiscoveryFilters {
   const result: DiscoveryFilters = {};

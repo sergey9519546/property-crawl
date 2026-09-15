@@ -1,4 +1,6 @@
 type ListingLinkFields = {
+  id?: string | null;
+  provenance?: { recordId?: string | number | null } | null;
   source?: string | null;
   sourceUrl?: string | null;
 };
@@ -48,7 +50,7 @@ const SOURCE_ALLOWED_HOSTS: Record<string, string[]> = {
   fannie: ["homepath.fanniemae.com"],
   freddie: ["homesteps.com"],
   gsa: ["realestatesales.gov"],
-  hud: ["hudhomestore.gov"],
+  hud: ["hudhomestore.gov", "egis.hud.gov"],
   irs: ["irsauctions.gov"],
   landbank: ["landbanksearch.com"],
   marshals: ["usmarshals.gov", "reallook.com"],
@@ -80,6 +82,24 @@ function hasRecordIdentity(url: URL) {
   );
   const uniqueSlug = /\d{3,}/.test(lastSegment) || lastSegment.split("-").length >= 4;
   return recordPath && uniqueSlug;
+}
+
+function exactHudEgisCase(listing: ListingLinkFields, url: URL) {
+  if (url.hostname.toLowerCase() !== "egis.hud.gov") return null;
+  const path = url.pathname.toLowerCase().replace(/\/+$/, "");
+  if (path !== "/arcgis/rest/services/cpdmaps/hudsfreo/mapserver/1/query") return null;
+  const allowedKeys = new Set(["where", "outfields", "f", "returngeometry", "outsr"]);
+  const entries = Array.from(url.searchParams.keys());
+  if (!entries.every((key) => allowedKeys.has(key.toLowerCase())) || new Set(entries.map((key) => key.toLowerCase())).size !== entries.length) return null;
+  const match = /^CASE_NUM\s*=\s*'([0-9]{3}-[0-9]{6})'$/.exec(url.searchParams.get("where") ?? "");
+  if (!match || !["json", "pjson"].includes(url.searchParams.get("f") ?? "")) return null;
+  if ((url.searchParams.get("outFields") ?? "*") !== "*") return null;
+  if (url.searchParams.has("returnGeometry") && !["true", "false"].includes(url.searchParams.get("returnGeometry") ?? "")) return null;
+  if (url.searchParams.has("outSR") && url.searchParams.get("outSR") !== "4326") return null;
+  const expected = listing.provenance?.recordId == null
+    ? listing.id?.replace(/^HUD-/i, "")
+    : String(listing.provenance.recordId);
+  return expected && match[1] === expected ? url.toString() : null;
 }
 
 function normalizedUrl(value: string) {
@@ -145,5 +165,9 @@ export function getExactSourceListingUrl(
 
   // Real listing CTAs must carry a stable record identity in either the path
   // or query string. A merely non-root URL is not enough.
+  if (sourceKey === "hud" && candidate.hostname.toLowerCase() === "egis.hud.gov") {
+    return exactHudEgisCase(listing, candidate);
+  }
+
   return hasRecordIdentity(candidate) ? candidate.toString() : null;
 }

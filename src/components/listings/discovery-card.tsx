@@ -3,10 +3,19 @@
 import Link from "next/link";
 import { ArrowUpRight, Bookmark, FileText, Loader2 } from "lucide-react";
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
+import { TriageChips } from "@/components/listings/triage-chips";
 import { CaseAction } from "@/components/research/case-action";
 import { SOURCES, type PropertyListing } from "@/components/terminal/property-data";
 import { displayDate, displayMoney, knownNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
+
+// Distress stage → label + Tailwind classes for the badge.
+const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }> = {
+  reo: { label: "REO", className: "bg-blue-50 text-blue-800" },
+  pre_foreclosure: { label: "Pre-FC", className: "bg-amber-50 text-amber-800" },
+  scheduled: { label: "Scheduled", className: "bg-orange-50 text-orange-800" },
+  tax_sale: { label: "Tax sale", className: "bg-purple-50 text-purple-800" },
+};
 
 // Format publisher capitalization for display only; the source address stays intact.
 function readable(value: string) {
@@ -56,22 +65,39 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
         <span className="font-medium text-slate-600">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
         {lifecycle ? <><span aria-hidden>·</span><span>{sourceDisplayText(lifecycle.replace(/_/g, " "))}</span></> : null}
         {!observed ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-900">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
+        {listing.triage && listing.triage.staleDays > 30 ? <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-600">Stale</span> : null}
+        {(() => {
+          const stage = listing.triage?.distressStage;
+          if (!stage || stage === "unknown") return null;
+          const badge = DISTRESS_STAGE_BADGE[stage];
+          if (!badge) return null;
+          return <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>;
+        })()}
+        {listing.crossSourceMatches && listing.crossSourceMatches.length > 0 ? (
+          <span
+            className="rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
+            title={listing.crossSourceMatches.map((m) => `${sourceDisplayText(m.source)}${m.openingBid != null ? ` ($${Number(m.openingBid).toLocaleString()})` : ""}`).join("\n")}
+          >
+            {listing.crossSourceMatches.length + 1} sources
+          </span>
+        ) : null}
       </div>
-      <h2 className="text-lg font-semibold leading-6 tracking-tight text-slate-950"><Link href={href} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">{street}</Link></h2>
+      <h2 className="text-lg font-semibold leading-6 tracking-tight text-slate-950"><Link href={href} prefetch={false} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">{street}</Link></h2>
       {locality ? <p className="mt-1 text-sm text-slate-500">{locality}</p> : null}
+      <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-slate-600">{facts.join(" · ")}</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3">
         <div><dt className="text-xs text-slate-500">Opening amount</dt><dd className={`mt-1 ${amount === null ? "text-sm font-medium text-slate-500" : "text-xl font-semibold tracking-tight text-slate-950"}`}>{displayMoney(listing.openingBid)}</dd></div>
         <div><dt className="text-xs text-slate-500">Sale date</dt><dd className={`mt-1 text-sm ${listing.saleDate ? "font-semibold text-slate-950" : "font-medium text-slate-500"}`}>{displayDate(listing.saleDate)}</dd></div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500">
-        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-amber-800" : ""}>{archived ? "Archive" : stale ? "Refresh due" : observed ? "Observed" : "Unverified"}{listing.sourceObservedAt ? ` ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
-        {completeness ? <span title={completeness.missing.length ? `Missing: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details available"}>{completeness.known}/{completeness.total} details available</span> : null}
+        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-amber-800" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
+        {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
         {knownNumber(listing.dealScore) !== null ? <span title="Modeled Deal Score. Review the inputs in property details.">Modeled score {listing.dealScore}/99</span> : null}
       </div>
       <div className="mt-auto grid grid-cols-[1.2fr_1fr] gap-2 pt-4">
-        <Link href={href} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
+        <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
         <CaseAction listingId={listing.id} label="Research" className="h-11 border-slate-200 bg-white font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50" />
       </div>
     </div>

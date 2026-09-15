@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BookOpenCheck, Crosshair, Database, Home, KeyRound, ListFilter, LockKeyhole, LogOut, X } from "lucide-react";
+import { Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +25,7 @@ const navigation = [
   { href: "/hunts", label: "Hunts", icon: Crosshair },
   { href: "/sources", label: "Sources", icon: Database },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/workspace/documents-review", label: "Reviews", icon: FileWarning },
 ];
 
 const defaultSession: SessionState = {
@@ -97,13 +98,31 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     ++authRequest.current;
     setSubmitting(true); setError("");
     try {
+      // Per-session rate-limit bucket key.
+      let sid = "";
+      try {
+        sid = sessionStorage.getItem("pp_unlock_sid") || "";
+        if (!sid) {
+          sid = crypto.randomUUID();
+          sessionStorage.setItem("pp_unlock_sid", sid);
+        }
+      } catch { /* sessionStorage unavailable */ }
       const response = await fetch("/api/workspace/session", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(sid ? { "x-unlock-sid": sid } : {}) },
         body: JSON.stringify({ credential }),
       });
       const result = await response.json();
+      if (response.status === 429) {
+        const retryAfter = Number(response.headers.get("Retry-After"));
+        setError(
+          Number.isFinite(retryAfter) && retryAfter > 0
+            ? `Too many attempts. Wait ${retryAfter} seconds and try again.`
+            : "Too many attempts. Wait a moment and try again.",
+        );
+        return;
+      }
       if (!response.ok) throw new Error(result.error || "Workspace could not be unlocked");
       setAuthenticated(true); setConfigured(true); setLoading(false); setExpiresAt(result.expiresAt || null); setCredential(""); setUnlockOpen(false); setShellError("");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Workspace could not be unlocked"); }
@@ -134,7 +153,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
           <Link href="/" className="mr-2 flex items-center" aria-label="PerfectProperty home"><Logo className="text-[16px]" /></Link>
-          <nav aria-label="Research workspace" className="order-3 grid w-full grid-cols-5 gap-1 sm:order-none sm:flex sm:w-auto sm:flex-1">
+          <nav aria-label="Research workspace" className="order-3 grid w-full grid-cols-6 gap-1 sm:order-none sm:flex sm:w-auto sm:flex-1">
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
@@ -154,12 +173,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     </div>
     <Dialog open={unlockOpen} onOpenChange={(value) => { if (!submitting) { setUnlockOpen(value); if (!value) setCredential(""); } }}>
       <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); unlockOpener.current?.focus(); }} className="z-[100] gap-0 rounded-2xl bg-white p-6 text-slate-950 sm:max-w-md">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-900">Private research workspace</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-slate-100"><X size={18} /></button></div>
-        <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">Save properties, searches, and research in your private workspace. Access lasts eight hours.</DialogDescription>
+        <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-900">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-slate-100"><X size={18} /></button></div>
+        <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">This beta uses a single shared operator key. Anyone with the key can access research, hunts, and activity.</DialogDescription>
         <form onSubmit={unlock} className="mt-5">
-          <label htmlFor="workspace-credential" className="text-xs font-semibold">Workspace access key</label>
+          <label htmlFor="workspace-credential" className="text-xs font-semibold">Operator key</label>
           <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-300 px-3"><KeyRound size={16} className="text-slate-400" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></div>
-          {!configured && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">Operator access is not configured. Set SCRAPER_ADMIN_TOKEN for both app processes, then restart them.</p>}
+          {!configured && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">Enter the operator key configured for this deployment.</p>}
           {error && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">{error}</p>}
           <button disabled={submitting || !configured} className="mt-4 w-full rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-50">{submitting ? "Unlocking…" : "Unlock workspace"}</button>
         </form>
