@@ -59,15 +59,21 @@ export function SiteFooter() {
   const [email, setEmail] = React.useState("");
   const [newsletterStatus, setNewsletterStatus] = React.useState("");
 
-  const handleNewsletterSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleNewsletterSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return;
-
-    window.localStorage.setItem("perfectproperty:newsletter-preview", normalizedEmail);
-    setNewsletterStatus(
-      "Saved on this device. Email delivery will be connected before launch.",
-    );
+    try {
+      const response = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      if (!response.ok) throw new Error("Subscription failed");
+      setNewsletterStatus("Thanks — you're on the list.");
+    } catch {
+      setNewsletterStatus("Something went wrong. Please try again.");
+    }
   };
 
   return (

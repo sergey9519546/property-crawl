@@ -9,25 +9,36 @@ export function ContactForm() {
   const [company, setCompany] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [submitted, setSubmitted] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !message.trim()) return;
-    window.localStorage.setItem(
-      "perfectproperty:contact-request",
-      JSON.stringify({ name, email, company, message, at: new Date().toISOString() }),
-    );
-    setSubmitted(true);
+    if (!name.trim() || !email.trim() || !message.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: message.trim() }),
+      });
+      if (!response.ok) throw new Error("Submission failed");
+      setSubmitted(true);
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
         <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
-        <h3 className="mt-4 text-lg font-bold text-[#111827]">Message saved</h3>
+        <h3 className="mt-4 text-lg font-bold text-[#111827]">Message sent</h3>
         <p className="mt-2 text-sm text-[#475569]">
-          Thank you, {name.split(" ")[0]}. Your request is saved on this device.
-          A monitored support address will respond before public launch.
+          Thanks — we received your message and will follow up by email.
         </p>
         <button
           onClick={() => {
@@ -104,11 +115,15 @@ export function ContactForm() {
           className="w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
         />
       </div>
+      {submitError && (
+        <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{submitError}</p>
+      )}
       <button
         type="submit"
-        className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 text-sm font-bold text-white transition-colors hover:bg-[#1E293B]"
+        disabled={submitting}
+        className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 text-sm font-bold text-white transition-colors hover:bg-[#1E293B] disabled:opacity-50"
       >
-        Send message
+        {submitting ? "Sending…" : "Send message"}
         <ArrowRight className="h-4 w-4" />
       </button>
     </form>

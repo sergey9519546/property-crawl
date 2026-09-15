@@ -73,7 +73,6 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [aiSource, setAiSource] = useState<string | null>(null);
-  const [selectedPuterModel, setSelectedPuterModel] = useState<string>("claude-3-5-sonnet");
   const [generatingAiLoi, setGeneratingAiLoi] = useState<boolean>(false);
   const [generatingAiMemo, setGeneratingAiMemo] = useState<boolean>(false);
 
@@ -149,41 +148,6 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     }
   };
 
-  const handleRunPuterAi = async () => {
-    setAiLoading(true);
-    if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-      try {
-        const prompt = `You are an institutional real estate underwriting AI analyzing a distressed foreclosure auction asset:
-Address: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Source Agency: ${sourceDisplayText(listing.source).toUpperCase()}
-Opening Bid: ${displayMoney(listing.openingBid)}
-Estimated Market Value: ${displayMoney(listing.estLow)} - ${displayMoney(listing.estHigh)} (Modeled deal score: ${dealScore ?? 'not available'})
-Property Type: ${displayText(listing.propType)}
-Deposit Terms: ${displayText(listing.deposit)}
-Occupancy Status: ${listing.occupancy || 'Unknown'}
-Foreclosing Plaintiff: ${listing.plaintiff || '—'}
-Redemption evidence: ${listing.redemptionDays ? `${listing.redemptionDays} days (${listing.redemptionWarning || ''})` : 'Not published in the current record'}
-Title-risk signal: ${listing.seniorLienRisk === 'high' ? 'Possible senior-lien risk; unverified' : 'No conclusive source evidence; official title work required'}
-
-Use only the facts above. Treat every missing value as unknown and do not invent liens, title status, comps, condition, costs, or legal conclusions. Provide a rigorous 2-paragraph institutional deal breakdown:
-Paragraph 1 - **Valuation Spread & Primary Catch**: Opening bid discount vs market value, deposit requirement, and immediate downside risks.
-Paragraph 2 - **Title Caveats & Next Checks**: Statutory redemption delays, occupancy/eviction obstacles, senior lien status, and evidence required before the buyer sets a maximum price.`;
-
-        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
-        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
-        if (text && text.trim().length > 20) {
-          setAiAnalysis(text);
-          setAiSource(selectedPuterModel);
-          setAiLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.warn("Puter AI client fallback to backend:", err);
-      }
-    }
-    await handleRunAi();
-  };
-
   const handleDownloadLoi = () => {
     if (!listing || openingBid === null) {
       setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
@@ -204,36 +168,6 @@ Paragraph 2 - **Title Caveats & Next Checks**: Statutory redemption delays, occu
       setAiAnalysis("A source-published opening amount is required before an LOI scenario can be generated.");
       return;
     }
-    setGeneratingAiLoi(true);
-    try {
-      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-        const prompt = `You are a distressed asset acquisitions attorney drafting a formal Letter of Intent (LOI) to purchase an auction asset:
-Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Opening Bid: ${displayMoney(openingBid)}
-Deposit Required: ${displayText(listing.deposit)}
-Occupancy: ${displayText(listing.occupancy)}
-Plaintiff / Docket: ${listing.plaintiff || 'County Court Foreclosure'}
-
-Draft a non-binding due-diligence LOI scenario. Do not claim clear title, verified occupancy, published fees, or seller acceptance. Label assumed terms explicitly.`;
-
-        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
-        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
-        if (text && text.trim().length > 50) {
-          const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `AI-LOI-${listing.id}.md`;
-          a.click();
-          URL.revokeObjectURL(url);
-          setGeneratingAiLoi(false);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn("AI LOI fallback to static template:", e);
-    }
-    setGeneratingAiLoi(false);
     handleDownloadLoi();
   };
 
@@ -262,43 +196,6 @@ Draft a non-binding due-diligence LOI scenario. Do not claim clear title, verifi
       setAiAnalysis("A source-published opening amount and valuation evidence are required before an investment memo can be generated.");
       return;
     }
-    setGeneratingAiMemo(true);
-    try {
-      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-        const memoMetrics = isCommercialOrMulti && sqft !== null ? computeCreMetrics({
-          sqft,
-          openingBid,
-          propType: listing.propType ?? undefined,
-        }) : null;
-        const prompt = `You are an acquisitions director preparing an Investment Committee (IC) acquisition memorandum for this asset:
-Property: ${listing.address}, ${listing.city}, ${listing.state} ${listing.zip}
-Opening Bid: ${displayMoney(openingBid)}
-Estimated value ceiling: ${displayMoney(estHigh)}
-Modeled deal score: ${dealScore ?? 'not available'}
-Modeled NOI: ${memoMetrics ? displayMoney(memoMetrics.netOperatingIncome) : 'not modeled'}
-Modeled target-yield MAO: ${memoMetrics ? displayMoney(memoMetrics.maxAllowableOffer) : 'not modeled'}
-Senior Lien Risk: ${listing.seniorLienRisk}
-
-Use only the supplied evidence. Never invent comps, title status, property condition, rent, fees, or legal conclusions. Label every calculation and assumption. Draft an executive 1-page Investment Committee Acquisition Memorandum covering Executive Summary, evidence gaps, modeled valuation, title-review requirements, and a conditional recommendation.`;
-
-        const resp = await (window as any).puter.ai.chat(prompt, { model: selectedPuterModel });
-        const text = typeof resp === 'string' ? resp : resp?.message?.content || resp?.toString();
-        if (text && text.trim().length > 50) {
-          const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `AI-IC-Memo-${listing.id}.md`;
-          a.click();
-          URL.revokeObjectURL(url);
-          setGeneratingAiMemo(false);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn("AI IC Memo fallback:", e);
-    }
-    setGeneratingAiMemo(false);
     handleDownloadIcMemo();
   };
 
@@ -494,54 +391,25 @@ Use only the supplied evidence. Never invent comps, title status, property condi
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <select
-                      value={selectedPuterModel}
-                      onChange={(e) => setSelectedPuterModel(e.target.value)}
-                      title="Select Puter AI Model"
-                      className="text-[11px] font-semibold bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-[#374151] focus:outline-none focus:ring-1 focus:ring-slate-400 cursor-pointer shadow-sm"
-                    >
-                      <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (Legal/Title)</option>
-                      <option value="gpt-4o-mini">GPT-4o-mini (Fast Triage)</option>
-                      <option value="deepseek-reasoner">DeepSeek R1 (Math/Debt)</option>
-                    </select>
                     {aiSource && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        {aiSource === 'backend' ? 'Rule Engine' : `✨ ${aiSource === 'claude-3-5-sonnet' ? 'Claude 3.5' : aiSource === 'gpt-4o-mini' ? 'GPT-4o-mini' : 'DeepSeek R1'}`}
+                        Rule Engine
                       </span>
                     )}
                     {!aiAnalysis && !aiLoading ? (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={handleRunAi}
-                          className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition shadow-sm"
-                        >
-                          Analyze Deal
-                        </button>
-                        <button
-                          onClick={handleRunPuterAi}
-                          title={`Free live ${selectedPuterModel} intelligence via Puter.js`}
-                          className="px-2.5 py-1 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition shadow-sm flex items-center gap-1"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Puter AI</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleRunAi}
+                        className="px-3 py-1 bg-[#0F172A] text-white text-xs font-bold rounded-lg hover:bg-[#1E293B] transition shadow-sm"
+                      >
+                        Analyze Deal
+                      </button>
                     ) : !aiLoading && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleRunPuterAi}
-                          className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline flex items-center gap-1"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Run {selectedPuterModel === 'claude-3-5-sonnet' ? 'Claude 3.5' : selectedPuterModel === 'gpt-4o-mini' ? 'GPT-4o-mini' : 'DeepSeek'}</span>
-                        </button>
-                        <button
-                          onClick={handleRunAi}
-                          className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
-                        >
-                          Re-analyze
-                        </button>
-                      </div>
+                      <button
+                        onClick={handleRunAi}
+                        className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline"
+                      >
+                        Re-analyze
+                      </button>
                     )}
                   </div>
                 </div>
@@ -760,7 +628,7 @@ Use only the supplied evidence. Never invent comps, title status, property condi
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl border border-emerald-600 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shadow-sm disabled:opacity-50"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{generatingAiLoi ? "Drafting with Puter..." : "✨ AI Tailored LOI"}</span>
+                    <span>{generatingAiLoi ? "Generating…" : "Download LOI"}</span>
                   </button>
 
                   <button
@@ -778,7 +646,7 @@ Use only the supplied evidence. Never invent comps, title status, property condi
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-xl bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition shadow-sm disabled:opacity-50"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{generatingAiMemo ? "Synthesizing Memo..." : "✨ AI Investment Memo"}</span>
+                    <span>{generatingAiMemo ? "Generating…" : "Download IC Memo"}</span>
                   </button>
                 </div>
                 {(openingBid === null || estHigh === null) && (

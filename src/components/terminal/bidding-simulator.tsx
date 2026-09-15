@@ -5,7 +5,6 @@ import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Sparkles } from "lucide-react";
 import { computeCashToClose, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
-import { sourceDisplayText } from "@/lib/source-display";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -40,7 +39,6 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
   const openingBid = positiveNumber(listing.openingBid);
   const estimatedValue = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
-  const location = [listing.city, listing.state].filter(Boolean).join(", ");
 
   if (openingBid === null || estimatedValue === null) {
     return (
@@ -77,29 +75,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const handleRunAiStrategy = async () => {
     if (!reverseScenario || cash.totalAcquisitionCost === null) return;
     setLoadingStrategy(true);
-    try {
-      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-        const prompt = `Review this buyer-entered acquisition scenario using only the supplied facts.
-Property: ${listing.address}${location ? `, ${location}` : ""}
-Source channel: ${sourceDisplayText(listing.source)}
-Published opening amount used as price scenario: $${openingBid.toLocaleString()}
-Supported valuation-range midpoint: $${estimatedValue.toLocaleString()}
-Explicit acquisition costs excluding price: $${otherAcquisitionCosts?.toLocaleString()}
-Explicit rehab assumption: $${rehabBudget.toLocaleString()}
-Target profit margin: ${targetMargin}%
-Maximum price meeting target: $${reverseScenario.maxPurchasePrice.toLocaleString()}
-Price reduction needed: $${reverseScenario.priceReductionNeeded.toLocaleString()}
-Published deposit text: ${listing.deposit || "Not published"}
-
-Explain the target-price math in three short points. Treat title, debt, property condition, final sale price, and any amount not listed above as unknown. Do not predict bidder behavior or recommend a bid.`;
-        const response = await (window as any).puter.ai.chat(prompt, { model: "claude-3-5-sonnet" });
-        const text = typeof response === "string" ? response : response?.message?.content || response?.toString();
-        if (text && text.trim().length > 30) { setAiStrategy(text); setLoadingStrategy(false); return; }
-      }
-    } catch (error) {
-      console.warn("Scenario explanation error:", error);
-    }
-    setAiStrategy("The explanation service is unavailable. The displayed maximum price is the supported valuation midpoint minus the selected target profit, rehab assumption, and every entered acquisition cost.");
+    setAiStrategy(
+      "The displayed maximum price is the supported valuation midpoint minus the selected target profit, rehab assumption, and every entered acquisition cost. Title, debt, property condition, and final sale price remain unknown.",
+    );
     setLoadingStrategy(false);
   };
 

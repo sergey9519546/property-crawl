@@ -1,3 +1,5 @@
+import type { DocumentEvidence } from '@/lib/document-evidence';
+
 export interface SourceInfo {
   key: string;
   label: string;
@@ -63,9 +65,22 @@ export interface PropertyListing {
   sourceFreshness?: { observedAt: string | null; ageHours: number | null; cadenceHours: number; status: string };
   /** Whether publisher documents were observed; document contents remain evidence-backed. */
   hasDocuments?: boolean | null;
+  documentEvidence?: DocumentEvidence;
   provenance?: Record<string, unknown> | null;
   sourceObservedAt?: string | null;
   fetchedAt?: string | null;
+  triage?: {
+    isNew: boolean;
+    priceDropped: boolean;
+    staleDays: number;
+    hasDocs: boolean;
+    occupancyKnown: boolean;
+    distressStage: string;
+  };
+  /** Other-source observations for the same parcel (bake-off). */
+  crossSourceMatches?: { source: string; listingId: string; observedAt: string | null; openingBid: number | null }[];
+  /** Preferred observation when cross-source data exists. */
+  bakeOff?: { preferredSource: string; reason: string; confidence: number };
 }
 
 // Source registry — KEPT IN SYNC with the production SOURCES at
