@@ -15,6 +15,8 @@ const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,160}$/;
 function iso(value) { return new Date(value || Date.now()).toISOString(); }
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 function safeError(error) { return String(error?.message || error || 'Collection failed').slice(0, 500); }
+function leaseLostError(){const error=new Error('Discovery job lease was lost');error.code='DISCOVERY_JOB_LEASE_LOST';return error;}
+async function assertLease(guard){if(guard&&!await guard())throw leaseLostError();}
 function jobId() { return `job_${crypto.randomBytes(12).toString('hex')}`; }
 function defaultStore() { return { version: 1, jobs: [] }; }
 
@@ -33,11 +35,24 @@ class CollectionJobStore {
     fs.renameSync(temporary, this.filePath);
   }
   mutate(mutator) {
-    const data = this.load();
-    const value = mutator(data);
-    data.updatedAt = iso(this.now);
-    this.write(data);
-    return clone(value);
+    const lockPath = `${this.filePath}.lock`;
+    let lock;
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    try { lock = fs.openSync(lockPath, 'wx', 0o600); }
+    catch (error) {
+      if (error.code === 'EEXIST') throw new Error('Collection job store is locked by another writer; retry after it finishes');
+      throw error;
+    }
+    try {
+      const data = this.load();
+      const value = mutator(data);
+      data.updatedAt = iso(this.now);
+      this.write(data);
+      return clone(value);
+    } finally {
+      if (lock !== undefined) fs.closeSync(lock);
+      if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
+    }
   }
   createOrReuse(input = {}) {
     const key = input.idempotencyKey && String(input.idempotencyKey);
@@ -124,7 +139,7 @@ function optionalCaseSink() {
         // narrow: only a validated listing with a current `match` result is
         // handed off, and the hunt event (when present) becomes the origin.
         return {
-          async upsertFromHunt({ hunt, evaluation, listings = [] }) {
+          async upsertFromHunt({ hunt, evaluation, listings = [], leaseGuard = null }) {
             if (evaluation?.resultsTruncated) return { skipped: 'evaluation_results_truncated', upserted: 0 };
             const byId = new Map(listings.map((listing) => [listing.id, listing]));
             const events = new Map((evaluation?.newEvents || []).map((event) => [event.identityKey, event]));
@@ -135,7 +150,8 @@ function optionalCaseSink() {
               if (!listing) continue;
               const event = events.get(result.identityKey);
               const type = event?.type === 'new_match' || event?.type === 'material_change' ? event.type : 'hunt_match';
-              candidate.createCase({
+              await assertLease(leaseGuard);
+              await candidate.createCase({
                 listing,
                 origin: {
                   type, huntId: hunt.id, huntVersion: hunt.version,
@@ -184,14 +200,18 @@ class CollectionCoordinator {
     if(claim.owner&&this.store.bindClaim)this.store.bindClaim(id,claim.owner);
     await this.store.update(id, { status: 'running', started: true, stage: { name: 'collection', value: { status: 'running' } } });
     try {
-      const result = await this.scheduler.runAll({ ...(input.sourceIds?.length ? { sourceIds: input.sourceIds } : {}), jobId: id, trigger: input.trigger || 'manual', ...(claim.owner ? { leaseGuard: async () => this.store.renewClaim(id, claim.owner, 300) } : {}) });
-      return this.finalize(id, result);
+      const leaseGuard=claim.owner&&typeof this.store.renewClaim==='function'?async()=>this.store.renewClaim(id,claim.owner,300):null;
+      const result = await this.scheduler.runAll({ ...(input.sourceIds?.length ? { sourceIds: input.sourceIds } : {}), jobId: id, owner: claim.owner, coordinatorManaged: true, trigger: input.trigger || 'manual', ...(leaseGuard ? { leaseGuard } : {}) });
+      await assertLease(leaseGuard);
+      return this.finalize(id, result, {owner:claim.owner,leaseGuard});
     } catch (error) {
+      if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error;
       await this.store.update(id, { status: 'failed', completed: true, error: { stage: 'collection', message: error }, stage: { name: 'collection', value: { status: 'failed' } } });
       return this.store.get(id);
     }
   }
-  async finalize(id, result = {}) {
+  async finalize(id, result = {}, claim = {}) {
+    await assertLease(claim.leaseGuard);
     const existing = await this.store.get(id);
     if (!existing || ['completed', 'partial', 'failed'].includes(existing.status)) return existing;
     await this.store.update(id, { stage: { name: 'collection', value: { status: result.skipped ? 'skipped' : 'completed', summary: { totalIngested: result.totalIngested || 0, sources: result.sourceResults?.length || 0 } } } });
@@ -216,7 +236,8 @@ class CollectionCoordinator {
           let baseline=await this.durableHunts.baseline(hunt.id),evaluated=null;const initial=!baseline,events=[];
           for(let pageOffset=0;pageOffset<listings.length||(!listings.length&&pageOffset===0);pageOffset+=1000){evaluated=this.hunts.evaluateInventory(hunt,listings.slice(pageOffset,pageOffset+1000),{previousBaseline:baseline,now:this.now&&iso(this.now),baselineLimit:Infinity,suppressEvents:initial});baseline=evaluated.baseline;events.push(...evaluated.events);}
           evaluated.events=events;evaluated.response.newEvents=events.slice(0,200);evaluated.response.eventsTruncated=events.length>200;
-          evaluations.push({hunt,evaluation:await this.durableHunts.saveEvaluation(hunt,evaluated)});
+          await assertLease(claim.leaseGuard);
+          evaluations.push({hunt,evaluation:await this.durableHunts.saveEvaluation(hunt,evaluated,{jobId:id,owner:claim.owner})});
         } else evaluations.push({ hunt, evaluation: this.hunts.runHunt(hunt.id, listings, { filePath: this.huntFilePath, now: this.now && iso(this.now) }) });
       }
       await this.store.update(id, { stage: { name: 'hunts', value: { status: 'completed', evaluated: evaluations.length, inventory: listings.length } } });
@@ -228,16 +249,19 @@ class CollectionCoordinator {
       try {
         let handoffs = 0, upserted = 0, skipped = 0;
         for (const entry of evaluations) {
-          const handoff = await caseSink.upsertFromHunt({ job: await this.store.get(id), hunt: entry.hunt, evaluation: entry.evaluation, listings });
+          await assertLease(claim.leaseGuard);
+          const handoff = await caseSink.upsertFromHunt({ job: await this.store.get(id), hunt: entry.hunt, evaluation: entry.evaluation, listings, leaseGuard: claim.leaseGuard });
           handoffs++;
           upserted += Math.max(0, Number(handoff?.upserted) || 0);
           if (handoff?.skipped) skipped++;
         }
         return this.store.update(id, { status: 'completed', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, stage: { name: 'cases', value: { status: 'completed', handoffs, upserted, skipped } } });
       } catch (error) {
+        if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error;
         return this.store.update(id, { status: 'partial', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, error: { stage: 'cases', message: error }, stage: { name: 'cases', value: { status: 'failed', error: safeError(error) } } });
       }
     } catch (error) {
+      if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error;
       return this.store.update(id, { status: 'partial', completed: true, result: { ...result, huntSafety: safety }, error: { stage: 'hunts', message: error }, stage: { name: 'hunts', value: { status: 'failed', error: safeError(error) } }, });
     }
   }

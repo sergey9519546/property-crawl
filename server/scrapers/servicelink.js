@@ -106,6 +106,30 @@ function publisherGallery(record, sourceUrl, observedAt) {
   }
   return gallery;
 }
+
+function publisherDocuments(record, sourceUrl, observedAt) {
+  if (!Object.hasOwn(record || {}, 'documents')) return undefined;
+  if (!Array.isArray(record.documents)) return undefined;
+  if (!inspectSourceRecordUrl(SOURCE_KEY, sourceUrl).isValid) return undefined;
+  return record.documents.map((document) => {
+    if (!document || typeof document !== 'object' || Array.isArray(document)) return {};
+    const output = {};
+    for (const field of ['title', 'label', 'name', 'documentName', 'documentType', 'accessState', 'access']) {
+      const value = cleanText(document[field], 300);
+      if (value) output[field] = value;
+    }
+    for (const field of ['fileUrl', 'mediaUrl', 'url', 'documentUrl', 'documentURL', 'thumbnailUrl']) {
+      const value = cleanText(document[field], 2_000);
+      if (!value) continue;
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && hostnameMatches(parsed.hostname, 'servicelinkauction.com')) output[field] = parsed.href;
+      } catch {}
+    }
+    output.observedAt = observedAt;
+    return output;
+  });
+}
 function compactRawRecord(record, sourceUrl) {
   const property = record?.propertyInfo || {};
   const run = record?.auctionRunInfo || {};
@@ -194,6 +218,10 @@ class ServiceLinkScraper extends BaseScraper {
     return url.toString();
   }
 
+  getCollectionScope() {
+    return { endpoint: LISTINGS_PATH, filters: {} };
+  }
+
   async fetchPage(continuationToken = null) {
     const payload = await this.requestJson(this.buildListingsUrl(continuationToken), {
       headers: { Accept: 'application/json' },
@@ -229,6 +257,7 @@ class ServiceLinkScraper extends BaseScraper {
       || cleanText(record?.foreclosureSaleStatus, 240);
     const raw = compactRawRecord(record, sourceUrl);
     const gallery = publisherGallery(record, sourceUrl, observedAt);
+    const documents = publisherDocuments(record, sourceUrl, observedAt);
     const latitude = finiteNumber(property.latitude), longitude = finiteNumber(property.longitude);
     const coordinates = latitude !== null && latitude >= -90 && latitude <= 90 && longitude !== null && longitude >= -180 && longitude <= 180 && !(latitude === 0 && longitude === 0)
       ? { lat: latitude, lng: longitude, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: sourceUrl, observedAt } : undefined;
@@ -277,6 +306,7 @@ class ServiceLinkScraper extends BaseScraper {
           isInPostAuction: observedBoolean(status.isInPostAuction),
           isComingSoon: observedBoolean(status.isComingSoon),
         },
+        ...(documents !== undefined ? { documents } : {}),
       },
       media: gallery.length ? { gallery, photo: { ...gallery[0] } } : { photo: null, photoStatus: { state: 'not_supplied', reason: 'publisher_payload_has_no_accepted_image', observedAt } },
     };
@@ -333,7 +363,7 @@ class ServiceLinkScraper extends BaseScraper {
       limit: this.limit,
       continuationStopped: false,
       failures: [],
-      scope: { endpoint: LISTINGS_PATH, filters: {} },
+      scope: this.getCollectionScope(),
       sweepStartedAt: this.sweepStartedAt || new Date(this.now()).toISOString(),
       pagesPreviouslyCommitted: this.pagesCommitted,
     };
@@ -421,6 +451,7 @@ module.exports.ServiceLinkScraper = ServiceLinkScraper;
 module.exports.collectServiceLink = collectServiceLink;
 module.exports.compactRawRecord = compactRawRecord;
 module.exports.publisherGallery = publisherGallery;
+module.exports.publisherDocuments = publisherDocuments;
 module.exports.observedOpeningBid = observedOpeningBid;
 module.exports.observedBoolean = observedBoolean;
 module.exports.sourceUrlFromRecord = sourceUrlFromRecord;

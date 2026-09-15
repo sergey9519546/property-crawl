@@ -13,7 +13,7 @@
 // listings (the state dropdown only lists states with inventory).
 //
 // NOTE: the bare host `resales.usda.gov` does not resolve — use `www.`.
-// Rate limit: 1 req/sec between state POSTs. Be polite — US government site.
+// Rate limit: shared 250-750ms crawl jitter between sequential state POSTs.
 
 const BaseScraper = require('./base');
 const { inspectImageUrl } = require('./media-policy');
@@ -31,12 +31,26 @@ const STATE_NAME_TO_CODE = {
   Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV',
   Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC', 'Puerto Rico': 'PR'
 };
+const USDA_JURISDICTIONS = new Set(Object.values(STATE_NAME_TO_CODE));
+const MAX_PUBLISHER_JURISDICTIONS = USDA_JURISDICTIONS.size;
+
+class UsdaScrapeError extends Error {
+  constructor(message, code = 'USDA_UPSTREAM_UNAVAILABLE') {
+    super(message);
+    this.name = 'UsdaScrapeError';
+    this.code = code;
+  }
+}
 
 class UsdaResalesScraper extends BaseScraper {
   constructor() {
     super({ name: 'UsdaResalesCollector', sourceKey: 'usda' });
     this.baseUrl = 'https://www.resales.usda.gov';
     this.lastRunReport = null;
+  }
+
+  getCollectionScope() {
+    return { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family' }, jurisdictionSelection: 'publisher_inventory_options' };
   }
 
   async scrapeFeed() {
@@ -49,23 +63,49 @@ class UsdaResalesScraper extends BaseScraper {
       // 2. POST a search for each state → parse the summary table.
       const listings = [];
       const completedStates = [];
+      const completedStateOptions = [];
       const failures = [];
-      for (const { code } of states) {
+      let sourceRows = 0;
+      let malformedRows = 0;
+      for (const { code, state } of states) {
         try {
           const rows = await this.searchState(code);
+          sourceRows += rows.length;
           for (const row of rows) {
             const listing = this.rowToListing(row);
             if (listing) listings.push(listing);
+            else malformedRows += 1;
           }
-          completedStates.push(code);
+          completedStates.push(state);
+          completedStateOptions.push(code);
           await this.crawlJitter();
         } catch (err) {
-          console.warn(`[${this.name}] Failed state ${code}: ${err.message}`);
-          failures.push({ state: code, error: err.message });
+          console.warn(`[${this.name}] Failed state ${state} (option ${code}): ${err.message}`);
+          failures.push({ state, optionCode: code, error: err.message });
         }
       }
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family', states: 'publisher_inventory_options' } }, statesDiscovered: states.length, discoveredStates: states.map(({ code }) => code), statesCompleted: completedStates, recordsEmitted: listings.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      this.lastRunReport = {
+        outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty',
+        scope: this.getCollectionScope(),
+        statesDiscovered: states.length,
+        discoveredStates: states.map(({ state }) => state),
+        discoveredStateOptions: states.map(({ code }) => code),
+        attemptedStates: states.map(({ state }) => state),
+        statesCompleted: completedStates,
+        completedStateOptions,
+        statesFailed: failures.length,
+        sourceRows,
+        malformedRows,
+        recordsDiscovered: sourceRows,
+        recordsEmitted: listings.length,
+        recordsRejected: malformedRows,
+        failures,
+        complete: failures.length === 0,
+        fullSweepComplete: failures.length === 0,
+        truncated: false,
+        fixtureFallbackUsed: false
+      };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
       return listings.map(item => this.standardizeListing(item));
     });
@@ -74,12 +114,27 @@ class UsdaResalesScraper extends BaseScraper {
   // Parse the <select id="stateCode"> options that have a non-empty value
   // (the dropdown only lists states with active properties).
   parseStateOptions(html) {
-    const m = html.match(/<select[^>]*id="stateCode"[\s\S]*?<\/select>/);
-    if (!m) return [];
-    const opts = [...m[0].matchAll(/<option value="([^"]+)"[^>]*>([^<]*)<\/option>/g)];
-    return opts
+    const m = String(html || '').match(/<select[^>]*id\s*=\s*["']stateCode["'][^>]*>[\s\S]*?<\/select>/i);
+    if (!m) throw new UsdaScrapeError('USDA SFH search page has no state inventory selector', 'USDA_SEARCH_SCHEMA_UNRECOGNIZED');
+    const opts = [...m[0].matchAll(/<option\b[^>]*value\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/option>/gi)];
+    const states = opts
       .filter(o => o[1] && o[1].trim() !== '')
-      .map(o => ({ code: o[1].trim(), label: o[2].trim() }));
+      .map(o => {
+        const code = o[1].trim();
+        const publisherLabel = this.text(o[2]);
+        const label = publisherLabel.replace(/\s*\(\d+\)\s*$/, '').trim();
+        const state = STATE_NAME_TO_CODE[label] || (/^[A-Z]{2}$/.test(label) && USDA_JURISDICTIONS.has(label) ? label : null);
+        if (!/^\d{1,3}$/.test(code) || !state) {
+          throw new UsdaScrapeError(`USDA SFH search page exposed an unrecognized jurisdiction option (${code || 'empty'}: ${publisherLabel || 'empty'})`, 'USDA_SEARCH_SCHEMA_UNRECOGNIZED');
+        }
+        return { code, label: publisherLabel, state };
+      });
+    if (states.length > MAX_PUBLISHER_JURISDICTIONS ||
+        new Set(states.map(({ code }) => code)).size !== states.length ||
+        new Set(states.map(({ state }) => state)).size !== states.length) {
+      throw new UsdaScrapeError('USDA SFH search page exposed duplicate or excessive jurisdiction options', 'USDA_SEARCH_SCHEMA_UNRECOGNIZED');
+    }
+    return states;
   }
 
   async searchState(stateCode) {
@@ -104,8 +159,8 @@ class UsdaResalesScraper extends BaseScraper {
   }
 
   parseSummaryTable(html) {
-    const m = html.match(/<table[^>]*id="propertySummariesTable"[^>]*>([\s\S]*?)<\/table>/);
-    if (!m) return [];
+    const m = String(html || '').match(/<table[^>]*id\s*=\s*["']propertySummariesTable["'][^>]*>([\s\S]*?)<\/table>/i);
+    if (!m) throw new UsdaScrapeError('USDA SFH state response has no property summary table', 'USDA_RESULT_SCHEMA_UNRECOGNIZED');
     const rows = [...m[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(r => r[1]);
     // Skip the header row (first row). Each data row has 11 cells.
     return rows.slice(1).map(rowHtml => [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(c => c[1]));
@@ -226,3 +281,4 @@ class UsdaResalesScraper extends BaseScraper {
 
 module.exports = new UsdaResalesScraper();
 module.exports.UsdaResalesScraper = UsdaResalesScraper;
+module.exports.UsdaScrapeError = UsdaScrapeError;

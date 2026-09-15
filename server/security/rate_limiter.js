@@ -1,7 +1,8 @@
 class MemoryRateLimiter {
-  constructor({ windowMs = 60000, maxRequests = 60 } = {}) {
+  constructor({ windowMs = 60000, maxRequests = 60, trustedProxyCount = 0 } = {}) {
     this.windowMs = windowMs;
     this.maxRequests = maxRequests;
+    this.trustedProxyCount = Math.max(0, Math.floor(Number(trustedProxyCount) || 0));
     this.hits = new Map();
 
     // Periodic eviction so stale IP records are removed regardless of traffic
@@ -18,7 +19,20 @@ class MemoryRateLimiter {
   middleware() {
     return (req, res, next) => {
       // Forwarded headers are caller-controlled without a trusted edge.
-      const ip = req.socket?.remoteAddress || 'unknown';
+      // When TRUSTED_PROXY_COUNT > 0, parse X-Forwarded-For from the right:
+      // take the address at position length - TRUSTED_PROXY_COUNT (i.e. the
+      // client address as seen by the innermost trusted proxy).
+      let ip;
+      if (this.trustedProxyCount > 0) {
+        const forwarded = String(req.headers['x-forwarded-for'] || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const idx = forwarded.length - this.trustedProxyCount;
+        ip = (idx >= 0 && forwarded[idx]) || req.socket?.remoteAddress || 'unknown';
+      } else {
+        ip = req.socket?.remoteAddress || 'unknown';
+      }
       const now = Date.now();
       // Periodically evict expired entries to prevent memory leak
       if (this.hits.size > 100) {

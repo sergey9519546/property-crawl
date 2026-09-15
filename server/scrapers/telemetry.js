@@ -3,12 +3,54 @@
  * Monitors scraper yield and circuit-breaker states across executions.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { inspectPublisherPhoto } = require('./media-policy');
+
+const DEFAULT_TELEMETRY_PATH = path.resolve(__dirname, '../../.cache/scraper-telemetry.json');
 
 class ScraperTelemetry {
   constructor() {
     // In-memory store for scraper run telemetry
     this.history = {};
+    this.persistPath = process.env.SCRAPER_TELEMETRY_PATH || DEFAULT_TELEMETRY_PATH;
+    this._saveTimer = null;
+    this._load();
+  }
+
+  _load() {
+    try {
+      if (fs.existsSync(this.persistPath)) {
+        const raw = JSON.parse(fs.readFileSync(this.persistPath, 'utf8'));
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+          this.history = raw;
+        }
+      }
+    } catch {
+      // Corrupted telemetry file — start fresh rather than crash.
+      this.history = {};
+    }
+  }
+
+  _save() {
+    // Debounce writes to avoid excessive disk I/O on rapid scraper runs.
+    if (this._saveTimer) return;
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      this._saveNow();
+    }, 200);
+    this._saveTimer.unref?.();
+  }
+
+  _saveNow() {
+    try {
+      fs.mkdirSync(path.dirname(this.persistPath), { recursive: true });
+      const tmp = `${this.persistPath}.${process.pid}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(this.history), 'utf8');
+      fs.renameSync(tmp, this.persistPath);
+    } catch {
+      // Persistence failure must not crash scrapers.
+    }
   }
 
   /**
@@ -65,6 +107,7 @@ class ScraperTelemetry {
       if (metadata.circuitOpen || error.haltScraper || state.consecutiveFailures >= 3) {
         state.circuitBreakerTripped = true;
       }
+      this._save();
       return;
     }
 
@@ -80,6 +123,7 @@ class ScraperTelemetry {
       state.consecutiveZeroYieldRuns += 1;
       state.lastYieldCount = 0;
       if (state.hasNonZeroBaseline) state.driftDetected = true;
+      this._save();
       return;
     }
 
@@ -126,6 +170,7 @@ class ScraperTelemetry {
       state.yieldMetrics.addressYield < 0.5 ||
       state.yieldMetrics.openingBidYield < 0.5
     );
+    this._save();
   }
 
   /**

@@ -138,10 +138,12 @@ function queryFromUrl(url) {
   };
 }
 function derived(row, now = Date.now()) {
-  const documents = row.provenance?.sourceFacts?.documents;
-  const hasDocuments = row.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
+  const sourceDocuments = row.provenance?.sourceFacts?.documents;
+  const mediaDocuments = row.provenance?.media?.documents;
+  const documentArrays = [sourceDocuments, mediaDocuments].filter(Array.isArray);
+  const hasDocuments = row.hasDocuments === true || documentArrays.some((documents) => documents.length > 0)
     ? true
-    : row.hasDocuments === false || Array.isArray(documents) ? false : null;
+    : row.hasDocuments === false || documentArrays.length > 0 ? false : null;
   const observedAt = row.sourceObservedAt || row.provenance?.observedAt || row.fetchedAt;
   const observedMs = Date.parse(observedAt || "");
   const nowMs = now instanceof Date ? now.getTime() : Number.isFinite(Number(now)) ? Number(now) : Date.parse(String(now));
@@ -314,9 +316,13 @@ function pgWhere(f, start = 1) {
   else if (f.seniorLien === "risk") w.push("senior_lien_risk='high'");
   if (f.redemption === "immediate") w.push("redemption_days=0");
   else if (f.redemption === "redemption_active") w.push("redemption_days>0");
-  if (f.hasDocuments === true) w.push("(has_documents=TRUE OR jsonb_array_length(CASE WHEN jsonb_typeof(provenance#>'{sourceFacts,documents}')='array' THEN provenance#>'{sourceFacts,documents}' ELSE '[]'::jsonb END)>0)");
-  else if (f.hasDocuments === false) w.push("(has_documents IS DISTINCT FROM TRUE AND jsonb_array_length(CASE WHEN jsonb_typeof(provenance#>'{sourceFacts,documents}')='array' THEN provenance#>'{sourceFacts,documents}' ELSE '[]'::jsonb END)=0 AND (has_documents=FALSE OR jsonb_typeof(provenance#>'{sourceFacts,documents}')='array'))");
-  else if (f.hasDocuments === "unknown") w.push("(has_documents IS NULL AND jsonb_typeof(provenance#>'{sourceFacts,documents}') IS DISTINCT FROM 'array')");
+  const sourceDocumentsExpr = "CASE WHEN jsonb_typeof(provenance#>'{sourceFacts,documents}')='array' THEN provenance#>'{sourceFacts,documents}' ELSE '[]'::jsonb END";
+  const mediaDocumentsExpr = "CASE WHEN jsonb_typeof(provenance#>'{media,documents}')='array' THEN provenance#>'{media,documents}' ELSE '[]'::jsonb END";
+  const anyDocumentExpr = `(jsonb_array_length(${sourceDocumentsExpr})>0 OR jsonb_array_length(${mediaDocumentsExpr})>0)`;
+  const observedDocumentsExpr = "(coalesce(jsonb_typeof(provenance#>'{sourceFacts,documents}')='array',FALSE) OR coalesce(jsonb_typeof(provenance#>'{media,documents}')='array',FALSE))";
+  if (f.hasDocuments === true) w.push(`(has_documents=TRUE OR ${anyDocumentExpr})`);
+  else if (f.hasDocuments === false) w.push(`(has_documents IS DISTINCT FROM TRUE AND NOT ${anyDocumentExpr} AND (has_documents=FALSE OR ${observedDocumentsExpr}))`);
+  else if (f.hasDocuments === "unknown") w.push(`(has_documents IS NULL AND NOT ${observedDocumentsExpr})`);
   if (f.freshness && f.freshness !== "all") {
     if (f.freshness === "fresh") w.push("provenance->>'origin'='live' AND coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '7 days'");
     else if (f.freshness === "aging") w.push("provenance->>'origin'='live' AND coalesce(source_observed_at,fetched_at)<NOW()-INTERVAL '7 days' AND coalesce(source_observed_at,fetched_at)>=NOW()-INTERVAL '30 days'");

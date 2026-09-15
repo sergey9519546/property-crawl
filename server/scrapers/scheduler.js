@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const sheriff = require('./sheriff');
 const hud = require('./hud');
 const fannie = require('./fannie');
@@ -12,9 +13,17 @@ const landbanksearch = require('./landbanksearch');
 const civilview = require('./civilview');
 const bid4assets = require('./bid4assets');
 const servicelink = require('./servicelink');
+const flDorCadastral = require('./fl-dor-cadastral');
+const caControllerTaxSale = require('./ca-controller-tax-sale');
+const courtlistener = require('./courtlistener');
+const hudUspsVacancy = require('./hud-usps-vacancy');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 const { validateListingForIngestion } = require('./validation');
+const { requireCollectionStorage, inspectCollectionStorage } = require('../discovery/storage-health');
+const { sanitizeRunReport } = require('../discovery/run-report');
+const { collectionScope } = require('./collection-scope');
+const { hash: scopeHash } = require('../discovery/store');
 
 const DEFAULT_INTERVAL_HOURS = 6;
 const MIN_INTERVAL_HOURS = 0.25;
@@ -85,9 +94,14 @@ class IngestionScheduler {
       freddie,
       va,
       marshals,
+      flDorCadastral,
+      caControllerTaxSale,
+      courtlistener,
+      hudUspsVacancy,
     ];
     this.database = options.database || db;
     this.discoveryStore = options.discoveryStore || null;
+    this.storageProbe = options.storageProbe || inspectCollectionStorage;
     this.telemetry = options.telemetry || telemetryInstance;
     this.onSourceRun = options.onSourceRun || (async () => {});
     this.onCycleStart = options.onCycleStart || (async () => null);
@@ -109,12 +123,19 @@ class IngestionScheduler {
       console.log('[Scheduler] Scrape run already in progress, skipping...');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
     }
+    if (this.discoveryStore) requireCollectionStorage(this.storageProbe);
     const requested = options.wave ? sourcesForWave(options.wave) : options.sourceIds;
     if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
       throw new Error('Choose registered live source collectors');
     }
     const scrapers = requested ? this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)) : this.realScrapers;
+    let ownership = options.jobId && options.owner ? { jobId: options.jobId, owner: options.owner } : {};
+    let leaseGuard = options.leaseGuard || null;
+    const assertLease = async (message = 'Collection job lease was lost') => {
+      if (leaseGuard && !await leaseGuard()) { const error=new Error(message);error.code='DISCOVERY_JOB_LEASE_LOST';throw error; }
+    };
     const completeCycle = !requested && scrapers.length === this.realScrapers.length;
+    this.isRunning = true;
     let cycleContext = null;
     try {
       cycleContext = await this.onCycleStart({
@@ -125,8 +146,25 @@ class IngestionScheduler {
       });
     } catch (error) {
       console.error('[Scheduler] Could not initialize collection job:', error.message);
+      if (this.discoveryStore?.requiresJobFence || error?.code === 'DISCOVERY_JOB_LEASE_LOST') {
+        this.isRunning = false;
+        throw error;
+      }
     }
-    this.isRunning = true;
+    if (!ownership.jobId && cycleContext?.jobId && cycleContext?.owner) ownership = { jobId: cycleContext.jobId, owner: cycleContext.owner };
+    if (!leaseGuard && cycleContext?.leaseGuard) leaseGuard = cycleContext.leaseGuard;
+    if (this.discoveryStore?.requiresJobFence && (!ownership.jobId || !ownership.owner || typeof leaseGuard !== 'function')) {
+      const error = new Error('Durable collection requires an owned live job claim');
+      error.code = 'DISCOVERY_JOB_LEASE_LOST';
+      this.isRunning = false;
+      throw error;
+    }
+    try {
+      await assertLease('Collection job lease was lost before cycle execution');
+    } catch (error) {
+      this.isRunning = false;
+      throw error;
+    }
     console.log(`[Scheduler] Starting automated ingestion cycle with concurrency ${this.concurrency}...`);
     const startTime = Date.now();
     let totalIngested = 0;
@@ -134,12 +172,13 @@ class IngestionScheduler {
     const sourceResults = [];
 
     try {
-      await mapWithConcurrency(scrapers, this.concurrency, async (scraper) => {
+      const workerResults=await mapWithConcurrency(scrapers, this.concurrency, async (scraper) => {
         const scraperStart = Date.now();
         let rejectedForScraper = 0;
         let discoveryRun = null;
         try {
-          if (options.leaseGuard && !await options.leaseGuard()) throw new Error('Collection job lease was lost before source execution');
+          if (this.discoveryStore) requireCollectionStorage(this.storageProbe);
+          await assertLease('Collection job lease was lost before source execution');
           if (scraper.fixtureOnly === true) {
             const error = new Error(`${scraper.name} is fixture-only and cannot run in production ingestion`);
             error.code = 'FIXTURE_ONLY_SCRAPER';
@@ -152,11 +191,16 @@ class IngestionScheduler {
           }
           console.log(`[Scheduler] Running ${scraper.name}...`);
           if (this.discoveryStore) {
+            const scope=collectionScope(scraper);
+            if(!scope)throw new Error(`Collector ${scraper.sourceKey} does not expose a bounded collection scope`);
             const checkpoint=await this.discoveryStore.getCheckpoint(scraper.sourceKey);
+            const freshCanary=options.trigger==='discovery_canary'&&checkpoint?.cursor&&typeof checkpoint.cursor==='object'&&!Array.isArray(checkpoint.cursor)&&Object.keys(checkpoint.cursor).length===0;
+            if(checkpoint&&checkpoint.scopeHash!==scopeHash(scope)&&!freshCanary)throw new Error(`Checkpoint scope does not match ${scraper.sourceKey} collector configuration`);
             if(typeof scraper.setCheckpoint==='function')scraper.setCheckpoint(checkpoint?.cursor||{});
-            discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope:{collector:scraper.name},idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null});
+            discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope,idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null},ownership);
           }
           const items = await scraper.scrapeFeed();
+          await assertLease('Collection job lease was lost after source execution');
           if (!Array.isArray(items)) {
             throw new TypeError(`${scraper.name} returned a non-array payload`);
           }
@@ -166,7 +210,8 @@ class IngestionScheduler {
 
           const accepted = [];
           for (const item of items) {
-            if (options.leaseGuard && !await options.leaseGuard()) throw new Error('Collection job lease was lost; refusing further writes');
+            if (this.discoveryStore && accepted.length % 50 === 0) requireCollectionStorage(this.storageProbe);
+            await assertLease('Collection job lease was lost; refusing further writes');
             const originalPublisherRecord = typeof scraper.getRawPublisherRecord === 'function' ? scraper.getRawPublisherRecord(item) : null;
             const validation = validateListingForIngestion(item, {
               expectedSource: scraper.sourceKey
@@ -182,7 +227,7 @@ class IngestionScheduler {
             if(this.discoveryStore&&discoveryRun){
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return validation.listing;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
-              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);});
+              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);},ownership);
             }else await this.database.createListing(validation.listing);
             accepted.push(validation.listing);
             totalIngested++;
@@ -192,8 +237,9 @@ class IngestionScheduler {
             rejectedCount: rejectedForScraper,
             circuitOpen: false
           });
+          const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
           const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
-            ? { outcome: scraper.lastRunReport.outcome || null, truncated: scraper.lastRunReport.truncated === true, complete: scraper.lastRunReport.complete, fullSweepComplete: scraper.lastRunReport.fullSweepComplete === true, scope: scraper.lastRunReport.scope || null }
+            ? { outcome: coverage.outcome || null, truncated: coverage.truncated === true, complete: coverage.complete, fullSweepComplete: coverage.fullSweepComplete === true, scope: coverage.acquisitionScope || null, coverage }
             : null;
           let observationError = null;
           try {
@@ -203,13 +249,30 @@ class IngestionScheduler {
             observationError = error.message;
             console.error('[Scheduler] Could not persist source history:', error.message);
           }
-          if(this.discoveryStore&&discoveryRun){await this.discoveryStore.finishRun(discoveryRun.id,{status:report?.truncated||report?.complete===false?'partial':'complete',discovered:items.length,accepted:accepted.length,rejected:rejectedForScraper});if(scraper.lastRunReport?.nextContinuationToken)await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{continuationToken:scraper.lastRunReport.nextContinuationToken,sweepStartedAt:scraper.lastRunReport.sweepStartedAt,pagesCommitted:(scraper.lastRunReport.pagesPreviouslyCommitted||0)+(scraper.lastRunReport.pagesFetched||0)},{collector:scraper.name});else await this.discoveryStore.saveCheckpoint(scraper.sourceKey,{}, {collector:scraper.name});}
+          if (this.discoveryStore && discoveryRun) {
+            await assertLease('Collection job lease was lost before source completion');
+            await this.discoveryStore.finishRun(discoveryRun.id, {
+              status: report?.truncated || report?.complete === false ? 'partial' : 'complete',
+              discovered: coverage.counts?.publisherDiscovered ?? items.length,
+              accepted: accepted.length,
+              rejected: rejectedForScraper + (coverage.counts?.parserRejected ?? coverage.counts?.malformedRows ?? 0),
+              coverage,
+            },ownership);
+            const cursor = scraper.lastRunReport?.nextContinuationToken ? {
+              continuationToken: scraper.lastRunReport.nextContinuationToken,
+              sweepStartedAt: scraper.lastRunReport.sweepStartedAt,
+              pagesCommitted: (scraper.lastRunReport.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport.pagesFetched || 0),
+            } : {};
+            await assertLease('Collection job lease was lost before checkpoint advancement');
+            await this.discoveryStore.saveCheckpoint(scraper.sourceKey, cursor, collectionScope(scraper),ownership);
+          }
           const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
           Object.defineProperty(sourceResult,'acceptedListings',{value:accepted,enumerable:false});
           sourceResults.push(sourceResult);
           console.log(`[Scheduler] ${scraper.name} completed successfully (${accepted.length} accepted, ${items.length - accepted.length} rejected)`);
           return accepted.length;
         } catch (err) {
+          if(err?.code==='DISCOVERY_JOB_LEASE_LOST')throw err;
           const latency = Date.now() - scraperStart;
           this.telemetry.recordRun(scraper.name, [], latency, err, {
             rejectedCount: rejectedForScraper,
@@ -219,19 +282,23 @@ class IngestionScheduler {
           });
           const errorDetails=err&&err.transportCode?{code:err.transportCode,hostname:err.hostname||null,retryable:err.retryable===true}:null;
           sourceResults.push({ sourceId: scraper.sourceKey, accepted: 0, rejected: rejectedForScraper, error: err.message, ...(errorDetails?{errorDetails}:{}) });
-          if(this.discoveryStore&&discoveryRun)try{await this.discoveryStore.finishRun(discoveryRun.id,{status:'failed',rejected:rejectedForScraper,error:err.message});}catch(_){}
+          if(this.discoveryStore&&discoveryRun)try{await assertLease();await this.discoveryStore.finishRun(discoveryRun.id,{status:'failed',rejected:rejectedForScraper,error:err.message},ownership);}catch(finishError){if(finishError?.code==='DISCOVERY_JOB_LEASE_LOST')throw finishError;}
           try { await this.onSourceRun(scraper.sourceKey, { listings: [], error: err.message, durationMs: latency, rejectedCount: rejectedForScraper }); }
           catch (historyError) { console.error('[Scheduler] Could not persist source history:', historyError.message); }
           console.error(`[Scheduler] ${scraper.name} encountered an error:`, err.message);
           return 0;
         }
       });
+      const leaseFailure=workerResults.find(entry=>entry.status==='rejected'&&entry.reason?.code==='DISCOVERY_JOB_LEASE_LOST');
+      if(leaseFailure)throw leaseFailure.reason;
 
       const duration = Date.now() - startTime;
       console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
       const result = { totalIngested, totalRejected, durationMs: duration, skipped: false, sourceResults, completeCycle, jobId: cycleContext?.jobId || options.jobId || null };
-      try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, trigger: options.trigger || 'scheduler' }); }
-      catch (error) { console.error('[Scheduler] Could not finalize collection job:', error.message); }
+      if (!options.coordinatorManaged) {
+        try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, trigger: options.trigger || 'scheduler', ...ownership, leaseGuard }); }
+        catch (error) { console.error('[Scheduler] Could not finalize collection job:', error.message); if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error; }
+      }
       return result;
     } finally {
       this.isRunning = false;
@@ -245,7 +312,9 @@ const scheduler = new IngestionScheduler({
     const path = require('node:path');
     const { mergeLiveRecords } = require('../db/live-record-store');
     const { recordSourceRun } = require('../sources/observations');
-    if (!run.error && run.listings.length) {
+    // PostgreSQL already committed listing projections and immutable evidence.
+    // The bounded demo cache cannot represent a national or resumed sweep.
+    if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {
       // A run may reconcile (retire records that disappeared from this source)
       // ONLY when the run completed without error AND was not truncated by
       // pagination, timeouts, or operator abort. The scheduler surfaces this
@@ -280,12 +349,16 @@ scheduler.collectionCoordinator = collectionCoordinator;
 scheduler.onCycleStart = async ({ jobId, trigger, sourceIds }) => {
   if (jobId) return { jobId };
   const job = await collectionCoordinator.store.createOrReuse({ sourceIds, trigger });
+  if(typeof collectionCoordinator.store.claim!=='function')return {jobId:job.id};
+  const owner=`scheduler:${process.pid}:${crypto.randomUUID()}`;
+  const claimed=await collectionCoordinator.store.claim(job.id,owner,300);
+  if(!claimed){const error=new Error('Collection job is already claimed');error.code='DISCOVERY_JOB_LEASE_LOST';throw error;}
   await collectionCoordinator.store.update(job.id, { status: 'running', started: true, stage: { name: 'collection', value: { status: 'running' } } });
-  return { jobId: job.id };
+  return { jobId: job.id, owner, leaseGuard: async()=>collectionCoordinator.store.renewClaim(job.id,owner,300) };
 };
 scheduler.onCycleComplete = async (result, context = {}) => {
   const id = context.jobId || result.jobId;
-  if (id) await collectionCoordinator.finalize(id, result);
+  if (id) await collectionCoordinator.finalize(id, result, {owner:context.owner,leaseGuard:context.leaseGuard});
 };
 
 if (require.main === module) {
