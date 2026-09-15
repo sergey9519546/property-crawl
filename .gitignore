@@ -89,3 +89,19 @@ upload/
 
 # --- v0 PWA backup (retired UI; kept locally for one-cycle rollback) ---
 .v0_backup/
+
+# --- One-shot probes / scratch (left on disk, never committed) ---
+*.bak
+*.bak2
+*.bak3
+full-diff.txt
+sp-diff.txt
+test/smoke-*.js
+
+# --- Video-creator task plumbing (H3 submissions land under videos/) ---
+video-creater-args.json
+video-creater-prompt.txt
+video-creater-query.json
+video-creater-submit.json
+video-creater-task-*.json
+videos/
