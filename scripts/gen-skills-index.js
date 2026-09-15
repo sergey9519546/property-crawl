@@ -25,14 +25,33 @@ function parseFrontmatter(content) {
   if (!m) return {};
   const yaml = m[1];
   const fields = {};
-  // simple YAML parser for flat + one-level nested keys
+  const lines = yaml.split('\n');
   let currentKey = null;
-  for (const line of yaml.split('\n')) {
+  let blockLines = null; // non-null when accumulating a YAML block scalar
+
+  for (const line of lines) {
+    // Inside a block scalar: collect indented lines
+    if (blockLines !== null) {
+      if (line.match(/^\s+\S/) || line === '') {
+        blockLines.push(line.replace(/^\s{2}/, '')); // strip common indent
+        continue;
+      }
+      // Block ended — flush
+      fields[currentKey] = blockLines.join('\n').trim();
+      blockLines = null;
+      // fall through to parse this line as a new key
+    }
+
     const kv = line.match(/^(\w+):\s*(.*)$/);
     const nested = line.match(/^\s{2}(\w+):\s*(.*)$/);
     if (kv) {
       currentKey = kv[1];
-      fields[currentKey] = kv[2] || '';
+      const value = kv[2] || '';
+      if (value === '|' || value === '>' || value === '|-' || value === '>-') {
+        blockLines = [];
+      } else {
+        fields[currentKey] = value;
+      }
     } else if (nested && currentKey) {
       if (typeof fields[currentKey] === 'string' && !fields[currentKey]) {
         fields[currentKey] = {};
@@ -41,6 +60,10 @@ function parseFrontmatter(content) {
         fields[currentKey][nested[1]] = nested[2] || '';
       }
     }
+  }
+  // Flush any trailing block
+  if (blockLines !== null && currentKey) {
+    fields[currentKey] = blockLines.join('\n').trim();
   }
   return fields;
 }

@@ -250,35 +250,36 @@ test('IC memo labels supplied metrics and never converts them into bid authority
 });
 
 // ----------------------------------------------------
-// 10. Puter.js Free Client AI Integration
+// 10. AI Integration (no third-party client SDK)
 // ----------------------------------------------------
-console.log('\n[Suite 10: Puter.js Free AI Integration]');
+console.log('\n[Suite 10: AI Integration — no third-party client SDK]');
 
-test('RootLayout loads Puter.js SDK from js.puter.com/v2/', () => {
+test('RootLayout does not load a third-party AI SDK', () => {
   const layoutContent = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
-  assert.ok(layoutContent.includes('js.puter.com/v2/'), 'Puter.js SDK script tag missing from layout.tsx');
+  assert.ok(!layoutContent.includes('js.puter.com'), 'Puter.js SDK must not be loaded from layout.tsx');
+  assert.ok(!layoutContent.includes('builder.puter.com'), 'Puter builder runtime must not be loaded from layout.tsx');
 });
 
-test('PropertyDrawer wires Puter AI alongside backend enrich endpoint', () => {
+test('PropertyDrawer uses backend enrich, not a client-side AI SDK', () => {
   const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
-  assert.ok(drawerContent.includes('handleRunPuterAi'), 'handleRunPuterAi function missing from property-drawer.tsx');
-  assert.ok(drawerContent.includes('puter.ai.chat'), 'puter.ai.chat call missing from property-drawer.tsx');
-  assert.ok(drawerContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet model configuration missing from property-drawer.tsx');
-  assert.ok(drawerContent.includes('Puter AI'), 'Puter AI button label missing from property-drawer.tsx');
+  assert.ok(!drawerContent.includes('puter.ai.chat'), 'puter.ai.chat must not appear in property-drawer.tsx');
+  assert.ok(!drawerContent.includes('handleRunPuterAi'), 'handleRunPuterAi must not appear in property-drawer.tsx');
+  assert.ok(!drawerContent.includes('window.puter'), 'window.puter must not appear in property-drawer.tsx');
 });
 
-test('PropertyDrawer includes Puter AI model dropdown and AI LOI/Memo generators', () => {
+test('PropertyDrawer retains AI LOI/Memo generators without a client AI model picker', () => {
   const drawerContent = fs.readFileSync(path.join(root, 'src/components/terminal/property-drawer.tsx'), 'utf8');
-  assert.ok(drawerContent.includes('selectedPuterModel'), 'selectedPuterModel state missing from property-drawer.tsx');
   assert.ok(drawerContent.includes('handleGenerateAiLoi'), 'handleGenerateAiLoi missing from property-drawer.tsx');
   assert.ok(drawerContent.includes('handleGenerateAiMemo'), 'handleGenerateAiMemo missing from property-drawer.tsx');
-  assert.ok(drawerContent.includes('AI Tailored LOI'), 'AI Tailored LOI button missing from property-drawer.tsx');
+  assert.ok(!drawerContent.includes('selectedPuterModel'), 'selectedPuterModel must not appear in property-drawer.tsx');
+  assert.ok(!drawerContent.includes('claude-3-5-sonnet'), 'client model picker must not appear in property-drawer.tsx');
 });
 
-test('BiddingSimulator explains an explicit reverse-price scenario without predicting bidders', () => {
+test('BiddingSimulator explains an explicit reverse-price scenario without a client AI SDK', () => {
   const bidsimContent = fs.readFileSync(path.join(root, 'src/components/terminal/bidding-simulator.tsx'), 'utf8');
   assert.ok(bidsimContent.includes('handleRunAiStrategy'), 'handleRunAiStrategy missing from bidding-simulator.tsx');
-  assert.ok(bidsimContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet missing from bidding-simulator.tsx');
+  assert.ok(!bidsimContent.includes('claude-3-5-sonnet'), 'claude-3-5-sonnet must not appear in bidding-simulator.tsx');
+  assert.ok(!bidsimContent.includes('puter.ai.chat'), 'puter.ai.chat must not appear in bidding-simulator.tsx');
   assert.ok(bidsimContent.includes('computeTargetPriceScenario'), 'reverse target-price calculation missing from bidding-simulator.tsx');
   assert.ok(bidsimContent.includes('Unknown taxes, debt, and fees are not treated as $0'), 'unresolved-cost warning missing from bidding-simulator.tsx');
   assert.ok(!bidsimContent.includes('winProbability'), 'simulator must not present a fabricated auction-win probability');

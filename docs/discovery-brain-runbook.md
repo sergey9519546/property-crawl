@@ -1,5 +1,36 @@
 # Discovery brain operations
 
+## Local storage reserve
+
+Advanced readiness includes `checks.storage`. Collection checks the collector's
+local filesystem before claiming jobs, before each source, and periodically during
+ingestion. The default reserve is 1 GiB. Set `DISCOVERY_STORAGE_PATH` to the volume
+used for collector artifacts and `DISCOVERY_MIN_FREE_BYTES` to a positive integer
+byte reserve appropriate to that deployment. This does not measure a remote
+PostgreSQL server's volume; monitor that server separately.
+
+Low space returns `DISCOVERY_STORAGE_LOW`. A continuous worker waits and retries;
+a one-shot canary fails explicitly before claiming work. Readiness stays false
+until the reserve is restored. Never remove PostgreSQL data or WAL to recover
+space. Advanced collection no longer writes the size-limited demo JSON inventory;
+PostgreSQL remains authoritative and the original compatibility file is retained.
+
+The September 12 recovery removed only regenerable npm caches, excluding hashes
+observed in active processes. Large external tool caches, Codex session logs, and
+the system-managed page file all consume C: space. Static file sizes do not prove
+which process caused a particular drop. Avoid repeated tool reinstalls while
+diagnosing pressure, and verify active process ownership before cache cleanup.
+
+## Durable coverage migration
+
+Run `npm run discovery:migrate` with the configured `DATABASE_URL` before serving
+the updated collector. Migration `013_discovery_run_coverage.sql` adds a JSONB
+coverage record to source runs. Readiness checks for that column. Future runs
+retain bounded publisher/parser/ingestion counts, page counts, and jurisdiction
+progress. Continuation tokens, credentials and arbitrary upstream failures are
+excluded from the coverage document. Existing runs keep an empty coverage object;
+do not infer historical page counts that were never recorded.
+
 The canonical runtime is Next.js 16 plus the Node API, backed by PostgreSQL/PostGIS in advanced mode. ServiceLink is a functional benchmark and dated evidence source. The supplied architecture report is a reported reverse-engineering account; it does not establish the complete publisher backend. Atlas entries are onboarding candidates, not operating integrations.
 
 ## Mode and readiness
@@ -41,9 +72,37 @@ Run `npm run discovery:worker -- --canary servicelink` for an explicit canary, o
 
 Two distinct clean, complete runs of the same declared scope are required before `npm run discovery:worker -- --promote <source>`. Run `npm run discovery:worker` for the dedicated worker, or append `--once` for a bounded iteration. Recurring work only selects promoted sources and applies source cadence. Keep failed or blocked sources unpromoted.
 
+Migration `014_discovery_promotion_evidence.sql` withdraws legacy approvals that
+lack two distinct durable runs with matching acquisition scope, accepted records,
+zero rejections, and explicit complete, full-sweep, untruncated coverage. Counters
+alone are insufficient. It preserves inventory, snapshots, runs and checkpoints.
+Changing acquisition scope resets qualification and withdraws promotion. Changing
+a request budget does not change acquisition scope or invalidate a resumable HUD
+checkpoint. Before collection, the worker checks the actual adapter configuration
+and checkpoint against the approved scope. A fresh canary may replace an empty
+terminal checkpoint's old scope; pending work cannot silently switch scope.
+
+Use `npm run discovery:worker:health` to inspect the dedicated worker's durable
+heartbeat. This worker has no HTTP listener. Its Compose health check runs that
+command instead of the API image's inherited HTTP probe. A recent idle loop is
+healthy even when no approved source is due; it does not establish source coverage.
+The default stale threshold is 360 seconds, allowing the maximum 300-second poll
+interval. Database queries have five-second timeouts, and health output excludes
+connection strings. API readiness reports worker degradation separately so stored
+inventory remains available during a collector outage.
+
 Current-run validated records may generate positive hunt matches independently of unrelated source failures. Missing or unobserved records retain their baselines. Disappearance never establishes sold, withdrawn, or completed. Challenge pages stop collection; use the explicit lookup/import path for inaccessible sources.
 
 Wave 1: ServiceLink, Treasury, IRS, USDA, GSA, HUD. Wave 2: land banks, CivilView, Bid4Assets, each with explicit jurisdiction coverage. Existing FDIC history remains historical evidence.
+
+For a CivilView county canary, configure `CIVILVIEW_TARGET_STATE` with the
+published uppercase state code and `CIVILVIEW_COUNTY_ID` with the publisher's
+numeric county identifier. `CIVILVIEW_DETAIL_LIMIT` bounds each run. A fully
+exhausted county can report complete coverage; a reached detail budget or any
+failed/rejected detail keeps the run incomplete. The default priority sample
+never qualifies as complete county coverage. Two clean observed runs of the
+same declared county scope are still required before promotion. These controls
+are tested, but do not establish a successful live county run by themselves.
 
 ## Shared discovery contract
 
@@ -54,6 +113,21 @@ Wave 1: ServiceLink, Treasury, IRS, USDA, GSA, HUD. Wave 2: land banks, CivilVie
 `GET /api/property-intelligence?listingId=...` adds durable snapshot history, exact parcel/jurisdiction publisher links, address candidates, conflicting values, sale mechanics, and document/media evidence. `snapshotId=...` exposes the exact stored raw record only when it belongs to that listing's publisher identity. Public-record research persists separately and retains its own observation time. AI is optional.
 
 ## Acceptance and incident response
+
+### Local recovery checkpoint (2026-09-12)
+
+The persisted local PostgreSQL/PostGIS runtime was recovered on `127.0.0.1:55432`, with the advanced API on port 3102. A source-scoped GSA canary (`job_ace3ec284ffff1e70934a9be`) completed against `/our-listing`: 2 records were accepted, 0 rejected, and the source report marked the sweep complete and untruncated. The job completed every downstream stage without errors.
+
+A subsequent bounded `discovery-worker --once` invocation found five promoted sources due and completed job `job_9ac32e9283267872f34f6926`. USDA (15), IRS (6), and Treasury (14) reported complete sweeps. ServiceLink (25) and HUD (1,971) were successful bounded collections but reported truncated, incomplete sweeps; do not treat that job as a clean complete multi-source cycle. No recurring worker was left running after the bounded pass.
+
+That recovery initially used an older production build while disk space was
+constrained. Later September 12 verification rebuilt the preview after storage
+recovery; the old build description is historical. See the follow-up reports for
+the current bundle and worker state. Migration 014 subsequently returned all six
+national-core sources to canary state where their stored evidence did not satisfy
+the stronger gate. ServiceLink then supplied a second complete 57-page sweep and
+was independently requalified. Other sources need fresh evidence for their exact
+current scope before recurring collection can resume.
 
 Run `npm run test:discovery` with DISCOVERY_TEST_DATABASE_URL (or TEST_DATABASE_URL/DATABASE_URL). PostgreSQL acceptance fails if the database is missing. Tests create isolated schemas; they do not truncate imported inventory. Run source, intelligence, database, canonical-runtime, evidence-truth, TypeScript, and production-build checks as well.
 

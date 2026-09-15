@@ -35,8 +35,9 @@
 
 - 16 source types (A/B tier): bid4assets, civilview, fannie, fdic, freddie, gsa, hud, irs, landbank, marshals, servicelink, sheriff, treasury, trustee, usda, va.
   - Source: `CONTEXT.md`, `data.js`
-- 585 listings across 28 states.
-  - Source: `CONTEXT.md`, `data.js`
+- 2079 listings across 51 states (states includes all 50 US states + DC territory + PR).
+  - Property types: Commercial, Condo, Duplex, Land, Single Family, Single Family Home, Town House, Triplex, Unknown.
+  - Source: `CONTEXT.md` (regenerated 2026-09-14), `data.js`
 - 15 Server API route modules: alerts, **document-review**, enrich, export, hunts, listings, parcel-boundary, parse, property-image, property-intelligence, property-signals, scrapers, source-network, verify-docket, workspace.
   - Source: `CONTEXT.md`, `server/routes/`
 - 35 scraper modules in `server/scrapers/` (adapter + infrastructure mix).
@@ -137,6 +138,8 @@
 - Total commits on `main`: 95 (`git rev-list --count HEAD`).
 - Test files in `test/`: 121 (`*.test.js`, `*.test.mjs`).
 - Suites in `test/verify.js`: 35 (npm test entry).
+- `CONTEXT.md` regenerated 2026-09-14 (digest `511f2916ce84...`); `node scripts/gen-context.js --check` passes.
+- `package.json` `test:source-integrity` script now also runs `test/discovery-workbench-chips.test.mjs`.
 - API route modules: 15.
 - Scraper modules: 35.
 - Intelligence modules: 10 (`document-evidence`, `document-review`, `dossier`, `hunt-store`, `hunts`, `property-title`, `research-cases`, `research-store`, `signals`, `zillow-mcp`).

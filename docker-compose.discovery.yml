@@ -91,8 +91,17 @@ services:
       PROPERTY_LIVE_CACHE_PATH: /var/lib/property-crawl/live-listings.json
       PROPERTY_MEDIA_CACHE_PATH: /var/lib/property-crawl/property-media.json
       DISCOVERY_POLL_MS: ${DISCOVERY_POLL_MS:-30000}
+      DISCOVERY_WAVE: ${DISCOVERY_WAVE:-wave1}
+      DISCOVERY_WORKER_MAX_AGE_SECONDS: ${DISCOVERY_WORKER_MAX_AGE_SECONDS:-360}
       SERVICELINK_MAX_PAGES: ${SERVICELINK_MAX_PAGES:-100}
       SERVICELINK_PAGE_SIZE: ${SERVICELINK_PAGE_SIZE:-100}
+      HUD_STATES: ${HUD_STATES:-}
+      HUD_MAX_STATES: ${HUD_MAX_STATES:-52}
+      HUD_PAGE_SIZE: ${HUD_PAGE_SIZE:-100}
+      HUD_MAX_PAGES_PER_STATE: ${HUD_MAX_PAGES_PER_STATE:-10}
+      CIVILVIEW_TARGET_STATE: ${CIVILVIEW_TARGET_STATE:-NJ}
+      CIVILVIEW_COUNTY_ID: ${CIVILVIEW_COUNTY_ID:-}
+      CIVILVIEW_DETAIL_LIMIT: ${CIVILVIEW_DETAIL_LIMIT:-60}
     depends_on:
       discovery-state-init:
         condition: service_completed_successfully
@@ -103,6 +112,15 @@ services:
     volumes:
       - discovery_state:/var/lib/property-crawl
       - discovery_media:/var/lib/property-crawl/media
+
+    healthcheck:
+      # The worker has no HTTP listener. Probe its durable heartbeat instead of
+      # inheriting the API image's port-3000 health check.
+      test: ["CMD", "node", "scripts/discovery-worker-health.js"]
+      interval: 30s
+      timeout: 8s
+      start_period: 30s
+      retries: 3
 
   discovery-web:
     restart: unless-stopped

@@ -12,7 +12,18 @@ Install dependencies once:
 npm install
 ```
 
-Start the listing API in one terminal:
+Start both application processes with one command:
+
+```bash
+npm run dev:workspace
+```
+
+The default UI is on port 3001 and the API is on port 3000. Check both with
+`npm run workspace:ready`. For an existing preview on different ports, set
+`PROPERTY_API_URL` and `WORKSPACE_UI_URL` before running the readiness command.
+The check validates the API response and rejects mismatched workspace boot IDs.
+
+Alternatively, start the listing API in one terminal:
 
 ```bash
 npm run dev:api
@@ -93,6 +104,22 @@ Sources may be slow, rate-limited, blocked, or unavailable. The collectors use b
 To enable the verified Street View fallback, set `GOOGLE_MAPS_API_KEY` only in the server runtime or ignored `.env.local`. Next.js loads that file automatically; `npm run dev:api` and `npm run start:api` load it with Node's optional env-file flag. Enable Street View Static API on the key's Google Cloud project; Geocoding API is also needed when a publisher supplies an address without coordinates. See `.env.example` for conservative distance, timeout, concurrency, rate-limit, and circuit-breaker controls. Restrict and rotate any key shared in chat before production use.
 
 ## Verification
+
+Record discovery, evidence review, a pass decision, Second Look, and both packet
+exports using the current production build:
+
+```bash
+npm run build
+npm run workspace:walkthrough
+```
+
+The walkthrough starts its own loopback API/UI on free ports. It copies local
+inventory into isolated stores and uses a temporary access key; synthetic
+evidence and decisions never enter your research workspace or PostgreSQL.
+It checks duplicate case requests, anonymous-access rejection, packet
+reconstruction after restart, and mobile layouts. Screenshots, video, packets,
+and metrics are retained in the temporary directory printed on completion.
+Reconsideration counts are synthetic test results, not customer usefulness measurements.
 
 The complete quality gate is self-contained — no servers need to be running first:
 

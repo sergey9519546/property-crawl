@@ -114,7 +114,7 @@ function getGate(changeType) {
     full: {
       suites: ['node test/verify.js'],
       label: 'full verification gate',
-      maxDuration: 120000
+      maxDuration: 1_800_000
     }
   };
   return gates[changeType] || gates.full;

@@ -1,41 +1,117 @@
 """Record the private discovery -> evidence -> decision -> export acceptance journey.
 
-The script reads the operator credential locally, records a browser video, saves
-screenshots and both packet formats, and writes machine-readable timing metrics.
-It never prints or stores the credential.
+The script starts isolated application processes with a temporary access key,
+records the journey, and retains screenshots, packets and timing metrics in a
+temporary artifact directory. Synthetic evidence never enters operator stores.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
+import secrets
+import shutil
+import socket
+import subprocess
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from time import perf_counter
-
-from playwright.sync_api import sync_playwright
-
+from time import perf_counter, sleep
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_URL = os.environ.get("NEXT_UI_URL", "http://localhost:3001").rstrip("/")
+BASE_URL = ""
 
 
-def env_value(name: str) -> str:
-    value = os.environ.get(name)
-    if value:
-        return value
-    env_file = ROOT / ".env.local"
-    if not env_file.exists():
-        raise RuntimeError(f"{name} is required in the environment or .env.local")
-    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, candidate = line.split("=", 1)
-        if key.strip() == name:
-            return candidate.strip().strip('"').strip("'")
-    raise RuntimeError(f"{name} is required in the environment or .env.local")
+@contextmanager
+def isolated_workspace():
+    """Run real application processes with disposable credentials and isolated stores.
+
+    Existing inventory is copied for read-only discovery. Decisions and synthetic
+    evidence can never reach the operator's stores or configured PostgreSQL.
+    """
+    global BASE_URL
+    if not (ROOT / ".next" / "BUILD_ID").exists():
+        raise RuntimeError("Run npm run build before the isolated walkthrough")
+    artifact_dir = Path(tempfile.mkdtemp(prefix="perfectproperty-walkthrough-"))
+    env = os.environ.copy()
+    env.update({
+        "DATABASE_URL": "", "DISCOVERY_MODE": "", "NODE_ENV": "production",
+        "SCRAPER_BACKGROUND_ENABLED": "0", "ALLOW_REAL_SCRAPERS": "0",
+        "SCRAPER_ADMIN_TOKEN": secrets.token_urlsafe(32),
+        "WORKSPACE_SESSION_SECRET": secrets.token_urlsafe(32),
+        "WORKSPACE_BOOT_ID": secrets.token_hex(16),
+        "NEXT_DISCOVERY_PREVIEW": "", "NEXT_VERIFY_BUILD": "",
+        "PROPERTY_API_RATE_LIMIT": "10000",
+    })
+    for name in ("RESEARCH_WORKSPACE", "SOURCE_INTAKE", "HUNTS", "OBSERVATIONS", "COLLECTION_JOBS", "LIVE_CACHE"):
+        env[f"PROPERTY_{name}_PATH"] = str(artifact_dir / f"{name.lower()}.json")
+    inventory = ROOT / ".cache" / "live-listings.json"
+    if inventory.exists():
+        shutil.copyfile(inventory, env["PROPERTY_LIVE_CACHE_PATH"])
+    reservations = [socket.socket(), socket.socket()]
+    for reservation in reservations:
+        reservation.bind(("127.0.0.1", 0))
+    api_port, ui_port = [reservation.getsockname()[1] for reservation in reservations]
+    for reservation in reservations:
+        reservation.close()
+    env["PORT"] = str(api_port)
+    env["PROPERTY_API_URL"] = f"http://localhost:{api_port}"
+    BASE_URL = f"http://localhost:{ui_port}"
+    processes = []
+    logs = []
+
+    def start(name, args):
+        log = (artifact_dir / f"{name}.log").open("ab")
+        logs.append(log)
+        process = subprocess.Popen(args, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        processes.append(process)
+        return process
+
+    def wait_ready(url):
+        deadline = perf_counter() + 45
+        while perf_counter() < deadline:
+            if any(process.poll() is not None for process in processes):
+                raise RuntimeError(f"Isolated process exited; inspect logs in {artifact_dir}")
+            try:
+                with urlopen(url, timeout=2) as response:
+                    if json.load(response).get("workspaceBootId") == env["WORKSPACE_BOOT_ID"]:
+                        return
+            except (OSError, ValueError):
+                pass
+            sleep(0.25)
+        raise RuntimeError(f"Isolated workspace not ready; inspect logs in {artifact_dir}")
+
+    def restart_api():
+        api = processes.pop(0)
+        api.terminate()
+        api.wait(timeout=10)
+        process = start("api", ["node", "-e", f"require('./server/server').listen({api_port}, '127.0.0.1')"])
+        processes.remove(process)
+        processes.insert(0, process)
+        wait_ready(f"{env['PROPERTY_API_URL']}/api/health")
+
+    try:
+        start("api", ["node", "-e", f"require('./server/server').listen({api_port}, '127.0.0.1')"])
+        start("ui", ["node", "node_modules/next/dist/bin/next", "start", "-p", str(ui_port), "-H", "127.0.0.1"])
+        wait_ready(f"{env['PROPERTY_API_URL']}/api/health")
+        wait_ready(f"{BASE_URL}/api/health")
+        yield artifact_dir, env["SCRAPER_ADMIN_TOKEN"], restart_api
+    finally:
+        for process in reversed(processes):
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+        for log in logs:
+            log.close()
 
 
 def expect_ok(response, purpose: str) -> dict:
@@ -44,21 +120,22 @@ def expect_ok(response, purpose: str) -> dict:
     return response.json()
 
 
-def main() -> None:
-    credential = env_value("SCRAPER_ADMIN_TOKEN")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    artifact_dir = ROOT / "artifacts" / "workspace-walkthrough" / stamp
+def record_journey(artifact_dir, credential, restart_api) -> None:
+    from playwright.sync_api import sync_playwright
+
     video_dir = artifact_dir / "video"
-    artifact_dir.mkdir(parents=True, exist_ok=False)
     video_dir.mkdir()
     metrics = {
         "startedAt": datetime.now(timezone.utc).isoformat(),
         "baseUrl": BASE_URL,
         "journey": ["discovery", "evidence", "decision", "second_look", "export"],
-        "usefulReconsiderationEvents": 0,
+        "syntheticReconsiderationEvents": 0,
+        "isolated": True,
+        "customerUsefulnessMeasured": False,
         "consoleErrors": [],
         "pageErrors": [],
         "serverErrors": [],
+        "failedRequests": [],
     }
     started = perf_counter()
     video_path = None
@@ -75,6 +152,10 @@ def main() -> None:
         page.set_default_timeout(15_000)
         page.on("console", lambda message: metrics["consoleErrors"].append(message.text) if message.type == "error" else None)
         page.on("pageerror", lambda error: metrics["pageErrors"].append(str(error)))
+        page.on("requestfailed", lambda request: metrics["failedRequests"].append({
+            "url": request.url, "reason": request.failure,
+            "applicationRequest": request.url.startswith(BASE_URL),
+        }))
         page.on(
             "response",
             lambda response: metrics["serverErrors"].append({"status": response.status, "url": response.url})
@@ -83,9 +164,9 @@ def main() -> None:
         )
         try:
             page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
-            page.get_by_role("heading", name="Distressed property records, without hidden assumptions").wait_for()
+            page.get_by_role("heading", name="Find properties", exact=True).wait_for()
             page.get_by_role("button", name=re.compile(r"Unlock|Checking")).click()
-            page.get_by_label("Operator credential").fill(credential)
+            page.get_by_label("Workspace access key").fill(credential)
             page.get_by_role("button", name="Unlock workspace").click()
             page.get_by_role("button", name="Lock", exact=True).wait_for()
 
@@ -114,8 +195,9 @@ def main() -> None:
                 raise RuntimeError("No source-observed listing is available for the browser journey")
             listing = candidates[0]
 
-            page.get_by_label("Search listings").fill(listing["address"])
-            page.get_by_role("button", name=re.compile(r"Deal Grid \(1 records?\)")).wait_for()
+            page.get_by_label("Search properties").fill(listing["id"])
+            page.get_by_role("button", name="Search", exact=True).click()
+            page.get_by_text("1 property", exact=True).wait_for()
             page.screenshot(path=str(artifact_dir / "01-discovery.png"), full_page=True)
             page.get_by_role("button", name="Research", exact=True).first.click()
             page.wait_for_url(re.compile(r"/research/rcase_[a-f0-9]{24}"))
@@ -134,7 +216,7 @@ def main() -> None:
             page.get_by_text("Pass saved. The case returns only when a supported condition is met.", exact=True).wait_for()
             page.screenshot(path=str(artifact_dir / "03-decision.png"), full_page=True)
 
-            captured_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            captured_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
             evidence_payload = {
                 "sourceId": listing["source"],
                 "sourceUrl": listing["sourceUrl"],
@@ -162,7 +244,7 @@ def main() -> None:
             page.get_by_role("button", name="Link", exact=True).click()
             page.get_by_text("Relevant evidence changed. Your saved pass remains intact until you review and save a new decision.", exact=True).wait_for()
             page.get_by_text("Second Look", exact=True).wait_for()
-            metrics["usefulReconsiderationEvents"] = 1
+            metrics["syntheticReconsiderationEvents"] = 1
             page.screenshot(path=str(artifact_dir / "04-second-look.png"), full_page=True)
 
             with page.expect_download() as download_info:
@@ -172,12 +254,44 @@ def main() -> None:
                 page.get_by_role("button", name="Print-ready report", exact=True).click()
             download_info.value.save_as(str(artifact_dir / "decision-packet.md"))
 
+            packet_url = f"{BASE_URL}/api/workspace/cases/{case_id}/packet?format=json"
+            before_restart = expect_ok(context.request.get(packet_url), "packet before restart")
+            restart_api()
+            after_restart = expect_ok(context.request.get(packet_url), "packet after restart")
+            if before_restart != after_restart:
+                raise RuntimeError("Stored packet changed across API restart")
+            metrics["packetSurvivesRestart"] = True
+            retained = expect_ok(context.request.get(f"{BASE_URL}/api/workspace/cases/{case_id}"), "retained case")
+            if retained["case"]["state"] != "pass" or not retained["case"]["reconsiderationRequired"]:
+                raise RuntimeError("Second Look did not preserve the pass decision across restart")
+            duplicate = expect_ok(context.request.post(f"{BASE_URL}/api/workspace/cases", data={
+                "listingId": listing["id"], "origin": {"type": "manual"},
+            }), "duplicate case request")
+            if duplicate["case"]["id"] != case_id:
+                raise RuntimeError("A repeated case request created a duplicate")
+            anonymous = browser.new_context()
+            try:
+                if anonymous.request.get(f"{BASE_URL}/api/workspace/cases/{case_id}").status != 401:
+                    raise RuntimeError("Anonymous browser could read a private case")
+            finally:
+                anonymous.close()
+            metrics["privateAccessAndDeduplication"] = True
+
             page.get_by_role("link", name="Research", exact=True).click()
             page.get_by_text("Second Look", exact=True).first.wait_for()
             page.screenshot(path=str(artifact_dir / "05-inbox.png"), full_page=True)
             visible_text = page.locator("body").inner_text().lower()
             if "servicelink" in visible_text:
                 raise RuntimeError("Prohibited publisher branding appeared in customer-visible text")
+            page.set_viewport_size({"width": 390, "height": 844})
+            for route, heading in [("activity", "Collection activity"),
+                                   ("research/alachua", "Second chance review")]:
+                page.goto(f"{BASE_URL}/{route}", wait_until="domcontentloaded")
+                page.get_by_role("heading", name=heading, exact=True).wait_for()
+                if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
+                    raise RuntimeError(f"Horizontal overflow on mobile {route}")
+                page.screenshot(path=str(artifact_dir / (route.replace("/", "-") + "-mobile.png")), full_page=True)
+            metrics["mobileViewport"] = {"width": 390, "height": 844}
             if metrics["pageErrors"] or metrics["serverErrors"]:
                 raise RuntimeError(f"Browser journey reported runtime errors: {metrics['pageErrors'] or metrics['serverErrors']}")
             metrics["completed"] = True
@@ -200,8 +314,10 @@ def main() -> None:
                 metrics["video"] = final_video.name
             (artifact_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
 
-    print(json.dumps({"completed": metrics.get("completed", False), "artifactDir": str(artifact_dir), "completionMs": metrics["completionMs"], "usefulReconsiderationEvents": metrics["usefulReconsiderationEvents"]}))
+    print(json.dumps({"completed": metrics.get("completed", False), "artifactDir": str(artifact_dir), "completionMs": metrics["completionMs"], "syntheticReconsiderationEvents": metrics["syntheticReconsiderationEvents"]}))
 
 
 if __name__ == "__main__":
-    main()
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    with isolated_workspace() as workspace:
+        record_journey(*workspace)
