@@ -14,6 +14,7 @@
 
 const BaseScraper = require('./base');
 const { extractDetailImages } = require('./media-policy');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -30,10 +31,12 @@ const STATE_NAME_TO_CODE = {
 };
 
 class GsaSurplusScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'GsaSurplusCollector', sourceKey: 'gsa' });
+  constructor(options = {}) {
+    super({ ...options, name: 'GsaSurplusCollector', sourceKey: 'gsa' });
     this.baseUrl = 'https://realestatesales.gov';
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('gsa');
+    this.extract = options.extractImpl || extractWithScrapling;
   }
 
   async scrapeFeed() {
@@ -42,7 +45,10 @@ class GsaSurplusScraper extends BaseScraper {
 
       // Property cards link to /asset-details/?property_id=N.
       const idRe = /\/asset-details\/\?property_id=(\d+)/g;
-      const ids = [...new Set([...listHtml.matchAll(idRe)].map(m => m[1]))];
+      const indexEvidence = this.useScrapling
+        ? await this.extract('gsa-index', { html: listHtml, url: `${this.baseUrl}/our-listing` }) : null;
+      const ids = indexEvidence ? indexEvidence.items.map(item => item.propertyId)
+        : [...new Set([...listHtml.matchAll(idRe)].map(m => m[1]))];
 
       // The list page is the only place "Current Bid" appears as one clean
       // token. Capture id → bid where present; cards without a current bid
@@ -50,7 +56,9 @@ class GsaSurplusScraper extends BaseScraper {
       const bidRe = /\/asset-details\/\?property_id=(\d+)[\s\S]*?property-price">[\s\S]*?\$([\d,]+)/g;
       const listBids = new Map();
       let m;
-      while ((m = bidRe.exec(listHtml)) !== null) {
+      if (indexEvidence) {
+        for (const item of indexEvidence.items) if (item.currentBid !== null) listBids.set(item.propertyId, item.currentBid);
+      } else while ((m = bidRe.exec(listHtml)) !== null) {
         if (!listBids.has(m[1])) listBids.set(m[1], this.parseMoney(m[2]));
       }
       console.log(`[${this.name}] Found ${ids.length} GSA properties on list page (${listBids.size} with a current bid)`);
@@ -71,6 +79,7 @@ class GsaSurplusScraper extends BaseScraper {
       }
 
       this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/our-listing', filters: { assetClass: 'real_estate' } }, recordsDiscovered: ids.length, recordsEmitted: listings.length, recordsRejected: ids.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      if (indexEvidence) this.lastRunReport.extraction = this.extractionEvidence(indexEvidence);
       console.log(`[${this.name}] Scraped ${listings.length} GSA properties`);
       return listings.map(item => this.standardizeListing(item));
     });
@@ -88,18 +97,20 @@ class GsaSurplusScraper extends BaseScraper {
     const html = await this.fetchText(detailUrl);
 
     // --- Clean address from hidden tour_property_* inputs ---
-    const street = this.attrValue(html, 'tour_property_address');
-    const city = this.attrValue(html, 'tour_property_city');
-    const stateName = this.attrValue(html, 'tour_property_state');
-    const zip = this.attrValue(html, 'tour_property_zipcode');
+    const detailEvidence = this.useScrapling
+      ? await this.extract('gsa-detail', { html, url: detailUrl }) : null;
+    const street = detailEvidence ? detailEvidence.property.address : this.attrValue(html, 'tour_property_address');
+    const city = detailEvidence ? detailEvidence.property.city : this.attrValue(html, 'tour_property_city');
+    const stateName = detailEvidence ? detailEvidence.property.state : this.attrValue(html, 'tour_property_state');
+    const zip = detailEvidence ? detailEvidence.property.zipcode : this.attrValue(html, 'tour_property_zipcode');
 
     if (!street || !/^\d/.test(street)) return null; // require a street number
     const state = STATE_NAME_TO_CODE[stateName] || (stateName && stateName.length === 2 ? stateName : 'US');
     if (state === 'US' || !zip) return null;
 
     // --- Case / Sale number ---
-    const caseNo = this.firstText(html, /Case Number:\s*([\w-]+)/);
-    const saleNo = this.firstText(html, /Sale Number:\s*(\w+)/);
+    const identifiers = this.publisherIdentifiers(html, id);
+    const { caseNo, saleNo } = identifiers;
 
     // --- Current bid: prefer the clean token parsed from the list page; fall
     // back to the detail page where the amount is split across markup, so we
@@ -121,7 +132,7 @@ class GsaSurplusScraper extends BaseScraper {
     const baths = this.clampInt(this.firstInt(desc, /(\d+)[-\s]?bath(?:room)?/i), 1, 15);
     const sqft = this.clampInt(this.firstInt(desc.replace(/,/g, ''), /([\d,]+)\s*sq(?:uare)?\s*(?:foot|feet|ft)/i), 300, 100000);
 
-    const listingId = `GSA-${saleNo || caseNo || id}`;
+    const listingId = `GSA-${identifiers.recordId}`;
     const fullAddress = `${street}, ${city}, ${state} ${zip}`;
 
     return {
@@ -157,11 +168,24 @@ class GsaSurplusScraper extends BaseScraper {
         origin: 'live',
         observed: true,
         publisher: 'U.S. General Services Administration',
-        recordId: String(saleNo || caseNo || id),
-        sourceFacts: { caseNumber: caseNo || null, saleNumber: saleNo || null, currentBid: currentBid || null },
+        recordId: identifiers.recordId,
+        sourceFacts: {
+          caseNumber: caseNo || null,
+          saleNumber: saleNo || null,
+          currentBid: currentBid || null,
+          identityBasis: identifiers.identityBasis,
+          rejectedIdentifierCandidates: identifiers.rejectedCandidates
+        },
+        ...(detailEvidence ? { extraction: this.extractionEvidence(detailEvidence) } : {}),
         media: { gallery, photo: gallery[0] ? { sourceRecordUrl: detailUrl, extraction: gallery[0] } : null }
       }
     };
+  }
+
+  extractionEvidence(result) {
+    return { engine: result.engine, engineVersion: result.engineVersion, profile: result.profile,
+      sourceUrl: result.sourceUrl, contentSha256: result.contentSha256,
+      method: 'deterministic-selectors', adaptiveIdentityMatching: false };
   }
 
   classifyPropertyType(desc) {
@@ -170,6 +194,29 @@ class GsaSurplusScraper extends BaseScraper {
     if (/multi.?family|duplex/i.test(desc)) return 'Multi-Family';
     if (/vacant land|land only|raw land|acreage/i.test(desc)) return 'Land';
     return null;
+  }
+
+  publisherIdentifiers(html, propertyId) {
+    const candidate = (label) => this.firstText(html, new RegExp(`${label}\\s*:\\s*([A-Za-z0-9-]+)`, 'i'));
+    const saleCandidate = candidate('Sale Number');
+    const caseCandidate = candidate('Case Number');
+    // Publisher identifiers observed on GSA pages are stable alphanumeric
+    // tokens. Requiring at least one digit prevents adjacent prose such as
+    // "Sale Number: Block ..." from becoming a durable property identity.
+    const valid = value => Boolean(value && value.length <= 64 && /\d/.test(value) && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(value));
+    const saleNo = valid(saleCandidate) ? saleCandidate : '';
+    const caseNo = valid(caseCandidate) ? caseCandidate : '';
+    const recordId = String(saleNo || caseNo || propertyId);
+    return {
+      saleNo,
+      caseNo,
+      recordId,
+      identityBasis: saleNo ? 'sale_number' : caseNo ? 'case_number' : 'property_id',
+      rejectedCandidates: [
+        ...(!saleNo && saleCandidate ? [{ field: 'saleNumber', value: saleCandidate }] : []),
+        ...(!caseNo && caseCandidate ? [{ field: 'caseNumber', value: caseCandidate }] : [])
+      ]
+    };
   }
 
   // Extract the value="..." from a hidden input named `name`.

@@ -1,5 +1,13 @@
 'use strict';
 
+// The PropertyTitle client refuses to construct without an API key (the
+// previous hardcoded DEFAULT_API_KEY was a security finding that has been
+// removed). Tests set the env var up-front so the module-load invariant
+// holds in CI and local runs.
+if (!process.env.PROPERTY_TITLE_API_KEY && !process.env.API_MARKET_KEY) {
+  process.env.PROPERTY_TITLE_API_KEY = 'test-property-title-key';
+}
+
 const assert = require('node:assert/strict');
 const { test, describe } = require('node:test');
 const {

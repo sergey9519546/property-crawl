@@ -3,6 +3,7 @@
 const db = require('../db/client');
 const { inspectSourceRecordUrl } = require('../scrapers/source-policy');
 const { inspectPublisherPhoto } = require('../scrapers/media-policy');
+const { lookupPanoramax } = require('../media/panoramax');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
 const GOOGLE_GEOCODING_PATH = '/maps/api/geocode/json';
@@ -772,6 +773,22 @@ function baseHeaders() {
   };
 }
 
+function panoramaxViewerUrl(candidate) {
+  if (!candidate?.pictureId || !/^[A-Za-z0-9_-]{1,200}$/.test(candidate.pictureId)) return null;
+  const url = new URL('https://api.panoramax.xyz/');
+  url.searchParams.set('focus', 'pic');
+  url.searchParams.set('pic', candidate.pictureId);
+  url.searchParams.set('map', candidate.location.lat.toFixed(7) + ',' + candidate.location.lng.toFixed(7));
+  return url.toString();
+}
+
+function publicPanoramaxCandidate(candidate) {
+  return {
+    ...candidate,
+    viewerUrl: panoramaxViewerUrl(candidate),
+  };
+}
+
 function errorResult(error) {
   const expected = error instanceof PropertyImageError;
   const headers = { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' };
@@ -835,13 +852,57 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_listing_id', 'listingId is invalid.');
       }
       const mode = safeText(url.searchParams.get('mode') || 'metadata', 16)?.toLowerCase();
-      if (!['metadata', 'walkthrough', 'image'].includes(mode)) {
-        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, or image.');
+      if (!['metadata', 'walkthrough', 'image', 'alternatives'].includes(mode)) {
+        throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, or alternatives.');
       }
 
       limiter.consume();
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
+      if (mode === 'alternatives') {
+        if (!hasSourceObservedProvenance(listing)) {
+          throw new PropertyImageError(422, 'listing_not_current_source_observed', 'Alternative imagery requires a current source-observed listing.');
+        }
+        if (!inspectSourceRecordUrl(listing.source, listing.sourceUrl).isValid) {
+          throw new PropertyImageError(422, 'invalid_source_record', 'Alternative imagery requires an exact publisher record URL.');
+        }
+        const coordinates = sourceCoordinates(listing);
+        if (!coordinates) {
+          throw new PropertyImageError(422, 'source_coordinates_unavailable', 'Alternative imagery requires validated current source coordinates.');
+        }
+        return await gate.run(async () => {
+          let lookup;
+          try {
+            lookup = await lookupPanoramax(coordinates, {
+              fetchImpl,
+              radiusMeters: clampInteger(env.PANORAMAX_RADIUS_METERS, 1, 100, 100),
+              limit: clampInteger(env.PANORAMAX_RESULT_LIMIT, 1, 10, 10),
+              timeoutMs: clampInteger(env.PANORAMAX_TIMEOUT_MS, 500, 15_000, 8_000),
+            });
+          } catch (_) {
+            throw new PropertyImageError(503, 'alternative_provider_unavailable', 'Panoramax coverage lookup is temporarily unavailable.');
+          }
+          const candidate = lookup.candidate ? publicPanoramaxCandidate(lookup.candidate) : null;
+          const directionalSequences = lookup.directionalSequences
+            .filter((entry) => entry.license.displayApproved)
+            .map(publicPanoramaxCandidate);
+          return {
+            status: 200,
+            headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+            body: {
+              provider: 'Panoramax',
+              available: Boolean(candidate),
+              candidate,
+              directionalSequences,
+              panoramicMetadata: lookup.panoramicMetadata,
+              reason: candidate ? null : lookup.reason,
+              queriedRadiusMeters: lookup.queriedRadiusMeters,
+              exactPropertyVerified: false,
+              coordinateBasis: coordinates.basis,
+            },
+          };
+        });
+      }
       const identity=validateListingForStreetView(listing, mode);
       const config = runtimeConfig(env);
 

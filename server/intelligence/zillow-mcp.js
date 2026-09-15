@@ -20,7 +20,6 @@
 const https = require('https');
 
 const DEFAULT_BASE_URL = 'https://prod.api.market/api/mcp/veer-hanuman-1/zillw-us-real-state-listings';
-const DEFAULT_API_KEY  = 'cmjgtcjea0001jr04c5ckyyk0';
 const DEFAULT_TIMEOUT  = 15000;
 
 let _idCounter = 100;
@@ -28,7 +27,8 @@ function nextId() { return ++_idCounter; }
 
 class ZillowMcpClient {
   constructor(options = {}) {
-    this.apiKey  = options.apiKey  || process.env.ZILLOW_MCP_API_KEY || process.env.API_MARKET_KEY || DEFAULT_API_KEY;
+    this.apiKey  = options.apiKey  || process.env.ZILLOW_MCP_API_KEY || process.env.API_MARKET_KEY;
+    if (!this.apiKey) throw new Error('ZILLOW_MCP_API_KEY is required');
     this.baseUrl = (options.baseUrl || process.env.ZILLOW_MCP_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = options.timeout || DEFAULT_TIMEOUT;
   }

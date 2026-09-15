@@ -1,5 +1,6 @@
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { evaluateOpportunitySignals } = require('./signals');
+const { buildDocumentEvidence } = require('./document-evidence');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
@@ -76,9 +77,10 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     }
   }
   const opportunityEvaluation = evaluateOpportunitySignals(listing, { observations, publicRecords, now });
+  const documentEvidence = buildDocumentEvidence(listing, { capturedEvidence, observedAt: timestamp, sourceUrl: source.url });
   return {
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
-    source, facts, signals, contradictions, gaps,
+    source, facts, signals, contradictions, gaps, documentEvidence,
     opportunitySignals: opportunityEvaluation.signals,
     triagePriority: opportunityEvaluation.triagePriority,
     opportunityWeights: opportunityEvaluation.weights,
@@ -96,6 +98,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
       unknownFacts: facts.filter((fact) => fact.evidenceClass === 'unknown').length,
       supportedChanges: signals.length, researchQuestions: gaps.length,
       opportunitySignals: opportunityEvaluation.signals.filter((s) => s.status === 'supported').length,
+      documentCount: documentEvidence.count,
     },
     interpretation: 'A research dossier separates publisher observations, public-record context, model assumptions, and unresolved questions. It is not an appraisal, title determination, or bid recommendation.',
   };

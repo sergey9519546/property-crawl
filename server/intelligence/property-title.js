@@ -3,7 +3,6 @@
 const https = require('https');
 
 const DEFAULT_BASE_URL = 'https://prod.api.market/api/v1/nicheapi-llc-1/propertytitle/v1/propertytitle';
-const DEFAULT_API_KEY = 'cmjgtcjea0001jr04c5ckyyk0';
 
 const RISK_BANDS = {
   CLEAN: { min: 0, max: 15, label: 'Clean Title', action: 'Proceed', color: 'green' },
@@ -15,7 +14,8 @@ const RISK_BANDS = {
 
 class PropertyTitleClient {
   constructor(options = {}) {
-    this.apiKey = options.apiKey || process.env.PROPERTY_TITLE_API_KEY || process.env.API_MARKET_KEY || DEFAULT_API_KEY;
+    this.apiKey = options.apiKey || process.env.PROPERTY_TITLE_API_KEY || process.env.API_MARKET_KEY;
+    if (!this.apiKey) throw new Error('PROPERTY_TITLE_API_KEY is required');
     this.baseUrl = (options.baseUrl || process.env.PROPERTY_TITLE_BASE_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = options.timeout || 12000;
   }

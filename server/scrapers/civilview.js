@@ -7,8 +7,9 @@
 //
 // Data-integrity policy:
 //   - Only emit records backed by a successfully parsed detail page.
-//   - Only use CivilView's published "Approx. Upset" as openingBid; preserve
-//     the exact record with a null bid when that amount has not been published.
+//   - An approximate upset price is a qualified estimate, not an opening bid.
+//     Preserve it as a source fact and only map an explicitly labeled opening
+//     or minimum bid into openingBid.
 //   - Unknown facts remain null; no hashes, stock photos, inferred valuations,
 //     geocodes, property attributes, or future dates are generated.
 //   - Preserve the exact detail URL, source fields, and status history as
@@ -32,7 +33,17 @@ class CivilViewScraper extends BaseScraper {
       maxRetries: options.maxRetries || 3,
     });
     this.baseUrl = options.baseUrl || 'https://salesweb.civilview.com';
-    this.targetState = options.targetState || 'NJ';
+    this.targetState = options.targetState ?? process.env.CIVILVIEW_TARGET_STATE ?? 'NJ';
+    const configuredCountyId = options.countyId ?? process.env.CIVILVIEW_COUNTY_ID;
+    this.countyId = configuredCountyId == null || configuredCountyId === ''
+      ? null
+      : String(configuredCountyId).trim();
+    if (!/^[A-Z]{2}$/.test(this.targetState)) {
+      throw new TypeError('CivilView targetState must be a two-letter uppercase state code');
+    }
+    if (this.countyId != null && !/^\d+$/.test(this.countyId)) {
+      throw new TypeError('CivilView countyId must contain only digits');
+    }
     this.observedRecordIds = new Set(options.observedRecordIds || []);
     this.maxCounties = this.positiveInt(
       options.maxCounties ?? process.env.CIVILVIEW_MAX_COUNTIES,
@@ -54,25 +65,45 @@ class CivilViewScraper extends BaseScraper {
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const counties = await this.fetchCounties();
-      const stateCounties = counties.filter((county) => county.state === this.targetState);
-      const ordered = this.orderCounties(stateCounties).slice(0, this.maxCounties);
-
-      if (ordered.length === 0) {
-        throw new Error(`No CivilView counties found for ${this.targetState}`);
-      }
-
       const report = {
-        countiesDiscovered: counties.length,
+        outcome: 'failed',
+        scope: {
+          endpoint: '/Sales/SalesSearch',
+          filters: this.countyId
+            ? { state: this.targetState, countyId: this.countyId }
+            : { state: this.targetState, selection: 'bounded-priority-sample' },
+        },
+        countiesDiscovered: 0,
         countiesAttempted: 0,
         summariesDiscovered: 0,
         detailPagesAttempted: 0,
         detailPagesParsed: 0,
         recordsEmitted: 0,
+        recordsAccepted: 0,
+        recordsRejected: 0,
+        unattemptedSummaries: 0,
         newDetailsAttempted: 0,
         refreshDetailsAttempted: 0,
         failures: [],
+        boundedSample: true,
+        truncated: true,
+        complete: false,
+        fullSweepComplete: false,
       };
+      this.lastRunReport = report;
+      const counties = await this.fetchCounties();
+      report.countiesDiscovered = counties.length;
+      const stateCounties = counties.filter((county) => county.state === this.targetState);
+      const ordered = this.countyId
+        ? stateCounties.filter((county) => county.id === this.countyId)
+        : this.orderCounties(stateCounties).slice(0, this.maxCounties);
+
+      if (ordered.length === 0) {
+        throw new Error(this.countyId
+          ? `CivilView county ${this.countyId} was not published for ${this.targetState}`
+          : `No CivilView counties found for ${this.targetState}`);
+      }
+
       const emitted = [];
       const seenPropertyIds = new Set();
       let remainingDetailBudget = this.maxDetailPages;
@@ -152,7 +183,25 @@ class CivilViewScraper extends BaseScraper {
 
       report.recordsEmitted = emitted.length;
       report.unattemptedSummaries = Math.max(0, report.summariesDiscovered - report.detailPagesAttempted);
-      report.boundedSample = report.unattemptedSummaries > 0 || stateCounties.length > report.countiesAttempted;
+      report.boundedSample = report.unattemptedSummaries > 0 || (
+        !this.countyId && stateCounties.length > report.countiesAttempted
+      );
+      report.recordsAccepted = emitted.length;
+      report.recordsRejected = Math.max(0, report.detailPagesAttempted - emitted.length);
+      report.truncated = report.unattemptedSummaries > 0 || !this.countyId;
+      report.complete = Boolean(
+        this.countyId &&
+        report.countiesAttempted === 1 &&
+        report.failures.length === 0 &&
+        report.recordsRejected === 0 &&
+        report.unattemptedSummaries === 0,
+      );
+      report.fullSweepComplete = report.complete;
+      report.outcome = report.failures.length > 0
+        ? 'partial_failure'
+        : emitted.length > 0
+          ? 'success'
+          : 'empty';
       this.lastRunReport = report;
 
       if (emitted.length === 0) {
@@ -350,12 +399,22 @@ class CivilViewScraper extends BaseScraper {
     const propertyNote = normalizeOcrText(this.field(fields, 'property note'));
     const detailUpsetRaw = this.field(fields, 'approx. upset*') || this.field(fields, 'approx. upset');
     const noteUpsetRaw = this.parseLabeledNote(propertyNote, 'GOOD FAITH ESTIMATED UPSET PRICE');
-    const upsetRaw = detailUpsetRaw || noteUpsetRaw;
-    const openingBid = this.parseMoney(upsetRaw);
-    const openingBidSource = detailUpsetRaw
+    const descriptionUpsetRaw = this.parseDescriptionUpset(description);
+    const upsetRaw = detailUpsetRaw || noteUpsetRaw || descriptionUpsetRaw;
+    const approximateUpsetPrice = this.parseMoney(upsetRaw);
+    const approximateUpsetSource = detailUpsetRaw
       ? 'CivilView Approx. Upset'
       : noteUpsetRaw
         ? 'CivilView Property Note — Good Faith Estimated Upset Price'
+        : descriptionUpsetRaw
+          ? 'CivilView Description — Approximate Upset Price'
+          : null;
+    const openingBidRaw = this.field(fields, 'opening bid') || this.field(fields, 'minimum bid');
+    const openingBid = this.parseMoney(openingBidRaw);
+    const openingBidSource = this.field(fields, 'opening bid')
+      ? 'CivilView Opening Bid'
+      : this.field(fields, 'minimum bid')
+        ? 'CivilView Minimum Bid'
         : null;
     const judgment = this.parseExecutionAmount(description);
     const occupancy = this.parseOccupancy(propertyNote);
@@ -386,10 +445,10 @@ class CivilViewScraper extends BaseScraper {
       estHigh: null,
       assessed: null,
       saleDate: this.parseSaleDate(saleDateRaw),
-      plaintiff: this.field(fields, 'plaintiff') || summary.plaintiff || null,
-      defendant: this.field(fields, 'defendant') || summary.defendant || null,
+      plaintiff: this.boundedProjectionText(this.field(fields, 'plaintiff') || summary.plaintiff),
+      defendant: this.boundedProjectionText(this.field(fields, 'defendant') || summary.defendant),
       judgment: judgment || null,
-      attorney: this.field(fields, 'attorney') || null,
+      attorney: this.boundedProjectionText(this.field(fields, 'attorney')),
       occupancy: occupancy || null,
       deposit: null,
       photo: null,
@@ -397,6 +456,20 @@ class CivilViewScraper extends BaseScraper {
       raw: description || propertyNote || JSON.stringify(sourceFields),
       status: 'scheduled',
       sourceObservedAt,
+      sourceFacts: {
+        saleDate: { raw: saleDateRaw, normalized: this.parseSaleDate(saleDateRaw) },
+        approximateUpsetPrice: approximateUpsetPrice
+          ? {
+              raw: upsetRaw,
+              amount: approximateUpsetPrice,
+              qualifier: 'approximate',
+              source: approximateUpsetSource,
+            }
+          : null,
+        openingBid: openingBid
+          ? { raw: openingBidRaw, amount: openingBid, source: openingBidSource }
+          : null,
+      },
       provenance: {
         origin: 'live',
         observed: true,
@@ -412,9 +485,32 @@ class CivilViewScraper extends BaseScraper {
         detailUrl: summary.detailUrl,
         detailUrlRequiresCountySession: true,
         detailPageFetched: true,
+        saleDateRaw,
+        approximateUpsetPrice: approximateUpsetPrice
+          ? {
+              raw: upsetRaw,
+              amount: approximateUpsetPrice,
+              qualifier: 'approximate',
+              source: approximateUpsetSource,
+            }
+          : null,
+        sourceFacts: {
+          saleDate: { raw: saleDateRaw, normalized: this.parseSaleDate(saleDateRaw) },
+          approximateUpsetPrice: approximateUpsetPrice
+            ? {
+                raw: upsetRaw,
+                amount: approximateUpsetPrice,
+                qualifier: 'approximate',
+                source: approximateUpsetSource,
+              }
+            : null,
+          openingBid: openingBid
+            ? { raw: openingBidRaw, amount: openingBid, source: openingBidSource }
+            : null,
+        },
         openingBidSource: openingBid ? openingBidSource : null,
         openingBidSourceNote: openingBid
-          ? 'Publisher labels this amount Approx. Upset and states that judgment interest and sheriff fees are excluded.'
+          ? 'Publisher explicitly labels this amount as an opening or minimum bid.'
           : null,
         statusHistory,
         sourceFields,
@@ -522,7 +618,7 @@ class CivilViewScraper extends BaseScraper {
 
   parseSaleDate(raw) {
     if (!raw) return null;
-    const match = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const match = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+\d{1,2}:\d{2}\s*(?:AM|PM))?$/i);
     if (!match) return null;
     return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
   }
@@ -541,6 +637,13 @@ class CivilViewScraper extends BaseScraper {
       /approximate\s+amount\s+due\s+on\s+this\s+execution\s+is\s+(\$[\d,\s]+(?:\.\d{1,2})?)/i,
     );
     return match ? this.parseMoney(match[1]) : 0;
+  }
+
+  parseDescriptionUpset(description) {
+    const match = String(description || '').match(
+      /\bapproximate\s+upset\s+price\s+is\s+(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+    );
+    return match ? match[1].trim() : '';
   }
 
   parseLabeledNote(note, label) {
@@ -596,6 +699,12 @@ class CivilViewScraper extends BaseScraper {
   positiveInt(value, fallback) {
     const parsed = Number.parseInt(value, 10);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
+  boundedProjectionText(value, maxLength = 255) {
+    const text = String(value || '').trim();
+    if (!text) return null;
+    return text.length <= maxLength ? text : text.slice(0, maxLength);
   }
 
   errorMessage(error) {

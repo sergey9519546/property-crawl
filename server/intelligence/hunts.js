@@ -490,12 +490,14 @@ function compactMaterialSnapshot(listing, hunt) {
   for (const field of fields) {
     if (field === 'sourceObservedAt') continue;
     if (field === 'hasDocuments') {
-      const documents = listing.provenance?.sourceFacts?.documents;
-      snapshot[field] = listing.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
-        ? true : listing.hasDocuments === false || Array.isArray(documents) ? false : null;
-      snapshot.documentIds = Array.isArray(documents)
-        ? documents.map((document) => document?.id || document?.url || document?.sourceUrl).filter(Boolean).sort()
-        : [];
+      const sourceDocuments = listing.provenance?.sourceFacts?.documents;
+      const mediaDocuments = listing.provenance?.media?.documents;
+      const documentArrays = [sourceDocuments, mediaDocuments].filter(Array.isArray);
+      snapshot[field] = listing.hasDocuments === true || documentArrays.some((documents) => documents.length > 0)
+        ? true : listing.hasDocuments === false || documentArrays.length > 0 ? false : null;
+      snapshot.documentIds = [...new Set(documentArrays.flat()
+        .map((document) => document?.id || document?.url || document?.sourceUrl)
+        .filter(Boolean))].sort();
     }
     else if (FIELD_DEFINITIONS[field]) snapshot[field] = actualValue(listing, field, FIELD_DEFINITIONS[field]);
     else {

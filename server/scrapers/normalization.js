@@ -45,6 +45,143 @@ function httpsUrlOrNull(value) {
   }
 }
 
+/** Strip non-alphanumeric characters and uppercase an APN/parcel number. */
+function normalizeApn(rawApn) {
+  if (rawApn === null || rawApn === undefined) return null;
+  const stripped = String(rawApn).replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  return stripped || null;
+}
+
+/**
+ * Build a stable parcel join key: `${countyFips}-${normalizedApn}` when a
+ * 5-digit county FIPS is available, otherwise the normalized APN alone.
+ * Returns null when no APN is present — never fabricates a key.
+ */
+function buildParcelKey({ apn, countyFips, stateFips } = {}) {
+  const normalizedApn = normalizeApn(apn);
+  if (!normalizedApn) return null;
+  const county = cleanText(countyFips);
+  const state = cleanText(stateFips);
+  let fips5 = null;
+  if (county && /^\d{5}$/.test(county)) {
+    fips5 = county;
+  } else if (state && county && /^\d{2}$/.test(state) && /^\d{3}$/.test(county)) {
+    fips5 = `${state}${county}`;
+  }
+  return fips5 ? `${fips5}-${normalizedApn}` : normalizedApn;
+}
+
+function extractCountyFips(listing) {
+  const candidates = [
+    listing.countyFips,
+    listing.provenance?.countyFips,
+    listing.provenance?.sourceFacts?.countyFips,
+    listing.provenance?.jurisdiction
+  ];
+  for (const candidate of candidates) {
+    const text = cleanText(candidate);
+    if (!text) continue;
+    const fipsMatch = text.match(/(?:us-fips:)?(\d{5})$/i);
+    if (fipsMatch) return fipsMatch[1];
+  }
+  const stateFips = cleanText(listing.stateFips || listing.provenance?.stateFips || listing.provenance?.sourceFacts?.stateFips);
+  const countyFips = cleanText(listing.countyFips || listing.provenance?.countyFips || listing.provenance?.sourceFacts?.countyFips);
+  if (stateFips && /^\d{2}$/.test(stateFips) && countyFips && /^\d{3}$/.test(countyFips)) {
+    return `${stateFips}${countyFips}`;
+  }
+  return null;
+}
+
+function extractRawApn(listing) {
+  const sourceFacts = asPlainObject(listing.provenance?.sourceFacts);
+  const candidates = [
+    listing.apn,
+    listing.parcelNumber,
+    listing.parcelId,
+    sourceFacts.apn,
+    sourceFacts.parcelNumber,
+    sourceFacts.parcelId
+  ];
+  for (const candidate of candidates) {
+    const text = cleanText(candidate);
+    if (text) return text;
+  }
+  return null;
+}
+
+const REO_SOURCES = new Set([
+  'hud', 'fannie', 'freddie', 'va', 'fdic', 'treasury', 'irs', 'gsa',
+  'landbank', 'landbanksearch', 'usda', 'hud-homestore', 'fannie-homepath',
+  'freddie-homesteps', 'va-vrm', 'fdic-asset-sales', 'usda-resales',
+  'treasury-forfeiture', 'irs-auctions', 'gsa-real-estate-sales'
+]);
+const SCHEDULED_SOURCES = new Set(['trustee', 'county-trustee-sale', 'bid4assets']);
+const SALE_PROXIMITY_SOURCES = new Set(['sheriff', 'civilview', 'ohio-sheriff-sale']);
+
+function mapDistressStage(source, saleDate) {
+  const key = (source || '').toLowerCase();
+  if (REO_SOURCES.has(key)) return 'reo';
+  if (SCHEDULED_SOURCES.has(key)) return 'scheduled';
+  if (SALE_PROXIMITY_SOURCES.has(key)) {
+    const saleTime = saleDate ? Date.parse(saleDate) : NaN;
+    if (Number.isFinite(saleTime)) {
+      const daysUntilSale = (saleTime - Date.now()) / 86_400_000;
+      return daysUntilSale <= 30 ? 'scheduled' : 'pre_foreclosure';
+    }
+    return 'pre_foreclosure';
+  }
+  if (key === 'tax_sale' || /tax[-_]?sale|tax[-_]?deed/.test(key)) return 'tax_sale';
+  return 'unknown';
+}
+
+function daysSince(timestamp, now = Date.now()) {
+  const time = Date.parse(timestamp || '');
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.floor((now - time) / 86_400_000));
+}
+
+function computeTriage(listing = {}, options = {}) {
+  const now = options.now ?? Date.now();
+  const firstSeenCandidate = listing.firstSeenAt ?? listing.updatedAt
+    ?? listing.sourceObservedAt ?? listing.fetchedAt
+    ?? listing.provenance?.observedAt;
+  const firstSeenTime = Date.parse(firstSeenCandidate || '');
+  const isNew = Number.isFinite(firstSeenTime) && (now - firstSeenTime) <= 48 * 3_600_000;
+
+  const lastObservedCandidate = listing.lastObservedAt ?? listing.updatedAt
+    ?? listing.sourceObservedAt ?? listing.fetchedAt
+    ?? listing.provenance?.observedAt;
+  const stale = daysSince(lastObservedCandidate, now);
+
+  const documents = listing.documents ?? listing.provenance?.sourceFacts?.documents;
+  const hasDocs = typeof listing.hasDocuments === 'boolean'
+    ? listing.hasDocuments
+    : Array.isArray(documents) ? documents.length > 0 : false;
+
+  const occupancy = cleanText(listing.occupancy);
+  const occupancyKnown = Boolean(occupancy);
+
+  const priorBid = numberOrNull(listing.priorOpeningBid, { min: 0 });
+  const currentBid = numberOrNull(listing.openingBid, { min: 0 });
+  const priceDropped = listing.priceDropped === true
+    || (priorBid !== null && currentBid !== null && currentBid < priorBid);
+
+  return {
+    isNew,
+    priceDropped,
+    staleDays: stale === null ? -1 : stale,
+    hasDocs,
+    occupancyKnown,
+    distressStage: mapDistressStage(listing.source, listing.saleDate)
+  };
+}
+
+function attachParcelIdentity(listing) {
+  const rawApn = extractRawApn(listing);
+  const countyFips = extractCountyFips(listing);
+  return buildParcelKey({ apn: rawApn, countyFips });
+}
+
 function standardizeListingRecord(raw = {}, options = {}) {
   const input = asPlainObject(raw);
   const configuredSource = cleanText(options.sourceKey);
@@ -194,7 +331,7 @@ function standardizeListingRecord(raw = {}, options = {}) {
     };
   }
 
-  return {
+  const normalizedRecord = {
     id: cleanText(input.id),
     source,
     state,
@@ -244,6 +381,16 @@ function standardizeListingRecord(raw = {}, options = {}) {
     provenance,
     sourceObservedAt
   };
+  normalizedRecord.parcelKey = attachParcelIdentity({
+    ...normalizedRecord,
+    apn: input.apn,
+    parcelNumber: input.parcelNumber,
+    parcelId: input.parcelId,
+    countyFips: input.countyFips,
+    stateFips: input.stateFips
+  });
+  normalizedRecord.triage = computeTriage(normalizedRecord);
+  return normalizedRecord;
 }
 
 module.exports = {
@@ -251,5 +398,9 @@ module.exports = {
   httpsUrlOrNull,
   numberOrNull,
   observationTimestamp,
-  standardizeListingRecord
+  standardizeListingRecord,
+  normalizeApn,
+  buildParcelKey,
+  computeTriage,
+  mapDistressStage
 };

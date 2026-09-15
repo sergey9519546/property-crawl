@@ -1,5 +1,12 @@
 'use strict';
 
+// The ZillowMcpClient refuses to construct without an API key (the previous
+// hardcoded DEFAULT_API_KEY was a security finding that has been removed).
+// Tests set the env var up-front so the module-load invariant holds.
+if (!process.env.ZILLOW_MCP_API_KEY && !process.env.API_MARKET_KEY) {
+  process.env.ZILLOW_MCP_API_KEY = 'test-zillow-mcp-key';
+}
+
 /**
  * test/zillow-mcp.test.js
  *

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
+const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 
 const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
 
@@ -151,7 +152,7 @@ function prepareListingForPersistence(listing = {}) {
     ? listing.seniorLienRisk.trim().toLowerCase()
     : null;
 
-  return {
+  const normalized = {
     ...listing,
     ...geocode,
     openingBid,
@@ -197,6 +198,16 @@ function prepareListingForPersistence(listing = {}) {
     // than accepted from a source payload.
     fetchedAt: new Date().toISOString(),
   };
+  const sourceFacts = normalized.provenance?.sourceFacts || {};
+  if (normalized.parcelKey === undefined || normalized.parcelKey === null) {
+    normalized.parcelKey = buildParcelKey({
+      apn: listing.apn ?? listing.parcelNumber ?? listing.parcelId
+        ?? sourceFacts.apn ?? sourceFacts.parcelNumber ?? sourceFacts.parcelId,
+      countyFips: listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
+    });
+  }
+  normalized.triage = computeTriage(normalized);
+  return normalized;
 }
 
 function mergeListingForInMemoryUpsert(existing, incoming) {
@@ -219,6 +230,16 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
       merged[field] = existing[field];
     }
   }
+  // Detect an opening-bid decrease versus the prior observation so triage can
+  // surface priceDropped without a separate history table.
+  if (existing.openingBid != null && incoming.openingBid != null
+      && Number(incoming.openingBid) < Number(existing.openingBid)) {
+    merged.priorOpeningBid = existing.openingBid;
+    merged.priceDropped = true;
+  } else if (existing.priceDropped && merged.priorOpeningBid == null) {
+    merged.priorOpeningBid = existing.priorOpeningBid ?? existing.openingBid;
+    merged.priceDropped = true;
+  }
   return prepareListingForPersistence(merged);
 }
 
@@ -228,6 +249,77 @@ function compareNumbersUnknownLast(left, right, descending = true) {
   if (leftKnown !== rightKnown) return leftKnown ? -1 : 1;
   if (!leftKnown) return 0;
   return descending ? Number(right) - Number(left) : Number(left) - Number(right);
+}
+
+/**
+ * Compute a bake-off between two listings that share a parcelKey but come
+ * from different sources. Prefer the fresher observation; never overwrite
+ * either record — both stay in the inventory with cross-source metadata.
+ */
+function computeBakeOff(existing, incoming) {
+  const existingTime = Date.parse(existing.sourceObservedAt || existing.provenance?.observedAt || '');
+  const incomingTime = Date.parse(incoming.sourceObservedAt || incoming.provenance?.observedAt || '');
+  const existingFresh = Number.isFinite(existingTime) ? existingTime : 0;
+  const incomingFresh = Number.isFinite(incomingTime) ? incomingTime : 0;
+  const preferred = incomingFresh >= existingFresh ? incoming : existing;
+  const other = preferred === incoming ? existing : incoming;
+  const ageGapHours = Math.abs(incomingFresh - existingFresh) / 3_600_000;
+  // Confidence: high when the gap is >24h, medium when >1h, low otherwise.
+  const confidence = ageGapHours > 24 ? 0.9 : ageGapHours > 1 ? 0.7 : 0.5;
+  return {
+    preferredSource: preferred.source,
+    reason: `Fresher observation from ${preferred.source} (age gap ${ageGapHours < 1 ? '<1h' : `${Math.round(ageGapHours)}h`})`,
+    confidence,
+    otherSource: other.source,
+    otherListingId: other.id,
+  };
+}
+
+/**
+ * Detect parcelKey collisions from different sources and annotate both
+ * records with crossSourceMatches + bakeOff. Mutates the listings array
+ * in place. Returns the number of listings annotated.
+ */
+function applyCrossSourceBakeOff(listings) {
+  if (!Array.isArray(listings) || listings.length < 2) return 0;
+  const byParcelKey = new Map();
+  for (const listing of listings) {
+    if (!listing.parcelKey) continue;
+    if (!byParcelKey.has(listing.parcelKey)) byParcelKey.set(listing.parcelKey, []);
+    byParcelKey.get(listing.parcelKey).push(listing);
+  }
+  let annotated = 0;
+  for (const group of byParcelKey.values()) {
+    if (group.length < 2) continue;
+    // Only annotate when at least two different sources are represented.
+    const sources = new Set(group.map((l) => l.source));
+    if (sources.size < 2) continue;
+    for (const listing of group) {
+      const others = group.filter((l) => l.id !== listing.id && l.source !== listing.source);
+      if (others.length === 0) continue;
+      listing.crossSourceMatches = others.map((l) => ({
+        source: l.source,
+        listingId: l.id,
+        observedAt: l.sourceObservedAt || l.provenance?.observedAt || null,
+        openingBid: l.openingBid ?? null,
+      }));
+      // Pick the freshest other-source observation for the bake-off.
+      let bestOther = others[0];
+      let bestOtherTime = Date.parse(bestOther.sourceObservedAt || bestOther.provenance?.observedAt || '') || 0;
+      for (const candidate of others.slice(1)) {
+        const t = Date.parse(candidate.sourceObservedAt || candidate.provenance?.observedAt || '') || 0;
+        if (t > bestOtherTime) { bestOther = candidate; bestOtherTime = t; }
+      }
+      const bakeOff = computeBakeOff(bestOther, listing);
+      listing.bakeOff = {
+        preferredSource: bakeOff.preferredSource,
+        reason: bakeOff.reason,
+        confidence: bakeOff.confidence,
+      };
+      annotated++;
+    }
+  }
+  return annotated;
 }
 
 class DatabaseClient {
@@ -297,28 +389,8 @@ class DatabaseClient {
         this.inMemoryData.listings = Array.from(sandbox.window.LISTINGS || []).flatMap((l) => {
           const provenance = seedProvenance(l);
           if (provenance === null) return [];
-          let images = Array.isArray(l.images) && l.images.length > 0 ? l.images : null;
-          if (!images) {
-            let hash = 0;
-            for (let i = 0; i < (l.id || '').length; i++) {
-              hash = ((hash << 5) - hash + (l.id || '').charCodeAt(i)) | 0;
-            }
-            const count = (Math.abs(hash) % 5) + 1; // 1 to 5
-            const pool = [
-              'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=640&q=70',
-              'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=640&q=70',
-              'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=640&q=70',
-              'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=640&q=70',
-              'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=640&q=70',
-              'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=640&q=70',
-              'https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=640&q=70',
-              'https://images.unsplash.com/photo-1598228723793-52759bba239c?w=640&q=70',
-            ];
-            images = [l.photo || pool[0]];
-            for (let i = 1; i < count; i++) {
-              images.push(pool[(Math.abs(hash >> (i * 4)) + i) % pool.length]);
-            }
-          }
+          // Live listings without images get an empty array — never fabricate URLs.
+          const images = Array.isArray(l.images) && l.images.length > 0 ? l.images : [];
           return [{
             ...l,
             images,
@@ -378,6 +450,7 @@ class DatabaseClient {
         applied++;
       }
       this.inMemoryData.listings = [...byId.values()];
+      applyCrossSourceBakeOff(this.inMemoryData.listings);
       this.liveCacheSignature = signature;
       this.liveCacheErrorSignature = null;
       if (applied) console.log(`[DB] Refreshed ${applied} validated source-observed records from the local store`);
@@ -555,15 +628,24 @@ class DatabaseClient {
     if (this.isPg) {
       const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return res.rows[0];
-      const aliasRes = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE '%' || $1 OR $1 LIKE '%' || id LIMIT 1`, [id]);
-      if (aliasRes.rows[0]) return aliasRes.rows[0];
+      // Constrained alias: strip a source prefix, or match by suffix only when
+      // the requested id is long enough to avoid short-id false positives
+      // (e.g. id=1 must not match listing-1).
+      if (id.length >= 6) {
+        const aliasRes = await this.pool.query(
+          `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE '%' || $1 LIMIT 1`, [id]);
+        if (aliasRes.rows[0]) return aliasRes.rows[0];
+      }
       return null;
     }
     this.refreshLiveCache();
     const exact = this.inMemoryData.listings.find(l => l.id === id);
     if (exact) return exact;
-    const aliased = this.inMemoryData.listings.find(l => l.id.endsWith(id) || id.endsWith(l.id));
-    if (aliased) return aliased;
+    // Suffix match only when id is long enough to avoid short-id false positives.
+    if (id.length >= 6) {
+      const aliased = this.inMemoryData.listings.find(l => l.id.endsWith(id));
+      if (aliased) return aliased;
+    }
     return null;
   }
 
@@ -679,6 +761,7 @@ class DatabaseClient {
     } else {
       this.inMemoryData.listings.unshift(enriched);
     }
+    applyCrossSourceBakeOff(this.inMemoryData.listings);
     return enriched;
   }
 
@@ -788,3 +871,5 @@ module.exports.DatabaseClient = DatabaseClient;
 module.exports.DEFAULT_LIVE_CACHE_PATH = DEFAULT_LIVE_CACHE_PATH;
 module.exports.LISTING_SELECT = LISTING_SELECT;
 module.exports.prepareListingForPersistence = prepareListingForPersistence;
+module.exports.applyCrossSourceBakeOff = applyCrossSourceBakeOff;
+module.exports.computeBakeOff = computeBakeOff;
