@@ -127,6 +127,38 @@ async function run() {
     res.body.listings.forEach((listing) => assert.ok(listing.hasDocuments == null));
   });
 
+  await test('GET /api/listings?since=<ISO> returns only records observed after the cutoff', async () => {
+    // Use a cutoff far in the past — every listing should qualify.
+    const res = await request('/api/listings?since=2000-01-01T00:00:00.000Z&limit=100');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.delta, true);
+    assert.strictEqual(res.body.since, '2000-01-01T00:00:00.000Z');
+    assert.ok(Array.isArray(res.body.listings));
+    assert.ok(res.body.listings.length > 0, 'expected at least one listing after since=2000');
+  });
+
+  await test('GET /api/listings?since=<future> returns an empty delta set', async () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    const res = await request(`/api/listings?since=${encodeURIComponent(future)}&limit=100`);
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.delta, true);
+    assert.strictEqual(res.body.since, future);
+    assert.strictEqual(res.body.listings.length, 0);
+  });
+
+  await test('GET /api/listings?since=<invalid> returns 400', async () => {
+    const res = await request('/api/listings?since=not-a-date');
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.error, /Invalid since parameter/);
+  });
+
+  await test('GET /api/listings without since does not include delta fields', async () => {
+    const res = await request('/api/listings?limit=5');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.delta, undefined);
+    assert.strictEqual(res.body.since, undefined);
+  });
+
   await test('GET /api/listings/:id returns single listing', async () => {
     const res = await request(`/api/listings/${encodeURIComponent(primaryListing.id)}`);
     assert.strictEqual(res.status, 200);

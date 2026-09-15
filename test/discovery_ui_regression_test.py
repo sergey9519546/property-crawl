@@ -266,20 +266,41 @@ class DiscoveryUiRegression(unittest.TestCase):
         self.assertTrue(opener.evaluate("element => document.activeElement === element"))
         context.close()
 
-    def test_source_null_coverage_renders_plain_fallback(self):
+    def test_source_release_gate_distinguishes_never_run_from_completed_canary(self):
         context, page = self.make_page({"width": 1280, "height": 800})
         fixture = {
             "sources": [{
                 "id": "null-coverage", "label": "Fixture County Records", "category": "county",
                 "role": "evidence", "coverage": None, "organization": "Fixture County",
                 "propertyLookup": True, "discoveryUrl": "https://example.test/records",
-                "access": "public", "adapterKey": None, "discoveryStatus": "manual",
+                "access": "public", "adapterKey": "fixture", "discoveryStatus": "awaiting_run",
+                "releaseGate": {"state": "unqualified", "cleanRuns": 0, "requiredRuns": 2,
+                                "approved": False, "evidenceQualified": False,
+                                "scopeMatchesLatest": False},
                 "workflow": {"primary": "Check the public record.", "fallback": "Review manually.",
                              "cadenceHours": 24, "steps": ["Open the record."]},
-                "requiredEvidence": ["Parcel record"], "notes": "Fixture only", "automated": False,
-                "status": "manual", "observedRecords": 0, "observedStates": [],
+                "requiredEvidence": ["Parcel record"], "notes": "Fixture only", "automated": True,
+                "status": "awaiting_run", "observedRecords": 0, "observedStates": [],
                 "latestObservation": None, "automatedEvidence": False, "evidencePackets": 0,
                 "dueAt": None, "nextAction": "Review", "lastRun": None,
+            }, {
+                "id": "canary-coverage", "label": "Fixture Canary Source", "category": "county",
+                "role": "opportunity", "coverage": {"scope": {"state": "NJ"},
+                    "discovered": 2, "accepted": 2, "rejected": 0, "complete": True},
+                "organization": "Fixture County", "propertyLookup": True,
+                "discoveryUrl": "https://example.test/canary", "access": "public",
+                "adapterKey": "fixture-canary", "discoveryStatus": "partial",
+                "releaseGate": {"state": "canary", "cleanRuns": 2, "requiredRuns": 2,
+                                "approved": False, "evidenceQualified": True,
+                                "scopeMatchesLatest": True},
+                "workflow": {"primary": "Check the public record.", "fallback": "Review manually.",
+                             "cadenceHours": 24, "steps": ["Open the record."]},
+                "requiredEvidence": ["Source record"], "notes": "Fixture only", "automated": True,
+                "status": "collected", "observedRecords": 2, "observedStates": ["NJ"],
+                "latestObservation": "2026-09-12T12:00:00Z", "automatedEvidence": True,
+                "evidencePackets": 0, "dueAt": None, "nextAction": "Review",
+                "lastRun": {"lastRunAt": "2026-09-12T12:00:00Z", "acceptedCount": 2,
+                            "error": None},
             }],
             "signals": [], "collectionRunning": False, "inventoryTruncated": False,
             "evidenceQueueError": False, "historyUnavailable": False,
@@ -292,6 +313,10 @@ class DiscoveryUiRegression(unittest.TestCase):
         page.goto(f"{BASE_URL}/sources", wait_until="domcontentloaded")
         page.get_by_role("heading", name="Fixture County Records").wait_for()
         self.assertTrue(page.get_by_text("No operational collection coverage recorded.", exact=True).is_visible())
+        self.assertTrue(page.get_by_text("Collector registered · not run", exact=True).is_visible())
+        self.assertTrue(page.get_by_role("heading", name="Fixture Canary Source").is_visible())
+        self.assertTrue(page.get_by_text("Approval pending", exact=True).is_visible())
+        self.assertTrue(page.get_by_text(re.compile(r"approval is pending \(2/2 clean runs\)"), exact=False).is_visible())
         context.close()
 
 

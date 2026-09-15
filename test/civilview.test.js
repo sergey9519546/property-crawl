@@ -85,7 +85,7 @@ test('CivilView detail parser uses published facts and leaves unavailable facts 
   assert.ok(listing);
   assert.equal(listing.id, 'CIV-NJ-7-2128964683');
   assert.equal(listing.sourceUrl, DETAIL_URL);
-  assert.equal(listing.openingBid, 564684.81);
+  assert.equal(listing.openingBid, null);
   assert.equal(listing.judgment, 556894.75);
   assert.equal(listing.saleDate, '2026-09-11');
   assert.equal(listing.address, '19 WEST PARK AVENUE, PARK RIDGE, NJ 07656');
@@ -96,7 +96,11 @@ test('CivilView detail parser uses published facts and leaves unavailable facts 
   assert.equal(listing.estLow, null);
   assert.equal(listing.estHigh, null);
   assert.equal(listing.photo, null);
-  assert.equal(listing.provenance.openingBidSource, 'CivilView Approx. Upset');
+  assert.equal(listing.provenance.openingBidSource, null);
+  assert.deepEqual(listing.sourceFacts.approximateUpsetPrice, {
+    raw: '$564,684.81', amount: 564684.81, qualifier: 'approximate', source: 'CivilView Approx. Upset',
+  });
+  assert.deepEqual(listing.provenance.sourceFacts, listing.sourceFacts);
   assert.equal(listing.provenance.detailUrlRequiresCountySession, true);
   assert.equal(listing.provenance.parcelNumber, 'LOT 7, BLOCK 1203');
   assert.deepEqual(listing.provenance.statusHistory.at(-1), {
@@ -126,7 +130,7 @@ test('CivilView preserves an exact detail record when the source has not publish
   );
 });
 
-test('CivilView can use a published good-faith upset from the property note', () => {
+test('CivilView preserves a published good-faith upset as a qualified source fact', () => {
   const subject = scraper();
   const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
   const noteOnly = DETAIL_HTML
@@ -137,12 +141,51 @@ test('CivilView can use a published good-faith upset from the property note', ()
     );
   const listing = subject.parseDetailPage(noteOnly, summary);
 
-  assert.equal(listing.openingBid, 671471.41);
+  assert.equal(listing.openingBid, null);
   assert.equal(
-    listing.provenance.openingBidSource,
+    listing.provenance.approximateUpsetPrice.source,
     'CivilView Property Note — Good Faith Estimated Upset Price',
   );
+  assert.equal(listing.provenance.approximateUpsetPrice.amount, 671471.41);
+  assert.equal(listing.provenance.approximateUpsetPrice.qualifier, 'approximate');
   assert.equal(subject.passesFilter(listing), true);
+});
+
+test('CivilView preserves a timed sale date and approximate upset published in the description', () => {
+  const subject = scraper();
+  const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
+  const descriptionOnly = DETAIL_HTML
+    .replace(detailItem('Sales Date', '9/11/2026'), detailItem('Sales Date', '09/14/2026 02:00 PM'))
+    .replace(detailItem('Approx. Upset*', '$564,684.81'), '')
+    .replace(
+      'The approximate amount due on this execution is $556,894.75 plus interest.',
+      'The approximate amount of the judgment is $556,894.75. The approximate upset price is $692,817.80. The upset price may change.',
+    );
+  const listing = subject.parseDetailPage(descriptionOnly, summary);
+
+  assert.equal(listing.saleDate, '2026-09-14');
+  assert.equal(listing.openingBid, null);
+  assert.equal(listing.sourceFacts.saleDate.raw, '09/14/2026 02:00 PM');
+  assert.equal(listing.sourceFacts.saleDate.normalized, '2026-09-14');
+  assert.deepEqual(listing.sourceFacts.approximateUpsetPrice, {
+    raw: '$692,817.80',
+    amount: 692817.80,
+    qualifier: 'approximate',
+    source: 'CivilView Description — Approximate Upset Price',
+  });
+});
+
+test('CivilView maps only an explicitly published opening bid into openingBid', () => {
+  const subject = scraper();
+  const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
+  const withOpeningBid = DETAIL_HTML + detailItem('Opening Bid', '$410,000.00');
+  const listing = subject.parseDetailPage(withOpeningBid, summary);
+
+  assert.equal(listing.openingBid, 410000);
+  assert.deepEqual(listing.sourceFacts.openingBid, {
+    raw: '$410,000.00', amount: 410000, source: 'CivilView Opening Bid',
+  });
+  assert.equal(listing.provenance.openingBidSource, 'CivilView Opening Bid');
 });
 
 test('CivilView occupancy extraction does not absorb unrelated tax and lien notes', () => {
@@ -153,6 +196,19 @@ test('CivilView occupancy extraction does not absorb unrelated tax and lien note
     ),
     'OCCUPIED',
   );
+});
+
+test('CivilView bounds relational projection text while preserving the full publisher field', () => {
+  const subject = scraper();
+  const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
+  const fullDefendant = 'A VERY LONG PUBLISHED DEFENDANT NAME '.repeat(12).trim();
+  const listing = subject.parseDetailPage(
+    DETAIL_HTML.replace('MOHAMMED FALAH; ET AL', fullDefendant),
+    summary,
+  );
+
+  assert.equal(listing.defendant.length, 255);
+  assert.equal(listing.provenance.sourceFields.defendant, fullDefendant);
 });
 
 test('CivilView carries the county session cookie into detail requests', async () => {
@@ -193,4 +249,102 @@ test('CivilView circuit breaker halts immediately on a WAF response', async () =
   await assert.rejects(subject.fetchPage(COUNTY_URL), /CIRCUIT_BREAKER_TRIPPED/);
   assert.equal(subject.circuitBreaker.isOpen(), true);
   await assert.rejects(subject.fetchPage(COUNTY_URL), /circuit breaker is OPEN/i);
+});
+
+function scopedScraper(options = {}) {
+  const subject = scraper({ countyId: '7', targetState: 'NJ', maxDetailPages: 10, ...options });
+  subject.fetchCounties = async () => [COUNTY, { id: '8', name: 'Essex County', state: 'NJ' }];
+  subject.fetchCountySummaries = async (county) => ({
+    sessionCookie: 'ASP.NET_SessionId=test',
+    summaries: ['1', '2'].map((propertyId) => ({
+      propertyId,
+      county,
+      detailUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${propertyId}`,
+    })),
+  });
+  subject.fetchText = async () => '<div class="sale-details-list">valid detail</div>';
+  subject.parseDetailPage = (_html, summary) => ({
+    id: `CIV-NJ-7-${summary.propertyId}`,
+    provenance: { propertyId: summary.propertyId },
+  });
+  subject.passesFilter = () => true;
+  return subject;
+}
+
+test('CivilView explicit county scope reports a gate-compatible complete sweep', async () => {
+  const subject = scopedScraper();
+  const listings = await subject.scrapeFeed();
+
+  assert.equal(listings.length, 2);
+  assert.deepEqual(subject.lastRunReport.scope, {
+    endpoint: '/Sales/SalesSearch',
+    filters: { state: 'NJ', countyId: '7' },
+  });
+  assert.equal(subject.lastRunReport.recordsAccepted, 2);
+  assert.equal(subject.lastRunReport.recordsRejected, 0);
+  assert.equal(subject.lastRunReport.unattemptedSummaries, 0);
+  assert.equal(subject.lastRunReport.complete, true);
+  assert.equal(subject.lastRunReport.fullSweepComplete, true);
+  assert.equal(subject.lastRunReport.truncated, false);
+  assert.equal(subject.lastRunReport.boundedSample, false);
+});
+
+test('CivilView explicit county budget marks unattempted summaries and never completes', async () => {
+  const subject = scopedScraper({ maxDetailPages: 1 });
+  await subject.scrapeFeed();
+
+  assert.equal(subject.lastRunReport.recordsAccepted, 1);
+  assert.equal(subject.lastRunReport.recordsRejected, 0);
+  assert.equal(subject.lastRunReport.unattemptedSummaries, 1);
+  assert.equal(subject.lastRunReport.truncated, true);
+  assert.equal(subject.lastRunReport.complete, false);
+  assert.equal(subject.lastRunReport.fullSweepComplete, false);
+});
+
+test('CivilView explicit county detail failure is counted as rejected and incomplete', async () => {
+  const subject = scopedScraper();
+  subject.fetchText = async (url) => {
+    if (url.endsWith('=2')) throw new Error('detail unavailable');
+    return '<div class="sale-details-list">valid detail</div>';
+  };
+  const listings = await subject.scrapeFeed();
+
+  assert.equal(listings.length, 1);
+  assert.equal(subject.lastRunReport.recordsAccepted, 1);
+  assert.equal(subject.lastRunReport.recordsRejected, 1);
+  assert.equal(subject.lastRunReport.failures.length, 1);
+  assert.equal(subject.lastRunReport.complete, false);
+  assert.equal(subject.lastRunReport.fullSweepComplete, false);
+});
+
+test('CivilView legacy state sample cannot claim a complete promotable scope', async () => {
+  const subject = scopedScraper({ countyId: null, maxCounties: 1 });
+  await subject.scrapeFeed();
+
+  assert.deepEqual(subject.lastRunReport.scope.filters, {
+    state: 'NJ', selection: 'bounded-priority-sample',
+  });
+  assert.equal(subject.lastRunReport.truncated, true);
+  assert.equal(subject.lastRunReport.complete, false);
+  assert.equal(subject.lastRunReport.fullSweepComplete, false);
+});
+
+test('CivilView rejects malformed explicit state and county configuration', () => {
+  assert.throws(() => scraper({ targetState: 'nj', countyId: '7' }), /targetState/);
+  assert.throws(() => scraper({ targetState: 'NJ', countyId: '7 OR 1=1' }), /countyId/);
+});
+
+test('CivilView early county-index failure replaces a prior complete report', async () => {
+  const subject = scopedScraper();
+  await subject.scrapeFeed();
+  assert.equal(subject.lastRunReport.complete, true);
+
+  subject.fetchCounties = async () => { throw new Error('county index unavailable'); };
+  await assert.rejects(subject.scrapeFeed(), /county index unavailable/);
+
+  assert.equal(subject.lastRunReport.outcome, 'failed');
+  assert.equal(subject.lastRunReport.complete, false);
+  assert.equal(subject.lastRunReport.fullSweepComplete, false);
+  assert.equal(subject.lastRunReport.truncated, true);
+  assert.deepEqual(subject.lastRunReport.scope.filters, { state: 'NJ', countyId: '7' });
 });
