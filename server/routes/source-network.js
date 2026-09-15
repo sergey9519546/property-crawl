@@ -67,6 +67,18 @@ function createSourceNetworkHandler(dependencies = {}) {
         if (!/^intake_[a-f0-9]{24}$/.test(id || '') || !['approve', 'reject'].includes(review.decision)) return res.status(400).json({ error: 'Evidence ID and an approve or reject decision are required' });
         return res.json({ record: intake.reviewEvidence(id, review) });
       }
+      if (url.pathname === '/api/source-network/onboarding' && req.method === 'GET') {
+        return res.json({ items: (dependencies.onboarding || require('../discovery/onboarding-pass')).listCachedSources() });
+      }
+      if (url.pathname === '/api/source-network/onboarding' && req.method === 'POST') {
+        const body = req.body || {};
+        const onboarding = dependencies.onboarding || require('../discovery/onboarding-pass');
+        const summary = await onboarding.runOnboardingPass({
+          sources: Array.isArray(body.sources) ? body.sources : null,
+          env: process.env
+        });
+        return res.json(summary);
+      }
       if (url.pathname === '/api/source-network/run' && req.method === 'POST') {
         if (req.body?.scope === 'all') {
           if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
