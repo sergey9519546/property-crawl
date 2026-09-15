@@ -15,6 +15,7 @@
 const BaseScraper = require('./base');
 const { mapWithConcurrency } = require('./http');
 const { extractDetailImages } = require('./media-policy');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 // Title substrings that mark an IRS auction as personal property, not real
 // estate (these auctions are hosted at a venue address, so a street-number
@@ -45,6 +46,8 @@ class IrsSeizedScraper extends BaseScraper {
     this.baseUrl = 'https://www.irsauctions.gov';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('irs');
+    this.extract = options.extractImpl || extractWithScrapling;
   }
 
   async scrapeFeed() {
@@ -60,12 +63,17 @@ class IrsSeizedScraper extends BaseScraper {
       const cardRe = /href="\/ad\/([a-z0-9-]+)"\s+rel="bookmark">\s*<span class="treas-page-title">([^<]+)<\/span>/g;
       const seen = new Set();
       const cards = [];
+      const excluded = [];
       let cm;
       while ((cm = cardRe.exec(listHtml)) !== null) {
         if (seen.has(cm[1])) continue;
         seen.add(cm[1]);
         const title = this.decodeEntities(cm[2]).trim();
-        if (PERSONAL_PROPERTY_KEYWORDS.some(kw => title.toLowerCase().includes(kw))) continue;
+        const excludedKeyword = PERSONAL_PROPERTY_KEYWORDS.find(kw => title.toLowerCase().includes(kw));
+        if (excludedKeyword) {
+          excluded.push({ slug: cm[1], reason: 'explicit_personal_property_title', keyword: excludedKeyword });
+          continue;
+        }
         cards.push({ slug: cm[1], title });
       }
       console.log(`[${this.name}] Found ${cards.length} real-estate auction cards on list page`);
@@ -73,9 +81,9 @@ class IrsSeizedScraper extends BaseScraper {
       const detailResults = await mapWithConcurrency(
         cards,
         this.detailConcurrency,
-        async ({ slug }) => {
+        async ({ slug, title }) => {
           await this.crawlJitter();
-          return this.fetchDetail(slug);
+          return this.fetchDetail(slug, title);
         }
       );
       const listings = [];
@@ -89,7 +97,9 @@ class IrsSeizedScraper extends BaseScraper {
         }
       });
 
-      this.lastRunReport = { outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected: cards.length - listings.length - failures.length, failures, complete: failures.length === 0, fullSweepComplete: failures.length === 0, truncated: false, fixtureFallbackUsed: false };
+      const recordsRejected = cards.length - listings.length - failures.length;
+      const complete = failures.length === 0 && recordsRejected === 0;
+      this.lastRunReport = { outcome: complete ? (listings.length ? 'success' : 'empty') : 'partial_failure', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected, recordsExcluded: excluded.length, exclusions: excluded, failures, complete, fullSweepComplete: complete, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
       return listings.map(item => this.standardizeListing(item));
     });
@@ -102,9 +112,34 @@ class IrsSeizedScraper extends BaseScraper {
     });
   }
 
-  async fetchDetail(slug) {
+  async fetchDetail(slug, publisherTitle = '') {
     const detailUrl = `${this.baseUrl}/ad/${slug}`;
     const html = await this.fetchText(detailUrl);
+
+    // When Scrapling is enabled, ask the venv for the structured property
+    // record before the regex scan runs. We still run the regex scan below
+    // so the per-field fallback path is unchanged when Scrapling returns
+    // null for a given field (a partial extract is OK).
+    let scraplingRecord = null;
+    if (this.useScrapling) {
+      try {
+        const evidence = await this.extract('irs-detail', { html, url: detailUrl });
+        const p = evidence && evidence.property ? evidence.property : null;
+        if (p && (p.address || p.state || p.minimumBid != null || p.saleDate || p.beds != null || p.baths != null)) {
+          scraplingRecord = p;
+        }
+      } catch (_) {
+        scraplingRecord = null;
+      }
+    }
+
+    // Only the exact publisher title and property-description field may qualify
+    // an unnumbered land address. Whole-page text can contain unrelated cards,
+    // navigation, or footer content.
+    const descMatch = html.match(/Asset Description<\/div>\s*<div class="field__item">([\s\S]*?)<\/div>/);
+    const desc = descMatch
+      ? descMatch[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+      : '';
 
     // --- Asset Address block: <address ...> STREET <br> City, ZIP ST <br> Country </address> ---
     const addrBlockMatch = html.match(/<address[^>]*>([\s\S]*?)<\/address>/);
@@ -118,37 +153,50 @@ class IrsSeizedScraper extends BaseScraper {
       .map(s => s.trim())
       .filter(Boolean);
 
+    const positiveLandEvidence = /\b(?:agricultural\s+land|vacant\s+land|vacant\s+lot|land\s+(?:is\s+)?for\s+sale|\d+(?:\.\d+)?\s+acres?)\b/i.test(`${publisherTitle} ${desc}`);
     if (addrLines.length < 2) return null;
-    const street = addrLines[0];
-    if (!/^\d/.test(street)) return null; // require a street number (real property)
+    const parcelPrefixedLand = positiveLandEvidence && /^parcel\s+id\b/i.test(addrLines[0]) && addrLines.length >= 3;
+    // Prefer the Scrapling-resolved street when the venv returned one;
+    // fall back to the regex split when it didn't.
+    const street = (scraplingRecord && scraplingRecord.address)
+      ? scraplingRecord.address
+      : (parcelPrefixedLand ? addrLines[1] : addrLines[0]);
+    if (!/^\d/.test(street) && !positiveLandEvidence) return null;
 
     // Second line: "Drexel Hill, 19026 PA"
-    const cityLine = addrLines[1];
+    const cityLine = parcelPrefixedLand ? addrLines[2] : addrLines[1];
     const cityMatch = cityLine.match(/^(.+?),\s*(\d{5})\s+([A-Z]{2})$/);
     if (!cityMatch) return null;
 
-    const city = cityMatch[1].trim();
-    const zip = cityMatch[2];
-    const state = cityMatch[3];
+    const city = (scraplingRecord && scraplingRecord.city) ? scraplingRecord.city : cityMatch[1].trim();
+    const zip = (scraplingRecord && scraplingRecord.zip) ? scraplingRecord.zip : cityMatch[2];
+    const state = (scraplingRecord && scraplingRecord.state) ? scraplingRecord.state : cityMatch[3];
 
     // --- Asset Description prose: "...built in 1942...3 bedrooms, 2 bathrooms, ~1,152 sq ft." ---
-    const descMatch = html.match(/Asset Description<\/div>\s*<div class="field__item">([\s\S]*?)<\/div>/);
-    const desc = descMatch
-      ? descMatch[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
-      : '';
-
-    const beds = this.firstInt(desc, /(\d+)\s*bedrooms?/i);
-    const baths = this.firstInt(desc, /(\d+)\s*bathrooms?/i);
-    const sqft = this.firstInt(desc.replace(/,/g, ''), /([\d,]+)\s*sq\s*ft/i);
-    const year = this.firstInt(desc, /built in (\d{4})/i) || null;
+    const beds = (scraplingRecord && Number.isInteger(scraplingRecord.beds))
+      ? scraplingRecord.beds
+      : this.firstInt(desc, /(\d+)\s*bedrooms?/i);
+    const baths = (scraplingRecord && Number.isInteger(scraplingRecord.baths))
+      ? scraplingRecord.baths
+      : this.firstInt(desc, /(\d+)\s*bathrooms?/i);
+    const sqft = (scraplingRecord && Number.isInteger(scraplingRecord.sqft))
+      ? scraplingRecord.sqft
+      : this.firstInt(desc.replace(/,/g, ''), /([\d,]+)\s*sq\s*ft/i);
+    const year = (scraplingRecord && Number.isInteger(scraplingRecord.yearBuilt))
+      ? scraplingRecord.yearBuilt
+      : (this.firstInt(desc, /built in (\d{4})/i) || null);
 
     // --- Minimum bid: <div content="110665.00" class="field__item">110,665.00</div> ---
     const bidMatch = html.match(/content="([\d,]+\.\d+)"\s+class="field__item"/);
-    const openingBid = bidMatch ? this.parseMoney(bidMatch[1]) : null;
+    const openingBid = (scraplingRecord && Number.isFinite(scraplingRecord.minimumBid))
+      ? scraplingRecord.minimumBid
+      : (bidMatch ? this.parseMoney(bidMatch[1]) : null);
 
     // --- Date of Auction: first <time datetime="2026-09-08T17:30:00Z"> ---
     const timeMatch = html.match(/<time datetime="([^"]+)"/);
-    const saleDate = timeMatch ? timeMatch[1].slice(0, 10) : null;
+    const saleDate = (scraplingRecord && scraplingRecord.saleDate)
+      ? scraplingRecord.saleDate.slice(0, 10)
+      : (timeMatch ? timeMatch[1].slice(0, 10) : null);
 
     // --- Defendant / taxpayer: "...seized ... due from Albert W Sperry." ---
     const defMatch = html.match(/due from ([^.]+?)\./i);
@@ -171,7 +219,7 @@ class IrsSeizedScraper extends BaseScraper {
       baths: baths || null,
       sqft: sqft || null,
       year,
-      propType: this.classifyPropertyType(desc),
+      propType: this.classifyPropertyType(`${publisherTitle} ${desc}`),
       openingBid,
       estLow: null,
       estHigh: null,
@@ -188,6 +236,7 @@ class IrsSeizedScraper extends BaseScraper {
       raw: (desc || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 2000),
       provenance: {
         origin: 'live', observed: true, publisher: 'Internal Revenue Service', recordId: slug,
+        sourceFacts: { publisherTitle: publisherTitle || null, addressQualification: /^\d/.test(street) ? 'numbered_street' : 'positive_land_evidence', publisherParcelLabel: parcelPrefixedLand ? addrLines[0] : null },
         media: gallery.length ? {
           photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
           gallery
@@ -200,6 +249,7 @@ class IrsSeizedScraper extends BaseScraper {
     if (/commercial/i.test(desc)) return 'Commercial';
     if (/condo/i.test(desc)) return 'Condo';
     if (/multi.?family|duplex|triplex/i.test(desc)) return 'Multi-Family';
+    if (/single.?family|\bhome\b|\bhouse\b|residential/i.test(desc)) return 'Single Family';
     if (/land|vacant|lot|acre/i.test(desc)) return 'Land';
     return null;
   }

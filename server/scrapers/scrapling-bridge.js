@@ -10,7 +10,7 @@ const { findBotChallengeSignature } = require('./circuit-breaker');
 const MAX_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 5000;
-const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extract']);
+const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extract', 'hud-cards', 'treasury-detail', 'irs-detail']);
 
 /**
  * Returns true when a hostname or IP literal refers to a private, loopback,

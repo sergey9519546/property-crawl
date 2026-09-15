@@ -6,6 +6,8 @@
 // Scrapes single-family HUD homes offered through HUD HomeStore.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const crypto = require('node:crypto');
 const { mapWithConcurrency } = require('./http');
 const { ScraperResponseError } = require('./circuit-breaker');
 
@@ -20,6 +22,32 @@ const DEFAULT_MAX_PAGES_PER_STATE = 3;
 const DEFAULT_PAGE_SIZE = 50;
 const DEFAULT_STATE_CONCURRENCY = 2;
 const HUD_REO_LAYER = 'https://egis.hud.gov/arcgis/rest/services/cpdmaps/HudSfReo/MapServer/1';
+const CHECKPOINT_VERSION = 1;
+const MAX_CHECKPOINT_BYTES = 16_384;
+
+function scopeHash(scope) {
+  return crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+}
+
+function encodeCheckpoint(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+}
+
+function decodeCheckpoint(token) {
+  if (token == null || token === '') return null;
+  if (typeof token !== 'string' || token.length > MAX_CHECKPOINT_BYTES) throw new Error('HUD checkpoint continuation token is malformed');
+  let value;
+  try { value = JSON.parse(Buffer.from(token, 'base64url').toString('utf8')); } catch (_) {
+    throw new Error('HUD checkpoint continuation token is malformed');
+  }
+  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort() : [];
+  if (!value || keys.join(',') !== 'completedStates,nextPages,scopeHash,v' ||
+      value.v !== CHECKPOINT_VERSION || !/^[a-f0-9]{64}$/.test(value.scopeHash) ||
+      !Array.isArray(value.completedStates) || !value.nextPages || typeof value.nextPages !== 'object' || Array.isArray(value.nextPages)) {
+    throw new Error('HUD checkpoint continuation token is malformed');
+  }
+  return value;
+}
 
 class HudScrapeError extends Error {
   constructor(message, report) {
@@ -54,21 +82,74 @@ class HudHomeScraper extends BaseScraper {
     // Keep explicit baseUrl injection on the legacy path for fixture tests. Live
     // collection uses HUD's documented public REO feature layer; step 6 means
     // the property is publicly listed on HUD HomeStore.
-    this.inventoryUrl = options.inventoryUrl || null;
+    // Accept either the ArcGIS layer URL or its query endpoint, but keep one
+    // canonical layer base so requests and scope evidence never gain /query/query.
+    this.inventoryUrl = options.inventoryUrl ? String(options.inventoryUrl).replace(/\/query\/?$/i, '').replace(/\/$/, '') : null;
     this.states = configuredStates(options.states ?? process.env.HUD_STATES);
     this.maxStates = positiveInt(options.maxStates ?? process.env.HUD_MAX_STATES, this.states.length, ALL_HUD_JURISDICTIONS.length);
     this.maxPagesPerState = positiveInt(options.maxPagesPerState ?? process.env.HUD_MAX_PAGES_PER_STATE, DEFAULT_MAX_PAGES_PER_STATE, 10);
     this.pageSize = positiveInt(options.pageSize ?? process.env.HUD_PAGE_SIZE, DEFAULT_PAGE_SIZE, 100);
     this.stateConcurrency = positiveInt(options.stateConcurrency ?? process.env.HUD_STATE_CONCURRENCY, DEFAULT_STATE_CONCURRENCY, 4);
     this.lastRunReport = null;
+    this.checkpointToken = null;
+    this.sweepStartedAt = null;
+    this.pagesCommitted = 0;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('hud');
+    this.extract = options.extractImpl || extractWithScrapling;
+  }
+
+  checkpointScope() {
+    return this.getCollectionScope();
+  }
+
+  getCollectionScope() {
+    return {
+      endpoint: this.inventoryUrl ? `${this.inventoryUrl}/query` : new URL('/Home/DataGrid', this.baseUrl).toString(),
+      states: this.states,
+      pageSize: this.pageSize,
+      filters: this.inventoryUrl ? { caseStepNumber: 6 } : {},
+    };
+  }
+
+  checkpointState() {
+    const decoded = decodeCheckpoint(this.checkpointToken);
+    const scope = this.checkpointScope();
+    if (!decoded) return { scope, completedStates: new Set(), nextPages: {} };
+    if (decoded.scopeHash !== scopeHash(scope)) throw new Error('HUD checkpoint scope does not match this collector configuration');
+    const known = new Set(this.states);
+    const completedStates = new Set(decoded.completedStates);
+    if (completedStates.size !== decoded.completedStates.length ||
+        [...completedStates].some((state) => !known.has(state)) ||
+        Object.keys(decoded.nextPages).some((state) => !known.has(state) || completedStates.has(state)) ||
+        Object.values(decoded.nextPages).some((page) => !Number.isSafeInteger(page) || page < 1 || page > 1_000_000)) {
+      throw new Error('HUD checkpoint continuation token is malformed');
+    }
+    if (completedStates.size === this.states.length && Object.keys(decoded.nextPages).length === 0) {
+      throw new Error('HUD checkpoint continuation token is already exhausted');
+    }
+    return { scope, completedStates, nextPages: { ...decoded.nextPages } };
+  }
+
+  setCheckpoint(checkpoint) {
+    this.checkpointToken = checkpoint?.continuationToken ?? null;
+    this.sweepStartedAt = typeof checkpoint?.sweepStartedAt === 'string' ? checkpoint.sweepStartedAt : null;
+    this.pagesCommitted = Math.max(0, Math.floor(Number(checkpoint?.pagesCommitted) || 0));
+    return this;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const states = this.states.slice(0, this.maxStates);
-      if (states.length === 0) throw new HudScrapeError('No valid HUD jurisdictions configured', this.createRunReport([]));
-      const report = this.createRunReport(states);
-      const results = await mapWithConcurrency(states, this.stateConcurrency, (state) => this.fetchStateHudHomes(state));
+      if (this.states.length === 0) throw new HudScrapeError('No valid HUD jurisdictions configured', this.createRunReport([]));
+      const checkpoint = this.checkpointState();
+      const pendingStates = this.states.filter((state) => !checkpoint.completedStates.has(state));
+      const states = pendingStates.slice(0, this.maxStates);
+      const report = this.createRunReport(this.states);
+      report.sweepStartedAt = this.sweepStartedAt || report.startedAt;
+      report.pagesPreviouslyCommitted = this.pagesCommitted;
+      report.statesPreviouslyCompleted = checkpoint.completedStates.size;
+      report.attemptedStates = states;
+      const results = await mapWithConcurrency(states, this.stateConcurrency,
+        (state) => this.fetchStateHudHomes(state, checkpoint.nextPages[state] || 1));
       const allListings = [];
       for (let index = 0; index < results.length; index += 1) {
         const state = states[index];
@@ -76,12 +157,23 @@ class HudHomeScraper extends BaseScraper {
         report.statesAttempted += 1;
         if (result.status === 'fulfilled') {
           const stateResult = result.value;
+          if (stateResult.truncated === true &&
+              (!Number.isSafeInteger(stateResult.nextPage) || stateResult.nextPage < 1 || stateResult.nextPage > 1_000_000)) {
+            throw new Error(`HUD checkpoint next page is invalid for ${state}`);
+          }
           report.pagesAttempted += stateResult.pagesAttempted;
           report.pagesFetched += stateResult.pagesFetched;
-          report.sourceRows += stateResult.sourceRows;
-          report.malformedRows += stateResult.malformedRows;
+          report.sourceRows = stateResult.sourceRows == null || report.sourceRows == null
+            ? null : report.sourceRows + stateResult.sourceRows;
+          report.malformedRows = stateResult.malformedRows == null || report.malformedRows == null
+            ? null : report.malformedRows + stateResult.malformedRows;
           report.fallbackStates += stateResult.usedHtmlFallback ? 1 : 0;
           report.truncated = report.truncated || stateResult.truncated === true;
+          if (stateResult.truncated) checkpoint.nextPages[state] = stateResult.nextPage;
+          else {
+            checkpoint.completedStates.add(state);
+            delete checkpoint.nextPages[state];
+          }
           allListings.push(...stateResult.listings);
           if (stateResult.listings.length) report.statesWithListings += 1;
           else report.statesEmpty += 1;
@@ -95,6 +187,10 @@ class HudHomeScraper extends BaseScraper {
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
       report.listingsEmitted = standardized.length;
+      const remainingStates = this.states.filter((state) => !checkpoint.completedStates.has(state));
+      report.completedStates = [...checkpoint.completedStates];
+      report.remainingStates = remainingStates;
+      report.truncated = remainingStates.length > 0;
       report.outcome = report.statesFailed === report.statesAttempted
         ? 'failed'
         : report.statesFailed > 0
@@ -102,8 +198,16 @@ class HudHomeScraper extends BaseScraper {
           : standardized.length === 0
             ? 'empty'
             : 'success';
-      report.complete = report.statesFailed === 0 && !report.truncated && states.length === this.states.length;
+      report.complete = remainingStates.length === 0;
       report.fullSweepComplete = report.complete;
+      if (!report.complete) {
+        report.nextContinuationToken = encodeCheckpoint({
+          v: CHECKPOINT_VERSION,
+          scopeHash: scopeHash(checkpoint.scope),
+          completedStates: report.completedStates,
+          nextPages: checkpoint.nextPages,
+        });
+      }
       report.fixtureFallbackUsed = false;
       this.lastRunReport = Object.freeze(report);
 
@@ -115,37 +219,48 @@ class HudHomeScraper extends BaseScraper {
     });
   }
 
-  async fetchStateHudHomes(state) {
-    if (this.inventoryUrl) return this.fetchArcGisState(state);
-    const listings = [];
-    let pagesAttempted = 0;
-    let pagesFetched = 0;
-    try {
-      for (let pageNo = 1; pageNo <= this.maxPagesPerState; pageNo += 1) {
-        pagesAttempted += 1;
-        const page = await this.fetchDataGridPage(state, pageNo);
-        pagesFetched += 1;
-        listings.push(...page.items.map((item) => this.mapJsonItem(item, state)).filter(Boolean));
-        if (!page.hasMore) return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: false };
-        if (pageNo === this.maxPagesPerState) return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: true };
-        await this.crawlJitter();
-      }
-      return { state, listings, pagesAttempted, pagesFetched, usedHtmlFallback: false, truncated: false };
-    } catch (error) {
-      if (error instanceof ScraperResponseError && error.haltScraper) throw error;
-      if (this.circuitBreaker.isOpen()) throw error;
-      const html = await this.fetchStateHtml(state, error);
-      return { state, listings: html, pagesAttempted, pagesFetched, usedHtmlFallback: true, truncated: false };
-    }
-  }
-
-  async fetchArcGisState(state) {
+  async fetchStateHudHomes(state, startPage = 1) {
+    if (this.inventoryUrl) return this.fetchArcGisState(state, startPage);
     const listings = [];
     let pagesAttempted = 0;
     let pagesFetched = 0;
     let sourceRows = 0;
     let malformedRows = 0;
-    for (let pageNo = 1; pageNo <= this.maxPagesPerState; pageNo += 1) {
+    try {
+      for (let pageIndex = 0; pageIndex < this.maxPagesPerState; pageIndex += 1) {
+        const pageNo = startPage + pageIndex;
+        pagesAttempted += 1;
+        const page = await this.fetchDataGridPage(state, pageNo);
+        pagesFetched += 1;
+        sourceRows += page.items.length;
+        const mappedListings = page.items.map((item) => this.mapJsonItem(item, state)).filter(Boolean);
+        malformedRows += page.items.length - mappedListings.length;
+        listings.push(...mappedListings);
+        if (!page.hasMore) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
+        if (pageIndex + 1 === this.maxPagesPerState) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: true, nextPage: pageNo + 1 };
+        await this.crawlJitter();
+      }
+      return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
+    } catch (error) {
+      if (error instanceof ScraperResponseError && error.haltScraper) throw error;
+      if (this.circuitBreaker.isOpen()) throw error;
+      // A fallback after any paginated progress cannot prove that it covers
+      // the uncommitted suffix. Leave the jurisdiction pending at its prior
+      // checkpoint so the committed batch can be replayed safely.
+      if (pagesFetched > 0 || startPage > 1) throw error;
+      const html = await this.fetchStateHtml(state, error);
+      return { state, listings: html, pagesAttempted, pagesFetched, sourceRows: null, malformedRows: null, usedHtmlFallback: true, truncated: false };
+    }
+  }
+
+  async fetchArcGisState(state, startPage = 1) {
+    const listings = [];
+    let pagesAttempted = 0;
+    let pagesFetched = 0;
+    let sourceRows = 0;
+    let malformedRows = 0;
+    for (let pageIndex = 0; pageIndex < this.maxPagesPerState; pageIndex += 1) {
+      const pageNo = startPage + pageIndex;
       pagesAttempted += 1;
       const offset = (pageNo - 1) * this.pageSize;
       const query = new URLSearchParams({
@@ -174,7 +289,7 @@ class HudHomeScraper extends BaseScraper {
       }
       const hasMore = data.exceededTransferLimit === true || data.features.length === this.pageSize;
       if (!hasMore) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
-      if (pageNo === this.maxPagesPerState) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: true };
+      if (pageIndex + 1 === this.maxPagesPerState) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: true, nextPage: pageNo + 1 };
       await this.crawlJitter();
     }
     return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
@@ -223,7 +338,9 @@ class HudHomeScraper extends BaseScraper {
     const payload = await this.requestText(url, { headers: this.jsonHeaders() });
     let data;
     try { data = JSON.parse(payload); } catch (error) {
-      const htmlItems = this.parseHtmlCards(payload, state);
+      const htmlItems = this.useScrapling
+        ? await this.parseCardsWithScrapling(payload, state, url)
+        : this.parseHtmlCards(payload, state);
       if (htmlItems.length > 0) return { items: htmlItems, hasMore: false };
       const parseError = new Error(`HUD DataGrid returned neither JSON nor property rows for ${state} page ${pageNo}`);
       parseError.cause = error;
@@ -238,6 +355,7 @@ class HudHomeScraper extends BaseScraper {
     const searchUrl = `${this.baseUrl}/Home/Index?state=${state}`;
     try {
       const html = await this.requestText(searchUrl, { headers: this.htmlHeaders() });
+      if (this.useScrapling) return this.parseCardsWithScrapling(html, state, searchUrl);
       return this.parseHtmlCards(html, state);
     } catch (err) {
       const combined = new Error(`HUD DataGrid and HTML fallback both failed for ${state}: ${this.errorSummary(primaryError)}; ${this.errorSummary(err)}`);
@@ -257,7 +375,6 @@ class HudHomeScraper extends BaseScraper {
   }
 
   hasMorePages(data, itemCount, pageNo) {
-    if (pageNo >= this.maxPagesPerState) return false;
     if (data && typeof data === 'object') {
       for (const key of ['hasMore', 'hasNextPage', 'more']) {
         if (typeof data[key] === 'boolean') return data[key];
@@ -279,8 +396,7 @@ class HudHomeScraper extends BaseScraper {
   }
 
   createRunReport(states) {
-    const scope = { endpoint: this.inventoryUrl ? `${this.inventoryUrl}/query` : '/Home/DataGrid', states, pageSize: this.pageSize, maxPagesPerState: this.maxPagesPerState };
-    if (this.inventoryUrl) scope.filter = 'CASE_STEP_NUMBER = 6';
+    const scope = { ...this.getCollectionScope(), states, maxPagesPerState: this.maxPagesPerState };
     return { source: 'hud', startedAt: new Date().toISOString(), configuredStates: states, scope, statesAttempted: 0, statesWithListings: 0, statesEmpty: 0, statesFailed: 0, fallbackStates: 0, pagesAttempted: 0, pagesFetched: 0, sourceRows: 0, malformedRows: 0, listingsParsed: 0, listingsEmitted: 0, failures: [], outcome: 'running', truncated: states.length < this.states.length };
   }
 
@@ -289,6 +405,56 @@ class HudHomeScraper extends BaseScraper {
   }
 
   parseHtmlCards(html, state) {
+    return this.parseHtmlCardsNative(html, state);
+  }
+
+  async parseCardsWithScrapling(html, state, sourceUrl) {
+    if (!html || !html.length) return [];
+    let evidence;
+    try {
+      evidence = await this.extract('hud-cards', { html, url: sourceUrl });
+    } catch (_) {
+      return [];
+    }
+    const extracted = Array.isArray(evidence?.items) ? evidence.items : [];
+    return extracted.map((item) => this.mapScraplingCard(item, state, sourceUrl)).filter(Boolean);
+  }
+
+  mapScraplingCard(item, state, sourceUrl) {
+    const caseNum = String(item.caseNumber || '').trim();
+    if (!caseNum) return null;
+    const id = `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
+    const address = String(item.address || '').trim();
+    const openingBid = Number.isFinite(item.currentBid) ? item.currentBid : null;
+    return {
+      id,
+      state,
+      county: null,
+      city: null,
+      zip: null,
+      address,
+      openingBid,
+      estLow: null,
+      estHigh: null,
+      assessed: null,
+      saleDate: null,
+      plaintiff: null,
+      defendant: null,
+      occupancy: null,
+      deposit: null,
+      sourceUrl: sourceUrl || `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      raw: `caseNumber=${caseNum};address=${address};currentBid=${openingBid}`,
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'HUD HomeStore',
+        recordId: caseNum,
+        ...(sourceUrl ? { sourceFacts: { extractedFromUrl: sourceUrl } } : {})
+      }
+    };
+  }
+
+  parseHtmlCardsNative(html, state) {
     const listings = [];
     const cardRegex = /<tr[^>]*class="[^"]*property-row[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
     let match;

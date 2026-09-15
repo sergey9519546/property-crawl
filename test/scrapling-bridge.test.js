@@ -30,7 +30,7 @@ test('source enablement uses an explicit case-insensitive CSV allowlist', () => 
 });
 
 test('profiles set includes all known profiles', () => {
-  assert.deepEqual([...PROFILES].sort(), ['gsa-detail', 'gsa-index', 'page-links', 'table-extract']);
+  assert.deepEqual([...PROFILES].sort(), ['gsa-detail', 'gsa-index', 'hud-cards', 'irs-detail', 'page-links', 'table-extract', 'treasury-detail']);
 });
 
 test('isPrivateOrLocalHost detects SSRF targets', () => {

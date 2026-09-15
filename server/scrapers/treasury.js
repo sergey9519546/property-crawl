@@ -14,6 +14,7 @@
 const BaseScraper = require('./base');
 const { mapWithConcurrency } = require('./http');
 const { extractDetailImages } = require('./media-policy');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 // Full US state / territory name → 2-letter code map.
 // Used by parseAddress to handle Treasury's "City, StateName 12345" format.
@@ -38,6 +39,8 @@ class TreasuryForfeitureScraper extends BaseScraper {
     this.baseUrl = 'https://www.treasury.gov/auctions/treasury/rp';
     this.detailConcurrency = Math.min(4, Math.max(1, Math.floor(Number(options.detailConcurrency) || 2)));
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
+    this.extract = options.extractImpl || extractWithScrapling;
   }
 
   async scrapeFeed() {
@@ -96,6 +99,22 @@ class TreasuryForfeitureScraper extends BaseScraper {
     const fullAddress = titleMatch[1].trim();
     if (!/^\d/.test(fullAddress)) return null; // skip non-property titles
 
+    // When Scrapling is enabled, delegate the labeled-field extraction to
+    // the Python venv and use the structured record instead of the regex
+    // body scan below. The Python profile returns { property: {...} }.
+    let scraplingRecord = null;
+    if (this.useScrapling) {
+      try {
+        const evidence = await this.extract('treasury-detail', { html: detailHtml, url: detailUrl });
+        const p = evidence && evidence.property ? evidence.property : null;
+        if (p && (p.startingBid != null || p.saleNumber || p.parcelNumber || p.livingArea != null || p.yearBuilt != null || p.beds != null || p.baths != null)) {
+          scraplingRecord = p;
+        }
+      } catch (_) {
+        scraplingRecord = null;
+      }
+    }
+
     // Body text — strip HTML and collapse whitespace
     const body = detailHtml
       .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -115,18 +134,41 @@ class TreasuryForfeitureScraper extends BaseScraper {
       return m ? m[1].trim() : null;
     };
 
-    const openingBid = this.parseMoney(get(/Starting Bid:\s*\$([\d,]+)/));
-    const sqft = this.parseInt0(get(/Living Area:\s*([\d,]+)/));
-    const year = this.parseInt0(get(/Year Built:\s*(\d{4})/));
-    const acres = parseFloat(get(/Site Area:\s*([\d.]+)/) || '');
+    // Prefer the Scrapling structured record (when enabled) for each labeled
+    // field; fall back to the regex body scan when the venv call did not
+    // return a value for that field.
+    const openingBid = (scraplingRecord && Number.isFinite(scraplingRecord.startingBid))
+      ? scraplingRecord.startingBid
+      : this.parseMoney(get(/Starting Bid:\s*\$([\d,]+)/));
+    const sqft = (scraplingRecord && Number.isFinite(scraplingRecord.livingArea))
+      ? scraplingRecord.livingArea
+      : this.parseInt0(get(/Living Area:\s*([\d,]+)/));
+    const year = (scraplingRecord && Number.isInteger(scraplingRecord.yearBuilt))
+      ? scraplingRecord.yearBuilt
+      : this.parseInt0(get(/Year Built:\s*(\d{4})/));
+    const acres = (scraplingRecord && Number.isFinite(scraplingRecord.siteAcres))
+      ? scraplingRecord.siteAcres
+      : parseFloat(get(/Site Area:\s*([\d.]+)/) || '');
     const landSqft = Number.isFinite(acres) && acres > 0 ? Math.round(acres * 43560) : null;
-    const deposit = get(/Deposit:\s*([^.]+?)(?:\.|Inspection|$)/);
-    const saleDateRaw = get(/Auction Date and Time:\s*([^I]+?)(?=Inspection|$)/);
-    const parcelNo = get(/Parcel No:\s*(\S+)/);
-    const saleNumber = get(/Sale Number:\s*([\w-]+)/);
+    const deposit = (scraplingRecord && scraplingRecord.deposit)
+      ? scraplingRecord.deposit
+      : get(/Deposit:\s*([^.]+?)(?:\.|Inspection|$)/);
+    const saleDateRaw = (scraplingRecord && scraplingRecord.auctionDate)
+      ? scraplingRecord.auctionDate
+      : get(/Auction Date and Time:\s*([^I]+?)(?=Inspection|$)/);
+    const parcelNo = (scraplingRecord && scraplingRecord.parcelNumber)
+      ? scraplingRecord.parcelNumber
+      : get(/Parcel No:\s*(\S+)/);
+    const saleNumber = (scraplingRecord && scraplingRecord.saleNumber)
+      ? scraplingRecord.saleNumber
+      : get(/Sale Number:\s*([\w-]+)/);
 
-    const beds = this.parseInt0(get(/(\d+)\s*bedrooms?/i));
-    const baths = this.parseInt0(get(/(\d+)\s*baths?/i));
+    const beds = (scraplingRecord && Number.isInteger(scraplingRecord.beds))
+      ? scraplingRecord.beds
+      : this.parseInt0(get(/(\d+)\s*bedrooms?/i));
+    const baths = (scraplingRecord && Number.isInteger(scraplingRecord.baths))
+      ? scraplingRecord.baths
+      : this.parseInt0(get(/(\d+)\s*baths?/i));
 
     const addrParts = this.parseAddress(fullAddress);
     const baseName = slug.replace('.shtml', '');
