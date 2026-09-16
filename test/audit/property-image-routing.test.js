@@ -100,6 +100,28 @@ test('auditListing: invalid state fails state_valid', () => {
   assert.equal(row.results.state_valid.ok, false);
 });
 
+test('auditListing: "US" placeholder state fails state_valid (closed-set rejects it)', () => {
+  // Previously, the audit accepted "US" because US_STATES was a 50-state
+  // set plus DC; the live-ingestion validator rejected it via an inline
+  // duplicate check. Now both paths share isUsStateOrTerritoryCode, which
+  // explicitly rejects the USPS "US" placeholder alongside the closed set.
+  const row = auditListing(listing({ state: 'US' }));
+  assert.equal(row.results.state_valid.ok, false);
+});
+
+test('auditListing: US territory codes pass state_valid but skip coords_in_state (no bbox data)', () => {
+  // PR / VI / GU / MP / AS are real USPS codes (50+DC+5 territories).
+  // The audit used to reject these because STATE_BBOX only has the 50
+  // states + DC. Now state_valid uses the closed set, and coords_in_state
+  // skips when no bbox is available rather than false-fail.
+  for (const code of ['PR', 'VI', 'GU', 'MP', 'AS']) {
+    const row = auditListing(listing({ state: code }));
+    assert.equal(row.results.state_valid.ok, true, `${code} should pass state_valid`);
+    assert.equal(row.results.coords_in_state.ok, true, `${code} coords_in_state should skip, not fail`);
+    assert.match(row.results.coords_in_state.reason, /state_bbox_unknown/);
+  }
+});
+
 test('auditListing: invalid zip fails zip_valid', () => {
   const row = auditListing(listing({ zip: 'ABCDE' }));
   assert.equal(row.results.zip_valid.ok, false);

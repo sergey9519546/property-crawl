@@ -6,6 +6,7 @@ const { inspectPublisherPhoto } = require('../scrapers/media-policy');
 const { lookupPanoramax } = require('../media/panoramax');
 const { lookupMapillary } = require('../media/mapillary');
 const { createProviderCache } = require('../media/provider-cache');
+const { isUsStateOrTerritoryCode } = require('../state-codes');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
 const GOOGLE_GEOCODING_PATH = '/maps/api/geocode/json';
@@ -331,7 +332,7 @@ function sourceObservedAddress(listing) {
   const city = safeText(listing?.city, 128);
   const state = safeText(listing?.state, 2)?.toUpperCase();
   const zip = safeText(listing?.zip, 10);
-  if (!address || !city || !state || !zip || !/^[A-Z]{2}$/.test(state) || !/^\d{5}(?:-\d{4})?$/.test(zip)) {
+  if (!address || !city || !state || !zip || !isUsStateOrTerritoryCode(state) || !/^\d{5}(?:-\d{4})?$/.test(zip)) {
     return null;
   }
   if (/^(?:p\.?\s*o\.?\s*box|lot\b|parcel\b|vacant\b)/i.test(address)) return null;

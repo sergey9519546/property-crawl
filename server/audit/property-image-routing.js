@@ -111,9 +111,14 @@ const PUBLISHER_HOSTS = Object.freeze({
   'CivilView': ['salesweb.civilview.com'],
 });
 
+const { isUsStateOrTerritoryCode } = require('../state-codes');
 const US_STATE_CODE = /^[A-Z]{2}$/;
 const ZIP_RE = /^\d{5}(?:-\d{4})?$/;
-const US_STATES = new Set(Object.keys(STATE_BBOX));
+// Codes with rough rectangular bbox data — subset of the full USPS set.
+// Used by checkCoordsInState for the "coords-inside-state" cross-check.
+// Territories (PR/VI/GU/MP/AS) are valid USPS codes but have no bbox data,
+// so coord-based checks skip them rather than false-fail.
+const US_STATES_WITH_BBOX = new Set(Object.keys(STATE_BBOX));
 
 function safeText(value, maximumLength = 256) {
   if (value === null || value === undefined) return null;
@@ -146,8 +151,8 @@ function checkAddressGeocodable(listing) {
 }
 
 function checkStateValid(listing) {
-  const state = safeText(listing?.state, 2)?.toUpperCase();
-  if (!state || !US_STATE_CODE.test(state) || !US_STATES.has(state)) {
+  const state = safeText(listing?.state, 2);
+  if (!isUsStateOrTerritoryCode(state)) {
     return { ok: false, reason: `state_invalid:${listing?.state || ''}` };
   }
   return { ok: true, reason: null };
@@ -170,11 +175,14 @@ function checkCoordsInState(listing) {
     return { ok: true, reason: 'coords_absent_skipped' };
   }
   const state = safeText(listing?.state, 2)?.toUpperCase();
-  if (!state || !US_STATE_CODE.test(state)) {
+  if (!state || !US_STATE_CODE.test(state) || !isUsStateOrTerritoryCode(state)) {
     return { ok: false, reason: 'state_invalid_for_coord_check' };
   }
   const bbox = STATE_BBOX[state];
   if (!bbox) {
+    // Valid USPS code (e.g. PR, VI) but no bbox data — skip the coord cross-
+    // check rather than fail. The state's validity was already confirmed by
+    // checkStateValid earlier in the pipeline.
     return { ok: true, reason: `state_bbox_unknown:${state}_skipped` };
   }
   if (lat < bbox.south || lat > bbox.north || lng < bbox.west || lng > bbox.east) {

@@ -1,20 +1,9 @@
 const { findBotChallengeSignature } = require('./circuit-breaker');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { inspectSourceRecordUrl } = require('./source-policy');
+const { isUsStateOrTerritoryCode } = require('../state-codes');
 
-const US_STATE_OR_TERRITORY = /^[A-Z]{2}$/;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{1,159}$/;
-// Closed set of US states + DC. Format-only regex (US_STATE_OR_TERRITORY)
-// would let "ZZ" or "AQ" through; ingestion must require a real postal code.
-// Source: USPS two-letter state abbreviations.
-const US_STATES = new Set([
-  'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN',
-  'IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH',
-  'NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT',
-  'VT','VA','WA','WV','WI','WY',
-  // US territories also surfaced by some government sources.
-  'PR','VI','GU','MP','AS'
-]);
 
 function finitePositive(value) {
   const number = Number(value);
@@ -46,7 +35,7 @@ function validateListingForIngestion(item, options = {}) {
   if (!SAFE_ID.test(listing.id)) errors.push('invalid_id');
   if (!listing.source) errors.push('missing_source');
   if (expectedSource && listing.source !== expectedSource) errors.push('source_mismatch');
-  if (!US_STATE_OR_TERRITORY.test(listing.state) || listing.state === 'US' || !US_STATES.has(listing.state)) {
+  if (!isUsStateOrTerritoryCode(listing.state)) {
     errors.push('invalid_state');
   }
   if (listing.address.length < 8 || listing.address.length > 500) errors.push('invalid_address');
