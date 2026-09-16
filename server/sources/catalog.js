@@ -134,6 +134,9 @@ function source(entry) {
       }
     }
   }
+  if (entry.accessPolicy !== undefined) {
+    validateAccessPolicy(entry.id, entry.accessPolicy);
+  }
   const status = entry.status || SOURCE_STATUS_BY_ID[entry.id];
   if (!status || !STATUSES.has(status)) {
     throw new TypeError(`Missing or invalid source status: ${entry.id}`);
@@ -142,6 +145,11 @@ function source(entry) {
     ...entry,
     status,
     robotsExclusion: Object.freeze([...(entry.robotsExclusion || [])]),
+    accessPolicy: entry.accessPolicy ? Object.freeze({
+      allowedPaths: Object.freeze((entry.accessPolicy.allowedPaths || []).map((p) => typeof p === 'string' ? Object.freeze({ path: p }) : Object.freeze({ ...p }))),
+      disallowedPaths: Object.freeze([...(entry.accessPolicy.disallowedPaths || [])]),
+      inventoryPaths: Object.freeze([...(entry.accessPolicy.inventoryPaths || [])])
+    }) : null,
     workflow: Object.freeze({ ...entry.workflow, steps: Object.freeze([...entry.workflow.steps]) }),
     requiredEvidence: Object.freeze([...entry.requiredEvidence])
   });
@@ -149,6 +157,77 @@ function source(entry) {
 
 const recordEvidence = ['exact publisher record URL', 'source-observed timestamp', 'sale terms or offer terms'];
 const parcelEvidence = ['APN or legal description', 'jurisdiction record URL', 'source-observed timestamp'];
+
+// Access-policy shape validator. Each catalog entry MAY declare
+// accessPolicy, which is the source of truth for which publisher paths the
+// adapter may request. Two layers:
+//
+//   allowedPaths      allow-list of paths the scraper may fetch; URLs not on
+//                     this list are refused by validateAccessForAdapter.
+//                     Each entry may also carry a queryPattern (RegExp source
+//                     string) restricting the allowed query string.
+//   disallowedPaths   publisher-declared off-limits paths (e.g. login-walled
+//                     pages, browsing artifacts); always refused.
+//   inventoryPaths    subset of allowedPaths whose pages carry individual
+//                     property records; useful for distinguishing live from
+//                     archive endpoints.
+//
+// The pre-existing top-level `robotsExclusion` field is treated as an alias
+// for `accessPolicy.disallowedPaths` for adapter-level callers (so
+// `isPathExcludedForAdapter` keeps working unchanged); the catalog itself
+// owns the unified policy view through `accessPolicy`.
+function validateAccessPolicy(sourceId, policy) {
+  if (policy === null) return;
+  if (typeof policy !== 'object' || Array.isArray(policy)) {
+    throw new TypeError(`accessPolicy must be an object: ${sourceId}`);
+  }
+  const allowed = policy.allowedPaths;
+  if (allowed !== undefined) {
+    if (!Array.isArray(allowed)) {
+      throw new TypeError(`accessPolicy.allowedPaths must be an array: ${sourceId}`);
+    }
+    for (const entry of allowed) {
+      if (typeof entry === 'string') {
+        if (!entry.startsWith('/')) {
+          throw new TypeError(`accessPolicy.allowedPaths entries must start with '/': ${sourceId} -> ${entry}`);
+        }
+        continue;
+      }
+      if (!entry || typeof entry !== 'object') {
+        throw new TypeError(`accessPolicy.allowedPaths entries must be a string or object: ${sourceId}`);
+      }
+      if (typeof entry.path !== 'string' || !entry.path.startsWith('/')) {
+        throw new TypeError(`accessPolicy.allowedPaths[].path must start with '/': ${sourceId}`);
+      }
+      if (entry.queryPattern !== undefined && (typeof entry.queryPattern !== 'string' || entry.queryPattern.length > 1024)) {
+        throw new TypeError(`accessPolicy.allowedPaths[].queryPattern must be a short RegExp source string: ${sourceId}`);
+      }
+    }
+  }
+  const disallowed = policy.disallowedPaths;
+  if (disallowed !== undefined) {
+    if (!Array.isArray(disallowed)) {
+      throw new TypeError(`accessPolicy.disallowedPaths must be an array: ${sourceId}`);
+    }
+    for (const path of disallowed) {
+      if (typeof path !== 'string' || !path.startsWith('/')) {
+        throw new TypeError(`accessPolicy.disallowedPaths entries must start with '/': ${sourceId} -> ${path}`);
+      }
+    }
+  }
+  const inventory = policy.inventoryPaths;
+  if (inventory !== undefined) {
+    if (!Array.isArray(inventory)) {
+      throw new TypeError(`accessPolicy.inventoryPaths must be an array: ${sourceId}`);
+    }
+    for (const entry of inventory) {
+      const path = typeof entry === 'string' ? entry : entry?.path;
+      if (typeof path !== 'string' || !path.startsWith('/')) {
+        throw new TypeError(`accessPolicy.inventoryPaths entries must be a string or object with .path starting with '/': ${sourceId}`);
+      }
+    }
+  }
+}
 
 const SOURCE_CATALOG = Object.freeze([
   source({ id: 'alachua-tax-deeds', label: 'Alachua County Tax-Deed Records', category: 'tax_sale', role: 'opportunity', coverage: 'Reviewed Alachua County case imports; no automated current county inventory.', discoveryUrl: 'https://alachuacounty.us/Depts/Clerk/TaxDeeds/Pages/TaxDeedSales.aspx', access: 'public', adapterKey: null, workflow: { primary: 'Import exact current county case records and approve the evidence before running the county pilot.', fallback: 'Use a reviewed public export or original case documents from the county-designated portals.', cadenceHours: 24, steps: ['Capture the exact case URL, publisher ID, explicit status, intact parcel IDs, observation time, and available original-document links.', 'Import structured JSON through source intake and review its original evidence.', 'Compare approved observations, run the county pilot, then confirm current availability and obtain a current purchase quote from the clerk.'] }, requiredEvidence: ['exact county portal case URL and publisher ID', 'explicit recorded case status', 'intact Alachua parcel identifiers', 'capture time and approved evidence review', 'separately identified published cost components and unresolved current quote'], notes: 'A passed auction date does not establish public-purchase availability. Program terms, a prior opening bid, and a current purchase quote remain separate. Imported evidence is not automatically published as live inventory.' }),
@@ -161,7 +240,7 @@ const SOURCE_CATALOG = Object.freeze([
   source({ id: 'va-vrm', label: 'VA REO / VRM Properties', category: 'government_reo', role: 'opportunity', coverage: 'Nationwide VA-owned property marketed by its contractor; inventory varies.', discoveryUrl: 'https://www.vrmproperties.com/', access: 'public', adapterKey: 'va', workflow: { primary: 'Use VRM public property search and exact listing.', fallback: 'Contact the named listing broker or property manager.', cadenceHours: 24, steps: ['Search the target geography.', 'Store exact VRM property URL.', 'Verify offer instructions and status with the publisher.'] }, requiredEvidence: [...recordEvidence, 'VA/VRM property identifier'], notes: 'Registration or broker involvement may be required to submit an offer.' }),
   source({ id: 'irs-auctions', label: 'IRS Auctions', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide IRS seized-real-property auction notices; low and irregular volume.', discoveryUrl: 'https://www.irsauctions.gov/', access: 'public', adapterKey: 'irs', workflow: { primary: 'Browse auction notices and use the exact auction/ad page.', fallback: 'Contact the named IRS sale contact in the official notice.', cadenceHours: 12, steps: ['Filter for real property.', 'Capture legal description, date, deposit, and terms.', 'Recheck before bid because notices can change.'] }, requiredEvidence: [...recordEvidence, 'official IRS notice or auction ID'], notes: 'Do not infer lien priority or condition from the listing alone.' }),
   source({ id: 'treasury-forfeiture', label: 'Treasury Forfeiture Real Property', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide Treasury forfeited real property, commonly marketed through a contractor.', discoveryUrl: 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml', access: 'public', adapterKey: 'treasury', workflow: { primary: 'Use the Treasury real-property page and linked offering record.', fallback: 'Use the named disposal contractor and preserve its offering URL.', cadenceHours: 12, steps: ['Review active real-property offerings.', 'Capture linked property record and terms.', 'Confirm closing, title, and occupancy terms.'] }, requiredEvidence: [...recordEvidence, 'forfeiture sale notice'], notes: 'An auction collection page is discovery, not evidence for an individual property.' }),
-  source({ id: 'gsa-real-estate-sales', label: 'GSA Real Estate Sales', category: 'government_surplus', role: 'opportunity', coverage: 'Nationwide federal surplus real property; sparse, episodic inventory.', discoveryUrl: 'https://realestatesales.gov/', access: 'public', adapterKey: 'gsa', robotsExclusion: ['/our-listing'], workflow: { primary: 'Use GSA search and the exact asset-details page.', fallback: 'Contact the GSA sales contact named in the offering.', cadenceHours: 24, steps: ['Filter for real property.', 'Capture asset-details URL and solicitation documents.', 'Confirm bid method and deadlines.'] }, requiredEvidence: [...recordEvidence, 'GSA property or solicitation ID'], notes: 'GSA personal-property auction APIs are not substitutes for real-estate records. The /our-listing path is disallowed by robots.txt and is not part of the live ingestion surface; the scraper should refuse to crawl it unless SCRAPER_RESPECT_ROBOTS=0 (operator override).' }),
+  source({ id: 'gsa-real-estate-sales', label: 'GSA Real Estate Sales', category: 'government_surplus', role: 'opportunity', coverage: 'Nationwide federal surplus real property; sparse, episodic inventory.', discoveryUrl: 'https://realestatesales.gov/', access: 'public', adapterKey: 'gsa', robotsExclusion: ['/our-listing'], accessPolicy: { allowedPaths: [ { path: '/asset-details', queryPattern: 'property_id=\\d+' } ], disallowedPaths: [ '/our-listing', '/login', '/register', '/about', '/news', '/contact', '/search', '/faqs' ], inventoryPaths: [ { path: '/asset-details' } ] }, workflow: { primary: 'Use GSA search and the exact asset-details page.', fallback: 'Contact the GSA sales contact named in the offering.', cadenceHours: 24, steps: ['Filter for real property.', 'Capture asset-details URL and solicitation documents.', 'Confirm bid method and deadlines.'] }, requiredEvidence: [...recordEvidence, 'GSA property or solicitation ID'], notes: 'GSA personal-property auction APIs are not substitutes for real-estate records. The /our-listing path is disallowed by robots.txt and is not part of the live ingestion surface; the scraper should refuse to crawl it unless SCRAPER_RESPECT_ROBOTS=0 (operator override). The accessPolicy is the catalog-driven source of truth: allowedPaths restricts the scraper to /asset-details (with a numeric property_id query) so login walls, browsing artifacts, and search results are rejected even if a future code path forgets to consult the legacy robotsExclusion field.' }),
   source({ id: 'us-marshals', label: 'U.S. Marshals Asset Forfeiture', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide DOJ forfeited real property; generally brokered and irregular.', discoveryUrl: 'https://www.usmarshals.gov/what-we-do/asset-forfeiture', access: 'public', adapterKey: 'marshals', workflow: { primary: 'Start at USMS, then use the named broker or RealLook property record.', fallback: 'Contact the assigned contractor or broker.', cadenceHours: 24, steps: ['Locate real-property disposition information.', 'Capture the broker record and USMS provenance.', 'Verify status with the named representative.'] }, requiredEvidence: [...recordEvidence, 'USMS or designated-contractor provenance'], notes: 'USMS states that most real property is sold through licensed brokers and its contractor.' }),
   source({ id: 'fdic-asset-sales', label: 'FDIC Asset Sales', category: 'government_reo', role: 'opportunity', coverage: 'Failed-bank real estate and property sales; current inventory may be empty.', discoveryUrl: 'https://www.fdic.gov/asset-sales/real-estate-and-property-sales', access: 'public', adapterKey: null, workflow: { primary: 'Use FDIC current real-estate/property sales and bargain-property pages.', fallback: 'Use FDIC Asset Sales contact and event calendar.', cadenceHours: 24, steps: ['Check current offerings.', 'Keep current listings separate from historical sales data.', 'Preserve FDIC page and any offering documents.'] }, requiredEvidence: [...recordEvidence, 'current FDIC offering document'], notes: 'The existing FDIC scraper is historical/fixture-oriented and is intentionally not scheduled as live opportunity ingestion.' }),
   source({ id: 'ncua-amac', label: 'NCUA AMAC Loan Sales & Available Real Estate', category: 'government_reo', role: 'opportunity', coverage: 'Failed or conserved credit-union asset sales; infrequent and often pooled.', discoveryUrl: 'https://ncua.gov/support-services/conservatorships-liquidations/loan-sales-available-real-estate', access: 'account', adapterKey: null, workflow: { primary: 'Monitor official NCUA sale page and interested-party sign-up.', fallback: 'Contact NCUA AMAC for current sale process.', cadenceHours: 168, steps: ['Check the scheduled asset-sales table.', 'Register or execute confidentiality documents when required.', 'Treat loan pools and individual real estate as distinct inventory.'] }, requiredEvidence: ['official NCUA sale page', 'sale-specific terms', 'qualified-bidder documentation when required'], notes: 'NCUA says a confidentiality agreement and deposit can be required; no current sale should be represented as inventory.' }),
@@ -280,4 +359,103 @@ function isPathExcludedForAdapter(adapterKey, path) {
   return false;
 }
 
-module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl, getRobotsExclusionForAdapter, isPathExcludedForAdapter };
+// Catalog-driven access gate. Returns { allowed, reason, matchedPolicy }.
+// Decision order:
+//   1. Reject unsafe URLs (non-https, userinfo, non-default port).
+//   2. If the URL host is not on the adapter's allowed host list (from
+//      source-policy), reject — this prevents a catalog policy bug from
+//      being bypassed by spoofed hosts.
+//   3. If the path is on accessPolicy.disallowedPaths OR on the legacy
+//      robotsExclusion, reject unless `respectRobots` is false.
+//   4. If accessPolicy.allowedPaths is declared, the path (and optional
+//      queryPattern) must match at least one entry; otherwise reject.
+//   5. Otherwise allow.
+//
+// The `allowOverride` option lets the operator bypass policy checks for an
+// individual call. It is intended for emergency recovery (e.g. manual
+// backfill) and is logged via the `note` field so it can be surfaced in
+// the run report.
+function validateAccessForAdapter(adapterKey, url, options = {}) {
+  const { respectRobots = true, allowOverride = false, now = Date.now } = options;
+  if (typeof adapterKey !== 'string') {
+    return { allowed: false, reason: 'adapter_key_missing', matchedPolicy: null };
+  }
+  if (typeof url !== 'string' || !url) {
+    return { allowed: false, reason: 'url_missing', matchedPolicy: null };
+  }
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_) {
+    return { allowed: false, reason: 'url_unparseable', matchedPolicy: null };
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port) {
+    return { allowed: false, reason: 'unsafe_url', matchedPolicy: null };
+  }
+  // Host check via source-policy — do not let a catalog accessPolicy.allowedPaths
+  // entry on a foreign host slip through.
+  const { SOURCE_HOSTS } = require('../scrapers/source-policy');
+  const allowedHosts = SOURCE_HOSTS[adapterKey];
+  if (!allowedHosts) {
+    return { allowed: false, reason: 'unknown_adapter', matchedPolicy: null };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const hostOk = allowedHosts.some((root) => {
+    const norm = root.toLowerCase();
+    return host === norm || host.endsWith(`.${norm}`);
+  });
+  if (!hostOk) {
+    return { allowed: false, reason: 'host_not_allowed', matchedPolicy: null };
+  }
+  const policy = getAccessPolicyForAdapter(adapterKey);
+  const path = parsed.pathname.replace(/\/+$/, '') || '/';
+  // Operator override is a master switch — when set, the function permits
+  // any URL on the adapter's host and reports the override so callers can
+  // surface it in run reports and audit logs.
+  if (allowOverride) {
+    return { allowed: true, reason: 'operator_override', matchedPolicy: null, override: true };
+  }
+  // 3. Disallowed paths: accessPolicy.disallowedPaths OR legacy
+  // top-level robotsExclusion (merged so adapter callers keep working).
+  const legacyExclusion = getRobotsExclusionForAdapter(adapterKey) || [];
+  const disallowed = [...(policy?.disallowedPaths || []), ...legacyExclusion];
+  for (const excluded of disallowed) {
+    if (path === excluded || path.startsWith(`${excluded}/`)) {
+      if (respectRobots) {
+        return { allowed: false, reason: 'path_disallowed', matchedPolicy: excluded };
+      }
+      return { allowed: true, reason: 'robots_override_active', matchedPolicy: excluded, override: true };
+    }
+  }
+  // 4. Allow-list (catalog-declared paths the scraper may fetch).
+  if (policy && Array.isArray(policy.allowedPaths) && policy.allowedPaths.length > 0) {
+    const query = parsed.search ? parsed.search.slice(1) : '';
+    for (const allowed of policy.allowedPaths) {
+      const allowedPath = allowed.path.replace(/\/+$/, '') || '/';
+      if (path !== allowedPath && !path.startsWith(`${allowedPath}/`)) continue;
+      if (allowed.queryPattern) {
+        let re;
+        try {
+          re = new RegExp(allowed.queryPattern);
+        } catch (_) {
+          continue;
+        }
+        if (!re.test(query)) continue;
+      }
+      return { allowed: true, reason: 'allowed_by_policy', matchedPolicy: allowed.path };
+    }
+    return { allowed: false, reason: 'path_not_in_allowed_list', matchedPolicy: null };
+  }
+  // 5. No allow-list declared → permissive default (legacy behavior).
+  return { allowed: true, reason: 'no_allow_list_declared', matchedPolicy: null };
+}
+
+function getAccessPolicyForAdapter(adapterKey) {
+  if (typeof adapterKey !== 'string') return null;
+  for (const entry of SOURCE_CATALOG) {
+    if (entry.adapterKey === adapterKey) return entry.accessPolicy || null;
+  }
+  return null;
+}
+
+module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl, getRobotsExclusionForAdapter, isPathExcludedForAdapter, validateAccessForAdapter, getAccessPolicyForAdapter };

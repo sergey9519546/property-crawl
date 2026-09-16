@@ -15,7 +15,7 @@
 const BaseScraper = require('./base');
 const { extractDetailImages } = require('./media-policy');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { isPathExcludedForAdapter } = require('../sources/catalog');
+const { isPathExcludedForAdapter, validateAccessForAdapter } = require('../sources/catalog');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -109,6 +109,21 @@ class GsaSurplusScraper extends BaseScraper {
   }
 
   async fetchText(url, timeoutMs = 60000) {
+    // Catalog-driven access gate. The catalog is the source of truth for
+    // which publisher paths this scraper is allowed to fetch — see
+    // server/sources/catalog.js validateAccessForAdapter. Defense in depth:
+    // any future code path that bypasses the robots.txt check above is
+    // caught here, and any path that isn't on accessPolicy.allowedPaths is
+    // refused even when robotsExclusion is silent.
+    const access = validateAccessForAdapter(this.sourceKey, url, {
+      respectRobots: process.env.SCRAPER_RESPECT_ROBOTS !== '0'
+    });
+    if (!access.allowed) {
+      const error = new Error(`GSA access policy refuses ${url}: ${access.reason}${access.matchedPolicy ? ` (matched: ${access.matchedPolicy})` : ''}`);
+      error.accessPolicyViolation = true;
+      error.accessDecision = access;
+      throw error;
+    }
     return super.fetchText(url, {
       timeoutMs,
       headers: { 'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)' }
