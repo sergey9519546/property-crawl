@@ -27,6 +27,9 @@ const handleWorkspace = require('./routes/workspace');
 const handleDocumentReview = require('./routes/document-review');
 const handleCoverage = require('./routes/coverage');
 const handleEnrichmentGateway = require('./routes/enrichment');
+const handleWatchlistComps = require('./routes/watchlist-comps').createWatchlistCompsHandler();
+const handleNeighborhoods = require('./routes/neighborhoods').createNeighborhoodsHandler();
+const handleAuctionCalendar = require('./routes/auction-calendar').createAuctionCalendarHandler();
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
@@ -182,6 +185,15 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/enrichment' || url.pathname.startsWith('/api/enrichment/')) {
       return handleEnrichmentGateway(req, res);
+    }
+    if (url.pathname.startsWith('/api/watchlist/')) {
+      return handleWatchlistComps(req, res, url);
+    }
+    if (url.pathname === '/api/neighborhoods' || url.pathname.startsWith('/api/neighborhoods/')) {
+      return handleNeighborhoods(req, res, url);
+    }
+    if (url.pathname === '/api/auction-calendar' || url.pathname.startsWith('/api/auction-calendar/')) {
+      return handleAuctionCalendar(req, res, url);
     }
     if (url.pathname === '/api/health') {
       return res.json({
