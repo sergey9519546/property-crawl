@@ -4,6 +4,7 @@ const db = require('../db/client');
 const { inspectSourceRecordUrl } = require('../scrapers/source-policy');
 const { inspectPublisherPhoto } = require('../scrapers/media-policy');
 const { lookupPanoramax } = require('../media/panoramax');
+const { createProviderCache } = require('../media/provider-cache');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
 const GOOGLE_GEOCODING_PATH = '/maps/api/geocode/json';
@@ -828,6 +829,11 @@ function createPropertyImageService(options = {}) {
     concurrency: env.PROPERTY_IMAGE_CONCURRENCY,
     maxQueue: env.PROPERTY_IMAGE_MAX_QUEUE,
   });
+  const panoramaxCache = options.panoramaxCache || createProviderCache({
+    ttlMs: env.PANORAMAX_CACHE_TTL_MS,
+    maxEntries: env.PANORAMAX_CACHE_MAX_ENTRIES,
+    now
+  });
   const panoramaInFlight = new Map();
 
   async function coalescedPanorama(listing,coordinates,config){
@@ -837,6 +843,44 @@ function createPropertyImageService(options = {}) {
     if(panoramaInFlight.has(key))return panoramaInFlight.get(key);
     const pending=resolvePanorama({fetchImpl,config,listing,coordinates,circuit,now}).finally(()=>panoramaInFlight.delete(key));
     panoramaInFlight.set(key,pending);return pending;
+  }
+
+  // Try Panoramax as a fallback when Google Street View returns no nearby
+  // imagery. The metadata path returns the Panoramax candidate directly; the
+  // caller labels the response with provider:'panoramax_fallback' so the UI
+  // can distinguish the source. Errors are swallowed — Panoramax being
+  // down should never turn into a 5xx when Google already returned its own
+  // graceful "no imagery here" answer.
+  async function tryPanoramaxFallback({ coordinates, env, fetchImpl, cache }) {
+    let lookup;
+    try {
+      lookup = await lookupPanoramax(coordinates, {
+        fetchImpl,
+        radiusMeters: clampInteger(env.PANORAMAX_RADIUS_METERS, 1, 100, 100),
+        limit: clampInteger(env.PANORAMAX_RESULT_LIMIT, 1, 10, 10),
+        timeoutMs: clampInteger(env.PANORAMAX_TIMEOUT_MS, 500, 15_000, 8_000),
+        cache
+      });
+    } catch (_) {
+      return null;
+    }
+    if (!lookup || !lookup.candidate) return null;
+    const candidate = publicPanoramaxCandidate(lookup.candidate);
+    return {
+      provider: 'panoramax_fallback',
+      primaryProvider: 'Google Street View',
+      primaryUnavailableReason: 'street_view_unavailable',
+      candidate,
+      panoramicMetadata: lookup.panoramicMetadata,
+      directionalSequences: lookup.directionalSequences
+        .filter((entry) => entry.license.displayApproved)
+        .map(publicPanoramaxCandidate),
+      reason: lookup.reason,
+      queriedRadiusMeters: lookup.queriedRadiusMeters,
+      exactPropertyVerified: false,
+      coordinateBasis: coordinates.basis,
+      coverage: 'community_alternative'
+    };
   }
 
   async function resolve(req) {
@@ -878,6 +922,7 @@ function createPropertyImageService(options = {}) {
               radiusMeters: clampInteger(env.PANORAMAX_RADIUS_METERS, 1, 100, 100),
               limit: clampInteger(env.PANORAMAX_RESULT_LIMIT, 1, 10, 10),
               timeoutMs: clampInteger(env.PANORAMAX_TIMEOUT_MS, 500, 15_000, 8_000),
+              cache: panoramaxCache
             });
           } catch (_) {
             throw new PropertyImageError(503, 'alternative_provider_unavailable', 'Panoramax coverage lookup is temporarily unavailable.');
@@ -919,6 +964,21 @@ function createPropertyImageService(options = {}) {
           panorama = await coalescedPanorama(listing, coordinates, {...config, radiusMeters: radius, maximumDistanceMeters: radius});
         }
         if (mode === 'metadata' || mode === 'walkthrough') {
+          // Walkthrough has its own wider-radius retry above; the metadata path
+          // additionally falls back to Panoramax when Google has no nearby
+          // outdoor imagery. Off by default — the source swap is visible to
+          // end-users and operators opt in explicitly with
+          // PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK=1.
+          if (mode === 'metadata' && env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1' && coordinates) {
+            const fallback = await tryPanoramaxFallback({ coordinates, env, fetchImpl, cache: panoramaxCache });
+            if (fallback) {
+              return {
+                status: 200,
+                headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                body: fallback,
+              };
+            }
+          }
           const { _panoId, ...publicMetadata } = panorama;
           const embedReady = Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY, 1024));
           const interactiveReady=embedReady || Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,1024));
@@ -954,7 +1014,7 @@ function createPropertyImageService(options = {}) {
     }
   }
 
-  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight };
+  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight, panoramaxCache };
 }
 
 function writeResult(res, result) {
@@ -972,6 +1032,8 @@ async function handlePropertyImage(req, res) {
 }
 
 module.exports = handlePropertyImage;
+module.exports.defaultService = defaultService;
+module.exports.createProviderCache = createProviderCache;
 module.exports.BoundedConcurrencyGate = BoundedConcurrencyGate;
 module.exports.FixedWindowRateLimiter = FixedWindowRateLimiter;
 module.exports.GOOGLE_MAPS_HOST = GOOGLE_MAPS_HOST;

@@ -50,6 +50,13 @@ async function lookupPanoramax(location,options={}){
   const target={lat:strictNumber(location?.lat,-90,90,'latitude'),lng:strictNumber(location?.lng,-180,180,'longitude')};
   const radius=integer(options.radiusMeters,100,100,'radius'),limit=integer(options.limit,10,10,'result limit'),timeout=integer(options.timeoutMs,8000,15000,'timeout'),max=integer(options.maximumBytes,MAX_BYTES,MAX_BYTES,'response byte limit');
   const fetchImpl=options.fetchImpl||globalThis.fetch;if(typeof fetchImpl!=='function')throw new TypeError('A fetch implementation is required');
+  const cache=options.cache;
+  const cacheable=Boolean(cache) && options.cacheTtlMs !== 0;
+  if (cacheable) {
+    const key = cache.buildKey({ provider: 'panoramax', lat: target.lat, lng: target.lng, radius });
+    const hit = cache.get(key);
+    if (hit !== undefined) return hit;
+  }
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
   try{
     const items=[];
@@ -61,7 +68,12 @@ async function lookupPanoramax(location,options={}){
     }
     const seen=new Set(),candidates=items.map(i=>normalize(i,target,radius)).filter(c=>c&&!seen.has(c.pictureId)&&seen.add(c.pictureId)).sort((a,b)=>a.distanceMeters-b.distanceMeters);
     const panoramicMetadata=candidates.filter(c=>c.mediaType==='panorama_360'),panoramas=panoramicMetadata.filter(c=>c.license.displayApproved),directionalSequences=candidates.filter(c=>c.mediaType==='directional_sequence');
-    return{available:panoramas.length>0,candidate:panoramas[0]||null,panoramas,panoramicMetadata,directionalSequences,reason:panoramas.length?null:'No explicitly identified, display-licensed 360° Panoramax imagery is available within the configured radius.',queriedRadiusMeters:radius};
+    const result={available:panoramas.length>0,candidate:panoramas[0]||null,panoramas,panoramicMetadata,directionalSequences,reason:panoramas.length?null:'No explicitly identified, display-licensed 360° Panoramax imagery is available within the configured radius.',queriedRadiusMeters:radius};
+    if (cacheable) {
+      const key = cache.buildKey({ provider: 'panoramax', lat: target.lat, lng: target.lng, radius });
+      cache.set(key, result);
+    }
+    return result;
   }finally{clearTimeout(timer);}
 }
 module.exports={lookupPanoramax};

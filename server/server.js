@@ -12,6 +12,13 @@ const handleScrapers = require('./routes/scrapers');
 const handleVerifyDocket = require('./routes/verify-docket');
 const handleParcelBoundary = require('./routes/parcel-boundary');
 const handlePropertyImage = require('./routes/property-image');
+const handlePropertyImageProviders = require('./routes/property-image-providers').createProviderStatusHandler({
+  circuits: {
+    'google-geocoding': handlePropertyImage.defaultService ? handlePropertyImage.defaultService.geocodingCircuit : null,
+    'google-streetview': handlePropertyImage.defaultService ? handlePropertyImage.defaultService.circuit : null
+  },
+  cache: handlePropertyImage.defaultService ? handlePropertyImage.defaultService.panoramaxCache : null
+});
 const handleSourceNetwork = require('./routes/source-network');
 const handlePropertyIntelligence = require('./routes/property-intelligence');
 const handlePropertySignals = require('./routes/property-signals');
@@ -158,6 +165,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/verify-docket') return handleVerifyDocket(req, res);
     if (url.pathname === '/api/parcel-boundary') return handleParcelBoundary(req, res);
     if (url.pathname === '/api/property-image') return handlePropertyImage(req, res);
+    if (url.pathname === '/api/property-image/providers') return handlePropertyImageProviders(req, res);
     if (url.pathname === '/api/property-intelligence') return handlePropertyIntelligence(req, res);
     if (url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
     if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
