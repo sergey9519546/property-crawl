@@ -4,6 +4,7 @@ const db = require('../db/client');
 const { inspectSourceRecordUrl } = require('../scrapers/source-policy');
 const { inspectPublisherPhoto } = require('../scrapers/media-policy');
 const { lookupPanoramax } = require('../media/panoramax');
+const { lookupMapillary } = require('../media/mapillary');
 const { createProviderCache } = require('../media/provider-cache');
 
 const GOOGLE_MAPS_HOST = 'maps.googleapis.com';
@@ -790,6 +791,21 @@ function publicPanoramaxCandidate(candidate) {
   };
 }
 
+function mapillaryViewerUrl(candidate) {
+  if (!candidate?.pictureId || !/^[A-Za-z0-9_-]{1,200}$/.test(candidate.pictureId)) return null;
+  const url = new URL('https://www.mapillary.com/app/');
+  url.searchParams.set('focus', 'photo');
+  url.searchParams.set('photoId', candidate.pictureId);
+  return url.toString();
+}
+
+function publicMapillaryCandidate(candidate) {
+  return {
+    ...candidate,
+    viewerUrl: mapillaryViewerUrl(candidate),
+  };
+}
+
 function errorResult(error) {
   const expected = error instanceof PropertyImageError;
   const headers = { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' };
@@ -832,6 +848,11 @@ function createPropertyImageService(options = {}) {
   const panoramaxCache = options.panoramaxCache || createProviderCache({
     ttlMs: env.PANORAMAX_CACHE_TTL_MS,
     maxEntries: env.PANORAMAX_CACHE_MAX_ENTRIES,
+    now
+  });
+  const mapillaryCache = options.mapillaryCache || createProviderCache({
+    ttlMs: env.MAPILLARY_CACHE_TTL_MS,
+    maxEntries: env.MAPILLARY_CACHE_MAX_ENTRIES,
     now
   });
   const panoramaInFlight = new Map();
@@ -883,6 +904,44 @@ function createPropertyImageService(options = {}) {
     };
   }
 
+  // Mapillary fallback. Same opt-in contract as tryPanoramaxFallback:
+  // only runs when PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK=1. Returns the
+  // first Mapillary candidate near the listing's coordinates, with the
+  // directional/panoramic metadata list. Errors are swallowed so a
+  // Mapillary outage can never turn a Google "no imagery here" answer into
+  // a 5xx.
+  async function tryMapillaryFallback({ coordinates, env, fetchImpl, cache }) {
+    let lookup;
+    try {
+      lookup = await lookupMapillary(coordinates, {
+        fetchImpl,
+        env,
+        radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 200, 100),
+        limit: clampInteger(env.MAPILLARY_RESULT_LIMIT, 1, 10, 10),
+        timeoutMs: clampInteger(env.MAPILLARY_TIMEOUT_MS, 500, 15_000, 8_000),
+        cache
+      });
+    } catch (_) {
+      return null;
+    }
+    if (!lookup || !lookup.candidate) return null;
+    const candidate = publicMapillaryCandidate(lookup.candidate);
+    return {
+      provider: 'mapillary_fallback',
+      primaryProvider: 'Google Street View',
+      primaryUnavailableReason: 'street_view_unavailable',
+      candidate,
+      panoramicMetadata: lookup.panoramicMetadata,
+      directionalSequences: lookup.directionalSequences
+        .map(publicMapillaryCandidate),
+      reason: lookup.reason,
+      queriedRadiusMeters: lookup.queriedRadiusMeters,
+      exactPropertyVerified: false,
+      coordinateBasis: coordinates.basis,
+      coverage: 'community_alternative'
+    };
+  }
+
   async function resolve(req) {
     try {
       if (String(req?.method || '').toUpperCase() !== 'GET') {
@@ -915,35 +974,83 @@ function createPropertyImageService(options = {}) {
           throw new PropertyImageError(422, 'source_coordinates_unavailable', 'Alternative imagery requires validated current source coordinates.');
         }
         return await gate.run(async () => {
-          let lookup;
-          try {
-            lookup = await lookupPanoramax(coordinates, {
-              fetchImpl,
-              radiusMeters: clampInteger(env.PANORAMAX_RADIUS_METERS, 1, 100, 100),
-              limit: clampInteger(env.PANORAMAX_RESULT_LIMIT, 1, 10, 10),
-              timeoutMs: clampInteger(env.PANORAMAX_TIMEOUT_MS, 500, 15_000, 8_000),
-              cache: panoramaxCache
-            });
-          } catch (_) {
-            throw new PropertyImageError(503, 'alternative_provider_unavailable', 'Panoramax coverage lookup is temporarily unavailable.');
+          // Panoramax and Mapillary run in parallel; each provider has its
+          // own cache (provider-keyed) so the lookups do not duplicate work
+          // across the two surfaces. A failure of one provider is isolated —
+          // a Mapillary outage must not turn a successful Panoramax lookup
+          // into a 5xx.
+          const panoramaxOptions = {
+            fetchImpl,
+            radiusMeters: clampInteger(env.PANORAMAX_RADIUS_METERS, 1, 100, 100),
+            limit: clampInteger(env.PANORAMAX_RESULT_LIMIT, 1, 10, 10),
+            timeoutMs: clampInteger(env.PANORAMAX_TIMEOUT_MS, 500, 15_000, 8_000),
+            cache: panoramaxCache
+          };
+          const mapillaryOptions = {
+            fetchImpl,
+            env,
+            radiusMeters: clampInteger(env.MAPILLARY_RADIUS_METERS, 1, 200, 100),
+            limit: clampInteger(env.MAPILLARY_RESULT_LIMIT, 1, 10, 10),
+            timeoutMs: clampInteger(env.MAPILLARY_TIMEOUT_MS, 500, 15_000, 8_000),
+            cache: mapillaryCache
+          };
+          const [panoramaxSettled, mapillarySettled] = await Promise.allSettled([
+            lookupPanoramax(coordinates, panoramaxOptions),
+            lookupMapillary(coordinates, mapillaryOptions),
+          ]);
+          const panoramaxLookup = panoramaxSettled.status === 'fulfilled' ? panoramaxSettled.value : null;
+          const mapillaryLookup = mapillarySettled.status === 'fulfilled' ? mapillarySettled.value : null;
+          // If BOTH providers' lookups rejected (e.g. invalid input), surface
+          // a 503 — the alternatives surface cannot answer the question.
+          if (!panoramaxLookup && !mapillaryLookup) {
+            throw new PropertyImageError(503, 'alternative_provider_unavailable', 'Alternative imagery providers are temporarily unavailable.');
           }
-          const candidate = lookup.candidate ? publicPanoramaxCandidate(lookup.candidate) : null;
-          const directionalSequences = lookup.directionalSequences
-            .filter((entry) => entry.license.displayApproved)
-            .map(publicPanoramaxCandidate);
+          const panoramaxCandidate = panoramaxLookup?.candidate ? publicPanoramaxCandidate(panoramaxLookup.candidate) : null;
+          const mapillaryCandidate = mapillaryLookup?.candidate ? publicMapillaryCandidate(mapillaryLookup.candidate) : null;
+          // Primary candidate stays Panoramax-first for backward compatibility
+          // with the existing UI surface; the merged response also exposes a
+          // `providers` sub-block so callers can render both columns.
+          const primaryCandidate = panoramaxCandidate || mapillaryCandidate;
+          const directionalSequences = [
+            ...(panoramaxLookup?.directionalSequences || [])
+              .filter((entry) => entry.license.displayApproved)
+              .map(publicPanoramaxCandidate),
+            ...(mapillaryLookup?.directionalSequences || [])
+              .map(publicMapillaryCandidate),
+          ];
+          const panoramicMetadata = [
+            ...(panoramaxLookup?.panoramicMetadata || []),
+            ...(mapillaryLookup?.panoramicMetadata || []),
+          ];
           return {
             status: 200,
             headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
             body: {
-              provider: 'Panoramax',
-              available: Boolean(candidate),
-              candidate,
+              provider: 'Panoramax + Mapillary',
+              available: Boolean(primaryCandidate),
+              candidate: primaryCandidate,
               directionalSequences,
-              panoramicMetadata: lookup.panoramicMetadata,
-              reason: candidate ? null : lookup.reason,
-              queriedRadiusMeters: lookup.queriedRadiusMeters,
+              panoramicMetadata,
+              reason: primaryCandidate ? null : (panoramaxLookup?.reason || mapillaryLookup?.reason || 'No alternative imagery providers returned a candidate.'),
+              queriedRadiusMeters: panoramaxLookup?.queriedRadiusMeters || mapillaryLookup?.queriedRadiusMeters || 0,
               exactPropertyVerified: false,
               coordinateBasis: coordinates.basis,
+              providers: {
+                panoramax: {
+                  available: Boolean(panoramaxCandidate),
+                  candidate: panoramaxCandidate,
+                  reason: panoramaxLookup?.reason || null,
+                  queriedRadiusMeters: panoramaxLookup?.queriedRadiusMeters || 0,
+                  error: panoramaxSettled.status === 'rejected' ? String(panoramaxSettled.reason?.message || panoramaxSettled.reason) : null,
+                },
+                mapillary: {
+                  available: Boolean(mapillaryCandidate),
+                  candidate: mapillaryCandidate,
+                  reason: mapillaryLookup?.reason || null,
+                  queriedRadiusMeters: mapillaryLookup?.queriedRadiusMeters || 0,
+                  error: mapillarySettled.status === 'rejected' ? String(mapillarySettled.reason?.message || mapillarySettled.reason) : null,
+                },
+              },
             },
           };
         });
@@ -965,18 +1072,34 @@ function createPropertyImageService(options = {}) {
         }
         if (mode === 'metadata' || mode === 'walkthrough') {
           // Walkthrough has its own wider-radius retry above; the metadata path
-          // additionally falls back to Panoramax when Google has no nearby
-          // outdoor imagery. Off by default — the source swap is visible to
-          // end-users and operators opt in explicitly with
-          // PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK=1.
-          if (mode === 'metadata' && env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1' && coordinates) {
-            const fallback = await tryPanoramaxFallback({ coordinates, env, fetchImpl, cache: panoramaxCache });
-            if (fallback) {
-              return {
-                status: 200,
-                headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
-                body: fallback,
-              };
+          // additionally falls back to Panoramax or Mapillary when Google has
+          // no nearby outdoor imagery. Both fallbacks are off by default —
+          // the source swap is visible to end-users, and operators opt in
+          // explicitly per provider:
+          //   PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK=1
+          //   PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK=1
+          // Panoramax wins when both opt-ins are enabled — the metadata
+          // surface can only return one body, and Panoramax was first.
+          if (mode === 'metadata' && coordinates) {
+            if (env.PROPERTY_IMAGE_GOOGLE_PANORAMAX_FALLBACK === '1') {
+              const fallback = await tryPanoramaxFallback({ coordinates, env, fetchImpl, cache: panoramaxCache });
+              if (fallback) {
+                return {
+                  status: 200,
+                  headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                  body: fallback,
+                };
+              }
+            }
+            if (env.PROPERTY_IMAGE_GOOGLE_MAPILLARY_FALLBACK === '1') {
+              const fallback = await tryMapillaryFallback({ coordinates, env, fetchImpl, cache: mapillaryCache });
+              if (fallback) {
+                return {
+                  status: 200,
+                  headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
+                  body: fallback,
+                };
+              }
             }
           }
           const { _panoId, ...publicMetadata } = panorama;
@@ -1014,7 +1137,7 @@ function createPropertyImageService(options = {}) {
     }
   }
 
-  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight, panoramaxCache };
+  return { resolve, circuit, geocodingCircuit, limiter, gate, panoramaInFlight, panoramaxCache, mapillaryCache };
 }
 
 function writeResult(res, result) {

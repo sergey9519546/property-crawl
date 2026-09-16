@@ -19,13 +19,18 @@ test('alternatives needs no Google key and uses only stored source coordinates',
   let requested;
   const api=service(listing(),async url=>{requested=new URL(url);return response([feature()]);},{GOOGLE_MAPS_API_KEY:''});
   const result=await api.resolve(request('&lat=1&lng=2'));
-  assert.equal(result.status,200);assert.equal(result.body.available,true);assert.equal(result.body.provider,'Panoramax');
+  assert.equal(result.status,200);assert.equal(result.body.available,true);assert.equal(result.body.provider,'Panoramax + Mapillary');
   assert.equal(result.body.coordinateBasis,'source_coordinates');
   assert.match(result.body.candidate.viewerUrl,/^https:\/\/api\.panoramax\.xyz\/\?/);
   assert.equal(new URL(result.body.candidate.viewerUrl).searchParams.get('pic'),'picture-1');
   const bbox=requested.searchParams.get('bbox').split(',').map(Number);
   assert.ok(bbox[0]<-74&&bbox[2]>-74&&bbox[1]<40.7&&bbox[3]>40.7);
   assert.doesNotMatch(requested.toString(),/maps\.googleapis|(?:^|[?&])lat=1|(?:^|[?&])lng=2/);
+  // Mapillary was queried in parallel and returned not_configured (no
+  // token in this fixture); the merged response surfaces the per-provider
+  // reason so callers can distinguish a missing key from real coverage.
+  assert.equal(result.body.providers.panoramax.available,true);
+  assert.match(result.body.providers.mapillary.reason,/not_configured/);
 });
 
 test('unverified, archived, derived, and missing source coordinates fail before provider calls',async()=>{
@@ -41,7 +46,13 @@ test('unverified, archived, derived, and missing source coordinates fail before 
 test('no imagery and provider errors have distinct truthful results',async()=>{
   const empty=await service(listing(),async()=>response([])).resolve(request());
   assert.equal(empty.status,200);assert.equal(empty.body.available,false);assert.match(empty.body.reason,/No explicitly identified/);
-  const failed=await service(listing(),async()=>new Response('failure',{status:503})).resolve(request());
+  // A transport-level failure on BOTH providers (network reset) surfaces
+  // a 503 with the standard "alternative_provider_unavailable" code. A
+  // failure on only one provider is isolated — the other still answers.
+  // Mapillary must be given a token here, otherwise its lookup returns a
+  // graceful { reason: 'not_configured' } object and the route still has
+  // at least one answer, which would surface as 200 instead of 503.
+  const failed=await service(listing(),async()=>{throw new TypeError('network reset');},{MAPILLARY_ACCESS_TOKEN:'TEST'}).resolve(request());
   assert.equal(failed.status,503);assert.equal(failed.body.error,'alternative_provider_unavailable');
 });
 

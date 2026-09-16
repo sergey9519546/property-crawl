@@ -52,7 +52,8 @@ function buildProviderSnapshot({ provider, env = process.env, circuits = {}, cac
 const DEFAULT_PROVIDERS = [
   { id: 'google-geocoding', label: 'Google Maps Geocoding API', role: 'geocoding', keyEnvVar: 'GOOGLE_MAPS_API_KEY' },
   { id: 'google-streetview', label: 'Google Street View Static API', role: 'streetview', keyEnvVar: 'GOOGLE_MAPS_API_KEY' },
-  { id: 'panoramax', label: 'Panoramax (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: null, cacheable: true }
+  { id: 'panoramax', label: 'Panoramax (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: null, cacheable: true },
+  { id: 'mapillary', label: 'Mapillary (community street-level imagery)', role: 'streetview-alternative', keyEnvVar: 'MAPILLARY_ACCESS_TOKEN', cacheable: true }
 ];
 
 function createProviderStatusHandler({
