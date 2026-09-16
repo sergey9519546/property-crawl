@@ -122,3 +122,38 @@ test('FL DOR cadastral sourceFacts.documents surfaces feature + parcel reference
   assert.ok(docs.some((d) => d.kind === 'feature' && d.url.includes('/9999')));
   assert.ok(docs.some((d) => d.kind === 'parcel' && /12-34-56/.test(d.label || '')));
 });
+
+test('CA Controller sourceFacts.documents surfaces reference + parcel references when parcelListUrl is provided', () => {
+  const { CaControllerTaxSaleScraper } = require('../server/scrapers/ca-controller-tax-sale');
+  const scraper = new CaControllerTaxSaleScraper({ directoryUrl: 'https://example.test/sco/directory' });
+  const observedAt = '2026-09-15T12:00:00.000Z';
+  const countyEntry = {
+    county: 'Los Angeles',
+    parcelListUrl: 'https://example.test/county/la/parcels',
+    sourceUrl: 'https://example.test/sco/los-angeles-sale-notice-1234'
+  };
+  const parcel = { parcel: '1234-005-007', address: '1 Test St', city: 'LA', zip: '90001', description: 'Single Family' };
+  const listing = scraper.mapParcelToListing(parcel, { countyEntry, directoryUrl: 'https://example.test/sco/directory', observedAt });
+  assert.ok(listing);
+  const docs = listing.provenance.sourceFacts.documents;
+  assert.ok(Array.isArray(docs));
+  assert.equal(docs.length, 2);
+  const kinds = docs.map((d) => d.kind).sort();
+  assert.deepEqual(kinds, ['parcel', 'reference']);
+  assert.ok(docs.some((d) => d.kind === 'reference' && /1234/.test(d.label || '')));
+  assert.ok(docs.some((d) => d.kind === 'parcel' && d.url === 'https://example.test/county/la/parcels'));
+});
+
+test('CA Controller sourceFacts.documents degrades to a single reference when parcelListUrl is absent', () => {
+  const { CaControllerTaxSaleScraper } = require('../server/scrapers/ca-controller-tax-sale');
+  const scraper = new CaControllerTaxSaleScraper({ directoryUrl: 'https://sco.ca.gov/boe_tax_sales.html' });
+  const observedAt = '2026-09-15T12:00:00.000Z';
+  const countyEntry = { county: 'Alameda', parcelListUrl: null, countyPageUrl: 'https://sco.ca.gov/alameda-sale-notice-77' };
+  const parcel = { parcel: '77-001-002', address: '2 Test St', city: 'OAKLAND', zip: '94601', description: 'Land' };
+  const listing = scraper.mapParcelToListing(parcel, { countyEntry, directoryUrl: 'https://sco.ca.gov/boe_tax_sales.html', observedAt });
+  assert.ok(listing);
+  const docs = listing.provenance.sourceFacts.documents;
+  assert.equal(docs.length, 1);
+  assert.equal(docs[0].kind, 'reference');
+  assert.equal(docs[0].url, 'https://sco.ca.gov/alameda-sale-notice-77');
+});

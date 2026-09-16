@@ -30,6 +30,7 @@
 const BaseScraper = require('./base');
 const { cleanText } = require('./normalization');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { buildDocumentReferences } = require('./document-reference');
 
 const SOURCE_KEY = 'ca-controller-tax-sale';
 const PUBLISHER = 'California State Controller Tax-Defaulted Sales Directory';
@@ -744,7 +745,11 @@ class CaControllerTaxSaleScraper extends BaseScraper {
           parcelListUrl: countyEntry?.parcelListUrl || null,
           countyFips: fips,
           evidenceClass: 'publisher_reported',
-          caveat: 'The Controller directory is a discovery index. County tax-collector notices govern sale terms, redemption status, and bidder requirements.'
+          caveat: 'The Controller directory is a discovery index. County tax-collector notices govern sale terms, redemption status, and bidder requirements.',
+          documents: buildDocumentReferences([
+            sourceUrl && { kind: 'reference', url: sourceUrl, label: `CA Controller sale notice ${parcel.parcel}` },
+            countyEntry?.parcelListUrl && { kind: 'parcel', url: countyEntry.parcelListUrl, label: `${countyName || 'County'} parcel list` }
+          ], { observedAt })
         }
       },
       sourceObservedAt: observedAt
