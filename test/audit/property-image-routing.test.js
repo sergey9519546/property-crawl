@@ -64,6 +64,37 @@ test('auditListing: apartment-style address is rejected by address_geocodable', 
   assert.equal(row.results.address_geocodable.ok, false);
 });
 
+test('auditListing: positive land evidence (no housenumber, publisher-recorded land) is treated as informational, not a failure', () => {
+  // The IRS scraper accepts land-without-a-housenumber listings when the
+  // publisher title indicates positive land evidence (agricultural land,
+  // N acres, etc.). These are real publisher records — the address just
+  // can't be geocoded to a street-level point. The audit treats them as
+  // informational (pass with reason "land_without_housenumber..."), not as
+  // a routing failure.
+  const row = auditListing(listing({
+    source: 'irs',
+    address: 'Summerford Rd, South Charleston, OH 45368',
+    city: 'South Charleston',
+    state: 'OH',
+    zip: '45368',
+    lat: null,
+    lng: null,
+    sourceUrl: 'https://www.irsauctions.gov/ad/agricultural-land-sale-summerford-rd-south-charleston-oh',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'Internal Revenue Service',
+      recordId: 'IRS-OH-AGRICULTURAL-LAND-',
+      sourceFacts: { addressQualification: 'positive_land_evidence' }
+    }
+  }));
+  assert.equal(row.results.address_geocodable.ok, true);
+  assert.equal(row.results.address_geocodable.reason, 'land_without_housenumber_publisher_recorded');
+  // The listing must not count toward the per-row fail tally.
+  assert.equal(row.fail, 0);
+});
+
 test('auditListing: invalid state fails state_valid', () => {
   const row = auditListing(listing({ state: 'ZZ' }));
   assert.equal(row.results.state_valid.ok, false);

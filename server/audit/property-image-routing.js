@@ -128,6 +128,16 @@ function safeHost(url) {
 }
 
 function checkAddressGeocodable(listing) {
+  // The IRS scraper accepts "land without a housenumber" listings when
+  // the publisher title indicates positive land evidence (agricultural
+  // land, N acres, etc.). These are real publisher records — the address
+  // just can't be geocoded to a street-level point. Treat them as
+  // informational, not as a routing failure: the upstream data is honest,
+  // and the property-image route already returns a clear 422 for them.
+  const qualification = listing?.provenance?.sourceFacts?.addressQualification;
+  if (qualification === 'positive_land_evidence') {
+    return { ok: true, reason: 'land_without_housenumber_publisher_recorded' };
+  }
   const observed = sourceObservedAddress(listing);
   if (!observed) {
     return { ok: false, reason: 'address_missing_or_unparseable_for_geocoding' };
