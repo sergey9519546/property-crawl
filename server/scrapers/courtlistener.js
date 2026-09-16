@@ -1,5 +1,7 @@
 // server/scrapers/courtlistener.js
 //
+const { buildDocumentReferences } = require('./document-reference');
+
 // CourtListener / RECAP docket enrichment collector.
 //
 // Source: https://www.courtlistener.com/api/rest/v4/
@@ -313,7 +315,10 @@ class CourtListenerScraper extends BaseScraper {
           pacerCaseId,
           evidenceClass: 'publisher_reported',
           enrichmentSource: true,
-          caveat: 'A court docket is not a property sale. No bid, sale date, or occupancy can be inferred from a filing alone.'
+          caveat: 'A court docket is not a property sale. No bid, sale date, or occupancy can be inferred from a filing alone.',
+          documents: buildDocumentReferences([
+            sourceUrl && { kind: 'docket', url: sourceUrl, label: docketNumber ? `CourtListener docket ${docketNumber}` : `CourtListener docket ${docketId}` }
+          ], { observedAt })
         }
       },
       sourceObservedAt: observedAt

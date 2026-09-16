@@ -26,6 +26,7 @@
 
 const BaseScraper = require('./base');
 const { buildParcelKey, normalizeApn, cleanText } = require('./normalization');
+const { buildDocumentReferences } = require('./document-reference');
 
 const SOURCE_KEY = 'fl-dor-cadastral';
 const PUBLISHER = 'Florida Department of Revenue Property Tax Oversight';
@@ -422,7 +423,11 @@ class FlDorCadastralScraper extends BaseScraper {
             'PHY_ADDR1', 'PHY_CITY', 'PHY_ZIPCD'
           ],
           evidenceClass: 'publisher_reported',
-          caveat: 'Cadastral geometry is not a boundary survey. Assessed values are not market values.'
+          caveat: 'Cadastral geometry is not a boundary survey. Assessed values are not market values.',
+          documents: buildDocumentReferences([
+            sourceUrl && { kind: 'feature', url: sourceUrl, label: `FL DOR ArcGIS feature ${objectId}` },
+            queryUrl && { kind: 'parcel', url: queryUrl, label: `FL DOR query page (parcel ${parcelId || objectId})` }
+          ], { observedAt })
         }
       },
       sourceObservedAt: observedAt
