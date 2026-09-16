@@ -10,6 +10,7 @@ const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge
 const crypto = require('node:crypto');
 const { mapWithConcurrency } = require('./http');
 const { ScraperResponseError } = require('./circuit-breaker');
+const { buildDocumentReferences } = require('./document-reference');
 
 const ALL_HUD_JURISDICTIONS = Object.freeze([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
@@ -233,7 +234,8 @@ class HudHomeScraper extends BaseScraper {
         const page = await this.fetchDataGridPage(state, pageNo);
         pagesFetched += 1;
         sourceRows += page.items.length;
-        const mappedListings = page.items.map((item) => this.mapJsonItem(item, state)).filter(Boolean);
+        const pageUrl = `${this.baseUrl}/Home/DataGrid?state=${encodeURIComponent(state)}&pageNo=${pageNo}&pageSize=${this.pageSize}`;
+      const mappedListings = page.items.map((item) => this.mapJsonItem(item, state, { pageUrl })).filter(Boolean);
         malformedRows += page.items.length - mappedListings.length;
         listings.push(...mappedListings);
         if (!page.hasMore) return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
@@ -283,7 +285,7 @@ class HudHomeScraper extends BaseScraper {
       pagesFetched += 1;
       sourceRows += data.features.length;
       for (const feature of data.features) {
-        const listing = this.mapArcGisFeature(feature, state);
+        const listing = this.mapArcGisFeature(feature, state, { pageUrl: `${this.inventoryUrl}/query?${query}` });
         if (listing) listings.push(listing);
         else malformedRows += 1;
       }
@@ -295,7 +297,23 @@ class HudHomeScraper extends BaseScraper {
     return { state, listings, pagesAttempted, pagesFetched, sourceRows, malformedRows, usedHtmlFallback: false, truncated: false };
   }
 
-  mapArcGisFeature(feature, state) {
+  // Build the sourceFacts.documents array for a HUD listing. Only URLs the
+  // scraper actually observed are surfaced — never construct per-listing
+  // detail URLs that the scraper did not visit.
+  //
+  // Inputs:
+  //   observedAt      timestamp stamped on each document
+  //   pageUrl         the page-level URL the scraper visited that contained
+  //                   this listing (ArcGIS feature-layer page query, HUD
+  //                   HomeStore DataGrid page, etc.). Surfaced as 'parcel'
+  //                   so the document-evidence pipeline can render the
+  //                   publisher's authoritative listing page.
+  //   perListingUrl   a per-listing URL the publisher itself included in the
+  //                   fetched payload (e.g. the JSON item's p.url). When
+  //                   present, surfaced as 'detail'.
+  //
+  // Returns: Array of normalized references (already filtered by buildDocumentReferences).
+  mapArcGisFeature(feature, state, options = {}) {
     const p = feature?.attributes;
     if (!p || Number(p.CASE_STEP_NUMBER) !== 6 || !p.CASE_NUM || !p.ADDRESS) return null;
     const caseNum = String(p.CASE_NUM).trim();
@@ -311,6 +329,10 @@ class HudHomeScraper extends BaseScraper {
     if (!Number.isInteger(objectId) || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
     const sourceUrl = `${this.inventoryUrl}/query?${new URLSearchParams({ where: `CASE_NUM = '${caseNum}'`, outFields: '*', f: 'pjson' })}`;
     const observedAt = new Date().toISOString();
+    const documents = buildDocumentReferences([
+      options.pageUrl && { kind: 'parcel', url: options.pageUrl, label: `HUD REO ${state} feature page (OBJECTID ${objectId})` },
+      options.perListingUrl && { kind: 'detail', url: options.perListingUrl, label: `HUD REO detail (${caseNum})` }
+    ], { observedAt });
     return {
       id: `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`,
       state: String(p.STATE_CODE || state).trim(), county: null, city, zip, address,
@@ -326,7 +348,13 @@ class HudHomeScraper extends BaseScraper {
         origin: 'live', observed: true, publisher: 'HUD eGIS — Single Family REO',
         recordId: caseNum, objectId, caseStepNumber: 6,
         observedStatus: 'publicly listed', sourceLayer: this.inventoryUrl,
-        sourceFacts: { auctionProgram: 'HUD REO', lifecycleStatus: 'publicly_listed', transactionOutcome: null, hasDocuments: null },
+        sourceFacts: {
+          auctionProgram: 'HUD REO',
+          lifecycleStatus: 'publicly_listed',
+          transactionOutcome: null,
+          hasDocuments: documents.length > 0,
+          ...(documents.length > 0 ? { documents } : {})
+        },
         coordinates: { lat, lng, origin: 'publisher_record', verification: 'source_extracted', sourceRecordUrl: sourceUrl, observedAt },
       },
       sourceObservedAt: observedAt,
@@ -340,7 +368,7 @@ class HudHomeScraper extends BaseScraper {
     try { data = JSON.parse(payload); } catch (error) {
       const htmlItems = this.useScrapling
         ? await this.parseCardsWithScrapling(payload, state, url)
-        : this.parseHtmlCards(payload, state);
+        : this.parseHtmlCards(payload, state, url);
       if (htmlItems.length > 0) return { items: htmlItems, hasMore: false };
       const parseError = new Error(`HUD DataGrid returned neither JSON nor property rows for ${state} page ${pageNo}`);
       parseError.cause = error;
@@ -356,7 +384,7 @@ class HudHomeScraper extends BaseScraper {
     try {
       const html = await this.requestText(searchUrl, { headers: this.htmlHeaders() });
       if (this.useScrapling) return this.parseCardsWithScrapling(html, state, searchUrl);
-      return this.parseHtmlCards(html, state);
+      return this.parseHtmlCards(html, state, searchUrl);
     } catch (err) {
       const combined = new Error(`HUD DataGrid and HTML fallback both failed for ${state}: ${this.errorSummary(primaryError)}; ${this.errorSummary(err)}`);
       combined.cause = err;
@@ -404,8 +432,8 @@ class HudHomeScraper extends BaseScraper {
     return error instanceof Error ? error.message : String(error);
   }
 
-  parseHtmlCards(html, state) {
-    return this.parseHtmlCardsNative(html, state);
+  parseHtmlCards(html, state, sourceUrl = null) {
+    return this.parseHtmlCardsNative(html, state, sourceUrl);
   }
 
   async parseCardsWithScrapling(html, state, sourceUrl) {
@@ -426,6 +454,9 @@ class HudHomeScraper extends BaseScraper {
     const id = `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
     const address = String(item.address || '').trim();
     const openingBid = Number.isFinite(item.currentBid) ? item.currentBid : null;
+    const documents = buildDocumentReferences([
+      sourceUrl && { kind: 'parcel', url: sourceUrl, label: `HUD HomeStore ${state} listings index (Scrapling)` }
+    ], { observedAt: new Date().toISOString() });
     return {
       id,
       state,
@@ -449,15 +480,20 @@ class HudHomeScraper extends BaseScraper {
         observed: true,
         publisher: 'HUD HomeStore',
         recordId: caseNum,
-        ...(sourceUrl ? { sourceFacts: { extractedFromUrl: sourceUrl } } : {})
+        sourceFacts: sourceUrl
+          ? (documents.length > 0
+              ? { documents, hasDocuments: true, extractedFromUrl: sourceUrl }
+              : { hasDocuments: false, extractedFromUrl: sourceUrl })
+          : { hasDocuments: false }
       }
     };
   }
 
-  parseHtmlCardsNative(html, state) {
+  parseHtmlCardsNative(html, state, sourceUrl = null) {
     const listings = [];
     const cardRegex = /<tr[^>]*class="[^"]*property-row[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
     let match;
+    const observedAt = new Date().toISOString();
 
     while ((match = cardRegex.exec(html)) !== null) {
       const row = match[1];
@@ -470,6 +506,9 @@ class HudHomeScraper extends BaseScraper {
         const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
         const caseNum = caseMatch[1];
         const id = `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
+        const documents = buildDocumentReferences([
+          sourceUrl && { kind: 'parcel', url: sourceUrl, label: `HUD HomeStore ${state} listings index` }
+        ], { observedAt });
 
         listings.push({
           id,
@@ -489,7 +528,15 @@ class HudHomeScraper extends BaseScraper {
           deposit: null,
           sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
           raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
-          provenance: { origin: 'live', observed: true, publisher: 'HUD HomeStore', recordId: caseNum },
+          provenance: {
+            origin: 'live',
+            observed: true,
+            publisher: 'HUD HomeStore',
+            recordId: caseNum,
+            sourceFacts: documents.length > 0
+              ? { documents, hasDocuments: true }
+              : { hasDocuments: false }
+          },
         });
       }
     }
@@ -497,12 +544,33 @@ class HudHomeScraper extends BaseScraper {
     return listings;
   }
 
-  mapJsonItem(p, state) {
+  mapJsonItem(p, state, options = {}) {
     const caseNum = p.caseNumber || p.CaseNumber || p.id;
     const price = p.listPrice ?? p.ListPrice ?? p.price ?? null;
     const address = p.address || p.Address || `${p.street || ''}, ${p.city || ''}, ${state} ${p.zip || ''}`.trim();
 
     if (!caseNum || !address || !address.replace(/[\s,]/g, '')) return null;
+
+    // Resolve the publisher-supplied per-listing URL only when it points at
+    // the publisher's host. A foreign URL in p.url would let a publisher
+    // payload promote attacker-controlled links into our listing — drop it.
+    const candidatePerListingUrl = typeof p.url === 'string' && p.url.trim()
+      ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`)
+      : null;
+    let perListingUrl = null;
+    if (candidatePerListingUrl) {
+      try {
+        const parsed = new URL(candidatePerListingUrl);
+        if (parsed.hostname === 'www.hudhomestore.gov' || parsed.hostname === 'hudhomestore.gov') {
+          perListingUrl = parsed.toString();
+        }
+      } catch (_) { perListingUrl = null; }
+    }
+    const observedAt = new Date().toISOString();
+    const documents = buildDocumentReferences([
+      options.pageUrl && { kind: 'parcel', url: options.pageUrl, label: `HUD HomeStore ${state} DataGrid page` },
+      perListingUrl && { kind: 'detail', url: perListingUrl, label: `HUD HomeStore detail (${caseNum})` }
+    ], { observedAt });
 
     return {
       id: `HUD-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`,
@@ -530,11 +598,18 @@ class HudHomeScraper extends BaseScraper {
       occupancy: p.occupancy ?? null,
       deposit: p.earnestMoney ?? p.deposit ?? null,
       photoUrl: p.photoUrl ?? p.imageUrl ?? null,
-      sourceUrl: p.url
-        ? (p.url.startsWith('http') ? p.url : `${this.baseUrl}${p.url}`)
-        : `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      sourceUrl: perListingUrl || `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
       raw: JSON.stringify(p),
-      provenance: { origin: 'live', observed: true, publisher: 'HUD HomeStore', recordId: String(caseNum) },
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'HUD HomeStore',
+        recordId: String(caseNum),
+        sourceFacts: {
+          auctionProgram: 'HUD REO',
+          ...(documents.length > 0 ? { documents, hasDocuments: true } : { hasDocuments: false })
+        }
+      },
     };
   }
 
