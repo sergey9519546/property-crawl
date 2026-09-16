@@ -15,6 +15,7 @@
 const BaseScraper = require('./base');
 const { extractDetailImages } = require('./media-policy');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { isPathExcludedForAdapter } = require('../sources/catalog');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -40,6 +41,28 @@ class GsaSurplusScraper extends BaseScraper {
   }
 
   async scrapeFeed() {
+    // Respect catalog-declared robots exclusions. GSA's /our-listing path is
+    // publisher-controlled (robots.txt disallows it) and is intentionally not
+    // part of the live ingestion surface; the scraper refuses to crawl it
+    // unless the operator explicitly overrides with SCRAPER_RESPECT_ROBOTS=0.
+    const excludedPath = '/our-listing';
+    if (isPathExcludedForAdapter('gsa', excludedPath)) {
+      const override = process.env.SCRAPER_RESPECT_ROBOTS === '0';
+      if (!override) {
+        const message = `Refusing to crawl ${this.baseUrl}${excludedPath}: catalog-declared robots exclusion. Set SCRAPER_RESPECT_ROBOTS=0 to override (operator-only).`;
+        console.warn(`[${this.name}] ${message}`);
+        this.lastRunReport = {
+          outcome: 'skipped_robots_exclusion',
+          scope: { endpoint: excludedPath, filters: { assetClass: 'real_estate' } },
+          recordsDiscovered: 0, recordsEmitted: 0, recordsRejected: 0,
+          failures: [], complete: false, fullSweepComplete: false,
+          truncated: false, fixtureFallbackUsed: false,
+          robotsExclusion: { path: excludedPath, source: 'catalog', overrideRequired: true }
+        };
+        return [];
+      }
+      console.warn(`[${this.name}] SCRAPER_RESPECT_ROBOTS=0 set; operator override active for catalog-declared robots exclusion (${excludedPath}).`);
+    }
     return this.executeWithRetry(async () => {
       const listHtml = await this.fetchText(`${this.baseUrl}/our-listing`, 60000);
 

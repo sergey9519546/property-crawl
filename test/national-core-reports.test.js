@@ -1,4 +1,10 @@
 'use strict';
+
+// GSA catalog-declared robots exclusion makes scrapeFeed return [] unless the
+// operator opts in via SCRAPER_RESPECT_ROBOTS=0. Tests that stub fetchText /
+// fetchDetail opt into the bypass so they can exercise the real pipeline.
+process.env.SCRAPER_RESPECT_ROBOTS = '0';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { TreasuryForfeitureScraper } = require('../server/scrapers/treasury');

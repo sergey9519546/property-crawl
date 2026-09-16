@@ -104,7 +104,7 @@ test('end-to-end: with SCRAPLING_SOURCES=gsa, scrapeFeed populates lastRunReport
 <input value='02889' name='tour_property_zipcode'>
 <p>Sale Number: FIXTURE123. Vacant land.</p>`;
 
-  await env({ SCRAPLING_SOURCES: 'gsa' }, async () => {
+  await env({ SCRAPLING_SOURCES: 'gsa', SCRAPER_RESPECT_ROBOTS: '0' }, async () => {
     const scraper = new GsaSurplusScraper();
     assert.equal(scraper.useScrapling, true);
     scraper.fetchText = async (url) => {
@@ -146,7 +146,7 @@ test('end-to-end: with SCRAPLING_SOURCES unset, scrapeFeed falls back to native 
     <article><a href='/asset-details/?property_id=27'>First property</a><span class='property-price'>Current Bid: $100,000</span></article>
   </main>`;
 
-  await env({ SCRAPLING_SOURCES: undefined }, async () => {
+  await env({ SCRAPLING_SOURCES: undefined, SCRAPER_RESPECT_ROBOTS: '0' }, async () => {
     const scraper = new GsaSurplusScraper({ extractImpl: fakeExtract });
     assert.equal(scraper.useScrapling, false);
     scraper.fetchText = async () => listHtml;

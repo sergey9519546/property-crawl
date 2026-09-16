@@ -1,5 +1,10 @@
 'use strict';
 
+// See gsa-scrapling-integration.test.js for why this override is required.
+// The robots guard at the top of scrapeFeed is intentional in production;
+// tests that stub fetch methods opt into the bypass.
+process.env.SCRAPER_RESPECT_ROBOTS = '0';
+
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { GsaSurplusScraper } = require('../server/scrapers/gsa');

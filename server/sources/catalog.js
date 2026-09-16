@@ -124,6 +124,16 @@ function source(entry) {
   if (entry.adapterKey !== null && !SCHEDULED_ADAPTER_KEYS.includes(entry.adapterKey)) {
     throw new TypeError(`Unknown scheduled adapter: ${entry.adapterKey}`);
   }
+  if (entry.robotsExclusion !== undefined) {
+    if (!Array.isArray(entry.robotsExclusion)) {
+      throw new TypeError(`robotsExclusion must be an array of strings: ${entry.id}`);
+    }
+    for (const path of entry.robotsExclusion) {
+      if (typeof path !== 'string' || !path.startsWith('/')) {
+        throw new TypeError(`robotsExclusion paths must start with '/': ${entry.id} -> ${path}`);
+      }
+    }
+  }
   const status = entry.status || SOURCE_STATUS_BY_ID[entry.id];
   if (!status || !STATUSES.has(status)) {
     throw new TypeError(`Missing or invalid source status: ${entry.id}`);
@@ -131,6 +141,7 @@ function source(entry) {
   return Object.freeze({
     ...entry,
     status,
+    robotsExclusion: Object.freeze([...(entry.robotsExclusion || [])]),
     workflow: Object.freeze({ ...entry.workflow, steps: Object.freeze([...entry.workflow.steps]) }),
     requiredEvidence: Object.freeze([...entry.requiredEvidence])
   });
@@ -150,7 +161,7 @@ const SOURCE_CATALOG = Object.freeze([
   source({ id: 'va-vrm', label: 'VA REO / VRM Properties', category: 'government_reo', role: 'opportunity', coverage: 'Nationwide VA-owned property marketed by its contractor; inventory varies.', discoveryUrl: 'https://www.vrmproperties.com/', access: 'public', adapterKey: 'va', workflow: { primary: 'Use VRM public property search and exact listing.', fallback: 'Contact the named listing broker or property manager.', cadenceHours: 24, steps: ['Search the target geography.', 'Store exact VRM property URL.', 'Verify offer instructions and status with the publisher.'] }, requiredEvidence: [...recordEvidence, 'VA/VRM property identifier'], notes: 'Registration or broker involvement may be required to submit an offer.' }),
   source({ id: 'irs-auctions', label: 'IRS Auctions', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide IRS seized-real-property auction notices; low and irregular volume.', discoveryUrl: 'https://www.irsauctions.gov/', access: 'public', adapterKey: 'irs', workflow: { primary: 'Browse auction notices and use the exact auction/ad page.', fallback: 'Contact the named IRS sale contact in the official notice.', cadenceHours: 12, steps: ['Filter for real property.', 'Capture legal description, date, deposit, and terms.', 'Recheck before bid because notices can change.'] }, requiredEvidence: [...recordEvidence, 'official IRS notice or auction ID'], notes: 'Do not infer lien priority or condition from the listing alone.' }),
   source({ id: 'treasury-forfeiture', label: 'Treasury Forfeiture Real Property', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide Treasury forfeited real property, commonly marketed through a contractor.', discoveryUrl: 'https://www.treasury.gov/auctions/treasury/rp/realprop.shtml', access: 'public', adapterKey: 'treasury', workflow: { primary: 'Use the Treasury real-property page and linked offering record.', fallback: 'Use the named disposal contractor and preserve its offering URL.', cadenceHours: 12, steps: ['Review active real-property offerings.', 'Capture linked property record and terms.', 'Confirm closing, title, and occupancy terms.'] }, requiredEvidence: [...recordEvidence, 'forfeiture sale notice'], notes: 'An auction collection page is discovery, not evidence for an individual property.' }),
-  source({ id: 'gsa-real-estate-sales', label: 'GSA Real Estate Sales', category: 'government_surplus', role: 'opportunity', coverage: 'Nationwide federal surplus real property; sparse, episodic inventory.', discoveryUrl: 'https://realestatesales.gov/', access: 'public', adapterKey: 'gsa', workflow: { primary: 'Use GSA search and the exact asset-details page.', fallback: 'Contact the GSA sales contact named in the offering.', cadenceHours: 24, steps: ['Filter for real property.', 'Capture asset-details URL and solicitation documents.', 'Confirm bid method and deadlines.'] }, requiredEvidence: [...recordEvidence, 'GSA property or solicitation ID'], notes: 'GSA personal-property auction APIs are not substitutes for real-estate records.' }),
+  source({ id: 'gsa-real-estate-sales', label: 'GSA Real Estate Sales', category: 'government_surplus', role: 'opportunity', coverage: 'Nationwide federal surplus real property; sparse, episodic inventory.', discoveryUrl: 'https://realestatesales.gov/', access: 'public', adapterKey: 'gsa', robotsExclusion: ['/our-listing'], workflow: { primary: 'Use GSA search and the exact asset-details page.', fallback: 'Contact the GSA sales contact named in the offering.', cadenceHours: 24, steps: ['Filter for real property.', 'Capture asset-details URL and solicitation documents.', 'Confirm bid method and deadlines.'] }, requiredEvidence: [...recordEvidence, 'GSA property or solicitation ID'], notes: 'GSA personal-property auction APIs are not substitutes for real-estate records. The /our-listing path is disallowed by robots.txt and is not part of the live ingestion surface; the scraper should refuse to crawl it unless SCRAPER_RESPECT_ROBOTS=0 (operator override).' }),
   source({ id: 'us-marshals', label: 'U.S. Marshals Asset Forfeiture', category: 'government_seizure', role: 'opportunity', coverage: 'Nationwide DOJ forfeited real property; generally brokered and irregular.', discoveryUrl: 'https://www.usmarshals.gov/what-we-do/asset-forfeiture', access: 'public', adapterKey: 'marshals', workflow: { primary: 'Start at USMS, then use the named broker or RealLook property record.', fallback: 'Contact the assigned contractor or broker.', cadenceHours: 24, steps: ['Locate real-property disposition information.', 'Capture the broker record and USMS provenance.', 'Verify status with the named representative.'] }, requiredEvidence: [...recordEvidence, 'USMS or designated-contractor provenance'], notes: 'USMS states that most real property is sold through licensed brokers and its contractor.' }),
   source({ id: 'fdic-asset-sales', label: 'FDIC Asset Sales', category: 'government_reo', role: 'opportunity', coverage: 'Failed-bank real estate and property sales; current inventory may be empty.', discoveryUrl: 'https://www.fdic.gov/asset-sales/real-estate-and-property-sales', access: 'public', adapterKey: null, workflow: { primary: 'Use FDIC current real-estate/property sales and bargain-property pages.', fallback: 'Use FDIC Asset Sales contact and event calendar.', cadenceHours: 24, steps: ['Check current offerings.', 'Keep current listings separate from historical sales data.', 'Preserve FDIC page and any offering documents.'] }, requiredEvidence: [...recordEvidence, 'current FDIC offering document'], notes: 'The existing FDIC scraper is historical/fixture-oriented and is intentionally not scheduled as live opportunity ingestion.' }),
   source({ id: 'ncua-amac', label: 'NCUA AMAC Loan Sales & Available Real Estate', category: 'government_reo', role: 'opportunity', coverage: 'Failed or conserved credit-union asset sales; infrequent and often pooled.', discoveryUrl: 'https://ncua.gov/support-services/conservatorships-liquidations/loan-sales-available-real-estate', access: 'account', adapterKey: null, workflow: { primary: 'Monitor official NCUA sale page and interested-party sign-up.', fallback: 'Contact NCUA AMAC for current sale process.', cadenceHours: 168, steps: ['Check the scheduled asset-sales table.', 'Register or execute confidentiality documents when required.', 'Treat loan pools and individual real estate as distinct inventory.'] }, requiredEvidence: ['official NCUA sale page', 'sale-specific terms', 'qualified-bidder documentation when required'], notes: 'NCUA says a confidentiality agreement and deposit can be required; no current sale should be represented as inventory.' }),
@@ -243,4 +254,30 @@ function validateJurisdictionDiscoveryUrl(value) {
   return { isValid: true, error: null, url: url.toString() };
 }
 
-module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl };
+function getRobotsExclusionForAdapter(adapterKey) {
+  if (typeof adapterKey !== 'string') return null;
+  for (const entry of SOURCE_CATALOG) {
+    if (entry.adapterKey === adapterKey) {
+      return [...(entry.robotsExclusion || [])];
+    }
+  }
+  return null;
+}
+
+function isPathExcludedForAdapter(adapterKey, path) {
+  if (typeof adapterKey !== 'string' || typeof path !== 'string') return false;
+  const exclusions = getRobotsExclusionForAdapter(adapterKey);
+  if (!exclusions || exclusions.length === 0) return false;
+  // Path matching is prefix-based: a registered exclusion of '/our-listing'
+  // matches both '/our-listing' and '/our-listing/page/2'. This is more
+  // permissive than robots.txt (which uses Allow/Disallow pattern matching),
+  // but the catalog only records confirmed publisher exclusions and a prefix
+  // match is the safe default.
+  for (const excluded of exclusions) {
+    if (path === excluded) return true;
+    if (path.startsWith(`${excluded}/`)) return true;
+  }
+  return false;
+}
+
+module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl, getRobotsExclusionForAdapter, isPathExcludedForAdapter };

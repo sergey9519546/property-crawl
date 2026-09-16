@@ -1,3 +1,9 @@
+// These tests stub the GSA scraper's fetch methods; the robots exclusion
+// guard at the top of scrapeFeed would otherwise short-circuit before any
+// fetch happens. The SCRAPER_RESPECT_ROBOTS=0 override lets tests exercise
+// the real fetch pipeline while production keeps the guard active.
+process.env.SCRAPER_RESPECT_ROBOTS = '0';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { GsaSurplusScraper } = require('../server/scrapers/gsa');
