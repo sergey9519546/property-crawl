@@ -337,6 +337,24 @@ const scheduler = new IngestionScheduler({
       }
     }
     recordSourceRun(sourceId, run);
+
+    // Fire saved-search alerts for newly accepted listings (the core of the
+    // "saved-search alerts" feature). This runs for the configured workspace
+    // identity so that persisted alert_matches become visible via
+    // /api/alerts/matches. Non-fatal: a failure here must never break ingestion.
+    if (Array.isArray(run.listings) && run.listings.length > 0) {
+      try {
+        const { runAlertsForUser } = require('../intelligence/alerts-runner');
+        const wsId = process.env.PROPERTY_WORKSPACE_ID || 'operator';
+        const userId = `workspace:${wsId}`;
+        const alertResult = await runAlertsForUser({ userId, listings: run.listings, database: db });
+        if (alertResult && alertResult.totalNewMatches > 0) {
+          console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);
+        }
+      } catch (alertErr) {
+        console.warn('[Alerts] Saved search alert processing failed (non-fatal):', alertErr && alertErr.message);
+      }
+    }
   },
 });
 

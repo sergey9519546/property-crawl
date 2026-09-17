@@ -85,4 +85,4 @@ Recommendation: deterministic
 VERIFICATION RESULT: 14/17 Suites Passed (3 Failed)
 ```
 
-The 3 failures (suites 9-11) are pre-existing infrastructure tests requiring `next` in node_modules — unrelated to the agent system. All 17 agent-system and domain suites pass.
+The 3 failures (suites 9-11) are pre-existing infrastructure tests requiring `next` in node_modules — unrelated to the agent system. Of the 17 suites in scope, the 14 runnable ones all pass; the remaining 3 infra suites could not run (missing `next`) and are counted as failed, not skipped. An earlier draft phrase "All 17 ... pass" was inaccurate; this paragraph is the authoritative wording.

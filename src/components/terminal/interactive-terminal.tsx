@@ -39,6 +39,7 @@ import { inspectPublisherPhoto } from "@server/scrapers/media-policy";
 import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
 import { sourceDisplayText } from "@/lib/source-display";
 import type { SavedSearch } from "@/lib/saved-searches";
+import { getUnreadAlertCount } from "@/lib/saved-searches";
 import { CaseAction } from "@/components/research/case-action";
 
 type TerminalFilters = {
@@ -127,6 +128,27 @@ export function InteractiveTerminal() {
   const workspaceRecordsRef = React.useRef<PropertyListing[]>([]);
   const refreshGeneration = React.useRef(0);
   const [urlReady, setUrlReady] = useState(false);
+  const [unreadAlertCount, setUnreadAlertCount] = useState(0);
+
+  const refreshUnreadAlerts = React.useCallback(async () => {
+    try {
+      const n = await getUnreadAlertCount();
+      setUnreadAlertCount(Number.isFinite(n) ? n : 0);
+    } catch {
+      // 401/503 or network: leave previous value; badge will be 0 or stale until unlock.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUnreadAlerts();
+  }, [refreshUnreadAlerts]);
+
+  // Refresh badge when alerts modal closes (a run may have created matches).
+  useEffect(() => {
+    if (!isAlertsOpen) {
+      void refreshUnreadAlerts();
+    }
+  }, [isAlertsOpen, refreshUnreadAlerts]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -493,6 +515,11 @@ export function InteractiveTerminal() {
             >
               <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
               <span>Saved searches</span>
+              {unreadAlertCount > 0 && (
+                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
+                  {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
+                </span>
+              )}
             </button>
 
             <Link

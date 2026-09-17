@@ -1,0 +1,158 @@
+{
+  "skills": [
+    {
+      "name": "agent-verification",
+      "description": "",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "undefined"
+      ],
+      "dir": ".agents/skills/agent-verification",
+      "file": ".agents/skills/agent-verification/SKILL.md"
+    },
+    {
+      "name": "deal-scoring",
+      "description": "",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "undefined"
+      ],
+      "dir": ".agents/skills/deal-scoring",
+      "file": ".agents/skills/deal-scoring/SKILL.md"
+    },
+    {
+      "name": "foreclosure-title-intelligence",
+      "description": "Specialized skill for real estate auction underwriting, title risk arbitration,\njunior lien survival analysis, 50-state statutory redemption periods, and cash-to-close fee schedules.",
+      "domain": "real-estate-intelligence",
+      "version": "v1",
+      "trigger": [
+        "50-state",
+        "analysis",
+        "arbitration",
+        "auction",
+        "cash-to-close",
+        "estate",
+        "foreclosure-title-intelligence",
+        "junior",
+        "lien",
+        "periods",
+        "real",
+        "redemption",
+        "risk",
+        "schedules",
+        "skill",
+        "specialized",
+        "statutory",
+        "survival",
+        "title",
+        "underwriting"
+      ],
+      "dir": ".agents/skills/foreclosure-title-intelligence",
+      "file": ".agents/skills/foreclosure-title-intelligence/SKILL.md"
+    },
+    {
+      "name": "google-cloud-auth-verification",
+      "description": "Mandatory Step 0 pre-flight execution order and authentication verification",
+      "domain": "general",
+      "version": "v2",
+      "trigger": [
+        "authentication",
+        "execution",
+        "google-cloud-auth-verification",
+        "mandatory",
+        "order",
+        "pre-flight",
+        "step",
+        "verification"
+      ],
+      "dir": ".agents/skills/google-cloud-auth-verification",
+      "file": ".agents/skills/google-cloud-auth-verification/SKILL.md"
+    },
+    {
+      "name": "listing-normalization",
+      "description": "",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "undefined"
+      ],
+      "dir": ".agents/skills/listing-normalization",
+      "file": ".agents/skills/listing-normalization/SKILL.md"
+    },
+    {
+      "name": "property-scraper-engineering",
+      "description": "Patterns and best practices for building resilient government auction scrapers,\ncounty docket crawlers, circuit breaker protection, WAF bypass, and anti-poisoning data gates.",
+      "domain": "data-engineering",
+      "version": "v1",
+      "trigger": [
+        "anti-poisoning",
+        "auction",
+        "best",
+        "breaker",
+        "building",
+        "bypass",
+        "circuit",
+        "county",
+        "crawlers",
+        "data",
+        "docket",
+        "gates",
+        "government",
+        "patterns",
+        "practices",
+        "property-scraper-engineering",
+        "protection",
+        "resilient",
+        "scrapers"
+      ],
+      "dir": ".agents/skills/property-scraper-engineering",
+      "file": ".agents/skills/property-scraper-engineering/SKILL.md"
+    },
+    {
+      "name": "schema-mapping",
+      "description": "Guides the process of analyzing, mapping, and documenting transformations",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "analyzing",
+        "documenting",
+        "guides",
+        "mapping",
+        "process",
+        "schema-mapping",
+        "transformations"
+      ],
+      "dir": ".agents/skills/schema-mapping",
+      "file": ".agents/skills/schema-mapping/SKILL.md"
+    },
+    {
+      "name": "skill-repair",
+      "description": "Use this to fix and re-install agent skills that have failed installation.\nThis skill provides the necessary context and permissions to surgically update\nthe `manifest.json` after a fix has been applied.",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "agent",
+        "applied",
+        "context",
+        "failed",
+        "installation",
+        "json",
+        "manifest",
+        "necessary",
+        "permissions",
+        "provides",
+        "re-install",
+        "skill",
+        "skill-repair",
+        "skills",
+        "surgically",
+        "update"
+      ],
+      "dir": ".agents/skills/skill-repair",
+      "file": ".agents/skills/skill-repair/SKILL.md"
+    }
+  ],
+  "digest": "86ab091b79d29589e9bea2c8ef83d7501964196cd476c39fee07793e276bb0ca"
+}

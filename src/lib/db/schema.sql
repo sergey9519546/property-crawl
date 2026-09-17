@@ -117,7 +117,36 @@ CREATE TABLE IF NOT EXISTS saved_deals (
     UNIQUE(user_id, listing_id)
 );
 
--- 4. AI Deal Analysis & Notice Cache Table
+-- 4. Saved Searches & Alert History
+--
+-- A saved search is a filter the user wants to be notified about. The
+-- filters are stored as a JSONB blob so the alerts engine can interpret
+-- them with the same predicate as live-ingestion filtering.
+-- alert_matches records every (search, listing) pair the engine flagged
+-- so we can show "you have 3 unread matches" without re-running.
+CREATE TABLE IF NOT EXISTS saved_searches (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id VARCHAR(128) NOT NULL,
+    label VARCHAR(120),
+    filters JSONB NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    last_run_at TIMESTAMPTZ,
+    last_match_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS alert_matches (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    search_id UUID NOT NULL REFERENCES saved_searches(id) ON DELETE CASCADE,
+    user_id VARCHAR(128) NOT NULL,
+    listing_id VARCHAR(64) NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    matched_at TIMESTAMPTZ DEFAULT NOW(),
+    read_at TIMESTAMPTZ,
+    UNIQUE(search_id, listing_id)
+);
+
+-- 5. AI Deal Analysis & Notice Cache Table
 CREATE TABLE IF NOT EXISTS ai_cache (
     content_hash VARCHAR(64) PRIMARY KEY,
     prompt_type VARCHAR(32) NOT NULL,
@@ -157,6 +186,9 @@ CREATE INDEX IF NOT EXISTS idx_listings_listing_date ON listings(listing_date);
 -- GiST spatial index: required for ST_DWithin radius queries to use index scan.
 CREATE INDEX IF NOT EXISTS idx_listings_geog ON listings USING GIST(geog);
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
+CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_id) WHERE read_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alert_matches_listing ON alert_matches(listing_id);
 
 -- ==========================================================
 -- Migration 002: Spatial Radius Search Function
@@ -181,7 +213,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         l.id,
         l.address,
         l.city,

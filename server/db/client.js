@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { randomUUID: cryptoRandomUUID } = require('crypto');
 const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
@@ -341,6 +342,8 @@ class DatabaseClient {
       sources: {},
       listings: [],
       savedDeals: new Map(), // userId -> Set of listingIds
+      savedSearches: new Map(), // searchId -> { userId, label, filters, isActive, createdAt, updatedAt, lastRunAt, lastMatchCount }
+      alertMatches: new Map(),   // matchId -> { searchId, userId, listingId, matchedAt, readAt }
       aiCache: new Map(),    // hash -> cached object
       logs: []
     };
@@ -842,6 +845,234 @@ class DatabaseClient {
       this.inMemoryData.savedDeals.get(userId).delete(listingId);
     }
     return true;
+  }
+
+  // Saved searches — a saved filter the user wants to be notified
+  // about. The shape mirrors what the alerts engine in
+  // server/intelligence/saved-search-alerts.js consumes.
+
+  async createSavedSearch(userId, { label, filters }) {
+    if (!userId || typeof userId !== 'string') throw new Error('userId required');
+    if (!filters || typeof filters !== 'object') throw new Error('filters required');
+    const safeLabel = typeof label === 'string' ? label.trim().slice(0, 120) : null;
+    const nowIso = new Date().toISOString();
+    if (this.isPg) {
+      const res = await this.pool.query(
+        `INSERT INTO saved_searches (user_id, label, filters, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3::jsonb, TRUE, NOW(), NOW())
+         RETURNING id, user_id, label, filters, is_active, last_run_at, last_match_count, created_at, updated_at`,
+        [userId, safeLabel, JSON.stringify(filters)]
+      );
+      const row = res.rows[0];
+      return this._serializeSavedSearch(row);
+    }
+    const id = cryptoRandomUUID();
+    const record = {
+      id,
+      userId,
+      label: safeLabel,
+      filters,
+      isActive: true,
+      lastRunAt: null,
+      lastMatchCount: 0,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+    this.inMemoryData.savedSearches.set(id, record);
+    return record;
+  }
+
+  async listSavedSearches(userId, { includeInactive = false } = {}) {
+    if (this.isPg) {
+      const sql = includeInactive
+        ? `SELECT * FROM saved_searches WHERE user_id = $1 ORDER BY created_at DESC`
+        : `SELECT * FROM saved_searches WHERE user_id = $1 AND is_active = TRUE ORDER BY created_at DESC`;
+      const res = await this.pool.query(sql, [userId]);
+      return res.rows.map((row) => this._serializeSavedSearch(row));
+    }
+    const out = [];
+    for (const record of this.inMemoryData.savedSearches.values()) {
+      if (record.userId !== userId) continue;
+      if (!includeInactive && !record.isActive) continue;
+      out.push(record);
+    }
+    out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return out;
+  }
+
+  async getSavedSearchById(userId, id) {
+    if (this.isPg) {
+      const res = await this.pool.query(
+        `SELECT * FROM saved_searches WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      return res.rows[0] ? this._serializeSavedSearch(res.rows[0]) : null;
+    }
+    const record = this.inMemoryData.savedSearches.get(id);
+    if (!record || record.userId !== userId) return null;
+    return record;
+  }
+
+  async updateSavedSearch(userId, id, updates) {
+    const record = await this.getSavedSearchById(userId, id);
+    if (!record) return null;
+    const allowed = {};
+    if (typeof updates.label === 'string') allowed.label = updates.label.trim().slice(0, 120);
+    if (typeof updates.isActive === 'boolean') allowed.isActive = updates.isActive;
+    if (updates.filters && typeof updates.filters === 'object') allowed.filters = updates.filters;
+    if (this.isPg) {
+      const fields = [];
+      const params = [];
+      let i = 1;
+      if ('label' in allowed) { fields.push(`label = $${i++}`); params.push(allowed.label); }
+      if ('isActive' in allowed) { fields.push(`is_active = $${i++}`); params.push(allowed.isActive); }
+      if ('filters' in allowed) { fields.push(`filters = $${i++}::jsonb`); params.push(JSON.stringify(allowed.filters)); }
+      if (!fields.length) return record;
+      fields.push(`updated_at = NOW()`);
+      params.push(id, userId);
+      const res = await this.pool.query(
+        `UPDATE saved_searches SET ${fields.join(', ')} WHERE id = $${i++} AND user_id = $${i++} RETURNING *`,
+        params
+      );
+      return res.rows[0] ? this._serializeSavedSearch(res.rows[0]) : null;
+    }
+    const stored = this.inMemoryData.savedSearches.get(id);
+    Object.assign(stored, allowed, { updatedAt: new Date().toISOString() });
+    return stored;
+  }
+
+  async deleteSavedSearch(userId, id) {
+    if (this.isPg) {
+      // ON DELETE CASCADE on alert_matches cleans up the join table.
+      const res = await this.pool.query(
+        `DELETE FROM saved_searches WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      return res.rowCount > 0;
+    }
+    const record = this.inMemoryData.savedSearches.get(id);
+    if (!record || record.userId !== userId) return false;
+    this.inMemoryData.savedSearches.delete(id);
+    // Cascade: drop alert_matches for this search
+    for (const [matchId, match] of this.inMemoryData.alertMatches) {
+      if (match.searchId === id) this.inMemoryData.alertMatches.delete(matchId);
+    }
+    return true;
+  }
+
+  async recordAlertMatches(userId, searchId, listingIds) {
+    if (!Array.isArray(listingIds) || listingIds.length === 0) return [];
+    if (this.isPg) {
+      const ids = [];
+      for (const listingId of listingIds) {
+        const res = await this.pool.query(
+          `INSERT INTO alert_matches (search_id, user_id, listing_id, matched_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (search_id, listing_id) DO NOTHING
+           RETURNING id, search_id, user_id, listing_id, matched_at, read_at`,
+          [searchId, userId, listingId]
+        );
+        if (res.rows[0]) ids.push(this._serializeAlertMatch(res.rows[0]));
+      }
+      await this.pool.query(
+        `UPDATE saved_searches SET last_run_at = NOW(), last_match_count = $2 WHERE id = $1`,
+        [searchId, ids.length]
+      );
+      return ids;
+    }
+    const nowIso = new Date().toISOString();
+    const out = [];
+    for (const listingId of listingIds) {
+      // Idempotency key: (searchId, listingId)
+      const existing = [...this.inMemoryData.alertMatches.values()].find(
+        (m) => m.searchId === searchId && m.listingId === listingId
+      );
+      if (existing) { out.push(existing); continue; }
+      const match = {
+        id: cryptoRandomUUID(),
+        searchId,
+        userId,
+        listingId,
+        matchedAt: nowIso,
+        readAt: null
+      };
+      this.inMemoryData.alertMatches.set(match.id, match);
+      out.push(match);
+    }
+    const stored = this.inMemoryData.savedSearches.get(searchId);
+    if (stored) {
+      stored.lastRunAt = nowIso;
+      stored.lastMatchCount = out.length;
+      stored.updatedAt = nowIso;
+    }
+    return out;
+  }
+
+  async listAlertMatches(userId, { onlyUnread = false, limit = 100 } = {}) {
+    if (this.isPg) {
+      const sql = onlyUnread
+        ? `SELECT * FROM alert_matches WHERE user_id = $1 AND read_at IS NULL ORDER BY matched_at DESC LIMIT $2`
+        : `SELECT * FROM alert_matches WHERE user_id = $1 ORDER BY matched_at DESC LIMIT $2`;
+      const res = await this.pool.query(sql, [userId, Math.max(1, Math.min(500, limit))]);
+      return res.rows.map((row) => this._serializeAlertMatch(row));
+    }
+    const out = [];
+    for (const match of this.inMemoryData.alertMatches.values()) {
+      if (match.userId !== userId) continue;
+      if (onlyUnread && match.readAt) continue;
+      out.push(match);
+    }
+    out.sort((a, b) => b.matchedAt.localeCompare(a.matchedAt));
+    return out.slice(0, Math.max(1, Math.min(500, limit)));
+  }
+
+  async markAlertMatchesRead(userId, matchIds) {
+    if (!Array.isArray(matchIds) || matchIds.length === 0) return 0;
+    const nowIso = new Date().toISOString();
+    if (this.isPg) {
+      const res = await this.pool.query(
+        `UPDATE alert_matches SET read_at = NOW()
+         WHERE user_id = $1 AND id = ANY($2::uuid[]) AND read_at IS NULL`,
+        [userId, matchIds]
+      );
+      return res.rowCount;
+    }
+    let count = 0;
+    for (const id of matchIds) {
+      const match = this.inMemoryData.alertMatches.get(id);
+      if (match && match.userId === userId && !match.readAt) {
+        match.readAt = nowIso;
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  _serializeSavedSearch(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      userId: row.user_id,
+      label: row.label,
+      filters: row.filters,
+      isActive: row.is_active,
+      lastRunAt: row.last_run_at,
+      lastMatchCount: row.last_match_count,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  _serializeAlertMatch(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      searchId: row.search_id,
+      userId: row.user_id,
+      listingId: row.listing_id,
+      matchedAt: row.matched_at,
+      readAt: row.read_at
+    };
   }
 
   async getAiCache(contentHash) {
