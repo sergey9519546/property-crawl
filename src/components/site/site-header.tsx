@@ -240,7 +240,15 @@ export function SiteHeader() {
             onMouseEnter={() => setOpen(null)}
             className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#1E293B]"
           >
-            Open workspace
+            Open listings
+          </Link>
+          <Link
+            href="/sign-in"
+            onMouseEnter={() => setOpen(null)}
+            title="Shared operator key — private beta"
+            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-3 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-white"
+          >
+            Operator key
           </Link>
         </div>
 
@@ -352,7 +360,14 @@ export function SiteHeader() {
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
               >
-                Open workspace
+                Open listings
+              </Link>
+              <Link
+                href="/sign-in"
+                onClick={() => setMobileOpen(false)}
+                className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-4 text-[14px] font-semibold text-[#374151]"
+              >
+                Operator key
               </Link>
             </div>
           </SheetContent>

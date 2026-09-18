@@ -47,6 +47,28 @@ test('marketing nav points at shipped routes, not phantom product names', () => 
   assert.match(header, /href: "\/sign-in"/);
 });
 
+test('homepage marketing does not ship phantom product names or accuracy guarantees', () => {
+  for (const rel of [
+    'src/components/site/gtm.tsx',
+    'src/components/site/ai-knows.tsx',
+    'src/components/site/site-footer.tsx',
+  ]) {
+    const text = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+    assert.doesNotMatch(text, /Deal Stacks/);
+    assert.doesNotMatch(text, /Shadow Mode/);
+    assert.doesNotMatch(text, /Prophecy/);
+    assert.doesNotMatch(text, /accuracy report/i);
+  }
+  const aiKnows = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/ai-knows.tsx'), 'utf8');
+  assert.match(aiKnows, /Evidence first/i);
+  assert.match(aiKnows, /optional/i);
+});
+
+test('/workspace index redirects to the private review queue', () => {
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src/app/workspace/page.tsx'), 'utf8');
+  assert.match(page, /redirect\("\/workspace\/documents-review"\)/);
+});
+
 test('contact page does not promise human replies without delivery', () => {
   const slug = fs.readFileSync(path.join(__dirname, '..', 'src/app/[slug]/page.tsx'), 'utf8');
   assert.doesNotMatch(slug, /Expect a response before public launch/);

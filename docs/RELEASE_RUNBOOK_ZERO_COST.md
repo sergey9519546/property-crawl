@@ -17,6 +17,15 @@ discovery canaries require PostgreSQL (optional upgrade boundary).
 
 ## Local production verification (this machine)
 
+Verified on a local production stack (`start:production` demo mode):
+
+- `http://127.0.0.1:3100/api/health` → 200
+- `/listings`, `/sources`, `/sign-in` → 200
+- `/workspace` → 307 to `/workspace/documents-review`
+- `/api/listings` → seed inventory JSON
+- CSP + `X-Frame-Options: SAMEORIGIN` present on Next responses
+- Homepage copy: no Deal Stacks / Prophecy / accuracy-report claims
+
 ```powershell
 npm run quality:report
 npm run smoke:production

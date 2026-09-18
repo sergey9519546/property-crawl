@@ -5,7 +5,7 @@ import { GsapReveal } from "./gsap-reveal";
 import { Play } from "lucide-react";
 import { VideoModal } from "./video-modal";
 
-const TAGS = ["ARVs", "Visuals", "Deal Stacks"];
+const TAGS = ["Notice facts", "Source evidence", "AI parse (optional)"];
 
 export function AiKnows() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
@@ -16,16 +16,16 @@ export function AiKnows() {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
           <GsapReveal>
             <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-              AI that reads the legal notice. AI that knows the catch.
+              Evidence first. AI notice parsing when configured.
             </h2>
           </GsapReveal>
           <GsapReveal delay={0.1}>
             <p className="text-[16px] leading-[1.6] text-[#4B5563] sm:text-[18px]">
-              Most distress deals are buried in legal prose &mdash; statutory
-              publication, certified funds, redemption periods, confirmation-of-sale
-              delays. PerfectProperty reads the notice the way an experienced
-              investor would, and surfaces the parts that matter before you wire
-              the deposit.
+              Distress deals hide in legal prose — statutory publication, certified
+              funds, redemption periods, confirmation-of-sale delays. The workspace
+              keeps published source facts separate from models. AI notice extraction
+              is optional and runs only when an API key is configured on the server;
+              it never replaces source evidence or invents inventory.
             </p>
           </GsapReveal>
         </div>

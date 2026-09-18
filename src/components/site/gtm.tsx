@@ -39,12 +39,12 @@ const TEAMS: Team[] = [
     key: "marketing",
     label: "Marketing",
     icon: Megaphone,
-    desc: "Create compelling, on-brand deal memos, ARV models, and visuals without the wait. Move fast to drive leads, boost adoption, and tell your market's story.",
+    desc: "Turn source-observed listing facts into clear deal notes and shareable evidence packets. What ships today is structured research, not automated brand campaigns.",
     chips: [
-      { label: "Deal memos", icon: FileText },
-      { label: "ARV visuals", icon: ImageIcon },
-      { label: "Brand kit", icon: Sparkles },
-      { label: "Social sizzle", icon: Layers },
+      { label: "Deal notes", icon: FileText },
+      { label: "Source photos", icon: ImageIcon },
+      { label: "Evidence packet", icon: Sparkles },
+      { label: "Share-ready export", icon: Layers },
     ],
     tint: "#e7faef",
   },
@@ -52,12 +52,12 @@ const TEAMS: Team[] = [
     key: "acquisitions",
     label: "Acquisitions",
     icon: Target,
-    desc: "From parcel to offer in minutes. Win deals early with ranked rings and a versioned underwriting engine that surfaces what's actually a deal.",
+    desc: "Triage from posted notice to research case. Filters, maps, hunts, and source evidence are live in this beta. Advanced deal-stack products remain roadmap.",
     chips: [
-      { label: "Deal Stacks", icon: LayoutDashboard },
-      { label: "Shadow Mode", icon: Eye },
-      { label: "Prophecy", icon: Sparkles },
-      { label: "Monitoring", icon: Radar },
+      { label: "Listing grid", icon: LayoutDashboard },
+      { label: "Saved hunts", icon: Radar },
+      { label: "Second Look", icon: Eye },
+      { label: "Watchlist", icon: Gauge },
     ],
     tint: "#E2E8F0",
   },
@@ -65,12 +65,12 @@ const TEAMS: Team[] = [
     key: "disposition",
     label: "Disposition",
     icon: Send,
-    desc: "Beautiful deal memos your partners and lenders trust. Share custom links, embed on your site, or export as a PDF in a click.",
+    desc: "Export structured listing facts and research notes for partners. Shared public links and polished lender PDFs are still roadmap — exports are CSV/JSON today.",
     chips: [
-      { label: "Share links", icon: Link2 },
-      { label: "Embed", icon: LayoutDashboard },
-      { label: "PDF export", icon: FileDown },
-      { label: "Partner portal", icon: ShieldCheck },
+      { label: "CSV export", icon: FileDown },
+      { label: "JSON export", icon: FileDown },
+      { label: "Research case", icon: FileText },
+      { label: "Partner portal (roadmap)", icon: ShieldCheck },
     ],
     tint: "#FFD6C8",
   },
@@ -78,12 +78,12 @@ const TEAMS: Team[] = [
     key: "underwriting",
     label: "Underwriting",
     icon: Calculator,
-    desc: "A versioned ARV, offer, and profit engine &mdash; with a Deal Score and a plain-English risk paragraph for every parcel. Audit-ready, every time.",
+    desc: "Cash inputs, opening bids, and modeled value bands stay separated from published source facts. AI notice parsing runs only when an API key is configured — never as a silent substitute for evidence.",
     chips: [
-      { label: "Versioned engine", icon: Layers },
-      { label: "Deal Score", icon: Gauge },
-      { label: "Risk paragraph", icon: FileText },
-      { label: "Accuracy view", icon: BarChart3 },
+      { label: "Opening bid facts", icon: Layers },
+      { label: "Deal score band", icon: Gauge },
+      { label: "Risk notes (AI optional)", icon: FileText },
+      { label: "Coverage honesty", icon: BarChart3 },
     ],
     tint: "#E9D5FF",
   },
@@ -98,11 +98,11 @@ export function Gtm() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            Empower your team to be better flippers.
+            Research that matches how flippers actually work.
           </h2>
           <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#4B5563] sm:text-[18px]">
-            Storytelling changes across the journey. Here&rsquo;s how different teams use
-            PerfectProperty.
+            Different roles need different cuts of the same evidence. Here&rsquo;s what
+            this beta ships today — and where roadmap items are labeled.
           </p>
         </GsapReveal>
 

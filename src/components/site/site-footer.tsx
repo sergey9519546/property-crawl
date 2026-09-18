@@ -85,10 +85,10 @@ export function SiteFooter() {
         <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] lg:items-center lg:gap-20 lg:py-16">
           <div className="max-w-[600px]">
             <p className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-[#111827] sm:text-[28px]">
-              Subscribe to the PerfectProperty accuracy report
+              Subscribe for source coverage notes
             </p>
             <p className="mt-2 max-w-[520px] text-[15px] leading-6 text-[#5B6472]">
-              Monthly updates on valuation spreads, model releases, and new scrapers.
+              Occasional updates on scraper coverage, seed inventory changes, and what this beta actually ships. No accuracy guarantee is claimed — evidence requires review.
             </p>
           </div>
           <form
