@@ -31,6 +31,7 @@ function parseArgs(argv) {
     parallel: false,
     review: false,
     testing: false,
+    real: false,
   };
   const opts = {};
   const positional = [];
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     else if (arg === '--parallel') flags.parallel = true;
     else if (arg === '--review') flags.review = true;
     else if (arg === '--testing') flags.testing = true;
+    else if (arg === '--real') flags.real = true;
     else if (arg.startsWith('--strategy=')) opts.strategy = arg.slice('--strategy='.length);
     else if (arg.startsWith('--mode=')) opts.mode = arg.slice('--mode='.length);
     else if (arg.startsWith('--max-agents=')) opts.maxAgents = Number(arg.slice('--max-agents='.length));
@@ -71,6 +73,7 @@ Options:
   --parallel          enable parallel phase execution
   --review            append a review phase
   --testing           append a testing phase (default on via config)
+  --real              execute allowlisted commands (default is simulated)
   --dry-run           print the plan as JSON and exit
   --verbose           log every orchestrator event
   --monitor           poll queue stats every 500ms until the run completes`);
@@ -136,6 +139,7 @@ function printSummary(report) {
   console.log(`runId:      ${report.runId}`);
   console.log(`strategy:   ${report.strategy}`);
   console.log(`mode:       ${report.mode}`);
+  console.log(`exec:       ${report.executionMode || 'simulated'}`);
   console.log(`objective:  ${report.objective}`);
   console.log(`dryRun:     ${Boolean(report.dryRun)}`);
   console.log(`durationMs: ${report.durationMs}`);
@@ -162,6 +166,7 @@ async function cmdRun(objective, flags, opts) {
   if (flags.review) overrides.review = true;
   if (flags.testing) overrides.testing = true;
   overrides.dryRun = flags.dryRun;
+  overrides.executionMode = flags.real ? 'real' : 'simulated';
 
   const orchestrator = new SwarmOrchestrator(overrides);
 

@@ -6,29 +6,49 @@
 // Scrapes real single-family HomePath listings with First Look program windows.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
 
 class FannieMaeScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'FannieMaeScraper', sourceKey: 'fannie' });
     this.baseUrl = 'https://www.homepath.fanniemae.com';
     this.timeoutMs = 4000;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('fannie');
+    this.extract = options.extractImpl || extractWithScrapling;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const topStates = ['TX', 'OH', 'FL', 'IL', 'PA', 'GA', 'AZ', 'NC'];
+      const topStates = (process.env.FANNIE_STATES || 'TX,OH,FL,IL,PA,GA,AZ,NC')
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const report = createRunReport('fannie', { endpoint: 'homepath-search-service', states: topStates });
+      report.statesRequested = [...topStates];
+      report.endpointsTried = topStates.length;
+      this.lastRunReport = report;
+
       const results = await Promise.allSettled(topStates.map(state => this.fetchStateHomePath(state)));
       const allListings = [];
-      for (const res of results) {
+      results.forEach((res, index) => {
+        const state = topStates[index];
         if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          recordUnitSuccess(report, state, res.value.length);
           allListings.push(...res.value);
+        } else {
+          recordUnitFailure(report, state, res.status === 'rejected' ? res.reason : new Error('non-array result'), 'upstream');
         }
-      }
+      });
 
-      console.log(`[${this.name}] Standardized ${allListings.length} Fannie Mae listings`);
-      return allListings
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      finalizeRunReport(report, { emitted: standardized.length });
+      if (report.outcome === 'failed') {
+        throw new Error(`FANNIE_UPSTREAM_UNAVAILABLE: all ${topStates.length} HomePath state endpoints failed`);
+      }
+      console.log(`[${this.name}] Standardized ${standardized.length} Fannie Mae listings (${report.outcome})`);
+      return standardized;
     });
   }
 
@@ -329,3 +349,4 @@ class FannieMaeScraper extends BaseScraper {
 }
 
 module.exports = new FannieMaeScraper();
+module.exports.FannieMaeScraper = FannieMaeScraper;

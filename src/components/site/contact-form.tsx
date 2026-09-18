@@ -11,22 +11,30 @@ export function ContactForm() {
   const [submitted, setSubmitted] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState("");
+  const [submitNote, setSubmitNote] = React.useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !message.trim() || submitting) return;
     setSubmitting(true);
     setSubmitError("");
+    setSubmitNote("");
     try {
       const response = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), message: message.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), company: company.trim(), message: message.trim() }),
       });
-      if (!response.ok) throw new Error("Submission failed");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Submission failed");
       setSubmitted(true);
-    } catch {
-      setSubmitError("Something went wrong. Please try again.");
+      setSubmitNote(
+        payload?.delivery === "forwarded"
+          ? "Thanks — your message was accepted for delivery."
+          : "Thanks — your message was saved for the operator. Outbound delivery is not configured yet."
+      );
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -36,13 +44,14 @@ export function ContactForm() {
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
         <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-600" />
-        <h3 className="mt-4 text-lg font-bold text-[#111827]">Message sent</h3>
+        <h3 className="mt-4 text-lg font-bold text-[#111827]">Message received</h3>
         <p className="mt-2 text-sm text-[#475569]">
-          Thanks — we received your message and will follow up by email.
+          {submitNote || "Thanks — your message was saved for the operator."}
         </p>
         <button
           onClick={() => {
             setSubmitted(false);
+            setSubmitNote("");
             setName("");
             setEmail("");
             setCompany("");

@@ -43,13 +43,34 @@ python3 -m venv .cache/crawler-tools/venv
 .cache/crawler-tools/venv/bin/python -m pip install -r scripts/crawlers/requirements.txt
 ```
 
-Set `SCRAPLING_SOURCES=gsa` in the collector environment to select it for GSA.
+Set `SCRAPLING_SOURCES` to a CSV allowlist of sources that should use the
+optional structural parser. Supported source keys and their profiles:
+
+| Source key | Profiles used |
+| --- | --- |
+| `gsa` | `gsa-index`, `gsa-detail` |
+| `hud` | `hud-cards` |
+| `treasury` | `treasury-detail` |
+| `irs` | `irs-detail` |
+| `ca-controller-tax-sale` | `table-extract` |
+| `fannie` / `freddie` / `va` / `marshals` / `sheriff` | env-gated; native parse remains default |
+| `usda` | `usda-table` (when enabled) |
+| `civilview` | `civilview-sales` discovery parse (when enabled) |
+
+Example: `SCRAPLING_SOURCES=hud,treasury,irs,gsa,usda,civilview`.
 `SCRAPLING_PYTHON` optionally names a dedicated interpreter; otherwise the bridge
 finds the project virtual environment. Python dependencies and state stay outside
 the UI bundle. Native collection remains the default when the feature is unset.
 Browser, stealth, proxy-rotation and challenge-solving modes are not enabled by
 this integration. The official Scrapling skill is installed separately in Codex;
 the skill itself is guidance, not the production Python dependency.
+
+Protocol contract (2026-09-14): the JS bridge now validates **every** profile
+shape (`hud-cards`, `treasury-detail`, `irs-detail`, `usda-table`,
+`civilview-sales`, plus the original GSA/page-links/table profiles). Python
+`page-links` emits only credential-free HTTPS targets so mixed HTTP/HTTPS pages
+no longer fail the whole extraction. IPv4-mapped IPv6 SSRF targets
+(`::ffff:127.0.0.1`) are rejected before the parser starts.
 
 ## Onboarding spider
 

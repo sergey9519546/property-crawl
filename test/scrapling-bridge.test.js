@@ -30,7 +30,17 @@ test('source enablement uses an explicit case-insensitive CSV allowlist', () => 
 });
 
 test('profiles set includes all known profiles', () => {
-  assert.deepEqual([...PROFILES].sort(), ['gsa-detail', 'gsa-index', 'hud-cards', 'irs-detail', 'page-links', 'table-extract', 'treasury-detail']);
+  assert.deepEqual([...PROFILES].sort(), [
+    'civilview-sales',
+    'gsa-detail',
+    'gsa-index',
+    'hud-cards',
+    'irs-detail',
+    'page-links',
+    'table-extract',
+    'treasury-detail',
+    'usda-table',
+  ]);
 });
 
 test('isPrivateOrLocalHost detects SSRF targets', () => {
@@ -41,8 +51,55 @@ test('isPrivateOrLocalHost detects SSRF targets', () => {
   assert.equal(isPrivateOrLocalHost('192.168.1.1'), true);
   assert.equal(isPrivateOrLocalHost('169.254.169.254'), true); // cloud metadata
   assert.equal(isPrivateOrLocalHost('::1'), true);
+  assert.equal(isPrivateOrLocalHost('::ffff:127.0.0.1'), true);
+  assert.equal(isPrivateOrLocalHost('::ffff:7f00:1'), true);
+  assert.equal(isPrivateOrLocalHost('::ffff:10.0.0.1'), true);
+  assert.equal(isPrivateOrLocalHost('fc00::1'), true);
+  assert.equal(isPrivateOrLocalHost('fe80::1'), true);
   assert.equal(isPrivateOrLocalHost('example.com'), false);
   assert.equal(isPrivateOrLocalHost('8.8.8.8'), false);
+});
+
+test('real Scrapling accepts hud-cards, treasury-detail, and irs-detail protocol shapes', async t => {
+  if (!fs.existsSync(python)) return t.skip('isolated Scrapling runtime not installed');
+  const hudHtml = fixture('hud-cards.html');
+  const hud = await extractWithScrapling('hud-cards', {
+    html: hudHtml,
+    url: 'https://www.hudhomestore.gov/Home/Index?state=CA',
+    python,
+  });
+  assert.equal(hud.items.length, 2);
+  assert.equal(hud.items[0].caseNumber, '123-456789');
+  assert.equal(hud.items[0].address, '100 Main Street');
+  assert.equal(hud.items[0].currentBid, 250000);
+
+  const treasury = await extractWithScrapling('treasury-detail', {
+    html: fixture('treasury-detail.html'),
+    url: 'https://www.treasury.gov/auctions/treasury/rp/1234.shtml',
+    python,
+  });
+  assert.equal(treasury.property.startingBid, 175000);
+  assert.equal(treasury.property.parcelNumber, '555-PQR');
+  assert.equal(treasury.property.beds, 4);
+
+  const irs = await extractWithScrapling('irs-detail', {
+    html: fixture('irs-detail.html'),
+    url: 'https://www.irsauctions.gov/auction/item/99',
+    python,
+  });
+  assert.equal(irs.property.address, '424 Override Avenue');
+  assert.equal(irs.property.state, 'PA');
+  assert.equal(irs.property.minimumBid, 222000);
+  assert.equal(irs.property.saleDate, '2027-03-01');
+});
+
+test('real page-links drops insecure http targets instead of failing the whole response', async t => {
+  if (!fs.existsSync(python)) return t.skip('isolated Scrapling runtime not installed');
+  const html = '<a href="https://example.test/ok">OK</a><a href="http://example.test/bad">HTTP</a>';
+  const result = await extractWithScrapling('page-links', { html, url: 'https://example.test', python });
+  assert.deepEqual(result.links, [
+    { href: 'https://example.test/ok', text: 'OK', document: false },
+  ]);
 });
 
 test('bridge rejects challenge HTML before starting Python', async () => {

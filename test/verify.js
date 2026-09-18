@@ -42,7 +42,11 @@ const suites = [
   { name: '19. Property Intelligence & Saved Hunts Suite', cmd: 'npm run test:intelligence' },
   { name: '20. Capability Graph & Typed Dispatch Suite (Tier 3.3)', cmd: 'node --test test/capability-graph.test.js' },
   { name: '21. Opportunity Signals & v0 DB Seeder Suite (Priority Upgrade 3 & Task 3.1)', cmd: 'node --test test/signals.test.js test/seed-from-v0.test.js' },
-  { name: '22. Swarm Orchestrator Suite', cmd: 'npm run test:swarm' }
+  { name: '22. Swarm Orchestrator Suite', cmd: 'npm run test:swarm' },
+  { name: '23. Email Alert Ingestion (IMAP / corpus)', cmd: 'npm run test:email-ingest' },
+  { name: '24. Contact/Newsletter Form Persistence', cmd: 'node --test test/form-submissions.test.js' },
+  { name: '25. Scraper Upgrade & Run Reports', cmd: 'node --test test/scraper-upgrade.test.js test/scrapling-bridge.test.js test/scrapling-hud-treasury-irs.test.js test/scrapling-env-gate.test.js' },
+  { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' }
 ];
 
 let totalPassed = 0;

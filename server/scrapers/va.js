@@ -6,29 +6,51 @@
 // Scrapes acquired properties managed by VRM Mortgage Services for VA.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
 
 class VaReoScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'VaReoScraper', sourceKey: 'va' });
-    this.baseUrl = 'https://vrmproperties.com';
+    // Publisher base is operator-configurable: the historical vrmproperties.com
+    // host has returned 404; VA REO disposition channels have moved over time.
+    this.baseUrl = (process.env.VA_REO_BASE_URL || 'https://vrmproperties.com').replace(/\/$/, '');
     this.timeoutMs = 4000;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('va');
+    this.extract = options.extractImpl || extractWithScrapling;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const topStates = ['TX', 'FL', 'OH', 'GA', 'NC', 'VA', 'PA', 'CA'];
+      const topStates = (process.env.VA_REO_STATES || 'TX,FL,OH,GA,NC,VA,PA,CA')
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const report = createRunReport('va', { endpoint: this.baseUrl, states: topStates });
+      report.statesRequested = [...topStates];
+      report.endpointsTried = topStates.length;
+      this.lastRunReport = report;
+
       const results = await Promise.allSettled(topStates.map(state => this.fetchStateListings(state)));
       const allListings = [];
-      for (const res of results) {
+      results.forEach((res, index) => {
+        const state = topStates[index];
         if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          recordUnitSuccess(report, state, res.value.length);
           allListings.push(...res.value);
+        } else {
+          recordUnitFailure(report, state, res.status === 'rejected' ? res.reason : new Error('non-array result'), 'upstream');
         }
-      }
+      });
 
-      console.log(`[${this.name}] Standardized ${allListings.length} VA REO listings`);
-      return allListings
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      finalizeRunReport(report, { emitted: standardized.length });
+      if (report.outcome === 'failed') {
+        throw new Error(`VA_UPSTREAM_UNAVAILABLE: all ${topStates.length} VA REO state endpoints failed for ${this.baseUrl}`);
+      }
+      console.log(`[${this.name}] Standardized ${standardized.length} VA REO listings (${report.outcome})`);
+      return standardized;
     });
   }
 
@@ -299,3 +321,4 @@ class VaReoScraper extends BaseScraper {
 }
 
 module.exports = new VaReoScraper();
+module.exports.VaReoScraper = VaReoScraper;

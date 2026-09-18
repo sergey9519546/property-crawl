@@ -3,7 +3,7 @@
 > Persistent global facts. Every entry cites its source file. No hallucinated facts.
 > Updated by the agent after significant changes; read at session start.
 >
-> Last refreshed: 2026-09-14.
+> Last refreshed: 2026-09-14 (forms persistence + completion audit).
 
 ## Architecture
 
@@ -35,10 +35,11 @@
 
 - 16 source types (A/B tier): bid4assets, civilview, fannie, fdic, freddie, gsa, hud, irs, landbank, marshals, servicelink, sheriff, treasury, trustee, usda, va.
   - Source: `CONTEXT.md`, `data.js`
-- 2079 listings across 51 states (states includes all 50 US states + DC territory + PR).
+- 2096 listings across 51 states (states includes all 50 US states + DC territory + PR).
   - Property types: Commercial, Condo, Duplex, Land, Single Family, Single Family Home, Town House, Triplex, Unknown.
   - Source: `CONTEXT.md` (regenerated 2026-09-14), `data.js`
-- 15 Server API route modules: alerts, **document-review**, enrich, export, hunts, listings, parcel-boundary, parse, property-image, property-intelligence, property-signals, scrapers, source-network, verify-docket, workspace.
+- Server API route modules: alerts, auction-calendar, coverage, document-review, enrich, enrichment, export, hunts, listings, neighborhoods, parcel-boundary, parse, property-image, property-image-providers, property-intelligence, property-signals, saved-searches, scrapers, source-network, verify-docket, watchlist-comps, workspace.
+  - Source: `CONTEXT.md`, `server/routes/`
   - Source: `CONTEXT.md`, `server/routes/`
 - 35 scraper modules in `server/scrapers/` (adapter + infrastructure mix).
   - Source: `server/scrapers/`
@@ -82,9 +83,9 @@
   - Source: `server/intelligence/zillow-mcp.js`, `server/intelligence/property-title.js`
 - Puter.js fully removed from `src/`; zero `puter` matches. AI paths use backend enrich endpoint.
   - Source: `src/app/layout.tsx`, `src/components/terminal/property-drawer.tsx`
-- Contact/newsletter forms POST to `/api/contact` and `/api/newsletter` (no more localStorage theater).
-  - Source: `src/app/api/contact/route.ts`, `src/app/api/newsletter/route.ts`
-- verify.js expanded to 35 suites including CONTEXT drift, discovery backend/ops, property documents, walkthrough providers, swarm orchestrator.
+- Contact/newsletter forms POST to `/api/contact` and `/api/newsletter`; both persist to `.cache/form-submissions/*.jsonl` via `src/lib/form-submissions.js` and report `delivery: local|forwarded`. UI copy does not claim email delivery when no webhook is set.
+  - Source: `src/lib/form-submissions.js`, `src/app/api/contact/route.ts`, `src/app/api/newsletter/route.ts`, `test/form-submissions.test.js`
+- verify.js expanded to 36 suites including CONTEXT drift, discovery backend/ops, property documents, walkthrough providers, swarm orchestrator, form persistence.
   - Source: `test/verify.js`
 - verify-gate.js full-gate timeout raised from 120s to 30 min.
   - Source: `scripts/verify-gate.js:117`
@@ -144,3 +145,19 @@
 - Scraper modules: 35.
 - Intelligence modules: 10 (`document-evidence`, `document-review`, `dossier`, `hunt-store`, `hunts`, `property-title`, `research-cases`, `research-store`, `signals`, `zillow-mcp`).
 - Production-hardening task `tsk_d962d462_production-hardening-and_1788941257669` archived 2026-09-14 with all 5 steps complete; deferred items remain in `memory/facts.md` and `reports/property-experience-2026-09-12.md`.
+## Scrapling + scraper expansion (2026-09-14)
+
+- **Scrapling protocol was broken for HUD/Treasury/IRS/page-links** until this session: `validResponse` only validated gsa-index/gsa-detail/table-extract, so real Python extractions of the other profiles always returned `SCRAPLING_PROTOCOL_ERROR`. Fixed with per-profile validators; Python `page-links` emits only HTTPS; IPv4-mapped IPv6 SSRF (`::ffff:127.0.0.1`) is rejected.
+  - Source: `server/scrapers/scrapling-bridge.js`, `scripts/crawlers/scrapling_extract.py`
+- Scrapling profiles now: gsa-index, gsa-detail, page-links, table-extract, hud-cards, treasury-detail, irs-detail, usda-table, civilview-sales. Doctor ready with scrapling==0.4.15.
+  - Source: `scripts/scrapling-doctor.js`, `scripts/crawlers/scrapling_extract.py`
+- Fannie/Freddie/VA/Marshals/Sheriff emit `lastRunReport` and throw `*_UPSTREAM_UNAVAILABLE` when every unit fails (no more silent `[]`).
+  - Source: `server/scrapers/run-report.js`, fannie/freddie/va/marshals/sheriff.js
+- Sheriff default counties expanded to 10 OH Realauction domains; extras via `SHERIFF_EXTRA_COUNTIES`. VA base via `VA_REO_BASE_URL`.
+  - Source: `server/scrapers/sheriff.js`, `va.js`, `.env.example`
+- Tests: scrapling+scraper-upgrade 69/69, crawler-tools+civilview 45/45, python parser 16/16.
+
+## Live canary script (2026-09-14)
+
+- `scripts/canary-live.js` wraps discovery-worker Migration 014 canaries: `list`, `status`, `run --all-promoted|--sources|--wave --repeat N --scrapling`, `promote --source`. Dry-runs without DATABASE_URL; writes `.cache/canary-reports/*.json`.
+  - Source: `scripts/canary-live.js`, `test/canary-live.test.js`, npm scripts `canary:live|list|status|promote`

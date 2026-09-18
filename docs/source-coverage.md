@@ -27,15 +27,29 @@ coverage.
 
 ## Current adapter boundary
 
-The scheduler currently contains only these adapters:
+The scheduler currently contains these property collectors (2026-09-14):
 
-`bid4assets`, `civilview`, `fannie`, `freddie`, `gsa`, `hud`, `irs`,
-`landbank`, `marshals`, `sheriff`, `treasury`, `usda`, and `va`.
+`bid4assets`, `civilview`, `courtlistener`, `ca-controller-tax-sale`,
+`email-ingest` (public notices), `fannie`, `fl-dor-cadastral`, `freddie`,
+`gsa`, `hud`, `hud-usps-vacancy`, `irs`, `landbank`, `marshals`, `sheriff`,
+`treasury`, `usda`, `va`, and `servicelink`.
 
-The catalog uses `adapterKey: null` for all other sources. In particular,
-FDIC is documented for current-offering workflow but is not in the scheduler;
-the existing FDIC collector is historical/fixture-oriented. Trustee sales are
-also a jurisdiction-enrollment workflow, not a universal adapter.
+FDIC remains **historical/fixture-oriented** and is registered in
+`scripts/build-data.js` but excluded from the production scheduler because
+closed-sale prices are not live opportunity inventory. Trustee sales remain a
+jurisdiction-enrollment workflow, not a universal adapter.
+
+Scraper reliability upgrades (2026-09-14):
+
+- Fannie, Freddie, VA, USMS, and Sheriff now expose `lastRunReport` and throw
+  `*_UPSTREAM_UNAVAILABLE` when every unit fails — empty arrays are no longer
+  used to hide transport/challenge failures.
+- Sheriff defaults to 10 Ohio Realauction counties; extra jurisdictions enroll
+  via `SHERIFF_EXTRA_COUNTIES=Name:domain:ST`.
+- VA REO base URL is operator-configurable (`VA_REO_BASE_URL`).
+- Optional Scrapling structural parsing covers GSA, HUD, Treasury, IRS,
+  CA Controller tables, plus `usda-table` and `civilview-sales` discovery
+  profiles when `SCRAPLING_SOURCES` includes those keys.
 
 ## Evidence rules
 

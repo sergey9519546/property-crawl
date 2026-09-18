@@ -69,8 +69,13 @@ export function SiteFooter() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalizedEmail }),
       });
-      if (!response.ok) throw new Error("Subscription failed");
-      setNewsletterStatus("Thanks — you're on the list.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Subscription failed");
+      setNewsletterStatus(
+        payload?.delivery === "forwarded"
+          ? "Thanks — you're on the list."
+          : "Saved. Email delivery is not configured yet."
+      );
     } catch {
       setNewsletterStatus("Something went wrong. Please try again.");
     }

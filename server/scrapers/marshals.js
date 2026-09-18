@@ -6,25 +6,42 @@
 // Scrapes federal asset forfeiture properties seized by US Marshals Service.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
 
 class UsMarshalsScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'UsMarshalsScraper', sourceKey: 'marshals' });
     this.baseUrl = 'https://www.usmarshals.gov';
     this.timeoutMs = 30000;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('marshals');
+    this.extract = options.extractImpl || extractWithScrapling;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const allListings = await this.fetchSeizedListings();
-      console.log(`[${this.name}] Standardized ${allListings.length} US Marshals listings`);
-      return allListings
+      const report = createRunReport('marshals', {
+        endpoints: ['usms-real-property', 'reallook-fallback', 'gaston-sheehan-fallback'],
+      });
+      report.statesRequested = ['usms', 'reallook', 'gaston'];
+      report.endpointsTried = 3;
+      this.lastRunReport = report;
+
+      const allListings = await this.fetchSeizedListings(report);
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      finalizeRunReport(report, { emitted: standardized.length });
+      if (report.outcome === 'failed') {
+        throw new Error('USMS_UPSTREAM_UNAVAILABLE: US Marshals primary and partner endpoints all failed');
+      }
+      console.log(`[${this.name}] Standardized ${standardized.length} US Marshals listings (${report.outcome})`);
+      return standardized;
     });
   }
 
-  async fetchSeizedListings() {
+  async fetchSeizedListings(report) {
     const url = `${this.baseUrl}/what-we-do/asset-forfeiture/real-property`;
     try {
       const html = await this.requestText(url, {
@@ -34,9 +51,15 @@ class UsMarshalsScraper extends BaseScraper {
         }
       });
       const listings = this.parseMarshalsHtml(html);
-      return listings.length > 0 ? listings : this.fetchPartnerAuctions();
+      if (listings.length > 0) {
+        recordUnitSuccess(report, 'usms', listings.length);
+        return listings;
+      }
+      recordUnitFailure(report, 'usms', new Error('empty or unparseable USMS page'), 'empty_primary');
+      return this.fetchPartnerAuctions(report);
     } catch (err) {
-      return this.fetchPartnerAuctions();
+      recordUnitFailure(report, 'usms', err, 'upstream');
+      return this.fetchPartnerAuctions(report);
     }
   }
 
@@ -95,7 +118,7 @@ class UsMarshalsScraper extends BaseScraper {
     return listings;
   }
 
-  async fetchPartnerAuctions() {
+  async fetchPartnerAuctions(report = null) {
     // Partner feed query (Gaston & Sheehan / RealLook USMS real estate)
     const partnerUrl = 'https://www.reallook.com/usms-inventory';
     try {
@@ -105,8 +128,15 @@ class UsMarshalsScraper extends BaseScraper {
           Accept: 'text/html,application/xhtml+xml',
         }
       });
-      return this.parsePartnerCards(html);
+      const listings = this.parsePartnerCards(html);
+      if (listings.length > 0) {
+        if (report) recordUnitSuccess(report, 'reallook', listings.length);
+        return listings;
+      }
+      if (report) recordUnitFailure(report, 'reallook', new Error('empty partner inventory'), 'empty_partner');
+      return [];
     } catch (err) {
+      if (report) recordUnitFailure(report, 'reallook', err, 'upstream');
       return [];
     }
   }
@@ -285,3 +315,4 @@ class UsMarshalsScraper extends BaseScraper {
 }
 
 module.exports = new UsMarshalsScraper();
+module.exports.UsMarshalsScraper = UsMarshalsScraper;

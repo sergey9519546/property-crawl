@@ -68,6 +68,23 @@ For existing local state, run `npm run discovery:import:legacy -- --directory .c
 
 ## Collection and promotion
 
+**Preferred live canary entrypoint** (wraps the worker Migration 014 gate):
+
+```powershell
+npm run canary:list
+npm run canary:live -- --wave wave1 --repeat 2
+npm run canary:live -- --all-promoted
+npm run canary:status -- --source servicelink
+npm run canary:promote -- --source servicelink
+```
+
+`scripts/canary-live.js` evaluates gate-clean criteria (accepted > 0, no
+source/observation error, `complete` + `fullSweepComplete`, not truncated,
+exact acquisition scope), writes JSON reports under `.cache/canary-reports/`,
+and dry-runs without inventing inventory when `DATABASE_URL` /
+`DISCOVERY_MODE=advanced` are unset. Pass `--scrapling` to enable the optional
+structural parser for the batch.
+
 Run `npm run discovery:worker -- --canary servicelink` for an explicit canary, or substitute a supported source. Configure publisher bounds using its environment variables (for example SERVICELINK_PAGE_SIZE and SERVICELINK_MAX_PAGES). A request budget pauses a sweep and commits a checkpoint only after accepted records have been stored. Continuations retain declared scope. Partial pages are never counted as clean complete canaries.
 
 Two distinct clean, complete runs of the same declared scope are required before `npm run discovery:worker -- --promote <source>`. Run `npm run discovery:worker` for the dedicated worker, or append `--once` for a bounded iteration. Recurring work only selects promoted sources and applies source cadence. Keep failed or blocked sources unpromoted.

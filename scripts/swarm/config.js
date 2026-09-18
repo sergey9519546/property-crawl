@@ -83,7 +83,7 @@ const agentTypes = {
       'evaluate_saved_hunts',
       'verify_completion_gate',
     ],
-    permissions: { read: 'allow', bash: 'allow', edit: 'scripts/**' },
+    permissions: { read: 'allow', bash: 'allow', edit: 'deny' },
     maxConcurrency: 1,
   },
   developer: {

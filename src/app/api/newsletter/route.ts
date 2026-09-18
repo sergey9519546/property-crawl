@@ -1,3 +1,5 @@
+import { persistFormSubmission, sanitize } from "@/lib/form-submissions";
+
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
 export async function POST(request: Request) {
@@ -10,10 +12,21 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400, headers: responseHeaders });
   }
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const email = sanitize(body.email, 320).toLowerCase();
   if (!email || email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return Response.json({ error: "A valid email is required" }, { status: 400, headers: responseHeaders });
   }
-  // Accept and acknowledge. Email delivery is wired separately.
-  return Response.json({ ok: true, queued: true }, { status: 202, headers: responseHeaders });
+
+  const result = await persistFormSubmission("newsletter", { email });
+  return Response.json(
+    {
+      ok: true,
+      queued: true,
+      delivery: result.delivery,
+      message: result.delivery === "forwarded"
+        ? "Subscription accepted."
+        : "Subscription saved. Operator email delivery is not configured yet.",
+    },
+    { status: 202, headers: responseHeaders }
+  );
 }

@@ -6,36 +6,78 @@
 // Scrapes live sheriff sales, appraised values, upset prices, and court case metadata.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+
+const DEFAULT_OH_COUNTIES = [
+  { name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Summit', domain: 'summit.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Hamilton', domain: 'hamilton.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Montgomery', domain: 'montgomery.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Lucas', domain: 'lucas.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Butler', domain: 'butler.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Stark', domain: 'stark.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Lorain', domain: 'lorain.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Mahoning', domain: 'mahoning.sheriffsaleauction.ohio.gov', state: 'OH' },
+];
+
+function parseExtraCounties(raw) {
+  // Format: Name:domain:ST,Name:domain:ST
+  return String(raw || '').split(',').map(entry => {
+    const parts = entry.trim().split(':').map(p => p.trim());
+    if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+    return {
+      name: parts[0],
+      domain: parts[1].replace(/^https?:\/\//, ''),
+      state: (parts[2] || 'OH').toUpperCase(),
+    };
+  }).filter(Boolean);
+}
 
 class SheriffSaleScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff' });
-    this.counties = [
-      { name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' },
-      { name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' },
-      { name: 'Summit', domain: 'summit.sheriffsaleauction.ohio.gov', state: 'OH' },
-      { name: 'Hamilton', domain: 'hamilton.sheriffsaleauction.ohio.gov', state: 'OH' },
-    ];
+    this.counties = options.counties
+      || [...DEFAULT_OH_COUNTIES, ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES)];
     this.timeoutMs = 30000;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
+    this.extract = options.extractImpl || extractWithScrapling;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const allListings = [];
+      const report = createRunReport('sheriff', {
+        platform: 'realauction-ohio',
+        counties: this.counties.map(c => `${c.name},${c.state}`),
+      });
+      report.statesRequested = this.counties.map(c => `${c.name},${c.state}`);
+      report.endpointsTried = this.counties.length;
+      this.lastRunReport = report;
 
+      const allListings = [];
       for (const c of this.counties) {
+        const unit = `${c.name},${c.state}`;
         try {
           const countyListings = await this.fetchCountyRealauction(c);
+          recordUnitSuccess(report, unit, countyListings.length);
           allListings.push(...countyListings);
         } catch (err) {
+          recordUnitFailure(report, unit, err, 'county');
           console.warn(`[${this.name}] Warning for ${c.name} County: ${err.message}`);
         }
       }
 
-      console.log(`[${this.name}] Standardized ${allListings.length} Sheriff Sale listings`);
-      return allListings
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      finalizeRunReport(report, { emitted: standardized.length });
+      if (report.outcome === 'failed') {
+        throw new Error(`SHERIFF_UPSTREAM_UNAVAILABLE: all ${this.counties.length} county endpoints failed`);
+      }
+      console.log(`[${this.name}] Standardized ${standardized.length} Sheriff Sale listings (${report.outcome})`);
+      return standardized;
     });
   }
 
@@ -355,3 +397,6 @@ class SheriffSaleScraper extends BaseScraper {
 }
 
 module.exports = new SheriffSaleScraper();
+module.exports.SheriffSaleScraper = SheriffSaleScraper;
+module.exports.DEFAULT_OH_COUNTIES = DEFAULT_OH_COUNTIES;
+module.exports.parseExtraCounties = parseExtraCounties;

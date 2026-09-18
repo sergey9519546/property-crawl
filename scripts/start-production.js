@@ -12,6 +12,7 @@ const publicPort = Number(process.env.PORT) || 3000;
 // Internal port for the backend listing API (must not collide with publicPort)
 const internalApiPort = Number(process.env.INTERNAL_API_PORT) || (publicPort === 3000 ? 3002 : 3000);
 
+const hasDatabase = Boolean(process.env.DATABASE_URL);
 const children = [];
 let closing = false;
 
@@ -49,8 +50,8 @@ process.on('uncaughtException', (err) => {
 });
 
 async function waitForHealth(url, timeoutMs = 30000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs && !closing) {
+  const startAt = Date.now();
+  while (Date.now() - startAt < timeoutMs && !closing) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
       if (res.ok) return true;
@@ -62,11 +63,44 @@ async function waitForHealth(url, timeoutMs = 30000) {
   return false;
 }
 
+/**
+ * Backend readiness strategy:
+ * - With DATABASE_URL: wait on advanced readiness (/api/health/ready).
+ * - Without DATABASE_URL: Demo/in-memory mode detected — advanced discovery
+ *   readiness may fail; fall back to liveness (/api/health) after a short wait.
+ */
+async function awaitBackendReady() {
+  const readyUrl = `http://127.0.0.1:${internalApiPort}/api/health/ready`;
+  const liveUrl = `http://127.0.0.1:${internalApiPort}/api/health`;
+
+  if (!hasDatabase) {
+    console.log('[Production] Demo/in-memory mode detected (DATABASE_URL unset).');
+  }
+
+  const ready = await waitForHealth(readyUrl, hasDatabase ? 45000 : 8000);
+  if (ready) {
+    console.log(`[Production] Backend Listing API is healthy on port ${internalApiPort}.`);
+    return true;
+  }
+
+  if (!hasDatabase) {
+    console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
+  }
+
+  const live = await waitForHealth(liveUrl, 30000);
+  if (live) {
+    console.log(`[Production] Backend Listing API is live on port ${internalApiPort} (liveness /api/health).`);
+    return true;
+  }
+
+  console.error('[Production] Backend Listing API failed health check in time.');
+  return false;
+}
+
 async function boot() {
   console.log(`[Production] Bootstrapping Property-Crawl production runtime...`);
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
-  // 1. Start backend Node API on internal loopback port
   const apiEnv = {
     ...process.env,
     PORT: String(internalApiPort),
@@ -75,15 +109,12 @@ async function boot() {
   start('Backend Listing API', process.execPath, ['server/server.js'], apiEnv);
 
   console.log(`[Production] Awaiting Backend Listing API on 127.0.0.1:${internalApiPort}...`);
-  const apiReady = await waitForHealth(`http://127.0.0.1:${internalApiPort}/api/health/ready`);
+  const apiReady = await awaitBackendReady();
   if (!apiReady) {
-    console.error('[Production] Backend Listing API failed health check in time.');
     shutdown(1);
     return;
   }
-  console.log(`[Production] Backend Listing API is healthy on port ${internalApiPort}.`);
 
-  // 2. Start Next.js on the public port, proxying API calls internally
   const nextEnv = {
     ...process.env,
     PORT: String(publicPort),
@@ -99,13 +130,21 @@ async function boot() {
   );
 
   console.log(`[Production] Awaiting Next.js UI on public port ${publicPort}...`);
-  const uiReady = await waitForHealth(`http://127.0.0.1:${publicPort}/api/health/ready`);
+  // UI readiness is liveness: the public healthcheck must not depend on
+  // advanced discovery readiness that demo mode cannot satisfy.
+  const uiReady = await waitForHealth(`http://127.0.0.1:${publicPort}/api/health`);
   if (uiReady) {
     console.log(`========================================================`);
     console.log(`[Production] Property-Crawl Production Stack LIVE!`);
     console.log(`[Production] Listening on 0.0.0.0:${publicPort}`);
     console.log(`[Production] Healthcheck: http://0.0.0.0:${publicPort}/api/health`);
+    if (!hasDatabase) {
+      console.log(`[Production] Data mode: Demo/in-memory (seeded from data.js).`);
+    }
     console.log(`========================================================`);
+  } else {
+    console.error('[Production] Next.js UI failed health check in time.');
+    shutdown(1);
   }
 }
 

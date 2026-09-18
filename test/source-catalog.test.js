@@ -56,12 +56,14 @@ test('property lookup evidence sources are explicit, unscheduled, and retain the
 test('current scheduler source coverage is explicit and historical sources remain unscheduled', () => {
   assert.deepEqual([...SCHEDULED_ADAPTER_KEYS].sort(), [
     'bid4assets', 'ca-controller-tax-sale', 'civilview', 'courtlistener', 'fannie', 'fl-dor-cadastral', 'freddie', 'gsa', 'hud', 'irs',
-    'landbank', 'marshals', 'servicelink', 'sheriff', 'treasury', 'usda', 'va'
+    'landbank', 'marshals', 'public-notices-email', 'servicelink', 'sheriff', 'treasury', 'usda', 'va'
   ]);
   assert.equal(getSource('fdic-asset-sales').adapterKey, null);
   assert.equal(getSource('county-trustee-sale').adapterKey, null);
   assert.equal(getSource('fl-dor-cadastral').adapterKey, 'fl-dor-cadastral');
   assert.equal(getSource('fl-dor-cadastral').status, 'DISCOVERY_ONLY');
+  assert.equal(getSource('press-association-email').adapterKey, 'public-notices-email');
+  assert.equal(getSource('press-association-email').status, 'DISCOVERY_ONLY');
   assert.equal(getSource('does-not-exist'), null);
   const summary = summarizeCatalog();
   assert.equal(summary.total, SOURCE_CATALOG.length);

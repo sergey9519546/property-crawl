@@ -10,7 +10,7 @@ const { findBotChallengeSignature } = require('./circuit-breaker');
 const MAX_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 5000;
-const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extract', 'hud-cards', 'treasury-detail', 'irs-detail']);
+const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extract', 'hud-cards', 'treasury-detail', 'irs-detail', 'usda-table', 'civilview-sales']);
 
 /**
  * Returns true when a hostname or IP literal refers to a private, loopback,
@@ -20,6 +20,15 @@ function isPrivateOrLocalHost(hostname) {
   if (!hostname) return true;
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
   if (h === 'localhost' || h === '::1' || h === '0.0.0.0' || h === '0') return true;
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1 and ::ffff:7f00:1) resolve to IPv4.
+  const mappedDotted = h.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mappedDotted) return isPrivateOrLocalHost(mappedDotted[1]);
+  const mappedHex = h.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    return isPrivateOrLocalHost(`${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`);
+  }
   // IPv4 checks
   if (net.isIPv4(h)) {
     const parts = h.split('.').map(Number);
@@ -85,12 +94,61 @@ function rejectInvalidInput(profile, html, url) {
   if (isPrivateOrLocalHost(parsed.hostname)) throw new ScraplingBridgeError('Scrapling source URL must not target private or loopback addresses', 'SCRAPLING_INVALID_URL');
 }
 
+function isValidHttpsUrl(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && !u.username && !u.password && !isPrivateOrLocalHost(u.hostname);
+  } catch { return false; }
+}
+
 function validResponse(result, profile, url, expectedHash) {
   if (!result || result.version !== 1 || result.profile !== profile || result.sourceUrl !== url || result.engine !== 'scrapling' || result.engineVersion !== '0.4.15' || result.contentSha256 !== expectedHash) return false;
-  if (profile === 'gsa-index') return Array.isArray(result.items) && result.items.every(item => item && /^\d+$/.test(item.propertyId) && typeof item.url === 'string' && (() => { try { const u=new URL(item.url); return u.protocol==='https:'&&!u.username&&!u.password; } catch { return false; } })() && (item.currentBid === null || (Number.isSafeInteger(item.currentBid) && item.currentBid >= 0)));
-  if (profile === 'gsa-detail') return result.property && typeof result.property === 'object' && !Array.isArray(result.property) && ['address','city','state','zipcode'].every(key => result.property[key] === null || typeof result.property[key] === 'string');
-  if (profile === 'table-extract') return Array.isArray(result.headers) && result.headers.every(h => typeof h === 'string') && Array.isArray(result.rows) && result.rows.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'string'));
-  return Array.isArray(result.links) && result.links.every(link => link && typeof link.href === 'string' && (link.text === null || typeof link.text === 'string') && typeof link.document === 'boolean' && (() => { try { const u=new URL(link.href); return u.protocol==='https:'&&!u.username&&!u.password; } catch { return false; } })());
+  if (profile === 'gsa-index') {
+    return Array.isArray(result.items) && result.items.every(item =>
+      item && /^\d+$/.test(String(item.propertyId))
+      && typeof item.url === 'string' && isValidHttpsUrl(item.url)
+      && (item.currentBid === null || (Number.isSafeInteger(item.currentBid) && item.currentBid >= 0)));
+  }
+  if (profile === 'hud-cards') {
+    return Array.isArray(result.items) && result.items.every(item =>
+      item && typeof item.caseNumber === 'string' && item.caseNumber.length > 0
+      && typeof item.address === 'string' && item.address.length > 0
+      && (item.currentBid === null || (Number.isSafeInteger(item.currentBid) && item.currentBid >= 0)));
+  }
+  if (profile === 'gsa-detail') {
+    return Boolean(result.property) && typeof result.property === 'object' && !Array.isArray(result.property)
+      && ['address', 'city', 'state', 'zipcode'].every(key => result.property[key] === null || typeof result.property[key] === 'string');
+  }
+  if (profile === 'treasury-detail' || profile === 'irs-detail') {
+    return Boolean(result.property) && typeof result.property === 'object' && !Array.isArray(result.property);
+  }
+  if (profile === 'table-extract') {
+    return Array.isArray(result.headers) && result.headers.every(h => typeof h === 'string')
+      && Array.isArray(result.rows) && result.rows.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'string'));
+  }
+  if (profile === 'usda-table') {
+    return Array.isArray(result.headers) && result.headers.every(h => typeof h === 'string')
+      && Array.isArray(result.rows) && result.rows.every(row => Array.isArray(row) && row.every(cell => typeof cell === 'string'))
+      && Array.isArray(result.items) && result.items.every(item =>
+        item && Array.isArray(item.cells)
+        && (item.detailUrl === null || (typeof item.detailUrl === 'string' && isValidHttpsUrl(item.detailUrl)))
+        && (item.price === null || (Number.isSafeInteger(item.price) && item.price >= 0))
+        && (item.state === null || (typeof item.state === 'string' && item.state.length <= 3)));
+  }
+  if (profile === 'civilview-sales') {
+    return Array.isArray(result.items) && result.items.every(item =>
+      item && typeof item.detailUrl === 'string' && isValidHttpsUrl(item.detailUrl)
+      && Array.isArray(item.cells)
+      && (item.caseNumber === null || typeof item.caseNumber === 'string')
+      && (item.saleDateText === null || typeof item.saleDateText === 'string'));
+  }
+  if (profile === 'page-links') {
+    return Array.isArray(result.links) && result.links.every(link =>
+      link && typeof link.href === 'string' && isValidHttpsUrl(link.href)
+      && (link.text === null || typeof link.text === 'string')
+      && typeof link.document === 'boolean');
+  }
+  return false;
 }
 
 function validateScriptPath(scriptPath) {

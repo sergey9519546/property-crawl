@@ -10,7 +10,7 @@ from urllib.parse import urljoin
 import scrapling
 from scrapling.parser import Selector
 
-PROFILES = {"gsa-index", "gsa-detail", "page-links", "table-extract", "hud-cards", "treasury-detail", "irs-detail"}
+PROFILES = {"gsa-index", "gsa-detail", "page-links", "table-extract", "hud-cards", "treasury-detail", "irs-detail", "usda-table", "civilview-sales"}
 MAX_INPUT_BYTES = 4 * 1024 * 1024  # 4 MB — mirrors the JS bridge guard
 
 
@@ -60,9 +60,11 @@ def page_links(page, base_url):
             continue  # in-page anchors
         text = clean(" ".join(node.xpath('.//text()').getall()))
         absolute = urljoin(base_url, href)
-        # Only include http(s) URLs after resolution
-        if not absolute.lower().startswith(("http://", "https://")):
+        # Bridge protocol accepts only credential-free https targets.
+        if not absolute.lower().startswith("https://"):
             continue
+        if "@" in absolute.split("//", 1)[-1].split("/", 1)[0]:
+            continue  # reject credential-bearing URLs
         document = bool(re.search(r"\.(?:pdf|docx?|xlsx?|csv|zip)(?:[?#]|$)", absolute, re.I))
         links.append({"href": absolute, "text": text or None, "document": document})
     return {"links": links}
@@ -242,7 +244,7 @@ def irs_detail(page, _base_url):
     body = clean(" ".join(page.xpath('//text()').getall()))
 
     def first_int(pattern):
-        m = re.search(pattern, body)
+        m = re.search(pattern, body, flags=re.I)
         if not m:
             return None
         try:
@@ -275,6 +277,89 @@ def table_extract(page, _base_url):
     return {"headers": headers, "rows": rows}
 
 
+def usda_table(page, _base_url):
+    """USDA resales propertySummariesTable."""
+    tables = page.xpath('//table[@id="propertySummariesTable"]')
+    if not tables:
+        tables = page.css('table')
+    if not tables:
+        return {"headers": [], "rows": [], "items": []}
+    table = tables[0]
+    header_nodes = table.xpath('.//th') if hasattr(table, 'xpath') else table.css('th')
+    headers = []
+    for th in header_nodes:
+        text_bits = th.xpath('.//text()').getall() if hasattr(th, 'xpath') else []
+        headers.append(clean(" ".join(text_bits)))
+    rows = []
+    items = []
+    tr_nodes = table.xpath('.//tr') if hasattr(table, 'xpath') else table.css('tr')
+    for tr in tr_nodes:
+        td_nodes = tr.xpath('./td') if hasattr(tr, 'xpath') else tr.css('td')
+        cells = []
+        for td in td_nodes:
+            bits = td.xpath('.//text()').getall() if hasattr(td, 'xpath') else []
+            cells.append(clean(" ".join(bits)))
+        if not cells:
+            continue
+        rows.append(cells)
+        href = ""
+        try:
+            hrefs = tr.xpath('.//a/@href').getall() if hasattr(tr, 'xpath') else []
+            href = one(hrefs)
+        except Exception:
+            href = ""
+        absolute = urljoin("https://www.resales.usda.gov", href) if href else None
+        if absolute and not absolute.lower().startswith("https://"):
+            absolute = None
+        text = " ".join(cells)
+        price_match = re.search(r"\$\s*([\d,]+)", text)
+        state_match = re.search(r"\b([A-Z]{2})\b", text)
+        items.append({
+            "cells": cells,
+            "detailUrl": absolute,
+            "price": int(price_match.group(1).replace(",", "")) if price_match else None,
+            "state": state_match.group(1) if state_match else None,
+        })
+    return {"headers": headers, "rows": rows, "items": items}
+
+
+def civilview_sales(page, _base_url):
+    """CivilView county sale-search table rows (discovery only)."""
+    items = []
+    seen = set()
+    tr_nodes = page.xpath('//tr')
+    for tr in tr_nodes:
+        href = ""
+        try:
+            anchors = tr.xpath('.//a[contains(@href,"SaleDetails") or contains(@href,"PropertyId")]/@href').getall()
+            href = one(anchors)
+        except Exception:
+            href = ""
+        if not href:
+            continue
+        absolute = urljoin("https://salesweb.civilview.com", href)
+        if not absolute.lower().startswith("https://"):
+            continue
+        cells = []
+        td_nodes = tr.xpath('./td')
+        for td in td_nodes:
+            bits = td.xpath('.//text()').getall()
+            cells.append(clean(" ".join(bits)))
+        text = " ".join(cells)
+        case_match = re.search(r"(?:CV|Docket|Case|Sheriff)[^\d]{0,10}([A-Z0-9-]{4,})", text, re.I)
+        date_match = re.search(r"([A-Z][a-z]{2,8}\s+\d{1,2},\s*\d{4}|\d{1,2}/\d{1,2}/\d{2,4})", text)
+        if absolute in seen:
+            continue
+        seen.add(absolute)
+        items.append({
+            "detailUrl": absolute,
+            "caseNumber": case_match.group(1) if case_match else None,
+            "saleDateText": date_match.group(1) if date_match else None,
+            "cells": cells,
+        })
+    return {"items": items}
+
+
 HANDLERS = {
     "gsa-index": gsa_index,
     "gsa-detail": gsa_detail,
@@ -283,6 +368,8 @@ HANDLERS = {
     "hud-cards": hud_cards,
     "treasury-detail": treasury_detail,
     "irs-detail": irs_detail,
+    "usda-table": usda_table,
+    "civilview-sales": civilview_sales,
 }
 
 

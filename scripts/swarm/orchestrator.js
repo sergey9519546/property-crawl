@@ -17,6 +17,7 @@ const config = require('./config');
 const { MemoryStore } = require('./memory-store');
 const { AgentRegistry } = require('./agent-registry');
 const { TaskQueue } = require('./task-queue');
+const { executeCapability } = require('./executor');
 
 // Phase name → preferred agent types (order = spawn priority).
 const PHASE_AGENT_TYPES = {
@@ -87,6 +88,8 @@ class SwarmOrchestrator extends EventEmitter {
     const rawTimeout = opts.timeoutMinutes != null ? opts.timeoutMinutes : d.timeoutMinutes;
     this.timeoutMinutes = Number.isFinite(rawTimeout) ? rawTimeout : d.timeoutMinutes;
     this.dryRun = Boolean(opts.dryRun);
+    // real | simulated — real only runs allowlisted commands via scripts/swarm/executor.js
+    this.executionMode = opts.executionMode === 'real' ? 'real' : 'simulated';
     this.memory = opts.memory || new MemoryStore();
     this.queue = opts.queue || new TaskQueue({ persist: true });
     this.registry = opts.registry || new AgentRegistry({ maxAgents: this.maxAgents });
@@ -190,11 +193,26 @@ class SwarmOrchestrator extends EventEmitter {
   }
 
   /**
-   * Simulated deterministic executor. Records start/end and returns a
-   * structured result; never shells out.
+   * Execute one claimed task. Simulated mode never shells out.
+   * Real mode runs only allowlisted commands through scripts/swarm/executor.js.
    */
   async execute(agent, task) {
     const started = Date.now();
+    if (this.executionMode === 'real') {
+      const result = await executeCapability({
+        capability: task.capability,
+        mode: 'real',
+        timeoutMs: Math.max(5_000, Math.floor((this.timeoutMinutes * 60 * 1000) / Math.max(1, this.maxAgents))),
+      });
+      return {
+        ...result,
+        agentId: agent.id,
+        taskId: task.id,
+        phase: task.phase,
+        capability: task.capability,
+        durationMs: result.durationMs != null ? result.durationMs : Math.max(0, Date.now() - started),
+      };
+    }
     // Yield so the event loop stays responsive in parallel stages.
     await new Promise((resolve) => setTimeout(resolve, 0));
     const durationMs = Math.max(0, Date.now() - started);
@@ -274,6 +292,7 @@ class SwarmOrchestrator extends EventEmitter {
         runId,
         strategy: strategyName,
         mode: this.mode,
+        executionMode: this.executionMode,
         objective,
         phases,
         agents: agents.map(summarizeAgent),
@@ -327,6 +346,7 @@ class SwarmOrchestrator extends EventEmitter {
       runId,
       strategy: strategyName,
       mode: this.mode,
+      executionMode: this.executionMode,
       objective,
       phases,
       agents: agents.map(summarizeAgent),

@@ -6,29 +6,49 @@
 // Scrapes live REO properties from Freddie Mac HomeSteps.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
 
 class FreddieMacScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'FreddieMacScraper', sourceKey: 'freddie' });
     this.baseUrl = 'https://www.homesteps.com';
     this.timeoutMs = 4000;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('freddie');
+    this.extract = options.extractImpl || extractWithScrapling;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
-      const topStates = ['OH', 'TX', 'FL', 'PA', 'IL', 'GA', 'NC', 'MI'];
+      const topStates = (process.env.FREDDIE_STATES || 'OH,TX,FL,PA,IL,GA,NC,MI')
+        .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      const report = createRunReport('freddie', { endpoint: 'homesteps-api', states: topStates });
+      report.statesRequested = [...topStates];
+      report.endpointsTried = topStates.length;
+      this.lastRunReport = report;
+
       const results = await Promise.allSettled(topStates.map(state => this.fetchStateListings(state)));
       const allListings = [];
-      for (const res of results) {
+      results.forEach((res, index) => {
+        const state = topStates[index];
         if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+          recordUnitSuccess(report, state, res.value.length);
           allListings.push(...res.value);
+        } else {
+          recordUnitFailure(report, state, res.status === 'rejected' ? res.reason : new Error('non-array result'), 'upstream');
         }
-      }
+      });
 
-      console.log(`[${this.name}] Standardized ${allListings.length} Freddie Mac listings`);
-      return allListings
+      const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
+      finalizeRunReport(report, { emitted: standardized.length });
+      if (report.outcome === 'failed') {
+        throw new Error(`FREDDIE_UPSTREAM_UNAVAILABLE: all ${topStates.length} HomeSteps state endpoints failed`);
+      }
+      console.log(`[${this.name}] Standardized ${standardized.length} Freddie Mac listings (${report.outcome})`);
+      return standardized;
     });
   }
 
@@ -300,3 +320,4 @@ class FreddieMacScraper extends BaseScraper {
 }
 
 module.exports = new FreddieMacScraper();
+module.exports.FreddieMacScraper = FreddieMacScraper;

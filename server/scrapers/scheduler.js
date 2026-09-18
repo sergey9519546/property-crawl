@@ -17,6 +17,7 @@ const flDorCadastral = require('./fl-dor-cadastral');
 const caControllerTaxSale = require('./ca-controller-tax-sale');
 const courtlistener = require('./courtlistener');
 const hudUspsVacancy = require('./hud-usps-vacancy');
+const publicNoticesEmail = require('./email-ingest');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 const { validateListingForIngestion } = require('./validation');
@@ -98,6 +99,8 @@ class IngestionScheduler {
       caControllerTaxSale,
       courtlistener,
       hudUspsVacancy,
+      // Email-as-API collector: only accepts evidence when IMAP/corpus is configured.
+      new publicNoticesEmail.PublicNoticesEmailScraper({ env: options.env || process.env }),
     ];
     this.database = options.database || db;
     this.discoveryStore = options.discoveryStore || null;
