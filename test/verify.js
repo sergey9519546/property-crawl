@@ -48,7 +48,8 @@ const suites = [
   { name: '25. Scraper Upgrade & Run Reports', cmd: 'node --test test/scraper-upgrade.test.js test/scrapling-bridge.test.js test/scrapling-hud-treasury-irs.test.js test/scrapling-env-gate.test.js' },
   { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' },
   { name: '27. Scraper Power & End Coverage Guarantee', cmd: 'npm run test:scraper-power' },
-  { name: '28. Promotion Gate + Swarm Real Mode Contract', cmd: 'npm run test:promotion-gate' }
+  { name: '28. Promotion Gate + Swarm Real Mode Contract', cmd: 'npm run test:promotion-gate' },
+  { name: '29. Foolproof Fetch Strategy Research Contract', cmd: 'node --test test/fetch-strategy.test.js' }
 ];
 
 let totalPassed = 0;
