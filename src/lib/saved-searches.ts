@@ -124,12 +124,24 @@ export type AlertMatch = {
   listing?: { id: string; address?: string; state?: string; openingBid?: number | null; dealScore?: number | null } | null;
 };
 
-export async function listAlertMatches(onlyUnread = false, limit = 50): Promise<AlertMatch[]> {
+export type AlertMatchesPage = {
+  matches: AlertMatch[];
+  nextCursor: string | null;
+};
+
+export async function listAlertMatches(onlyUnread?: boolean, limit?: number): Promise<AlertMatch[]>;
+export async function listAlertMatches(onlyUnread: boolean | undefined, limit: number | undefined, cursor: string): Promise<AlertMatchesPage>;
+export async function listAlertMatches(onlyUnread?: boolean, limit?: number, cursor?: string): Promise<AlertMatch[] | AlertMatchesPage> {
   const q = new URLSearchParams();
   if (onlyUnread) q.set("onlyUnread", "true");
   if (limit) q.set("limit", String(limit));
-  const data = await api<{ matches?: AlertMatch[] }>(`/api/alerts/matches?${q.toString()}`);
-  return Array.isArray(data.matches) ? data.matches : [];
+  if (cursor) q.set("cursor", cursor);
+  const data = await api<{ matches?: AlertMatch[]; nextCursor?: string | null }>(`/api/alerts/matches?${q.toString()}`);
+  const matches = Array.isArray(data.matches) ? data.matches : [];
+  if (cursor !== undefined) {
+    return { matches, nextCursor: data.nextCursor ?? null };
+  }
+  return matches;
 }
 
 export async function markAlertMatchesRead(matchIds: string[]): Promise<{ markedRead: number }> {
@@ -141,11 +153,8 @@ export async function markAlertMatchesRead(matchIds: string[]): Promise<{ marked
 }
 
 export async function getUnreadAlertCount(): Promise<number> {
-  const matches = await listAlertMatches(true, 1);
-  // The endpoint returns the filtered count; if the server doesn't compute total separately we can fetch a small page.
-  // For a badge we accept "at least one" or do a second call with higher limit if needed.
-  // Simpler: call with limit=200 and count length (cheap).
-  if (matches.length === 0) return 0;
+  // The badge only needs the unread count; a single page fetch is cheap and
+  // keeps the endpoint contract (matches + cursor) unchanged.
   const allUnread = await listAlertMatches(true, 200);
   return allUnread.length;
 }

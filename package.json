@@ -50,7 +50,7 @@
     "test:agents": "node --test test/agents.test.js",
     "sources:public-records": "node scripts/collect-public-records.js",
     "sources:taxonomy": "node scripts/sync-source-taxonomy.js",
-    "test:intelligence": "node --test test/public-records.test.js test/property-intelligence.test.js test/hunts.test.js test/hunts-http.test.js test/source-operator.test.js",
+    "test:intelligence": "node --test test/public-records.test.js test/property-intelligence.test.js test/hunts.test.js test/hunts-http.test.js test/source-operator.test.js test/intelligence/saved-search-alerts.test.js test/routes/saved-searches.test.js test/routes/neighborhoods.test.js test/routes/watchlist-comps.test.js test/routes/auction-calendar.test.js",
     "sources:setup": "node scripts/setup-source-operator.js",
     "skills:graph": "node scripts/capability-graph.js",
     "db:seed": "node scripts/seed-from-v0.js",

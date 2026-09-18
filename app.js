@@ -113,12 +113,23 @@ function scoreLabel(s){ return bandFor(s).label; }
 function scoreColorAlpha(s){ return bandFor(s).color + bandFor(s).alpha; }
 
 /* ---------------- persistence (Puter KV when signed in, else memory/localStorage) ---------------- */
+// One-shot flag: set by the sign-in handler so loadSaved() merges any
+// anonymous localStorage saves into the cloud set exactly once per sign-in
+// transition, instead of on every signed-in load.
+let mergeLocalOnNextLoad = false;
 async function loadSaved(){
   try{
     if(user){
       const v = await puter.kv.get('pc_saved');
       const cloudItems = v ? JSON.parse(v) : [];
-      if(saved && saved.size > 0){
+      if(mergeLocalOnNextLoad){
+        mergeLocalOnNextLoad = false;
+        // Union cloud items with whatever the anonymous session stashed in
+        // localStorage (and anything already in memory), then persist the
+        // merged set back to the cloud so nothing is silently discarded.
+        let localItems = [];
+        try{ localItems = JSON.parse(localStorage.getItem('pc_saved') || '[]'); }catch(e){}
+        saved = new Set([...saved, ...localItems]);
         cloudItems.forEach(id => saved.add(id));
         await persistSaved();
       } else {
@@ -180,6 +191,7 @@ function renderAuth(){
       try {
         await puter.auth.signIn();
         user = await puter.auth.getUser();
+        mergeLocalOnNextLoad = true;
         await loadSaved(); renderAuth(); render();
         toast('Signed in — saved deals now sync');
       } catch(e) {

@@ -6,6 +6,18 @@ const { loadLiveRecords } = require('./live-record-store');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 
 const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
+const DEFAULT_WORKSPACE_STORE_PATH = path.resolve(__dirname, '../../.cache/workspace-store.json');
+const WORKSPACE_STORE_VERSION = 1;
+
+// GET /api/alerts/matches pagination bounds (shared by Postgres + in-memory paths).
+const ALERT_MATCHES_DEFAULT_LIMIT = 50;
+const ALERT_MATCHES_MAX_LIMIT = 200;
+
+function clampAlertMatchesLimit(limit) {
+  const n = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) return ALERT_MATCHES_DEFAULT_LIMIT;
+  return Math.max(1, Math.min(ALERT_MATCHES_MAX_LIMIT, Math.floor(n)));
+}
 
 // Canonical camelCase projection for listings. The in-memory provider emits
 // camelCase (dealScore, openingBid, propType, ...) and the UUID-style record
@@ -336,6 +348,18 @@ class DatabaseClient {
     this.liveCachePath = explicitLiveCachePath
       ? path.resolve(explicitLiveCachePath)
       : (explicitLiveCachePath === null || testMode ? null : DEFAULT_LIVE_CACHE_PATH);
+
+    // Workspace store: file-backed persistence for saved searches + alert matches
+    // in dev mode (DATABASE_URL unset). Disabled in tests or when explicitly set to null.
+    const explicitWorkspaceStorePath = Object.prototype.hasOwnProperty.call(options, 'workspaceStorePath')
+      ? options.workspaceStorePath
+      : this.env.PROPERTY_WORKSPACE_STORE_PATH;
+    this.workspaceStorePath = explicitWorkspaceStorePath
+      ? path.resolve(explicitWorkspaceStorePath)
+      : (explicitWorkspaceStorePath === null || testMode ? null : DEFAULT_WORKSPACE_STORE_PATH);
+    this._workspaceStoreLoaded = false;
+    this._workspaceStoreDirty = false;
+
     this.liveCacheSignature = null;
     this.liveCacheErrorSignature = null;
     this.inMemoryData = {
@@ -373,7 +397,62 @@ class DatabaseClient {
     }
 
     if (!this.isPg) {
+      this._loadWorkspaceStore();
       this.seedInMemory();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workspace store: file-backed persistence for saved searches + alert matches
+  // ---------------------------------------------------------------------------
+
+  _loadWorkspaceStore() {
+    if (!this.workspaceStorePath) return;
+    try {
+      if (!fs.existsSync(this.workspaceStorePath)) return;
+      const raw = fs.readFileSync(this.workspaceStorePath, 'utf8');
+      const data = JSON.parse(raw);
+      if (data.version !== WORKSPACE_STORE_VERSION) {
+        console.warn('[DB] Workspace store version mismatch; starting with empty saved searches.');
+        return;
+      }
+      if (data.savedSearches && typeof data.savedSearches === 'object') {
+        for (const [id, record] of Object.entries(data.savedSearches)) {
+          this.inMemoryData.savedSearches.set(id, record);
+        }
+      }
+      if (data.alertMatches && typeof data.alertMatches === 'object') {
+        for (const [id, record] of Object.entries(data.alertMatches)) {
+          this.inMemoryData.alertMatches.set(id, record);
+        }
+      }
+      this._workspaceStoreLoaded = true;
+      console.log(`[DB] Loaded ${this.inMemoryData.savedSearches.size} saved searches, ${this.inMemoryData.alertMatches.size} alert matches from workspace store`);
+    } catch (err) {
+      console.warn('[DB] Failed to load workspace store; starting empty:', err.message);
+    }
+  }
+
+  _persistWorkspaceStore() {
+    if (!this.workspaceStorePath || this.isPg) return;
+    try {
+      fs.mkdirSync(path.dirname(this.workspaceStorePath), { recursive: true });
+      const body = JSON.stringify({
+        version: WORKSPACE_STORE_VERSION,
+        updatedAt: new Date().toISOString(),
+        savedSearches: Object.fromEntries(this.inMemoryData.savedSearches),
+        alertMatches: Object.fromEntries(this.inMemoryData.alertMatches)
+      });
+      const tempPath = this.workspaceStorePath + '.' + cryptoRandomUUID() + '.tmp';
+      try {
+        fs.writeFileSync(tempPath, body, { flag: 'wx', mode: 0o600 });
+        fs.renameSync(tempPath, this.workspaceStorePath);
+      } finally {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      }
+      this._workspaceStoreDirty = false;
+    } catch (err) {
+      console.warn('[DB] Failed to persist workspace store:', err.message);
     }
   }
 
@@ -879,6 +958,7 @@ class DatabaseClient {
       updatedAt: nowIso
     };
     this.inMemoryData.savedSearches.set(id, record);
+    this._persistWorkspaceStore();
     return record;
   }
 
@@ -938,6 +1018,7 @@ class DatabaseClient {
     }
     const stored = this.inMemoryData.savedSearches.get(id);
     Object.assign(stored, allowed, { updatedAt: new Date().toISOString() });
+    this._persistWorkspaceStore();
     return stored;
   }
 
@@ -957,6 +1038,7 @@ class DatabaseClient {
     for (const [matchId, match] of this.inMemoryData.alertMatches) {
       if (match.searchId === id) this.inMemoryData.alertMatches.delete(matchId);
     }
+    this._persistWorkspaceStore();
     return true;
   }
 
@@ -1005,17 +1087,48 @@ class DatabaseClient {
       stored.lastMatchCount = out.length;
       stored.updatedAt = nowIso;
     }
+    this._persistWorkspaceStore();
     return out;
   }
 
-  async listAlertMatches(userId, { onlyUnread = false, limit = 100 } = {}) {
+  async listAlertMatches(userId, { onlyUnread = false, limit = ALERT_MATCHES_DEFAULT_LIMIT, cursor } = {}) {
     if (this.isPg) {
-      const sql = onlyUnread
-        ? `SELECT * FROM alert_matches WHERE user_id = $1 AND read_at IS NULL ORDER BY matched_at DESC LIMIT $2`
-        : `SELECT * FROM alert_matches WHERE user_id = $1 ORDER BY matched_at DESC LIMIT $2`;
-      const res = await this.pool.query(sql, [userId, Math.max(1, Math.min(500, limit))]);
-      return res.rows.map((row) => this._serializeAlertMatch(row));
+      const conditions = ['user_id = $1'];
+      const params = [userId];
+      let paramIdx = 2;
+
+      if (onlyUnread) {
+        conditions.push('read_at IS NULL');
+      }
+      if (cursor) {
+        // cursor format: "<matchedAtISO>|<id>"
+        const sepIdx = cursor.indexOf('|');
+        if (sepIdx > 0) {
+          const cursorDate = cursor.slice(0, sepIdx);
+          const cursorId = cursor.slice(sepIdx + 1);
+          conditions.push(`(matched_at < $${paramIdx} OR (matched_at = $${paramIdx} AND id < $${paramIdx + 1}))`);
+          params.push(cursorDate, cursorId);
+          paramIdx += 2;
+        }
+      }
+
+      const where = conditions.join(' AND ');
+      const effectiveLimit = clampAlertMatchesLimit(limit);
+      // Fetch one extra row to detect whether there is a next page
+      const sql = `SELECT * FROM alert_matches WHERE ${where} ORDER BY matched_at DESC, id DESC LIMIT $${paramIdx}`;
+      const res = await this.pool.query(sql, [...params, effectiveLimit + 1]);
+      const rows = res.rows.map((row) => this._serializeAlertMatch(row));
+
+      const hasMore = rows.length > effectiveLimit;
+      const page = hasMore ? rows.slice(0, effectiveLimit) : rows;
+      const nextCursor = hasMore && page.length > 0
+        ? `${page[page.length - 1].matchedAt}|${page[page.length - 1].id}`
+        : null;
+
+      return { matches: page, nextCursor };
     }
+
+    // In-memory path
     const out = [];
     for (const match of this.inMemoryData.alertMatches.values()) {
       if (match.userId !== userId) continue;
@@ -1023,7 +1136,29 @@ class DatabaseClient {
       out.push(match);
     }
     out.sort((a, b) => b.matchedAt.localeCompare(a.matchedAt));
-    return out.slice(0, Math.max(1, Math.min(500, limit)));
+
+    if (cursor) {
+      const sepIdx = cursor.indexOf('|');
+      if (sepIdx > 0) {
+        const cursorDate = cursor.slice(0, sepIdx);
+        const cursorId = cursor.slice(sepIdx + 1);
+        const pivot = out.findIndex(
+          (m) => m.matchedAt === cursorDate && m.id === cursorId
+        );
+        if (pivot >= 0) {
+          out.splice(0, pivot + 1);
+        }
+      }
+    }
+
+    const effectiveLimit = clampAlertMatchesLimit(limit);
+    const hasMore = out.length > effectiveLimit;
+    const page = hasMore ? out.slice(0, effectiveLimit) : out;
+    const nextCursor = hasMore && page.length > 0
+      ? `${page[page.length - 1].matchedAt}|${page[page.length - 1].id}`
+      : null;
+
+    return { matches: page, nextCursor };
   }
 
   async markAlertMatchesRead(userId, matchIds) {
@@ -1045,6 +1180,7 @@ class DatabaseClient {
         count += 1;
       }
     }
+    if (count > 0) this._persistWorkspaceStore();
     return count;
   }
 

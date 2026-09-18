@@ -21,13 +21,46 @@ async function createIsolatedDatabase(options = {}) {
   const connectionString = options.url || testDatabaseUrl();
   const bootstrap = new Pool({ connectionString, max: 1 });
   await bootstrap.query(`CREATE SCHEMA "${schema}"`);
-  await bootstrap.end();
-  const pool = new Pool({ connectionString, max: options.max || 20, options: `-c search_path=${schema},public` });
+  // Install cluster-level extensions once, under an advisory lock, before any
+  // schema object is created. Parallel acceptance files otherwise race inside
+  // schema.sql: concurrent CREATE EXTENSION IF NOT EXISTS statements collide
+  // on pg_extension's unique index (code 23505), and a lost race can leave
+  // the loser without PostGIS types for the rest of the file.
+  await bootstrap.query('SELECT pg_advisory_lock(727421)');
   try {
-    await pool.query(fs.readFileSync(path.resolve(__dirname, '../server/db/schema.sql'), 'utf8'));
-    for (const name of fs.readdirSync(path.resolve(__dirname, '../server/db/migrations')).filter((item) => /^\d+.*\.sql$/.test(item)).sort()) {
-      await pool.query(fs.readFileSync(path.resolve(__dirname, '../server/db/migrations', name), 'utf8'));
+    await bootstrap.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+    await bootstrap.query('CREATE EXTENSION IF NOT EXISTS "postgis"');
+    await bootstrap.query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+    await bootstrap.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  } finally {
+    await bootstrap.query('SELECT pg_advisory_unlock(727421)');
+    await bootstrap.end();
+  }
+  const pool = new Pool({ connectionString, max: options.max || 20, options: `-c search_path=${schema},public` });
+  const migrations = fs.readdirSync(path.resolve(__dirname, '../server/db/migrations'))
+    .filter((item) => /^\d+.*\.sql$/.test(item))
+    .sort();
+  try {
+    // Concurrent acceptance files each apply schema.sql, and parallel
+    // CREATE EXTENSION IF NOT EXISTS statements race on pg_extension's
+    // unique index (code 23505) even with IF NOT EXISTS. Every statement
+    // in the schema and migrations is idempotent, so retry the whole
+    // application: the next pass skips whatever the winner created.
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await pool.query(fs.readFileSync(path.resolve(__dirname, '../server/db/schema.sql'), 'utf8'));
+        for (const name of migrations) {
+          await pool.query(fs.readFileSync(path.resolve(__dirname, '../server/db/migrations', name), 'utf8'));
+        }
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!(error && error.code === '23505' && /pg_extension/.test(error.constraint || ''))) throw error;
+      }
     }
+    if (lastError) throw lastError;
   } catch (error) {
     await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await pool.end();

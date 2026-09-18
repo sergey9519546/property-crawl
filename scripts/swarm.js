@@ -44,7 +44,10 @@ function parseArgs(argv) {
     else if (arg.startsWith('--strategy=')) opts.strategy = arg.slice('--strategy='.length);
     else if (arg.startsWith('--mode=')) opts.mode = arg.slice('--mode='.length);
     else if (arg.startsWith('--max-agents=')) opts.maxAgents = Number(arg.slice('--max-agents='.length));
-    else if (arg.startsWith('--timeout=')) opts.timeoutMinutes = Number(arg.slice('--timeout='.length));
+    else if (arg.startsWith('--timeout=')) {
+      const t = Number(arg.slice('--timeout='.length));
+      opts.timeoutMinutes = Number.isFinite(t) && t > 0 ? t : undefined;
+    }
     else if (arg.startsWith('--namespace=')) opts.namespace = arg.slice('--namespace='.length);
     else if (arg.startsWith('--')) {
       // ignore unknown flags rather than crashing
@@ -64,7 +67,7 @@ Options:
   --strategy=<name>   auto|development|research|analysis|testing|optimization|maintenance|canary
   --mode=<name>       centralized|distributed|hierarchical|mesh|hybrid
   --max-agents=<n>    default ${config.defaults.maxAgents}
-  --timeout=<min>     default ${config.defaults.timeoutMinutes}
+  --timeout=<min>     default ${config.defaults.timeoutMinutes} (minimum 1)
   --parallel          enable parallel phase execution
   --review            append a review phase
   --testing           append a testing phase (default on via config)

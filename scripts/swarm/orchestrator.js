@@ -81,7 +81,11 @@ class SwarmOrchestrator extends EventEmitter {
     this.parallel = opts.parallel != null ? opts.parallel : d.parallel;
     this.review = opts.review != null ? opts.review : d.review;
     this.testing = opts.testing != null ? opts.testing : d.testing;
-    this.timeoutMinutes = opts.timeoutMinutes != null ? opts.timeoutMinutes : d.timeoutMinutes;
+    // An explicit timeoutMinutes of 0 or less means "already expired" (deadline = now);
+    // undefined/null means "use the default". The CLI filters out non-positive
+    // values before constructing the orchestrator, so real runs are unaffected.
+    const rawTimeout = opts.timeoutMinutes != null ? opts.timeoutMinutes : d.timeoutMinutes;
+    this.timeoutMinutes = Number.isFinite(rawTimeout) ? rawTimeout : d.timeoutMinutes;
     this.dryRun = Boolean(opts.dryRun);
     this.memory = opts.memory || new MemoryStore();
     this.queue = opts.queue || new TaskQueue({ persist: true });
@@ -564,9 +568,11 @@ function summarizeTask(task) {
 }
 
 function classifyChangeType(task) {
-  if (task && task.phase === 'testing') return 'scraper';
-  if (task && task.capability === 'verify_completion_gate') return 'agent';
-  return 'trivial';
+  if (task && typeof task.capability === 'string') {
+    if (task.capability.includes('scrape')) return 'scraper';
+    if (task.capability.includes('normalize')) return 'normalization';
+  }
+  return 'general';
 }
 
-module.exports = { SwarmOrchestrator, KEYWORD_STRATEGY, PHASE_AGENT_TYPES };
+module.exports = { SwarmOrchestrator };

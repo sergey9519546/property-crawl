@@ -13,13 +13,18 @@
 //                                       live listing pool right now and
 //                                       persist any new matches
 //   GET    /api/alerts/matches          list alert_matches for the user
-//   POST   /api/alerts/matches/read     mark a batch read
+//   POST   /api/alerts/matches          mark a batch read
 //
 // Auth: same workspace-identity gate as the existing /api/alerts route.
+// Cursor: "<matchedAtISO>|<matchId>" — pipe only; underscore is invalid.
 
 const db = require('../db/client');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { runAlertsForUser } = require('../intelligence/alerts-runner');
+
+// Pagination bounds for GET /api/alerts/matches.
+const ALERT_MATCHES_DEFAULT_LIMIT = 50;
+const ALERT_MATCHES_MAX_LIMIT = 200;
 
 function isStringArray(value, maxLen = 64) {
   return Array.isArray(value)
@@ -74,12 +79,36 @@ function serializeSearch(record) {
   };
 }
 
+function parseAlertCursor(cursor) {
+  if (cursor == null || cursor === '') return { ok: true, value: null };
+  if (typeof cursor !== 'string') return { ok: false, error: 'invalid_cursor' };
+  const sepIdx = cursor.indexOf('|');
+  if (sepIdx <= 0 || sepIdx === cursor.length - 1) {
+    return { ok: false, error: 'invalid_cursor' };
+  }
+  const matchedAt = cursor.slice(0, sepIdx);
+  const id = cursor.slice(sepIdx + 1).trim();
+  if (!id) return { ok: false, error: 'invalid_cursor' };
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(matchedAt)) {
+    return { ok: false, error: 'invalid_cursor' };
+  }
+  const parsed = Date.parse(matchedAt);
+  if (!Number.isFinite(parsed)) return { ok: false, error: 'invalid_cursor' };
+  return { ok: true, value: cursor };
+}
+
+function unwrapAlertMatches(result) {
+  if (Array.isArray(result)) {
+    return { matches: result, nextCursor: null };
+  }
+  const matches = Array.isArray(result?.matches) ? result.matches : [];
+  const nextCursor = result?.nextCursor == null ? null : String(result.nextCursor);
+  return { matches, nextCursor };
+}
+
 async function runSearchAgainstPool(database, search) {
   const inventory = await database.getListings({ limit: 1000 });
   const pool = Array.isArray(inventory?.listings) ? inventory.listings : [];
-  // We piggy-back on runAlertsForUser so the persistence side stays
-  // consistent. The userId/scope is the search owner — only the
-  // recordAlertMatches path matters here.
   const { matchListingAgainstSearch } = require('../intelligence/saved-search-alerts');
   const matchingIds = [];
   for (const listing of pool) {
@@ -177,22 +206,43 @@ function createSavedSearchesHandler(dependencies = {}) {
 
     if (method === 'GET') {
       const onlyUnread = url.searchParams.get('onlyUnread') === 'true';
-      const limit = Number(url.searchParams.get('limit'));
-      const matches = await database.listAlertMatches(userId, {
+      const rawLimit = Number(url.searchParams.get('limit'));
+      const requested = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : ALERT_MATCHES_DEFAULT_LIMIT;
+      const limit = Math.min(ALERT_MATCHES_MAX_LIMIT, requested);
+      const parsedCursor = parseAlertCursor(url.searchParams.get('cursor'));
+      if (!parsedCursor.ok) {
+        return res.status(400).json({ error: parsedCursor.error || 'invalid_cursor' });
+      }
+
+      const result = await database.listAlertMatches(userId, {
         onlyUnread,
-        limit: Number.isFinite(limit) ? limit : 100
+        limit,
+        cursor: parsedCursor.value
       });
-      return res.json({ userId, onlyUnread, count: matches.length, matches });
+      const { matches, nextCursor } = unwrapAlertMatches(result);
+
+      return res.json({
+        userId,
+        onlyUnread,
+        count: matches.length,
+        matches,
+        nextCursor
+      });
     }
+
     if (method === 'POST') {
       const body = req.body || {};
       const action = typeof body.action === 'string' ? body.action : 'mark_read';
       if (action !== 'mark_read') return res.status(400).json({ error: 'unsupported_action' });
-      const ids = Array.isArray(body.matchIds) ? body.matchIds.filter((v) => typeof v === 'string') : [];
+      const ids = Array.isArray(body.matchIds)
+        ? body.matchIds.filter((v) => typeof v === 'string')
+        : (Array.isArray(body.ids) ? body.ids.filter((v) => typeof v === 'string') : []);
       if (ids.length === 0) return res.status(400).json({ error: 'matchIds_required' });
       const marked = await database.markAlertMatchesRead(userId, ids);
-      return res.json({ success: true, markedRead: marked });
+      const markedRead = typeof marked === 'number' ? marked : (Array.isArray(marked) ? marked.length : 0);
+      return res.json({ success: true, markedRead });
     }
+
     return res.status(405).json({ error: 'method_not_allowed' });
   }
 
