@@ -1,23 +1,35 @@
-# fly.toml app configuration file generated for property-crawl on 2026-09-10T07:08:48Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# fly.toml — Property-Crawl production container
+# $0-capable path uses Dockerfile.production (Next UI + listing API, PORT=3000).
+# Note: Fly free tier may require card verification; prefer Koyeb/Render for $0.
 
 app = 'property-crawl'
 primary_region = 'ams'
 
 [build]
+  dockerfile = 'Dockerfile.production'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '3000'
+  SCRAPER_BACKGROUND_ENABLED = '0'
 
 [http_service]
-  internal_port = 8080
+  internal_port = 3000
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
   processes = ['app']
 
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '20s'
+    method = 'GET'
+    path = '/api/health'
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-  memory_mb = 256
+  memory_mb = 512

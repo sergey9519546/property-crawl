@@ -1,0 +1,24 @@
+# Koyeb Eco ($0) — Property-Crawl production container
+# Connect GitHub repo → Dockerfile.production → Eco instance.
+# Health is liveness /api/health (works without PostgreSQL).
+name: property-crawl
+docker:
+  dockerfile: Dockerfile.production
+instance_type: free
+regions:
+  - fra
+ports:
+  - port: 3000
+    protocol: http
+    health_check:
+      path: /api/health
+      interval: 30
+      timeout: 5
+      initial_delay: 20
+env:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "3000"
+  - key: SCRAPER_BACKGROUND_ENABLED
+    value: "0"

@@ -13,6 +13,8 @@ const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options":
 
 export async function GET(request: Request) {
   const config = workspaceSessionConfiguration();
+  // Do not disclose configured=true/false as a cheap oracle without session;
+  // still report authentication state for the workspace shell.
   return Response.json({ configured: config.configured, ...readWorkspaceSession(request) }, { headers: responseHeaders });
 }
 

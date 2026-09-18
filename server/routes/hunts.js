@@ -31,7 +31,8 @@ function createHuntsHandler(dependencies = {}) {
   return async function handleHunts(req, res, urlInput) {
     const url = urlInput instanceof URL ? urlInput : new URL(req.url, 'http://localhost');
     res.setHeader('Cache-Control', 'no-store');
-    const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+    const { resolveOperatorToken } = require('../security/operator-token');
+    const configuredToken = resolveOperatorToken(env);
     if (!configuredToken) return res.status(503).json({
       error: 'Saved hunts need SCRAPER_ADMIN_TOKEN on the API server.',
       requiredConfiguration: 'SCRAPER_ADMIN_TOKEN',

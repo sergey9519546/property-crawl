@@ -66,6 +66,14 @@ const fmt = n => n == null ? '—' : '$' + Number(n).toLocaleString();
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+// Escape is not enough for URL sinks: javascript: and data: survive esc().
+function safeHttpUrl(raw) {
+  const value = String(raw == null ? '' : raw).trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return '';
+}
+const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
 function icon(){ createIcons({ icons }); }
 function toast(msg){ $('#toastMsg').textContent = msg; const t = $('#toast'); t.classList.remove('hidden'); clearTimeout(t._t); t._t = setTimeout(()=>t.classList.add('hidden'), 2400); }
@@ -312,7 +320,7 @@ function card(l){
   const c=el('article','group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-brand-500 hover:-translate-y-0.5 transition cursor-pointer fade-in');
   c.innerHTML = `
     <div class="relative">
-      <img src="${esc(l.photo)}" alt="" loading="lazy" class="w-full h-44 object-cover"/>
+      <img src="${esc(safeHttpUrl(l.photo) || TRANSPARENT_PIXEL)}" alt="" loading="lazy" class="w-full h-44 object-cover"/>
       <div class="absolute top-3 left-3 flex items-center gap-1.5 text-[11px] font-bold text-white px-2.5 py-1 rounded-full" style="background:${s.color}">
         <span class="w-1.5 h-1.5 rounded-full bg-white"></span>${esc(s.label)} <span class="opacity-70">· Tier ${esc(s.tier)}</span>
       </div>
@@ -353,7 +361,7 @@ function card(l){
         ${l.sqft?`<span class="inline-flex items-center gap-1"><i data-lucide="ruler" class="w-3.5 h-3.5"></i>${l.sqft.toLocaleString()} sf</span>`:''}
         <span class="ml-auto inline-flex items-center gap-1 font-semibold text-emerald-600"><i data-lucide="trending-up" class="w-3.5 h-3.5"></i>${fmt(l.equity)} spread</span>
       </div>
-      ${l.sourceUrl?`<a href="${esc(l.sourceUrl)}" target="_blank" rel="noopener noreferrer" data-source-link class="mt-3 pt-3 border-t border-slate-100 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>View on source<span class="opacity-50">↗</span></a>`:''}
+      ${safeHttpUrl(l.sourceUrl)?`<a href="${esc(safeHttpUrl(l.sourceUrl))}" target="_blank" rel="noopener noreferrer" data-source-link class="mt-3 pt-3 border-t border-slate-100 inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800"><i data-lucide="external-link" class="w-3.5 h-3.5"></i>View on source<span class="opacity-50">↗</span></a>`:''}
     </div>`;
   c.querySelector('[data-save]').onclick=(e)=>{ e.stopPropagation(); toggleSave(l.id); };
   // Stop the source link from bubbling up to the card's openDrawer click.
@@ -417,7 +425,7 @@ function openDrawer(id, keepScroll){
   const isSaved=saved.has(id);
   dc.innerHTML=`
     <div class="relative">
-      <img src="${esc(l.photo)}" class="w-full h-56 object-cover"/>
+      <img src="${esc(safeHttpUrl(l.photo) || TRANSPARENT_PIXEL)}" class="w-full h-56 object-cover"/>
       <button id="closeDrawer" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/90 flex items-center justify-center hover:bg-white"><i data-lucide="x" class="w-5 h-5"></i></button>
       <div class="absolute bottom-4 left-4 flex items-center gap-1.5 text-xs font-bold text-white px-3 py-1.5 rounded-full" style="background:${s.color}"><span class="w-1.5 h-1.5 rounded-full bg-white"></span>${esc(s.label)} · Tier ${esc(s.tier)}</div>
     </div>
@@ -485,7 +493,7 @@ function openDrawer(id, keepScroll){
           <i data-lucide="bookmark" class="w-4 h-4 ${isSaved?'fill-white':''}"></i>${isSaved?'Saved':'Save deal'}
         </button>
         <button id="reAnalyze" class="inline-flex items-center justify-center gap-2 font-semibold px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50"><i data-lucide="refresh-cw" class="w-4 h-4"></i>Re-run</button>
-        ${l.sourceUrl?`<a id="drawerSource" href="${esc(l.sourceUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 font-semibold px-4 py-3 rounded-xl border border-brand-200 text-brand-700 hover:bg-brand-50" title="Open the original listing on the source's site"><i data-lucide="external-link" class="w-4 h-4"></i>View on source</a>`:''}
+        ${safeHttpUrl(l.sourceUrl)?`<a id="drawerSource" href="${esc(safeHttpUrl(l.sourceUrl))}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 font-semibold px-4 py-3 rounded-xl border border-brand-200 text-brand-700 hover:bg-brand-50" title="Open the original listing on the source's site"><i data-lucide="external-link" class="w-4 h-4"></i>View on source</a>`:''}
       </div>
       <p class="text-[11px] text-slate-400 mt-3 leading-relaxed">Triage only — not an appraisal or legal advice. Confirm every term, lien, and redemption right at the source before bidding.</p>
     </div>`;
@@ -741,7 +749,7 @@ function openAlerts(){
         ? `<span class="text-red-600">sale passed · ${fmtDate(l.saleDate)}</span>`
         : `${daysLabel(du)} to sale · ${fmtDate(l.saleDate)}`;
       return `<div class="flex items-center gap-3 p-3 rounded-xl border border-slate-200 mb-2 hover:border-brand-500 cursor-pointer" data-goto="${esc(l.id)}">
-        <img src="${esc(l.photo)}" alt="" class="w-14 h-14 rounded-lg object-cover"/>
+        <img src="${esc(safeHttpUrl(l.photo) || TRANSPARENT_PIXEL)}" alt="" class="w-14 h-14 rounded-lg object-cover"/>
         <div class="flex-1 min-w-0"><p class="font-semibold text-sm text-ink-900 truncate">${esc(l.city)}, ${esc(l.state)}</p><p class="text-xs text-slate-500 truncate">${esc(s.label)} · ${fmt(l.openingBid)}</p>
         <p class="text-xs mt-0.5 font-semibold ${past?'text-red-600':(urgent?'text-red-600':'text-slate-400')}">${sub}</p></div>
         <span class="text-xs font-extrabold px-2 py-1 rounded-lg" style="color:${scoreColor(l.dealScore)};background:${scoreColorAlpha(l.dealScore)}">${l.dealScore}</span>

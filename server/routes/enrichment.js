@@ -50,7 +50,8 @@ function createEnrichmentHandler(dependencies = {}) {
 
     try {
       if (isRefresh) {
-        const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+        const { resolveOperatorToken } = require('../security/operator-token');
+        const configuredToken = resolveOperatorToken(env);
         if (!configuredToken) return res.status(503).json({ error: 'Enrichment refresh needs SCRAPER_ADMIN_TOKEN on the API server. Read-only view remains available.' });
         if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Enrichment operator credential required' });
         const body = req.body || {};

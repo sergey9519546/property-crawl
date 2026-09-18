@@ -8,7 +8,7 @@ export class WorkspaceUnlockLimiter {
   private readonly windowMs: number;
   private readonly now: () => number;
 
-  constructor(maxFailures = 8, windowMs = 60_000, now: () => number = Date.now) {
+  constructor(maxFailures = 5, windowMs = 5 * 60_000, now: () => number = Date.now) {
     this.maxFailures = maxFailures;
     this.windowMs = windowMs;
     this.now = now;
@@ -41,12 +41,13 @@ export class WorkspaceUnlockLimiter {
   }
 }
 
-// Per-session bucket: the client sends a random x-unlock-sid header so one
-// user's failed attempts do not lock out other users. Falls back to a shared
-// bucket when the header is absent (e.g. non-browser callers).
+// Unlock attempts are a single-operator surface. Client-supplied headers
+// (x-unlock-sid, x-forwarded-for without a trusted edge) must never mint
+// unlimited rate-limit buckets — that would make SCRAPER_ADMIN_TOKEN
+// brute-forceable. Enforcement is intentionally global/fail-closed.
 export function workspaceUnlockBucket(request: Request) {
-  const sid = request.headers.get("x-unlock-sid");
-  return sid && sid.length <= 64 ? `sid:${sid}` : "global";
+  void request;
+  return "global";
 }
 
 export const workspaceUnlockLimiter = new WorkspaceUnlockLimiter();

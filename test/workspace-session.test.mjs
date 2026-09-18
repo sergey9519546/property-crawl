@@ -19,15 +19,21 @@ test('workspace unlock attempts are bounded and report retry timing', () => {
   assert.deepEqual(limiter.check('global'), { allowed: true, retryAfterSeconds: 0 });
 });
 
-test('successful unlock resets failures and forwarded headers cannot create new buckets', () => {
+test('client-controlled headers cannot mint unlimited unlock buckets', () => {
   const limiter = new WorkspaceUnlockLimiter(1, 60_000, () => 20_000);
   limiter.recordFailure('global');
   assert.equal(limiter.check('global').allowed, false);
   limiter.reset('global');
   assert.equal(limiter.check('global').allowed, true);
 
-  const first = new Request('https://app.example/api/workspace/session', { headers: { 'x-forwarded-for': '203.0.113.1' } });
-  const second = new Request('https://app.example/api/workspace/session', { headers: { 'x-forwarded-for': '203.0.113.2', 'x-real-ip': '198.51.100.9' } });
-  assert.equal(workspaceUnlockBucket(first), 'global');
-  assert.equal(workspaceUnlockBucket(second), 'global');
+  const withSid = new Request('https://app.example/api/workspace/session', {
+    headers: { 'x-unlock-sid': 'attacker-rotates-this' },
+  });
+  const withForwarded = new Request('https://app.example/api/workspace/session', {
+    headers: { 'x-forwarded-for': '203.0.113.1', 'x-unlock-sid': 'another-id' },
+  });
+  const bare = new Request('https://app.example/api/workspace/session');
+  assert.equal(workspaceUnlockBucket(withSid), 'global');
+  assert.equal(workspaceUnlockBucket(withForwarded), 'global');
+  assert.equal(workspaceUnlockBucket(bare), 'global');
 });

@@ -9,7 +9,6 @@ import {
   X,
   LayoutDashboard,
   Eye,
-  Sparkles,
   Radar,
   Gauge,
   Plug,
@@ -17,12 +16,12 @@ import {
   Send,
   Calculator,
   Landmark,
-  Newspaper,
   BookOpen,
   Map,
   History,
   BarChart3,
   ArrowRight,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { Logo } from "./logo";
@@ -55,22 +54,21 @@ type MenuGroup = {
   simple?: { label: string; href: string }[];
 };
 
-// Arcade's exact nav: Product | Solutions | Resources | Enterprise | Pricing
-// (NO Tools, NO Company, NO Log in — Enterprise is a link, not a dropdown)
+// Product nav maps to shipped beta surfaces. Phantom roadmap names are labeled.
 const GROUPS: MenuGroup[] = [
   {
     key: "product",
     label: "Product",
     columns: [
       [
-        { label: "Deal Stacks", desc: "Effortlessly beautiful deal presentations", icon: LayoutDashboard, href: "#live-feed", tint: "#e7faef" },
-        { label: "Shadow Mode", desc: "Inspect off-market distress signals", icon: Eye, href: "#product", tint: "#E2E8F0" },
-        { label: "Prophecy", desc: "Predict which parcels will list next", icon: Sparkles, href: "#product", tint: "#E9D5FF" },
+        { label: "Listing workspace", desc: "Search grid, map, and deal detail", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
+        { label: "Source Radar", desc: "Coverage, trust status, and collector health", icon: Plug, href: "/sources", tint: "#E2E8F0" },
+        { label: "Saved Hunts", desc: "Explain matches and track evidence changes", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
       ],
       [
-        { label: "Saved Hunts", desc: "Explain matches and track evidence changes", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
-        { label: "Accuracy", desc: "Track your ARV engine hit rate", icon: Gauge, href: "#proof", tint: "#e7faef" },
-        { label: "Source Radar", desc: "Follow sources and investigate what changed", icon: Plug, href: "/sources", tint: "#E2E8F0" },
+        { label: "Second Look", desc: "Research cases and reconsideration queue", icon: Eye, href: "/research", tint: "#E9D5FF" },
+        { label: "Collection activity", desc: "Jobs, runs, and ingestion health", icon: History, href: "/activity", tint: "#e7faef" },
+        { label: "What's in beta", desc: "Shipped vs roadmap capability matrix", icon: Gauge, href: "/#pricing", tint: "#E2E8F0" },
       ],
     ],
   },
@@ -79,12 +77,12 @@ const GROUPS: MenuGroup[] = [
     label: "Solutions",
     columns: [
       [
-        { label: "Acquisitions", desc: "From parcel to offer in minutes", icon: Target, href: "#solutions", tint: "#e7faef" },
-        { label: "Disposition", desc: "Deal memos your partners trust", icon: Send, href: "#solutions", tint: "#FFD6C8" },
+        { label: "Acquisitions", desc: "Triage from source record to research case", icon: Target, href: "/listings", tint: "#e7faef" },
+        { label: "Disposition", desc: "Evidence-backed deal notes (beta)", icon: Send, href: "/listings", tint: "#FFD6C8" },
       ],
       [
-        { label: "Underwriting", desc: "Versioned ARV, offer, and profit", icon: Calculator, href: "#solutions", tint: "#E2E8F0" },
-        { label: "Capital", desc: "Show lenders the story behind the number", icon: Landmark, href: "#solutions", tint: "#E9D5FF" },
+        { label: "Underwriting", desc: "Cash inputs, assumptions, and gaps", icon: Calculator, href: "/listings", tint: "#E2E8F0" },
+        { label: "Capital", desc: "Lender-ready evidence packages (roadmap)", icon: Landmark, href: "/#pricing", tint: "#E9D5FF" },
       ],
     ],
   },
@@ -93,13 +91,13 @@ const GROUPS: MenuGroup[] = [
     label: "Resources",
     columns: [
       [
-        { label: "Blog", desc: "The latest in deal flow", icon: Newspaper, href: "/resources#blog", tint: "#e7faef" },
-        { label: "Knowledge Base", desc: "Unlock your underwriting", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
-        { label: "Guides", desc: "Hands-on county playbooks", icon: Map, href: "/resources#guides", tint: "#FFD6C8" },
+        { label: "Knowledge base", desc: "How to use the beta workflow", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
+        { label: "County guides", desc: "Jurisdiction differences before you bid", icon: Map, href: "/resources#guides", tint: "#FFD6C8" },
+        { label: "Changelog", desc: "What shipped in this build", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
       ],
       [
-        { label: "Changelog", desc: "What's new in PerfectProperty", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
-        { label: "Accuracy Report", desc: "Our ARV hit rate, in public", icon: BarChart3, href: "#proof", tint: "#e7faef" },
+        { label: "Scraper power report", desc: "Source coverage vs live inventory limits", icon: BarChart3, href: "/sources", tint: "#e7faef" },
+        { label: "Operator access", desc: "Shared-key private beta model", icon: KeyRound, href: "/sign-in", tint: "#E2E8F0" },
       ],
     ],
   },

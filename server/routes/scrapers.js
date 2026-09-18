@@ -34,7 +34,8 @@ async function handleScrapers(req, res) {
   }
 
   if (method === 'POST' && (url.pathname === '/api/scrapers/run' || url.pathname === '/api/scrapers')) {
-    const configuredToken = String(process.env.SCRAPER_ADMIN_TOKEN || '').trim();
+    const { resolveOperatorToken } = require('../security/operator-token');
+    const configuredToken = resolveOperatorToken(process.env);
     if (!configuredToken) {
       return res.status(503).json({
         error: 'On-demand scraper execution is disabled',

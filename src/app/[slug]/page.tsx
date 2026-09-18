@@ -88,9 +88,11 @@ const INFO_PAGES: Record<string, InfoPage> = {
   contact: {
     eyebrow: "Contact",
     title: "Talk to the PerfectProperty team.",
-    intro: "The project is currently in private beta. A monitored support address and production service channels will be added before public access.",
+    intro: "Private beta. Messages are stored on the server for the operator; outbound email delivery is only active when a webhook endpoint is configured.",
     sections: [
       { title: "Product feedback", body: "Use the live interface to identify broken workflows, unclear risk language, missing sources, and the filters your acquisitions process needs." },
+      { title: "Delivery status", body: "If the contact form says delivery is not configured yet, your message was saved for operator review and was not emailed. Prefer the in-product research workflow for urgent source issues." },
+      { title: "Operator access", body: "There is no public self-serve account system. Access uses a shared operator credential — see /sign-in for the current model." },
       { id: "careers", title: "Careers", body: "There are no open roles published at this time. Future engineering and data-operations roles will be listed here." },
     ],
   },
@@ -179,7 +181,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-6 py-5 sm:px-8">
                 <h2 className="text-xl font-bold text-[#111827]">Send us a message</h2>
                 <p className="mt-1 text-sm text-[#64748B]">
-                  We read every message. Expect a response before public launch.
+                  Messages are stored for operator review. Outbound email is only active when a webhook is configured on the server.
                 </p>
               </div>
               <div className="p-6 sm:p-8">

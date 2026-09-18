@@ -1,10 +1,18 @@
 import { persistFormSubmission, sanitize } from "@/lib/form-submissions";
+import { checkFormRateLimit } from "@/lib/form-rate-limit";
 
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
 export async function POST(request: Request) {
   if (Number(request.headers.get("content-length")) > 8192) {
     return Response.json({ error: "Request body too large" }, { status: 413, headers: responseHeaders });
+  }
+  const rate = checkFormRateLimit("contact");
+  if (!rate.allowed) {
+    return Response.json(
+      { error: "Too many contact submissions. Retry later." },
+      { status: 429, headers: { ...responseHeaders, "Retry-After": String(rate.retryAfterSeconds) } },
+    );
   }
   let body: { name?: unknown; email?: unknown; company?: unknown; message?: unknown };
   try {

@@ -41,6 +41,22 @@ async function main() {
     /await waitForHealth\(`http:\/\/127\.0\.0\.1:\$\{publicPort\}\/api\/health`\)/.test(startProd),
     'UI health uses /api/health liveness'
   ));
+  const dockerfile = fs.readFileSync(path.join(ROOT, 'Dockerfile.production'), 'utf8');
+  findings.push(check(
+    'docker-healthcheck-liveness',
+    /HEALTHCHECK[\s\S]*?\/api\/health[^/]/.test(dockerfile) || /HEALTHCHECK[\s\S]*?\/api\/health"/.test(dockerfile),
+    'Dockerfile.production healthcheck uses /api/health (demo-safe)'
+  ));
+  const renderYaml = fs.existsSync(path.join(ROOT, 'render.yaml'))
+    ? fs.readFileSync(path.join(ROOT, 'render.yaml'), 'utf8')
+    : '';
+  if (renderYaml) {
+    findings.push(check(
+      'render-health-liveness',
+      /healthCheckPath:\s*\/api\/health\s*$/m.test(renderYaml) || /healthCheckPath:\s*\/api\/health\n/.test(renderYaml),
+      'render.yaml healthCheckPath is /api/health for $0 demo'
+    ));
+  }
   findings.push(check(
     'production-boot-demo-mode',
     /Demo\/in-memory mode detected/.test(startProd),
@@ -56,6 +72,12 @@ async function main() {
     ['start:production', 'canary:live', 'scrapers:power', 'quality:report', 'swarm:real']
       .every((s) => pkg.scripts && pkg.scripts[s]),
     'required operational npm scripts exist'
+  ));
+  const signIn = fs.readFileSync(path.join(ROOT, 'src/app/sign-in/page.tsx'), 'utf8');
+  findings.push(check(
+    'honest-operator-access-page',
+    /shared operator credential/i.test(signIn) && !/redirect\("/.test(signIn),
+    'sign-in explains operator beta instead of dead redirect'
   ));
 
   const apiBase = process.env.SMOKE_API_URL || 'http://127.0.0.1:3000';

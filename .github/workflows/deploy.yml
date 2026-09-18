@@ -1,0 +1,63 @@
+name: Deploy / $0 production
+
+# Optional deploy after unit-gate is green.
+# Secrets (repo settings):
+#   RENDER_DEPLOY_HOOK_URL  — Render dashboard deploy hook (preferred $0 path)
+#   KOYEB_API_TOKEN         — optional Koyeb API deploy
+#   DEPLOY_SMOKE_URL        — public base URL to curl after deploy
+
+on:
+  workflow_run:
+    workflows: ["CI / Verification Pipeline"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        required: true
+        default: render
+        type: choice
+        options: [render, koyeb, smoke-only]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Deploy target selection
+        id: pick
+        run: |
+          target="${{ github.event.inputs.target || 'render' }}"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "Selected target: $target"
+
+      - name: Trigger Render deploy hook
+        if: ${{ steps.pick.outputs.target == 'render' }}
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL secret not set — configure Render Blueprint first."
+            echo "Manual path: https://dashboard.render.com → New Blueprint → this repo"
+            exit 0
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+
+      - name: Post-deploy smoke
+        env:
+          DEPLOY_SMOKE_URL: ${{ secrets.DEPLOY_SMOKE_URL }}
+        run: |
+          if [ -z "$DEPLOY_SMOKE_URL" ]; then
+            echo "DEPLOY_SMOKE_URL not set — skip live verify."
+            exit 0
+          fi
+          echo "Smoke: $DEPLOY_SMOKE_URL/api/health"
+          curl -fsS --max-time 30 "$DEPLOY_SMOKE_URL/api/health" | tee /tmp/health.json
+          grep -qi 'ok\|status\|ready\|live' /tmp/health.json

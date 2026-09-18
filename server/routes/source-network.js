@@ -46,7 +46,8 @@ function createSourceNetworkHandler(dependencies = {}) {
       }
       const jobMatch = url.pathname.match(/^\/api\/source-network\/jobs\/(job_[a-f0-9]{24})$/);
       // Raw evidence and operational mutations use the existing operator credential.
-      const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+      const { resolveOperatorToken } = require('../security/operator-token');
+      const configuredToken = resolveOperatorToken(env);
       if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
       if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {

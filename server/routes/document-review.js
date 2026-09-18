@@ -24,6 +24,24 @@ const {
   filterByStatus,
   summarizeReviews,
 } = require('../intelligence/document-review');
+const { resolveOperatorToken } = require('../security/operator-token');
+const { presentedRunToken, tokensMatch } = require('./scrapers');
+
+function requireOperator(req, res) {
+  const configuredToken = resolveOperatorToken(process.env);
+  if (!configuredToken) {
+    res.status(503).json({
+      error: 'Document review needs SCRAPER_ADMIN_TOKEN (or PROPERTY_OPERATOR_SECRET) on the API server.',
+      requiredConfiguration: 'SCRAPER_ADMIN_TOKEN',
+    });
+    return false;
+  }
+  if (!tokensMatch(presentedRunToken(req), configuredToken)) {
+    res.status(401).json({ error: 'Operator credential required for document review' });
+    return false;
+  }
+  return true;
+}
 
 const MAX_DOCUMENT_ID_LENGTH = 200;
 const MAX_LISTING_ID_LENGTH = 200;
@@ -86,6 +104,7 @@ async function handleDocumentReview(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const method = req.method;
   res.setHeader('Cache-Control', 'no-store');
+  if (!requireOperator(req, res)) return;
 
   if (method === 'GET' && url.pathname === '/api/document-review') {
     const requestedStatus = url.searchParams.get('status');

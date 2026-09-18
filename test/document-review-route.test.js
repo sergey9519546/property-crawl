@@ -3,12 +3,17 @@ const { afterEach, beforeEach, test } = require('node:test');
 const handleDocumentReview = require('../server/routes/document-review');
 const { REVIEW_STATES } = require('../server/intelligence/document-review');
 
-function makeReq({ method = 'POST', url = '/api/document-review', body = null, headers = {} } = {}) {
+const TEST_TOKEN = 'document-review-test-operator';
+
+function makeReq({ method = 'POST', url = '/api/document-review', body = null, headers = {}, authenticated = true } = {}) {
   const listeners = { data: [], end: [], close: [], error: [] };
+  const authHeaders = authenticated
+    ? { authorization: `Bearer ${TEST_TOKEN}` }
+    : {};
   const req = {
     method,
     url,
-    headers: { 'content-type': 'application/json', ...headers },
+    headers: { 'content-type': 'application/json', ...authHeaders, ...headers },
     socket: { destroy() { /* noop */ } },
     on(event, handler) { (listeners[event] ||= []).push(handler); return req; },
   };
@@ -35,11 +40,31 @@ function makeRes() {
 }
 
 beforeEach(() => {
+  process.env.SCRAPER_ADMIN_TOKEN = TEST_TOKEN;
+  delete process.env.PROPERTY_OPERATOR_SECRET;
   handleDocumentReview._resetForTests();
 });
 
 afterEach(() => {
   handleDocumentReview._resetForTests();
+  delete process.env.SCRAPER_ADMIN_TOKEN;
+});
+
+test('document review rejects unauthenticated requests', async () => {
+  const req = makeReq({ method: 'GET', authenticated: false });
+  const res = makeRes();
+  await handleDocumentReview(req, res);
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.error, /Operator credential required/);
+});
+
+test('document review fails closed when operator token is unset', async () => {
+  delete process.env.SCRAPER_ADMIN_TOKEN;
+  const req = makeReq({ method: 'GET', authenticated: false });
+  const res = makeRes();
+  await handleDocumentReview(req, res);
+  assert.equal(res.statusCode, 503);
+  assert.match(res.body.requiredConfiguration, /SCRAPER_ADMIN_TOKEN/);
 });
 
 test('GET /api/document-review with no reviews returns empty list and zero counts', async () => {
@@ -83,7 +108,6 @@ test('POST /api/document-review with valid approval returns the new review', asy
 });
 
 test('POST /api/document-review advances from pending to approved and increments revision', async () => {
-  // First: create the review by approving directly
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();
   await handleDocumentReview(req1, res1);
@@ -91,7 +115,6 @@ test('POST /api/document-review advances from pending to approved and increments
   assert.equal(initialReview.revision, 1);
   assert.equal(initialReview.priorStatus, REVIEW_STATES.PENDING);
 
-  // Then: re-confirm — should preserve revision and reviewedAt
   const req2 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'confirmed' } });
   const res2 = makeRes();
   await handleDocumentReview(req2, res2);
@@ -99,7 +122,6 @@ test('POST /api/document-review advances from pending to approved and increments
   assert.equal(res2.body.review.notes, 'confirmed');
   assert.equal(res2.body.review.priorStatus, REVIEW_STATES.PENDING);
 
-  // Then: transition to rejected — should increment revision
   const req3 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'rejected', reviewer: 'op-7', notes: 'actually wrong' } });
   const res3 = makeRes();
   await handleDocumentReview(req3, res3);
@@ -133,22 +155,17 @@ test('POST /api/document-review without body returns 400 listingId required', as
 });
 
 test('GET /api/document-review?status=pending returns only pending reviews', async () => {
-  // Create one approved review and one pending review (with valid input).
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();
   await handleDocumentReview(req1, res1);
   assert.equal(res1.statusCode, 200);
 
-  // Seed the second review as pending via a state-changing POST then revert
-  // its prior status; alternatively just POST with pending (the pure module
-  // accepts pending without reviewer).
   const req2 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-2', status: 'pending' } });
   const res2 = makeRes();
   await handleDocumentReview(req2, res2);
   assert.equal(res2.statusCode, 200);
   assert.equal(res2.body.review.status, REVIEW_STATES.PENDING);
 
-  // Query pending
   const reqGet = makeReq({ method: 'GET', url: '/api/document-review?status=pending' });
   const resGet = makeRes();
   await handleDocumentReview(reqGet, resGet);
@@ -201,7 +218,6 @@ test('unsupported method returns 405', async () => {
 });
 
 test('listingId is whitespace-trimmed and length-capped', async () => {
-  // Single rep padded; trim only strips outer whitespace.
   const padded = '  CIV-NJ-1  ';
   const req = makeReq({ method: 'POST', body: { listingId: padded, status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res = makeRes();

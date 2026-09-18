@@ -32,6 +32,22 @@ const nextConfig = {
   },
   // Security: do not advertise the framework in headers.
   poweredByHeader: false,
+  // Canonical UI security headers (production). Align with the Node API.
+  async headers() {
+    const security = [
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+      { key: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https: data:; connect-src 'self' https:; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'" },
+    ];
+    if (process.env.NODE_ENV === 'production') {
+      security.push({ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' });
+    }
+    return [
+      { source: '/(.*)', headers: security },
+    ];
+  },
   // @server/* is a runtime alias for ./server/* so Next.js components
   // can import canonical Node-side modules (not stubs under src/lib/scrapers/).
   webpack(config) {

@@ -5,7 +5,8 @@ const { presentedRunToken, tokensMatch } = require('../routes/scrapers');
 // One private operator workspace today. Identity comes from server configuration,
 // never from x-user-id, query parameters, or an untrusted request body.
 function requireWorkspaceIdentity(req, res, env = process.env) {
-  const credential = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+  const { resolveOperatorToken } = require('./operator-token');
+  const credential = resolveOperatorToken(env);
   if (!credential) {
     res.status(503).json({ error: 'Private workspace access is not configured' });
     return null;
