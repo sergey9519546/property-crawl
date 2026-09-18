@@ -43,6 +43,30 @@ test('profiles set includes all known profiles', () => {
   ]);
 });
 
+test('treasury/irs detail protocol rejects empty property objects', async t => {
+  if (!fs.existsSync(python)) return t.skip('isolated Scrapling runtime not installed');
+  // Python always emits typed keys; validate the JS gate itself.
+  const { PROFILES } = require('../server/scrapers/scrapling-bridge');
+  assert.ok(PROFILES.has('treasury-detail'));
+  const path = require('node:path');
+  const script = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-empty-'));
+  const emptyProp = path.join(script, 'empty.py');
+  const crypto = require('node:crypto');
+  fs.writeFileSync(emptyProp, `import json,sys,hashlib
+r=json.load(sys.stdin)
+h=hashlib.sha256(r['html'].encode()).hexdigest()
+print(json.dumps({'version':1,'profile':r['profile'],'sourceUrl':r['url'],'engine':'scrapling','engineVersion':'0.4.15','contentSha256':h,'property':{}}))
+`);
+  try {
+    await assert.rejects(
+      () => extractWithScrapling('treasury-detail', { html: '<p>Starting Bid: $1</p>', url: 'https://example.test/p', python, scriptPath: emptyProp }),
+      error => error.code === 'SCRAPLING_PROTOCOL_ERROR'
+    );
+  } finally {
+    fs.rmSync(script, { recursive: true, force: true });
+  }
+});
+
 test('isPrivateOrLocalHost detects SSRF targets', () => {
   assert.equal(isPrivateOrLocalHost('localhost'), true);
   assert.equal(isPrivateOrLocalHost('127.0.0.1'), true);

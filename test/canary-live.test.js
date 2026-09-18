@@ -17,6 +17,25 @@ const {
   parseArgs,
 } = require('../scripts/canary-live');
 
+test('evaluateCanaryClean rejects non-zero rejected counts and fixture inventory', () => {
+  const base = {
+    accepted: 5,
+    error: null,
+    observationError: null,
+    report: { scope: { a: 1 }, complete: true, fullSweepComplete: true, truncated: false },
+  };
+  assert.equal(evaluateCanaryClean({ ...base, rejected: 0 }).clean, true);
+  assert.equal(evaluateCanaryClean({ ...base, rejected: 3 }).clean, false);
+  assert.equal(evaluateCanaryClean({
+    ...base,
+    report: { ...base.report, recordsRejected: 2 },
+  }).clean, false);
+  assert.equal(evaluateCanaryClean({
+    ...base,
+    report: { ...base.report, fixtureFallbackUsed: true },
+  }).clean, false);
+});
+
 test('evaluateCanaryClean accepts Migration 014 gate-clean source results', () => {
   const result = evaluateCanaryClean({
     sourceId: 'treasury',

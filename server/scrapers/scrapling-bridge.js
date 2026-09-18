@@ -62,6 +62,25 @@ function isScraplingEnabled(sourceKey, env = process.env) {
   return wanted.includes(String(sourceKey || '').trim().toLowerCase());
 }
 
+/**
+ * Scrapers capture useScrapling at construction. Canary/CLI tools that set
+ * SCRAPLING_SOURCES after modules are loaded must re-bind the flag here.
+ */
+function refreshScraplingFlags(scrapers, env = process.env) {
+  if (!Array.isArray(scrapers)) return 0;
+  let enabled = 0;
+  for (const scraper of scrapers) {
+    const key = scraper && (scraper.sourceKey || scraper.name);
+    if (!key) continue;
+    const on = isScraplingEnabled(scraper.sourceKey || key, env);
+    if ('useScrapling' in scraper || scraper.useScrapling !== undefined) {
+      scraper.useScrapling = on;
+    }
+    if (on) enabled += 1;
+  }
+  return enabled;
+}
+
 function defaultPython(env = process.env) {
   if (env.SCRAPLING_PYTHON) return env.SCRAPLING_PYTHON;
   const root = path.resolve(__dirname, '..', '..');
@@ -120,7 +139,18 @@ function validResponse(result, profile, url, expectedHash) {
       && ['address', 'city', 'state', 'zipcode'].every(key => result.property[key] === null || typeof result.property[key] === 'string');
   }
   if (profile === 'treasury-detail' || profile === 'irs-detail') {
-    return Boolean(result.property) && typeof result.property === 'object' && !Array.isArray(result.property);
+    if (!result.property || typeof result.property !== 'object' || Array.isArray(result.property)) return false;
+    const prop = result.property;
+    // Require at least one typed observation so empty {} is not protocol-valid.
+    const numericFields = profile === 'treasury-detail'
+      ? ['startingBid', 'livingArea', 'yearBuilt', 'beds', 'baths']
+      : ['minimumBid', 'beds', 'baths', 'sqft', 'yearBuilt'];
+    const stringFields = profile === 'treasury-detail'
+      ? ['deposit', 'auctionDate', 'parcelNumber', 'saleNumber']
+      : ['address', 'city', 'state', 'zip', 'saleDate', 'description'];
+    const hasNumeric = numericFields.some((key) => prop[key] === null || (Number.isFinite(prop[key]) && prop[key] >= 0));
+    const hasString = stringFields.some((key) => prop[key] === null || (typeof prop[key] === 'string'));
+    return hasNumeric && hasString && Object.keys(prop).length >= 4;
   }
   if (profile === 'table-extract') {
     return Array.isArray(result.headers) && result.headers.every(h => typeof h === 'string')
@@ -222,4 +252,4 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
   });
 }
 
-module.exports = { extractWithScrapling, isScraplingEnabled, ScraplingBridgeError, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, PROFILES, isPrivateOrLocalHost, defaultPython, getScraplingRuntimeStatus };
+module.exports = { extractWithScrapling, isScraplingEnabled, refreshScraplingFlags, ScraplingBridgeError, MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, PROFILES, isPrivateOrLocalHost, defaultPython, getScraplingRuntimeStatus };

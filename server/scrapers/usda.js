@@ -17,6 +17,7 @@
 
 const BaseScraper = require('./base');
 const { inspectImageUrl } = require('./media-policy');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -43,10 +44,12 @@ class UsdaScrapeError extends Error {
 }
 
 class UsdaResalesScraper extends BaseScraper {
-  constructor() {
+  constructor(options = {}) {
     super({ name: 'UsdaResalesCollector', sourceKey: 'usda' });
     this.baseUrl = 'https://www.resales.usda.gov';
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('usda');
+    this.extract = options.extractImpl || extractWithScrapling;
   }
 
   getCollectionScope() {
@@ -104,7 +107,18 @@ class UsdaResalesScraper extends BaseScraper {
         complete: failures.length === 0,
         fullSweepComplete: failures.length === 0,
         truncated: false,
-        fixtureFallbackUsed: false
+        fixtureFallbackUsed: false,
+        scrapling: this.useScrapling
+          ? {
+            enabled: true,
+            profile: 'usda-table',
+            engine: this._lastExtraction?.engine || null,
+            engineVersion: this._lastExtraction?.engineVersion || null,
+            contentSha256: this._lastExtraction?.contentSha256 || null,
+            itemCount: Array.isArray(this._lastExtraction?.items) ? this._lastExtraction.items.length : null,
+            error: this._lastExtraction?.error || null,
+          }
+          : { enabled: false },
       };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
       return listings.map(item => this.standardizeListing(item));
@@ -154,7 +168,15 @@ class UsdaResalesScraper extends BaseScraper {
       Search: 'Search'
     }).toString();
 
-    const html = await this.fetchText(`${this.baseUrl}/resales/public/searchSFH`, 30000, 'POST', body);
+    const pageUrl = `${this.baseUrl}/resales/public/searchSFH`;
+    const html = await this.fetchText(pageUrl, 30000, 'POST', body);
+    if (this.useScrapling && typeof this.extract === 'function') {
+      try {
+        this._lastExtraction = await this.extract('usda-table', { html, url: pageUrl });
+      } catch (error) {
+        this._lastExtraction = { error: String(error?.message || error), code: error?.code || null };
+      }
+    }
     return this.parseSummaryTable(html);
   }
 

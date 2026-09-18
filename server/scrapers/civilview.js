@@ -18,6 +18,7 @@
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
 const { normalizeOcrText } = require('../ai/notice-parser');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -33,6 +34,8 @@ class CivilViewScraper extends BaseScraper {
       maxRetries: options.maxRetries || 3,
     });
     this.baseUrl = options.baseUrl || 'https://salesweb.civilview.com';
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('civilview');
+    this.extract = options.extractImpl || extractWithScrapling;
     this.targetState = options.targetState ?? process.env.CIVILVIEW_TARGET_STATE ?? 'NJ';
     const configuredCountyId = options.countyId ?? process.env.CIVILVIEW_COUNTY_ID;
     this.countyId = configuredCountyId == null || configuredCountyId === ''
@@ -320,6 +323,13 @@ class CivilViewScraper extends BaseScraper {
   async fetchCountySummaries(county) {
     const pageUrl = `${this.baseUrl}/Sales/SalesSearch?countyId=${encodeURIComponent(county.id)}`;
     const page = await this.fetchPage(pageUrl, this.timeoutMs);
+    if (this.useScrapling && typeof this.extract === 'function') {
+      try {
+        this._lastExtraction = await this.extract('civilview-sales', { html: page.body, url: pageUrl });
+      } catch (error) {
+        this._lastExtraction = { error: String(error?.message || error), code: error?.code || null };
+      }
+    }
     const summaries = this.parseSalesTable(page.body, county, pageUrl);
     if (summaries.length > 0 && !page.sessionCookie) {
       throw new Error('CivilView county page did not establish the session required for detail pages');

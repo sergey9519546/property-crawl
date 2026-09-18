@@ -161,3 +161,13 @@
 
 - `scripts/canary-live.js` wraps discovery-worker Migration 014 canaries: `list`, `status`, `run --all-promoted|--sources|--wave --repeat N --scrapling`, `promote --source`. Dry-runs without DATABASE_URL; writes `.cache/canary-reports/*.json`.
   - Source: `scripts/canary-live.js`, `test/canary-live.test.js`, npm scripts `canary:live|list|status|promote`
+
+## Self-audit canary/scrapling (2026-09-14)
+
+- evaluateCanaryClean rejects non-zero rejected/recordsRejected and fixtureFallbackUsed (Migration 014 rejected_count=0).
+- canary-live strict exit + distinct runId tracking + refreshScraplingFlags after env set.
+- scrapling-bridge treasury/irs detail requires typed fields; refreshScraplingFlags exported.
+- usda.js + civilview.js call Scrapling (usda-table / civilview-sales) when enabled.
+- Remaining: fannie/freddie/va/marshals/sheriff declare useScrapling but do not call extract; SPA 200+empty still classifies as empty.
+- Source: scripts/canary-live.js, scrapling-bridge.js, usda.js, civilview.js
+
