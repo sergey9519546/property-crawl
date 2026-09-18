@@ -12,9 +12,9 @@ type Metric = {
 
 const METRICS: Metric[] = [
   {
-    value: "Live",
-    label: "Connected property feed",
-    desc: "A transparent beta dataset for exercising market search, filters, underwriting, and exports.",
+    value: "Beta",
+    label: "Seed property feed",
+    desc: "In-memory/demo inventory for exercising market search, filters, underwriting inputs, and exports. Not a guaranteed live national feed.",
     tint: "#E2E8F0",
   },
   {

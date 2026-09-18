@@ -8,18 +8,23 @@ export const WORKSPACE_SESSION_SECONDS = 8 * 60 * 60;
 type WorkspaceSession = { authenticated: boolean; expiresAt: string | null };
 
 function configuredOperatorCredential(env: NodeJS.ProcessEnv = process.env) {
-  return String(env.SCRAPER_ADMIN_TOKEN || "").trim();
+  return String(env.SCRAPER_ADMIN_TOKEN || env.PROPERTY_OPERATOR_SECRET || "").trim();
 }
 
 function signingKey(env: NodeJS.ProcessEnv = process.env) {
   const credential = configuredOperatorCredential(env);
   if (!credential) return null;
   const sessionSecret = String(env.WORKSPACE_SESSION_SECRET || "").trim();
+  // WORKSPACE_SESSION_EPOCH lets the operator revoke outstanding cookies
+  // without rotating the unlock password (bump the epoch and redeploy).
+  const sessionEpoch = String(env.WORKSPACE_SESSION_EPOCH || "1").trim() || "1";
   return createHash("sha256")
     .update("perfectproperty/workspace-session/v1\0")
     .update(sessionSecret || credential)
     .update("\0")
     .update(credential)
+    .update("\0")
+    .update(sessionEpoch)
     .digest();
 }
 

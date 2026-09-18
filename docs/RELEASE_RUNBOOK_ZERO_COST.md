@@ -17,13 +17,13 @@ discovery canaries require PostgreSQL (optional upgrade boundary).
 
 ## Local production verification (this machine)
 
-Verified on a local production stack (`start:production` demo mode):
+Verified on a local production stack (`start:production` demo mode) **and** the
+`Dockerfile.production` image (`property-crawl:production`):
 
-- `http://127.0.0.1:3100/api/health` → 200
-- `/listings`, `/sources`, `/sign-in` → 200
-- `/workspace` → 307 to `/workspace/documents-review`
-- `/api/listings` → seed inventory JSON
-- CSP + `X-Frame-Options: SAMEORIGIN` present on Next responses
+- Host stack `http://127.0.0.1:3100`: `/api/health` 200; `/listings`,
+  `/sources`, `/sign-in` 200; `/workspace` → 307 review queue; CSP + XFO set
+- Docker `docker run -p 3200:3000 property-crawl:production`:
+  container **healthy**; `http://127.0.0.1:3200/api/health` 200
 - Homepage copy: no Deal Stacks / Prophecy / accuracy-report claims
 
 ```powershell
@@ -32,6 +32,8 @@ npm run smoke:production
 npm run promotion:gate
 npm run test:foolproof-p0
 npm run build
+docker build -f Dockerfile.production -t property-crawl:production .
+docker run -d -p 3200:3000 -e SCRAPER_BACKGROUND_ENABLED=0 property-crawl:production
 # optional live stack:
 # npm run start:production   then curl http://127.0.0.1:3000/api/health
 ```
@@ -78,8 +80,10 @@ Local: `git revert` + rebuild. Demo data is regenerable (`npm run refresh-data`)
   appears in a browser, log, or shared screenshot.
 - **Accepted $0 model:** one shared operator secret unlocks the private
   workspace and authorizes API admin routes. There are no multi-user roles.
-  Treat the token like a root password. Upgrade path: split unlock credential
-  from API service tokens + server-side session revocation.
+  Treat the token like a root password. Rotate the token **or** bump
+  `WORKSPACE_SESSION_EPOCH` to revoke outstanding session cookies.
+  Upgrade path: split unlock credential from API service tokens + server-side
+  session revocation list.
 - Workspace unlock rate limiting is **global/fail-closed** (client cannot mint
   unlimited SID buckets). A handful of bad attempts locks unlock for everyone
   until the window expires — acceptable for a private single-operator deploy.

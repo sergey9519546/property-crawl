@@ -26,7 +26,12 @@ export function SocialProof() {
             <span className="inline-flex items-center rounded-md border border-[rgba(17,24,39,0.10)] bg-white px-1.5 py-0.5 text-[14px] font-semibold text-[#111827]">
               faster triage
             </span>{" "}
-            across public property and market data sources
+            using public property and market data sources
+          </p>
+          <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-5 text-[#6B7280]">
+            Names below mark the source/tooling landscape this beta models or
+            evaluates. They are not customer logos, partnerships, or proof of
+            live commercial integrations.
           </p>
         </GsapReveal>
       </div>

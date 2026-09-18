@@ -69,6 +69,20 @@ test('/workspace index redirects to the private review queue', () => {
   assert.match(page, /redirect\("\/workspace\/documents-review"\)/);
 });
 
+test('session signing accepts operator alias and epoch revocation', () => {
+  const session = fs.readFileSync(path.join(__dirname, '..', 'src/lib/workspace-session.ts'), 'utf8');
+  assert.match(session, /PROPERTY_OPERATOR_SECRET/);
+  assert.match(session, /WORKSPACE_SESSION_EPOCH/);
+});
+
+test('SEO schema and social proof do not overclaim partnerships or AI omniscience', () => {
+  const seo = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/seo-schema.tsx'), 'utf8');
+  assert.doesNotMatch(seo, /Zillow for distressed/);
+  assert.doesNotMatch(seo, /AI that reads the fine print/);
+  const proof = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/social-proof.tsx'), 'utf8');
+  assert.match(proof, /not customer logos|not endorsements/i);
+});
+
 test('contact page does not promise human replies without delivery', () => {
   const slug = fs.readFileSync(path.join(__dirname, '..', 'src/app/[slug]/page.tsx'), 'utf8');
   assert.doesNotMatch(slug, /Expect a response before public launch/);

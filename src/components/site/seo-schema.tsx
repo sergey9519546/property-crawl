@@ -10,7 +10,7 @@ export function SeoSchema() {
         "name": "PerfectProperty",
         "url": "https://perfectproperty.ai",
         "logo": "https://perfectproperty.ai/logo.svg",
-        "description": "Zillow for distressed & government-sold property. An AI that reads the fine print on every foreclosure, sheriff sale, and seizure."
+        "description": "Evidence-first research workspace for distressed and government-sold property. Source observations, seed inventory, and optional AI notice parsing — not a guaranteed national listing feed."
       },
       {
         "@type": "WebSite",
