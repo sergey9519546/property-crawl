@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X } from "lucide-react";
 import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
+import type { Feature as GeoJsonFeature } from "geojson";
 import { displayMoney, displayText, knownNumber } from "@/lib/listing-display";
 import { inspectMapLocation, groupMapLocations } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
@@ -141,7 +142,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
           }
 
           if (data.properties?.setbackGeometry) {
-            const setbackFeature = {
+            const setbackFeature: GeoJsonFeature = {
               type: "Feature",
               geometry: data.properties.setbackGeometry,
               properties: {},
