@@ -29,6 +29,15 @@ const ALLOWLIST = Object.freeze({
   generate_property_dossier: [
     { cmd: process.execPath, args: ['--test', 'test/property-intelligence.test.js'], label: 'property intelligence' },
   ],
+  completion_certification: [
+    { cmd: process.execPath, args: ['--test', 'test/canary-live.test.js', 'test/scraper-power-report.test.js'], label: 'canary + scraper-power contracts' },
+  ],
+  source_gate: [
+    { cmd: process.execPath, args: ['scripts/canary-live.js', 'help'], label: 'canary-live help (dry, no DB)' },
+  ],
+  deal_score: [
+    { cmd: process.execPath, args: ['--test', 'test/signals.test.js'], label: 'opportunity signals unit' },
+  ],
 });
 
 const DEFAULT_TIMEOUT_MS = 60_000;

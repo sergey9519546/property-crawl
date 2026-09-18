@@ -497,4 +497,5 @@ module.exports = {
   ingestImapMailbox,
   writePackets,
   PublicNoticesEmailScraper,
+  ImapClient,
 };

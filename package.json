@@ -81,7 +81,12 @@
     "test:canary": "node --test test/canary-live.test.js",
     "test:scraper-power": "node --test test/scraper-power-report.test.js",
     "swarm": "node scripts/swarm.js",
-    "test:swarm": "node --test test/swarm.test.js test/swarm-executor.test.js"
+    "swarm:real": "node scripts/swarm.js --real --testing",
+    "test:swarm": "node --test test/swarm.test.js test/swarm-executor.test.js",
+    "quality:report": "node scripts/quality-gate-report.js",
+    "smoke:production": "node scripts/production-smoke.js",
+    "promotion:gate": "node scripts/promotion-gate-check.js",
+    "test:promotion-gate": "node --test test/promotion-gate-contract.test.js"
   },
   "keywords": [
     "real-estate",

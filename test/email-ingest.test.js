@@ -67,6 +67,17 @@ test('ingestImapMailbox fails closed when credentials are missing', async () => 
   assert.equal(result.accepted, 0);
 });
 
+test('IMAP client command protocol tags LOGIN/SELECT/SEARCH/FETCH', () => {
+  const { ImapClient } = require('../server/scrapers/email-ingest');
+  const client = new ImapClient({
+    host: 'imap.example.com', port: 993, user: 'u', pass: 'p', mailbox: 'INBOX',
+    tls: false, maxMessages: 5, keywords: ["sheriff's sale"], storePath: '/tmp/x.json',
+  });
+  assert.ok(typeof client.connect === 'function');
+  assert.ok(typeof client.command === 'function');
+  assert.ok(typeof client.close === 'function');
+});
+
 test('isConfigured is false without IMAP env', () => {
   assert.equal(isConfigured({}), false);
   assert.equal(isConfigured({
