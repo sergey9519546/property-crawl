@@ -49,7 +49,8 @@ const suites = [
   { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' },
   { name: '27. Scraper Power & End Coverage Guarantee', cmd: 'npm run test:scraper-power' },
   { name: '28. Promotion Gate + Swarm Real Mode Contract', cmd: 'npm run test:promotion-gate' },
-  { name: '29. Foolproof Fetch Strategy Research Contract', cmd: 'node --test test/fetch-strategy.test.js' }
+  { name: '29. Foolproof Fetch Strategy Research Contract', cmd: 'node --test test/fetch-strategy.test.js' },
+  { name: '30. Foolproof P0 (SPA XHR + Throttle + Schema)', cmd: 'node --test test/foolproof-scrape-p0.test.js' }
 ];
 
 let totalPassed = 0;

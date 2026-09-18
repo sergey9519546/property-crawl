@@ -14,6 +14,8 @@ const {
   looksLikeClientRenderedShell,
   applyEmptyInventoryHonesty,
 } = require('./run-report');
+const { spaXhrEnabled, captureSpaXhr, mapCapturedItems } = require('./spa-xhr');
+const { validateListingShape } = require('./listing-schema');
 
 class FannieMaeScraper extends BaseScraper {
   constructor(options = {}) {
@@ -94,6 +96,16 @@ class FannieMaeScraper extends BaseScraper {
     });
     const listings = this.parseHtmlCards(html, state);
     if (!listings.length && looksLikeClientRenderedShell(html)) {
+      // Foolproof P0: optional Scrapling DynamicFetcher capture_xhr lane.
+      if (spaXhrEnabled('fannie', process.env)) {
+        const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'fannie' });
+        if (xhr.ok && Array.isArray(xhr.items) && xhr.items.length) {
+          const mapped = mapCapturedItems(this, xhr.items, state)
+            .map((item) => ({ ...item, provenance: { ...(item.provenance || {}), spaXhr: true, capturedUrls: xhr.capturedUrls || [] } }));
+          const usable = mapped.filter((item) => validateListingShape(item).valid);
+          if (usable.length) return { listings: usable, html, spaXhr: true };
+        }
+      }
       throw new Error(`FANNIE_SPA_SHELL ${state}: client-rendered HomePath page has no parseable listing cards (not empty inventory)`);
     }
     return { listings, html };

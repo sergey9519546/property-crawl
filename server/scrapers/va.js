@@ -14,6 +14,8 @@ const {
   looksLikeClientRenderedShell,
   applyEmptyInventoryHonesty,
 } = require('./run-report');
+const { spaXhrEnabled, captureSpaXhr, mapCapturedItems } = require('./spa-xhr');
+const { validateListingShape } = require('./listing-schema');
 
 class VaReoScraper extends BaseScraper {
   constructor(options = {}) {
@@ -95,6 +97,15 @@ class VaReoScraper extends BaseScraper {
     });
     const listings = this.parseHtmlCards(html, state);
     if (!listings.length && looksLikeClientRenderedShell(html)) {
+      if (spaXhrEnabled('va', process.env)) {
+        const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'va' });
+        if (xhr.ok && Array.isArray(xhr.items) && xhr.items.length) {
+          const mapped = mapCapturedItems(this, xhr.items, state)
+            .map((item) => ({ ...item, provenance: { ...(item.provenance || {}), spaXhr: true, capturedUrls: xhr.capturedUrls || [] } }));
+          const usable = mapped.filter((item) => validateListingShape(item).valid);
+          if (usable.length) return { listings: usable, html, spaXhr: true };
+        }
+      }
       throw new Error(`VA_SPA_SHELL ${state}: client-rendered VA REO page has no parseable listing cards (not empty inventory)`);
     }
     return { listings, html };

@@ -80,6 +80,7 @@
     "scrapers:power": "node scripts/scraper-power-report.js",
     "scrapers:research": "node -e \"console.log(require('fs').readFileSync('docs/FOOLPROOF_SCRAPE_RESEARCH.md','utf8'))\"",
     "test:fetch-strategy": "node --test test/fetch-strategy.test.js",
+    "test:foolproof-p0": "node --test test/foolproof-scrape-p0.test.js test/fetch-strategy.test.js",
     "test:canary": "node --test test/canary-live.test.js",
     "test:scraper-power": "node --test test/scraper-power-report.test.js",
     "swarm": "node scripts/swarm.js",

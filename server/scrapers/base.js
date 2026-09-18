@@ -7,6 +7,8 @@ const {
   normalizeRequestTimeout
 } = require('./http');
 const { standardizeListingRecord } = require('./normalization');
+const { validateListingShape } = require('./listing-schema');
+
 class BaseScraper {
   constructor({
     name,
@@ -95,7 +97,22 @@ class BaseScraper {
   }
 
   standardizeListing(raw) {
-    return standardizeListingRecord(raw, { sourceKey: this.sourceKey });
+    const listing = standardizeListingRecord(raw, { sourceKey: this.sourceKey });
+    // Schema-first gate (foolproof scrape P0): fail only on identity-critical
+    // errors. Provenance/host policy remains the ingestion validator's job.
+    const schema = validateListingShape(listing, { expectedSource: this.sourceKey });
+    const critical = new Set([
+      'invalid_id', 'invalid_state', 'invalid_address', 'missing_source',
+      'missing_id', 'missing_source', 'missing_state', 'missing_address',
+    ]);
+    const blocking = (schema.errors || []).filter((e) => critical.has(e) || e === 'invalid_id');
+    if (blocking.length) {
+      const error = new Error(`LISTING_SCHEMA_INVALID(${this.sourceKey}): ${blocking.join(',')}`);
+      error.code = 'LISTING_SCHEMA_INVALID';
+      error.errors = blocking;
+      throw error;
+    }
+    return listing;
   }
 
   passesFilter(item) {
