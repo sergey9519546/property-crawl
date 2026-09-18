@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { SeoSchema } from "@/components/site/seo-schema";
 
 // Arcade loads fonts via Google WebFont loader (webfont.js):
 //   families: ["Droid Serif:400,400italic,700,700italic","Geist Mono:400",
@@ -59,8 +60,6 @@ export const metadata: Metadata = {
       "Follow source evidence, understand what changed, and bring passed properties back when the facts meet your rules.",
   },
 };
-
-import { SeoSchema } from "@/components/site/seo-schema";
 
 export default function RootLayout({
   children,

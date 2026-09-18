@@ -16,8 +16,12 @@ const nextConfig = {
   },
   // Allow the Base44 preview origin (served through a proxy hostname that
   // changes whenever the environment is recreated) to reach dev assets/HMR.
+  // Fixed: ensure both entries have valid origin protocols (http + https).
   allowedDevOrigins: process.env.BASE44_PUBLIC_HOST_SUFFIX
-    ? [`https://3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`, `3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`]
+    ? [
+        `https://3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`,
+        `http://3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`
+      ]
     : [],
   images: {
     remotePatterns: [
@@ -26,6 +30,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'cdn.prod.website-files.com' }
     ]
   },
+  // Security: do not advertise the framework in headers.
+  poweredByHeader: false,
   // @server/* is a runtime alias for ./server/* so Next.js components
   // can import canonical Node-side modules (not stubs under src/lib/scrapers/).
   webpack(config) {

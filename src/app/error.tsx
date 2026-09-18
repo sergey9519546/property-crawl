@@ -4,12 +4,12 @@ import React, { useEffect } from "react";
 import Link from "next/link";
 import { RefreshCw, Home, AlertOctagon } from "lucide-react";
 
-export default function GlobalError({
+export default function ErrorPage({
   error,
-  retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     console.error("Uncaught application error:", error);
@@ -39,7 +39,7 @@ export default function GlobalError({
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
           <button
-            onClick={() => retry()}
+            onClick={() => reset()}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 text-[#0F172A] text-xs font-bold hover:bg-emerald-400 transition shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
