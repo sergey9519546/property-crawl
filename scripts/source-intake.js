@@ -6,8 +6,9 @@ const { submitEvidence, listEvidence, reviewEvidence, MAX_PAYLOAD_BYTES } = requ
 function usage() {
   return [
     'Usage:',
-    '  node scripts/source-intake.js submit --source <id> --url <https-url> --captured-at <ISO> --kind <text|csv|json> --file <path>',
+    '  node scripts/source-intake.js submit --source <id-or-alias> --url <https-url> --captured-at <ISO> --kind <text|csv|json> --file <path>',
     '       [--name <custom name> --organization <publisher> --description <text> --homepage <https-url>] [--store <path>]',
+    '       (adapter aliases like gsa, hud, irs, treasury, usda, sheriff, landbank, marshals, fannie, freddie, va are accepted and resolve to catalog IDs)',
     '  node scripts/source-intake.js list [--status <status>] [--source <id>] [--limit <1-200>] [--include-content] [--store <path>]',
     '  node scripts/source-intake.js review --id <intake-id> --decision <approve|reject> [--reviewer <name>] [--note <text>] [--store <path>]',
   ].join('\n');

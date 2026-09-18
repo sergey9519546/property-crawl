@@ -9,6 +9,22 @@ const MAX_JSON_RECORDS = 500;
 const SOURCE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const SENSITIVE_KEY = /^(authorization|cookie|password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|private[_-]?key)$/i;
 const SENSITIVE_TEXT = /(?:authorization\s*:\s*(?:bearer|basic)|(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|private[_-]?key)\s*[:=]\s*[^\s,;]+)/i;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?$/;
+
+// Adapter key aliases (short keys used by scrapers) resolve to full catalog IDs for evidence intake.
+const ADAPTER_ALIASES = Object.freeze({
+  gsa: 'gsa-real-estate-sales',
+  hud: 'hud-homestore',
+  irs: 'irs-auctions',
+  treasury: 'treasury-forfeiture',
+  usda: 'usda-resales',
+  sheriff: 'ohio-sheriff-sale',
+  landbank: 'landbanksearch',
+  marshals: 'us-marshals',
+  fannie: 'fannie-homepath',
+  freddie: 'freddie-homesteps',
+  va: 'va-vrm',
+});
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -88,10 +104,34 @@ function cleanOptionalString(value, field, maximum, errors) {
   return value.trim();
 }
 
+function parseCapturedAt(value) {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : NaN;
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
+  if (typeof value !== 'string') return NaN;
+  const trimmed = value.trim();
+  if (!ISO_TIMESTAMP.test(trimmed)) return NaN;
+  const normalized = /(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed) ? trimmed : `${trimmed}Z`;
+  return Date.parse(normalized);
+}
+
 function defaultGetSource(sourceId) {
+  if (typeof sourceId !== 'string') return null;
+  const key = sourceId.trim().toLowerCase();
+  const resolvedId = ADAPTER_ALIASES[key] || key;
   try {
     const catalog = require('./catalog');
-    return typeof catalog.getSource === 'function' ? catalog.getSource(sourceId) : null;
+    if (typeof catalog.getSource === 'function') {
+      let found = catalog.getSource(resolvedId);
+      if (!found && resolvedId !== key) found = catalog.getSource(key);
+      if (found) return found;
+    }
+    const entries = Array.isArray(catalog.SOURCE_CATALOG) ? catalog.SOURCE_CATALOG : [];
+    return entries.find((entry) =>
+      entry && (entry.id === resolvedId || entry.adapterKey === key || entry.id === key)
+    ) || null;
   } catch (error) {
     if (error.code === 'MODULE_NOT_FOUND' && /[\\/]sources[\\/]catalog/.test(error.message)) return null;
     throw error;
@@ -118,15 +158,15 @@ function validateSubmission(input, options = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return { isValid: false, errors: ['Submission must be an object'] };
   if (hasSensitiveKeys(input)) errors.push('Submission contains a credential-like field and cannot be retained');
 
-  const sourceId = typeof input.sourceId === 'string' ? input.sourceId.trim().toLowerCase() : '';
-  if (!SOURCE_ID_PATTERN.test(sourceId)) errors.push('sourceId must be a 2-64 character lowercase source key');
+  const submittedSourceId = typeof input.sourceId === 'string' ? input.sourceId.trim().toLowerCase() : '';
+  if (!SOURCE_ID_PATTERN.test(submittedSourceId)) errors.push('sourceId must be a 2-64 character lowercase source key');
   const sourceUrl = safeHttpsUrl(input.sourceUrl, 'sourceUrl', errors);
-  const isoTimestamp = typeof input.capturedAt === 'string'
-    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(input.capturedAt);
-  const capturedAtMs = isoTimestamp ? Date.parse(input.capturedAt) : NaN;
-  if (!Number.isFinite(capturedAtMs)) errors.push('capturedAt must be an ISO-8601 timestamp');
   const referenceNowValue = typeof options.now === 'function' ? options.now() : (options.now || Date.now());
   const referenceNow = new Date(referenceNowValue).getTime();
+  const capturedAtMs = input.capturedAt == null || input.capturedAt === ''
+    ? referenceNow
+    : parseCapturedAt(input.capturedAt);
+  if (!Number.isFinite(capturedAtMs)) errors.push('capturedAt must be an ISO-8601 timestamp');
   if (Number.isFinite(capturedAtMs) && capturedAtMs > referenceNow + 10 * 60 * 1000) errors.push('capturedAt cannot be in the future');
   const capturedAt = Number.isFinite(capturedAtMs) ? new Date(capturedAtMs).toISOString() : null;
 
@@ -166,10 +206,11 @@ function validateSubmission(input, options = {}) {
 
   const getSource = options.getSource || defaultGetSource;
   let catalogSource = null;
-  if (SOURCE_ID_PATTERN.test(sourceId)) {
-    try { catalogSource = getSource(sourceId) || null; }
+  if (SOURCE_ID_PATTERN.test(submittedSourceId)) {
+    try { catalogSource = getSource(submittedSourceId) || null; }
     catch { errors.push('Source catalog lookup failed'); }
   }
+  const sourceId = catalogSource?.id || submittedSourceId;
   const source = catalogSource
     ? {
         id: sourceId,
@@ -178,7 +219,7 @@ function validateSubmission(input, options = {}) {
         homepageUrl: catalogSource.homepageUrl || catalogSource.websiteUrl || catalogSource.discoveryUrl || null,
         cataloged: true,
       }
-    : validateCustomSource(input.customSource, sourceId, errors);
+    : validateCustomSource(input.customSource, submittedSourceId, errors);
 
   if (original) {
     try {
@@ -319,6 +360,7 @@ module.exports = {
   getSummary,
   listEvidence,
   listEvidenceSummaries,
+  parseCapturedAt,
   reviewEvidence,
   submitEvidence,
   validateSubmission,

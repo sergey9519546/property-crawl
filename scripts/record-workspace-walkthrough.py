@@ -26,6 +26,10 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = ""
 
 
+def utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 @contextmanager
 def isolated_workspace():
     """Run real application processes with disposable credentials and isolated stores.
@@ -120,13 +124,28 @@ def expect_ok(response, purpose: str) -> dict:
     return response.json()
 
 
+def catalog_source_aliases(network: dict) -> tuple[set[str], dict[str, str]]:
+    known = set()
+    aliases = {}
+    for item in network.get("sources", []):
+        source_id = item.get("id")
+        adapter_key = item.get("adapterKey")
+        if source_id:
+            known.add(source_id)
+            aliases[source_id] = source_id
+        if adapter_key:
+            known.add(adapter_key)
+            aliases[adapter_key] = source_id or adapter_key
+    return known, aliases
+
+
 def record_journey(artifact_dir, credential, restart_api) -> None:
     from playwright.sync_api import sync_playwright
 
     video_dir = artifact_dir / "video"
     video_dir.mkdir()
     metrics = {
-        "startedAt": datetime.now(timezone.utc).isoformat(),
+        "startedAt": utc_iso(),
         "baseUrl": BASE_URL,
         "journey": ["discovery", "evidence", "decision", "second_look", "export"],
         "syntheticReconsiderationEvents": 0,
@@ -173,13 +192,13 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             inventory = expect_ok(context.request.get(f"{BASE_URL}/api/listings?limit=1000"), "listing inventory")
             cases = expect_ok(context.request.get(f"{BASE_URL}/api/workspace/cases?limit=200"), "research cases")
             network = expect_ok(context.request.get(f"{BASE_URL}/api/source-network"), "source catalog")
-            catalog_source_ids = {item["id"] for item in network.get("sources", [])}
+            known_sources, source_aliases = catalog_source_aliases(network)
             used_aliases = {alias for item in cases.get("items", []) for alias in item.get("listingAliases", [item.get("listingId")]) if alias}
             candidates = [
                 item for item in inventory.get("listings", [])
                 if item.get("id") not in used_aliases
                 and item.get("source") != "servicelink"
-                and item.get("source") in catalog_source_ids
+                and item.get("source") in known_sources
                 and item.get("provenance", {}).get("origin") == "live"
                 and item.get("provenance", {}).get("observed") is True
             ]
@@ -187,13 +206,14 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
                 candidates = [
                     item for item in inventory.get("listings", [])
                     if item.get("source") != "servicelink"
-                    and item.get("source") in catalog_source_ids
+                    and item.get("source") in known_sources
                     and item.get("provenance", {}).get("origin") == "live"
                     and item.get("provenance", {}).get("observed") is True
                 ]
             if not candidates:
                 raise RuntimeError("No source-observed listing is available for the browser journey")
             listing = candidates[0]
+            catalog_source_id = source_aliases.get(listing["source"], listing["source"])
 
             page.get_by_label("Search properties").fill(listing["id"])
             page.get_by_role("button", name="Search", exact=True).click()
@@ -205,6 +225,7 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             case_id = re.search(r"/research/(rcase_[a-f0-9]{24})", page.url).group(1)
             metrics["caseId"] = case_id
             metrics["listingId"] = listing["id"]
+            metrics["catalogSourceId"] = catalog_source_id
             page.screenshot(path=str(artifact_dir / "02-evidence.png"), full_page=True)
 
             page.get_by_role("button", name="pass", exact=True).click()
@@ -216,22 +237,22 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             page.get_by_text("Pass saved. The case returns only when a supported condition is met.", exact=True).wait_for()
             page.screenshot(path=str(artifact_dir / "03-decision.png"), full_page=True)
 
-            captured_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            captured_at = utc_iso()
             evidence_payload = {
-                "sourceId": listing["source"],
+                "sourceId": catalog_source_id,
                 "sourceUrl": listing["sourceUrl"],
                 "capturedAt": captured_at,
                 "kind": "text",
                 "body": f"Walkthrough-reviewed title research reference for exact listing {listing['id']}; source claims remain subject to document-level verification. Captured {captured_at}.",
             }
             intake = expect_ok(
-                context.request.post(f"{BASE_URL}/api/source-network/intake", data=evidence_payload),
+                context.request.post(f"{BASE_URL}/api/source-network/intake", json=evidence_payload),
                 "evidence intake",
             )
             review = expect_ok(
                 context.request.post(
                     f"{BASE_URL}/api/source-network/review",
-                    data={"id": intake["record"]["id"], "decision": "approve", "note": "Reviewed during recorded workspace acceptance journey."},
+                    json={"id": intake["record"]["id"], "decision": "approve", "note": "Reviewed during recorded workspace acceptance journey."},
                 ),
                 "evidence review",
             )
@@ -264,9 +285,10 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             retained = expect_ok(context.request.get(f"{BASE_URL}/api/workspace/cases/{case_id}"), "retained case")
             if retained["case"]["state"] != "pass" or not retained["case"]["reconsiderationRequired"]:
                 raise RuntimeError("Second Look did not preserve the pass decision across restart")
-            duplicate = expect_ok(context.request.post(f"{BASE_URL}/api/workspace/cases", data={
-                "listingId": listing["id"], "origin": {"type": "manual"},
-            }), "duplicate case request")
+            duplicate = expect_ok(context.request.post(
+                f"{BASE_URL}/api/workspace/cases",
+                json={"listingId": listing["id"], "origin": {"type": "manual"}},
+            ), "duplicate case request")
             if duplicate["case"]["id"] != case_id:
                 raise RuntimeError("A repeated case request created a duplicate")
             anonymous = browser.new_context()
@@ -301,7 +323,7 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             page.screenshot(path=str(artifact_dir / "failure.png"), full_page=True)
             raise
         finally:
-            metrics["completedAt"] = datetime.now(timezone.utc).isoformat()
+            metrics["completedAt"] = utc_iso()
             metrics["completionMs"] = round((perf_counter() - started) * 1000)
             if page.video:
                 video_path = page.video.path()
