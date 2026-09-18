@@ -11,6 +11,14 @@ const { readPinnedVersion, checkScraplingReadiness } = require('../scripts/scrap
 const fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures', 'crawler-tools', name), 'utf8');
 const python = process.env.SCRAPLING_PYTHON || path.resolve(__dirname, '..', '.cache', 'crawler-tools', 'venv', 'Scripts', 'python.exe');
 
+function requirePython(t) {
+  if (!fs.existsSync(python)) {
+    t.skip('isolated Scrapling runtime not installed');
+    return false;
+  }
+  return true;
+}
+
 test('Scrapling doctor reads the pinned dependency and reports import readiness', () => {
   assert.equal(readPinnedVersion(), '0.4.15');
   const result = checkScraplingReadiness({ python: process.execPath, runner: () => '0.4.15\n' });
@@ -166,21 +174,25 @@ test('bridge rejects missing Python runtime', async () => {
   await assert.rejects(() => extractWithScrapling('page-links', { html: '<a href="/x">x</a>', url: 'https://example.test', python: null }), error => error.code === 'SCRAPLING_RUNTIME_MISSING');
 });
 
-test('bridge rejects path traversal in scriptPath', async () => {
+test('bridge rejects path traversal in scriptPath', async t => {
+  if (!requirePython(t)) return;
   await assert.rejects(() => extractWithScrapling('page-links', { html: '<a href="/x">x</a>', url: 'https://example.test', python, scriptPath: '../../etc/passwd' }), error => error.code === 'SCRAPLING_SCRIPT_NOT_FOUND');
 });
 
-test('bridge rejects nonexistent scriptPath', async () => {
+test('bridge rejects nonexistent scriptPath', async t => {
+  if (!requirePython(t)) return;
   await assert.rejects(() => extractWithScrapling('page-links', { html: '<a href="/x">x</a>', url: 'https://example.test', python, scriptPath: path.join(os.tmpdir(), 'does-not-exist-scrapling.py') }), error => error.code === 'SCRAPLING_SCRIPT_NOT_FOUND');
 });
 
-test('bridge rejects when AbortController fires', async () => {
+test('bridge rejects when AbortController fires', async t => {
+  if (!requirePython(t)) return;
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(() => extractWithScrapling('page-links', { html: '<a href="/x">x</a>', url: 'https://example.test', python, signal: controller.signal }), error => error.code === 'SCRAPLING_ABORTED');
 });
 
-test('bridge rejects when AbortController fires mid-flight', async () => {
+test('bridge rejects when AbortController fires mid-flight', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-abort-'));
   const sleeper = path.join(temp, 'sleep.py');
   fs.writeFileSync(sleeper, 'import sys,time\nsys.stdin.read()\ntime.sleep(5)\n');
@@ -240,7 +252,8 @@ test('table-extract returns empty arrays when no table present', async t => {
   assert.deepEqual(result.rows, []);
 });
 
-test('bridge kills a timed-out child and rejects malformed protocol', async () => {
+test('bridge kills a timed-out child and rejects malformed protocol', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-bridge-'));
   const sleeper = path.join(temp, 'sleep.py');
   const malformed = path.join(temp, 'malformed.py');
@@ -254,7 +267,8 @@ test('bridge kills a timed-out child and rejects malformed protocol', async () =
   }
 });
 
-test('bridge validates hashes and shapes without exposing child stderr', async () => {
+test('bridge validates hashes and shapes without exposing child stderr', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-protocol-'));
   const wrong = path.join(temp, 'wrong.py');
   const secret = path.join(temp, 'secret.py');
@@ -268,7 +282,8 @@ test('bridge validates hashes and shapes without exposing child stderr', async (
   }
 });
 
-test('bridge rejects wrong protocol version from child', async () => {
+test('bridge rejects wrong protocol version from child', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-version-'));
   const script = path.join(temp, 'v2.py');
   fs.writeFileSync(script, `import json,sys\nr=json.load(sys.stdin)\nprint(json.dumps({'version':2,'profile':r['profile'],'sourceUrl':r['url'],'engine':'scrapling','engineVersion':'0.4.15','contentSha256':'0'*64,'links':[]}))\n`);
@@ -279,7 +294,8 @@ test('bridge rejects wrong protocol version from child', async () => {
   }
 });
 
-test('bridge rejects wrong engine name from child', async () => {
+test('bridge rejects wrong engine name from child', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-engine-'));
   const script = path.join(temp, 'fake.py');
   fs.writeFileSync(script, `import json,sys,hashlib\nr=json.load(sys.stdin)\nh=hashlib.sha256(r['html'].encode()).hexdigest()\nprint(json.dumps({'version':1,'profile':r['profile'],'sourceUrl':r['url'],'engine':'cheerio','engineVersion':'0.4.15','contentSha256':h,'links':[]}))\n`);
@@ -290,7 +306,8 @@ test('bridge rejects wrong engine name from child', async () => {
   }
 });
 
-test('bridge rejects wrong engineVersion from child', async () => {
+test('bridge rejects wrong engineVersion from child', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-ver-'));
   const script = path.join(temp, 'old.py');
   fs.writeFileSync(script, `import json,sys,hashlib\nr=json.load(sys.stdin)\nh=hashlib.sha256(r['html'].encode()).hexdigest()\nprint(json.dumps({'version':1,'profile':r['profile'],'sourceUrl':r['url'],'engine':'scrapling','engineVersion':'0.4.0','contentSha256':h,'links':[]}))\n`);
@@ -301,7 +318,8 @@ test('bridge rejects wrong engineVersion from child', async () => {
   }
 });
 
-test('bridge rejects output exceeding 2 MB', async () => {
+test('bridge rejects output exceeding 2 MB', async t => {
+  if (!requirePython(t)) return;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-bigout-'));
   const script = path.join(temp, 'big.py');
   fs.writeFileSync(script, `import sys\nsys.stdin.read()\nprint('x' * ${3 * 1024 * 1024})\n`);

@@ -37,12 +37,22 @@ function runSuite(suite) {
     return { id: suite.id, status: 'pass', durationMs: Date.now() - started, envRequired: suite.envRequired };
   } catch (err) {
     const envMissing = Boolean(suite.envRequired) && !process.env[suite.envRequired];
+    const output = [err.stdout, err.stderr]
+      .filter(Boolean)
+      .map((value) => String(value))
+      .join('\n')
+      .split(/\r?\n/)
+      .filter((line) => /not ok|✖|Error|fail|assert|FAIL|SKIP/i.test(line))
+      .slice(-12)
+      .join(' | ');
     return {
       id: suite.id,
       status: envMissing ? 'skip_env' : 'fail',
       durationMs: Date.now() - started,
       envRequired: suite.envRequired,
-      reason: envMissing ? `missing ${suite.envRequired}` : String(err.message || err).slice(0, 300),
+      reason: envMissing
+        ? `missing ${suite.envRequired}`
+        : [String(err.message || err).slice(0, 160), output].filter(Boolean).join(' :: ').slice(0, 500),
     };
   }
 }
