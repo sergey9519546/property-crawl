@@ -46,7 +46,8 @@ const suites = [
   { name: '23. Email Alert Ingestion (IMAP / corpus)', cmd: 'npm run test:email-ingest' },
   { name: '24. Contact/Newsletter Form Persistence', cmd: 'node --test test/form-submissions.test.js' },
   { name: '25. Scraper Upgrade & Run Reports', cmd: 'node --test test/scraper-upgrade.test.js test/scrapling-bridge.test.js test/scrapling-hud-treasury-irs.test.js test/scrapling-env-gate.test.js' },
-  { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' }
+  { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' },
+  { name: '27. Scraper Power & End Coverage Guarantee', cmd: 'npm run test:scraper-power' }
 ];
 
 let totalPassed = 0;

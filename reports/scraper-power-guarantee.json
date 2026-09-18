@@ -1,0 +1,1729 @@
+{
+  "generatedAt": "2026-09-18T10:48:06.084Z",
+  "guarantee": {
+    "catalogSources": 59,
+    "scheduledAdapters": 21,
+    "scraplingEnabledAdapters": 7,
+    "seedListingsIndexed": 2096,
+    "endCoverageRequired": 10,
+    "endCoverageWithScheduledAdapter": 10,
+    "endCoverageGaps": [],
+    "codeGuarantees": [
+      "Every catalog end is represented in server/sources/catalog.js (machine-readable).",
+      "Every scheduled adapter extends BaseScraper with circuit breaker + timeout.",
+      "Fannie/Freddie/VA/USMS/Sheriff/HUD fail closed — no silent empty inventory.",
+      "Scrapling protocol validates all 9 profiles; SSRF + HTTPS + rejected=0 canary gates.",
+      "Live inventory is never fabricated: demo Unsplash inventories removed; fixtures labeled origin=fixture."
+    ],
+    "cannotGuarantee": [
+      "Publisher inventory volume at runtime (blocked CAPTCHA/WAF/SPA sites may yield 0).",
+      "Nationwide county foreclosure coverage (no universal U.S. endpoint — enrollment required).",
+      "Promoted Migration 014 sources without PostgreSQL durable canaries.",
+      "Bid4Assets / Land Bank / CA Controller live data while CAPTCHA/Cloudflare persist."
+    ]
+  },
+  "tiers": {
+    "P0_CATALOG_ONLY": 39,
+    "P3_LIVE_ADAPTER": 2,
+    "P4_LIVE_STRONG": 6,
+    "P2_DISCOVERY_ADAPTER": 10,
+    "P2_BLOCKED_PUBLISHER": 2
+  },
+  "categories": {
+    "tax_sale": {
+      "total": 7,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "parcel_evidence": {
+      "total": 6,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "foreclosure_auction": {
+      "total": 5,
+      "scheduled": 4,
+      "strong": 1
+    },
+    "government_reo": {
+      "total": 7,
+      "scheduled": 5,
+      "strong": 2
+    },
+    "government_seizure": {
+      "total": 5,
+      "scheduled": 3,
+      "strong": 2
+    },
+    "government_surplus": {
+      "total": 3,
+      "scheduled": 1,
+      "strong": 1
+    },
+    "government_land": {
+      "total": 2,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "land_bank": {
+      "total": 2,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "local_surplus": {
+      "total": 1,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "public_notice": {
+      "total": 3,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "court_record": {
+      "total": 3,
+      "scheduled": 1,
+      "strong": 0
+    },
+    "area_context": {
+      "total": 3,
+      "scheduled": 0,
+      "strong": 0
+    },
+    "vacancy_evidence": {
+      "total": 1,
+      "scheduled": 0,
+      "strong": 0
+    },
+    "title_evidence": {
+      "total": 3,
+      "scheduled": 0,
+      "strong": 0
+    },
+    "land_use_evidence": {
+      "total": 1,
+      "scheduled": 0,
+      "strong": 0
+    },
+    "hazard_evidence": {
+      "total": 3,
+      "scheduled": 0,
+      "strong": 0
+    },
+    "marketplace": {
+      "total": 4,
+      "scheduled": 0,
+      "strong": 0
+    }
+  },
+  "ends": [
+    {
+      "key": "government_reo",
+      "label": "Federal/GSE REO",
+      "required": true,
+      "catalogEntries": 7,
+      "scheduledAdapters": 5,
+      "strongAdapters": 2,
+      "opportunityScheduled": 5,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "hud-homestore*",
+        "fannie-homepath*",
+        "freddie-homesteps*",
+        "usda-resales*",
+        "va-vrm*",
+        "fdic-asset-sales",
+        "ncua-amac"
+      ]
+    },
+    {
+      "key": "government_seizure",
+      "label": "Federal seizure/forfeiture",
+      "required": true,
+      "catalogEntries": 5,
+      "scheduledAdapters": 3,
+      "strongAdapters": 2,
+      "opportunityScheduled": 3,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "irs-auctions*",
+        "treasury-forfeiture*",
+        "us-marshals*",
+        "cws-marketing",
+        "real-look"
+      ]
+    },
+    {
+      "key": "government_surplus",
+      "label": "Federal/state surplus real property",
+      "required": true,
+      "catalogEntries": 3,
+      "scheduledAdapters": 1,
+      "strongAdapters": 1,
+      "opportunityScheduled": 1,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "gsa-real-estate-sales*",
+        "state-surplus-property",
+        "govdeals-real-property"
+      ]
+    },
+    {
+      "key": "government_land",
+      "label": "Federal/state land sales",
+      "required": true,
+      "catalogEntries": 2,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 1,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "blm-public-land-sales",
+        "state-land-auctions*"
+      ]
+    },
+    {
+      "key": "foreclosure_auction",
+      "label": "Foreclosure/sheriff/trustee auction",
+      "required": true,
+      "catalogEntries": 5,
+      "scheduledAdapters": 4,
+      "strongAdapters": 1,
+      "opportunityScheduled": 4,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "servicelink*",
+        "civilview*",
+        "bid4assets*",
+        "ohio-sheriff-sale*",
+        "county-trustee-sale"
+      ]
+    },
+    {
+      "key": "tax_sale",
+      "label": "Tax lien/deed sale",
+      "required": true,
+      "catalogEntries": 7,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "alachua-tax-deeds",
+        "harris-county-tax-sale",
+        "maricopa-tax-deed",
+        "county-tax-sale-template",
+        "realauction",
+        "ca-controller-tax-sale*",
+        "excess-funds"
+      ]
+    },
+    {
+      "key": "land_bank",
+      "label": "Land bank inventory",
+      "required": true,
+      "catalogEntries": 2,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 1,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "landbanksearch*",
+        "cuyahoga-land-bank"
+      ]
+    },
+    {
+      "key": "local_surplus",
+      "label": "County/municipal surplus",
+      "required": true,
+      "catalogEntries": 1,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 1,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "county-surplus-property*"
+      ]
+    },
+    {
+      "key": "marketplace",
+      "label": "Commercial marketplaces (issuer-preserving)",
+      "required": false,
+      "catalogEntries": 4,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "auction-dot-com",
+        "hubzu",
+        "xome",
+        "mls-licensed-feed"
+      ]
+    },
+    {
+      "key": "public_notice",
+      "label": "Public notices / early signal",
+      "required": true,
+      "catalogEntries": 3,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "federal-register",
+        "jurisdiction-public-notices",
+        "press-association-email*"
+      ]
+    },
+    {
+      "key": "court_record",
+      "label": "Court/PACER dockets",
+      "required": false,
+      "catalogEntries": 3,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "pacer-bankruptcy",
+        "state-court-dockets",
+        "courtlistener*"
+      ]
+    },
+    {
+      "key": "parcel_evidence",
+      "label": "Parcel/assessor evidence",
+      "required": true,
+      "catalogEntries": 6,
+      "scheduledAdapters": 1,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "alachua-county-parcels",
+        "florida-statewide-parcels",
+        "county-assessor",
+        "county-gis",
+        "fl-dor-cadastral*",
+        "tx-cad-bulk"
+      ]
+    },
+    {
+      "key": "title_evidence",
+      "label": "Title/recorder evidence",
+      "required": false,
+      "catalogEntries": 3,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "county-recorder",
+        "county-recorder-nod",
+        "mers-servicerid"
+      ]
+    },
+    {
+      "key": "area_context",
+      "label": "Area/market context",
+      "required": false,
+      "catalogEntries": 3,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "census-acs",
+        "fhfa-hpi",
+        "census-geocoder"
+      ]
+    },
+    {
+      "key": "hazard_evidence",
+      "label": "Hazard/environmental screening",
+      "required": false,
+      "catalogEntries": 3,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "fema-flood-map",
+        "epa-envirofacts",
+        "usfws-wetlands"
+      ]
+    },
+    {
+      "key": "vacancy_evidence",
+      "label": "Vacancy context",
+      "required": false,
+      "catalogEntries": 1,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "hud-usps-vacancy"
+      ]
+    },
+    {
+      "key": "land_use_evidence",
+      "label": "Zoning/land use",
+      "required": false,
+      "catalogEntries": 1,
+      "scheduledAdapters": 0,
+      "strongAdapters": 0,
+      "opportunityScheduled": 0,
+      "coveredByCode": true,
+      "honestGap": null,
+      "memberIds": [
+        "local-zoning"
+      ]
+    }
+  ],
+  "scheduledAdapterKeys": [
+    "bid4assets",
+    "ca-controller-tax-sale",
+    "civilview",
+    "courtlistener",
+    "fannie",
+    "fl-dor-cadastral",
+    "freddie",
+    "government-land",
+    "gsa",
+    "hud",
+    "hud-usps-vacancy",
+    "irs",
+    "landbank",
+    "local-surplus",
+    "marshals",
+    "public-notices-email",
+    "servicelink",
+    "sheriff",
+    "treasury",
+    "usda",
+    "va"
+  ],
+  "sources": [
+    {
+      "id": "alachua-tax-deeds",
+      "label": "Alachua County Tax-Deed Records",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://alachuacounty.us/Depts/Clerk/TaxDeeds/Pages/TaxDeedSales.aspx",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "alachua-county-parcels",
+      "label": "Alachua County Parcel and Planning Records",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "SCOPE_LIMITED",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://maps.alachuacounty.us/server/rest/services/Hosted/ParcelsACGM/FeatureServer/0",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "servicelink",
+      "label": "Public Auction Network",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "VERIFIED_FIRST_PARTY",
+      "adapterKey": "servicelink",
+      "access": "public",
+      "discoveryUrl": "https://www.servicelinkauction.com/",
+      "power": {
+        "tier": "P3_LIVE_ADAPTER",
+        "score": 4,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 25
+    },
+    {
+      "id": "hud-homestore",
+      "label": "HUD HomeStore",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": "hud",
+      "access": "public",
+      "discoveryUrl": "https://www.hudhomestore.gov/",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "hud-cards"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:hud-cards",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards",
+      "seedListings": 1971
+    },
+    {
+      "id": "fannie-homepath",
+      "label": "Fannie Mae HomePath",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "fannie",
+      "access": "public",
+      "discoveryUrl": "https://www.homepath.com/",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "SPA/API often unparseable without partner feed; fail-closed + SPA observation_error",
+      "seedListings": 0
+    },
+    {
+      "id": "freddie-homesteps",
+      "label": "Freddie Mac HomeSteps",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "freddie",
+      "access": "public",
+      "discoveryUrl": "https://www.homesteps.com/",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "SPA/API often unparseable; fail-closed + SPA observation_error",
+      "seedListings": 0
+    },
+    {
+      "id": "usda-resales",
+      "label": "USDA RD/FSA Property Resales",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": "usda",
+      "access": "public",
+      "discoveryUrl": "https://www.resales.usda.gov/resales/public/searchSFH",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "usda-table"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:usda-table",
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 15
+    },
+    {
+      "id": "va-vrm",
+      "label": "VA REO / VRM Properties",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "va",
+      "access": "public",
+      "discoveryUrl": "https://www.vrmproperties.com/",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed",
+      "seedListings": 0
+    },
+    {
+      "id": "irs-auctions",
+      "label": "IRS Auctions",
+      "category": "government_seizure",
+      "role": "opportunity",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": "irs",
+      "access": "public",
+      "discoveryUrl": "https://www.irsauctions.gov/",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "irs-detail"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:irs-detail",
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 8
+    },
+    {
+      "id": "treasury-forfeiture",
+      "label": "Treasury Forfeiture Real Property",
+      "category": "government_seizure",
+      "role": "opportunity",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": "treasury",
+      "access": "public",
+      "discoveryUrl": "https://www.treasury.gov/auctions/treasury/rp/realprop.shtml",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "treasury-detail"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:treasury-detail",
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 15
+    },
+    {
+      "id": "gsa-real-estate-sales",
+      "label": "GSA Real Estate Sales",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": "gsa",
+      "access": "public",
+      "discoveryUrl": "https://realestatesales.gov/",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "gsa-index",
+          "gsa-detail"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:gsa-index+gsa-detail",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "robots exclusion on /our-listing; sparse inventory; Scrapling optional",
+      "seedListings": 2
+    },
+    {
+      "id": "us-marshals",
+      "label": "U.S. Marshals Asset Forfeiture",
+      "category": "government_seizure",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "marshals",
+      "access": "public",
+      "discoveryUrl": "https://www.usmarshals.gov/what-we-do/asset-forfeiture",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "USMS bot-protection / brokered RealLook; fail-closed",
+      "seedListings": 0
+    },
+    {
+      "id": "fdic-asset-sales",
+      "label": "FDIC Asset Sales",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.fdic.gov/asset-sales/real-estate-and-property-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "ncua-amac",
+      "label": "NCUA AMAC Loan Sales & Available Real Estate",
+      "category": "government_reo",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://ncua.gov/support-services/conservatorships-liquidations/loan-sales-available-real-estate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "blm-public-land-sales",
+      "label": "BLM Federal Public Land Sales",
+      "category": "government_land",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.blm.gov/programs/lands-and-realty/sales-and-exchanges/federal-public-land-sales-faqs",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "cws-marketing",
+      "label": "CWS Marketing Group (Treasury contractor)",
+      "category": "government_seizure",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cwsmarketing.com/auctions/real-estate/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "real-look",
+      "label": "RealLook (USMS real-property contractor)",
+      "category": "government_seizure",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.reallook.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "civilview",
+      "label": "CivilView Sheriff/Tax Sale Platform",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "SCOPE_LIMITED",
+      "adapterKey": "civilview",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://salesweb.civilview.com/Sales/SalesSearch",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "civilview-sales"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:civilview-sales",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Jurisdiction-scoped (countyId); not nationwide",
+      "seedListings": 60
+    },
+    {
+      "id": "bid4assets",
+      "label": "Bid4Assets",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "INCONCLUSIVE_BLOCKED",
+      "adapterKey": "bid4assets",
+      "access": "account",
+      "discoveryUrl": "https://www.bid4assets.com/",
+      "power": {
+        "tier": "P2_BLOCKED_PUBLISHER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "CAPTCHA/account; circuit breaker fails closed",
+      "seedListings": 0
+    },
+    {
+      "id": "landbanksearch",
+      "label": "Land Bank Search",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "INCONCLUSIVE_BLOCKED",
+      "adapterKey": "landbank",
+      "access": "public",
+      "discoveryUrl": "https://www.landbanksearch.com/",
+      "power": {
+        "tier": "P2_BLOCKED_PUBLISHER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Turnstile/CAPTCHA on some portals",
+      "seedListings": 0
+    },
+    {
+      "id": "cuyahoga-land-bank",
+      "label": "Cuyahoga County Land Bank",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "SCOPE_LIMITED",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cuyahogalandbank.org/all-available-properties/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "ohio-sheriff-sale",
+      "label": "Ohio Sheriff Sale Auction",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://sheriffsaleauction.ohio.gov/",
+      "power": {
+        "tier": "P3_LIVE_ADAPTER",
+        "score": 4,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "county-trustee-sale",
+      "label": "County Trustee Sale Publisher",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "harris-county-tax-sale",
+      "label": "Harris County, TX Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.hctax.net/Property/TaxSales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "maricopa-tax-deed",
+      "label": "Maricopa County, AZ Tax-Deeded Land Sales",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.maricopa.gov/780/Tax-Deeded-Land-Sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-tax-sale-template",
+      "label": "County Tax Lien/Deed Sale Template",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-surplus-property",
+      "label": "County/Municipal Surplus Real Property",
+      "category": "local_surplus",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "local-surplus",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled",
+      "seedListings": 0
+    },
+    {
+      "id": "state-land-auctions",
+      "label": "State Trust/Public Land Auction Office",
+      "category": "government_land",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "government-land",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-government",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled",
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-property",
+      "label": "State Surplus Real Property Office",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-government",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "federal-register",
+      "label": "Federal Register Notices",
+      "category": "public_notice",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.federalregister.gov/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "jurisdiction-public-notices",
+      "label": "Jurisdiction Public Notices",
+      "category": "public_notice",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "press-association-email",
+      "label": "Press-Association Public Notice Email Alerts",
+      "category": "public_notice",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "public-notices-email",
+      "access": "account",
+      "discoveryUrl": "https://www.publicnoticeillinois.com/",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "DISCOVERY_ONLY; operator IMAP/corpus evidence only",
+      "seedListings": 0
+    },
+    {
+      "id": "pacer-bankruptcy",
+      "label": "PACER Bankruptcy and Federal Court Records",
+      "category": "court_record",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.uscourts.gov/court-records/find-a-case-pacer",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-court-dockets",
+      "label": "State/Local Court Docket Publisher",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.ncsc.org/information-and-resources/browse-by-state/state-court-websites",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "florida-statewide-parcels",
+      "label": "Florida Statewide Cadastral",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "census-acs",
+      "label": "Census ACS Public Area Context",
+      "category": "area_context",
+      "role": "evidence",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.census.gov/data/developers/data-sets/acs-5year.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "hud-usps-vacancy",
+      "label": "HUD/USPS Vacancy Data",
+      "category": "vacancy_evidence",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "licensed",
+      "discoveryUrl": "https://www.huduser.gov/portal/datasets/usps.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-assessor",
+      "label": "County Assessor/Appraiser",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-recorder",
+      "label": "County Recorder/Clerk Land Records",
+      "category": "title_evidence",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-gis",
+      "label": "County Parcel GIS",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "local-zoning",
+      "label": "Local Zoning and Planning",
+      "category": "land_use_evidence",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/local-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "fema-flood-map",
+      "label": "FEMA Flood Map Service Center",
+      "category": "hazard_evidence",
+      "role": "evidence",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://msc.fema.gov/portal/home",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "epa-envirofacts",
+      "label": "EPA Environmental Screening",
+      "category": "hazard_evidence",
+      "role": "evidence",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.epa.gov/enviro",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "usfws-wetlands",
+      "label": "U.S. Fish & Wildlife Wetlands Mapper",
+      "category": "hazard_evidence",
+      "role": "evidence",
+      "status": "VERIFIED_OFFICIAL",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.fws.gov/program/national-wetlands-inventory/wetlands-mapper",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "auction-dot-com",
+      "label": "Auction.com",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.auction.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "hubzu",
+      "label": "Hubzu",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.hubzu.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "xome",
+      "label": "Xome Auctions",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.xome.com/auctions/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "realauction",
+      "label": "RealAuction Platform",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.realauction.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "govdeals-real-property",
+      "label": "GovDeals Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.govdeals.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "mls-licensed-feed",
+      "label": "MLS / Broker-Authorized Feed",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "licensed",
+      "discoveryUrl": "https://www.nar.realtor/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "fl-dor-cadastral",
+      "label": "FL DOR Statewide Cadastral (ArcGIS REST)",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "fl-dor-cadastral",
+      "access": "public",
+      "discoveryUrl": "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "DISCOVERY_ONLY until two clean canaries (parcel evidence, not sale inventory)",
+      "seedListings": 0
+    },
+    {
+      "id": "tx-cad-bulk",
+      "label": "Texas Central Appraisal District Bulk Rolls",
+      "category": "parcel_evidence",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.hcad.org/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "county-recorder-nod",
+      "label": "County Recorder NOD/NOS Indexes",
+      "category": "title_evidence",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.ocrecorder.com/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "courtlistener",
+      "label": "CourtListener / RECAP",
+      "category": "court_record",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "courtlistener",
+      "access": "public",
+      "discoveryUrl": "https://www.courtlistener.com/",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "DISCOVERY_ONLY; enrichment only — never invents bid/sale",
+      "seedListings": 0
+    },
+    {
+      "id": "ca-controller-tax-sale",
+      "label": "CA State Controller Tax-Defaulted Sales Directory",
+      "category": "tax_sale",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": "ca-controller-tax-sale",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.sco.ca.gov/boe_tax_sales.html",
+      "power": {
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Cloudflare; DISCOVERY_ONLY until canaries",
+      "seedListings": 0
+    },
+    {
+      "id": "fhfa-hpi",
+      "label": "FHFA House Price Index",
+      "category": "area_context",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.fhfa.gov/data/hpi",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "census-geocoder",
+      "label": "Census Geocoder + ACS",
+      "category": "area_context",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://geocoding.geo.census.gov/geocoder/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "mers-servicerid",
+      "label": "MERS ServicerID",
+      "category": "title_evidence",
+      "role": "evidence",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "account",
+      "discoveryUrl": "https://www.mersinc.org/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "excess-funds",
+      "label": "Excess Funds / Unclaimed Surplus",
+      "category": "tax_sale",
+      "role": "discovery",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.orangecountyfl.net/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    }
+  ]
+}

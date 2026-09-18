@@ -77,7 +77,9 @@
     "canary:list": "node scripts/canary-live.js list",
     "canary:status": "node scripts/canary-live.js status",
     "canary:promote": "node scripts/canary-live.js promote",
+    "scrapers:power": "node scripts/scraper-power-report.js",
     "test:canary": "node --test test/canary-live.test.js",
+    "test:scraper-power": "node --test test/scraper-power-report.test.js",
     "swarm": "node scripts/swarm.js",
     "test:swarm": "node --test test/swarm.test.js test/swarm-executor.test.js"
   },

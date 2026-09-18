@@ -18,6 +18,8 @@ const caControllerTaxSale = require('./ca-controller-tax-sale');
 const courtlistener = require('./courtlistener');
 const hudUspsVacancy = require('./hud-usps-vacancy');
 const publicNoticesEmail = require('./email-ingest');
+const governmentLand = require('./government-land');
+const localSurplus = require('./local-surplus');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 const { validateListingForIngestion } = require('./validation');
@@ -101,6 +103,10 @@ class IngestionScheduler {
       hudUspsVacancy,
       // Email-as-API collector: only accepts evidence when IMAP/corpus is configured.
       new publicNoticesEmail.PublicNoticesEmailScraper({ env: options.env || process.env }),
+      // End-coverage enrollment templates: scheduled so Source Radar always
+      // shows these ends; fail closed / skip when not enrolled — never invent.
+      governmentLand,
+      localSurplus,
     ];
     this.database = options.database || db;
     this.discoveryStore = options.discoveryStore || null;

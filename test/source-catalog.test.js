@@ -55,8 +55,8 @@ test('property lookup evidence sources are explicit, unscheduled, and retain the
 
 test('current scheduler source coverage is explicit and historical sources remain unscheduled', () => {
   assert.deepEqual([...SCHEDULED_ADAPTER_KEYS].sort(), [
-    'bid4assets', 'ca-controller-tax-sale', 'civilview', 'courtlistener', 'fannie', 'fl-dor-cadastral', 'freddie', 'gsa', 'hud', 'irs',
-    'landbank', 'marshals', 'public-notices-email', 'servicelink', 'sheriff', 'treasury', 'usda', 'va'
+    'bid4assets', 'ca-controller-tax-sale', 'civilview', 'courtlistener', 'fannie', 'fl-dor-cadastral', 'freddie', 'government-land', 'gsa', 'hud', 'irs',
+    'landbank', 'local-surplus', 'marshals', 'public-notices-email', 'servicelink', 'sheriff', 'treasury', 'usda', 'va'
   ]);
   assert.equal(getSource('fdic-asset-sales').adapterKey, null);
   assert.equal(getSource('county-trustee-sale').adapterKey, null);
