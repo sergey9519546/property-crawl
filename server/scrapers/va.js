@@ -6,8 +6,14 @@
 // Scrapes acquired properties managed by VRM Mortgage Services for VA.
 
 const BaseScraper = require('./base');
-const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+const {
+  createRunReport,
+  recordUnitFailure,
+  recordUnitSuccess,
+  finalizeRunReport,
+  looksLikeClientRenderedShell,
+  applyEmptyInventoryHonesty,
+} = require('./run-report');
 
 class VaReoScraper extends BaseScraper {
   constructor(options = {}) {
@@ -16,8 +22,8 @@ class VaReoScraper extends BaseScraper {
     // host has returned 404; VA REO disposition channels have moved over time.
     this.baseUrl = (process.env.VA_REO_BASE_URL || 'https://vrmproperties.com').replace(/\/$/, '');
     this.timeoutMs = 4000;
-    this.useScrapling = options.useScrapling ?? isScraplingEnabled('va');
-    this.extract = options.extractImpl || extractWithScrapling;
+    this.useScrapling = options.useScrapling ?? false;
+    this.extract = options.extractImpl || null;
     this.lastRunReport = null;
   }
 
@@ -32,9 +38,14 @@ class VaReoScraper extends BaseScraper {
 
       const results = await Promise.allSettled(topStates.map(state => this.fetchStateListings(state)));
       const allListings = [];
+      const htmlSamples = [];
       results.forEach((res, index) => {
         const state = topStates[index];
-        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        if (res.status === 'fulfilled' && Array.isArray(res.value?.listings)) {
+          recordUnitSuccess(report, state, res.value.listings.length);
+          if (res.value.html) htmlSamples.push(res.value.html);
+          allListings.push(...res.value.listings);
+        } else if (res.status === 'fulfilled' && Array.isArray(res.value)) {
           recordUnitSuccess(report, state, res.value.length);
           allListings.push(...res.value);
         } else {
@@ -49,6 +60,7 @@ class VaReoScraper extends BaseScraper {
       if (report.outcome === 'failed') {
         throw new Error(`VA_UPSTREAM_UNAVAILABLE: all ${topStates.length} VA REO state endpoints failed for ${this.baseUrl}`);
       }
+      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples, sourceKey: 'va' });
       console.log(`[${this.name}] Standardized ${standardized.length} VA REO listings (${report.outcome})`);
       return standardized;
     });
@@ -65,7 +77,9 @@ class VaReoScraper extends BaseScraper {
       });
       const data = JSON.parse(payload);
       const items = Array.isArray(data) ? data : (data.properties || data.results || []);
-      return items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
+      const listings = items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
+      if (!listings.length) return this.fetchStateHtml(state);
+      return { listings, html: null };
     } catch (err) {
       return this.fetchStateHtml(state);
     }
@@ -73,17 +87,17 @@ class VaReoScraper extends BaseScraper {
 
   async fetchStateHtml(state) {
     const searchUrl = `${this.baseUrl}/search-properties?state=${state}`;
-    try {
-      const html = await this.requestText(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-        }
-      });
-      return this.parseHtmlCards(html, state);
-    } catch (err) {
-      return [];
+    const html = await this.requestText(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      }
+    });
+    const listings = this.parseHtmlCards(html, state);
+    if (!listings.length && looksLikeClientRenderedShell(html)) {
+      throw new Error(`VA_SPA_SHELL ${state}: client-rendered VA REO page has no parseable listing cards (not empty inventory)`);
     }
+    return { listings, html };
   }
 
   parseHtmlCards(html, state) {
@@ -168,155 +182,9 @@ class VaReoScraper extends BaseScraper {
   }
 
 
-  getVerifiedInventory() {
-    return this.markFixtureInventory([
-      {
-        id: 'VA-26-88129',
-        state: 'TX',
-        county: 'Bexar',
-        city: 'San Antonio',
-        zip: '78227',
-        address: '7415 Military Dr W, San Antonio, TX 78227',
-        lat: 29.412,
-        lng: -98.632,
-        beds: 3,
-        baths: 2,
-        sqft: 1480,
-        year: 1976,
-        propType: 'Single Family',
-        openingBid: 84000,
-        estLow: 168000,
-        estHigh: 195000,
-        assessed: 142000,
-        saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Department of Veterans Affairs (VA REO)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'VRM Mortgage Services Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money via VRM Properties',
-        photo: 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=800&q=80',
-        sourceUrl: 'https://vrmproperties.com/property/VA-26-88129',
-        raw: 'VA ACQUIRED PROPERTY: 7415 Military Dr W, San Antonio TX 78227. List $84,000. VA Vendee financing eligible with zero down payment for qualified buyers.'
-      },
-      {
-        id: 'VA-09-44192',
-        state: 'FL',
-        county: 'Hillsborough',
-        city: 'Tampa',
-        zip: '33605',
-        address: '2410 E Lake Ave, Tampa, FL 33605',
-        lat: 27.978,
-        lng: -82.435,
-        beds: 3,
-        baths: 2,
-        sqft: 1390,
-        year: 1968,
-        propType: 'Single Family',
-        openingBid: 95000,
-        estLow: 185000,
-        estHigh: 215000,
-        assessed: 160000,
-        saleDate: new Date(Date.now() + 16 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Department of Veterans Affairs (VA REO)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'VRM Mortgage Services Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,500 earnest money deposit',
-        photo: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80',
-        sourceUrl: 'https://vrmproperties.com/property/VA-09-44192',
-        raw: 'VA REO PROPERTY: 2410 E Lake Ave, Tampa FL 33605. List $95,000. Sold as-is through VRM Properties.'
-      },
-      {
-        id: 'VA-31-55291',
-        state: 'OH',
-        county: 'Montgomery',
-        city: 'Dayton',
-        zip: '45403',
-        address: '1842 Huffman Ave, Dayton, OH 45403',
-        lat: 39.758,
-        lng: -84.168,
-        beds: 3,
-        baths: 1,
-        sqft: 1240,
-        year: 1942,
-        propType: 'Single Family',
-        openingBid: 42000,
-        estLow: 98000,
-        estHigh: 120000,
-        assessed: 82000,
-        saleDate: new Date(Date.now() + 11 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Department of Veterans Affairs (VA REO)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'VRM Mortgage Services Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money',
-        photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80',
-        sourceUrl: 'https://vrmproperties.com/property/VA-31-55291',
-        raw: 'VA LOAN FORECLOSURE ACQUISITION: 1842 Huffman Ave, Dayton OH. List $42,000. VA Vendee financing eligible.'
-      },
-      {
-        id: 'VA-07-77182',
-        state: 'GA',
-        county: 'Muscogee',
-        city: 'Columbus',
-        zip: '31904',
-        address: '3418 Rosemont Dr, Columbus, GA 31904',
-        lat: 32.502,
-        lng: -84.972,
-        beds: 3,
-        baths: 1.5,
-        sqft: 1320,
-        year: 1961,
-        propType: 'Single Family',
-        openingBid: 58000,
-        estLow: 132000,
-        estHigh: 154000,
-        assessed: 110000,
-        saleDate: new Date(Date.now() + 18 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Department of Veterans Affairs (VA REO)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'VRM Mortgage Services Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money',
-        photo: 'https://images.unsplash.com/photo-1576941089067-2de3c901e126?w=800&q=80',
-        sourceUrl: 'https://vrmproperties.com/property/VA-07-77182',
-        raw: 'VA ACQUIRED HOME: 3418 Rosemont Dr, Columbus GA. List $58,000. Managed by VRM Mortgage Services.'
-      },
-      {
-        id: 'VA-45-99210',
-        state: 'GA',
-        county: 'Richmond',
-        city: 'Augusta',
-        zip: '30901',
-        address: '1215 Broad St, Augusta, GA 30901',
-        lat: 33.475,
-        lng: -81.972,
-        beds: 3,
-        baths: 2,
-        sqft: 1410,
-        year: 1954,
-        propType: 'Single Family',
-        openingBid: 62000,
-        estLow: 140000,
-        estHigh: 165000,
-        assessed: 118000,
-        saleDate: new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Department of Veterans Affairs (VA REO)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'VRM Mortgage Services Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money',
-        photo: 'https://images.unsplash.com/photo-1598228723793-52759bba239c?w=800&q=80',
-        sourceUrl: 'https://vrmproperties.com/property/VA-45-99210',
-        raw: 'VA REO: 1215 Broad St, Augusta GA. List $62,000. Sold as-is through VRM Properties portal.'
-      }
-    ], 'va-embedded-demo');
-  }
+  // Demo/Unsplash inventory overrides removed (2026-09-14 audit).
+  // Live collectors must not fabricate listings; BaseScraper may still read
+  // data/listings.snapshot.json as explicitly labeled fixture evidence.
 
 }
 

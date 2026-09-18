@@ -22,10 +22,15 @@ test('real HTTP workflow imports, reviews, and enrolls a local publisher without
   const authorized = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
   try {
     const before = await (await fetch(`${base}/api/source-network`)).json();
-    assert.equal(before.summary.catalogSources, require('../server/sources/catalog').SOURCE_CATALOG.length);
-    // The catalog currently exposes 17 registered property collectors; this count
-    // intentionally excludes the separate evidence collector below.
-    assert.equal(before.summary.propertyCollectors, 17);
+    const { SOURCE_CATALOG } = require('../server/sources/catalog');
+    assert.equal(before.summary.catalogSources, SOURCE_CATALOG.length);
+    // propertyCollectors = automated non-evidence collectors; keep the invariant
+    // instead of a brittle hardcoded registry size.
+    assert.equal(
+      before.summary.propertyCollectors,
+      before.summary.automatedCollectors - before.summary.evidenceCollectors
+    );
+    assert.ok(before.summary.propertyCollectors >= 17, `expected ≥17 property collectors, got ${before.summary.propertyCollectors}`);
     assert.equal(before.summary.evidenceCollectors, 1);
     assert.equal((await fetch(`${base}/api/source-network/intake`)).status, 401);
     const originalInventory = await (await fetch(`${base}/api/listings?limit=1`)).json();

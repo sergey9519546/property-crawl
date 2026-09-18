@@ -8,7 +8,7 @@ const { FreddieMacScraper } = require('../server/scrapers/freddie');
 const { VaReoScraper } = require('../server/scrapers/va');
 const { UsMarshalsScraper } = require('../server/scrapers/marshals');
 const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
-const { createRunReport, finalizeRunReport, recordUnitFailure, recordUnitSuccess } = require('../server/scrapers/run-report');
+const { createRunReport, finalizeRunReport, recordUnitFailure, recordUnitSuccess, looksLikeClientRenderedShell, applyEmptyInventoryHonesty } = require('../server/scrapers/run-report');
 
 function withEnv(overrides, body) {
   const previous = {};
@@ -35,6 +35,33 @@ function withEnv(overrides, body) {
     throw error;
   }
 }
+
+test('SPA shell HTML is not treated as verified empty inventory', () => {
+  const spa = '<html><body><div id="root"></div><script src="/app.js"></script></body></html>';
+  assert.equal(looksLikeClientRenderedShell(spa), true);
+  assert.equal(looksLikeClientRenderedShell('<div class="property-card">1 Main St</div>'), false);
+
+  const report = createRunReport('fannie', {});
+  report.statesRequested = ['TX'];
+  recordUnitSuccess(report, 'TX', 0);
+  finalizeRunReport(report, { emitted: 0 });
+  assert.equal(report.outcome, 'empty');
+  assert.throws(
+    () => applyEmptyInventoryHonesty(report, { emitted: 0, htmlSamples: [spa], sourceKey: 'fannie' }),
+    /client-rendered|not verified empty|SOURCE_OBSERVATION/i
+  );
+});
+
+test('Fannie SPA shell HTML fallback throws instead of claiming empty', async () => {
+  await withEnv({ FANNIE_STATES: 'OH' }, async () => {
+    const scraper = new FannieMaeScraper();
+    scraper.fetchStateHomePath = async () => {
+      const html = '<html><body><div id="root"></div></body></html>';
+      return { listings: [], html };
+    };
+    await assert.rejects(() => scraper.scrapeFeed(), /SPA_SHELL|client-rendered|SOURCE_OBSERVATION|UPSTREAM/i);
+  });
+});
 
 test('run-report helper classifies failed / partial / empty / success', () => {
   const failed = createRunReport('x', {});

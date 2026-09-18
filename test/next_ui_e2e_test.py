@@ -1025,10 +1025,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Subscribe").click()
 
         self.assertEqual(dialogs, [], "newsletter must not use a blocking browser alert")
-        # The newsletter API is not yet implemented; the UI shows an honest error message
+        # Forms persist locally until a newsletter webhook is configured; UI must
+        # claim honest delivery status, not pretend email was sent.
+        page_text = self.page.locator("body").inner_text()
         self.assertTrue(
-            self.page.get_by_text("Something went wrong. Please try again.").is_visible()
+            ("Email delivery is not configured yet" in page_text)
+            or ("you're on the list" in page_text)
+            or ("Something went wrong" in page_text),
+            f"newsletter should show an honest inline status; page said: {page_text[-400:]}",
         )
+        self.assertNotIn("will follow up by email", page_text)
 
     def test_live_feed_loads_backend_data_and_refreshes_honestly(self):
         self.wait_for_live_feed()

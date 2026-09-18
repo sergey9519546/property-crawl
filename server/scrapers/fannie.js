@@ -6,16 +6,23 @@
 // Scrapes real single-family HomePath listings with First Look program windows.
 
 const BaseScraper = require('./base');
-const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+const {
+  createRunReport,
+  recordUnitFailure,
+  recordUnitSuccess,
+  finalizeRunReport,
+  looksLikeClientRenderedShell,
+  applyEmptyInventoryHonesty,
+} = require('./run-report');
 
 class FannieMaeScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'FannieMaeScraper', sourceKey: 'fannie' });
     this.baseUrl = 'https://www.homepath.fanniemae.com';
     this.timeoutMs = 4000;
-    this.useScrapling = options.useScrapling ?? isScraplingEnabled('fannie');
-    this.extract = options.extractImpl || extractWithScrapling;
+    // Structural parser not wired for HomePath SPA HTML; flag reserved.
+    this.useScrapling = options.useScrapling ?? false;
+    this.extract = options.extractImpl || null;
     this.lastRunReport = null;
   }
 
@@ -30,9 +37,14 @@ class FannieMaeScraper extends BaseScraper {
 
       const results = await Promise.allSettled(topStates.map(state => this.fetchStateHomePath(state)));
       const allListings = [];
+      const htmlSamples = [];
       results.forEach((res, index) => {
         const state = topStates[index];
-        if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+        if (res.status === 'fulfilled' && Array.isArray(res.value?.listings)) {
+          recordUnitSuccess(report, state, res.value.listings.length);
+          if (res.value.html) htmlSamples.push(res.value.html);
+          allListings.push(...res.value.listings);
+        } else if (res.status === 'fulfilled' && Array.isArray(res.value)) {
           recordUnitSuccess(report, state, res.value.length);
           allListings.push(...res.value);
         } else {
@@ -47,6 +59,7 @@ class FannieMaeScraper extends BaseScraper {
       if (report.outcome === 'failed') {
         throw new Error(`FANNIE_UPSTREAM_UNAVAILABLE: all ${topStates.length} HomePath state endpoints failed`);
       }
+      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples, sourceKey: 'fannie' });
       console.log(`[${this.name}] Standardized ${standardized.length} Fannie Mae listings (${report.outcome})`);
       return standardized;
     });
@@ -63,7 +76,9 @@ class FannieMaeScraper extends BaseScraper {
       });
       const data = JSON.parse(payload);
       const items = Array.isArray(data) ? data : (data.properties || data.listings || data.content || []);
-      return items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
+      const listings = items.map(p => this.mapJsonItem(p, state)).filter(Boolean);
+      if (!listings.length) return this.fetchStateHtml(state);
+      return { listings, html: null };
     } catch (err) {
       return this.fetchStateHtml(state);
     }
@@ -71,17 +86,17 @@ class FannieMaeScraper extends BaseScraper {
 
   async fetchStateHtml(state) {
     const searchUrl = `${this.baseUrl}/listing/search?q=${state}`;
-    try {
-      const html = await this.requestText(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-        }
-      });
-      return this.parseHtmlCards(html, state);
-    } catch (err) {
-      return [];
+    const html = await this.requestText(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml',
+      }
+    });
+    const listings = this.parseHtmlCards(html, state);
+    if (!listings.length && looksLikeClientRenderedShell(html)) {
+      throw new Error(`FANNIE_SPA_SHELL ${state}: client-rendered HomePath page has no parseable listing cards (not empty inventory)`);
     }
+    return { listings, html };
   }
 
   parseHtmlCards(html, state) {
@@ -167,184 +182,9 @@ class FannieMaeScraper extends BaseScraper {
   }
 
 
-  getVerifiedInventory() {
-    return this.markFixtureInventory([
-      {
-        id: 'FNMA-1049281',
-        state: 'TX',
-        county: 'Tarrant',
-        city: 'Fort Worth',
-        zip: '76105',
-        address: '3218 Avenue I, Fort Worth, TX 76105',
-        lat: 32.721,
-        lng: -97.288,
-        beds: 3,
-        baths: 2,
-        sqft: 1450,
-        year: 1965,
-        propType: 'Single Family',
-        openingBid: 125000,
-        estLow: 185000,
-        estHigh: 210000,
-        assessed: 168000,
-        saleDate: new Date(Date.now() + 16 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: 'Standard HomePath contract terms (10% or $1,000)',
-        photo: 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/1049281',
-        raw: 'HOMEPATH REO PROPERTY: 3218 Avenue I, Fort Worth TX 76105. List $125,000. First Look program active (owner occupants only during initial 30 days).'
-      },
-      {
-        id: 'FNMA-2094821',
-        state: 'OH',
-        county: 'Cuyahoga',
-        city: 'Cleveland',
-        zip: '44106',
-        address: '1412 E 110th St, Cleveland, OH 44106',
-        lat: 41.512,
-        lng: -81.602,
-        beds: 3,
-        baths: 1.5,
-        sqft: 1320,
-        year: 1925,
-        propType: 'Single Family',
-        openingBid: 65000,
-        estLow: 130000,
-        estHigh: 155000,
-        assessed: 105000,
-        saleDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money via HomePath portal',
-        photo: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/2094821',
-        raw: 'FANNIE MAE HOMEPATH: 1412 E 110th St, Cleveland OH. List $65,000. HomePath ReadyBuyer buyer closing cost assistance eligible.'
-      },
-      {
-        id: 'FNMA-3081942',
-        state: 'AZ',
-        county: 'Maricopa',
-        city: 'Phoenix',
-        zip: '85008',
-        address: '2204 N 36th St, Phoenix, AZ 85008',
-        lat: 33.472,
-        lng: -112.005,
-        beds: 3,
-        baths: 2,
-        sqft: 1520,
-        year: 1972,
-        propType: 'Single Family',
-        openingBid: 175000,
-        estLow: 265000,
-        estHigh: 295000,
-        assessed: 235000,
-        saleDate: new Date(Date.now() + 18 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: '$2,500 earnest money deposit',
-        photo: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/3081942',
-        raw: 'HOMEPATH PROPERTY: 2204 N 36th St, Phoenix AZ 85008. List $175,000. First Look priority period active.'
-      },
-      {
-        id: 'FNMA-4019284',
-        state: 'FL',
-        county: 'Miami-Dade',
-        city: 'Miami',
-        zip: '33143',
-        address: '5821 SW 60th Ave, Miami, FL 33143',
-        lat: 25.715,
-        lng: -80.292,
-        beds: 4,
-        baths: 2.5,
-        sqft: 1850,
-        year: 1982,
-        propType: 'Single Family',
-        openingBid: 210000,
-        estLow: 340000,
-        estHigh: 390000,
-        assessed: 290000,
-        saleDate: new Date(Date.now() + 20 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: '5% certified funds via HomePath portal',
-        photo: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/4019284',
-        raw: 'FANNIE MAE HOMEPATH: 5821 SW 60th Ave, Miami FL. List $210,000. Special Fannie Mae financing options available.'
-      },
-      {
-        id: 'FNMA-5028193',
-        state: 'IL',
-        county: 'Cook',
-        city: 'Chicago',
-        zip: '60609',
-        address: '4910 S Marshfield Ave, Chicago, IL 60609',
-        lat: 41.804,
-        lng: -87.666,
-        beds: 3,
-        baths: 1.5,
-        sqft: 1380,
-        year: 1918,
-        propType: 'Single Family',
-        openingBid: 85000,
-        estLow: 165000,
-        estHigh: 195000,
-        assessed: 140000,
-        saleDate: new Date(Date.now() + 12 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money via HomePath portal',
-        photo: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/5028193',
-        raw: 'HOMEPATH REO: 4910 S Marshfield Ave, Chicago IL. List $85,000. First Look program active.'
-      },
-      {
-        id: 'FNMA-6039182',
-        state: 'GA',
-        county: 'Muscogee',
-        city: 'Columbus',
-        zip: '31906',
-        address: '1735 Wynnton Rd, Columbus, GA 31906',
-        lat: 32.464,
-        lng: -84.965,
-        beds: 3,
-        baths: 2,
-        sqft: 1410,
-        year: 1956,
-        propType: 'Single Family',
-        openingBid: 55000,
-        estLow: 125000,
-        estHigh: 148000,
-        assessed: 102000,
-        saleDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-        plaintiff: 'Fannie Mae REO (HomePath)',
-        defendant: '—',
-        judgment: 0,
-        attorney: 'HomePath Listing Broker',
-        occupancy: 'Vacant',
-        deposit: '$1,000 earnest money via HomePath portal',
-        photo: 'https://images.unsplash.com/photo-1598228723793-52759bba239c?w=800&q=80',
-        sourceUrl: 'https://www.homepath.fanniemae.com/property-details/6039182',
-        raw: 'HOMEPATH PROPERTY: 1735 Wynnton Rd, Columbus GA. List $55,000. First Look owner occupant period active.'
-      }
-    ], 'fannie-embedded-demo');
-  }
+  // Demo/Unsplash inventory overrides removed (2026-09-14 audit).
+  // Live collectors must not fabricate listings; BaseScraper may still read
+  // data/listings.snapshot.json as explicitly labeled fixture evidence.
 
 }
 

@@ -76,9 +76,78 @@ function finalizeRunReport(report, { emitted = 0, rejected = 0 } = {}) {
   return report;
 }
 
+/**
+ * True when HTML looks like a client-rendered shell (React/Next/Angular/Vue
+ * bootstrap) without recognizable listing-card markup. An HTTP 200 SPA shell
+ * is not proof of empty inventory.
+ */
+function looksLikeClientRenderedShell(html) {
+  const s = String(html || '');
+  if (!s.trim()) return false;
+  const spaMarkers = [
+    /id\s*=\s*["']root["']/i,
+    /id\s*=\s*["']app["']/i,
+    /id\s*=\s*["']__next["']/i,
+    /data-reactroot/i,
+    /__NEXT_DATA__/,
+    /ng-app/i,
+    /data-v-[0-9a-f]{8}/i,
+  ];
+  const listingMarkers = [
+    /property-card/i,
+    /property-item/i,
+    /property-row/i,
+    /property-address/i,
+    /SaleDetails/i,
+    /asset-details/i,
+    /opening\s+bid/i,
+  ];
+  return spaMarkers.some((re) => re.test(s)) && !listingMarkers.some((re) => re.test(s));
+}
+
+/**
+ * When every requested unit "succeeds" with zero records but HTML samples
+ * look like SPA shells (or every unit failed transport), do not claim empty
+ * inventory — mark observation_error / failed.
+ */
+function applyEmptyInventoryHonesty(report, { emitted = 0, htmlSamples = [], throwOnUnresolved = true, sourceKey = '' } = {}) {
+  if (!report) return null;
+  if (emitted > 0) {
+    report.observationError = null;
+    return report;
+  }
+  const spaHits = htmlSamples.filter((html) => looksLikeClientRenderedShell(html)).length;
+  const emptySuccess = (report.statesSucceeded || []).length > 0 && (report.statesFailed || []).length === 0 && emitted === 0;
+  if (spaHits > 0 && emptySuccess) {
+    report.outcome = 'observation_error';
+    report.complete = false;
+    report.fullSweepComplete = false;
+    report.observationError = `${sourceKey || report.sourceKey}: ${spaHits} HTTP 200 response(s) looked like client-rendered shells without parseable listing cards — not verified empty inventory`;
+    report.failures.push({
+      unit: null,
+      kind: 'spa_shell_empty',
+      message: report.observationError.slice(0, 300),
+    });
+  } else if (emptySuccess && htmlSamples.length > 0 && spaHits === htmlSamples.length) {
+    report.outcome = 'observation_error';
+    report.complete = false;
+    report.fullSweepComplete = false;
+    report.observationError = `${sourceKey || report.sourceKey}: all HTML samples lacked parseable listing markers`;
+  }
+  if (throwOnUnresolved && report.outcome === 'observation_error') {
+    const error = new Error(report.observationError || 'Collection returned unverified empty inventory');
+    error.code = 'SOURCE_OBSERVATION_ERROR';
+    error.lastRunReport = report;
+    throw error;
+  }
+  return report;
+}
+
 module.exports = {
   createRunReport,
   recordUnitFailure,
   recordUnitSuccess,
   finalizeRunReport,
+  looksLikeClientRenderedShell,
+  applyEmptyInventoryHonesty,
 };
