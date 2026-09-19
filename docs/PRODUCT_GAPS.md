@@ -27,6 +27,7 @@ Honest inventory after production release, 10x listing pipeline, and nationwide 
 | Next scraper proxy 20s timeout vs live runs | **Closed** | 180s scrapers POST; E2E 88s run → 200 / 2206 ingested |
 | Live record store 20MB cap after HUD nationwide | **Closed** | default 64MB + `PROPERTY_LIVE_STORE_MAX_BYTES` |
 | Complete user workflow verification | **Closed** | `npm run e2e:workflow` — **17/17** on live production stack |
+| Migration 014 promotions (treasury, usda) | **Closed locally** | 2 clean durable canaries each; state=`promoted` — `reports/canary-promotion-2026-09-19.md` |
 
 ## Operator / external (not code-closable)
 
@@ -34,7 +35,7 @@ Honest inventory after production release, 10x listing pipeline, and nationwide 
 |---|---|
 | Public live URL | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
 | Form webhook delivery | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Migration 014 promotions of more sources | `DATABASE_URL` + `DISCOVERY_MODE=advanced` + `canary:live --repeat 2` |
+| Migration 014 promotions of more sources | Narrow HUD scope + more clean runs; treasury/usda already promoted |
 | CAPTCHA publishers (Bid4Assets, Land Bank, CA Controller) | Legitimate access — never auto-bypass |
 | Lawyer review of `/privacy` `/terms` | Legal |
 | Custom domain | Ops |
