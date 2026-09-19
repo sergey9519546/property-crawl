@@ -61,9 +61,15 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   }
   try {
     const base = dependencies.apiUrl || process.env.PROPERTY_API_URL || "http://localhost:3000";
+    // Scraper collection runs can take minutes (HUD multi-state). The default
+    // 20s proxy timeout made POST /api/scrapers fail through Next while the
+    // direct API path succeeded — hide that class of failure.
+    const timeoutMs = url.pathname.startsWith("/api/scrapers") && request.method === "POST"
+      ? 180_000
+      : 20_000;
     const upstream = await (dependencies.fetchImpl || fetch)(`${base.replace(/\/$/, "")}${url.pathname}${url.search}`, {
       method: request.method, headers, body: body as BodyInit | undefined,
-      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20_000),
+      cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
     for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date"]) {
@@ -78,5 +84,14 @@ export async function proxyPropertyApi(request: Request, dependencies: {
     }
     const responseBody = upstream.status === 204 ? null : await boundedBody(upstream.body, 8 * 1024 * 1024);
     return new Response(responseBody as BodyInit | null, { status: upstream.status, headers: responseHeaders });
-  } catch { return jsonError(503, "Property data service is unavailable. No substitute records were returned."); }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const timedOut = /timeout|aborted/i.test(message);
+    return jsonError(
+      503,
+      timedOut
+        ? 'Property data service timed out. Collection may still be running on the API; retry health/scrapers status.'
+        : 'Property data service is unavailable. No substitute records were returned.'
+    );
+  }
 }

@@ -23,6 +23,10 @@ Honest inventory after production release, 10x listing pipeline, and nationwide 
 | Local Postgres + Migration 014 stack | **Closed** | `discovery:local` migrate verified |
 | Shared terminal filter store | **Closed** | `terminal-filter-store.ts` + tests |
 | CAPTCHA fail-closed policy | **Closed** | catalog `INCONCLUSIVE_BLOCKED` + enrollment policy tests |
+| Intelligence sort UI | **Closed** | Discovery workbench quality/opportunity + minQuality |
+| Next scraper proxy 20s timeout vs live runs | **Closed** | 180s scrapers POST; E2E 88s run → 200 / 2206 ingested |
+| Live record store 20MB cap after HUD nationwide | **Closed** | default 64MB + `PROPERTY_LIVE_STORE_MAX_BYTES` |
+| Complete user workflow verification | **Closed** | `npm run e2e:workflow` — **17/17** on live production stack |
 
 ## Operator / external (not code-closable)
 

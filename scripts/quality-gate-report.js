@@ -18,7 +18,7 @@ const SUITES = [
   { id: 'scrapers', cmd: [process.execPath, ['test/scrapers.test.js']], envRequired: false },
   { id: 'scrapling+upgrade', cmd: [process.execPath, ['--test', 'test/scrapling-bridge.test.js', 'test/scraper-upgrade.test.js']], envRequired: false },
   { id: 'canary+power', cmd: [process.execPath, ['--test', 'test/canary-live.test.js', 'test/scraper-power-report.test.js', 'test/promotion-gate-contract.test.js']], envRequired: false },
-  { id: 'forms+boot', cmd: [process.execPath, ['--test', 'test/form-submissions.test.js', 'test/production-boot.test.js']], envRequired: false },
+  { id: 'forms+boot', cmd: [process.execPath, ['--test', 'test/form-submissions.test.js', 'test/production-boot.test.js', 'test/production-proxy-timeout.test.js']], envRequired: false },
   { id: 'sources', cmd: [process.execPath, ['--test', 'test/source-catalog.test.js', 'test/source-intake.test.js', 'test/source-intake-aliases.test.js', 'test/source-network.test.js', 'test/source-network-http.test.js', 'test/source-observations.test.js', 'test/source-collector-coverage.test.js', 'test/live-cache-refresh.test.js', 'test/federal-register-source.test.js', 'test/servicelink.test.js', 'test/listing-identifiers.test.js', 'test/email-ingest.test.js']], envRequired: false },
   { id: 'email-ingest', cmd: [process.execPath, ['--test', 'test/email-ingest.test.js']], envRequired: false },
   { id: 'swarm', cmd: [process.execPath, ['--test', 'test/swarm.test.js', 'test/swarm-executor.test.js']], envRequired: false },

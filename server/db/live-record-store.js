@@ -3,7 +3,15 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { validateListingForIngestion } = require('../scrapers/validation');
 
-const MAX_BYTES = 20 * 1024 * 1024;
+// Live store must absorb multi-state HUD (~2k records) + CivilView/FL DOR
+// batches without throwing after ingest. Bounded but large enough for $0 hosts.
+const MAX_BYTES = Math.max(
+  8 * 1024 * 1024,
+  Math.min(
+    128 * 1024 * 1024,
+    Number.parseInt(process.env.PROPERTY_LIVE_STORE_MAX_BYTES, 10) || 64 * 1024 * 1024,
+  ),
+);
 
 function loadLiveRecords(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return [];

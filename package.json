@@ -98,7 +98,8 @@
     "market:enroll": "node scripts/apply-market-enrollment.js",
     "discovery:local": "node scripts/local-discovery.js",
     "civilview:counties": "node scripts/civilview-counties.js",
-    "nationwide:coverage": "node scripts/nationwide-coverage.js"
+    "nationwide:coverage": "node scripts/nationwide-coverage.js",
+    "e2e:workflow": "node scripts/e2e-user-workflow.js"
   },
   "keywords": [
     "real-estate",
