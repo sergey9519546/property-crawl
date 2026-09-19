@@ -32,14 +32,17 @@ Assume the system was deployed and failed badly. Plausible reasons + repairs app
 8. Live public URL still requires an external $0 host account — image + unit-gate
    are verified locally (Docker `property-crawl:production` healthy).
 
-## Adversarial review notes (staff pass, 2026-09-18)
+## Adversarial review notes (staff pass, 2026-09-18 → 2026-09-19)
 
 - Client-controlled unlock SID cannot mint unlimited rate buckets (fixed).
 - Document-review and enrichment are operator-gated on both API and Next (fixed).
 - Scraper mutations on Next require workspace session; public health GET remains.
-- Legacy PWA URL sinks only emit `http(s)` (fixed); third-party puter scripts remain
-  only in unused legacy `index.html` — not launched by production boot.
-- Next CSP/XFO present; API CSP remains broader (`connect-src https:`) — accepted
-  for API-only responses.
+- Legacy PWA URL sinks only emit `http(s)` (fixed); puter CDN scripts removed from `index.html`.
+- Next CSP/XFO present; API CSP remains broader (`connect-src https:`) — accepted for API-only responses.
 - maplibre XSS advisory patched to 6.10.0; `npm audit --omit=dev` clean at ship time.
-- No known P0 remains for the $0 demo tier after `935c6af` + this pass.
+- Docker contact form EACCES fixed (writable `/app/.cache` + fail-soft store).
+- Session cookie Secure flag follows request protocol (Docker HTTP unlock works).
+- Terminal grid/map share one filter store (no divergent filter state).
+- CAPTCHA sources remain fail-closed; nationwide catalog adds enrollment templates only.
+- No known P0 remains for the $0 demo tier after `9244390` + this pass.
+

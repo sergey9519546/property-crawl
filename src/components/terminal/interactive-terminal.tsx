@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import { INITIAL_LISTINGS, PropertyListing, SOURCES } from "./property-data";
 import { PropertyDrawer } from "./property-drawer";
@@ -41,31 +41,15 @@ import { sourceDisplayText } from "@/lib/source-display";
 import type { SavedSearch } from "@/lib/saved-searches";
 import { getUnreadAlertCount } from "@/lib/saved-searches";
 import { CaseAction } from "@/components/research/case-action";
-
-type TerminalFilters = {
-  searchQuery: string; selectedState: string; selectedSource: string; observedOnly: boolean;
-  sortBy: "score" | "equity" | "bid" | "date" | "images"; minDealScore: number; minEquity: number;
-  maxOpeningBid: number | null; propertyType: string; occupancy: string;
-  seniorLienFilter: string; redemptionFilter: string; activeView: "grid" | "map" | "parser";
-};
-
-function terminalQuery(filters: TerminalFilters) {
-  const params = new URLSearchParams();
-  if (filters.searchQuery) params.set("q", filters.searchQuery);
-  if (filters.selectedState !== "all") params.set("state", filters.selectedState);
-  if (filters.selectedSource !== "all") params.set("source", filters.selectedSource);
-  if (filters.observedOnly) params.set("observed", "1");
-  if (filters.sortBy !== "date") params.set("sort", filters.sortBy);
-  if (filters.minDealScore > 0) params.set("minScore", String(filters.minDealScore));
-  if (filters.minEquity > 0) params.set("minSpread", String(filters.minEquity));
-  if (filters.maxOpeningBid !== null) params.set("maxBid", String(filters.maxOpeningBid));
-  if (filters.propertyType !== "all") params.set("type", filters.propertyType);
-  if (filters.occupancy !== "all") params.set("occupancy", filters.occupancy);
-  if (filters.seniorLienFilter !== "all") params.set("lien", filters.seniorLienFilter);
-  if (filters.redemptionFilter !== "all") params.set("redemption", filters.redemptionFilter);
-  if (filters.activeView !== "grid") params.set("view", filters.activeView);
-  return params.toString();
-}
+import {
+  countActiveFilters,
+  DEFAULT_TERMINAL_FILTERS,
+  selectFilteredListings,
+  terminalFilterReducer,
+  terminalQuery,
+  type TerminalSort,
+  type TerminalView,
+} from "@/lib/terminal-filter-store";
 
 function isObservedSourceRecord(listing: PropertyListing) {
   const provenance = listing.provenance;
@@ -104,21 +88,24 @@ export function InteractiveTerminal() {
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
-  const [activeView, setActiveView] = useState<"grid" | "map" | "parser">("grid");
 
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedState, setSelectedState] = useState("all");
-  const [selectedSource, setSelectedSource] = useState("all");
-  const [observedOnly, setObservedOnly] = useState(false);
-  const [sortBy, setSortBy] = useState<"score" | "equity" | "bid" | "date" | "images">("date");
-  const [minDealScore, setMinDealScore] = useState<number>(0);
-  const [minEquity, setMinEquity] = useState<number>(0);
-  const [maxOpeningBid, setMaxOpeningBid] = useState<number | null>(null);
-  const [propertyType, setPropertyType] = useState<string>("all");
-  const [occupancy, setOccupancy] = useState<string>("all");
-  const [seniorLienFilter, setSeniorLienFilter] = useState<string>("all");
-  const [redemptionFilter, setRedemptionFilter] = useState<string>("all");
+  // Shared filter/view store — one source of truth for grid, map, and URL.
+  const [filters, dispatchFilters] = useReducer(terminalFilterReducer, DEFAULT_TERMINAL_FILTERS);
+  const {
+    searchQuery,
+    selectedState,
+    selectedSource,
+    observedOnly,
+    sortBy,
+    minDealScore,
+    minEquity,
+    maxOpeningBid,
+    propertyType,
+    occupancy,
+    seniorLienFilter,
+    redemptionFilter,
+    activeView,
+  } = filters;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   const [syncStatus, setSyncStatus] = useState<"loading" | "ready" | "refreshing" | "error">("loading");
   const [syncCount, setSyncCount] = useState(0);
@@ -151,23 +138,7 @@ export function InteractiveTerminal() {
   }, [isAlertsOpen, refreshUnreadAlerts]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setSearchQuery(params.get("q") || "");
-    setSelectedState(params.get("state") || "all");
-    setSelectedSource(params.get("source") || "all");
-    setObservedOnly(params.get("observed") === "1");
-    const sort = params.get("sort");
-    if (sort && ["score", "equity", "bid", "date"].includes(sort)) setSortBy(sort as "score" | "equity" | "bid" | "date");
-    const numberParam = (name: string) => { const value = Number(params.get(name)); return Number.isFinite(value) && value >= 0 ? value : 0; };
-    setMinDealScore(numberParam("minScore"));
-    setMinEquity(numberParam("minSpread"));
-    setMaxOpeningBid(params.has("maxBid") ? numberParam("maxBid") : null);
-    setPropertyType(params.get("type") || "all");
-    setOccupancy(params.get("occupancy") || "all");
-    setSeniorLienFilter(params.get("lien") || "all");
-    setRedemptionFilter(params.get("redemption") || "all");
-    const view = params.get("view");
-    if (view && ["grid", "map", "parser"].includes(view)) setActiveView(view as "grid" | "map" | "parser");
+    dispatchFilters({ type: "hydrateFromSearch", search: window.location.search });
     setUrlReady(true);
   }, []);
 
@@ -244,8 +215,7 @@ export function InteractiveTerminal() {
       if (typeof detail?.query !== "string") return;
       const query = detail.query.trim();
 
-      setSearchQuery(query);
-      setActiveView("grid");
+      dispatchFilters({ type: "setSearch", query, view: "grid" });
     };
 
     window.addEventListener("perfectproperty:search", handleHeroSearch);
@@ -268,7 +238,7 @@ export function InteractiveTerminal() {
     try { window.localStorage.setItem("perfectproperty:research-records:v1", JSON.stringify(next)); }
     catch { setInventoryNotice("This research record could not be saved to browser storage. Export it before closing this session."); }
     setSavedIds((prev) => new Set([...prev, newListing.id]));
-    setActiveView("grid");
+    dispatchFilters({ type: "setView", view: "grid" });
     setSelectedListing(newListing);
   };
 
@@ -323,21 +293,10 @@ export function InteractiveTerminal() {
   };
 
   const resetFilters = () => {
-    setObservedOnly(false);
-    setSearchQuery("");
-    setSelectedState("all");
-    setSelectedSource("all");
-    setMinDealScore(0);
-    setMinEquity(0);
-    setMaxOpeningBid(null);
-    setPropertyType("all");
-    setOccupancy("all");
-    setSeniorLienFilter("all");
-    setRedemptionFilter("all");
-    setSortBy("date");
+    dispatchFilters({ type: "resetFilters" });
   };
 
-  const serializedFilters = terminalQuery({ searchQuery, selectedState, selectedSource, observedOnly, sortBy, minDealScore, minEquity, maxOpeningBid, propertyType, occupancy, seniorLienFilter, redemptionFilter, activeView });
+  const serializedFilters = terminalQuery(filters);
   const currentPath = typeof window !== "undefined" ? window.location.pathname : "/";
   const currentHash = typeof window !== "undefined" ? window.location.hash : "";
   const returnContext = `${currentPath}${serializedFilters ? `?${serializedFilters}` : ""}${currentHash}`;
@@ -353,79 +312,17 @@ export function InteractiveTerminal() {
     window.history.replaceState(window.history.state, "", returnContext);
   }, [urlReady, returnContext]);
 
-  const activeFiltersCount =
-    (observedOnly ? 1 : 0) +
-    (searchQuery ? 1 : 0) +
-    (selectedState !== "all" ? 1 : 0) +
-    (selectedSource !== "all" ? 1 : 0) +
-    (minDealScore > 0 ? 1 : 0) +
-    (minEquity > 0 ? 1 : 0) +
-    (maxOpeningBid !== null ? 1 : 0) +
-    (propertyType !== "all" ? 1 : 0) +
-    (occupancy !== "all" ? 1 : 0) +
-    (seniorLienFilter !== "all" ? 1 : 0) +
-    (redemptionFilter !== "all" ? 1 : 0);
+  const activeFiltersCount = countActiveFilters(filters);
 
-  const inventory = [...workspaceRecords.filter((record) => !listings.some((item) => item.id === record.id)), ...listings];
+  const inventory = useMemo(
+    () => [...workspaceRecords.filter((record) => !listings.some((item) => item.id === record.id)), ...listings],
+    [workspaceRecords, listings],
+  );
   const observedRecordCountsAtAddress = sourceRecordCountsAtAddress(inventory, isObservedSourceRecord);
-  const normalizedQuery = searchQuery.toLowerCase().trim();
-  const exactSearchField = (["county", "city", "state", "zip"] as const).find((field) => normalizedQuery && inventory.some((item) => item[field]?.toLowerCase() === normalizedQuery));
-  const filtered = inventory.filter((l) => {
-    if (observedOnly && !isObservedSourceRecord(l)) return false;
-    if (selectedState !== "all" && l.state !== selectedState) return false;
-    if (selectedSource !== "all" && l.source !== selectedSource) return false;
-    const dealScore = knownNumber(l.dealScore);
-    const equity = knownNumber(l.equity);
-    const openingBid = knownNumber(l.openingBid);
-    if (minDealScore > 0 && (dealScore === null || dealScore < minDealScore)) return false;
-    if (minEquity > 0 && (equity === null || equity < minEquity)) return false;
-    if (maxOpeningBid !== null && (openingBid === null || openingBid > maxOpeningBid)) return false;
-    if (propertyType !== "all" && l.propType?.toLowerCase() !== propertyType.toLowerCase()) return false;
-    if (occupancy !== "all" && l.occupancy?.toLowerCase() !== occupancy.toLowerCase()) return false;
-    if (seniorLienFilter === "clean" && l.seniorLienRisk !== "low") return false;
-    if (seniorLienFilter === "risk" && l.seniorLienRisk !== "high") return false;
-    if (redemptionFilter === "immediate" && l.redemptionDays !== 0) return false;
-    if (redemptionFilter === "redemption_active" && (!l.redemptionDays || l.redemptionDays === 0)) return false;
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      if (exactSearchField) return l[exactSearchField]?.toLowerCase() === q;
-
-      const hay = [l.address, l.city, l.county, l.state, l.zip, l.plaintiff, l.defendant, l.attorney].join(" ").toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-
-  const compareKnown = (a: number | null, b: number | null, direction: "asc" | "desc") => {
-    if (a === null && b === null) return 0;
-    if (a === null) return 1;
-    if (b === null) return -1;
-    return direction === "asc" ? a - b : b - a;
-  };
-  const parsedDate = (value: string | null) => {
-    if (!value) return null;
-    const timestamp = Date.parse(value);
-    return Number.isFinite(timestamp) ? timestamp : null;
-  };
-  const deadlineOrder = (value: string | null) => {
-    const timestamp = parsedDate(value);
-    if (timestamp === null) return { bucket: 1, value: Number.MAX_SAFE_INTEGER };
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    if (timestamp >= startOfToday.getTime()) return { bucket: 0, value: timestamp };
-    return { bucket: 2, value: -timestamp };
-  };
-
-  if (sortBy === "equity") filtered.sort((a, b) => compareKnown(knownNumber(a.equity), knownNumber(b.equity), "desc"));
-  else if (sortBy === "bid") filtered.sort((a, b) => compareKnown(knownNumber(a.openingBid), knownNumber(b.openingBid), "asc"));
-  else if (sortBy === "date") filtered.sort((a, b) => {
-    const left = deadlineOrder(a.saleDate);
-    const right = deadlineOrder(b.saleDate);
-    return left.bucket - right.bucket || left.value - right.value || a.id.localeCompare(b.id);
-  });
-  else if (sortBy === "images") filtered.sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
-  else filtered.sort((a, b) => compareKnown(knownNumber(a.dealScore), knownNumber(b.dealScore), "desc"));
+  const filtered = useMemo(
+    () => selectFilteredListings(inventory, filters, { isObserved: isObservedSourceRecord }),
+    [inventory, filters],
+  );
 
   const knownBids = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
   const medianBid = knownBids.length > 0 ? knownBids[Math.floor(knownBids.length / 2)] : null;
@@ -459,7 +356,7 @@ export function InteractiveTerminal() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setActiveView("grid")}
+              onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
               aria-pressed={activeView === "grid"}
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
@@ -473,7 +370,7 @@ export function InteractiveTerminal() {
             </button>
 
             <button
-              onClick={() => setActiveView("map")}
+              onClick={() => dispatchFilters({ type: "setView", view: "map" })}
               aria-pressed={activeView === "map"}
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
@@ -487,7 +384,7 @@ export function InteractiveTerminal() {
             </button>
 
             <button
-              onClick={() => setActiveView("parser")}
+              onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
               aria-pressed={activeView === "parser"}
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
@@ -587,7 +484,7 @@ export function InteractiveTerminal() {
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => dispatchFilters({ type: "set", key: "searchQuery", value: e.target.value })}
                     aria-label="Search listings"
                     placeholder="Search address, county, court docket..."
                     className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#D1D5DB] bg-white focus:outline-none focus:border-[#0F172A]"
@@ -597,7 +494,7 @@ export function InteractiveTerminal() {
                 {/* State Filter */}
                 <select
                   value={selectedState}
-                  onChange={(e) => setSelectedState(e.target.value)}
+                  onChange={(e) => dispatchFilters({ type: "set", key: "selectedState", value: e.target.value })}
                   aria-label="State filter"
                   className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
@@ -612,7 +509,7 @@ export function InteractiveTerminal() {
                 {/* Source Filter */}
                 <select
                   value={selectedSource}
-                  onChange={(e) => setSelectedSource(e.target.value)}
+                  onChange={(e) => dispatchFilters({ type: "set", key: "selectedSource", value: e.target.value })}
                   aria-label="Source filter"
                   className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
@@ -631,12 +528,12 @@ export function InteractiveTerminal() {
                 <button
                   type="button"
                   aria-pressed={observedOnly}
-                  onClick={() => setObservedOnly((value) => !value)}
+                  onClick={() => dispatchFilters({ type: "toggleObservedOnly" })}
                   className={cn("rounded-xl border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-[#D1D5DB] bg-white text-[#374151]")}
                 >Source-observed only</button>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
+                  onChange={(e) => dispatchFilters({ type: "set", key: "sortBy", value: e.target.value as TerminalSort })}
                   aria-label="Sort listings"
                   className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
                 >
@@ -689,7 +586,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={minDealScore}
-                      onChange={(e) => setMinDealScore(Number(e.target.value))}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "minDealScore", value: Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value={0}>Any Score</option>
@@ -706,7 +603,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={minEquity}
-                      onChange={(e) => setMinEquity(Number(e.target.value))}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "minEquity", value: Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value={0}>Any Bid Spread</option>
@@ -724,7 +621,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={maxOpeningBid === null ? "all" : maxOpeningBid}
-                      onChange={(e) => setMaxOpeningBid(e.target.value === "all" ? null : Number(e.target.value))}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "maxOpeningBid", value: e.target.value === "all" ? null : Number(e.target.value) })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value="all">Any Opening Bid</option>
@@ -742,7 +639,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={propertyType}
-                      onChange={(e) => setPropertyType(e.target.value)}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "propertyType", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value="all">All Types</option>
@@ -760,7 +657,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={seniorLienFilter}
-                      onChange={(e) => setSeniorLienFilter(e.target.value)}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "seniorLienFilter", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value="all">All Title Profiles</option>
@@ -776,7 +673,7 @@ export function InteractiveTerminal() {
                     </label>
                     <select
                       value={redemptionFilter}
-                      onChange={(e) => setRedemptionFilter(e.target.value)}
+                      onChange={(e) => dispatchFilters({ type: "set", key: "redemptionFilter", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value="all">All Jurisdictions</option>
@@ -791,11 +688,11 @@ export function InteractiveTerminal() {
               {activeFiltersCount > 0 && (
                 <div className="pt-2 border-t border-[#F1F5F9] flex flex-wrap items-center gap-1.5 text-xs">
                   <span className="text-[11px] font-bold text-[#6B7280] mr-1">Active:</span>
-                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => setObservedOnly(false)} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
+                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
                   {selectedState !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       State: {selectedState}
-                      <button type="button" onClick={() => setSelectedState("all")} aria-label="Remove state filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedState", value: "all" })} aria-label="Remove state filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -803,7 +700,7 @@ export function InteractiveTerminal() {
                   {selectedSource !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Source: {sourceDisplayText(SOURCES[selectedSource]?.label || selectedSource)}
-                      <button type="button" onClick={() => setSelectedSource("all")} aria-label="Remove source filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedSource", value: "all" })} aria-label="Remove source filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -811,7 +708,7 @@ export function InteractiveTerminal() {
                   {minDealScore > 0 && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Score: ≥{minDealScore}
-                      <button type="button" onClick={() => setMinDealScore(0)} aria-label="Remove score filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minDealScore", value: 0 })} aria-label="Remove score filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -819,7 +716,7 @@ export function InteractiveTerminal() {
                   {minEquity > 0 && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Bid spread: ≥${(minEquity / 1000).toFixed(0)}k
-                      <button type="button" onClick={() => setMinEquity(0)} aria-label="Remove bid spread filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minEquity", value: 0 })} aria-label="Remove bid spread filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -827,7 +724,7 @@ export function InteractiveTerminal() {
                   {maxOpeningBid !== null && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Bid: ≤${(maxOpeningBid / 1000).toFixed(0)}k
-                      <button type="button" onClick={() => setMaxOpeningBid(null)} aria-label="Remove max bid filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "maxOpeningBid", value: null })} aria-label="Remove max bid filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -835,7 +732,7 @@ export function InteractiveTerminal() {
                   {propertyType !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Type: {propertyType}
-                      <button type="button" onClick={() => setPropertyType("all")} aria-label="Remove property type filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "propertyType", value: "all" })} aria-label="Remove property type filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -843,7 +740,7 @@ export function InteractiveTerminal() {
                   {seniorLienFilter !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Title: {seniorLienFilter === "clean" ? "Clean 1st" : "Junior Risk"}
-                      <button type="button" onClick={() => setSeniorLienFilter("all")} aria-label="Remove title risk filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "seniorLienFilter", value: "all" })} aria-label="Remove title risk filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -851,7 +748,7 @@ export function InteractiveTerminal() {
                   {redemptionFilter !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
                       Redemption: {redemptionFilter === "immediate" ? "Immediate" : "Active Window"}
-                      <button type="button" onClick={() => setRedemptionFilter("all")} aria-label="Remove redemption filter">
+                      <button type="button" onClick={() => dispatchFilters({ type: "set", key: "redemptionFilter", value: "all" })} aria-label="Remove redemption filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
                     </span>
@@ -898,7 +795,7 @@ export function InteractiveTerminal() {
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setMinDealScore(minDealScore === 70 ? 0 : 70)}
+                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 70 })}
                     title={`Elite (70+): ${eliteCount} deals`}
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
@@ -911,7 +808,7 @@ export function InteractiveTerminal() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMinDealScore(minDealScore === 55 ? 0 : 55)}
+                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 55 })}
                     title={`Strong (55–69): ${strongCount} deals`}
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
@@ -924,7 +821,7 @@ export function InteractiveTerminal() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setMinDealScore(minDealScore === 35 ? 0 : 35)}
+                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 35 })}
                     title={`Fair (35–54): ${fairCount} deals`}
                     className={cn(
                       "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
@@ -1116,11 +1013,24 @@ export function InteractiveTerminal() {
         availableStates={availableStates}
         listings={inventory}
         onApply={(search: SavedSearch) => {
-          resetFilters();
-          setSelectedState(search.state === "All" ? "all" : search.state);
-          setMinDealScore(search.minScore);
-          setMaxOpeningBid(search.maxBid > 0 ? search.maxBid : null);
-          setActiveView("grid");
+          dispatchFilters({
+            type: "applySavedSearch",
+            patch: {
+              searchQuery: "",
+              selectedState: search.state === "All" ? "all" : search.state,
+              selectedSource: "all",
+              observedOnly: false,
+              minDealScore: search.minScore,
+              minEquity: 0,
+              maxOpeningBid: search.maxBid > 0 ? search.maxBid : null,
+              propertyType: "all",
+              occupancy: "all",
+              seniorLienFilter: "all",
+              redemptionFilter: "all",
+              sortBy: "date",
+              activeView: "grid",
+            },
+          });
           setIsAlertsOpen(false);
         }}
       />

@@ -9,6 +9,8 @@
 
 - **Three layers**: v0 static PWA (`index.html`/`app.js`), v1 Node `http` API (`server/`), v2 Next.js 16 App Router (`src/`).
   - Source: `CONTEXT.md`, `AGENTS.md`
+- **Terminal filter/view store**: `src/lib/terminal-filter-store.ts` is the pure Redux-style source of truth for live-feed filters, sort, and grid/map/parser view. `interactive-terminal.tsx` uses `useReducer` + `selectFilteredListings`; keep filter logic out of the component. Store must stay free of `@/`/`@server` imports so Node tests can load it.
+  - Source: `src/lib/terminal-filter-store.ts`, `src/components/terminal/interactive-terminal.tsx`, `test/terminal-filter-store.test.mjs`
 - **No database required to boot**: `server/db/client.js` falls back to in-memory provider seeded from `data.js` when `DATABASE_URL` is unset.
   - Source: `server/db/client.js`, `AGENTS.md`
 - **API port**: `server/server.js` listens on port 3000; Next dev on 3001. Base44 compose maps UI to 3000 and proxies API.

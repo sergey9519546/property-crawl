@@ -13,6 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 const SUITES = [
   { id: 'unit-core', cmd: [process.execPath, ['--test', 'test/suite.test.js']], envRequired: false },
   { id: 'listing-intelligence', cmd: [process.execPath, ['--test', 'test/listing-intelligence.test.js', 'test/scraper-upgrade.test.js', 'test/market-enrollment.test.js', 'test/nationwide-coverage.test.js']], envRequired: false },
+  { id: 'terminal-filters', cmd: [process.execPath, ['--test', 'test/terminal-filter-store.test.mjs']], envRequired: false },
   { id: 'context', cmd: [process.execPath, ['scripts/gen-context.js', '--check']], envRequired: false },
   { id: 'scrapers', cmd: [process.execPath, ['test/scrapers.test.js']], envRequired: false },
   { id: 'scrapling+upgrade', cmd: [process.execPath, ['--test', 'test/scrapling-bridge.test.js', 'test/scraper-upgrade.test.js']], envRequired: false },
