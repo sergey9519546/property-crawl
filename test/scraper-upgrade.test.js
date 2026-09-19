@@ -139,11 +139,34 @@ test('Marshals scraper records primary failure and does not claim success from e
 test('Sheriff scraper expands default OH counties and accepts extra enrollment via env', async () => {
   await withEnv({ SHERIFF_EXTRA_COUNTIES: 'Erie:erie.sheriffsaleauction.ohio.gov:OH,NJ-Demo:demo.example.gov:NJ' }, async () => {
     const scraper = new SheriffSaleScraper();
-    assert.ok(scraper.counties.length >= 12);
+    assert.ok(scraper.counties.length >= 20, 'default OH set expanded for 10x collection');
     assert.ok(scraper.counties.some(c => c.name === 'Montgomery'));
+    assert.ok(scraper.counties.some(c => c.name === 'Warren'));
+    assert.ok(scraper.counties.some(c => c.name === 'Delaware'));
     assert.ok(scraper.counties.some(c => c.name === 'Erie' && c.state === 'OH'));
     assert.ok(scraper.counties.some(c => c.name === 'NJ-Demo' && c.state === 'NJ'));
   });
+});
+
+test('Sheriff parser extracts sale date and appraisal from varied Realauction markup', () => {
+  const scraper = new SheriffSaleScraper({ counties: [{ name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' }] });
+  const html = `<table>
+    <tr class="auction-row sale-row">
+      <td>Case # CV-2026-12345</td>
+      <td class="address">789 Oak Avenue</td>
+      <td>Opening Bid: $45,000</td>
+      <td>Appraisal: $120,000</td>
+      <td>Sale Date: 03/15/2027</td>
+      <td><a href="/Sales/Detail?id=1">detail</a></td>
+    </tr>
+  </table>`;
+  const listings = scraper.parseRealauctionHtml(html, { name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' });
+  assert.equal(listings.length, 1);
+  assert.equal(listings[0].address, '789 Oak Avenue');
+  assert.equal(listings[0].openingBid, 45000);
+  assert.equal(listings[0].assessed, 120000);
+  assert.equal(listings[0].saleDate, '2027-03-15');
+  assert.equal(listings[0].provenance.origin, 'live');
 });
 
 test('Sheriff scraper throws when every county fails', async () => {

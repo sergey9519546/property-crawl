@@ -70,6 +70,7 @@ function publicExportListing(listing) {
     'deposit', 'plaintiff', 'defendant', 'attorney', 'judgment', 'redemptionDays', 'seniorLienRisk',
     'propType', 'beds', 'baths', 'sqft', 'lotSize', 'year', 'yearBuilt', 'apn', 'parcelId', 'parcelNumber', 'caseNumber', 'lat', 'lng', 'photo',
     'hasDocuments', 'bidSpread', 'dealScore', 'sourceFreshness', 'discoveryStatus', 'evidenceCompleteness',
+    'researchQuality', 'opportunity', 'identityKey',
   ];
   const exported = {};
   for (const field of fields) if (Object.hasOwn(presented, field)) exported[field] = presented[field];

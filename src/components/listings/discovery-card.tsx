@@ -51,6 +51,27 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
     knownNumber(listing.sqft) !== null ? `${Number(listing.sqft).toLocaleString()} sq ft` : null,
   ].filter(Boolean);
   const completeness = listing.evidenceCompleteness;
+  const quality = listing.researchQuality;
+  const opportunity = listing.opportunity;
+  const qualityBadge = quality
+    ? quality.band === 'strong'
+      ? { label: `Evidence ${quality.score}`, className: 'bg-emerald-50 text-emerald-800' }
+      : quality.band === 'usable'
+        ? { label: `Evidence ${quality.score}`, className: 'bg-sky-50 text-sky-800' }
+        : quality.band === 'thin'
+          ? { label: `Evidence ${quality.score}`, className: 'bg-amber-50 text-amber-900' }
+          : { label: `Evidence ${quality.score}`, className: 'bg-rose-50 text-rose-800' }
+    : null;
+  const urgencyBadge = opportunity && ['imminent', 'near_term'].includes(opportunity.urgency)
+    ? {
+        label: opportunity.urgency === 'imminent'
+          ? `Sale ${opportunity.daysToSale}d`
+          : `Sale ~${opportunity.daysToSale}d`,
+        className: opportunity.urgency === 'imminent'
+          ? 'bg-rose-50 text-rose-800'
+          : 'bg-orange-50 text-orange-800',
+      }
+    : null;
 
   return <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md" aria-label={listing.address}>
     <div className="relative shrink-0">
@@ -81,6 +102,19 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
             {listing.crossSourceMatches.length + 1} sources
           </span>
         ) : null}
+        {qualityBadge ? (
+          <span
+            className={`rounded px-1.5 py-0.5 text-xs font-semibold ${qualityBadge.className}`}
+            title={quality?.note || 'Research evidence quality'}
+          >
+            {qualityBadge.label}
+          </span>
+        ) : null}
+        {urgencyBadge ? (
+          <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${urgencyBadge.className}`} title={opportunity?.note || 'Sale urgency'}>
+            {urgencyBadge.label}
+          </span>
+        ) : null}
       </div>
       <h2 className="text-lg font-semibold leading-6 tracking-tight text-slate-950"><Link href={href} prefetch={false} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">{street}</Link></h2>
       {locality ? <p className="mt-1 text-sm text-slate-500">{locality}</p> : null}
@@ -95,6 +129,7 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
         {knownNumber(listing.dealScore) !== null ? <span title="Modeled Deal Score. Review the inputs in property details.">Modeled score {listing.dealScore}/99</span> : null}
+        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}</span> : null}
       </div>
       <div className="mt-auto grid grid-cols-[1.2fr_1fr] gap-2 pt-4">
         <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>

@@ -81,6 +81,27 @@ export interface PropertyListing {
   crossSourceMatches?: { source: string; listingId: string; observedAt: string | null; openingBid: number | null }[];
   /** Preferred observation when cross-source data exists. */
   bakeOff?: { preferredSource: string; reason: string; confidence: number };
+  /** Cross-source identity (parcelKey or address fallback). */
+  identityKey?: string | null;
+  identityFallback?: string | null;
+  /** Evidence quality for triage (not an appraisal). */
+  researchQuality?: {
+    score: number;
+    band: 'strong' | 'usable' | 'thin' | 'weak';
+    factors: { factor: string; weight: number }[];
+    note: string;
+  };
+  /** Opportunity signal from published fields + modeled deal score. */
+  opportunity?: {
+    rank: number;
+    shape: string;
+    urgency: string;
+    daysToSale: number | null;
+    dealScore: number | null;
+    bidSpread: number | null;
+    bidToMidRatio: number | null;
+    note: string;
+  };
 }
 
 // Source registry — KEPT IN SYNC with the production SOURCES at

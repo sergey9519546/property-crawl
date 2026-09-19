@@ -5,6 +5,7 @@ const discovery = require('../discovery/query');
 const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
+const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
 
 function mediaEntries() {
   try { return readMediaStore(); }
@@ -52,7 +53,8 @@ function presentListing(listing) {
       publisher: neutralCustomerText(presented.provenance.publisher),
     };
   }
-  return presented;
+  // Research quality + opportunity rank (10x listing intelligence layer).
+  return annotateListing(presented);
 }
 
 // Bounds for query-string parameters. The HTTP server already caps the request
@@ -190,7 +192,15 @@ async function handleListings(req, res) {
     // a per-listing bake-off descriptor (preferredSource / reason / confidence).
     // presentListing preserves these fields through the spread.
     applyCrossSourceBakeOff(result.listings);
-    const body = { ...result, page, revision: result.revision || null, facets: result.facets || {}, listings: result.listings.map(listing => presentListing(attachMedia(listing, entries))) };
+    const presentedListings = result.listings.map(listing => presentListing(attachMedia(listing, entries)));
+    const body = {
+      ...result,
+      page,
+      revision: result.revision || null,
+      facets: result.facets || {},
+      pipeline: summarizeInventory(presentedListings),
+      listings: presentedListings,
+    };
     if (sinceMs !== null) {
       body.delta = true;
       body.since = sinceIso;

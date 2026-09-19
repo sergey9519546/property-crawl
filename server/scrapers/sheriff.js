@@ -8,7 +8,10 @@
 const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+const { mapWithConcurrency } = require('./http');
 
+// Expanded default Ohio Realauction jurisdictions (10x collection footprint).
+// SHERIFF_EXTRA_COUNTIES still accepts Name:domain:ST enrollment.
 const DEFAULT_OH_COUNTIES = [
   { name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' },
   { name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' },
@@ -20,6 +23,16 @@ const DEFAULT_OH_COUNTIES = [
   { name: 'Stark', domain: 'stark.sheriffsaleauction.ohio.gov', state: 'OH' },
   { name: 'Lorain', domain: 'lorain.sheriffsaleauction.ohio.gov', state: 'OH' },
   { name: 'Mahoning', domain: 'mahoning.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Warren', domain: 'warren.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Clermont', domain: 'clermont.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Delaware', domain: 'delaware.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Lake', domain: 'lake.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Trumbull', domain: 'trumbull.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Wood', domain: 'wood.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Allen', domain: 'allen.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Fairfield', domain: 'fairfield.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Clark', domain: 'clark.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Licking', domain: 'licking.sheriffsaleauction.ohio.gov', state: 'OH' },
 ];
 
 function parseExtraCounties(raw) {
@@ -57,16 +70,21 @@ class SheriffSaleScraper extends BaseScraper {
       this.lastRunReport = report;
 
       const allListings = [];
-      for (const c of this.counties) {
+      const concurrency = Math.max(1, Math.min(4, Number(process.env.SHERIFF_COUNTY_CONCURRENCY) || 3));
+      const countyResults = await mapWithConcurrency(this.counties, concurrency, async (c) => {
         const unit = `${c.name},${c.state}`;
         try {
           const countyListings = await this.fetchCountyRealauction(c);
           recordUnitSuccess(report, unit, countyListings.length);
-          allListings.push(...countyListings);
+          return countyListings;
         } catch (err) {
           recordUnitFailure(report, unit, err, 'county');
           console.warn(`[${this.name}] Warning for ${c.name} County: ${err.message}`);
+          return [];
         }
+      });
+      for (const result of countyResults) {
+        if (result.status === 'fulfilled' && Array.isArray(result.value)) allListings.push(...result.value);
       }
 
       const standardized = allListings
@@ -99,21 +117,29 @@ class SheriffSaleScraper extends BaseScraper {
 
   parseRealauctionHtml(html, county) {
     const listings = [];
-    const itemRegex = /<tr[^>]*class="[^"]*table-row[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
+    // Broader row matcher: Realauction markup varies by county skin.
+    const itemRegex = /<tr[^>]*class="[^"]*(?:table-row|auction-row|sale-row|DataRow)[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
     let match;
 
     while ((match = itemRegex.exec(html)) !== null) {
       const row = match[1];
-      const caseMatch = row.match(/Case\s*(?:#|No\.)?\s*([A-Z0-9-]+)/i) || row.match(/CV-[0-9-]+/i);
-      const addressMatch = row.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
-      const bidMatch = row.match(/Opening Bid:\s*\$([0-9,]+)/i) || row.match(/\$([0-9,]+)/);
-      const appraisalMatch = row.match(/Appraisal:\s*\$([0-9,]+)/i);
+      const caseMatch = row.match(/Case\s*(?:#|No\.)?\s*([A-Z0-9-]+)/i) || row.match(/CV-[0-9-]+/i) || row.match(/\b(\d{2,4}[A-Z]{0,2}-\d{2,6})\b/);
+      const addressMatch =
+        row.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i) ||
+        row.match(/(?:property\s*address|address)\s*:?\s*([^<\n]{8,120})/i) ||
+        row.match(/>(\d{1,6}\s+[NSEW]?\s*[A-Za-z0-9 .'-]{4,80}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Way|Place|Pl)\.?[^<]*)</i);
+      const bidMatch =
+        row.match(/(?:Opening|Upset|Minimum)\s*Bid\s*:?\s*\$?\s*([0-9,]+)/i) ||
+        row.match(/bid\s*:?\s*\$([0-9,]+)/i);
+      const appraisalMatch = row.match(/Apprais(?:al|ed(?:\s*Value)?)\s*:?\s*\$?\s*([0-9,]+)/i);
+      const saleDateMatch = row.match(/(?:Sale|Auction)\s*Date\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
       const linkMatch = row.match(/href=["']([^"']+)["']/i);
 
       if (addressMatch && caseMatch && linkMatch) {
         const address = addressMatch[1].trim();
         const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ''), 10) : null;
         const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ''), 10) : null;
+        const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
         const caseNum = caseMatch[1] || caseMatch[0];
         const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
         const sourceUrl = linkMatch[1].startsWith('http')
@@ -130,8 +156,8 @@ class SheriffSaleScraper extends BaseScraper {
           openingBid,
           estLow: null,
           estHigh: null,
-          assessed: null,
-          saleDate: null,
+          assessed: appraisal,
+          saleDate,
           plaintiff: null,
           defendant: null,
           judgment: null,
@@ -147,6 +173,19 @@ class SheriffSaleScraper extends BaseScraper {
     }
 
     return listings;
+  }
+
+  normalizeSaleDate(raw) {
+    if (!raw) return null;
+    const text = String(raw).trim();
+    let m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+      const [, mo, dy, yr] = m;
+      return `${yr}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}`;
+    }
+    m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return text;
+    return null;
   }
 
   async fetchCountyPublicNotices(county) {

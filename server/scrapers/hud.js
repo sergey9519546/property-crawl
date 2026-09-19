@@ -19,12 +19,13 @@ const ALL_HUD_JURISDICTIONS = Object.freeze([
   'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV',
   'WI', 'WY', 'DC', 'PR'
 ]);
-const DEFAULT_MAX_PAGES_PER_STATE = 3;
-const DEFAULT_PAGE_SIZE = 50;
-const DEFAULT_STATE_CONCURRENCY = 2;
 const HUD_REO_LAYER = 'https://egis.hud.gov/arcgis/rest/services/cpdmaps/HudSfReo/MapServer/1';
 const CHECKPOINT_VERSION = 1;
 const MAX_CHECKPOINT_BYTES = 16_384;
+// Collection depth knobs (env-overridable; bounded).
+const DEFAULT_MAX_PAGES_PER_STATE = Math.min(20, Math.max(1, Number.parseInt(process.env.HUD_MAX_PAGES_PER_STATE, 10) || 3));
+const DEFAULT_PAGE_SIZE = Math.min(200, Math.max(10, Number.parseInt(process.env.HUD_PAGE_SIZE, 10) || 50));
+const DEFAULT_STATE_CONCURRENCY = Math.min(6, Math.max(1, Number.parseInt(process.env.HUD_STATE_CONCURRENCY, 10) || 2));
 
 function scopeHash(scope) {
   return crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex');
@@ -88,7 +89,7 @@ class HudHomeScraper extends BaseScraper {
     this.inventoryUrl = options.inventoryUrl ? String(options.inventoryUrl).replace(/\/query\/?$/i, '').replace(/\/$/, '') : null;
     this.states = configuredStates(options.states ?? process.env.HUD_STATES);
     this.maxStates = positiveInt(options.maxStates ?? process.env.HUD_MAX_STATES, this.states.length, ALL_HUD_JURISDICTIONS.length);
-    this.maxPagesPerState = positiveInt(options.maxPagesPerState ?? process.env.HUD_MAX_PAGES_PER_STATE, DEFAULT_MAX_PAGES_PER_STATE, 10);
+    this.maxPagesPerState = positiveInt(options.maxPagesPerState ?? process.env.HUD_MAX_PAGES_PER_STATE, DEFAULT_MAX_PAGES_PER_STATE, 20);
     this.pageSize = positiveInt(options.pageSize ?? process.env.HUD_PAGE_SIZE, DEFAULT_PAGE_SIZE, 100);
     this.stateConcurrency = positiveInt(options.stateConcurrency ?? process.env.HUD_STATE_CONCURRENCY, DEFAULT_STATE_CONCURRENCY, 4);
     this.lastRunReport = null;

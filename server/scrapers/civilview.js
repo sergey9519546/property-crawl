@@ -41,6 +41,11 @@ class CivilViewScraper extends BaseScraper {
     this.countyId = configuredCountyId == null || configuredCountyId === ''
       ? null
       : String(configuredCountyId).trim();
+    // Optional comma-separated countyId enrollment for multi-county collection.
+    this.extraCountyIds = String(options.extraCountyIds ?? process.env.CIVILVIEW_EXTRA_COUNTIES ?? '')
+      .split(',')
+      .map((value) => String(value).trim())
+      .filter((value) => /^\d+$/.test(value));
     if (!/^[A-Z]{2}$/.test(this.targetState)) {
       throw new TypeError('CivilView targetState must be a two-letter uppercase state code');
     }
@@ -97,9 +102,21 @@ class CivilViewScraper extends BaseScraper {
       const counties = await this.fetchCounties();
       report.countiesDiscovered = counties.length;
       const stateCounties = counties.filter((county) => county.state === this.targetState);
-      const ordered = this.countyId
-        ? stateCounties.filter((county) => county.id === this.countyId)
-        : this.orderCounties(stateCounties).slice(0, this.maxCounties);
+      let ordered;
+      if (this.extraCountyIds.length > 0) {
+        const byId = new Map(stateCounties.map((county) => [String(county.id), county]));
+        ordered = this.extraCountyIds
+          .map((id) => byId.get(id))
+          .filter(Boolean);
+        if (this.countyId && !this.extraCountyIds.includes(this.countyId)) {
+          const primary = byId.get(this.countyId);
+          if (primary) ordered = [primary, ...ordered];
+        }
+      } else if (this.countyId) {
+        ordered = stateCounties.filter((county) => String(county.id) === this.countyId);
+      } else {
+        ordered = this.orderCounties(stateCounties).slice(0, this.maxCounties);
+      }
 
       if (ordered.length === 0) {
         throw new Error(this.countyId

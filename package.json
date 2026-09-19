@@ -91,7 +91,8 @@
     "quality:report": "node scripts/quality-gate-report.js",
     "smoke:production": "node scripts/production-smoke.js",
     "promotion:gate": "node scripts/promotion-gate-check.js",
-    "test:promotion-gate": "node --test test/promotion-gate-contract.test.js"
+    "test:promotion-gate": "node --test test/promotion-gate-contract.test.js",
+    "listing:pipeline": "node scripts/listing-pipeline-report.js"
   },
   "keywords": [
     "real-estate",
