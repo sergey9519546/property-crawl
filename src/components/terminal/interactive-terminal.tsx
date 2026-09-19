@@ -572,7 +572,7 @@ export function InteractiveTerminal() {
                 >
                   {syncStatus === "refreshing" ? (
                     <><span className="w-2.5 h-2.5 border-2 border-black/40 border-t-black rounded-full animate-spin inline-block" />Refreshing…</>
-                  ) : "Refresh live feed"}
+                  ) : "Refresh inventory"}
                 </button>
               </div>
             </div>

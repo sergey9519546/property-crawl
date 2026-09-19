@@ -14,9 +14,10 @@ window.onunhandledrejection=function(e){var m=e.reason&&e.reason.message||e.reas
 window.addEventListener('error',function(e){var t=e&&e.target;if(t&&t!==window&&t.tagName==='SCRIPT'){var u=t.src||'';var m='Failed to load script'+(u?': '+u:' (inline module)');console.error('app-script',m);window.parent.postMessage({type:'app-error',message:m,source:u},'*');}},true);
 (function(){var _f=window.fetch;window.fetch=function(){var a=arguments,u=typeof a[0]==='string'?a[0]:(a[0]&&a[0].url)||'';var p=_f.apply(this,a);p.then(function(r){if(r.status===500){r.clone().text().then(function(b){window.parent.postMessage({type:'fetch-error',url:u,status:500,body:b},'*');}).catch(function(){window.parent.postMessage({type:'fetch-error',url:u,status:500,body:''},'*');});}}).catch(function(e){console.error('app-fetch',u,e);window.parent.postMessage({type:'fetch-error',url:u,status:0,body:e.message||'fetch failed'},'*');});return p;};})();
 </script>
-<script src="https://builder.puter.com/runtime.js" defer></script>
-<script src="https://js.puter.com/v2/"></script>
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Third-party runtime scripts removed for production security.
+     Canonical UI is Next.js; this legacy shell must not load external CDNs. -->
+<!-- External builder/AI/tailwind CDN tags intentionally omitted -->
+
 <!-- Vendor (no CDN): Leaflet for the map, Lucide for icons -->
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
 <script src="vendor/leaflet/leaflet.js"></script>

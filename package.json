@@ -1,12 +1,14 @@
 {
   "name": "property-crawl",
   "version": "2.0.0",
-  "description": "Zillow for distressed and government-sold property with AI deal intelligence",
+  "description": "Evidence-first property research workspace for distressed and government-sold listings (private operator beta)",
   "main": "server/server.js",
   "scripts": {
     "dev": "next dev -p 3001",
     "dev:workspace": "node scripts/workspace-runner.js",
     "build": "next build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
     "start": "next start -p 3001",
     "start:workspace": "node scripts/workspace-runner.js --production",
     "start:production": "node scripts/start-production.js",

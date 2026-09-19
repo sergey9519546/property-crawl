@@ -54,18 +54,31 @@ async function forwardWebhook(url, payload) {
 async function persistFormSubmission(kind, fields, options = {}) {
   const receivedAt = new Date().toISOString();
   const record = { kind, receivedAt, ...fields };
-  const storedPath = appendJsonl(kind, record);
+  let storedPath = null;
+  let storeError = null;
+  try {
+    storedPath = appendJsonl(kind, record);
+  } catch (error) {
+    // Containers without a writable cache must not 500 marketing forms.
+    storeError = String(error?.message || error || 'store-failed');
+  }
   const webhookUrl = options.webhookUrl
     || (kind === 'newsletter'
       ? process.env.NEWSLETTER_ENDPOINT || process.env.NEWSLETTER_WEBHOOK_URL || ''
       : process.env.CONTACT_ENDPOINT || process.env.CONTACT_WEBHOOK_URL || '');
   const forward = await forwardWebhook(webhookUrl, record);
+  const delivery = forward.forwarded
+    ? 'forwarded'
+    : storedPath
+      ? 'local'
+      : 'unavailable';
   return {
-    ok: true,
+    ok: Boolean(storedPath) || forward.forwarded,
     kind,
     receivedAt,
     storedPath,
-    delivery: forward.forwarded ? 'forwarded' : 'local',
+    storeError,
+    delivery,
     forward,
   };
 }

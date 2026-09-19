@@ -33,6 +33,10 @@ COPY --chown=node:node --from=builder /app/server ./server
 COPY --chown=node:node --from=builder /app/scripts ./scripts
 COPY --chown=node:node --from=builder /app/data.js ./data.js
 
+# Writable cache for form submissions / live observations (node user).
+RUN mkdir -p /app/.cache/form-submissions /app/.cache/source-observations \
+  && chown -R node:node /app/.cache
+
 USER node
 EXPOSE 3000
 

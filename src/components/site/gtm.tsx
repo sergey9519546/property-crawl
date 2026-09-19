@@ -14,7 +14,6 @@ import {
   Layers,
   Eye,
   Radar,
-  Link2,
   FileDown,
   LayoutDashboard,
   Gauge,

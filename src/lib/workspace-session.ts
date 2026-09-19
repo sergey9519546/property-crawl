@@ -85,17 +85,45 @@ export function workspaceMutationAllowed(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") return false;
   const origin = request.headers.get("origin");
   if (!origin) return true;
-  try { return new URL(origin).origin === new URL(request.url).origin; }
-  catch { return false; }
+  try {
+    const requestOrigin = new URL(request.url).origin;
+    if (origin === requestOrigin) return true;
+    // Behind Docker port maps / reverse proxies the process may see an
+    // internal host while the browser sends the public Origin.
+    const forwardedHost =
+      request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+      request.headers.get("host")?.split(",")[0]?.trim();
+    const forwardedProto =
+      request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+      (requestOrigin.startsWith("https:") ? "https" : "http");
+    if (forwardedHost) {
+      const publicOrigin = `${forwardedProto}://${forwardedHost}`;
+      if (origin === publicOrigin) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function cookieIsSecure(request: Request) {
+  const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  if (forwarded === "https") return true;
+  if (forwarded === "http") return false;
+  try {
+    return new URL(request.url).protocol === "https:";
+  } catch {
+    return process.env.NODE_ENV === "production" && !process.env.WORKSPACE_COOKIE_INSECURE;
+  }
 }
 
 export function serializeWorkspaceSession(value: string, request: Request) {
-  const secure = process.env.NODE_ENV === "production" || new URL(request.url).protocol === "https:";
+  const secure = cookieIsSecure(request);
   return `${WORKSPACE_SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${WORKSPACE_SESSION_SECONDS}${secure ? "; Secure" : ""}`;
 }
 
 export function clearWorkspaceSession(request: Request) {
-  const secure = process.env.NODE_ENV === "production" || new URL(request.url).protocol === "https:";
+  const secure = cookieIsSecure(request);
   return `${WORKSPACE_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
 }
 

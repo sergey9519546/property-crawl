@@ -20,16 +20,22 @@ services:
       - key: DATABASE_URL
         sync: false
       # Code reads SCRAPER_ADMIN_TOKEN; PROPERTY_OPERATOR_SECRET is accepted
-      # as an alias (see server/security/operator-token.js).
+      # as an alias (see server/security/operator-token.js). Do NOT
+      # generateValue both independently — they must be the same secret or
+      # only the primary set; otherwise unlock/API can diverge.
       - key: SCRAPER_ADMIN_TOKEN
         generateValue: true
         sync: false
       - key: PROPERTY_OPERATOR_SECRET
-        generateValue: true
         sync: false
       - key: WORKSPACE_SESSION_SECRET
         generateValue: true
         sync: false
+      - key: WORKSPACE_SESSION_EPOCH
+        value: "1"
+      # Behind Render's proxy, key rate limits on client IP from XFF.
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
       # Honest form delivery: leave unset for local persistence only.
       - key: NEWSLETTER_ENDPOINT
         sync: false

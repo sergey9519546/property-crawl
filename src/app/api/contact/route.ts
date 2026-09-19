@@ -42,7 +42,9 @@ export async function POST(request: Request) {
       delivery: result.delivery,
       message: result.delivery === "forwarded"
         ? "Message accepted."
-        : "Message saved for the operator. Outbound delivery is not configured yet.",
+        : result.delivery === "local"
+          ? "Message saved for the operator. Outbound delivery is not configured yet."
+          : "Message accepted for review, but this deployment cannot write local form storage.",
     },
     { status: 202, headers: responseHeaders }
   );

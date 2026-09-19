@@ -69,10 +69,34 @@ test('/workspace index redirects to the private review queue', () => {
   assert.match(page, /redirect\("\/workspace\/documents-review"\)/);
 });
 
-test('session signing accepts operator alias and epoch revocation', () => {
+test('session cookie Secure flag follows request protocol, not NODE_ENV alone', () => {
   const session = fs.readFileSync(path.join(__dirname, '..', 'src/lib/workspace-session.ts'), 'utf8');
+  assert.match(session, /cookieIsSecure/);
   assert.match(session, /PROPERTY_OPERATOR_SECRET/);
   assert.match(session, /WORKSPACE_SESSION_EPOCH/);
+  assert.doesNotMatch(session, /NODE_ENV === "production" \|\| new URL\(request\.url\)\.protocol === "https:"/);
+});
+
+test('form persistence fails soft when cache is not writable', () => {
+  const forms = fs.readFileSync(path.join(__dirname, '..', 'src/lib/form-submissions.js'), 'utf8');
+  assert.match(forms, /unavailable/);
+  assert.match(forms, /storeError/);
+  const docker = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile.production'), 'utf8');
+  assert.match(docker, /mkdir -p \/app\/\.cache/);
+});
+
+test('legacy index.html does not load third-party puter/tailwind CDNs', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /<script[^>]+src=["'][^"']*puter/i);
+  assert.doesNotMatch(html, /<script[^>]+src=["'][^"']*tailwindcss/i);
+});
+
+test('render.yaml does not independently generate divergent operator aliases', () => {
+  const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
+  assert.match(render, /key: SCRAPER_ADMIN_TOKEN\s*\n\s*generateValue: true/);
+  // PROPERTY_OPERATOR_SECRET must not also generateValue independently.
+  const aliasBlock = render.split('PROPERTY_OPERATOR_SECRET')[1] || '';
+  assert.doesNotMatch(aliasBlock.slice(0, 80), /generateValue:\s*true/);
 });
 
 test('SEO schema and social proof do not overclaim partnerships or AI omniscience', () => {
