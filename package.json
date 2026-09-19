@@ -92,7 +92,10 @@
     "smoke:production": "node scripts/production-smoke.js",
     "promotion:gate": "node scripts/promotion-gate-check.js",
     "test:promotion-gate": "node --test test/promotion-gate-contract.test.js",
-    "listing:pipeline": "node scripts/listing-pipeline-report.js"
+    "listing:pipeline": "node scripts/listing-pipeline-report.js",
+    "market:enroll": "node scripts/apply-market-enrollment.js",
+    "discovery:local": "node scripts/local-discovery.js",
+    "civilview:counties": "node scripts/civilview-counties.js"
   },
   "keywords": [
     "real-estate",
