@@ -6,28 +6,21 @@
  * fail-closed and never enrolled for automatic crawl.
  */
 
+const { CIVILVIEW_NATIONWIDE, countiesByState, allStateCodes, idsForState } = require('./nationwide-civilview');
+
 const MARKET_ENROLLMENT = {
-  version: 1,
-  note: 'Operator market defaults. Override via env; never bypass CAPTCHA.',
+  version: 2,
+  note: 'Nationwide participating CivilView set + OH Sheriff extras + careful HUD. CAPTCHA never enrolled.',
   civilview: {
-    targetStates: ['NJ', 'OH', 'PA', 'FL', 'TX', 'AZ'],
-    // Ids validated against live salesweb.civilview.com index (2026-09-19).
-    extraCountyIdsByState: {
-      // NJ high-volume: Hudson, Bergen, Middlesex, Essex, Monmouth, Passaic, Union, Ocean
-      NJ: ['10', '7', '73', '2', '8', '17', '15', '85'],
-      // OH published CivilView counties
-      OH: ['34', '18', '81', '61'],
-      // PA: Lehigh, Montgomery, Philadelphia
-      PA: ['51', '23', '60'],
-      // FL: Palm Beach, Santa Rosa
-      FL: ['49', '75'],
-      // TX: Dallas P1/P2, Guadalupe Sheriff, Rockwall Sheriff
-      TX: ['93', '94', '90', '63'],
-      // AZ: Maricopa
-      AZ: ['47'],
-    },
+    nationwide: true,
+    targetStates: allStateCodes(),
     maxCountiesPerRun: 8,
     detailLimit: 80,
+    // Full multi-state registry lives in config/nationwide-civilview.js
+    extraCountyIdsByState: Object.fromEntries(
+      allStateCodes().map((state) => [state, idsForState(state).map((c) => c.id)])
+    ),
+    registryCountyCount: CIVILVIEW_NATIONWIDE.counties.length,
   },
   sheriffOhio: {
     extraCounties: [

@@ -46,7 +46,10 @@ class CivilViewScraper extends BaseScraper {
       .split(',')
       .map((value) => String(value).trim())
       .filter((value) => /^\d+$/.test(value));
-    if (!/^[A-Z]{2}$/.test(this.targetState)) {
+    // Nationwide mode: rotate through all published CivilView counties.
+    this.nationwide = String(options.nationwide ?? process.env.CIVILVIEW_NATIONWIDE ?? '') === '1'
+      || String(options.nationwide ?? process.env.CIVILVIEW_NATIONWIDE ?? '').toLowerCase() === 'true';
+    if (!/^[A-Z]{2}$/.test(this.targetState) && !this.nationwide) {
       throw new TypeError('CivilView targetState must be a two-letter uppercase state code');
     }
     if (this.countyId != null && !/^\d+$/.test(this.countyId)) {
@@ -101,27 +104,41 @@ class CivilViewScraper extends BaseScraper {
       this.lastRunReport = report;
       const counties = await this.fetchCounties();
       report.countiesDiscovered = counties.length;
-      const stateCounties = counties.filter((county) => county.state === this.targetState);
       let ordered;
-      if (this.extraCountyIds.length > 0) {
-        const byId = new Map(stateCounties.map((county) => [String(county.id), county]));
-        ordered = this.extraCountyIds
-          .map((id) => byId.get(id))
-          .filter(Boolean);
-        if (this.countyId && !this.extraCountyIds.includes(this.countyId)) {
-          const primary = byId.get(this.countyId);
-          if (primary) ordered = [primary, ...ordered];
-        }
-      } else if (this.countyId) {
-        ordered = stateCounties.filter((county) => String(county.id) === this.countyId);
+      if (this.nationwide) {
+        // Bounded sample across all participating states (nationwide set).
+        const shuffled = [...counties];
+        // Deterministic order: alphabetical by state then name (no RNG dependency).
+        shuffled.sort((a, b) => String(a.state || '').localeCompare(String(b.state || '')) || String(a.name || '').localeCompare(String(b.name || '')));
+        ordered = shuffled.slice(0, this.maxCounties);
+        report.scope = {
+          endpoint: '/Sales/SalesSearch',
+          filters: { mode: 'nationwide-participating', maxCounties: this.maxCounties },
+        };
       } else {
-        ordered = this.orderCounties(stateCounties).slice(0, this.maxCounties);
+        const stateCounties = counties.filter((county) => county.state === this.targetState);
+        if (this.extraCountyIds.length > 0) {
+          const byId = new Map(stateCounties.map((county) => [String(county.id), county]));
+          ordered = this.extraCountyIds
+            .map((id) => byId.get(id))
+            .filter(Boolean);
+          if (this.countyId && !this.extraCountyIds.includes(this.countyId)) {
+            const primary = byId.get(this.countyId);
+            if (primary) ordered = [primary, ...ordered];
+          }
+        } else if (this.countyId) {
+          ordered = stateCounties.filter((county) => String(county.id) === this.countyId);
+        } else {
+          ordered = this.orderCounties(stateCounties).slice(0, this.maxCounties);
+        }
       }
 
       if (ordered.length === 0) {
-        throw new Error(this.countyId
-          ? `CivilView county ${this.countyId} was not published for ${this.targetState}`
-          : `No CivilView counties found for ${this.targetState}`);
+        throw new Error(this.nationwide
+          ? 'CivilView nationwide registry returned no published counties'
+          : this.countyId
+            ? `CivilView county ${this.countyId} was not published for ${this.targetState}`
+            : `No CivilView counties found for ${this.targetState}`);
       }
 
       const emitted = [];

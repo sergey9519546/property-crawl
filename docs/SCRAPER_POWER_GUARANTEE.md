@@ -1,15 +1,15 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-09-19T03:57:01.378Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-09-19T09:40:12.059Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
 
 | Metric | Value |
 |---|---:|
-| Catalog sources (all ends) | **59** |
+| Catalog sources (all ends) | **163** |
 | Scheduled production adapters | **21** |
-| Adapters with Scrapling profiles | **7** |
+| Adapters with Scrapling profiles | **8** |
 | Seed listings in data.js | **2096** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -19,10 +19,10 @@
 |---|---:|---:|---:|:---:|---|
 | Federal/GSE REO | 7 | 5 | 2 | yes | ✅ adapter |
 | Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
-| Federal/state surplus real property | 3 | 1 | 1 | yes | ✅ adapter |
+| Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
-| Foreclosure/sheriff/trustee auction | 5 | 4 | 1 | yes | ✅ adapter |
-| Tax lien/deed sale | 7 | 1 | 0 | yes | ✅ adapter |
+| Foreclosure/sheriff/trustee auction | 7 | 6 | 2 | yes | ✅ adapter |
+| Tax lien/deed sale | 58 | 1 | 0 | yes | ✅ adapter |
 | Land bank inventory | 2 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
 | Commercial marketplaces (issuer-preserving) | 4 | 0 | 0 | no | catalog only |
@@ -39,17 +39,18 @@
 
 | Tier | Meaning | Count |
 |---|---|---:|
-| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 6 |
-| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 2 |
+| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 7 |
+| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 3 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 10 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
-| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 39 |
+| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 141 |
 
 ## Scheduled adapters (power scorecard)
 
 | Adapter | Tier | Scrapling | Seed listings | Limitation |
 |---|---|---|---:|---|
 | `civilview` (CivilView Sheriff/Tax Sale Platform) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
+| `civilview` (CivilView Participating Jurisdictions (Nationwide set)) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 2 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 8 | — |
@@ -57,6 +58,7 @@
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 15 | — |
 | `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
 | `sheriff` (Ohio Sheriff Sale Auction) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `courtlistener` (CourtListener / RECAP) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; enrichment only — never invents bid/sale |

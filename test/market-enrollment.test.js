@@ -30,7 +30,8 @@ test('market enrollment resolves CivilView ids from live index only', () => {
     { id: '51', name: 'Lehigh County, PA', state: 'PA' },
   ];
   const resolved = resolveCivilViewIds(live);
-  assert.deepEqual(resolved.NJ.ids, ['10', '7']);
+  // Enrollment order follows the CivilView registry, then filters to live ids.
+  assert.deepEqual([...resolved.NJ.ids].sort(), ['10', '7']);
   assert.deepEqual(resolved.OH.ids, ['34']);
   assert.deepEqual(resolved.PA.ids, ['51']);
   // Unknown ids never invent enrollment

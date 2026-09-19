@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-19T03:57:01.378Z",
+  "generatedAt": "2026-09-19T09:40:12.059Z",
   "guarantee": {
-    "catalogSources": 59,
+    "catalogSources": 163,
     "scheduledAdapters": 21,
-    "scraplingEnabledAdapters": 7,
+    "scraplingEnabledAdapters": 8,
     "seedListingsIndexed": 2096,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
@@ -23,15 +23,15 @@
     ]
   },
   "tiers": {
-    "P0_CATALOG_ONLY": 39,
-    "P3_LIVE_ADAPTER": 2,
-    "P4_LIVE_STRONG": 6,
+    "P0_CATALOG_ONLY": 141,
+    "P3_LIVE_ADAPTER": 3,
+    "P4_LIVE_STRONG": 7,
     "P2_DISCOVERY_ADAPTER": 10,
     "P2_BLOCKED_PUBLISHER": 2
   },
   "categories": {
     "tax_sale": {
-      "total": 7,
+      "total": 58,
       "scheduled": 1,
       "strong": 0
     },
@@ -41,9 +41,9 @@
       "strong": 0
     },
     "foreclosure_auction": {
-      "total": 5,
-      "scheduled": 4,
-      "strong": 1
+      "total": 7,
+      "scheduled": 6,
+      "strong": 2
     },
     "government_reo": {
       "total": 7,
@@ -56,7 +56,7 @@
       "strong": 2
     },
     "government_surplus": {
-      "total": 3,
+      "total": 54,
       "scheduled": 1,
       "strong": 1
     },
@@ -159,7 +159,7 @@
       "key": "government_surplus",
       "label": "Federal/state surplus real property",
       "required": true,
-      "catalogEntries": 3,
+      "catalogEntries": 54,
       "scheduledAdapters": 1,
       "strongAdapters": 1,
       "opportunityScheduled": 1,
@@ -168,7 +168,58 @@
       "memberIds": [
         "gsa-real-estate-sales*",
         "state-surplus-property",
-        "govdeals-real-property"
+        "govdeals-real-property",
+        "state-surplus-al",
+        "state-surplus-ak",
+        "state-surplus-az",
+        "state-surplus-ar",
+        "state-surplus-ca",
+        "state-surplus-co",
+        "state-surplus-ct",
+        "state-surplus-de",
+        "state-surplus-fl",
+        "state-surplus-ga",
+        "state-surplus-hi",
+        "state-surplus-id",
+        "state-surplus-il",
+        "state-surplus-in",
+        "state-surplus-ia",
+        "state-surplus-ks",
+        "state-surplus-ky",
+        "state-surplus-la",
+        "state-surplus-me",
+        "state-surplus-md",
+        "state-surplus-ma",
+        "state-surplus-mi",
+        "state-surplus-mn",
+        "state-surplus-ms",
+        "state-surplus-mo",
+        "state-surplus-mt",
+        "state-surplus-ne",
+        "state-surplus-nv",
+        "state-surplus-nh",
+        "state-surplus-nj",
+        "state-surplus-nm",
+        "state-surplus-ny",
+        "state-surplus-nc",
+        "state-surplus-nd",
+        "state-surplus-oh",
+        "state-surplus-ok",
+        "state-surplus-or",
+        "state-surplus-pa",
+        "state-surplus-ri",
+        "state-surplus-sc",
+        "state-surplus-sd",
+        "state-surplus-tn",
+        "state-surplus-tx",
+        "state-surplus-ut",
+        "state-surplus-vt",
+        "state-surplus-va",
+        "state-surplus-wa",
+        "state-surplus-wv",
+        "state-surplus-wi",
+        "state-surplus-wy",
+        "state-surplus-dc"
       ]
     },
     {
@@ -190,10 +241,10 @@
       "key": "foreclosure_auction",
       "label": "Foreclosure/sheriff/trustee auction",
       "required": true,
-      "catalogEntries": 5,
-      "scheduledAdapters": 4,
-      "strongAdapters": 1,
-      "opportunityScheduled": 4,
+      "catalogEntries": 7,
+      "scheduledAdapters": 6,
+      "strongAdapters": 2,
+      "opportunityScheduled": 6,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
@@ -201,14 +252,16 @@
         "civilview*",
         "bid4assets*",
         "ohio-sheriff-sale*",
-        "county-trustee-sale"
+        "county-trustee-sale",
+        "civilview-nationwide*",
+        "realeauction-sheriff-multi-state*"
       ]
     },
     {
       "key": "tax_sale",
       "label": "Tax lien/deed sale",
       "required": true,
-      "catalogEntries": 7,
+      "catalogEntries": 58,
       "scheduledAdapters": 1,
       "strongAdapters": 0,
       "opportunityScheduled": 0,
@@ -221,7 +274,58 @@
         "county-tax-sale-template",
         "realauction",
         "ca-controller-tax-sale*",
-        "excess-funds"
+        "excess-funds",
+        "state-tax-sale-al",
+        "state-tax-sale-ak",
+        "state-tax-sale-az",
+        "state-tax-sale-ar",
+        "state-tax-sale-ca",
+        "state-tax-sale-co",
+        "state-tax-sale-ct",
+        "state-tax-sale-de",
+        "state-tax-sale-fl",
+        "state-tax-sale-ga",
+        "state-tax-sale-hi",
+        "state-tax-sale-id",
+        "state-tax-sale-il",
+        "state-tax-sale-in",
+        "state-tax-sale-ia",
+        "state-tax-sale-ks",
+        "state-tax-sale-ky",
+        "state-tax-sale-la",
+        "state-tax-sale-me",
+        "state-tax-sale-md",
+        "state-tax-sale-ma",
+        "state-tax-sale-mi",
+        "state-tax-sale-mn",
+        "state-tax-sale-ms",
+        "state-tax-sale-mo",
+        "state-tax-sale-mt",
+        "state-tax-sale-ne",
+        "state-tax-sale-nv",
+        "state-tax-sale-nh",
+        "state-tax-sale-nj",
+        "state-tax-sale-nm",
+        "state-tax-sale-ny",
+        "state-tax-sale-nc",
+        "state-tax-sale-nd",
+        "state-tax-sale-oh",
+        "state-tax-sale-ok",
+        "state-tax-sale-or",
+        "state-tax-sale-pa",
+        "state-tax-sale-ri",
+        "state-tax-sale-sc",
+        "state-tax-sale-sd",
+        "state-tax-sale-tn",
+        "state-tax-sale-tx",
+        "state-tax-sale-ut",
+        "state-tax-sale-vt",
+        "state-tax-sale-va",
+        "state-tax-sale-wa",
+        "state-tax-sale-wv",
+        "state-tax-sale-wi",
+        "state-tax-sale-wy",
+        "state-tax-sale-dc"
       ]
     },
     {
@@ -1713,6 +1817,2198 @@
       "adapterKey": null,
       "access": "jurisdiction",
       "discoveryUrl": "https://www.orangecountyfl.net/",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "civilview-nationwide",
+      "label": "CivilView Participating Jurisdictions (Nationwide set)",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "SCOPE_LIMITED",
+      "adapterKey": "civilview",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://salesweb.civilview.com/",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "civilview-sales"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:civilview-sales",
+          "lastRunReport",
+          "limitation"
+        ]
+      },
+      "weakness": "Jurisdiction-scoped (countyId); not nationwide",
+      "seedListings": 60
+    },
+    {
+      "id": "realeauction-sheriff-multi-state",
+      "label": "Realauction Sheriff/Tax Sale Portals (Multi-state)",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.realauction.com/",
+      "power": {
+        "tier": "P3_LIVE_ADAPTER",
+        "score": 4,
+        "inScheduler": true,
+        "scrapling": null,
+        "flags": [
+          "scheduled",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-al",
+      "label": "Alabama (AL) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-al",
+      "label": "Alabama (AL) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ak",
+      "label": "Alaska (AK) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ak",
+      "label": "Alaska (AK) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-az",
+      "label": "Arizona (AZ) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-az",
+      "label": "Arizona (AZ) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ar",
+      "label": "Arkansas (AR) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ar",
+      "label": "Arkansas (AR) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ca",
+      "label": "California (CA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ca",
+      "label": "California (CA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-co",
+      "label": "Colorado (CO) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-co",
+      "label": "Colorado (CO) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ct",
+      "label": "Connecticut (CT) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ct",
+      "label": "Connecticut (CT) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-de",
+      "label": "Delaware (DE) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-de",
+      "label": "Delaware (DE) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-fl",
+      "label": "Florida (FL) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-fl",
+      "label": "Florida (FL) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ga",
+      "label": "Georgia (GA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ga",
+      "label": "Georgia (GA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-hi",
+      "label": "Hawaii (HI) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-hi",
+      "label": "Hawaii (HI) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-id",
+      "label": "Idaho (ID) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-id",
+      "label": "Idaho (ID) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-il",
+      "label": "Illinois (IL) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-il",
+      "label": "Illinois (IL) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-in",
+      "label": "Indiana (IN) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-in",
+      "label": "Indiana (IN) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ia",
+      "label": "Iowa (IA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ia",
+      "label": "Iowa (IA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ks",
+      "label": "Kansas (KS) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ks",
+      "label": "Kansas (KS) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ky",
+      "label": "Kentucky (KY) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ky",
+      "label": "Kentucky (KY) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-la",
+      "label": "Louisiana (LA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-la",
+      "label": "Louisiana (LA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-me",
+      "label": "Maine (ME) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-me",
+      "label": "Maine (ME) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-md",
+      "label": "Maryland (MD) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-md",
+      "label": "Maryland (MD) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ma",
+      "label": "Massachusetts (MA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ma",
+      "label": "Massachusetts (MA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-mi",
+      "label": "Michigan (MI) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-mi",
+      "label": "Michigan (MI) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-mn",
+      "label": "Minnesota (MN) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-mn",
+      "label": "Minnesota (MN) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ms",
+      "label": "Mississippi (MS) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ms",
+      "label": "Mississippi (MS) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-mo",
+      "label": "Missouri (MO) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-mo",
+      "label": "Missouri (MO) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-mt",
+      "label": "Montana (MT) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-mt",
+      "label": "Montana (MT) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ne",
+      "label": "Nebraska (NE) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ne",
+      "label": "Nebraska (NE) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nv",
+      "label": "Nevada (NV) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nv",
+      "label": "Nevada (NV) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nh",
+      "label": "New Hampshire (NH) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nh",
+      "label": "New Hampshire (NH) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nj",
+      "label": "New Jersey (NJ) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nj",
+      "label": "New Jersey (NJ) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nm",
+      "label": "New Mexico (NM) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nm",
+      "label": "New Mexico (NM) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ny",
+      "label": "New York (NY) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ny",
+      "label": "New York (NY) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nc",
+      "label": "North Carolina (NC) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nc",
+      "label": "North Carolina (NC) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-nd",
+      "label": "North Dakota (ND) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-nd",
+      "label": "North Dakota (ND) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-oh",
+      "label": "Ohio (OH) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-oh",
+      "label": "Ohio (OH) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ok",
+      "label": "Oklahoma (OK) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ok",
+      "label": "Oklahoma (OK) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-or",
+      "label": "Oregon (OR) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-or",
+      "label": "Oregon (OR) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-pa",
+      "label": "Pennsylvania (PA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-pa",
+      "label": "Pennsylvania (PA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ri",
+      "label": "Rhode Island (RI) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ri",
+      "label": "Rhode Island (RI) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-sc",
+      "label": "South Carolina (SC) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-sc",
+      "label": "South Carolina (SC) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-sd",
+      "label": "South Dakota (SD) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-sd",
+      "label": "South Dakota (SD) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-tn",
+      "label": "Tennessee (TN) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-tn",
+      "label": "Tennessee (TN) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-tx",
+      "label": "Texas (TX) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-tx",
+      "label": "Texas (TX) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-ut",
+      "label": "Utah (UT) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-ut",
+      "label": "Utah (UT) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-vt",
+      "label": "Vermont (VT) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-vt",
+      "label": "Vermont (VT) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-va",
+      "label": "Virginia (VA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-va",
+      "label": "Virginia (VA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-wa",
+      "label": "Washington (WA) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-wa",
+      "label": "Washington (WA) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-wv",
+      "label": "West Virginia (WV) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-wv",
+      "label": "West Virginia (WV) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-wi",
+      "label": "Wisconsin (WI) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-wi",
+      "label": "Wisconsin (WI) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-wy",
+      "label": "Wyoming (WY) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-wy",
+      "label": "Wyoming (WY) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-tax-sale-dc",
+      "label": "District of Columbia (DC) State/County Tax Sale Program",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "state-surplus-dc",
+      "label": "District of Columbia (DC) State Surplus Real Property",
+      "category": "government_surplus",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
       "power": {
         "tier": "P0_CATALOG_ONLY",
         "score": 1,

@@ -51,14 +51,19 @@ async function main() {
   console.log('');
   console.log('Suggested env block (export / paste into host dashboard):');
   console.log('');
-  console.log(`# CivilView markets (primary target + extras)`);
+  console.log('# CivilView nationwide participating set');
+  console.log('CIVILVIEW_NATIONWIDE=1');
+  console.log(`CIVILVIEW_MAX_COUNTIES=${MARKET_ENROLLMENT.civilview.maxCountiesPerRun}`);
+  console.log(`CIVILVIEW_DETAIL_LIMIT=${MARKET_ENROLLMENT.civilview.detailLimit}`);
+  console.log(`# Participating states: ${Object.keys(civilview).join(',')}`);
+  console.log(`# Registry counties: ${MARKET_ENROLLMENT.civilview.registryCountyCount || 'see config/nationwide-civilview.js'}`);
+  console.log('');
+  console.log(`# CivilView per-state extras (optional rotation)`);
   for (const [state, info] of Object.entries(civilview)) {
     if (!info.ids.length) continue;
-    console.log(`# ${state}: ${info.names.join(', ')}`);
-    console.log(`CIVILVIEW_TARGET_STATE=${state}`);
-    console.log(`CIVILVIEW_EXTRA_COUNTIES=${info.ids.join(',')}`);
-    console.log(`CIVILVIEW_MAX_COUNTIES=${MARKET_ENROLLMENT.civilview.maxCountiesPerRun}`);
-    console.log(`CIVILVIEW_DETAIL_LIMIT=${MARKET_ENROLLMENT.civilview.detailLimit}`);
+    console.log(`# ${state}: ${info.names.slice(0, 3).join(', ')}${info.names.length > 3 ? '…' : ''} (${info.ids.length} ids)`);
+    console.log(`# CIVILVIEW_TARGET_STATE=${state}`);
+    console.log(`# CIVILVIEW_EXTRA_COUNTIES=${info.ids.join(',')}`);
   }
   console.log('');
   console.log(`SHERIFF_EXTRA_COUNTIES=${sheriffExtraCountiesEnv()}`);
