@@ -147,3 +147,23 @@ test('scrapers Next mutations use the private session proxy', () => {
   assert.match(scrapers, /proxyPrivatePropertyApi/);
 });
 
+test('legacy marketing shells do not overclaim AI omniscience', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /AI that reads the fine print/);
+  assert.doesNotMatch(html, /Zillow for distressed/);
+  const manifest = fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8');
+  assert.doesNotMatch(manifest, /Zillow for distressed/);
+  assert.doesNotMatch(manifest, /AI that reads the fine print/);
+});
+
+test('listings API exports intelligence view for quality/opportunity sorts', () => {
+  const listings = fs.readFileSync(path.join(__dirname, '..', 'server/routes/listings.js'), 'utf8');
+  assert.match(listings, /applyIntelligenceView/);
+  assert.match(listings, /module\.exports\.applyIntelligenceView/);
+  assert.match(listings, /minQuality/);
+  const workbench = fs.readFileSync(path.join(__dirname, '..', 'src/components/listings/discovery-workbench.tsx'), 'utf8');
+  assert.match(workbench, /value="quality"/);
+  assert.match(workbench, /value="opportunity"/);
+  assert.match(workbench, /minQuality/);
+});
+

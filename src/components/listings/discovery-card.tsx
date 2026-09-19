@@ -8,6 +8,7 @@ import { CaseAction } from "@/components/research/case-action";
 import { SOURCES, type PropertyListing } from "@/components/terminal/property-data";
 import { displayDate, displayMoney, knownNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
+import { bandForScore } from "@/lib/score-bands";
 
 // Distress stage → label + Tailwind classes for the badge.
 const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }> = {
@@ -128,7 +129,14 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
         <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-amber-800" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
-        {knownNumber(listing.dealScore) !== null ? <span title="Modeled Deal Score. Review the inputs in property details.">Modeled score {listing.dealScore}/99</span> : null}
+        {knownNumber(listing.dealScore) !== null ? (() => {
+          const band = bandForScore(listing.dealScore);
+          return (
+            <span title={band?.desc || "Modeled Deal Score. Review the inputs in property details."}>
+              {band ? `${band.label} ${listing.dealScore}` : `Modeled score ${listing.dealScore}/99`}
+            </span>
+          );
+        })() : null}
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}</span> : null}
       </div>
       <div className="mt-auto grid grid-cols-[1.2fr_1fr] gap-2 pt-4">

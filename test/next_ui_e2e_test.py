@@ -145,7 +145,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_desktop_navigation_menus_reveal_their_feature_links(self):
         menu_expectations = {
-            "Product": "Deal Stacks",
+            "Product": "Listing workspace",
             "Solutions": "Acquisitions",
             "Resources": "Blog",
         }
@@ -1011,7 +1011,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         newsletter = footer.locator("#contact")
         self.assertEqual(footer.evaluate("el => getComputedStyle(el).borderTopWidth"), "0px")
         self.assertEqual(newsletter.evaluate("el => getComputedStyle(el).borderBottomWidth"), "0px")
-        self.assertTrue(footer.get_by_text("Subscribe to the PerfectProperty accuracy report").is_visible())
+        self.assertTrue(footer.get_by_text("Subscribe for source coverage notes").is_visible())
 
     def test_newsletter_submit_has_an_inline_honest_result(self):
         dialogs = []
@@ -1211,7 +1211,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         menu = self.page.get_by_role("dialog")
         menu.wait_for(state="visible")
         menu.get_by_role("button", name="Product").click()
-        menu.get_by_role("link", name="Deal Stacks").click()
+        menu.get_by_role("link", name="Listing workspace").click()
 
         self.page.wait_for_url(f"{BASE_URL}/#live-feed")
         self.assertEqual(self.page.url, f"{BASE_URL}/#live-feed")

@@ -72,12 +72,36 @@ const PARAM_CAPS = Object.freeze({
   sort:       { maxLen: 16,  defaultIfEmpty: 'score' }
 });
 
+const INTELLIGENCE_SORTS = new Set(['quality', 'opportunity']);
+
+function applyIntelligenceView(presentedListings, filters) {
+  let view = presentedListings;
+  const minQuality = Number(filters.minQuality) || 0;
+  if (minQuality > 0) {
+    view = view.filter((listing) => (listing.researchQuality?.score ?? 0) >= minQuality);
+  }
+  const sort = String(filters.sort || '');
+  if (INTELLIGENCE_SORTS.has(sort)) {
+    view = [...view].sort((a, b) => {
+      const av = sort === 'quality'
+        ? (a.researchQuality?.score ?? -1)
+        : (a.opportunity?.rank ?? -1);
+      const bv = sort === 'quality'
+        ? (b.researchQuality?.score ?? -1)
+        : (b.opportunity?.rank ?? -1);
+      return bv - av || String(a.id).localeCompare(String(b.id));
+    });
+  }
+  return view;
+}
+
 const NUMERIC_RANGES = Object.freeze({
   limit:      { defaultValue: 50, min: 1, max: 1000    },
   offset:     { defaultValue: 0,  min: 0, max: 100000  },
   minScore:   { defaultValue: 0,  min: 0, max: 100     },
   minEquity:  { defaultValue: 0,  min: 0, max: 50000000 },
-  maxBid:     { defaultValue: 0,  min: 0, max: 50000000 }
+  maxBid:     { defaultValue: 0,  min: 0, max: 50000000 },
+  minQuality: { defaultValue: 0,  min: 0, max: 100     }
 });
 
 function parseStringParam(raw, field, maxLen) {
@@ -163,7 +187,19 @@ async function handleListings(req, res) {
 
     const usesDiscovery = true;
     let result;
-    try { result = usesDiscovery ? await discovery.search(db, discovery.queryFromUrl(url)) : await db.getListings(filters); }
+    try {
+      if (usesDiscovery) {
+        // Intelligence sorts (quality/opportunity) are applied after annotation.
+        // The discovery SQL layer only understands score/date/bid-asc/equity.
+        const discoveryUrl = new URL(url);
+        if (INTELLIGENCE_SORTS.has(String(filters.sort))) {
+          discoveryUrl.searchParams.set('sort', 'score');
+        }
+        result = await discovery.search(db, discovery.queryFromUrl(discoveryUrl));
+      } else {
+        result = await db.getListings(filters);
+      }
+    }
     catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
 
     // Apply delta filter when since is present: keep only listings whose
@@ -193,13 +229,23 @@ async function handleListings(req, res) {
     // presentListing preserves these fields through the spread.
     applyCrossSourceBakeOff(result.listings);
     const presentedListings = result.listings.map(listing => presentListing(attachMedia(listing, entries)));
+    // Post-annotation intelligence view: quality/opportunity sort + minQuality.
+    const viewListings = applyIntelligenceView(presentedListings, filters);
     const body = {
       ...result,
       page,
       revision: result.revision || null,
       facets: result.facets || {},
-      pipeline: summarizeInventory(presentedListings),
-      listings: presentedListings,
+      intelligence: {
+        sort: INTELLIGENCE_SORTS.has(String(filters.sort)) ? String(filters.sort) : null,
+        minQuality: Number(filters.minQuality) || 0,
+        note: 'quality/opportunity sorts apply after listing intelligence annotation.',
+      },
+      pipeline: summarizeInventory(viewListings),
+      listings: viewListings,
+      total: INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0
+        ? viewListings.length
+        : result.total,
     };
     if (sinceMs !== null) {
       body.delta = true;
@@ -213,3 +259,4 @@ async function handleListings(req, res) {
 
 module.exports = handleListings;
 module.exports.presentListing = presentListing;
+module.exports.applyIntelligenceView = applyIntelligenceView;

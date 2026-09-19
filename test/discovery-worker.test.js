@@ -23,7 +23,9 @@ test('an explicit canary creates and claims only its requested source job',async
   const store={async failAbandonedRuns(){},async promotedSources(){throw new Error('canary must not inspect promotions');},async claimNextJob(){throw new Error('canary must not drain unrelated queue');},async createOrReuseJob(input){calls.push(['create',input]);return job;},async claimJob(id){calls.push(['claim',id]);return job;},async renewJobClaim(){return true;},async recordCanary(source,value){calls.push(['canary',source,value]);}};
   const coordinator={async execute(){return {result:{sourceResults:[{sourceId:'servicelink',accepted:1,runId:'00000000-0000-0000-0000-000000000001',report:{scope:{endpoint:'/feed'},complete:true,fullSweepComplete:true,truncated:false}}]}};}};
   const prior=process.env.DISCOVERY_MODE;process.env.DISCOVERY_MODE='advanced';
-  try{await run({canarySource:'servicelink',database:{isPg:true},collector:{collectionCoordinator:coordinator},discoveryStore:store});}finally{if(prior===undefined)delete process.env.DISCOVERY_MODE;else process.env.DISCOVERY_MODE=prior;}
+  // Unit tests must not depend on host free-disk capacity.
+  const storageProbe=()=>({ready:true,freeBytes:10*1024*1024*1024,minimumFreeBytes:1024*1024*1024,scope:'collector_local_volume'});
+  try{await run({canarySource:'servicelink',database:{isPg:true},collector:{collectionCoordinator:coordinator},discoveryStore:store,storageProbe});}finally{if(prior===undefined)delete process.env.DISCOVERY_MODE;else process.env.DISCOVERY_MODE=prior;}
   assert.deepEqual(calls[0][1].sourceIds,['servicelink']);assert.equal(calls[1][0],'claim');assert.equal(calls[2][1],'servicelink');
 });
 

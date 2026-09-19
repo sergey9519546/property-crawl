@@ -63,7 +63,7 @@ const filterLabels: Record<string, string> = {
   program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
   saleFrom: "From", saleTo: "Until", maxBid: "Max opening amount", minScore: "Min score",
   minEquity: "Min spread", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption",
-  distressStage: "Distress stage",
+  distressStage: "Distress stage", minQuality: "Min evidence quality",
 };
 export function DiscoveryWorkbench() {
   const router = useRouter();
@@ -433,8 +433,21 @@ export function DiscoveryWorkbench() {
             className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
           >
             <option value="score">Modeled score</option>
+            <option value="quality">Evidence quality</option>
+            <option value="opportunity">Opportunity rank</option>
             <option value="date">Sale date</option>
             <option value="bid-asc">Opening amount</option>
+          </select>
+          <select
+            aria-label="Minimum evidence quality"
+            value={filters.minQuality || ""}
+            onChange={(event) => setFilters({ minQuality: event.target.value || undefined })}
+            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
+          >
+            <option value="">Any evidence</option>
+            <option value="25">Evidence ≥ 25</option>
+            <option value="50">Evidence ≥ 50</option>
+            <option value="75">Evidence ≥ 75</option>
           </select>
           <SaveSearchButton filters={filters} />
           <details className="relative">

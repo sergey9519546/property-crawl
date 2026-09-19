@@ -9,7 +9,7 @@
   "id": "./",
   "name": "PROPERTY_CRAWL — Distressed & Government Property Intelligence",
   "short_name": "PROPERTY_CRAWL",
-  "description": "Zillow for distressed and government-sold property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is.",
+  "description": "Evidence-first research workspace for distressed and government-sold property. Source-observed records; triage models are not appraisals.",
   "start_url": "./",
   "scope": "./",
   "background_color": "#0f766e",

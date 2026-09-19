@@ -89,7 +89,7 @@ function renderContext(facts) {
 > Drift-gated by \`test/context.test.js\` and \`node scripts/gen-context.js --check\`.
 
 ## What this project is
-"Zillow for distressed and government-sold property" — a discovery/triage layer over
+Evidence-first discovery/triage layer for distressed and government-sold property —
 sheriff sales, trustee sales, HUD/REO, IRS/Treasury/GSA dispositions.
 Three layers: static PWA (v0, \`index.html\`/\`app.js\`), Node \`http\` listing API (v1,
 \`server/\`), Next.js 16 App Router marketing site (v2, \`src/\`).

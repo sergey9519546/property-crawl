@@ -14,6 +14,7 @@ import { ListingWatchlistToggle } from "@/components/listings/listing-watchlist-
 import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
 import { inspectMapLocation } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
+import { scoreBandLabel } from "@/lib/score-bands";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
 import { SaleMechanics } from "@/components/listings/sale-mechanics";
@@ -126,7 +127,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const description = [
     isDemo ? `Demonstration property profile for ${listing.address}.` : `Auction-source record for ${listing.address}.`,
     positiveNumber(listing.openingBid) !== null ? `Published opening amount: ${formatMoney(listing.openingBid)}.` : null,
-    finiteNumber(listing.dealScore) !== null ? `Modeled Deal Score: ${finiteNumber(listing.dealScore)}/99.` : null,
+    finiteNumber(listing.dealScore) !== null
+      ? `Modeled Deal Score: ${finiteNumber(listing.dealScore)}/99${scoreBandLabel(listing.dealScore) ? ` (${scoreBandLabel(listing.dealScore)})` : ""}. Triage only, not an appraisal.`
+      : null,
     "Verify every auction term with the upstream record before bidding.",
   ].filter(Boolean).join(" ");
 
