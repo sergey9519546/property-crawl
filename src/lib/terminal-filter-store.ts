@@ -1,8 +1,7 @@
 /**
  * Shared terminal filter/view store.
  * Pure reducer + selectors so grid and map always consume one source of truth.
- * Pattern follows the Redux tutorials in build-your-own-x: immutable state,
- * pure updates, derived data computed from state + inventory only.
+ * Immutable updates and derived listings only — no component coupling.
  *
  * Keep this module free of `@/` and `@server` imports so Node tests can load it.
  */
@@ -113,10 +112,6 @@ export function terminalFilterReducer(
     default:
       return state;
   }
-}
-
-export function createTerminalFilterStore(initial?: Partial<TerminalFilters>) {
-  return { ...DEFAULT_TERMINAL_FILTERS, ...initial };
 }
 
 export function terminalQuery(filters: TerminalFilters): string {

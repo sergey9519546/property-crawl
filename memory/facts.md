@@ -9,8 +9,10 @@
 
 - **Three layers**: v0 static PWA (`index.html`/`app.js`), v1 Node `http` API (`server/`), v2 Next.js 16 App Router (`src/`).
   - Source: `CONTEXT.md`, `AGENTS.md`
-- **Terminal filter/view store**: `src/lib/terminal-filter-store.ts` is the pure Redux-style source of truth for live-feed filters, sort, and grid/map/parser view. `interactive-terminal.tsx` uses `useReducer` + `selectFilteredListings`; keep filter logic out of the component. Store must stay free of `@/`/`@server` imports so Node tests can load it.
-  - Source: `src/lib/terminal-filter-store.ts`, `src/components/terminal/interactive-terminal.tsx`, `test/terminal-filter-store.test.mjs`
+- **Terminal filter/view store**: `src/lib/terminal-filter-store.ts` is the pure shared source of truth for live-feed filters, sort, and grid/map/parser view. `interactive-terminal.tsx` uses `useReducer` + `selectFilteredListings`. Keep filter logic out of the component. Store must stay free of `@/`/`@server` imports so Node tests can load it.
+  - Source: `src/lib/terminal-filter-store.ts`, `src/components/terminal/interactive-terminal.tsx`
+- **Hunt match ranking**: `server/intelligence/hunt-ranking.js` ranks *matched* hunt results for triage (criterion closeness, research quality, urgency, SCORE_BANDS band). Binary match remains the gate; rank is presentation-only and never invents publisher facts. `server/intelligence/score-bands.js` + `src/lib/score-bands.ts` are the Elite/Strong/Fair/Thin presentation bands.
+  - Source: `server/intelligence/hunt-ranking.js`, `server/intelligence/hunts.js`, `src/lib/score-bands.ts`, `test/hunt-ranking.test.js`
 - **No database required to boot**: `server/db/client.js` falls back to in-memory provider seeded from `data.js` when `DATABASE_URL` is unset.
   - Source: `server/db/client.js`, `AGENTS.md`
 - **API port**: `server/server.js` listens on port 3000; Next dev on 3001. Base44 compose maps UI to 3000 and proxies API.

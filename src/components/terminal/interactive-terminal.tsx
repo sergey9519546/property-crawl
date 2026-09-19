@@ -50,6 +50,7 @@ import {
   type TerminalSort,
   type TerminalView,
 } from "@/lib/terminal-filter-store";
+import { DEAL_SCORE_MEANING, SCORE_BANDS, bandForScore } from "@/lib/score-bands";
 
 function isObservedSourceRecord(listing: PropertyListing) {
   const provenance = listing.provenance;
@@ -329,9 +330,10 @@ export function InteractiveTerminal() {
   const knownEquity = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
   const avgEquity = knownEquity.length > 0 ? Math.round(knownEquity.reduce((sum, value) => sum + value, 0) / knownEquity.length) : null;
   const knownScores = filtered.map((listing) => knownNumber(listing.dealScore)).filter((value): value is number => value !== null);
-  const eliteCount = knownScores.filter((score) => score >= 70).length;
-  const strongCount = knownScores.filter((score) => score >= 55 && score < 70).length;
-  const fairCount = knownScores.filter((score) => score >= 35 && score < 55).length;
+  const scoreBandCounts = SCORE_BANDS.map((band) => ({
+    band,
+    count: knownScores.filter((score) => score >= band.min && score <= band.max).length,
+  }));
 
   const savedListings = inventory.filter((l) => savedIds.has(l.id));
   const availableStates = Array.from(
@@ -793,46 +795,34 @@ export function InteractiveTerminal() {
               <div className="flex flex-col justify-center">
                 <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 70 })}
-                    title={`Elite (70+): ${eliteCount} deals`}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
-                      minDealScore === 70
-                        ? "bg-[#0F172A] text-white ring-2 ring-[#0F172A]"
-                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
-                    )}
-                  >
-                    Elite: {eliteCount}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 55 })}
-                    title={`Strong (55–69): ${strongCount} deals`}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
-                      minDealScore === 55
-                        ? "bg-[#0F172A] text-white ring-2 ring-[#0F172A]"
-                        : "bg-slate-200 text-slate-800 hover:bg-slate-300"
-                    )}
-                  >
-                    Strong: {strongCount}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: 35 })}
-                    title={`Fair (35–54): ${fairCount} deals`}
-                    className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
-                      minDealScore === 35
-                        ? "bg-[#F59E0B] text-white ring-2 ring-[#0F172A]"
-                        : "bg-[#F59E0B]/15 text-[#B45309] hover:bg-[#F59E0B]/25"
-                    )}
-                  >
-                    Fair: {fairCount}
-                  </button>
+                  {scoreBandCounts.map(({ band, count }) => (
+                    <button
+                      key={band.key}
+                      type="button"
+                      onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: band.min })}
+                      title={`${band.label} (${band.min}–${band.max}): ${count} deals. ${band.desc}`}
+                      aria-label={`Filter Deal Score band ${band.label}`}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
+                        minDealScore === band.min
+                          ? "text-white ring-2 ring-[#0F172A]"
+                          : "text-slate-800 hover:opacity-90",
+                      )}
+                      style={{
+                        backgroundColor:
+                          minDealScore === band.min
+                            ? band.color
+                            : `${band.color}${band.alpha}`,
+                        color: minDealScore === band.min ? "#fff" : undefined,
+                      }}
+                    >
+                      {band.label}: {count}
+                    </button>
+                  ))}
                 </div>
+                <p className="mt-1 text-[10px] leading-4 text-[#6B7280]" title={DEAL_SCORE_MEANING}>
+                  {DEAL_SCORE_MEANING}
+                </p>
               </div>
             </div>
 
@@ -936,8 +926,18 @@ export function InteractiveTerminal() {
                               </p>
                             )}
                           </div>
-                          <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 shrink-0">
-                            {knownNumber(listing.dealScore) === null ? "Not modeled" : `${listing.dealScore}/99`}
+                          <span
+                            title={DEAL_SCORE_MEANING}
+                            data-testid="listing-deal-score"
+                            className="text-xs font-extrabold px-2.5 py-1 rounded-md shrink-0"
+                            style={{
+                              color: bandForScore(listing.dealScore)?.color ?? "#374151",
+                              backgroundColor: `${bandForScore(listing.dealScore)?.color ?? "#6B7280"}18`,
+                            }}
+                          >
+                            {knownNumber(listing.dealScore) === null
+                              ? "Not modeled"
+                              : `${listing.dealScore}/99 ${bandForScore(listing.dealScore)?.label ?? ""}`.trim()}
                           </span>
                         </div>
 

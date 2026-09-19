@@ -42,6 +42,15 @@ type Result = {
   status: string;
   observedAt: string;
   clauseResults: Clause[];
+  relevance?: {
+    rank: number;
+    band: string;
+    dealScoreBand?: string | null;
+    researchQualityScore?: number;
+    urgency?: string;
+    factors?: { factor: string; weight: number; detail: string }[];
+    note?: string;
+  } | null;
 };
 type Event = {
   id: string;
@@ -60,6 +69,7 @@ type Evaluation = {
   resultsTruncated: boolean;
   newEvents: Event[];
   eventsTruncated: boolean;
+  rankingNote?: string;
 };
 const fields = [
   ["state", "State", "text"],
@@ -791,6 +801,11 @@ export function SavedHunts() {
                         earlier records were not observed in this run; no sale
                         or disappearance is inferred.
                       </p>
+                      {evaluation.rankingNote ? (
+                        <p className="mt-2 text-[11px] leading-5 text-[#6B7280]">
+                          {evaluation.rankingNote}
+                        </p>
+                      ) : null}
                       <label className="mt-6 flex items-center justify-between gap-3 text-sm font-semibold">
                         Inspect results
                         <select
@@ -820,21 +835,70 @@ export function SavedHunts() {
                                   result.address || result.listingId,
                                 )}
                               </Link>
-                              <span
-                                className={`rounded px-2 py-1 text-[10px] font-semibold ${result.status === "match" ? "bg-emerald-100" : result.status === "unknown" ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-600"}`}
-                              >
-                                {result.status.replaceAll("_", " ")}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {result.status === "match" && result.relevance ? (
+                                  <span
+                                    title={result.relevance.note || "Evidence-backed triage rank for this hunt match."}
+                                    className={`rounded px-2 py-1 text-[10px] font-semibold ${
+                                      result.relevance.band === "high"
+                                        ? "bg-emerald-700 text-white"
+                                        : result.relevance.band === "medium"
+                                          ? "bg-emerald-100 text-emerald-900"
+                                          : "bg-slate-100 text-slate-700"
+                                    }`}
+                                  >
+                                    Rank {result.relevance.rank}/100
+                                  </span>
+                                ) : null}
+                                <span
+                                  className={`rounded px-2 py-1 text-[10px] font-semibold ${result.status === "match" ? "bg-emerald-100" : result.status === "unknown" ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-600"}`}
+                                >
+                                  {result.status.replaceAll("_", " ")}
+                                </span>
+                              </div>
                             </div>
                             <p className="mt-2 text-xs text-[#6B7280]">
                               {sourceDisplayText(result.sourceId)} · Observed{" "}
                               {new Date(result.observedAt).toLocaleString()}
                             </p>
+                            {result.status === "match" && result.relevance ? (
+                              <p className="mt-2 text-[11px] leading-5 text-[#6B7280]">
+                                Triage rank uses criterion closeness, evidence quality
+                                {result.relevance.researchQualityScore != null
+                                  ? ` (${result.relevance.researchQualityScore}/100)`
+                                  : ""}
+                                {result.relevance.urgency
+                                  ? `, sale urgency (${result.relevance.urgency.replaceAll("_", " ")})`
+                                  : ""}
+                                {result.relevance.dealScoreBand
+                                  ? `, and modeled Deal Score band (${result.relevance.dealScoreBand})`
+                                  : ""}
+                                . Not an appraisal or legal verification.
+                              </p>
+                            ) : null}
                             <details className="mt-3">
                               <summary className="cursor-pointer text-xs font-semibold">
                                 Why this result
                               </summary>
                               <div className="mt-3 space-y-3">
+                                {result.relevance?.factors?.length ? (
+                                  <div className="rounded-lg bg-[#F5F6F7] p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+                                      Ranking factors
+                                    </p>
+                                    <ul className="mt-2 space-y-1.5">
+                                      {result.relevance.factors.map((factor) => (
+                                        <li key={factor.factor} className="text-[11px] leading-4 text-[#374151]">
+                                          <span className="font-semibold">{factor.factor.replaceAll("_", " ")}</span>
+                                          {" · "}
+                                          {factor.detail}
+                                          {" "}
+                                          <span className="text-[#6B7280]">({factor.weight})</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : null}
                                 {result.clauseResults.map((clause, index) => (
                                   <div
                                     key={index}

@@ -6,6 +6,7 @@ const { queryFromUrl, matches: matchesDiscoveryQuery } = require('../discovery/q
 const {
   HUNT_ID, MAX_BASELINE_RECORDS, MAX_EVENTS, MAX_HUNTS, loadStore, mutateStore,
 } = require('./hunt-store');
+const { rankHuntMatch, sortHuntResults } = require('./hunt-ranking');
 
 const MAX_NAME_LENGTH = 80;
 const MAX_RULES = 20;
@@ -448,6 +449,9 @@ function evaluateListing(listing, hunt, options = {}) {
     const params = new URLSearchParams(hunt.criteria.discoveryFilters);
     const query = queryFromUrl(new URL(`http://localhost/api/listings?${params}`));
     const status = matchesDiscoveryQuery(observed.listing, query, { now: Date.parse(now) }) ? 'match' : 'no_match';
+    const relevance = status === 'match'
+      ? rankHuntMatch(observed.listing, hunt, [{ status: 'match' }], { now: Date.parse(now) })
+      : null;
     return {
       listingId: observed.listing.id, status, observedAt: new Date(observed.observedAt).toISOString(),
       address: observed.listing.address, sourceId: observed.listing.source, sourceUrl: observed.listing.sourceUrl,
@@ -455,7 +459,9 @@ function evaluateListing(listing, hunt, options = {}) {
       clauseResults: [{ field: 'discoveryFilters', operator: 'matches', expected: hunt.criteria.discoveryFilters,
         actual: status === 'match', status, evidenceClass: 'canonical_discovery_query',
         reason: status === 'match' ? 'The record matches the saved discovery filters.' : 'The record does not match the saved discovery filters.' }],
-      reasons: status === 'match' ? [] : ['The record does not match the saved discovery filters.'], validationErrors: [],
+      reasons: status === 'match' ? [] : ['The record does not match the saved discovery filters.'],
+      validationErrors: [],
+      relevance,
     };
   }
   const clauseResults = hunt.criteria.rules.map((rule) => {
@@ -470,12 +476,16 @@ function evaluateListing(listing, hunt, options = {}) {
     };
   });
   const status = combine(hunt.criteria.mode, clauseResults);
+  const relevance = status === 'match'
+    ? rankHuntMatch(observed.listing, hunt, clauseResults, { now: Date.parse(now) })
+    : null;
   return {
     listingId: observed.listing.id, status, observedAt: new Date(observed.observedAt).toISOString(),
     address: observed.listing.address, sourceId: observed.listing.source, sourceUrl: observed.listing.sourceUrl,
     recordId: String(observed.listing.provenance.recordId), clauseResults,
     reasons: clauseResults.filter((result) => result.status !== 'match').map((result) => result.reason),
     validationErrors: [],
+    relevance,
   };
 }
 
@@ -565,6 +575,7 @@ function evaluateInventory(hunt, listings, options = {}) {
       recordId: evaluated.recordId.slice(0, 300), sourceUrl: evaluated.sourceUrl,
       observedAt: evaluated.observedAt, status: evaluated.status,
       clauseResults: evaluated.clauseResults,
+      relevance: evaluated.relevance || null,
       evaluationHash: sha({ status: evaluated.status, clauseResults: evaluated.clauseResults }),
       valueHash: sha(snapshot), snapshot,
     };
@@ -604,16 +615,18 @@ function evaluateInventory(hunt, listings, options = {}) {
   if (Object.keys(nextRecords).length > baselineLimit) throw new HuntError('HUNT_BASELINE_LIMIT', `Hunt baseline cannot exceed ${MAX_BASELINE_RECORDS} records`);
   const currentStatuses = [...effectiveRecords.values()].map((record) => record.status);
   const eventCounts = Object.fromEntries(['new_match', 'material_change', 'no_longer_matches', 'evaluation_unknown'].map((type) => [type, events.filter((event) => event.type === type).length]));
-  const results = [...effectiveRecords.values()].map((record) => ({
+  const rawResults = [...effectiveRecords.values()].map((record) => ({
     identityKey: record.identityKey, listingId: record.listingId, sourceId: record.sourceId,
     address: record.address,
     sourceUrl: record.sourceUrl, observedAt: record.observedAt, status: record.status,
     clauseResults: record.clauseResults,
+    relevance: record.relevance || null,
     ...(record.observationDisposition ? {
       observationDisposition: record.observationDisposition,
       ignoredObservedAt: record.ignoredObservedAt,
     } : {}),
-  })).concat(invalidResults).slice(0, MAX_RETURNED_RESULTS);
+  })).concat(invalidResults);
+  const results = sortHuntResults(rawResults).slice(0, MAX_RETURNED_RESULTS);
   return {
     baseline: { huntVersion: hunt.version, evaluatedAt, records: nextRecords },
     events: options.suppressEvents ? [] : events,
@@ -633,6 +646,7 @@ function evaluateInventory(hunt, listings, options = {}) {
       resultsTruncated: candidates.size + invalidResults.length > MAX_RETURNED_RESULTS,
       newEvents: options.suppressEvents ? [] : events.slice(0, MAX_RETURNED_EVENTS),
       eventsTruncated: !options.suppressEvents && events.length > MAX_RETURNED_EVENTS,
+      rankingNote: 'Match results are ordered by evidence-backed triage rank (criterion closeness, research quality, sale urgency, modeled deal-score band). Rank is not an appraisal or legal verification.',
       interpretation: baselineCreated
         ? 'Initial evaluation established a comparison baseline and emitted no lifecycle events.'
         : 'Events compare newer observations for the same exact publisher record. Missing inventory never implies a sale or resolution.',

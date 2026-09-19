@@ -26,17 +26,28 @@ dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)))
 - Clamping to `1–99` prevents division anomalies and NaN.
 - Score is a **triage indicator** of opening price spread, not an appraisal.
 
-## SCORE_BANDS (single source of truth)
+## SCORE_BANDS (presentation taxonomy)
 
 | Range | Label | Color | Alpha |
 |---|---|---|---|
-| 1–34 | Thin | `#dc2626` (red) | 0.12 |
-| 35–54 | Fair | `#f59e0b` (amber) | 0.14 |
-| 55–69 | Strong | `#16a34a` (green) | 0.15 |
-| 70–99 | Elite | `#059669` (dark green) | 0.18 |
+| 70–99 | Elite | `#059669` (dark green) | 0x18 |
+| 55–69 | Strong | `#16a34a` (green) | 0x15 |
+| 35–54 | Fair | `#d97706` (amber) | 0x14 |
+| 1–34 | Thin | `#dc2626` (red) | 0x12 |
 
-`SCORE_BANDS` in `app.js:96-103` is the **only** source of truth for colors, labels,
-and alpha transparency. Never hardcode band values elsewhere.
+Canonical band objects live in:
+
+- `server/intelligence/score-bands.js` (API / hunt ranking)
+- `src/lib/score-bands.ts` (Next.js terminal cards + score distribution)
+- `.agents/skills/deal-scoring/SKILL.md` (this doc)
+
+`app.js` remains the v0 PWA help-modal bands (legacy Strong/Moderate/Thin split).
+The formula and worked example (77) are unchanged. Never hardcode band labels in
+new components — import `bandForScore` / `SCORE_BANDS` instead.
+
+Hunt match **triage rank** (`server/intelligence/hunt-ranking.js`) uses these bands
+as one factor among evidence quality, criterion closeness, and sale urgency. Rank
+is presentation-only and is never the same metric as `dealScore` or `triagePriority`.
 
 ## Worked Example (Columbus OH)
 
