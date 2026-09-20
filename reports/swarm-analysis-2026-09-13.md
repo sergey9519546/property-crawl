@@ -25,7 +25,7 @@ subsystem. CONTEXT.md is already stale relative to package.json.
 
 ### 1. Rotate and remove the hardcoded API key
 - `server/intelligence/zillow-mcp.js:23` and `server/intelligence/property-title.js:6`
-  both contain `const DEFAULT_API_KEY = 'cmjgtcjea0001jr04c5ckyyk0';`
+  both previously contained `const DEFAULT_API_KEY = '<REDACTED-api.market-key>';`
 - Rotate the key on api.market immediately. Delete the default; throw if the
   env var is unset.
 

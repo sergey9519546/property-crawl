@@ -19,9 +19,11 @@ function presentedRunToken(req) {
 
 function tokensMatch(presented, expected) {
   if (!presented || !expected) return false;
-  const left = Buffer.from(String(presented));
-  const right = Buffer.from(String(expected));
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
+  // Hash both sides so length differences cannot early-return before
+  // timingSafeEqual (same approach as workspace-session.ts).
+  const left = crypto.createHash('sha256').update(String(presented)).digest();
+  const right = crypto.createHash('sha256').update(String(expected)).digest();
+  return crypto.timingSafeEqual(left, right);
 }
 
 async function handleScrapers(req, res) {

@@ -374,9 +374,13 @@ export function DealDiscoveryMap() {
           element.style.setProperty("--marker-delay", `${index * 60}ms`);
           element.innerHTML = `
             <span aria-hidden="true" class="opportunity-map-marker__halo"></span>
-            <span aria-hidden="true" class="opportunity-map-marker__pin">${deal.score}</span>
-            <span aria-hidden="true" class="opportunity-map-marker__label">${deal.area}</span>
+            <span aria-hidden="true" class="opportunity-map-marker__pin"></span>
+            <span aria-hidden="true" class="opportunity-map-marker__label"></span>
           `;
+          const pin = element.querySelector(".opportunity-map-marker__pin");
+          const areaLabel = element.querySelector(".opportunity-map-marker__label");
+          if (pin) pin.textContent = String(deal.score ?? "");
+          if (areaLabel) areaLabel.textContent = String(deal.area ?? "");
           element.addEventListener("click", (event) => {
             event.stopPropagation();
             selectDealRef.current(index, true);

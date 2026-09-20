@@ -13,7 +13,6 @@ import {
 
 interface EnrichmentViewProps {
   parcelKey: string | null | undefined;
-  operatorToken?: string;
   fetchImpl?: typeof fetch;
   showRefreshButton?: boolean;
 }
@@ -31,7 +30,7 @@ function describeOutcome(outcome: EnrichmentAdapterOutcome): string {
   return outcome.error ? `failed (${outcome.error.slice(0, 80)})` : 'failed';
 }
 
-export function EnrichmentView({ parcelKey, operatorToken, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
+export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +44,8 @@ export function EnrichmentView({ parcelKey, operatorToken, fetchImpl, showRefres
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchEnrichmentByParcelKey(parcelKey as string, { fetchImpl, operatorToken });
+      // Session cookie only — never pass operator tokens from client components.
+      const result = await fetchEnrichmentByParcelKey(parcelKey as string, { fetchImpl });
       setView(result);
     } catch (err) {
       setError((err as Error).message);
@@ -53,7 +53,7 @@ export function EnrichmentView({ parcelKey, operatorToken, fetchImpl, showRefres
     } finally {
       setLoading(false);
     }
-  }, [parcelKey, fetchImpl, operatorToken, isValidKey]);
+  }, [parcelKey, fetchImpl, isValidKey]);
 
   useEffect(() => {
     void load();
@@ -65,7 +65,7 @@ export function EnrichmentView({ parcelKey, operatorToken, fetchImpl, showRefres
     setRefreshStatus(null);
     setError(null);
     try {
-      const refreshed = await refreshEnrichmentByParcelKey(parcelKey as string, { fetchImpl, operatorToken });
+      const refreshed = await refreshEnrichmentByParcelKey(parcelKey as string, { fetchImpl });
       setView(refreshed.view);
       const counts = refreshed.adapterOutcomes.reduce<Record<string, number>>((acc, outcome) => {
         acc[outcome.outcome] = (acc[outcome.outcome] || 0) + 1;
@@ -79,7 +79,7 @@ export function EnrichmentView({ parcelKey, operatorToken, fetchImpl, showRefres
     } finally {
       setRefreshing(false);
     }
-  }, [parcelKey, fetchImpl, operatorToken, isValidKey]);
+  }, [parcelKey, fetchImpl, isValidKey]);
 
   if (!isValidKey) {
     return (

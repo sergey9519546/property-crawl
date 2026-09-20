@@ -60,7 +60,16 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         try { observations = await readHistory(); } catch (_) { historyUnavailable = true; }
       }
       const { observations: _observations, ...extensions } = stored || {};
-      return res.json({ ...buildPropertyDossier(listing, { observations, publicRecords: evidence?.result || null }), ...extensions, historyUnavailable });
+      // Anonymous GET must never leak operator-funded research, durable
+      // evidence extensions, or public-record lookup results.
+      const authorized = requireWorkspaceIdentity.isAuthorized
+        ? requireWorkspaceIdentity.isAuthorized(req, env)
+        : Boolean(snapshotId || req.method === 'POST');
+      const publicPayload = buildPropertyDossier(listing, { observations: authorized ? observations : { records: {}, signals: [] }, publicRecords: authorized ? (evidence?.result || null) : null });
+      if (!authorized) {
+        return res.json({ ...publicPayload, historyUnavailable, researchRestricted: true });
+      }
+      return res.json({ ...publicPayload, ...extensions, historyUnavailable });
     } catch (error) {
       console.error('[Property Intelligence]', error.message);
       return res.status(503).json({ error: 'Property research is temporarily unavailable. Stored listing evidence was preserved.' });

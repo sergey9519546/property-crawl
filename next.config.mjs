@@ -39,7 +39,9 @@ const nextConfig = {
       { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
-      { key: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https: data:; connect-src 'self' https:; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'" },
+      // style-src must allow Google Fonts CSS hosts used by src/app/layout.tsx.
+      // script-src still needs 'unsafe-inline' for Next bootstrap (tracked residual).
+      { key: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https: data:; connect-src 'self' https:; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'" },
     ];
     if (process.env.NODE_ENV === 'production') {
       security.push({ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' });

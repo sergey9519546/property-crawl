@@ -34,8 +34,32 @@ function impersonationEnabled(sourceKey, env = process.env) {
 /**
  * Optional Scrapling HTTP impersonated fetch (tier 1).
  * Requires scrapling[fetchers] installed; refuses without runtime.
+ * SSRF: same credential-free HTTPS + private/loopback rejection as scrapling-bridge.
  */
 async function scraplingHttpGet(url, { timeoutMs = 8000 } = {}) {
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_INVALID_URL' };
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_INVALID_URL' };
+  }
+  try {
+    const { isPrivateOrLocalHost } = require('./scrapling-bridge');
+    if (typeof isPrivateOrLocalHost === 'function' && isPrivateOrLocalHost(parsed.hostname)) {
+      return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_INVALID_URL' };
+    }
+  } catch (_) { /* bridge export optional; fall through to local check */ }
+  // Local SSRF guard even if the bridge helper is unavailable.
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const isPrivate = host === 'localhost' || host.endsWith('.localhost')
+    || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)
+    || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    || host === '0.0.0.0' || host === '::1' || host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')
+    || host === '169.254.169.254' || host.endsWith('.internal');
+  if (isPrivate) {
+    return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_INVALID_URL' };
+  }
   const python = pythonRuntime();
   if (!python) {
     return { ok: false, tier: 'scrapling-http', error: 'SCRAPLING_RUNTIME_MISSING' };
@@ -100,8 +124,13 @@ async function waterfallFetch({ url, sourceKey, nativeFetch, timeoutMs = 8000, e
   if (typeof nativeFetch === 'function') {
     try {
       const html = await nativeFetch(url);
-      attempts.push({ tier: 'native', ok: true, bytes: String(html || '').length });
-      return { ok: true, tier: 'native', html, attempts, sourceKey, url };
+      const text = html == null ? '' : String(html);
+      if (text.trim()) {
+        attempts.push({ tier: 'native', ok: true, bytes: text.length });
+        return { ok: true, tier: 'native', html, attempts, sourceKey, url };
+      }
+      // Empty/null body is not success — continue the waterfall fail-closed.
+      attempts.push({ tier: 'native', ok: false, error: 'empty_body' });
     } catch (error) {
       attempts.push({ tier: 'native', ok: false, error: String(error?.message || error).slice(0, 200) });
     }

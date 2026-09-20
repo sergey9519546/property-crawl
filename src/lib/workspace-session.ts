@@ -81,15 +81,46 @@ export function readWorkspaceSession(request: Request, now = Date.now(), env: No
   return { authenticated: true, expiresAt: new Date(expiresAtMs).toISOString() };
 }
 
+function normalizeLoopbackHost(hostname: string) {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "127.0.0.1" || host === "::1" || host === "0:0:0:0:0:0:0:1" || host === "0.0.0.0" || host === "[::]") {
+    return "localhost";
+  }
+  return host;
+}
+
+function sameBrowserOrigin(origin: string, requestUrl: string) {
+  try {
+    const a = new URL(origin);
+    const b = new URL(requestUrl);
+    if (normalizeLoopbackHost(a.hostname) !== normalizeLoopbackHost(b.hostname)) return false;
+    const portA = a.port || (a.protocol === "https:" ? "443" : "80");
+    const portB = b.port || (b.protocol === "https:" ? "443" : "80");
+    return portA === portB && a.protocol === b.protocol;
+  } catch {
+    return false;
+  }
+}
+
+function trustedProxyEnabled(env: NodeJS.ProcessEnv = process.env) {
+  const n = Number(env.TRUSTED_PROXY_COUNT || "0");
+  return Number.isFinite(n) && n > 0;
+}
+
 export function workspaceMutationAllowed(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") return false;
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) {
+    return request.headers.get("x-workspace-request") === "1";
+  }
+  if (sameBrowserOrigin(origin, request.url)) return true;
+  const publicApp = String(process.env.PUBLIC_APP_ORIGIN || "").trim();
+  if (publicApp && (origin === publicApp || sameBrowserOrigin(origin, publicApp))) return true;
+  // Forwarded Host/Proto are client-influenced unless a reverse proxy is
+  // explicitly trusted. Never mint same-origin from untrusted XFH.
+  if (!trustedProxyEnabled(process.env)) return false;
   try {
     const requestOrigin = new URL(request.url).origin;
-    if (origin === requestOrigin) return true;
-    // Behind Docker port maps / reverse proxies the process may see an
-    // internal host while the browser sends the public Origin.
     const forwardedHost =
       request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
       request.headers.get("host")?.split(",")[0]?.trim();
@@ -98,7 +129,7 @@ export function workspaceMutationAllowed(request: Request) {
       (requestOrigin.startsWith("https:") ? "https" : "http");
     if (forwardedHost) {
       const publicOrigin = `${forwardedProto}://${forwardedHost}`;
-      if (origin === publicOrigin) return true;
+      if (origin === publicOrigin || sameBrowserOrigin(origin, publicOrigin)) return true;
     }
     return false;
   } catch {

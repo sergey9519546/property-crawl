@@ -2,7 +2,21 @@ const assert = require('assert');
 const SecuritySanitizer = require('../server/security/sanitizer');
 const Validator = require('../server/security/validation');
 const { CostTracker, CostRecord } = require('../server/ai/cost_tracker');
-const db = require('../server/db/client');
+// Hardening fixtures are intentionally incomplete listings. Load the db
+// client without DATABASE_URL so quality-gate/CI Postgres env cannot force
+// NOT NULL constraint failures on H-TEST fixtures.
+const savedDbUrl = process.env.DATABASE_URL;
+const savedDiscovery = process.env.DISCOVERY_MODE;
+delete process.env.DATABASE_URL;
+delete process.env.DISCOVERY_MODE;
+const { DatabaseClient } = require('../server/db/client');
+const db = new DatabaseClient({
+  env: { ...process.env, NODE_ENV: 'test', DATABASE_URL: undefined, DISCOVERY_MODE: undefined },
+  liveCachePath: null,
+  workspaceStorePath: null,
+});
+if (savedDbUrl !== undefined) process.env.DATABASE_URL = savedDbUrl;
+if (savedDiscovery !== undefined) process.env.DISCOVERY_MODE = savedDiscovery;
 
 console.log('=== PHASE 4: HOSTILE HARDENING TEST PASS ===');
 

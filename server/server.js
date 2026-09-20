@@ -51,14 +51,11 @@ function configuredCorsOrigins(env = process.env) {
 function isCorsOriginAllowed(origin, req, env = process.env) {
   if (!origin) return true;
   const allowed = configuredCorsOrigins(env);
-  try {
-    const host = req.headers.host || 'localhost';
-    const httpOrigin = `http://${host}`;
-    const httpsOrigin = `https://${host}`;
-    return origin === httpOrigin || origin === httpsOrigin || allowed.has(origin);
-  } catch (_) {
-    return false;
-  }
+  // PUBLIC_APP_ORIGIN is the explicit public UI origin. Never derive the
+  // allowlist from the request Host header (client-influenced / rebinding).
+  const publicApp = String(env.PUBLIC_APP_ORIGIN || '').trim();
+  if (publicApp) allowed.add(publicApp);
+  return allowed.has(origin);
 }
 
 function parseJsonBody(req) {
@@ -204,10 +201,15 @@ async function handleRequest(req, res) {
       return savedSearchesHandlers.handleAlertMatches(req, res, url);
     }
     if (url.pathname === '/api/health') {
+      const { defaultStorePath } = require('./intelligence/document-review-store');
       return res.json({
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
+        // Honest runtime mode for operators/UI banners — never invent PG.
+        dataMode: db.pool ? 'postgres' : 'demo',
+        documentReviewStore: db.pool ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
+        documentReviewStorePath: db.pool ? null : (defaultStorePath(process.env) || null),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),
       });
     }

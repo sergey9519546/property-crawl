@@ -148,8 +148,9 @@ export function Gtm() {
                   </p>
                   <p
                     className="mt-4 text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]"
-                    dangerouslySetInnerHTML={{ __html: team.desc }}
-                  />
+                  >
+                    {team.desc}
+                  </p>
                   <div className="mt-6 flex flex-wrap gap-2">
                     {team.chips.map((c) => (
                       <span

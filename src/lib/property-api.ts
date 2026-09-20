@@ -1,7 +1,7 @@
 // Server-only transport to the canonical Node API. Never consult a second
 // in-memory snapshot for mutations or listing-backed enrichment.
 const MAX_BYTES = 2 * 1024 * 1024;
-const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-image(?:\/providers)?|property-intelligence|property-signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|onboarding|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?|alerts\/matches|saved-searches(?:\/[^/]+)?|enrichment(?:\/[A-Za-z0-9._:-]+(?:\/refresh)?)?|document-review(?:\/[^/]+)?|neighborhoods(?:\/[^/]+)?|auction-calendar|watchlist\/[^/]+\/comps)$/;
+const API_PATH = /^\/api\/(?:listings(?:\/[^/]+)?|enrich|export|verify-docket|parcel-boundary|property-image(?:\/providers)?|property-intelligence|property-signals|hunts(?:\/[A-Za-z0-9_-]+(?:\/(?:evaluate|events))?)?|parse|health(?:\/ready)?|sources|source-network(?:\/(?:intake|review|run|onboarding|unbrowse(?:\/(?:status|intake))?|jobs(?:\/job_[a-f0-9]{24})?))?|workspace(?:\/[A-Za-z0-9_-]+)*|scrapers(?:\/(?:health|run))?|alerts(?:\/[^/]+)?|alerts\/matches|saved-searches(?:\/[^/]+)?|enrichment(?:\/[A-Za-z0-9._:-]+(?:\/refresh)?)?|document-review(?:\/[^/]+)?|neighborhoods(?:\/[^/]+)?|auction-calendar|watchlist\/[^/]+\/comps)$/;
 
 function jsonError(status: number, message: string) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
@@ -27,6 +27,27 @@ async function boundedBody(stream: ReadableStream<Uint8Array> | null, maxBytes: 
   return body;
 }
 
+function normalizeLoopbackHost(hostname: string) {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (host === "127.0.0.1" || host === "::1" || host === "0:0:0:0:0:0:0:1" || host === "0.0.0.0" || host === "[::]") {
+    return "localhost";
+  }
+  return host;
+}
+
+function sameBrowserOrigin(origin: string, requestUrl: string) {
+  try {
+    const a = new URL(origin);
+    const b = new URL(requestUrl);
+    if (normalizeLoopbackHost(a.hostname) !== normalizeLoopbackHost(b.hostname)) return false;
+    const portA = a.port || (a.protocol === "https:" ? "443" : "80");
+    const portB = b.port || (b.protocol === "https:" ? "443" : "80");
+    return portA === portB && a.protocol === b.protocol;
+  } catch {
+    return false;
+  }
+}
+
 export async function proxyPropertyApi(request: Request, dependencies: {
   fetchImpl?: typeof fetch; apiUrl?: string; operatorToken?: string;
 } = {}) {
@@ -34,14 +55,19 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   if (!API_PATH.test(url.pathname)) return jsonError(404, "Unknown API route");
   if (request.url.length > 8192) return jsonError(414, "Request URL too long");
   const origin = request.headers.get("origin");
-  const configuredOrigins = String(process.env.CORS_ALLOWED_ORIGINS || "").split(",").map((value) => value.trim());
-  if (origin && origin !== url.origin && !configuredOrigins.includes(origin)) return jsonError(403, "Cross-origin request denied");
+  const configuredOrigins = String(process.env.CORS_ALLOWED_ORIGINS || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (process.env.PUBLIC_APP_ORIGIN) configuredOrigins.push(String(process.env.PUBLIC_APP_ORIGIN).trim());
+  if (origin && !sameBrowserOrigin(origin, request.url) && !configuredOrigins.includes(origin)) {
+    return jsonError(403, "Cross-origin request denied");
+  }
   if (request.headers.get("sec-fetch-site") === "cross-site" && !origin) return jsonError(403, "Cross-origin request denied");
   const headers = new Headers({ Accept: "application/json" });
   for (const name of ["content-type"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  // Same-origin mutation marker for API-side CSRF checks when Origin is stripped.
+  headers.set("x-workspace-request", "1");
   if (dependencies.operatorToken) headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
   else {
     const authorization = request.headers.get("authorization");

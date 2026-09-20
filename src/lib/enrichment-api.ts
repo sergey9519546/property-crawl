@@ -87,8 +87,9 @@ async function callApi(path: string, init: RequestInit, options: ApiOptions = {}
   if (!headers.has('content-type') && init.body && typeof init.body === 'string') {
     headers.set('content-type', 'application/json');
   }
-  if (options.operatorToken) headers.set('authorization', `Bearer ${options.operatorToken}`);
-  return fetchImpl(path, { ...init, headers, signal: options.signal });
+  // Never attach operator bearer tokens from browser/client code. Session
+  // cookie + Next private proxy inject credentials server-side.
+  return fetchImpl(path, { ...init, headers, signal: options.signal, credentials: options.fetchImpl ? undefined : 'same-origin' });
 }
 
 export async function fetchEnrichmentAdapters(options: ApiOptions = {}): Promise<EnrichmentAdaptersResponse> {
