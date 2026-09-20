@@ -253,7 +253,8 @@
 - **HUD catalog:** `hud-homestore` status **SCOPE_LIMITED**; UI coverage preset “OH, NJ promoted run scope — not nationwide”.
 - **E2E default pins demo** (`delete DATABASE_URL`); `npm run test:production-e2e:db` opts into PG path.
 - **Explore-5 closure (2026-09-20):** schema mirror synced; quality-gate `forms+boot` includes queue-ui/hardening/source-catalog; isolated `db-contract` suite strips ambient DATABASE_URL; inventory tests cover template-literal prefixes; e2e default **demo-pinned** (25/25) + `--with-db` PG path; HUD catalog SCOPE_LIMITED; CSP fonts allowed; hardening fixtures isolated from live PG.
-- **Still open:** Next script-src unsafe-inline; operator secrets/webhooks/URL/Maps key; more wave-source canaries; live PG db.test timestamp/bidSpread projection quirks (optional when DATABASE_URL set).
+- **Ultraplan execution (2026-09-20 begin):** Phase 0 commits f94e113/300bdb7/d29e1de/ac804e6; Phase 1 CI 814611e (schema:check, demo-pin e2e, optional PG job). Phase 3: **servicelink promoted** after 2 CLEAN canaries (maxPages=100); fixed sweepStartedAt bug. Phase 2: CSP nonce blocked on static pages per Next 16 docs — residual documented.
+- **Still open:** Next script-src unsafe-inline; gsa/irs/wave2 canaries; operator secrets/volume/Maps key; optional live-PG db.test quirks.
 - **HUD promotion (2026-09-20):** `hud` **promoted** after 2 clean canaries at declared scope `HUD_STATES=OH,NJ`, `HUD_MAX_PAGES_PER_STATE=20`, `HUD_PAGE_SIZE=50`. Scope hash `da1ae8f3080f…`. maxPages=2 first attempt was NOT_CLEAN (gate held). Report: `reports/canary-promotion-hud-2026-09-20.md`. Nationwide 52-state HUD remains unpromoted.
 
 ## Ultraplan (2026-09-20)
