@@ -1,6 +1,15 @@
 # Koyeb Eco ($0) — Property-Crawl production container
 # Connect GitHub repo → Dockerfile.production → Eco instance.
 # Health is liveness /api/health (works without PostgreSQL).
+#
+# Operator surfaces require a Koyeb secret (do not commit the value):
+#   SCRAPER_ADMIN_TOKEN  (or PROPERTY_OPERATOR_SECRET alias)
+# Without it, unlock/document-review/hunts fail closed with 503 — public
+# listings remain available.
+#
+# Durable local cache (document reviews, live overlays, form leads) needs a
+# Koyeb persistent disk mounted at /app/.cache in the dashboard. Without a
+# disk, reviews/forms are lost on redeploy/scale-to-zero.
 name: property-crawl
 docker:
   dockerfile: Dockerfile.production
@@ -22,3 +31,11 @@ env:
     value: "3000"
   - key: SCRAPER_BACKGROUND_ENABLED
     value: "0"
+  - key: PROPERTY_LIVE_CACHE_PATH
+    value: /app/.cache/live-listings.json
+  - key: PROPERTY_DOCUMENT_REVIEW_STORE_PATH
+    value: /app/.cache/document-review-store.json
+  # Set as Koyeb secrets in the dashboard / CLI — never commit values:
+  # - SCRAPER_ADMIN_TOKEN
+  # - PROPERTY_OPERATOR_SECRET (alias; optional)
+

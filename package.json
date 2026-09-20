@@ -99,7 +99,10 @@
     "discovery:local": "node scripts/local-discovery.js",
     "civilview:counties": "node scripts/civilview-counties.js",
     "nationwide:coverage": "node scripts/nationwide-coverage.js",
-    "e2e:workflow": "node scripts/e2e-user-workflow.js"
+    "e2e:workflow": "node scripts/e2e-user-workflow.js",
+    "test:production-e2e": "node scripts/run-production-e2e.js",
+    "test:production-e2e:db": "node scripts/run-production-e2e.js --with-db",
+    "test:document-review-ui": "node --test test/document-review-queue-ui.test.js test/source-network-approval-ui.test.js"
   },
   "keywords": [
     "real-estate",

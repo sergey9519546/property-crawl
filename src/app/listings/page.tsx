@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Metadata } from "next";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { DiscoveryWorkbench } from "@/components/listings/discovery-workbench";
+import { DataModeBanner } from "@/components/site/data-mode-banner";
 
 export const metadata: Metadata = {
   title: "Distressed Property Evidence Feed | PerfectProperty",
@@ -17,6 +18,7 @@ export default function ListingsDirectoryPage() {
   return (
     <WorkspaceShell>
     <main className="relative min-h-screen max-w-full overflow-x-hidden bg-[#F5F6F7] text-[#111827]">
+      <DataModeBanner />
       <Suspense fallback={<div className="grid min-h-[60vh] place-items-center text-sm text-slate-500">Loading discovery…</div>}>
         <DiscoveryWorkbench />
       </Suspense>

@@ -23,12 +23,13 @@ services:
     volumes:
       - ./:/app
       - node_modules:/app/node_modules
-    # No DATABASE_URL → server/db/client.js falls back to the in-memory
-    # provider seeded from data.js. PORT is the in-container listen port.
+    # Optional env file — Compose must not require .env.local (gitignored).
+    # Node --env-file-if-exists also tolerates a missing file. Process env
+    # still wins over file values.
     environment:
       - NODE_ENV=development
       - PORT=3000
-    command: node server/server.js
+    command: node --env-file-if-exists=.env.local server/server.js
     restart: unless-stopped
 
   web:

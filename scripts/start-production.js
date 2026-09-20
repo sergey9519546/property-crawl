@@ -1,18 +1,26 @@
 'use strict';
 
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
+const { loadLocalEnvFiles, resolveInternalApiPort } = require('./production-env');
 
 const root = path.resolve(__dirname, '..');
 const nextBin = path.join(root, 'node_modules', 'next', 'dist', 'bin', 'next');
 
+// Next.js loads .env.local itself; the plain Node listing API does not.
+// process.env always wins so cloud secret injection is never clobbered.
+const bootEnv = loadLocalEnvFiles(process.env);
+
 // Public port exposed by the cloud provider (Render, Koyeb, Hugging Face, etc.)
-const publicPort = Number(process.env.PORT) || 3000;
+const publicPort = Number(bootEnv.PORT) || 3000;
 
-// Internal port for the backend listing API (must not collide with publicPort)
-const internalApiPort = Number(process.env.INTERNAL_API_PORT) || (publicPort === 3000 ? 3002 : 3000);
+// Internal port for the backend listing API (must not collide with publicPort
+// or with other local stacks). Cloud PORT=3000 keeps historical 3002; any
+// other public port uses publicPort+2 (3700 → 3702).
+const internalApiPort = resolveInternalApiPort(publicPort, bootEnv.INTERNAL_API_PORT);
 
-const hasDatabase = Boolean(process.env.DATABASE_URL);
+const hasDatabase = Boolean(bootEnv.DATABASE_URL);
 const children = [];
 let closing = false;
 
@@ -102,11 +110,20 @@ async function boot() {
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
   const apiEnv = {
-    ...process.env,
+    ...bootEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
   };
-  start('Backend Listing API', process.execPath, ['server/server.js'], apiEnv);
+  // --env-file-if-exists matches start:api / dev:api so the Node API sees
+  // operator credentials even if this orchestrator is launched without them.
+  // Only .env.local is passed here: Node warns on every missing --env-file
+  // path, and production images legitimately have no .env.
+  start(
+    'Backend Listing API',
+    process.execPath,
+    ['--env-file-if-exists=.env.local', 'server/server.js'],
+    apiEnv
+  );
 
   console.log(`[Production] Awaiting Backend Listing API on 127.0.0.1:${internalApiPort}...`);
   const apiReady = await awaitBackendReady();
@@ -116,11 +133,20 @@ async function boot() {
   }
 
   const nextEnv = {
-    ...process.env,
+    ...bootEnv,
     PORT: String(publicPort),
     PROPERTY_API_URL: `http://127.0.0.1:${internalApiPort}`,
     NODE_ENV: 'production',
   };
+
+  // next start serves .next — refuse to boot a stale/missing production build.
+  const nextDir = path.join(root, process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview' : '.next');
+  const buildId = path.join(nextDir, 'BUILD_ID');
+  if (!fs.existsSync(buildId)) {
+    console.error(`[Production] Missing Next production build at ${nextDir}. Run: npm run build`);
+    shutdown(1);
+    return;
+  }
 
   start(
     'Next.js Canonical UI',

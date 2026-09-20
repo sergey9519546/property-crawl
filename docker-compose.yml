@@ -7,6 +7,15 @@ services:
       - PORT=3000
       - DATABASE_URL=postgres://postgres:postgres@db:5432/property_crawl
       - NODE_ENV=production
+      # Operator features fail closed unless this is set on the host.
+      # - SCRAPER_ADMIN_TOKEN=
+      # Durable local cache (reviews, live overlays, form leads).
+      - PROPERTY_LIVE_CACHE_PATH=/app/.cache/live-listings.json
+      - PROPERTY_DOCUMENT_REVIEW_STORE_PATH=/app/.cache/document-review-store.json
+    volumes:
+      # Persist operator state across container recreate. Without this volume,
+      # document reviews / live overlays / form submissions are wiped on redeploy.
+      - appcache:/app/.cache
     depends_on:
       db:
         condition: service_healthy
@@ -34,3 +43,4 @@ services:
 
 volumes:
   pgdata:
+  appcache:

@@ -263,13 +263,13 @@ type CoveragePreset = {
 
 const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
   hud: {
-    countyCount: 52,
-    countyLabel: "52 jurisdictions",
+    countyCount: 2,
+    countyLabel: "OH, NJ promoted run scope — not nationwide",
     dimensions: { foreclosure: true, documentImages: true },
   },
   "hud-homestore": {
-    countyCount: 52,
-    countyLabel: "52 jurisdictions",
+    countyCount: 2,
+    countyLabel: "OH, NJ promoted run scope — not nationwide",
     dimensions: { foreclosure: true, documentImages: true },
   },
   servicelink: {
@@ -411,11 +411,19 @@ function releaseGateMessage(source: Source) {
 }
 
 function sourceStatus(source: Source) {
+  const gate = source.releaseGate;
   const gateMessage = releaseGateMessage(source);
   if (gateMessage) {
     return {
       label: source.releaseGate?.scopeMatchesLatest === false ? "Approval blocked" : "Approval pending",
       color: "bg-amber-100 text-amber-900",
+    };
+  }
+  // Approved collection gate is stronger than publisher catalog status alone.
+  if (gate && gate.approved === true) {
+    return {
+      label: "Collection approved",
+      color: "bg-emerald-100 text-emerald-900",
     };
   }
   return STATUS[source.discoveryStatus || source.status] || {
@@ -425,8 +433,18 @@ function sourceStatus(source: Source) {
 }
 
 function collectionProblem(source: Source) {
+  const gate = source.releaseGate;
   const gateMessage = releaseGateMessage(source);
   if (gateMessage) return gateMessage;
+  if (gate && gate.approved === true) {
+    const scope = formatSourceScopeSummary(
+      source.coverage && typeof source.coverage === "object" && !Array.isArray(source.coverage)
+        ? source.coverage.acquisitionScope ?? source.coverage.scope
+        : null
+    );
+    const hint = scope && scope !== "unknown" ? ` (${scope})` : "";
+    return `Recurring collection approved${hint}. Promoted collection scope may be narrower than publisher catalog coverage — do not treat this as nationwide inventory.`;
+  }
   const status = source.discoveryStatus || source.status;
   const coverageError = source.coverage && typeof source.coverage === "object" && !Array.isArray(source.coverage)
     && typeof source.coverage.error === "string"

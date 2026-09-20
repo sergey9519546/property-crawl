@@ -18,7 +18,8 @@ const SUITES = [
   { id: 'scrapers', cmd: [process.execPath, ['test/scrapers.test.js']], envRequired: false },
   { id: 'scrapling+upgrade', cmd: [process.execPath, ['--test', 'test/scrapling-bridge.test.js', 'test/scraper-upgrade.test.js']], envRequired: false },
   { id: 'canary+power', cmd: [process.execPath, ['--test', 'test/canary-live.test.js', 'test/scraper-power-report.test.js', 'test/promotion-gate-contract.test.js']], envRequired: false },
-  { id: 'forms+boot', cmd: [process.execPath, ['--test', 'test/form-submissions.test.js', 'test/production-boot.test.js', 'test/production-proxy-timeout.test.js']], envRequired: false },
+  { id: 'forms+boot', cmd: [process.execPath, ['--test', 'test/form-submissions.test.js', 'test/production-boot.test.js', 'test/production-env.test.js', 'test/production-proxy-timeout.test.js', 'test/property-api-proxy-inventory.test.js', 'test/document-review-persistence.test.js', 'test/document-review-route.test.js', 'test/document-review-transitions.test.js', 'test/document-review-persist-failure.test.js', 'test/document-review-store-lock.test.js', 'test/document-review-pg-store.test.js', 'test/document-review-queue-ui.test.js', 'test/source-network-approval-ui.test.js', 'test/property-intelligence-auth.test.js', 'test/fetch-strategy-ssrf.test.js', 'test/cors-policy.test.js', 'test/workspace-mutation-gate.test.js', 'test/hardening.test.js', 'test/source-catalog.test.js']], envRequired: false },
+  { id: 'db-contract', cmd: [process.execPath, ['--test', 'test/db.test.js']], envRequired: false },
   { id: 'sources', cmd: [process.execPath, ['--test', 'test/source-catalog.test.js', 'test/source-intake.test.js', 'test/source-intake-aliases.test.js', 'test/source-network.test.js', 'test/source-network-http.test.js', 'test/source-observations.test.js', 'test/source-collector-coverage.test.js', 'test/live-cache-refresh.test.js', 'test/federal-register-source.test.js', 'test/servicelink.test.js', 'test/listing-identifiers.test.js', 'test/email-ingest.test.js']], envRequired: false },
   { id: 'email-ingest', cmd: [process.execPath, ['--test', 'test/email-ingest.test.js']], envRequired: false },
   { id: 'swarm', cmd: [process.execPath, ['--test', 'test/swarm.test.js', 'test/swarm-executor.test.js']], envRequired: false },
@@ -29,11 +30,18 @@ const SUITES = [
 function runSuite(suite) {
   const [cmd, args] = suite.cmd;
   const started = Date.now();
+  const env = { ...process.env };
+  // db-contract suite uses an isolated in-memory DatabaseClient for fixtures;
+  // strip ambient Postgres URLs so CI quality-gate cannot force live PG inserts.
+  if (suite.id === 'db-contract') {
+    delete env.DATABASE_URL;
+    delete env.DISCOVERY_MODE;
+  }
   try {
     execFileSync(cmd, args, {
       cwd: ROOT,
       stdio: 'pipe',
-      env: process.env,
+      env,
       timeout: 180000,
     });
     return { id: suite.id, status: 'pass', durationMs: Date.now() - started, envRequired: suite.envRequired };

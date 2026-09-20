@@ -63,6 +63,27 @@ async function main() {
     'demo mode announced when DATABASE_URL unset'
   ));
   findings.push(check(
+    'production-boot-loads-local-env',
+    /loadLocalEnvFiles/.test(startProd) && /--env-file-if-exists=\.env\.local/.test(startProd),
+    'API child process loads .env.local (operator token parity with Next)'
+  ));
+  findings.push(check(
+    'document-review-durable-store',
+    fs.existsSync(path.join(ROOT, 'server/intelligence/document-review-store.js'))
+      && /createDocumentReviewStore/.test(fs.readFileSync(path.join(ROOT, 'server/routes/document-review.js'), 'utf8'))
+      && /unbrowse/.test(fs.readFileSync(path.join(ROOT, 'src/lib/property-api.ts'), 'utf8'))
+      && /document_reviews/.test(fs.readFileSync(path.join(ROOT, 'server/db/schema.sql'), 'utf8'))
+      && /schema\.sql/.test(fs.readFileSync(path.join(ROOT, 'Dockerfile.production'), 'utf8')),
+    'document-review store + PG schema + Docker schema copy present'
+  ));
+  findings.push(check(
+    'production-e2e-gate-present',
+    fs.existsSync(path.join(ROOT, 'scripts/run-production-e2e.js'))
+      && Boolean(pkg.scripts && pkg.scripts['test:production-e2e'])
+      && /run-production-e2e\.js/.test(fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')),
+    'production boot + e2e is wired into package scripts and CI unit-gate'
+  ));
+  findings.push(check(
     'production-boot-advanced-fallback',
     /Advanced discovery readiness failed/.test(startProd),
     'advanced readiness failure logged before liveness fallback'

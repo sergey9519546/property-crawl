@@ -32,6 +32,9 @@ COPY --chown=node:node --from=builder /app/next.config.mjs ./next.config.mjs
 COPY --chown=node:node --from=builder /app/server ./server
 COPY --chown=node:node --from=builder /app/scripts ./scripts
 COPY --chown=node:node --from=builder /app/data.js ./data.js
+# Schema is required when DATABASE_URL points at an empty Postgres
+# (document_reviews + listings tables).
+COPY --chown=node:node --from=builder /app/server/db/schema.sql ./server/db/schema.sql
 
 # Writable cache for form submissions / live observations (node user).
 RUN mkdir -p /app/.cache/form-submissions /app/.cache/source-observations \

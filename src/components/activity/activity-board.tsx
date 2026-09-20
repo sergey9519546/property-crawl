@@ -59,7 +59,12 @@ export function ActivityBoard() {
   async function runFullCycle() {
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch("/api/source-network/run", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scope: "all", idempotencyKey: `ui-${new Date().toISOString().slice(0, 16)}-${crypto.randomUUID()}` }) });
+      const response = await fetch("/api/source-network/run", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "x-workspace-request": "1" },
+        body: JSON.stringify({ scope: "all", idempotencyKey: `ui-${new Date().toISOString().slice(0, 16)}-${crypto.randomUUID()}` }),
+      });
       const result = await response.json();
       if (response.status === 401) {
         setJobs([]);

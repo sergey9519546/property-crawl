@@ -46,6 +46,21 @@ async function main() {
 
   const health = await get('/api/health');
   record('health', health.status === 200 && health.json?.status === 'ok', `status=${health.status}`);
+  record(
+    'health honesty fields',
+    typeof health.json?.dataMode === 'string' && typeof health.json?.documentReviewStore === 'string',
+    `dataMode=${health.json?.dataMode} store=${health.json?.documentReviewStore}`
+  );
+  // When the orchestrator pins demo mode (no DATABASE_URL), require honest labels.
+  const pinDemo = process.env.E2E_EXPECT_DEMO === '1';
+  if (pinDemo) {
+    record(
+      'health demo-pin',
+      health.json?.dataMode === 'demo'
+        && (health.json?.documentReviewStore === 'file' || health.json?.documentReviewStore === 'none'),
+      `dataMode=${health.json?.dataMode} store=${health.json?.documentReviewStore}`
+    );
+  }
 
   for (const path of ['/', '/listings', '/sources', '/hunts', '/sign-in', '/workspace']) {
     const res = await get(path);
@@ -75,13 +90,15 @@ async function main() {
   const contact = await post('/api/contact', { name: 'E2E Workflow', email: 'e2e@example.com', message: 'end-to-end verification' });
   record('contact form', contact.status === 202 && contact.json?.delivery, `status=${contact.status} delivery=${contact.json?.delivery}`);
 
-  if (!token) {
-    record('operator unlock', false, 'SCRAPER_ADMIN_TOKEN missing');
-  } else {
+  if (token) {
     const cookieJar = [];
     const unlock = await fetch(`${baseUrl}/api/workspace/session`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        origin: baseUrl,
+        'x-workspace-request': '1',
+      },
       body: JSON.stringify({ credential: token }),
     });
     const unlockText = await unlock.text();
@@ -92,11 +109,64 @@ async function main() {
     if (cookieHeader) {
       const dr = await fetch(`${baseUrl}/api/document-review`, { headers: { cookie: cookieHeader } });
       record('document-review session', dr.status === 200, `status=${dr.status}`);
+      const drJson = safeJson(await dr.clone().text());
+      record(
+        'document-review envelope',
+        Boolean(drJson && Array.isArray(drJson.reviews) && drJson.byStatus),
+        `total=${drJson?.total} pending=${drJson?.byStatus?.pending}`
+      );
+      const mutationHeaders = {
+        cookie: cookieHeader,
+        'content-type': 'application/json',
+        // Non-browser e2e omits Origin; gate accepts x-workspace-request=1.
+        'x-workspace-request': '1',
+      };
+      const drWrite = await fetch(`${baseUrl}/api/document-review`, {
+        method: 'POST',
+        headers: mutationHeaders,
+        body: JSON.stringify({
+          listingId: 'E2E-WORKFLOW',
+          documentIndex: 0,
+          documentUrl: 'https://example.com/e2e-notice.pdf',
+          status: 'approved',
+          reviewer: 'e2e-workflow',
+          notes: 'e2e durability check',
+        }),
+      });
+      const drWriteJson = safeJson(await drWrite.text());
+      record(
+        'document-review write+persist',
+        drWrite.status === 200 && drWriteJson?.persisted === true && drWriteJson?.review?.status === 'approved',
+        `status=${drWrite.status} persisted=${drWriteJson?.persisted}`
+      );
+      const drReload = await fetch(`${baseUrl}/api/document-review?hydrate=false`, { headers: { cookie: cookieHeader } });
+      const drReloadJson = safeJson(await drReload.text());
+      const hasE2e = (drReloadJson?.reviews || []).some((r) => r.listingId === 'E2E-WORKFLOW');
+      record('document-review durable readback', drReload.status === 200 && hasE2e, `status=${drReload.status} hasE2e=${hasE2e}`);
+
       const hunts = await fetch(`${baseUrl}/api/hunts`, { headers: { cookie: cookieHeader } });
       record('hunts session', hunts.status === 200, `status=${hunts.status}`);
       const anon = await fetch(`${baseUrl}/api/document-review`);
       record('document-review anonymous rejected', anon.status === 401, `status=${anon.status}`);
+
+      const jobs = await fetch(`${baseUrl}/api/source-network/jobs?limit=5`, { headers: { cookie: cookieHeader } });
+      record('source-network jobs list proxy', jobs.status === 200, `status=${jobs.status}`);
+      const unbrowse = await fetch(`${baseUrl}/api/source-network/unbrowse/status`, { headers: { cookie: cookieHeader } });
+      const unbrowseJson = safeJson(await unbrowse.text());
+      record('unbrowse status proxy', unbrowse.status === 200 && typeof unbrowseJson?.installed === 'boolean', `status=${unbrowse.status} installed=${unbrowseJson?.installed}`);
+      const importPreview = await fetch(`${baseUrl}/api/workspace/import/preview`, {
+        method: 'POST',
+        headers: {
+          cookie: cookieHeader,
+          'content-type': 'application/json',
+          'x-workspace-request': '1',
+        },
+        body: JSON.stringify({ listingIds: [] }),
+      });
+      record('workspace import preview proxy', [200, 400, 422].includes(importPreview.status), `status=${importPreview.status}`);
     }
+  } else {
+    record('operator unlock', false, 'SCRAPER_ADMIN_TOKEN missing');
   }
 
   const listingsPage = await get('/listings');

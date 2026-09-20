@@ -22,6 +22,24 @@ test('production orchestrator waits on liveness, not advanced readiness, for dem
   );
 });
 
+test('production orchestrator loads .env.local into the API process without overriding live env', () => {
+  assert.match(startProduction, /loadLocalEnvFiles/);
+  assert.match(startProduction, /--env-file-if-exists=\.env\.local/);
+  assert.match(startProduction, /bootEnv/);
+  assert.match(startProduction, /resolveInternalApiPort/);
+
+  const { loadLocalEnvFiles, resolveInternalApiPort } = require('../scripts/production-env');
+  const merged = loadLocalEnvFiles(
+    { SCRAPER_ADMIN_TOKEN: 'from-process', PORT: '3700' },
+    []
+  );
+  assert.equal(merged.SCRAPER_ADMIN_TOKEN, 'from-process');
+  assert.equal(merged.PORT, '3700');
+  assert.equal(resolveInternalApiPort(3000), 3002);
+  assert.equal(resolveInternalApiPort(3700), 3702);
+  assert.equal(resolveInternalApiPort(3700, 3902), 3902);
+});
+
 test('operator token alias PROPERTY_OPERATOR_SECRET resolves when primary unset', () => {
   const { resolveOperatorToken } = require('../server/security/operator-token');
   assert.equal(resolveOperatorToken({ SCRAPER_ADMIN_TOKEN: 'primary' }), 'primary');
@@ -34,7 +52,19 @@ test('fly.toml production port matches Dockerfile.production', () => {
   const docker = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile.production'), 'utf8');
   assert.match(fly, /internal_port\s*=\s*3000/);
   assert.match(fly, /dockerfile\s*=\s*'Dockerfile\.production'/);
+  assert.match(fly, /memory_mb\s*=\s*1024/);
+  assert.doesNotMatch(fly, /^\s*memory\s*=/m);
+  assert.match(fly, /SCRAPER_ADMIN_TOKEN/);
+  assert.match(fly, /\[\[mounts\]\]/);
+  assert.match(fly, /destination\s*=\s*'\/app\/\.cache'/);
   assert.match(docker, /EXPOSE 3000/);
+  const koyeb = fs.readFileSync(path.join(__dirname, '..', 'koyeb.yml'), 'utf8');
+  assert.match(koyeb, /SCRAPER_ADMIN_TOKEN/);
+  assert.match(koyeb, /PROPERTY_DOCUMENT_REVIEW_STORE_PATH/);
+  const compose = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.yml'), 'utf8');
+  assert.match(compose, /appcache:\/app\/\.cache/);
+  const base44 = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.base44.yml'), 'utf8');
+  assert.doesNotMatch(base44, /env_file:\s*\n\s*- \.\/\.env\.local/);
 });
 
 test('marketing nav points at shipped routes, not phantom product names', () => {
@@ -116,10 +146,12 @@ test('contact page does not promise human replies without delivery', () => {
 test('document-review API and Next proxies require operator identity', () => {
   const api = fs.readFileSync(path.join(__dirname, '..', 'server/routes/document-review.js'), 'utf8');
   assert.match(api, /requireOperator/);
+  assert.match(api, /createDocumentReviewStore/);
   const nextRoute = fs.readFileSync(path.join(__dirname, '..', 'src/app/api/document-review/route.ts'), 'utf8');
   assert.match(nextRoute, /proxyPrivatePropertyApi/);
   const allowlist = fs.readFileSync(path.join(__dirname, '..', 'src/lib/property-api.ts'), 'utf8');
   assert.match(allowlist, /document-review/);
+  assert.match(allowlist, /unbrowse/);
 });
 
 test('Next security headers are declared for the canonical UI', () => {
@@ -127,6 +159,14 @@ test('Next security headers are declared for the canonical UI', () => {
   assert.match(config, /Content-Security-Policy/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /poweredByHeader:\s*false/);
+  const cspMatch = config.match(/Content-Security-Policy['"]\s*,\s*value:\s*"([^"]+)"/);
+  assert.ok(cspMatch, 'CSP value present');
+  assert.doesNotMatch(cspMatch[1], /unsafe-eval/);
+  assert.match(cspMatch[1], /style-src[^;]*fonts\.googleapis\.com/);
+  assert.match(cspMatch[1], /font-src[^;]*fonts\.gstatic\.com/);
+  // Known residual: Next production bootstrap still needs script-src 'unsafe-inline'
+  // until nonce/hash CSP is wired. Tracked in PRODUCT_GAPS / memory facts.
+  assert.match(cspMatch[1], /script-src[^;]*'unsafe-inline'/);
 });
 
 test('API rate policy wires TRUSTED_PROXY_COUNT into limiters', () => {
@@ -165,5 +205,27 @@ test('listings API exports intelligence view for quality/opportunity sorts', () 
   assert.match(workbench, /value="quality"/);
   assert.match(workbench, /value="opportunity"/);
   assert.match(workbench, /minQuality/);
+});
+
+test('production boot refuses to start without Next BUILD_ID', () => {
+  const startProduction = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'start-production.js'), 'utf8');
+  assert.match(startProduction, /BUILD_ID/);
+  assert.match(startProduction, /npm run build/);
+});
+
+test('UI surfaces honest data-mode banner and schema has document_reviews', () => {
+  const banner = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/data-mode-banner.tsx'), 'utf8');
+  assert.match(banner, /dataMode/);
+  assert.match(banner, /documentReviewStore/);
+  assert.match(banner, /data-testid="data-mode-banner"/);
+  const listings = fs.readFileSync(path.join(__dirname, '..', 'src/app/listings/page.tsx'), 'utf8');
+  assert.match(listings, /DataModeBanner/);
+  const reviewPage = fs.readFileSync(path.join(__dirname, '..', 'src/app/workspace/documents-review/page.tsx'), 'utf8');
+  assert.match(reviewPage, /DataModeBanner/);
+  const schema = fs.readFileSync(path.join(__dirname, '..', 'server/db/schema.sql'), 'utf8');
+  assert.match(schema, /CREATE TABLE IF NOT EXISTS document_reviews/);
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server/server.js'), 'utf8');
+  assert.match(server, /dataMode/);
+  assert.match(server, /documentReviewStore/);
 });
 

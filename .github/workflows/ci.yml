@@ -11,7 +11,7 @@ jobs:
   # This is the $0 release gate that must stay green.
   unit-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,6 +38,14 @@ jobs:
         run: npm run test:scraper-power
       - name: Production build
         run: npm run build
+      - name: Production boot + user workflow e2e
+        run: |
+          if [ ! -f .env.local ]; then
+            printf 'SCRAPER_ADMIN_TOKEN=ci-e2e-operator-token\nPROPERTY_API_URL=http://127.0.0.1:3002\n' > .env.local
+          elif ! grep -q '^SCRAPER_ADMIN_TOKEN=' .env.local; then
+            printf 'SCRAPER_ADMIN_TOKEN=ci-e2e-operator-token\n' >> .env.local
+          fi
+          node scripts/run-production-e2e.js
 
   # Extended suite — may require optional env (DISCOVERY_TEST_DATABASE_URL,
   # Playwright browsers). Failure here does not block demo $0 release.
