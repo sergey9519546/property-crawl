@@ -59,7 +59,7 @@ coverage work, and a strict release-owner re-audit of claimed closures.
 |---|---|
 | Public live URL | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
 | Form webhook delivery | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/servicelink/**civilview(NJ Salem)** promoted; gsa robots-blocked, irs live-empty, CAPTCHA sources unpromoted — `reports/canary-not-clean-gsa-irs-2026-09-20.md`, `canary-promotion-civilview-salem-nj-2026-09-20.md` |
+| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/servicelink/**civilview(NJ Hudson id=10)** promoted; gsa robots-blocked, irs live-empty, CAPTCHA unpromoted |
 | CAPTCHA publishers | Legitimate access — never auto-bypass |
 | Lawyer review of `/privacy` `/terms` | Legal |
 | Custom domain | Ops |

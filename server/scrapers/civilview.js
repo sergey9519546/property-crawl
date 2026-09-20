@@ -221,14 +221,17 @@ class CivilViewScraper extends BaseScraper {
       report.recordsEmitted = emitted.length;
       report.unattemptedSummaries = Math.max(0, report.summariesDiscovered - report.detailPagesAttempted);
       report.boundedSample = report.unattemptedSummaries > 0 || (
-        !this.countyId && stateCounties.length > report.countiesAttempted
+        !this.countyId && (report.countiesDiscovered || ordered.length) > report.countiesAttempted
       );
       report.recordsAccepted = emitted.length;
       report.recordsRejected = Math.max(0, report.detailPagesAttempted - emitted.length);
+      const expectedCounties = ordered.length;
+      report.countiesExpected = expectedCounties;
+      // Legacy state-sample (no explicit countyId) is never a promotable complete sweep.
       report.truncated = report.unattemptedSummaries > 0 || !this.countyId;
       report.complete = Boolean(
         this.countyId &&
-        report.countiesAttempted === 1 &&
+        report.countiesAttempted === expectedCounties &&
         report.failures.length === 0 &&
         report.recordsRejected === 0 &&
         report.unattemptedSummaries === 0,
