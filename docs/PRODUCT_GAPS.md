@@ -59,7 +59,7 @@ coverage work, and a strict release-owner re-audit of claimed closures.
 |---|---|
 | Public live URL | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
 | Form webhook delivery | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Migration 014 promotions of more sources | treasury/usda/**hud(OH,NJ)** promoted 2026-09-20; other wave sources need their own 2 clean canaries |
+| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/**servicelink** promoted 2026-09-20; gsa/irs/wave2 still need canaries |
 | CAPTCHA publishers | Legitimate access — never auto-bypass |
 | Lawyer review of `/privacy` `/terms` | Legal |
 | Custom domain | Ops |

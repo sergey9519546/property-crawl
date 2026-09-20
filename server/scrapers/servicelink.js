@@ -351,6 +351,7 @@ class ServiceLinkScraper extends BaseScraper {
   }
 
   async scrapeFeed() {
+    this.sweepStartedAt = this.sweepStartedAt || new Date(this.now()).toISOString();
     const report = {
       outcome: 'failed',
       pagesRequested: 0,
@@ -364,7 +365,7 @@ class ServiceLinkScraper extends BaseScraper {
       continuationStopped: false,
       failures: [],
       scope: this.getCollectionScope(),
-      sweepStartedAt: this.sweepStartedAt || new Date(this.now()).toISOString(),
+      sweepStartedAt: this.sweepStartedAt,
       pagesPreviouslyCommitted: this.pagesCommitted,
     };
     this.lastRunReport = report;
@@ -401,7 +402,9 @@ class ServiceLinkScraper extends BaseScraper {
             }
             break;
           }
-          if (pageNumber === this.maxPages) {
+          if (pageNumber === this.maxPages && next) {
+            // Page budget exhausted while publisher still has more records —
+            // honest truncated sweep (not a clean canary).
             report.continuationStopped = true;
             break;
           }
@@ -412,9 +415,9 @@ class ServiceLinkScraper extends BaseScraper {
       });
       report.recordsEmitted = listings.length;
       report.outcome = listings.length ? 'success' : 'empty';
-      report.truncated = report.continuationStopped;
-      report.complete = !report.continuationStopped;
-      report.fullSweepComplete = report.complete && Boolean(report.sweepStartedAt);
+      report.truncated = report.continuationStopped === true;
+      report.complete = report.truncated !== true && report.failures.length === 0;
+      report.fullSweepComplete = report.complete && Boolean(this.sweepStartedAt);
       return listings;
     } catch (error) {
       report.outcome = 'failed';

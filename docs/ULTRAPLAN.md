@@ -59,6 +59,8 @@
 | C5 | API-side CSP remains `script-src 'self'` | Unchanged |
 
 > C3 vs C4 is a **choice**. Static marketing + PPR make full nonce painful; prefer **C4 for static JSON-LD + keep residual documented** unless operator pages can go fully dynamic.
+>
+> **2026-09-20 note (Next 16 docs):** nonce CSP **requires dynamically rendered pages** (`proxy.ts` + `await connection()`). Static App Router marketing routes cannot receive a nonce at build time. Therefore `script-src 'unsafe-inline'` remains **required for static pages** until those routes are forced dynamic or SRI covers all inline scripts. Do not flip production-boot assertions to ban `unsafe-inline` until that work lands.
 
 ### WS-D — Product honesty leftovers (P1, code)
 | ID | Item | Done when |
