@@ -279,7 +279,7 @@ const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
   },
   civilview: {
     countyCount: 1,
-    countyLabel: "NJ Salem only",
+    countyLabel: "NJ Salem promoted run scope — not nationwide",
     dimensions: { foreclosure: true },
   },
   "fl-dor-cadastral": {
