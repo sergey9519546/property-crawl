@@ -103,10 +103,19 @@ test('DocumentReviewQueue renders the empty-state chrome when authenticated', ()
   assert.doesNotMatch(html, REJECT_BUTTON);
 });
 
+test('DocumentReviewQueue empty-state copy states durability honestly', () => {
+  const html = queueRender();
+  assert.match(html, /documentReviewStore/);
+  assert.match(html, /volume|PostgreSQL/i);
+  assert.doesNotMatch(html, /when PostgreSQL is not configured\)/);
+});
+
 test('DocumentReviewQueue page module exists and uses the queue + shell imports', () => {
   const pagePath = path.resolve(__dirname, '..', 'src/app/workspace/documents-review/page.tsx');
   assert.ok(fs.existsSync(pagePath), 'page.tsx must exist on disk');
-  const compiled = transformSync(fs.readFileSync(pagePath, 'utf8'), {
+  const pageSource = fs.readFileSync(pagePath, 'utf8');
+  assert.match(pageSource, /DataModeBanner/);
+  const compiled = transformSync(pageSource, {
     filename: pagePath,
     module: { type: 'commonjs' },
     jsc: { parser: { syntax: 'typescript', tsx: true }, target: 'es2022', transform: { react: { runtime: 'automatic' } } },

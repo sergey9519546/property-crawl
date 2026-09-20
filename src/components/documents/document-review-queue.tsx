@@ -183,7 +183,16 @@ export function DocumentReviewQueue() {
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Document review queue</h1>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-[#6B7280]">
-            Pending documents captured by the build-data extraction pipeline. Approve, reject, or request more evidence before the item is surfaced in the workspace.
+            Publisher documents from the listing evidence pipeline, plus any
+            decisions you record. Approve, reject, or request more evidence
+            before an item is treated as reviewed. Decisions write through to
+            PostgreSQL <code className="text-[12px]">document_reviews</code> when{" "}
+            <code className="text-[12px]">DATABASE_URL</code> is set, otherwise a
+            host-local file under <code className="text-[12px]">.cache/</code>.
+            File mode survives API restarts but is lost on container recreate
+            unless a volume is attached. Check{" "}
+            <code className="text-[12px]">GET /api/health</code>{" "}
+            <code className="text-[12px]">documentReviewStore</code>.
           </p>
         </div>
         <button

@@ -1,9 +1,20 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { afterEach, beforeEach, test } = require('node:test');
-const handleDocumentReview = require('../server/routes/document-review');
+const route = require('../server/routes/document-review');
 const { REVIEW_STATES } = require('../server/intelligence/document-review');
 
 const TEST_TOKEN = 'document-review-test-operator';
+
+function emptyDb() {
+  return { getListings: async () => ({ listings: [] }) };
+}
+
+async function handle(req, res) {
+  return route.handleDocumentReview(req, res, { database: emptyDb() });
+}
 
 function makeReq({ method = 'POST', url = '/api/document-review', body = null, headers = {}, authenticated = true } = {}) {
   const listeners = { data: [], end: [], close: [], error: [] };
@@ -39,21 +50,24 @@ function makeRes() {
   return res;
 }
 
+let tmpStore;
+
 beforeEach(() => {
   process.env.SCRAPER_ADMIN_TOKEN = TEST_TOKEN;
   delete process.env.PROPERTY_OPERATOR_SECRET;
-  handleDocumentReview._resetForTests();
+  tmpStore = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'doc-review-route-')), 'reviews.json');
+  route._resetForTests({ storePath: tmpStore, env: { ...process.env, NODE_ENV: 'test' } });
 });
 
 afterEach(() => {
-  handleDocumentReview._resetForTests();
+  route._resetForTests({ storePath: null, env: { ...process.env, NODE_ENV: 'test' } });
   delete process.env.SCRAPER_ADMIN_TOKEN;
 });
 
 test('document review rejects unauthenticated requests', async () => {
   const req = makeReq({ method: 'GET', authenticated: false });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 401);
   assert.match(res.body.error, /Operator credential required/);
 });
@@ -62,7 +76,7 @@ test('document review fails closed when operator token is unset', async () => {
   delete process.env.SCRAPER_ADMIN_TOKEN;
   const req = makeReq({ method: 'GET', authenticated: false });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 503);
   assert.match(res.body.requiredConfiguration, /SCRAPER_ADMIN_TOKEN/);
 });
@@ -70,19 +84,17 @@ test('document review fails closed when operator token is unset', async () => {
 test('GET /api/document-review with no reviews returns empty list and zero counts', async () => {
   const req = makeReq({ method: 'GET' });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, {
-    total: 0,
-    byStatus: { pending: 0, approved: 0, rejected: 0, needs_more: 0 },
-    reviews: [],
-  });
+  assert.equal(res.body.total, 0);
+  assert.deepEqual(res.body.byStatus, { pending: 0, approved: 0, rejected: 0, needs_more: 0 });
+  assert.deepEqual(res.body.reviews, []);
 });
 
 test('POST /api/document-review with invalid JSON returns 400', async () => {
   const req = makeReq({ method: 'POST', body: 'not-json' });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /invalid JSON body/);
 });
@@ -90,7 +102,7 @@ test('POST /api/document-review with invalid JSON returns 400', async () => {
 test('POST /api/document-review without listingId returns 400', async () => {
   const req = makeReq({ method: 'POST', body: { status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /listingId is required/);
 });
@@ -98,33 +110,34 @@ test('POST /api/document-review without listingId returns 400', async () => {
 test('POST /api/document-review with valid approval returns the new review', async () => {
   const req = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', documentIndex: 0, status: 'approved', reviewer: 'op-7', notes: 'looks fine' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.listingId, 'CIV-NJ-1');
   assert.equal(res.body.review.status, REVIEW_STATES.APPROVED);
   assert.equal(res.body.review.reviewer, 'op-7');
   assert.equal(res.body.review.notes, 'looks fine');
   assert.equal(res.body.review.priorStatus, REVIEW_STATES.PENDING);
+  assert.equal(res.body.persisted, true);
 });
 
 test('POST /api/document-review advances from pending to approved and increments revision', async () => {
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();
-  await handleDocumentReview(req1, res1);
+  await handle(req1, res1);
   const initialReview = res1.body.review;
   assert.equal(initialReview.revision, 1);
   assert.equal(initialReview.priorStatus, REVIEW_STATES.PENDING);
 
   const req2 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'confirmed' } });
   const res2 = makeRes();
-  await handleDocumentReview(req2, res2);
+  await handle(req2, res2);
   assert.equal(res2.body.review.revision, 1);
   assert.equal(res2.body.review.notes, 'confirmed');
   assert.equal(res2.body.review.priorStatus, REVIEW_STATES.PENDING);
 
   const req3 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'rejected', reviewer: 'op-7', notes: 'actually wrong' } });
   const res3 = makeRes();
-  await handleDocumentReview(req3, res3);
+  await handle(req3, res3);
   assert.equal(res3.body.review.revision, 2);
   assert.equal(res3.body.review.status, REVIEW_STATES.REJECTED);
   assert.equal(res3.body.review.priorStatus, REVIEW_STATES.APPROVED);
@@ -133,7 +146,7 @@ test('POST /api/document-review advances from pending to approved and increments
 test('POST /api/document-review without reviewer for terminal status returns 422', async () => {
   const req = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', notes: 'ok' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 422);
   assert.match(res.body.error, /reviewer:/);
 });
@@ -141,7 +154,7 @@ test('POST /api/document-review without reviewer for terminal status returns 422
 test('POST /api/document-review without note for rejected returns 422', async () => {
   const req = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'rejected', reviewer: 'op-7' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 422);
   assert.match(res.body.error, /note:/);
 });
@@ -149,40 +162,42 @@ test('POST /api/document-review without note for rejected returns 422', async ()
 test('POST /api/document-review without body returns 400 listingId required', async () => {
   const req = makeReq({ method: 'POST', body: null });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /listingId is required/);
 });
 
-test('GET /api/document-review?status=pending returns only pending reviews', async () => {
+test('GET /api/document-review?status=pending returns only pending reviews with UI envelope', async () => {
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();
-  await handleDocumentReview(req1, res1);
+  await handle(req1, res1);
   assert.equal(res1.statusCode, 200);
 
   const req2 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-2', status: 'pending' } });
   const res2 = makeRes();
-  await handleDocumentReview(req2, res2);
+  await handle(req2, res2);
   assert.equal(res2.statusCode, 200);
   assert.equal(res2.body.review.status, REVIEW_STATES.PENDING);
 
   const reqGet = makeReq({ method: 'GET', url: '/api/document-review?status=pending' });
   const resGet = makeRes();
-  await handleDocumentReview(reqGet, resGet);
+  await handle(reqGet, resGet);
   assert.equal(resGet.body.total, 2);
   assert.equal(resGet.body.byStatus.pending, 1);
   assert.equal(resGet.body.byStatus.approved, 1);
   assert.equal(resGet.body.reviews.length, 1);
-  assert.equal(resGet.body.reviews[0].status, REVIEW_STATES.PENDING);
+  assert.equal(resGet.body.reviews[0].review.status, REVIEW_STATES.PENDING);
+  assert.equal(resGet.body.reviews[0].listingId, 'CIV-NJ-2');
+  assert.ok(resGet.body.reviews[0].id);
 });
 
 test('GET /api/document-review with unknown status returns empty filtered list', async () => {
   const req = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
-  await handleDocumentReview(req, makeRes());
+  await handle(req, makeRes());
 
   const reqGet = makeReq({ method: 'GET', url: '/api/document-review?status=unknown' });
   const resGet = makeRes();
-  await handleDocumentReview(reqGet, resGet);
+  await handle(reqGet, resGet);
   assert.equal(resGet.body.reviews.length, 0);
   assert.equal(resGet.body.total, 1);
   assert.equal(resGet.body.byStatus.approved, 1);
@@ -191,12 +206,12 @@ test('GET /api/document-review with unknown status returns empty filtered list',
 test('GET /api/document-review/:id returns the matching review', async () => {
   const postReq = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', documentIndex: 0, status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const postRes = makeRes();
-  await handleDocumentReview(postReq, postRes);
+  await handle(postReq, postRes);
   const id = postRes.body.id;
 
   const getReq = makeReq({ method: 'GET', url: `/api/document-review/${id}` });
   const getRes = makeRes();
-  await handleDocumentReview(getReq, getRes);
+  await handle(getReq, getRes);
   assert.equal(getRes.statusCode, 200);
   assert.equal(getRes.body.id, id);
   assert.equal(getRes.body.review.status, REVIEW_STATES.APPROVED);
@@ -205,14 +220,14 @@ test('GET /api/document-review/:id returns the matching review', async () => {
 test('GET /api/document-review/:id returns 404 when no such review', async () => {
   const req = makeReq({ method: 'GET', url: '/api/document-review/no-such-id' });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 404);
 });
 
 test('unsupported method returns 405', async () => {
   const req = makeReq({ method: 'DELETE' });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 405);
   assert.deepEqual(res.body.allowed, ['GET', 'POST']);
 });
@@ -221,7 +236,7 @@ test('listingId is whitespace-trimmed and length-capped', async () => {
   const padded = '  CIV-NJ-1  ';
   const req = makeReq({ method: 'POST', body: { listingId: padded, status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.listingId, 'CIV-NJ-1');
 });
@@ -230,7 +245,7 @@ test('listingId longer than MAX_LISTING_ID_LENGTH is truncated', async () => {
   const long = 'A'.repeat(500);
   const req = makeReq({ method: 'POST', body: { listingId: long, status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res = makeRes();
-  await handleDocumentReview(req, res);
+  await handle(req, res);
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.listingId.length, 200);
   assert.equal(res.body.listingId, 'A'.repeat(200));

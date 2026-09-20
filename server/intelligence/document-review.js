@@ -61,12 +61,18 @@ function cleanReviewer(value) {
 }
 
 /**
- * Validate a proposed review transition. Returns an array of error strings
- * (empty if the input is valid). Each error has a stable code as the first
- * character: 'state' for state-machine violations, 'note' for missing
- * required notes, 'reviewer' for missing reviewer identifier, 'shape' for
- * malformed input.
+ * Allowed review transitions (strict). Terminal reviews may be re-confirmed
+ * with the same status (notes/reviewer refresh) but cannot silently reopen.
+ * pending -> any terminal is allowed.
+ * needs_more / rejected / approved -> pending is forbidden.
  */
+const ALLOWED_TRANSITIONS = {
+  pending: new Set(['pending', 'approved', 'rejected', 'needs_more']),
+  approved: new Set(['approved', 'rejected', 'needs_more']),
+  rejected: new Set(['rejected', 'approved', 'needs_more']),
+  needs_more: new Set(['needs_more', 'approved', 'rejected']),
+};
+
 function validateReviewInput(input, options = {}) {
   const errors = [];
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
@@ -80,18 +86,33 @@ function validateReviewInput(input, options = {}) {
     errors.push(`state: status must be one of ${[...REVIEW_STATES_SET].join(', ')}`);
   }
 
+  const currentStatus = normalizeReview(options.current).status;
+  if (nextStatus && REVIEW_STATES_SET.has(nextStatus) && currentStatus) {
+    const allowed = ALLOWED_TRANSITIONS[currentStatus] || new Set([currentStatus]);
+    if (!allowed.has(nextStatus)) {
+      errors.push(`state: transition ${currentStatus} -> ${nextStatus} is not allowed`);
+    }
+  }
+
+  // Optional optimistic concurrency: when expectedRevision is provided it
+  // must match the current revision (callers that omit it keep legacy behavior).
+  const expectedRevision = options.expectedRevision;
+  if (expectedRevision !== undefined && expectedRevision !== null) {
+    const currentRevision = normalizeReview(options.current).revision;
+    const expected = Number(expectedRevision);
+    if (!Number.isFinite(expected) || expected !== currentRevision) {
+      errors.push(`state: revision mismatch (expected ${expectedRevision}, current ${currentRevision})`);
+    }
+  }
+
   const note = cleanNote(input.notes ?? input.note);
   const reviewer = cleanReviewer(input.reviewer);
 
-  // Notes are required for rejected and needs_more (the document is not OK
-  // as-is; the reviewer must explain why or what they need).
   const requiresNote = nextStatus === REVIEW_STATES.REJECTED || nextStatus === REVIEW_STATES.NEEDS_MORE;
   if (requiresNote && !note) {
     errors.push('note: rejected and needs_more reviews require a note');
   }
 
-  // Reviewer is required for any terminal state (approved, rejected,
-  // needs_more). Pending entries don't require a reviewer.
   const requiresReviewer = nextStatus === REVIEW_STATES.APPROVED
     || nextStatus === REVIEW_STATES.REJECTED
     || nextStatus === REVIEW_STATES.NEEDS_MORE;
@@ -99,8 +120,6 @@ function validateReviewInput(input, options = {}) {
     errors.push('reviewer: terminal reviews require a reviewer identifier');
   }
 
-  // Options.maxNoteLength lets the caller override the default cap when
-  // persisting into a larger column.
   const cap = Number(options.maxNoteLength);
   if (Number.isInteger(cap) && cap > 0 && note && note.length > cap) {
     errors.push(`note: exceeds ${cap} characters after cleaning`);
@@ -117,7 +136,7 @@ function validateReviewInput(input, options = {}) {
  */
 function applyReview(currentReview, proposed, options = {}) {
   const previous = normalizeReview(currentReview);
-  const errors = validateReviewInput(proposed, options);
+  const errors = validateReviewInput(proposed, { ...options, current: previous });
   if (errors.length) {
     return Object.freeze({ errors: Object.freeze(errors.slice()) });
   }

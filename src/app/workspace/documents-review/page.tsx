@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { DocumentReviewQueue } from "@/components/documents/document-review-queue";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
+import { DataModeBanner } from "@/components/site/data-mode-banner";
 
 export const metadata: Metadata = {
   title: "Document Review Queue | PerfectProperty",
@@ -12,6 +13,7 @@ export default function DocumentReviewPage() {
   return (
     <WorkspaceShell>
       <main>
+        <DataModeBanner />
         <DocumentReviewQueue />
       </main>
     </WorkspaceShell>

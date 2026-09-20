@@ -227,3 +227,28 @@ BEGIN
     ORDER BY distance_meters ASC;
 END;
 $$;
+
+-- ==========================================================
+-- Document content review (operator workspace)
+-- ==========================================================
+-- Durable review decisions when PostgreSQL is configured. The file store
+-- under .cache remains the $0/demo fallback.
+
+CREATE TABLE IF NOT EXISTS document_reviews (
+  id TEXT PRIMARY KEY,
+  listing_id TEXT NOT NULL,
+  document_index INTEGER,
+  document_url TEXT,
+  status TEXT NOT NULL,
+  notes TEXT,
+  reviewer TEXT,
+  reviewed_at TIMESTAMPTZ,
+  revision INTEGER NOT NULL DEFAULT 1,
+  prior_status TEXT,
+  extracted_at TIMESTAMPTZ,
+  payload JSONB NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_reviews_listing ON document_reviews(listing_id);
+CREATE INDEX IF NOT EXISTS idx_document_reviews_status ON document_reviews(status);
