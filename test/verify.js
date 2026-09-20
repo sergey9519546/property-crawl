@@ -10,6 +10,7 @@ console.log('====================================================\n');
 const suites = [
   { name: '1. Client Unit & Formula Suite', cmd: 'node test/suite.test.js' },
   { name: '1a. CONTEXT drift', cmd: 'node --test test/context.test.js' },
+  { name: '1b. Schema mirror sync', cmd: 'node scripts/sync-schema-mirror.js --check' },
   { name: '2. Backend REST API & Server Suite', cmd: 'node test/server.test.js' },
   { name: '3. Data Scrapers & Ingestion Pipeline', cmd: 'node test/scrapers.test.js' },
   { name: '3a. Scraper Reliability, CivilView, Durable Live Records & Build-Data Publication Gate', cmd: 'node --test test/scraper-reliability.test.js test/civilview.test.js test/national-core-reports.test.js test/irs-scraper.test.js' },

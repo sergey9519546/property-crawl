@@ -77,6 +77,17 @@ async function main() {
     'document-review store + PG schema + Docker schema copy present'
   ));
   findings.push(check(
+    'schema-mirror-sync',
+    (() => {
+      try {
+        const { execFileSync } = require('node:child_process');
+        execFileSync(process.execPath, [path.join(ROOT, 'scripts/sync-schema-mirror.js'), '--check'], { cwd: ROOT, stdio: 'pipe' });
+        return true;
+      } catch { return false; }
+    })(),
+    'src/lib/db/schema.sql matches server/db/schema.sql'
+  ));
+  findings.push(check(
     'production-e2e-gate-present',
     fs.existsSync(path.join(ROOT, 'scripts/run-production-e2e.js'))
       && Boolean(pkg.scripts && pkg.scripts['test:production-e2e'])

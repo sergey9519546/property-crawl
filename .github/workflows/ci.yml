@@ -26,6 +26,8 @@ jobs:
         run: npm run typecheck
       - name: Context drift
         run: node scripts/gen-context.js --check
+      - name: Schema mirror sync
+        run: node scripts/sync-schema-mirror.js --check
       - name: Production smoke contract
         run: node scripts/production-smoke.js
       - name: Promotion gate contract
@@ -38,7 +40,10 @@ jobs:
         run: npm run test:scraper-power
       - name: Production build
         run: npm run build
-      - name: Production boot + user workflow e2e
+      - name: Production boot + user workflow e2e (demo-pinned)
+        env:
+          DATABASE_URL: ""
+          DISCOVERY_MODE: ""
         run: |
           if [ ! -f .env.local ]; then
             printf 'SCRAPER_ADMIN_TOKEN=ci-e2e-operator-token\nPROPERTY_API_URL=http://127.0.0.1:3002\n' > .env.local
@@ -77,3 +82,44 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
+
+  # PostgreSQL-backed production e2e — document-review store=postgres path.
+  production-e2e-pg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: unit-gate
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4-alpine
+        env:
+          POSTGRES_USER: property
+          POSTGRES_PASSWORD: property-local-dev
+          POSTGRES_DB: property_crawl
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U property -d property_crawl"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Production build
+        run: npm run build
+      - name: Apply schema + run e2e with PostgreSQL
+        env:
+          DATABASE_URL: postgres://property:property-local-dev@127.0.0.1:55432/property_crawl
+          DISCOVERY_MODE: advanced
+        run: |
+          node -e "const {Pool}=require('pg');const fs=require('fs');const p=new Pool({connectionString:process.env.DATABASE_URL});p.query(fs.readFileSync('server/db/schema.sql','utf8')).then(()=>p.end()).catch(e=>{console.error(e);process.exit(1)});"
+          printf 'SCRAPER_ADMIN_TOKEN=ci-e2e-operator-token\nPROPERTY_API_URL=http://127.0.0.1:3002\n' > .env.local
+          node scripts/run-production-e2e.js --with-db

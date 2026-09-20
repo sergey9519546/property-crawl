@@ -102,7 +102,9 @@
     "e2e:workflow": "node scripts/e2e-user-workflow.js",
     "test:production-e2e": "node scripts/run-production-e2e.js",
     "test:production-e2e:db": "node scripts/run-production-e2e.js --with-db",
-    "test:document-review-ui": "node --test test/document-review-queue-ui.test.js test/source-network-approval-ui.test.js"
+    "test:document-review-ui": "node --test test/document-review-queue-ui.test.js test/source-network-approval-ui.test.js",
+    "schema:sync": "node scripts/sync-schema-mirror.js",
+    "schema:check": "node scripts/sync-schema-mirror.js --check"
   },
   "keywords": [
     "real-estate",
