@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-09-19T09:40:12.059Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-09-19T23:37:17.846Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers

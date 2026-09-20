@@ -24,20 +24,27 @@ listing API is a plain Node `http` server in `server/`. They share one
 
 No database is required to boot. `server/db/client.js` falls back to an
 in-memory provider seeded from `data.js` whenever `DATABASE_URL` is unset
-(54 listings across 11 sources; 38 real via Treasury/USDA/IRS/GSA scrapers,
-16 mock fixtures). Set `DATABASE_URL` to a Postgres+PostGIS URL only
-to enable persistence. The repo's own `docker-compose.yml` wires PostGIS,
-but the Base44 dev compose intentionally omits it for a lighter dev loop.
+(2096 seed listings across 16 catalog sources; live scrapers and
+`.cache/live-listings.json` can raise the served total further). Set
+`DATABASE_URL` to a Postgres+PostGIS URL only to enable persistence. The
+repo's own `docker-compose.yml` wires PostGIS, but the Base44 dev compose
+intentionally omits it for a lighter dev loop.
 
-No external secrets are required at boot. `OPENAI_API_KEY` is optional and
-fails closed when unset; IMAP/Sentry vars are post-launch only.
+No external secrets are required to **boot** public listing pages. Optional
+`SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`) is required for operator
+workspace surfaces (unlock, document-review, hunts, scrapers run) — without it
+those routes fail closed with 503. `OPENAI_API_KEY` is optional and fails
+closed when unset; IMAP/Sentry vars are post-launch only.
 
 ## Verifying it works
 
 ```bash
 docker compose -f docker-compose.base44.yml up -d
 # UI on http://localhost:3000, API proxied through /api/listings
-curl -sf http://localhost:3000/api/listings   # → 50 listings (default cap), source "property-api"
+# Default list cap is typically 50 per page; total inventory is larger
+# (2096 seed listings + live-store overlays). Source label comes from the API.
+curl -sf http://localhost:3000/api/health   # dataMode + documentReviewStore
+curl -sf http://localhost:3000/api/listings # paginated listings payload
 ```
 
 The preview is served through an external proxy hostname, so `next.config.mjs`

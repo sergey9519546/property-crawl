@@ -83,7 +83,7 @@
   - Source: `server/scrapers/normalization.js` `buildParcelKey()`, `normalizeApn()`
 - 9 new discovery-only catalog sources: fl-dor-cadastral, tx-cad-bulk, county-recorder-nod, courtlistener, ca-controller-tax-sale, fhfa-hpi, census-geocoder, mers-servicerid, excess-funds.
   - Source: `server/sources/catalog.js`
-- Hardcoded api.market API key removed from `zillow-mcp.js` and `property-title.js`; both throw if env unset. Rotate `cmjgtcjea0001jr04c5ckyyk0`.
+- Hardcoded api.market API key removed from `zillow-mcp.js` and `property-title.js`; both throw if env unset. Tracked markdown previously contained the raw key — **redacted**; operator must rotate the historical api.market credential offline.
   - Source: `server/intelligence/zillow-mcp.js`, `server/intelligence/property-title.js`
 - Puter.js fully removed from `src/`; zero `puter` matches. AI paths use backend enrich endpoint.
   - Source: `src/app/layout.tsx`, `src/components/terminal/property-drawer.tsx`
@@ -212,4 +212,51 @@
 - auto-throttle.js + Retry-After in http.js fetchTextWithPolicy.
 - listing-schema.js identity gate in BaseScraper.standardizeListing.
 - Tests 50/50 foolproof-p0 + scrapers + server; pushed to origin/main.
+
+
+## Security + durability re-audit (2026-09-19/20 strict)
+
+- Tracked api.market key redacted from `reports/swarm-analysis-2026-09-13.md` and `memory/facts.md`; rotate historical credential offline.
+- Anonymous `GET /api/property-intelligence` no longer returns stored research/public-record extensions (`researchRestricted:true`); operator Bearer required.
+- Document-review: durable file store (`server/intelligence/document-review-store.js`), listing-document hydration for pending queue, transition table + optional revision check, percent-encoded document ids, POST body reuse of `req.body` (fixes deadlock after `server.js parseJsonBody`), persist failure → 503.
+- Next proxy: `API_PATH` covers unbrowse/jobs/import; App Router routes for jobs list, unbrowse status/intake, workspace import preview/commit; `test/property-api-proxy-inventory.test.js` in quality gate.
+- CORS: API and Next no longer trust request Host / naive origin equality; loopback+0.0.0.0 normalized; mutations require Origin or `x-workspace-request: 1`.
+- SSRF: `scraplingHttpGet` rejects private/loopback/metadata hosts + non-HTTPS + credentials.
+- `tokensMatch` hashes both sides before timingSafeEqual; client `operatorToken` prop removed from enrichment view.
+- Fly/Koyeb configs document required `SCRAPER_ADMIN_TOKEN`; Fly `memory_mb` only; Base44 compose api loads `.env.local`.
+- AGENTS.md seed truth updated to 2096 listings / 16 sources.
+- Production boot: `scripts/production-env.js` loads `.env.local`; internal API port `publicPort+2` for non-3000.
+- Verified: quality gate **13/13** (PG set); tsc clean; live e2e **23/23** on `:3970`/`:3972` (unlock, review write+persist, durable readback, unbrowse, jobs, import preview).
+## Strict improvement pass (2026-09-20 follow-up)
+
+- **Durability honesty:** document-review is a **host-local file store** (process-restart durable, not redeploy-durable). UI + PRODUCT_GAPS say so; `/api/health` returns `dataMode` (demo|postgres) + `documentReviewStore` (file|none) + path.
+- **Volumes:** `docker-compose.yml` `appcache:/app/.cache`; `fly.toml` `[[mounts]] property_cache → /app/.cache`; Koyeb env paths + disk docs. Base44 compose **no longer requires** `.env.local` via `env_file` (Node `--env-file-if-exists` only).
+- **Store lock:** document-review persist uses exclusive `.lock` (live-record-store protocol); failed persist **rolls back** in-memory map so GET cannot lie; HTTP illegal transition → 422.
+- **e2e runner:** isolated `PROPERTY_DOCUMENT_REVIEW_STORE_PATH` under tmpdir; 180s timeout; awaits taskkill; waits for ports free; health logs dataMode.
+- **CSP:** Next script-src without `unsafe-eval`; map markers use `textContent` not interpolated innerHTML; gtm team.desc is text nodes.
+- **CSRF:** `workspaceMutationAllowed` does not trust `X-Forwarded-Host` unless `TRUSTED_PROXY_COUNT>0`; accepts `PUBLIC_APP_ORIGIN`; tests in `test/workspace-mutation-gate.test.js`.
+- **CI:** unit-gate timeout 40m; e2e after build; verify.js suite 10 includes `production-boot.test.js`.
+- **start-production:** refuses boot when `.next/BUILD_ID` missing.
+- **Verified:** quality **13/13** (PG), production e2e **23/23** (`:3980`, isolated store, `dataMode=demo documentReviewStore=file`).
+## Missed-gap closure (2026-09-20 follow-up 2)
+
+- **AGENTS.md**: seed truth 2096/16; verify comments no longer claim “50 listings only”; documents optional `SCRAPER_ADMIN_TOKEN` and `/api/health` honesty fields.
+- **UI demo banner**: `src/components/site/data-mode-banner.tsx` on `/listings` + `/workspace/documents-review`; reads `/api/health` `dataMode`/`documentReviewStore`.
+- **Postgres document_reviews**: `server/db/schema.sql` + `document-review-store.js` pool backend (`persistAsync` / `loadPg`); route binds pool from `db` on first request; health reports `postgres|file|none`.
+- **Intelligence auth tests**: wrong token, POST denied, token-unset restricted path.
+- **E2E**: asserts health honesty fields; **24/24** on live stack with `dataMode=postgres documentReviewStore=postgres` (review write+readback through PG path).
+- **Quality**: 13/13 with PG; CONTEXT current; tsc clean.
+- **Source Radar (2026-09-20):** approved Migration 014 gates show **Collection approved** + scope hint; pending remains Approval pending/blocked. Publisher catalog taxonomy is no longer the only status chip.
+- **Dockerfile.production** explicitly copies `server/db/schema.sql` (document_reviews). Production smoke asserts schema + store + proxy contract.
+- **Schema mirrors (2026-09-20):** `src/lib/db/schema.sql` byte-synced with `server/db/schema.sql` after `document_reviews`; `test/db.test.js` in unit-gate.
+- **CSP:** `style-src` allows `fonts.googleapis.com`; `font-src` allows `fonts.gstatic.com`. `script-src 'unsafe-inline'` remains a documented Next bootstrap residual.
+- **HUD catalog:** `hud-homestore` status **SCOPE_LIMITED**; UI coverage preset “OH, NJ promoted run scope — not nationwide”.
+- **E2E default pins demo** (`delete DATABASE_URL`); `npm run test:production-e2e:db` opts into PG path.
+- **Explore-5 closure (2026-09-20):** schema mirror synced; quality-gate `forms+boot` includes queue-ui/hardening/source-catalog; isolated `db-contract` suite strips ambient DATABASE_URL; inventory tests cover template-literal prefixes; e2e default **demo-pinned** (25/25) + `--with-db` PG path; HUD catalog SCOPE_LIMITED; CSP fonts allowed; hardening fixtures isolated from live PG.
+- **Still open:** Next script-src unsafe-inline; operator secrets/webhooks/URL/Maps key; more wave-source canaries; live PG db.test timestamp/bidSpread projection quirks (optional when DATABASE_URL set).
+- **HUD promotion (2026-09-20):** `hud` **promoted** after 2 clean canaries at declared scope `HUD_STATES=OH,NJ`, `HUD_MAX_PAGES_PER_STATE=20`, `HUD_PAGE_SIZE=50`. Scope hash `da1ae8f3080f…`. maxPages=2 first attempt was NOT_CLEAN (gate held). Report: `reports/canary-promotion-hud-2026-09-20.md`. Nationwide 52-state HUD remains unpromoted.
+
+## Ultraplan (2026-09-20)
+
+- Full remaining-work plan: `docs/ULTRAPLAN.md` — phases 0–6 (commit/land → CI truth → CSP → scoped canaries → PG db contract → operator pack → polish). Timebox order in §6.
 
