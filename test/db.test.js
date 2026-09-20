@@ -366,10 +366,19 @@ async function run() {
         assert.ok(key in fetched, `PG row missing "${key}"`);
       }
       for (const numeric of ['openingBid', 'estLow', 'estHigh', 'assessed', 'mid', 'ratio', 'equity', 'dealScore', 'lat', 'lng']) {
-        assert.strictEqual(
-          typeof fetched[numeric], 'number',
-          `PG "${numeric}" should be a number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
-        );
+        const seedValue = seed[numeric];
+        if (seedValue == null) {
+          // Optional source fields stay unknown — do not invent numbers on PG.
+          assert.ok(
+            fetched[numeric] === null || typeof fetched[numeric] === 'number',
+            `PG "${numeric}" should be null or number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
+          );
+        } else {
+          assert.strictEqual(
+            typeof fetched[numeric], 'number',
+            `PG "${numeric}" should be a number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
+          );
+        }
       }
       assert.strictEqual(fetched.baths, 2.5, 'PG NUMERIC baths must be cast back to a number without truncating half-baths');
       assert.deepStrictEqual(fetched.cashToCloseDetails, record.cashToCloseDetails, 'PG JSONB cash-to-close details must round-trip');

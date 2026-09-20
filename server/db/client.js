@@ -49,6 +49,7 @@ const LISTING_SELECT = `
   CASE WHEN opening_bid > 0 AND est_low > 0 AND est_high >= est_low
        THEN GREATEST(0, ((est_low + est_high) / 2.0) - opening_bid)::float8
        ELSE NULL END    AS "equity",
+  equity_spread::float8 AS "bidSpread",
   CASE WHEN opening_bid > 0 AND est_low > 0 AND est_high >= est_low
        THEN deal_score
        ELSE NULL END    AS "dealScore",
@@ -95,6 +96,29 @@ function normalizeGeocode(latValue, lngValue) {
     && lat >= -90 && lat <= 90
     && lng >= -180 && lng <= 180;
   return valid ? { lat, lng } : { lat: null, lng: null };
+}
+
+function isoOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+/** Align PG text/numeric columns with the in-memory camelCase contract. */
+function mapPgListingRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  return {
+    ...row,
+    bidSpread: row.bidSpread == null || row.bidSpread === ''
+      ? null
+      : Number(row.bidSpread),
+    sourceObservedAt: isoOrNull(row.sourceObservedAt),
+    fetchedAt: isoOrNull(row.fetchedAt),
+    // Computed fields are not columns; keep contract keys present (nullable).
+    parcelKey: Object.prototype.hasOwnProperty.call(row, 'parcelKey') ? row.parcelKey : null,
+    triage: Object.prototype.hasOwnProperty.call(row, 'triage') ? row.triage : null,
+    sourceFacts: Object.prototype.hasOwnProperty.call(row, 'sourceFacts') ? row.sourceFacts : null,
+  };
 }
 
 function normalizeTimestamp(value) {
@@ -663,7 +687,7 @@ class DatabaseClient {
       const res = await this.pool.query(sql, params);
       // total = full match count (COUNT(*) OVER), not the page size.
       const total = Number(res.rows[0]?.fullCount ?? 0);
-      const listings = res.rows.map(({ fullCount, ...row }) => row);
+      const listings = res.rows.map(({ fullCount, ...row }) => mapPgListingRow(row));
       return { total, listings };
     }
 
@@ -709,14 +733,14 @@ class DatabaseClient {
   async getListingById(id) {
     if (this.isPg) {
       const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
-      if (res.rows[0]) return res.rows[0];
+      if (res.rows[0]) return mapPgListingRow(res.rows[0]);
       // Constrained alias: strip a source prefix, or match by suffix only when
       // the requested id is long enough to avoid short-id false positives
       // (e.g. id=1 must not match listing-1).
       if (id.length >= 6) {
         const aliasRes = await this.pool.query(
           `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE '%' || $1 LIMIT 1`, [id]);
-        if (aliasRes.rows[0]) return aliasRes.rows[0];
+        if (aliasRes.rows[0]) return mapPgListingRow(aliasRes.rows[0]);
       }
       return null;
     }
@@ -814,7 +838,8 @@ class DatabaseClient {
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
         has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
         updated_at = NOW()
-      WHERE listings.source_observed_at IS NULL
+      WHERE EXCLUDED.source_observed_at IS NULL
+         OR listings.source_observed_at IS NULL
          OR (EXCLUDED.source_observed_at IS NOT NULL AND EXCLUDED.source_observed_at >= listings.source_observed_at)
       RETURNING ${LISTING_SELECT};`;
       const params = [
@@ -833,7 +858,13 @@ class DatabaseClient {
         enriched.auctionProgram, enriched.lifecycleStatus, enriched.transactionOutcome, enriched.hasDocuments
       ];
       const result = await this.pool.query(sql, params);
-      return result.rows[0];
+      if (result.rows[0]) return mapPgListingRow(result.rows[0]);
+      // UPSERT WHERE can reject a stale partial refresh (e.g. null observedAt
+      // on an existing newer row). Surface the retained record instead of null.
+      if (enriched && typeof enriched.id === 'string' && enriched.id) {
+        return this.getListingById(enriched.id);
+      }
+      return null;
     }
 
     const idx = this.inMemoryData.listings.findIndex(l => l.id === enriched.id);
