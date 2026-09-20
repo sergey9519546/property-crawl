@@ -257,7 +257,8 @@
 - **Phase 3/4 continue (2026-09-20):** gsa **NOT_CLEAN** (robots exclusion — policy held); irs **NOT_CLEAN** (0 live records). Report `canary-not-clean-gsa-irs-2026-09-20.md`. PG listing projection: `bidSpread` from `equity_spread`, ISO timestamps, nullable computed keys, UPSERT allows null observedAt merges. **db.test 6/6 with DATABASE_URL**; quality `db-pg` suite added.
 - **CivilView promotion (2026-09-20):** **civilview promoted** at declared scope NJ countyId=20 (Salem) — 2 CLEAN canaries ×19 records. Report `canary-promotion-civilview-salem-nj-2026-09-20.md`. CAPTCHA sources remain unpromoted by policy.
 - **Still open:** Next script-src `unsafe-inline`; **landbank** catalog `INCONCLUSIVE_BLOCKED` (no bypass); operator secrets/volume/Maps key; gsa robots + irs empty until publisher conditions change.
-- **CivilView Hudson NJ (2026-09-20):** promoted countyId=10 after 2 CLEAN canaries (68 records); multi-county `complete` uses expected ordered county count; host disk ~0.5 GB free — storage reserve may pause large collections.
+- **CivilView Allen OH (2026-09-20):** promoted countyId=34 after 2 CLEAN canaries (10 records); active civilview scope hash `8b6d5a1c3759…` replaces Hudson. Report `canary-promotion-civilview-allen-oh-2026-09-20.md`.
+- **Still open:** Next script-src `unsafe-inline`; landbank `INCONCLUSIVE_BLOCKED`; operator secrets/volume/Maps key; gsa robots + irs empty; host disk low (~0.5 GB free).
 - **HUD promotion (2026-09-20):** `hud` **promoted** after 2 clean canaries at declared scope `HUD_STATES=OH,NJ`, `HUD_MAX_PAGES_PER_STATE=20`, `HUD_PAGE_SIZE=50`. Scope hash `da1ae8f3080f…`. maxPages=2 first attempt was NOT_CLEAN (gate held). Report: `reports/canary-promotion-hud-2026-09-20.md`. Nationwide 52-state HUD remains unpromoted.
 
 ## Ultraplan (2026-09-20)

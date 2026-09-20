@@ -59,7 +59,7 @@ coverage work, and a strict release-owner re-audit of claimed closures.
 |---|---|
 | Public live URL | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
 | Form webhook delivery | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/servicelink/**civilview(NJ Hudson id=10)** promoted; gsa robots-blocked, irs live-empty, CAPTCHA unpromoted |
+| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/servicelink/**civilview(OH Allen id=34)** promoted; gsa robots-blocked, irs live-empty, CAPTCHA unpromoted |
 | CAPTCHA publishers | Legitimate access — never auto-bypass |
 | Lawyer review of `/privacy` `/terms` | Legal |
 | Custom domain | Ops |

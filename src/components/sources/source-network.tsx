@@ -279,7 +279,7 @@ const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
   },
   civilview: {
     countyCount: 1,
-    countyLabel: "NJ Hudson promoted run scope — not nationwide",
+    countyLabel: "OH Allen promoted run scope — not nationwide",
     dimensions: { foreclosure: true },
   },
   "fl-dor-cadastral": {
