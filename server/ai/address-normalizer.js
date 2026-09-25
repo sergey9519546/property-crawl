@@ -56,12 +56,16 @@ function normalizeAddressAndParcel(rawString = '') {
 
   const str = String(rawString);
 
-  // Extract Parcel ID: e.g. "PARCEL 108-12-044" or "PIN # 12-34-567"
-  const parcelMatch = str.match(/(?:parcel|pin|tax\s*id|apn)\s*(?:no\.?|#)?\s*([0-9A-Za-z\-\.\/]+)/i);
+  // Extract Parcel ID: e.g. "PARCEL 108-12-044" or "PIN # 12-34-567".
+  // Word boundaries are required so street names like "Pine" or
+  // "Apple" don't accidentally match "pin" / "apn". Tax ID accepts
+  // "TAX ID", "TAXID", and "tax-id" — the latter is the canonical
+  // county-recorder spelling for some FL counties.
+  const parcelMatch = str.match(/\b(?:parcel|pin|tax[\s-]*id|apn)\b\s*(?:no\.?|#)?\s*([0-9A-Za-z\-\.\/]+)/i);
   const parcelId = parcelMatch ? parcelMatch[1].trim() : null;
 
   // Remove parcel clause to isolate address part
-  let addrPart = str.replace(/(?:[\/\;\|]?\s*(?:parcel|pin|tax\s*id|apn)[\s\S]*)/i, '').trim();
+  let addrPart = str.replace(/(?:[\/\;\|]?\s*\b(?:parcel|pin|tax[\s-]*id|apn)\b[\s\S]*)/i, '').trim();
 
   // Normalize range numbers: e.g. "1420-1422" -> "1420"
   addrPart = addrPart.replace(/^(\d+)\s*[\-\/]\s*\d+/, '$1');
