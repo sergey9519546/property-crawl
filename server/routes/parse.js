@@ -241,7 +241,14 @@ function calculateConfidence(parsed) {
     ['plaintiff_or_seller', 0.1],
     ['defendant', 0.1]
   ];
-  const score = weighted.reduce((sum, [field, weight]) => parsed[field] !== null ? sum + weight : sum, 0);
+  // Treat missing (undefined) the same as null — a fresh `{}` parsed
+  // record must score 0, not 1 (the prior version's `!== null` check
+  // passed for undefined fields, double-counting fields that never
+  // existed in the notice).
+  const score = weighted.reduce((sum, [field, weight]) => {
+    const value = parsed?.[field];
+    return value !== null && value !== undefined && value !== '' ? sum + weight : sum;
+  }, 0);
   return Number(Math.min(1, score).toFixed(2));
 }
 
