@@ -117,7 +117,26 @@ CREATE TABLE IF NOT EXISTS saved_deals (
     UNIQUE(user_id, listing_id)
 );
 
--- 4. Saved Searches & Alert History
+-- 4. Listing Price History
+--
+-- One row per (listing_id, observed_at) snapshot. The price-drop
+-- detector reads the most-recent prior snapshot to decide whether
+-- the current opening_bid is lower than what the listing had before.
+-- Snapshots are upserted (idempotent on listing_id + source_observed_at)
+-- so re-running the same scrape doesn't create duplicate history rows.
+CREATE TABLE IF NOT EXISTS listing_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    listing_id VARCHAR(64) NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    source_observed_at TIMESTAMPTZ NOT NULL,
+    opening_bid NUMERIC(14, 2),
+    mid NUMERIC(14, 2),
+    deal_score NUMERIC(5, 2),
+    source VARCHAR(64),
+    recorded_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(listing_id, source_observed_at)
+);
+
+-- 5. Saved Searches & Alert History
 --
 -- A saved search is a filter the user wants to be notified about. The
 -- filters are stored as a JSONB blob so the alerts engine can interpret
@@ -189,6 +208,8 @@ CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_id) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alert_matches_listing ON alert_matches(listing_id);
+CREATE INDEX IF NOT EXISTS idx_listing_history_listing ON listing_history(listing_id, source_observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listing_history_recorded ON listing_history(recorded_at DESC);
 
 -- ==========================================================
 -- Migration 002: Spatial Radius Search Function

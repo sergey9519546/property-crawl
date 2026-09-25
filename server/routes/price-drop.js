@@ -20,13 +20,16 @@ function defaultIdentity(req, res) {
   return requireWorkspaceIdentity(req, res);
 }
 
-async function loadHistoryLookup(database, userId) {
-  // The DB may expose a per-user listing-history store. If not, the
-  // route returns dropped=false for every saved listing — that's a
-  // fail-closed answer, not a "you have no drops" claim.
+async function loadHistoryLookup(database, listingIds) {
+  // Returns a Map<listingId, mostRecentSnapshot> for the requested ids.
+  // The history is global (not per-user); if the DB doesn't implement
+  // getListingHistory, the route returns dropped=false for every saved
+  // listing — fail-closed, not "you have no drops" claim.
   if (!database || typeof database.getListingHistory !== 'function') return new Map();
   try {
-    const history = await database.getListingHistory(userId);
+    const history = await database.getListingHistory(listingIds);
+    if (history instanceof Map) return history;
+    // Backward-compat: some test stubs return a plain array.
     const map = new Map();
     if (Array.isArray(history)) {
       for (const entry of history) {
@@ -64,7 +67,8 @@ function createPriceDropHandler(dependencies = {}) {
 
     const saved = await database.getSavedDeals(userId);
     const savedListings = Array.isArray(saved) ? saved : [];
-    const historyLookup = await loadHistoryLookup(database, userId);
+    const listingIds = savedListings.map((l) => l && l.id).filter(Boolean);
+    const historyLookup = await loadHistoryLookup(database, listingIds);
 
     const drops = [];
     for (const listing of savedListings) {

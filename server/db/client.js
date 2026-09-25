@@ -5,6 +5,12 @@ const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 
+function finiteOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
 const DEFAULT_WORKSPACE_STORE_PATH = path.resolve(__dirname, '../../.cache/workspace-store.json');
 const WORKSPACE_STORE_VERSION = 1;
@@ -392,6 +398,9 @@ class DatabaseClient {
       savedDeals: new Map(), // userId -> Set of listingIds
       savedSearches: new Map(), // searchId -> { userId, label, filters, isActive, createdAt, updatedAt, lastRunAt, lastMatchCount }
       alertMatches: new Map(),   // matchId -> { searchId, userId, listingId, matchedAt, readAt }
+      // listingHistory: listingId -> array of { sourceObservedAt, openingBid, mid, dealScore, source }
+      // Most-recent-first; the price-drop detector reads [0] as the prior snapshot.
+      listingHistory: new Map(),
       aiCache: new Map(),    // hash -> cached object
       logs: []
     };
@@ -1261,6 +1270,107 @@ class DatabaseClient {
       return;
     }
     this.inMemoryData.aiCache.set(record.contentHash, record);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Listing price history
+  //
+  // The price-drop detector reads the most-recent prior snapshot per
+  // listing and compares it against the current opening_bid. Snapshots
+  // are idempotent on (listing_id, source_observed_at) so re-running the
+  // same scrape does not create duplicate history rows.
+  // ---------------------------------------------------------------------------
+
+  async recordListingHistorySnapshots(listings, options = {}) {
+    if (!Array.isArray(listings) || listings.length === 0) return 0;
+    const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+    let recorded = 0;
+    if (this.isPg) {
+      for (const listing of listings) {
+        if (!listing || typeof listing !== 'object' || !listing.id) continue;
+        const sourceObservedAt = listing.sourceObservedAt || listing.provenance?.observedAt;
+        if (!sourceObservedAt) continue;
+        const res = await this.pool.query(
+          `INSERT INTO listing_history (listing_id, source_observed_at, opening_bid, mid, deal_score, source)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (listing_id, source_observed_at) DO NOTHING
+           RETURNING id`,
+          [
+            listing.id,
+            sourceObservedAt,
+            listing.openingBid ?? null,
+            listing.mid ?? null,
+            listing.dealScore ?? null,
+            listing.source ?? null
+          ]
+        );
+        if (res.rows.length > 0) recorded += 1;
+      }
+      return recorded;
+    }
+    // In-memory path
+    for (const listing of listings) {
+      if (!listing || typeof listing !== 'object' || !listing.id) continue;
+      const sourceObservedAt = listing.sourceObservedAt || listing.provenance?.observedAt;
+      if (!sourceObservedAt) continue;
+      const arr = this.inMemoryData.listingHistory.get(listing.id) || [];
+      // Idempotency: skip if (listingId, sourceObservedAt) already exists
+      const exists = arr.some((s) => s.sourceObservedAt === sourceObservedAt);
+      if (exists) continue;
+      arr.push({
+        listingId: listing.id,
+        sourceObservedAt,
+        openingBid: finiteOrNull(listing.openingBid),
+        mid: finiteOrNull(listing.mid),
+        dealScore: finiteOrNull(listing.dealScore),
+        source: typeof listing.source === 'string' ? listing.source : null,
+        recordedAt: new Date(nowMs).toISOString()
+      });
+      // Most-recent-first ordering
+      arr.sort((a, b) => b.sourceObservedAt.localeCompare(a.sourceObservedAt));
+      this.inMemoryData.listingHistory.set(listing.id, arr);
+      recorded += 1;
+    }
+    return recorded;
+  }
+
+  async getListingHistory(listingIds, options = {}) {
+    // Returns a Map<listingId, mostRecentSnapshot> for the requested
+    // ids. History is global (not per-user) — the per-user parameter
+    // is preserved for backward compat with earlier callers.
+    const ids = Array.isArray(listingIds) ? listingIds.filter((id) => typeof id === 'string' && id.trim()) : [];
+    if (ids.length === 0) return new Map();
+    const result = new Map();
+    if (this.isPg) {
+      // Fetch the most-recent prior snapshot for each listing by
+      // joining on a max-source_observed_at subquery.
+      const res = await this.pool.query(
+        `SELECT DISTINCT ON (listing_id)
+            listing_id, source_observed_at, opening_bid, mid, deal_score, source, recorded_at
+         FROM listing_history
+         WHERE listing_id = ANY($1::text[])
+         ORDER BY listing_id, source_observed_at DESC`,
+        [ids]
+      );
+      for (const row of res.rows) {
+        result.set(row.listing_id, {
+          listingId: row.listing_id,
+          sourceObservedAt: row.source_observed_at,
+          openingBid: row.opening_bid,
+          mid: row.mid,
+          dealScore: row.deal_score,
+          source: row.source,
+          recordedAt: row.recorded_at
+        });
+      }
+      return result;
+    }
+    for (const id of ids) {
+      const arr = this.inMemoryData.listingHistory.get(id);
+      if (!arr || arr.length === 0) continue;
+      result.set(id, arr[0]);
+    }
+    return result;
   }
 }
 

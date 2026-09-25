@@ -364,6 +364,22 @@ const scheduler = new IngestionScheduler({
         console.warn('[Alerts] Saved search alert processing failed (non-fatal):', alertErr && alertErr.message);
       }
     }
+
+    // Snapshot the freshly-observed listings so the price-drop detector
+    // has a prior-bid reference on the next ingestion cycle. Snapshots
+    // are idempotent on (listing_id, source_observed_at), so re-running
+    // the same scrape does not create duplicate history rows. Non-fatal
+    // — a failure here must never break ingestion.
+    if (Array.isArray(run.listings) && run.listings.length > 0) {
+      try {
+        const recorded = await db.recordListingHistorySnapshots(run.listings);
+        if (recorded > 0) {
+          console.log(`[History] Snapshotted ${recorded} listings for price-drop tracking.`);
+        }
+      } catch (historyErr) {
+        console.warn('[History] Listing history snapshot failed (non-fatal):', historyErr && historyErr.message);
+      }
+    }
   },
 });
 
