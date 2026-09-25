@@ -246,3 +246,52 @@ test('matchAllSearches: a fully-matching listing matches every applicable search
   const result = matchAllSearches(listing(), searches);
   assert.equal(result.matches.length, 3);
 });
+
+test('matchListingAgainstSearch: accepts the DB-stored filters blob (production shape)', () => {
+  // The DB stores the user's filter set inside a `filters` JSONB column.
+  // The alerts runner passes the record straight to the predicate without
+  // flattening. Without this fallback, no real saved search would ever
+  // match — every predicate call would return search_empty_filters.
+  const result = matchListingAgainstSearch(listing({ state: 'TX' }), {
+    id: 'DB-BLOB',
+    filters: { states: ['TX'] }
+  });
+  assert.deepEqual(result, { match: true });
+});
+
+test('matchListingAgainstSearch: top-level filter fields win when both shapes are present', () => {
+  // A caller can override a stored filter by passing top-level fields.
+  // The runner relies on this for tests; the API contract is documented.
+  const result = matchListingAgainstSearch(
+    listing({ state: 'TX' }),
+    { id: 'BOTH', filters: { states: ['CA'] }, states: ['TX'] }
+  );
+  assert.deepEqual(result, { match: true });
+});
+
+test('matchListingAgainstSearch: numeric filter fields read from the blob correctly', () => {
+  const blob = {
+    id: 'NUMERIC',
+    filters: { maxBid: 100000, minScore: 60, minEquity: 10000 }
+  };
+  // Above thresholds: match
+  assert.equal(matchListingAgainstSearch(
+    listing({ openingBid: 90000, dealScore: 70, equity: 50000 }),
+    blob
+  ).match, true);
+  // openingBid too high → maxBid_exceeded
+  assert.equal(matchListingAgainstSearch(
+    listing({ openingBid: 200000, dealScore: 70, equity: 50000 }),
+    blob
+  ).reason, 'maxBid_exceeded');
+  // dealScore too low → minScore_not_met
+  assert.equal(matchListingAgainstSearch(
+    listing({ openingBid: 90000, dealScore: 30, equity: 50000 }),
+    blob
+  ).reason, 'minScore_not_met');
+  // equity too low → minEquity_not_met
+  assert.equal(matchListingAgainstSearch(
+    listing({ openingBid: 90000, dealScore: 70, equity: 1000 }),
+    blob
+  ).reason, 'minEquity_not_met');
+});

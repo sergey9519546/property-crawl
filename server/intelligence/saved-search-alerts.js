@@ -33,27 +33,60 @@ function finiteOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Field lookup. The predicate accepts either a flat shape
+// (`{states: [...], maxBid: ...}`) or the DB-stored shape
+// (`{filters: {states: [...], maxBid: ...}}`). The DB stores the user's
+// filter blob verbatim, so the runner pulls a record off Postgres and
+// passes it straight here — flat fields would force every caller to
+// spread the blob first, which is a recipe for forgetting one field.
+// Top-level fields win when both are present so callers can override a
+// stored filter (e.g. tests injecting a flat search).
+function getFilter(search, key) {
+  if (!search || typeof search !== 'object') return undefined;
+  if (search[key] !== undefined) return search[key];
+  if (search.filters && typeof search.filters === 'object' && !Array.isArray(search.filters)) {
+    return search.filters[key];
+  }
+  return undefined;
+}
+
 // Returns the normalized state list for a search: ['TX', 'CA'] (uppercase,
 // trimmed, deduplicated, no empties). Null if the search doesn't constrain
 // state. An empty array is treated as null (don't filter).
 function normalizedStates(search) {
-  if (!isStringArray(search.states) || search.states.length === 0) return null;
-  return [...new Set(search.states.map((s) => s.trim().toUpperCase()))];
+  const states = getFilter(search, 'states');
+  if (!isStringArray(states) || states.length === 0) return null;
+  return [...new Set(states.map((s) => s.trim().toUpperCase()))];
 }
 
 function normalizedSources(search) {
-  if (!isStringArray(search.sources) || search.sources.length === 0) return null;
-  return [...new Set(search.sources.map((s) => s.trim().toLowerCase()))];
+  const sources = getFilter(search, 'sources');
+  if (!isStringArray(sources) || sources.length === 0) return null;
+  return [...new Set(sources.map((s) => s.trim().toLowerCase()))];
 }
 
 function normalizedPropTypes(search) {
-  if (!isStringArray(search.propTypes) || search.propTypes.length === 0) return null;
-  return [...new Set(search.propTypes.map((s) => s.trim()))];
+  const propTypes = getFilter(search, 'propTypes');
+  if (!isStringArray(propTypes) || propTypes.length === 0) return null;
+  return [...new Set(propTypes.map((s) => s.trim()))];
 }
 
 function normalizedKeywords(search) {
-  if (!isStringArray(search.keywords) || search.keywords.length === 0) return null;
-  return search.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+  const keywords = getFilter(search, 'keywords');
+  if (!isStringArray(keywords) || keywords.length === 0) return null;
+  return keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+}
+
+function trimmedString(search, key) {
+  const value = getFilter(search, key);
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function numericFilter(search, key) {
+  const value = getFilter(search, key);
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 // Detect "this search has no real filters at all". We intentionally allow
@@ -64,12 +97,12 @@ function hasAnyFilter(search) {
     || normalizedSources(search)
     || normalizedPropTypes(search)
     || normalizedKeywords(search)
-    || Number.isFinite(search.minScore)
-    || Number.isFinite(search.maxBid)
-    || Number.isFinite(search.minEquity)
-    || (typeof search.occupancy === 'string' && search.occupancy.trim())
-    || (typeof search.seniorLien === 'string' && search.seniorLien.trim())
-    || (typeof search.redemption === 'string' && search.redemption.trim()));
+    || Number.isFinite(numericFilter(search, 'minScore'))
+    || Number.isFinite(numericFilter(search, 'maxBid'))
+    || Number.isFinite(numericFilter(search, 'minEquity'))
+    || Boolean(trimmedString(search, 'occupancy'))
+    || Boolean(trimmedString(search, 'seniorLien'))
+    || Boolean(trimmedString(search, 'redemption')));
 }
 
 // Returns one of:
@@ -109,45 +142,51 @@ function matchListingAgainstSearch(listing, search) {
     }
   }
 
-  if (Number.isFinite(search.minScore)) {
+  const minScore = numericFilter(search, 'minScore');
+  if (minScore !== null) {
     const score = finiteOrNull(listing.dealScore);
-    if (!Number.isFinite(score) || score < search.minScore) {
+    if (!Number.isFinite(score) || score < minScore) {
       return { match: false, reason: 'minScore_not_met' };
     }
   }
 
-  if (Number.isFinite(search.maxBid)) {
+  const maxBid = numericFilter(search, 'maxBid');
+  if (maxBid !== null) {
     const bid = finiteOrNull(listing.openingBid);
-    if (Number.isFinite(bid) && bid > search.maxBid) {
+    if (Number.isFinite(bid) && bid > maxBid) {
       return { match: false, reason: 'maxBid_exceeded' };
     }
   }
 
-  if (Number.isFinite(search.minEquity)) {
+  const minEquity = numericFilter(search, 'minEquity');
+  if (minEquity !== null) {
     const equity = finiteOrNull(listing.equity);
-    if (!Number.isFinite(equity) || equity < search.minEquity) {
+    if (!Number.isFinite(equity) || equity < minEquity) {
       return { match: false, reason: 'minEquity_not_met' };
     }
   }
 
-  if (typeof search.occupancy === 'string' && search.occupancy.trim()) {
-    const wanted = search.occupancy.trim().toLowerCase();
+  const occupancy = trimmedString(search, 'occupancy');
+  if (occupancy) {
+    const wanted = occupancy.toLowerCase();
     const got = typeof listing.occupancy === 'string' ? listing.occupancy.trim().toLowerCase() : '';
     if (!got || got !== wanted) {
       return { match: false, reason: 'occupancy_mismatch' };
     }
   }
 
-  if (typeof search.seniorLien === 'string' && search.seniorLien.trim()) {
-    const wanted = search.seniorLien.trim().toLowerCase();
+  const seniorLien = trimmedString(search, 'seniorLien');
+  if (seniorLien) {
+    const wanted = seniorLien.toLowerCase();
     const got = typeof listing.seniorLienRisk === 'string' ? listing.seniorLienRisk.trim().toLowerCase() : '';
     if (!got || got !== wanted) {
       return { match: false, reason: 'seniorLien_mismatch' };
     }
   }
 
-  if (typeof search.redemption === 'string' && search.redemption.trim()) {
-    const wanted = search.redemption.trim().toLowerCase();
+  const redemption = trimmedString(search, 'redemption');
+  if (redemption) {
+    const wanted = redemption.toLowerCase();
     const got = typeof listing.redemptionWarning === 'string' ? listing.redemptionWarning.trim().toLowerCase() : '';
     if (!got || got !== wanted) {
       return { match: false, reason: 'redemption_mismatch' };

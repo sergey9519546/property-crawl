@@ -1,75 +1,55 @@
 // server/intelligence/alerts-runner.js
 //
 // Alerts runner: takes a batch of new listings, runs each listing
-// through the user's saved searches, and persists matches. The
-// engine itself is thin — the heavy lifting lives in
+// against every active saved search for the workspace user, and
+// persists matches via the DB. Heavy lifting lives in
 // server/intelligence/saved-search-alerts.js (the predicate) and
-// server/db/client.js (persistence). This module exists so the HTTP
-// route, the cron-style ingest hook, and tests share one entry point.
+// server/db/client.js (persistence). This module is the thin
+// orchestration glue so the scheduler's post-ingest hook and tests
+// share one entry point.
 //
-// Pure orchestration: no state of its own. Each function is stateless
-// and takes the database + clock as dependencies.
+// Pure orchestration: no state of its own. The DB is injected.
 
 'use strict';
 
-const { matchAllSearches } = require('./saved-search-alerts');
+const { matchListingAgainstSearch } = require('./saved-search-alerts');
 
-// Run a single listing through every active saved search for the
-// listing's publisher's user community. Saves matches via the DB and
-// returns the new match records.
+// Run every active saved search for a user against a batch of
+// listings. Returns:
+//   {
+//     userId,
+//     searches: <count of active searches>,
+//     totalNewMatches: <count of new alert_matches rows written>,
+//     results: [{ searchId, label, newMatches }]
+//   }
 //
 // `database` must implement:
-//   - listSavedSearches(userId)               → Search[]  (note: signature
-//                                               takes a user; we pass the
-//                                               per-listing pseudo-user
-//                                               unless `userId` is given)
-//   - recordAlertMatches(userId, searchId, ids)
+//   - listSavedSearches(userId, { includeInactive })
+//   - recordAlertMatches(userId, searchId, listingIds)
 //
-// In practice, the alerts runner is per-user: callers iterate users.
-// The simpler helper `runAlertsForListingAcrossUsers` covers the
-// case where one user owns the saved searches.
-async function runAlertsForListing({ listing, savedSearches, database, userId, nowMs }) {
-  if (!listing || typeof listing !== 'object') {
-    return { skipped: 'listing_missing', matches: [] };
-  }
-  if (!Array.isArray(savedSearches)) {
-    return { skipped: 'searches_missing', matches: [] };
-  }
-  if (!database) return { skipped: 'database_missing', matches: [] };
+// The scheduler calls this once per ingestion cycle and logs the
+// totalNewMatches count.
+async function runAlertsForUser({ userId, listings, database }) {
   if (!userId || typeof userId !== 'string') {
-    return { skipped: 'userId_missing', matches: [] };
+    return { userId: userId || null, searches: 0, totalNewMatches: 0, results: [], skipped: 'userId_missing' };
+  }
+  if (!database) {
+    return { userId, searches: 0, totalNewMatches: 0, results: [], skipped: 'database_missing' };
+  }
+  if (!Array.isArray(listings) || listings.length === 0) {
+    return { userId, searches: 0, totalNewMatches: 0, results: [], skipped: 'listings_empty' };
   }
 
-  const verdict = matchAllSearches(listing, savedSearches);
-  if (verdict.matches.length === 0) {
-    return { skipped: 'no_match', matches: [], skippedSearches: verdict.skipped };
-  }
-
-  const newMatches = [];
-  for (const match of verdict.matches) {
-    if (!match.searchId) continue;
-    const records = await database.recordAlertMatches(userId, match.searchId, [listing.id]);
-    if (Array.isArray(records) && records.length) {
-      newMatches.push(...records.map((r) => ({ ...r, searchLabel: match.label })));
-    }
-  }
-  return { skipped: null, matches: newMatches, skippedSearches: verdict.skipped };
-}
-
-// Run every saved search for a user against a batch of listings.
-// Returns a map { searchId: numberOfNewMatches } so callers can report
-// "3 searches surfaced new matches this run".
-async function runAlertsForUser({ userId, listings, database, nowMs }) {
-  if (!userId || !database) return { userId, searches: 0, totalNewMatches: 0, results: [] };
   const searches = await database.listSavedSearches(userId, { includeInactive: false });
-  if (!searches.length) return { userId, searches: 0, totalNewMatches: 0, results: [] };
+  if (!searches.length) {
+    return { userId, searches: 0, totalNewMatches: 0, results: [], skipped: null };
+  }
 
   const results = [];
   let total = 0;
   for (const search of searches) {
     const matchingIds = [];
     for (const listing of listings) {
-      const { matchListingAgainstSearch } = require('./saved-search-alerts');
       const verdict = matchListingAgainstSearch(listing, search);
       if (verdict.match) matchingIds.push(listing.id);
     }
@@ -79,10 +59,9 @@ async function runAlertsForUser({ userId, listings, database, nowMs }) {
     total += newCount;
     results.push({ searchId: search.id, label: search.label, newMatches: newCount });
   }
-  return { userId, searches: searches.length, totalNewMatches: total, results };
+  return { userId, searches: searches.length, totalNewMatches: total, results, skipped: null };
 }
 
 module.exports = {
-  runAlertsForListing,
   runAlertsForUser
 };

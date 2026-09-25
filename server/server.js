@@ -31,6 +31,7 @@ const handleWatchlistComps = require('./routes/watchlist-comps').createWatchlist
 const handleNeighborhoods = require('./routes/neighborhoods').createNeighborhoodsHandler();
 const handleAuctionCalendar = require('./routes/auction-calendar').createAuctionCalendarHandler();
 const savedSearchesHandlers = require('./routes/saved-searches').createSavedSearchesHandler();
+const handlePortfolioDashboard = require('./routes/portfolio-dashboard').createPortfolioDashboardHandler();
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
@@ -199,6 +200,9 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/alerts/matches' || url.pathname.startsWith('/api/alerts/matches/')) {
       return savedSearchesHandlers.handleAlertMatches(req, res, url);
+    }
+    if (url.pathname === '/api/portfolio/dashboard' || url.pathname.startsWith('/api/portfolio/')) {
+      return handlePortfolioDashboard(req, res, url);
     }
     if (url.pathname === '/api/health') {
       const { defaultStorePath } = require('./intelligence/document-review-store');
