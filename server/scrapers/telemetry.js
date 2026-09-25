@@ -10,12 +10,19 @@ const { inspectPublisherPhoto } = require('./media-policy');
 const DEFAULT_TELEMETRY_PATH = path.resolve(__dirname, '../../.cache/scraper-telemetry.json');
 
 class ScraperTelemetry {
-  constructor() {
+  constructor(options = {}) {
     // In-memory store for scraper run telemetry
     this.history = {};
-    this.persistPath = process.env.SCRAPER_TELEMETRY_PATH || DEFAULT_TELEMETRY_PATH;
+    // Tests and ephemeral runs pass { persist: false } to skip the
+    // disk-load + disk-save round-trip; the persisted file leaks
+    // state between test invocations otherwise (every fresh test was
+    // observing whatever the previous run had written).
+    this._persistEnabled = options.persist !== false;
+    this.persistPath = this._persistEnabled
+      ? (options.path || process.env.SCRAPER_TELEMETRY_PATH || DEFAULT_TELEMETRY_PATH)
+      : null;
     this._saveTimer = null;
-    this._load();
+    if (this._persistEnabled) this._load();
   }
 
   _load() {
@@ -33,6 +40,7 @@ class ScraperTelemetry {
   }
 
   _save() {
+    if (!this._persistEnabled) return;
     // Debounce writes to avoid excessive disk I/O on rapid scraper runs.
     if (this._saveTimer) return;
     this._saveTimer = setTimeout(() => {
@@ -43,6 +51,7 @@ class ScraperTelemetry {
   }
 
   _saveNow() {
+    if (!this._persistEnabled) return;
     try {
       fs.mkdirSync(path.dirname(this.persistPath), { recursive: true });
       const tmp = `${this.persistPath}.${process.pid}.tmp`;

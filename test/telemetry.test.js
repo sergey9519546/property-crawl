@@ -4,7 +4,9 @@ const { ScraperTelemetry } = require('../server/scrapers/telemetry');
 async function runTelemetryTests() {
   console.log('--- Testing Scraper Telemetry ---');
 
-  const telemetry = new ScraperTelemetry();
+  // Each instance opts out of disk persistence so prior runs in
+  // .cache/scraper-telemetry.json can't leak into the next test.
+  const telemetry = new ScraperTelemetry({ persist: false });
 
   // Test 1: Record successful run with perfect yield
   telemetry.recordRun('test-source', [
@@ -44,7 +46,7 @@ async function runTelemetryTests() {
   console.log('✓ Drift detection works for missing fields');
 
   // Test 3: Circuit breaker trip on consecutive errors
-  const errorTelemetry = new ScraperTelemetry();
+  const errorTelemetry = new ScraperTelemetry({ persist: false });
   errorTelemetry.recordRun('error-source', [], 0, new Error('Connection failed'));
   assert.strictEqual(errorTelemetry.getHealthReport().details['error-source'].circuitBreakerTripped, false);
   
