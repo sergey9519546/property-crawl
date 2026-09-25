@@ -101,7 +101,23 @@ class IrsSeizedScraper extends BaseScraper {
       const complete = failures.length === 0 && recordsRejected === 0;
       this.lastRunReport = { outcome: complete ? (listings.length ? 'success' : 'empty') : 'partial_failure', scope: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } }, recordsDiscovered: cards.length, recordsEmitted: listings.length, recordsRejected, recordsExcluded: excluded.length, exclusions: excluded, failures, complete, fullSweepComplete: complete, truncated: false, fixtureFallbackUsed: false };
       console.log(`[${this.name}] Scraped ${listings.length} IRS properties`);
-      return listings.map(item => this.standardizeListing(item));
+      // Schema-invalid items must not break the entire scrapeFeed call —
+      // the run report above already counts them as recordsRejected. Catch
+      // each item individually so the surviving listings still flow through
+      // the validator and the failure mode is observable in the report.
+      const standardized = [];
+      for (const item of listings) {
+        try {
+          standardized.push(this.standardizeListing(item));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`);
+          } else {
+            throw err;
+          }
+        }
+      }
+      return standardized;
     });
   }
 
