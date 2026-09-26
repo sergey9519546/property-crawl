@@ -43,7 +43,7 @@
     "sources:email:corpus": "node scripts/collect-email-notices.js --corpus test/fixtures/email-notices",
     "test:email-ingest": "node --test test/email-ingest.test.js",
     "test:swarm-executor": "node --test test/swarm-executor.test.js",
-    "test:sources": "node --test test/source-catalog.test.js test/source-intake.test.js test/source-intake-aliases.test.js test/source-network.test.js test/source-network-http.test.js test/source-observations.test.js test/source-collector-coverage.test.js test/live-cache-refresh.test.js test/federal-register-source.test.js test/servicelink.test.js test/listing-identifiers.test.js test/email-ingest.test.js",
+    "test:sources": "node --test test/source-catalog.test.js test/source-intake.test.js test/source-intake-aliases.test.js test/source-network.test.js test/source-network-http.test.js test/source-observations.test.js test/source-collector-coverage.test.js test/live-cache-refresh.test.js test/federal-register-source.test.js test/servicelink.test.js test/listing-identifiers.test.js test/email-ingest.test.js test/sources/intake-helpers.test.js",
     "refresh-data": "node scripts/build-data.js",
     "refresh-data:real": "node scripts/build-data.js --real",
     "skills:doctor": "node scripts/skills-doctor.js",
