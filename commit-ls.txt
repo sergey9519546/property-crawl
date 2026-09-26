@@ -1,0 +1,23 @@
+test(scrapers): cover listing-schema-helpers pure functions in 12 unit tests
+
+Direct unit coverage for validateListingShape + assertListingShape
+exported from server/scrapers/listing-schema.js. These are the
+schema-first gate the foolproof-scraping pipeline runs every record
+through before it lands in the database. Silent drift would either
+let malformed records through (lost identity fields) or reject
+legitimate fixtures.
+
+Pins:
+- validateListingShape: valid=true for a complete listing, emits
+  missing_<field> for each absent required field, treats null and
+  empty-string required fields as missing, rejects fixture origin
+  when requireLive=true, permits a non-fixture origin when
+  requireLive is set, returns the standardized listing on the
+  result, REQUIRED_FIELDS contains the documented identity-critical
+  fields
+- assertListingShape: returns the standardized listing on success,
+  throws LISTING_SCHEMA_INVALID with structured errors, error
+  message lists every failed field, fixture origin + requireLive=true
+  throws
+
+Wired into test:scraper-reliability so CI exercises the new file.
