@@ -187,6 +187,14 @@ test('extractObservedNotice: extracts attorney', () => {
   assert.match(result.attorney, /Smith & Associates/);
 });
 
+test('extractObservedNotice: extracts the deposit_terms field from "Deposit: $X" colon-prefixed form', () => {
+  // The sample notice uses "Deposit: $5,000.00 cashier's check". The regex
+  // must accept the colon between "Deposit" and the amount, not just
+  // "Deposit $X" and "Deposit of $X".
+  const result = extractObservedNotice(SAMPLE_NOTICE);
+  assert.match(result.deposit_terms, /Deposit: \$5,000\.00/);
+});
+
 test('extractObservedNotice: marks every field with field_status', () => {
   const result = extractObservedNotice(SAMPLE_NOTICE);
   assert.equal(result.field_status.property_address, 'extracted_from_notice');

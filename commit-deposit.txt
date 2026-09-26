@@ -1,0 +1,17 @@
+fix(parse): accept colon-prefixed Deposit: $X form
+
+The deposit regex in routes/parse.js required "Deposit $X" or
+"Deposit of $X" but real notices also use "Deposit: $X" and
+"Required deposit: $X". Without a colon slot in the regex, the
+deposit_terms field came back null for those notices and the LLM
+prompt lost the deposit context.
+
+Repro: extractObservedNotice on a notice containing "Deposit: $5,000
+cashier check" returned deposit_terms=null even though opening_bid
+and other money fields extracted cleanly.
+
+Fix: add a colon to the separator slot. The colon is optional, so
+the existing "Deposit $X" and "Deposit of $X" matches still work and
+the new "Deposit: $X" form now extracts. Added a regression test on
+the existing SAMPLE_NOTICE which already used the colon-prefixed
+form but was never asserted against.

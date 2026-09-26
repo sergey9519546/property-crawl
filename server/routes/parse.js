@@ -151,7 +151,9 @@ function extractObservedNotice(cleanNotice) {
   );
   const deposit = evidenceMatch(
     cleanNotice,
-    /\b(deposit(?:\s+of)?\s+(?:\$\s*[0-9,]+(?:\.\d{2})?|\d+(?:\.\d+)?\s*%)[^.\n]{0,100})/i
+    // Accept "Deposit $X", "Deposit of $X", and the colon-prefixed forms
+    // ("Deposit: $X", "Required deposit: $X") that appear in real notices.
+    /\b(deposit(?:\s+of)?\s*:?\s+(?:\$\s*[0-9,]+(?:\.\d{2})?|\d+(?:\.\d+)?\s*%)[^.\n]{0,100})/i
   );
   const attorney = evidenceMatch(
     cleanNotice,
