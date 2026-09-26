@@ -1,0 +1,27 @@
+test(intelligence): cover research-cases-helpers pure functions in 20 unit tests
+
+Direct unit coverage for the pure helpers exported from
+server/intelligence/research-cases.js. These back the research
+workspace — case creation, reconsideration rules, dossier summaries,
+and provenance normalization. Silent drift would let malformed
+provenance or oversized dossiers land in the workspace and corrupt
+every downstream summary.
+
+Pins:
+- canonicalJson: keys sorted alphabetically regardless of input
+  order, nested object keys sorted, arrays preserve order, primitive
+  + null handling
+- sha: deterministic 64-char hex digest, key-order independence
+  (depends on canonicalJson), accepts string input directly
+- identityKey: 64-char hex digest, deterministic for case-normalised
+  inputs, different recordIds produce different keys, throws on
+  non-object input via normalizeSourceRef
+- normalizeSourceRef: lower-case + trim sourceId, throws
+  RESEARCH_SOURCE_REF_INVALID on empty sourceId, sourceId with
+  disallowed characters, or non-object input; cleanText throws
+  RESEARCH_INVALID on missing recordId
+- caseSummary: documented summary fields projection, listingAliases
+  defaults to one-element array when missing, null fallback for
+  missing numeric snapshot fields, null latestTrigger / latestOrigin
+
+Wired into test:hunt-ranking so CI exercises the new file.
