@@ -22,7 +22,7 @@
     "test:hunts": "node --test test/hunts.test.js test/hunt-ranking.test.js test/hunt-discovery-filters.test.js",
     "test:server": "node test/server.test.js",
     "test:scrapers": "node test/scrapers.test.js",
-    "test:scraper-reliability": "node --test test/scraper-reliability.test.js test/civilview.test.js test/national-core-reports.test.js test/irs-scraper.test.js test/scrapers/federal-scrapers.test.js test/scrapers/normalization-helpers.test.js",
+    "test:scraper-reliability": "node --test test/scraper-reliability.test.js test/civilview.test.js test/national-core-reports.test.js test/irs-scraper.test.js test/scrapers/federal-scrapers.test.js test/scrapers/normalization-helpers.test.js test/scrapers/source-policy-helpers.test.js",
     "test:source-integrity": "node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs",
     "test:property-image": "node --test test/property-image.test.js test/publisher-media.test.js",
     "test:evidence-truth": "node --test test/cors-policy.test.js test/api-rate-policy.test.js test/api-rate-http.test.js test/enrich-evidence.test.js test/export-truth.test.js test/underwriting-truth.test.mjs test/legal-rules-truth.test.js test/routes/thin-routes.test.js test/routes/scrapers-auth.test.js test/routes/parcel-boundary-helpers.test.js test/routes/listings-helpers.test.js test/routes/enrich-evidence-summary.test.js",
