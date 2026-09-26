@@ -26,7 +26,7 @@
     "test:source-integrity": "node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs",
     "test:property-image": "node --test test/property-image.test.js test/publisher-media.test.js",
     "test:evidence-truth": "node --test test/cors-policy.test.js test/api-rate-policy.test.js test/api-rate-http.test.js test/enrich-evidence.test.js test/export-truth.test.js test/underwriting-truth.test.mjs test/legal-rules-truth.test.js test/routes/thin-routes.test.js test/routes/scrapers-auth.test.js test/routes/parcel-boundary-helpers.test.js",
-    "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js",
+    "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js test/ai/bidding-simulator.test.js",
     "test:e2e": "node test/e2e.test.js",
     "test:ui:e2e": "python test/next_ui_e2e_test.py",
     "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js",
