@@ -1,0 +1,21 @@
+test(security): cover requireWorkspaceIdentity + isWorkspaceAuthorized in 14 unit tests
+
+Direct unit coverage for the auth helpers exported from
+server/security/workspace-identity.js. requireWorkspaceIdentity and
+isWorkspaceAuthorized are the gates every workspace route goes
+through. Silent drift in either direction would either lock out
+the operator (no token configured) or let an unauthenticated caller
+through (token mismatch).
+
+Pins:
+- requireWorkspaceIdentity: 503 when no operator token is configured,
+  401 on token mismatch, returns the operator workspace id on
+  match, PROPERTY_WORKSPACE_ID override (truncated to 100 chars),
+  PROPERTY_OPERATOR_SECRET alias, SCRAPER_ADMIN_TOKEN precedence,
+  Authorization Bearer accepted, x-scraper-token precedence
+- isWorkspaceAuthorized: matching token returns true, no token
+  configured returns false, token mismatch returns false, no
+  presented token returns false, hash-based comparison (length
+  difference cannot early-exit and leak the expected length)
+
+Wired into test:evidence-truth so CI exercises the new file.
