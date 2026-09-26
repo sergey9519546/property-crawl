@@ -29,7 +29,7 @@
     "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js test/ai/bidding-simulator.test.js",
     "test:e2e": "node test/e2e.test.js",
     "test:ui:e2e": "python test/next_ui_e2e_test.py",
-    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js",
+    "test:canonical": "node --test test/canonical-runtime.test.js test/production-boot.test.js test/discovery/query-helpers.test.js",
     "test:adversary": "node test/adversary.test.js",
     "test:db": "node test/db.test.js",
     "scrape": "node server/scrapers/scheduler.js",
