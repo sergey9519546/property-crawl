@@ -13,7 +13,7 @@ let isolated;
 test.before(async () => { isolated = await createIsolatedDatabase(); });
 test.after(async () => { if (isolated) await isolated.close(); });
 
-test('migrations expose PostGIS and every durable discovery table', async () => {
+test('migrations expose PostGIS and every durable discovery table',{skip: !databaseUrl}, async () => {
   const result = await isolated.pool.query(`SELECT extname FROM pg_extension WHERE extname IN ('postgis','pg_trgm') ORDER BY extname`);
   assert.deepEqual(result.rows.map((row) => row.extname), ['pg_trgm', 'postgis']);
   const tables = await isolated.pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'discovery_%'");
@@ -21,7 +21,7 @@ test('migrations expose PostGIS and every durable discovery table', async () => 
   for (const name of ['discovery_source_runs','discovery_snapshots','discovery_observations','discovery_checkpoints','discovery_jobs','discovery_leases','discovery_imports']) assert.ok(names.has(name), name);
 });
 
-test('runs, snapshots, checkpoints, jobs, and leases survive store recreation', async () => {
+test('runs, snapshots, checkpoints, jobs, and leases survive store recreation',{skip: !databaseUrl}, async () => {
   const first = createDiscoveryStore(isolated.pool);
   const run = await first.beginRun({ sourceKey: 'hud', idempotencyKey: 'acceptance-run', scope: { state: 'CA' } });
   const sameRun = await first.beginRun({ sourceKey: 'hud', idempotencyKey: 'acceptance-run', scope: { state: 'CA' } });
