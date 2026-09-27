@@ -7,6 +7,13 @@
       "createdAt": "2026-09-07T00:56:43.802Z",
       "remote": "origin",
       "branchOwned": true
+    },
+    "wt-1790456419162-1": {
+      "branch": "feature/search-ranking-hunts",
+      "path": "c:\\users\\serge\\.minimax\\sessions\\mvs_33469e4a8e48472faf25c6f55a29c489\\workspace\\property-crawl\\.kilo\\worktrees\\search-ranking",
+      "parentBranch": "main",
+      "createdAt": "2026-09-19T10:52:35.035Z",
+      "remote": "origin"
     }
   },
   "sessions": {
@@ -41,7 +48,8 @@
     ]
   },
   "worktreeOrder": [
-    "wt-1788742603802-1"
+    "wt-1788742603802-1",
+    "wt-1790456419162-1"
   ],
   "sessionsCollapsed": true
 }

@@ -37,7 +37,7 @@
     "sources:intake": "node scripts/source-intake.js",
     "crawler:spider": "node scripts/crawler-tools-spider.cjs",
     "crawler:unbrowse": "node scripts/crawler-tools-unbrowse.cjs",
-    "test:crawler-tools": "node --test test/scrapling-bridge.test.js test/gsa-scrapling-integration.test.js test/gsa-identity.test.js test/onboarding-spider.test.js test/crawler-tools-unbrowse.test.js test/discovery-storage-health.test.js test/discovery-run-report.test.js test/scheduler-checkpoint.test.js test/hud-checkpoint.test.js",
+    "test:crawler-tools": "node --test test/scrapling-bridge.test.js test/gsa-scrapling-integration.test.js test/gsa-identity.test.js test/onboarding-spider.test.js test/crawler-tools-unbrowse.test.js test/discovery-storage-health.test.js test/discovery-run-report.test.js test/scheduler-checkpoint.test.js test/hud-checkpoint.test.js test/onboarding-pass.test.js test/discovery/onboarding-pass-helpers.test.js test/discovery/onboarding-ceilings.test.js",
     "sources:notices": "node scripts/collect-federal-notices.js",
     "sources:email": "node scripts/collect-email-notices.js",
     "sources:email:corpus": "node scripts/collect-email-notices.js --corpus test/fixtures/email-notices",

@@ -1,9 +1,19 @@
-# Product gaps — closing status (2026-09-19, strict re-audit)
+# Product gaps — closing status (2026-09-20)
 
-Honest inventory after production release, 10x listing pipeline, nationwide
-coverage work, and a strict release-owner re-audit of claimed closures.
+Honest inventory. Closed rows have a file or test. Open rows are not closed.
 
-## Closed in code (2026-09-18 → 2026-09-19)
+## Closed in this pass (2026-09-20)
+
+| Gap | Status | Evidence |
+|---|---|---|
+| Onboarding direct crawl ignored env page/depth/timeout clamps | **Closed** | `runOnboardingSource` passes clamped `maxPages` / `maxDepth` / `timeoutMs`. An explicit option still wins. `test/discovery/onboarding-source-budget.test.js` |
+| Search page invented a catalog-wide opening-bid fraction | **Closed** | `summarizeInventoryHonesty` counts the current page only. No hardcoded 54/1000 or HUD volume. `src/lib/inventory-honesty.ts`, `src/components/listings/discovery-workbench.tsx`, `test/inventory-honesty.test.mjs` |
+| Those fixes were outside the default test gate | **Closed** | `test/verify.js` suite `1c`. 29/29 passed on 2026-09-20. |
+| Lint gate missing from CI | **Closed as typecheck** | `npm run lint` is `tsc --noEmit`. There is no eslint config. `.github/workflows/lint.yml` runs that script. |
+| Seed count cited as 2096 | **Closed** | Current seed is **2093** in `CONTEXT.md`. `AGENTS.md` and `memory/facts.md` cite 2093. Do not cite 2096. |
+| Document `script-src 'unsafe-inline'` | **Closed** | Per-request nonce in `src/proxy.ts`. HTTPS-only `upgrade-insecure-requests`. `test/content-security-policy.test.js`, gate suite `1d`. |
+
+## Closed earlier (2026-09-18 → 2026-09-20)
 
 | Gap | Status | Evidence |
 |---|---|---|
@@ -15,69 +25,51 @@ coverage work, and a strict release-owner re-audit of claimed closures.
 | Swarm real-execution mode | **Closed** | `npm run swarm:real` |
 | Source promotion gate (code) | **Closed** | Migration 014 + `promotion:gate` without PG |
 | Production boot demo honesty | **Closed** | liveness `/api/health` + demo messages |
-| $0 deploy config (Render path) | **Closed for Render** | Render generates `SCRAPER_ADMIN_TOKEN`; **Koyeb/Fly need secrets set manually** — see operator table |
+| $0 deploy config (Render path) | **Closed for Render** | Render generates `SCRAPER_ADMIN_TOKEN`; **Koyeb/Fly need secrets set manually** |
 | Operator unlock cookie on HTTP/Docker | **Closed** | `cookieIsSecure` follows request protocol |
 | Document-review / enrichment / scraper mutations (auth) | **Closed** | operator session + API token |
-| **Document-review persistence** | **Closed for PG + file backends** | `document_reviews` in `server/db/schema.sql` + store write-through when `DATABASE_URL` pool exists; file store + lock remains $0 fallback. Health: `documentReviewStore: postgres|file|none`. Container file path still needs a volume for redeploy durability. |
-| Listing intelligence (quality/opportunity/identity) | **Closed** | `listing-intelligence.js` + `/api/listings.pipeline` |
-| Sheriff/CivilView/HUD collection depth | **Closed** | 20 OH counties; CivilView multi-county; HUD env knobs |
-| Nationwide catalog + CivilView 18-state registry | **Closed** | 163 catalog sources; `nationwide:coverage` |
+| Document-review persistence | **Closed for PG + file backends** | `document_reviews` in `server/db/schema.sql` + file store. Health: `documentReviewStore: postgres\|file\|none`. Redeploy durability still needs a volume. |
+| Listing intelligence | **Closed** | `listing-intelligence.js` + `/api/listings.pipeline` |
+| Sheriff/CivilView/HUD collection depth | **Closed at declared scope** | HUD stays OH,NJ. Nationwide HUD is not promoted. |
+| Nationwide catalog + CivilView registry | **Closed** | catalog + `nationwide:coverage` |
 | Local Postgres + Migration 014 stack | **Closed** | `discovery:local` migrate verified |
 | Shared terminal filter store | **Closed** | `terminal-filter-store.ts` + tests |
-| CAPTCHA fail-closed policy | **Closed** | catalog `INCONCLUSIVE_BLOCKED` + enrollment policy tests |
+| CAPTCHA fail-closed policy | **Closed** | catalog `INCONCLUSIVE_BLOCKED` |
 | Intelligence sort UI | **Closed** | Discovery workbench quality/opportunity + minQuality |
-| Next scraper proxy 20s timeout vs live runs | **Closed** | 180s scrapers POST; E2E 88s run → 200 / 2206 ingested |
-| Live record store 20MB cap after HUD nationwide | **Closed** | default 64MB + `PROPERTY_LIVE_STORE_MAX_BYTES` |
-| Next proxy holes (jobs list, unbrowse, workspace import) | **Closed 2026-09-19** | `API_PATH` + App Router routes; `test/property-api-proxy-inventory.test.js` gates UI↔proxy parity |
-| start:production operator-token parity | **Closed 2026-09-19** | `scripts/production-env.js` loads `.env.local` into API child; internal port `publicPort+2` for non-3000 |
-| Complete user workflow verification | **Closed in unit-gate 2026-09-20** | `npm run test:production-e2e` boots `start:production` then `e2e:workflow`; required step in `.github/workflows/ci.yml` unit-gate after `npm run build` |
-| Migration 014 promotions (treasury, usda, **hud @ OH,NJ**) | **Closed locally 2026-09-20** | treasury/usda + **hud** with 2 clean durable canaries at declared scope `HUD_STATES=OH,NJ`, `pageSize=50`, `maxPages=20` — `reports/canary-promotion-hud-2026-09-20.md`. Nationwide HUD sweeps remain unpromoted. |
-
-## Re-opened / still open (strict audit)
-
-| Gap | Status | Action |
-|---|---|---|
+| Next scraper proxy timeout | **Closed** | 180s scrapers POST |
+| Live record store cap | **Closed** | default 64MB + `PROPERTY_LIVE_STORE_MAX_BYTES` |
+| Next proxy holes | **Closed 2026-09-19** | `API_PATH` + App Router routes |
+| start:production operator-token parity | **Closed 2026-09-19** | `scripts/production-env.js` |
+| Complete user workflow verification | **Closed in unit-gate 2026-09-20** | `npm run test:production-e2e` |
+| Migration 014 promotions (treasury, usda, hud @ OH,NJ) | **Closed locally 2026-09-20** | `reports/canary-promotion-hud-2026-09-20.md`. Nationwide HUD remains unpromoted. |
 | e2e:workflow in CI unit-gate | **Closed 2026-09-20** | unit-gate runs `scripts/run-production-e2e.js` after production build |
-| Runtime production-boot process test | **Closed 2026-09-20** | `scripts/run-production-e2e.js` spawns `start:production` in unit-gate after build |
-| Fly/Koyeb operator secrets | **Operator** | Configs now document required secrets; values must be set in each host |
-| **`.cache` durability across redeploys** | **Partial — volume required** | `docker-compose.yml` + `fly.toml` mount `/app/.cache`; Koyeb disk is dashboard-only. Without mounts, reviews/forms/live overlays are wiped on recreate. |
-| Form webhook delivery | **Operator** | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Public live URL | **Operator** | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
-| CAPTCHA publishers (Bid4Assets, Land Bank, CA Controller) | **Policy** | Legitimate access — never auto-bypass |
-| Lawyer review of `/privacy` `/terms` | **Legal** | — |
-| Custom domain | **Ops** | — |
-| Multi-user auth | **Product** | Shared-key beta is intentional |
-| Playwright UI suite | **Known flaky here** | Re-run on idle host; not unit-gate |
-| Google Maps key restriction | **Ops** | GCP console — restrict public embed key |
-| Schema mirror + unit-gate wiring | **Closed 2026-09-20** | `src/lib/db/schema.sql` synced with `server/db/schema.sql`; db + queue-ui + hardening in `forms+boot` / verify 24a |
+| Runtime production-boot process test | **Closed 2026-09-20** | same script |
+| Schema mirror + unit-gate wiring | **Closed 2026-09-20** | `src/lib/db/schema.sql` synced with `server/db/schema.sql` |
 | HUD catalog honesty | **Closed 2026-09-20** | `hud-homestore` **SCOPE_LIMITED**; UI preset “OH, NJ promoted run scope” |
-| CSP Google Fonts | **Closed 2026-09-20** | `style-src`/`font-src` allow fonts.googleapis.com / fonts.gstatic.com |
+| CSP Google Fonts | **Closed 2026-09-20** | `style-src` / `font-src` allow fonts.googleapis.com / fonts.gstatic.com |
 
-## Operator / external (not code-closable)
+## Still open
 
-| Gap | Action owner |
-|---|---|
-| Public live URL | Sign up $0 host; set `SCRAPER_ADMIN_TOKEN` + secrets |
-| Form webhook delivery | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Migration 014 promotions of more sources | treasury/usda/hud(OH,NJ)/servicelink/**civilview(OH Allen id=34)** promoted; gsa robots-blocked, irs live-empty, CAPTCHA unpromoted |
-| CAPTCHA publishers | Legitimate access — never auto-bypass |
-| Lawyer review of `/privacy` `/terms` | Legal |
-| Custom domain | Ops |
-| Multi-user auth | Product decision (shared-key beta is intentional) |
-| Playwright UI suite | Re-run on idle host; not unit-gate |
-| Google Maps key restriction | GCP console — restrict public embed key |
+| Gap | Status | Why it stays open |
+|---|---|---|
+| CSP `style-src 'unsafe-inline'` | **Open** | React style attributes are not nonced. `script-src` no longer uses `unsafe-inline`. |
+| Live Postgres listing round-trip | **Open** | `LISTING_SELECT` casts `bidSpread` and timestamps in SQL. A live insert/read still needs `DATABASE_URL`. |
+| gsa, irs, nationwide HUD promotion | **Open** | Not promoted. Robots.txt and empty canaries are not overrides. |
+| `.cache` durability across redeploys | **Partial** | Compose and Fly mount `/app/.cache`. Koyeb disk is dashboard-only. |
+| Fly/Koyeb operator secrets | **Operator** | Values are not set from this repo. |
+| Form webhook delivery | **Operator** | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
+| Public live URL and custom domain | **Operator** | — |
+| CAPTCHA publishers | **Policy** | Never auto-bypass. |
+| Lawyer review of `/privacy` `/terms` | **Legal** | — |
+| Multi-user auth | **Product** | Shared-key beta is intentional. |
+| Playwright UI suite | **Known flaky here** | Not in the unit gate. |
+| Google Maps key restriction | **Ops** | GCP console. |
+| Nonce CSP in a live browser | **Unverified** | Policy unit test only. A browser load was not run. |
+| Uncommitted session work | **Open** | Not committed in this pass. |
 
-## Commands
+## Do not do
 
-```powershell
-npm run quality:report
-npm run smoke:production
-npm run promotion:gate
-npm run scrapers:power
-npm run listing:pipeline
-npm run nationwide:coverage
-npm run market:enroll
-npm run discovery:local -- migrate
-npm run e2e:workflow
-npm run test:production-e2e
-```
+- Do not promote gsa, irs, or a nationwide HUD sweep to clear a checklist.
+- Do not hardcode an opening-bid fraction or a HUD volume on the search page.
+- Do not treat a green unit gate as a live Postgres or production-secret close.
+- Do not mark style-src `unsafe-inline` closed because script-src no longer uses it.

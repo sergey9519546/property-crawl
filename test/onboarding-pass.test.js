@@ -217,6 +217,7 @@ test('runOnboardingSource returns outcome=empty when the crawl surfaces no candi
   });
   assert.equal(record.outcome, 'empty');
   assert.equal(record.candidatesCount, 0);
+  assert.equal(record.blockedCount, 0);
 });
 
 test('runOnboardingSource respects persist: false', async () => {
@@ -249,7 +250,7 @@ test('runOnboardingPass over the production SOURCE_CATALOG returns at least one 
   assert.ok(summary.runId.startsWith('onboarding-'));
   assert.equal(typeof summary.durationMs, 'number');
   for (const record of summary.records) {
-    assert.ok(['success', 'empty', 'failed', 'skipped'].includes(record.outcome));
+    assert.ok(['success', 'empty', 'blocked', 'failed', 'skipped'].includes(record.outcome));
   }
 });
 
@@ -302,7 +303,7 @@ test('runOnboardingPass summary counters add up to records.length', async () => 
     robots: { isAllowed: () => true },
     dependencies: { extractWithScrapling: extractStub([]) }
   });
-  assert.equal(summary.success + summary.empty + summary.failed + summary.skipped, summary.records.length);
+  assert.equal(summary.success + summary.empty + summary.blocked + summary.failed + summary.skipped, summary.records.length);
 });
 
 test('listCachedSources reads back the persisted manifests', async () => {

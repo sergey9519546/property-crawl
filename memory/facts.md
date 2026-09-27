@@ -3,7 +3,7 @@
 > Persistent global facts. Every entry cites its source file. No hallucinated facts.
 > Updated by the agent after significant changes; read at session start.
 >
-> Last refreshed: 2026-09-14 (forms persistence + completion audit).
+> Last refreshed: 2026-09-20. Current seed count and route list: `memory/facts-refresh-2026-09-20.md`.
 
 ## Architecture
 
@@ -39,10 +39,10 @@
 
 - 16 source types (A/B tier): bid4assets, civilview, fannie, fdic, freddie, gsa, hud, irs, landbank, marshals, servicelink, sheriff, treasury, trustee, usda, va.
   - Source: `CONTEXT.md`, `data.js`
-- 2096 listings across 51 states (states includes all 50 US states + DC territory + PR).
+- 2093 seed listings. State and property-type lists are the generated lists in `CONTEXT.md`. Do not cite 2096.
   - Property types: Commercial, Condo, Duplex, Land, Single Family, Single Family Home, Town House, Triplex, Unknown.
-  - Source: `CONTEXT.md` (regenerated 2026-09-14), `data.js`
-- Server API route modules: alerts, auction-calendar, coverage, document-review, enrich, enrichment, export, hunts, listings, neighborhoods, parcel-boundary, parse, property-image, property-image-providers, property-intelligence, property-signals, saved-searches, scrapers, source-network, verify-docket, watchlist-comps, workspace.
+  - Source: `CONTEXT.md` (digest `5fe1c0c2599e5f9f29750963fe0c783adb7223a60b7297c2df759134c83a8f92`), `data.js`
+- Server API route modules: alerts, auction-calendar, coverage, document-review, enrich, enrichment, export, hunts, listings, neighborhoods, parcel-boundary, parse, portfolio-dashboard, price-drop, property-comparison, property-image, property-image-providers, property-intelligence, property-signals, saved-searches, scrapers, source-network, verify-docket, watchlist-comps, workspace. Inline handlers: sources, health.
   - Source: `CONTEXT.md`, `server/routes/`
   - Source: `CONTEXT.md`, `server/routes/`
 - 35 scraper modules in `server/scrapers/` (adapter + infrastructure mix).
@@ -265,3 +265,14 @@
 
 - Full remaining-work plan: `docs/ULTRAPLAN.md` — phases 0–6 (commit/land → CI truth → CSP → scoped canaries → PG db contract → operator pack → polish). Timebox order in §6.
 
+
+## Facts refresh (2026-09-20)
+
+- Seed inventory is **2093** records. Older 2096 notes in this file are historical.
+  - Source: `CONTEXT.md`, `memory/facts-refresh-2026-09-20.md`
+- Onboarding crawl budget honors env clamps unless an explicit option is passed.
+  - Source: `server/discovery/onboarding-pass.js`
+- Search-page coverage counts are page-scoped.
+  - Source: `src/lib/inventory-honesty.ts`
+- Still open: CSP `unsafe-inline`; live Postgres round-trip; gsa, irs, and nationwide HUD promotion; operator secrets.
+  - Source: `docs/OPEN_RESIDUALS.md`

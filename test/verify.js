@@ -10,6 +10,8 @@ console.log('====================================================\n');
 const suites = [
   { name: '1. Client Unit & Formula Suite', cmd: 'node test/suite.test.js' },
   { name: '1a. CONTEXT drift', cmd: 'node --test test/context.test.js' },
+  { name: '1c. Page-scoped inventory honesty and onboarding budget', cmd: 'node --experimental-strip-types --test test/inventory-honesty.test.mjs test/discovery/onboarding-source-budget.test.js test/discovery/onboarding-ceilings.test.js test/discovery/onboarding-pass-helpers.test.js' },
+  { name: '1d. Document CSP nonce policy', cmd: 'node --test test/content-security-policy.test.js' },
   { name: '1b. Schema mirror sync', cmd: 'node scripts/sync-schema-mirror.js --check' },
   { name: '2. Backend REST API & Server Suite', cmd: 'node test/server.test.js' },
   { name: '3. Data Scrapers & Ingestion Pipeline', cmd: 'node test/scrapers.test.js' },
@@ -49,6 +51,7 @@ const suites = [
   { name: '24. Contact/Newsletter Form Persistence', cmd: 'node --test test/form-submissions.test.js' },
   { name: '24a. Document-review durability + Next proxy inventory + SSRF/CSP/CSRF', cmd: 'node --test test/document-review-route.test.js test/document-review-persistence.test.js test/document-review-transitions.test.js test/document-review-persist-failure.test.js test/document-review-store-lock.test.js test/document-review-pg-store.test.js test/document-review-queue-ui.test.js test/property-api-proxy-inventory.test.js test/production-env.test.js test/fetch-strategy-ssrf.test.js test/cors-policy.test.js test/property-intelligence-auth.test.js test/workspace-mutation-gate.test.js test/hardening.test.js' },
   { name: '25. Scraper Upgrade & Run Reports', cmd: 'node --test test/scraper-upgrade.test.js test/scrapling-bridge.test.js test/scrapling-hud-treasury-irs.test.js test/scrapling-env-gate.test.js' },
+  { name: '25a. Onboarding pass', cmd: 'node --test test/onboarding-pass.test.js test/discovery/onboarding-pass-helpers.test.js test/discovery/onboarding-ceilings.test.js' },
   { name: '26. Live Canary Script Contract', cmd: 'npm run test:canary' },
   { name: '27. Scraper Power & End Coverage Guarantee', cmd: 'npm run test:scraper-power' },
   { name: '28. Promotion Gate + Swarm Real Mode Contract', cmd: 'npm run test:promotion-gate' },

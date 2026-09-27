@@ -36,7 +36,7 @@
 |---|---|---|
 | A1 | Commit session work (or split commits) | Clean `git status` vs origin policy |
 | A2 | CONTEXT regenerated after final script/catalog edits | `node scripts/gen-context.js --check` |
-| A3 | `PRODUCT_GAPS.md` / `memory/facts.md` match last verification numbers | Diff review |
+| A3 | Gap docs match the seed count | **Closed 2026-09-20.** Seed is 2093. See `docs/GAP_CLOSEOUT_2026-09-20.md`. |
 | A4 | `package.json` scripts documented (`test:production-e2e`, `:db`, `test:document-review-ui`) | npm scripts list |
 
 ### WS-B — CI / verification hardening (P0, code)
@@ -47,7 +47,7 @@
 | B3 | Optional CI job `production-e2e:db` with Postgres service | `documentReviewStore=postgres` on CI |
 | B4 | Sync schema mirror on every schema change | Script `scripts/sync-schema-mirror.js` + smoke/CI check |
 | B5 | Align verify 3b ↔ `test:source-integrity` npm script | Single source of test file list |
-| B6 | `lint` ≠ typecheck: either `eslint .` wired or drop eslint deps + doc | `npm run lint` defined and run in CI |
+| B6 | Lint gate | **Closed 2026-09-20.** `npm run lint` is `tsc --noEmit`. `.github/workflows/lint.yml` runs it. No eslint config. |
 
 ### WS-C — CSP close-out (P1, code)
 | ID | Item | Done when |
@@ -66,7 +66,7 @@
 | ID | Item | Done when |
 |---|---|---|
 | D1 | Active inventory path shows volume (HUD 937) + sale urgency unknown honesty | listing:pipeline report cited in PRODUCT_GAPS |
-| D2 | Opening-bid coverage (~54/1000) messaged on workbench | UI note or pipeline badge |
+| D2 | Opening-bid coverage | **Closed 2026-09-20.** Page-scoped count only. Do not cite 54/1000. `src/lib/inventory-honesty.ts`. |
 | D3 | Playwright suite: mark not-in-gate clearly; optional nightly job | README/PRODUCT_GAPS + optional CI `continue-on-error` |
 | D4 | Premortem residual list reconciled to PRODUCT_GAPS | One table, no contradictions |
 
@@ -235,3 +235,28 @@ npm run e2e:workflow            # against an already-running stack
 [ ] canary:status shows only intended promoted scopes
 [ ] PRODUCT_GAPS / health dataMode match reality
 ```
+
+## Close-out 2026-09-20 (filled gaps only)
+
+These items are closed. The rest of this plan stays open.
+
+| ID | Status | Evidence |
+|---|---|---|
+| B6 | **Closed as typecheck** | `npm run lint` is `tsc --noEmit`. No eslint config. `.github/workflows/lint.yml` runs it. |
+| D2 | **Closed as page-scoped honesty** | Workbench counts the current page only. The old ~54/1000 catalog fraction is not shown. `src/lib/inventory-honesty.ts` |
+| A3 | **Closed for seed count and these gaps** | Seed is 2093. `docs/PRODUCT_GAPS.md`, `memory/facts.md`, `AGENTS.md`. |
+| D4 | **Reconciled** | Open leftovers match `docs/PRODUCT_GAPS.md` and `docs/OPEN_RESIDUALS.md`. |
+
+Still open here: A1 (uncommitted), C2–C4 (`unsafe-inline`), E1 for gsa/irs, F1–F3 (live Postgres), and every operator item in WS-G. Do not mark those closed.
+
+
+## Later close-out (2026-09-20)
+
+Fixed after this report. Not a rewrite of the original findings.
+
+- Onboarding crawl budget now passes clamped env limits. Explicit options still win.
+- Search opening-bid coverage counts the current page only. No catalog fraction.
+- Lint CI runs `npm run lint` (`tsc --noEmit`). No eslint config.
+- Seed count is 2093. Do not cite 2096.
+
+Still open: CSP `unsafe-inline`, live Postgres round-trip, gsa/irs/nationwide HUD promotion, operator secrets. Ledger: `docs/GAP_CLOSEOUT_2026-09-20.md`.

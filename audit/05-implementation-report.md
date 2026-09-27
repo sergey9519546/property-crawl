@@ -86,3 +86,15 @@ VERIFICATION RESULT: 14/17 Suites Passed (3 Failed)
 ```
 
 The 3 failures (suites 9-11) are pre-existing infrastructure tests requiring `next` in node_modules — unrelated to the agent system. Of the 17 suites in scope, the 14 runnable ones all pass; the remaining 3 infra suites could not run (missing `next`) and are counted as failed, not skipped. An earlier draft phrase "All 17 ... pass" was inaccurate; this paragraph is the authoritative wording.
+
+
+## Later close-out (2026-09-20)
+
+Fixed after this report. Not a rewrite of the original findings.
+
+- Onboarding crawl budget now passes clamped env limits. Explicit options still win.
+- Search opening-bid coverage counts the current page only. No catalog fraction.
+- Lint CI runs `npm run lint` (`tsc --noEmit`). No eslint config.
+- Seed count is 2093. Do not cite 2096.
+
+Still open: CSP `unsafe-inline`, live Postgres round-trip, gsa/irs/nationwide HUD promotion, operator secrets. Ledger: `docs/GAP_CLOSEOUT_2026-09-20.md`.

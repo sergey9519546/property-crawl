@@ -32,16 +32,14 @@ const nextConfig = {
   },
   // Security: do not advertise the framework in headers.
   poweredByHeader: false,
-  // Canonical UI security headers (production). Align with the Node API.
+  // Canonical UI security headers (production). Document CSP is set per request
+  // in src/proxy.ts so script-src can use a nonce instead of 'unsafe-inline'.
   async headers() {
     const security = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
-      // style-src must allow Google Fonts CSS hosts used by src/app/layout.tsx.
-      // script-src still needs 'unsafe-inline' for Next bootstrap (tracked residual).
-      { key: 'Content-Security-Policy', value: "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https: data:; connect-src 'self' https:; frame-src https:; object-src 'none'; base-uri 'self'; form-action 'self'" },
     ];
     if (process.env.NODE_ENV === 'production') {
       security.push({ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' });

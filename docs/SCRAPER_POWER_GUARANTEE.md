@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-09-19T23:37:17.846Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-09-26T23:27:30.965Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -10,7 +10,7 @@
 | Catalog sources (all ends) | **163** |
 | Scheduled production adapters | **21** |
 | Adapters with Scrapling profiles | **8** |
-| Seed listings in data.js | **2096** |
+| Seed listings in data.js | **2093** |
 | Required end coverage (scheduled) | **10/10** |
 
 ## End coverage (all channels)
@@ -54,8 +54,8 @@
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 2 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 8 | — |
-| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 15 | — |
-| `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 15 | — |
+| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 11 | — |
+| `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
 | `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
 | `sheriff` (Ohio Sheriff Sale Auction) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |

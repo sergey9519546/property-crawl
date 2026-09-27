@@ -46,3 +46,27 @@ Assume the system was deployed and failed badly. Plausible reasons + repairs app
 - CAPTCHA sources remain fail-closed; nationwide catalog adds enrollment templates only.
 - No known P0 remains for the $0 demo tier after `9244390` + this pass.
 
+## Close-out 2026-09-20 (filled gaps only)
+
+These items are closed. The rest of this plan stays open.
+
+| ID | Status | Evidence |
+|---|---|---|
+| B6 | **Closed as typecheck** | `npm run lint` is `tsc --noEmit`. No eslint config. `.github/workflows/lint.yml` runs it. |
+| D2 | **Closed as page-scoped honesty** | Workbench counts the current page only. The old ~54/1000 catalog fraction is not shown. `src/lib/inventory-honesty.ts` |
+| A3 | **Closed for seed count and these gaps** | Seed is 2093. `docs/PRODUCT_GAPS.md`, `memory/facts.md`, `AGENTS.md`. |
+| D4 | **Reconciled** | Open leftovers match `docs/PRODUCT_GAPS.md` and `docs/OPEN_RESIDUALS.md`. |
+
+Still open here: A1 (uncommitted), C2–C4 (`unsafe-inline`), E1 for gsa/irs, F1–F3 (live Postgres), and every operator item in WS-G. Do not mark those closed.
+
+
+## Later close-out (2026-09-20)
+
+Fixed after this report. Not a rewrite of the original findings.
+
+- Onboarding crawl budget now passes clamped env limits. Explicit options still win.
+- Search opening-bid coverage counts the current page only. No catalog fraction.
+- Lint CI runs `npm run lint` (`tsc --noEmit`). No eslint config.
+- Seed count is 2093. Do not cite 2096.
+
+Still open: CSP `unsafe-inline`, live Postgres round-trip, gsa/irs/nationwide HUD promotion, operator secrets. Ledger: `docs/GAP_CLOSEOUT_2026-09-20.md`.

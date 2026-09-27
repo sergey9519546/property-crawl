@@ -1,6 +1,6 @@
 import { serializeJsonLd } from "@/lib/json-ld";
 
-export function SeoSchema() {
+export function SeoSchema({ nonce }: { nonce?: string | null }) {
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -25,6 +25,7 @@ export function SeoSchema() {
   return (
     <script
       type="application/ld+json"
+      nonce={nonce || undefined}
       dangerouslySetInnerHTML={{ __html: serializeJsonLd(structuredData) }}
     />
   );

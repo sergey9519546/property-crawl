@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { connection } from "next/server";
+import { headers } from "next/headers";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { SeoSchema } from "@/components/site/seo-schema";
@@ -61,11 +63,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonces require a request. Static shells cannot carry a fresh nonce.
+  await connection();
+  const nonce = (await headers()).get("x-nonce");
+
   return (
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <head>
@@ -80,7 +86,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Droid+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Geist+Mono:wght@400&family=Press+Start+2P&display=swap"
           rel="stylesheet"
         />
-        <SeoSchema />
+        <SeoSchema nonce={nonce} />
       </head>
       <body className="antialiased bg-[#F5F6F7] text-[#111827]">
         {children}
