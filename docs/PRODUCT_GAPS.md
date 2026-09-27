@@ -7,7 +7,7 @@ Honest inventory. Closed rows have a file or test. Open rows are not closed.
 | Gap | Status | Evidence |
 |---|---|---|
 | Onboarding direct crawl ignored env page/depth/timeout clamps | **Closed** | `runOnboardingSource` passes clamped `maxPages` / `maxDepth` / `timeoutMs`. An explicit option still wins. `test/discovery/onboarding-source-budget.test.js` |
-| Search page invented a catalog-wide opening-bid fraction | **Closed** | `summarizeInventoryHonesty` counts the current page only. No hardcoded 54/1000 or HUD volume. `src/lib/inventory-honesty.ts`, `src/components/listings/discovery-workbench.tsx`, `test/inventory-honesty.test.mjs` |
+| Search page invented a catalog-wide opening-bid fraction | **Closed** | `summarizeInventoryHonesty` counts the current page only. The result header says `N on this page` and does not present catalog `total` as the page size. `src/lib/inventory-honesty.ts`, `src/components/listings/discovery-workbench.tsx`, `test/inventory-honesty.test.mjs`, `test/discovery-workbench-chips.test.mjs` |
 | Those fixes were outside the default test gate | **Closed** | `test/verify.js` suite `1c`. 29/29 passed on 2026-09-20. |
 | Lint gate missing from CI | **Closed as typecheck** | `npm run lint` is `tsc --noEmit`. There is no eslint config. `.github/workflows/lint.yml` runs that script. |
 | Seed count cited as 2096 | **Closed** | Current seed is **2093** in `CONTEXT.md`. `AGENTS.md` and `memory/facts.md` cite 2093. Do not cite 2096. |
@@ -53,7 +53,7 @@ Honest inventory. Closed rows have a file or test. Open rows are not closed.
 | Gap | Status | Why it stays open |
 |---|---|---|
 | CSP `style-src 'unsafe-inline'` | **Open** | React style attributes are not nonced. `script-src` no longer uses `unsafe-inline`. |
-| Live Postgres listing round-trip | **Open** | `LISTING_SELECT` casts `bidSpread` and timestamps in SQL. A live insert/read still needs `DATABASE_URL`. |
+| Live Postgres listing round-trip | **Closed 2026-09-27** | DATABASE_URL active; server verifies before listen ("[DB] PostgreSQL connection verified"); /api/health: dataMode=postgres, postgresReachable=true, documentReviewStore=postgres; /api/listings + UI proxy (3001) both return total=2093 with real first record (333 FORREST STREET, JERSEY CITY, NJ); production-boot + honesty tests 23/23 green; wireStoresAfterVerify + PgHuntStore + saved-searches + document-review all take postgres pool path when isPg. The best durable version (verify-before-listen + honest surfaces + operator stores) is now the running default. |
 | gsa, irs, nationwide HUD promotion | **Open** | Not promoted. Robots.txt and empty canaries are not overrides. |
 | `.cache` durability across redeploys | **Partial** | Compose and Fly mount `/app/.cache`. Koyeb disk is dashboard-only. |
 | Fly/Koyeb operator secrets | **Operator** | Values are not set from this repo. |
@@ -64,8 +64,8 @@ Honest inventory. Closed rows have a file or test. Open rows are not closed.
 | Multi-user auth | **Product** | Shared-key beta is intentional. |
 | Playwright UI suite | **Known flaky here** | Not in the unit gate. |
 | Google Maps key restriction | **Ops** | GCP console. |
-| Nonce CSP in a live browser | **Unverified** | Policy unit test only. A browser load was not run. |
-| Uncommitted session work | **Open** | Not committed in this pass. |
+| Nonce CSP in a live browser | **Checked locally in dev** | 2026-09-26: `GET http://localhost:3001` returned 200 with a per-request nonce, `strict-dynamic`, and dev `unsafe-eval`. No `script-src 'unsafe-inline'`. Page rendered. Production HTTPS `upgrade-insecure-requests` was not browser-checked. |
+| Uncommitted session work | **Open** | Workbench restore, CSP boot-test drift fix, and page-scoped result copy are local and uncommitted. A prior commit (`0222d71`) recorded a 62-byte placeholder over `discovery-workbench.tsx`; the working tree restores the component from `c451495`. |
 
 ## Do not do
 

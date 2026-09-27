@@ -60,9 +60,9 @@ Evidence-first discovery + triage layer for distressed and government-sold prope
 ## 2. Three-layer architecture (do not mix them)
 | Layer | Path | Role | Port (local) |
 |---|---|---|---|
-| v0 — static PWA | `index.html` + `app.js` | Client-side PWA, no server | served by `npm run dev` (3001) |
+| v0 — static PWA | `index.html` + `app.js` | Legacy reference only. Not launched by `npm run dev`. | not a dev server |
 | v1 — listing API | `server/` (plain Node `http`) | Listing API, scrapers, DB client | `npm run dev:api` (3000) |
-| v2 — Next.js 16 App Router | `src/` | Marketing / workspace UI | `npm run dev` (3001) |
+| v2 — Next.js 16 App Router | `src/` | Canonical marketing / workspace UI | `npm run dev` (3001) |
 
 Shared: one `package.json` / `node_modules`. The Next UI reaches the API via `PROPERTY_API_URL` (default `http://localhost:3000`). In the Base44 compose the UI runs on port 3000 and proxies API calls server-side to the internal `api` service. (`CLAUDE.md`)
 
@@ -155,7 +155,7 @@ Reports (`reports/`): canary promotions (`canary-promotion-*.md`), gap analysis 
 - CSP: either fully closed or tracked as an explicit residual with a concrete close-out path (`docs/ULTRAPLAN.md` §5).
 
 ## 8. Residuals / open work (`docs/ULTRAPLAN.md`, `docs/GAP_CLOSEOUT_2026-09-20.md`, `docs/OPEN_RESIDUALS.md`)
-- Phase 0: ~60 files dirty, uncommitted — must land before any claim of "done".
+- Session fixes (workbench restore, page-scoped result copy, CSP boot-test drift, postgres verify-before-listen wiring) were committed on 2026-09-27. Live Postgres listing round-trip is closed with evidence (`docs/OPEN_RESIDUALS.md`, `docs/PRODUCT_GAPS.md`): `dataMode=postgres`, `total=2093`, UI proxy matches API. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
 - Nationwide HUD unpromoted; treasury, usda, hud@OH,NJ promoted.
 - Quality gate: 14/14; e2e demo: 25/25; e2e `--with-db`: 24/24; `tsc` clean (`docs/ULTRAPLAN.md` §0).
 - Budget target: $0 at MVP, under $150/month in production (`docs/STRATEGY.md` §0).
