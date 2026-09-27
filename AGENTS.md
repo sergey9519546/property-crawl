@@ -126,6 +126,13 @@ npm run test:property-image
 npm run test:scraper-reliability
 npm run test:source-integrity
 npm run verify:gate      # gate verification
+
+# Database / persistence (optional Postgres; in-memory demo fallback by default)
+npm run test:db          # DB contract suite; with DATABASE_URL set it also runs
+                         # a live PG round-trip (verify-first, self-cleaning)
+npm run db:seed          # seed listings into Postgres via createListing
+npm run discovery:migrate  # apply server/db/migrations to a Postgres DB
+npm run discovery:local  # local Postgres + migration stack for discovery
 ```
 
 ## 5. Verified design patterns (`docs/STRATEGY.md`, `docs/FOOLPROOF_SCRAPE_RESEARCH.md`)

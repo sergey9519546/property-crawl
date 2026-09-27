@@ -2,6 +2,16 @@
 
 Honest inventory. Closed rows have a file or test. Open rows are not closed.
 
+## Closed in this pass (2026-09-27)
+
+| Gap | Status | Evidence |
+|---|---|---|
+| Active inventory path shows volume + sale-urgency honesty (ULTRAPLAN D1) | **Closed** | `npm run listing:pipeline` (exit 0) reports the active path honestly: Total 1000 observed; opening bid published for 51; sale urgency `unknown` for 956/1000 (no fabricated urgency); top volume hud 940, servicelink 25, usda 16, treasury 11, irs 8. `scripts/listing-pipeline-report.js`, `docs/SCRAPER_LISTING_10X.md`. Numbers are report output, not UI hardcodes. |
+| Google Fonts third-party CSS (ULTRAPLAN C2) | **Closed (deliberate residual)** | Inter + Geist Mono self-hosted via `next/font/google` (woff2 in `.next/static/media`); the Google CSS `<link>` now loads Droid Serif only (deprecated in next/font font-data — used by `.font-serif-arcade` testimonials); Press Start 2P removed entirely (class `.font-display-arcade` was never referenced by any component). Verified: `npm run build` exit 0; tsc clean; live browser check — `document.fonts.check` true for Inter, Geist Mono, and Droid Serif (italic+700); stylesheet link = `css2?family=Droid+Serif:...`; only pre-existing fail-closed 401s (`/api/alerts/matches`) in console. CSP keeps `fonts.googleapis.com` in `style-src` for Droid Serif. |
+| Live PG contract suite in CI (ULTRAPLAN F3) | **Closed 2026-09-27** | `.github/workflows/ci.yml` `production-e2e-pg` job now runs `node test/db.test.js` against the throwaway PostGIS service container (schema applied by the job; the test cleans its `TEST-` row). Optional `continue-on-error` job per WS-B B3 — cannot block the $0 unit gate. |
+| README marks the browser suite outside the unit gate (ULTRAPLAN D3) | **Closed** | README test section now labels `test:ui:e2e` as not part of the required unit gate (optional, Playwright browsers required). CI already runs it only in `continue-on-error: true` extended-suite. |
+| Premortem residuals reconciled (ULTRAPLAN D4) | **Closed** | `docs/PRODUCTION_PREMORTEM.md` close-out 2026-09-27 section aligns with PRODUCT_GAPS/OPEN_RESIDUALS: A1 committed, F1/F2 closed live, F3 closed in CI, C2 closed with Droid Serif residual; still open: `style-src 'unsafe-inline'`, gsa/irs/nationwide HUD (policy), WS-G operator items. |
+
 ## Closed in this pass (2026-09-20)
 
 | Gap | Status | Evidence |
@@ -62,10 +72,10 @@ Honest inventory. Closed rows have a file or test. Open rows are not closed.
 | CAPTCHA publishers | **Policy** | Never auto-bypass. |
 | Lawyer review of `/privacy` `/terms` | **Legal** | — |
 | Multi-user auth | **Product** | Shared-key beta is intentional. |
-| Playwright UI suite | **Known flaky here** | Not in the unit gate. |
+| Playwright UI suite | **Known flaky here** | Not in the unit gate; README marks `test:ui:e2e` optional and CI runs it only in `continue-on-error` extended-suite. |
 | Google Maps key restriction | **Ops** | GCP console. |
 | Nonce CSP in a live browser | **Checked locally in dev** | 2026-09-26: `GET http://localhost:3001` returned 200 with a per-request nonce, `strict-dynamic`, and dev `unsafe-eval`. No `script-src 'unsafe-inline'`. Page rendered. Production HTTPS `upgrade-insecure-requests` was not browser-checked. |
-| Uncommitted session work | **Open** | Workbench restore, CSP boot-test drift fix, and page-scoped result copy are local and uncommitted. A prior commit (`0222d71`) recorded a 62-byte placeholder over `discovery-workbench.tsx`; the working tree restores the component from `c451495`. |
+| Session work committed | **Closed 2026-09-27** | Working tree clean; six logical commits landed (b85b93e db wiring, 04d23b7 workbench restore, 2904757 CSP middleware, 43ab938 docs, 5cbc3b3 live-PG test, 746efa4 ULTRAPLAN). The `0222d71` placeholder over `discovery-workbench.tsx` was restored from `c451495` in `04d23b7`. |
 
 ## Do not do
 

@@ -147,7 +147,7 @@ npm run test:ui:e2e
 npm run build
 ```
 
-The browser suite in `test/next_ui_e2e_test.py` exercises desktop and mobile navigation, every listing-page URL, all geographic search scopes, grid/map synchronization, live filters and sorting, watchlist persistence, source-link truthfulness, notice parsing, dialogs, exports, responsive widget geometry, accessible names, and runtime-console failures.
+The browser suite in `test/next_ui_e2e_test.py` exercises desktop and mobile navigation, every listing-page URL, all geographic search scopes, grid/map synchronization, live filters and sorting, watchlist persistence, source-link truthfulness, notice parsing, dialogs, exports, responsive widget geometry, accessible names, and runtime-console failures. It is **not part of the required unit gate** — it needs local Playwright browsers and is known to be flaky in this environment; CI runs it only in a `continue-on-error` extended job. The fail-closed unit gate is `npm run verify:gate`.
 
 ## Production commands
 

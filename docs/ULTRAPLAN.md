@@ -37,38 +37,36 @@
 | A1 | Commit session work (or split commits) | **Closed 2026-09-27.** Working tree clean; five logical commits landed: `b85b93e` db wiring, `04d23b7` workbench restore, `2904757` CSP middleware, `43ab938` docs, `5cbc3b3` live-PG test. |
 | A2 | CONTEXT regenerated after final script/catalog edits | **Verified 2026-09-27** after the remote `data.js` refresh merge (seed still 2093/16 sources): `CONTEXT.md is current.` |
 | A3 | Gap docs match the seed count | **Closed 2026-09-20.** Seed is 2093. See `docs/GAP_CLOSEOUT_2026-09-20.md`. |
-| A4 | `package.json` scripts documented (`test:production-e2e`, `:db`, `test:document-review-ui`) | npm scripts list |
+| A4 | `package.json` scripts documented (`test:production-e2e`, `:db`, `test:document-review-ui`) | **Closed 2026-09-27.** AGENTS.md §4 test block lists `test:production-e2e`, `test:document-review-ui`, `test:db`; new Database/persistence block lists `db:seed`, `discovery:migrate`, `discovery:local`. |
 
 ### WS-B — CI / verification hardening (P0, code)
 | ID | Item | Done when |
 |---|---|---|
-| B1 | unit-gate timeout 40m + e2e after build | CI green on a clean Ubuntu checkout |
-| B2 | **Always demo-pin** e2e in CI (`E2E_EXPECT_DEMO=1`) | CI log shows `dataMode=demo` |
-| B3 | Optional CI job `production-e2e:db` with Postgres service | `documentReviewStore=postgres` on CI |
-| B4 | Sync schema mirror on every schema change | Script `scripts/sync-schema-mirror.js` + smoke/CI check |
-| B5 | Align verify 3b ↔ `test:source-integrity` npm script | Single source of test file list |
+| B1 | unit-gate timeout 40m + e2e after build | **Wired.** `ci.yml` unit-gate: `timeout-minutes: 40`, build step then demo-pinned `run-production-e2e.js`. CI green on a clean Ubuntu checkout is the ongoing signal. |
+| B2 | **Always demo-pin** e2e in CI (`E2E_EXPECT_DEMO=1`) | **Closed (wired earlier).** `scripts/run-production-e2e.js` sets `E2E_EXPECT_DEMO=1` when not `--with-db`; `scripts/e2e-user-workflow.js` asserts `dataMode=demo` + store file/none; the CI step clears `DATABASE_URL`/`DISCOVERY_MODE`. |
+| B3 | Optional CI job `production-e2e:db` with Postgres service | **Wired earlier.** `ci.yml` `production-e2e-pg` job: postgis service, schema apply, `--with-db` run, `continue-on-error: true`. |
+| B4 | Sync schema mirror on every schema change | **Wired earlier.** CI step "Schema mirror sync" runs `node scripts/sync-schema-mirror.js --check`; `db.test.js` also asserts byte-equality. |
+| B5 | Align verify 3b ↔ `test:source-integrity` npm script | **Closed (already aligned).** Both run `node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs`. |
 | B6 | Lint gate | **Closed 2026-09-20.** `npm run lint` is `tsc --noEmit`. `.github/workflows/lint.yml` runs it. No eslint config. |
 
 ### WS-C — CSP close-out (P1, code)
 | ID | Item | Done when |
 |---|---|---|
-| C1 | Keep Google Fonts hosts in CSP | Already done; retain assertions |
-| C2 | Migrate layout fonts to `next/font` where possible | Reduce third-party CSS |
-| C3 | **Nonce path:** `proxy.ts` + dynamic rendering for pages that need nonce CSP | `script-src 'nonce-…'` without `unsafe-inline` on operator pages |
-| C4 | **Or SRI path:** `experimental.sri` + hash SeoSchema JSON-LD; drop script `unsafe-inline` | production-boot test flips to `doesNotMatch(unsafe-inline)` |
-| C5 | API-side CSP remains `script-src 'self'` | Unchanged |
+| C1 | Keep Google Fonts hosts in CSP | Done; `fonts.googleapis.com` stays in `style-src` for Droid Serif. |
+| C2 | Migrate layout fonts to `next/font` where possible | **Closed 2026-09-27 (deliberate residual).** Inter + Geist Mono on `next/font` (self-hosted woff2 in `.next/static/media`); Google CSS link trimmed to Droid Serif only (deprecated in next/font font-data); unused Press Start 2P removed with its dead `.font-display-arcade` class. Verified: build exit 0, tsc clean, live browser `document.fonts.check` true for all three families, no new console errors. |
+| C3 | **Nonce path:** `proxy.ts` + dynamic rendering for pages that need nonce CSP | **Closed.** `middleware.ts` wires `src/proxy.ts`; live check 2026-09-26: `script-src 'self' 'nonce-…' 'strict-dynamic'` with no `unsafe-inline` for scripts. |
+| C4 | **Or SRI path:** `experimental.sri` + hash SeoSchema JSON-LD; drop script `unsafe-inline` | Superseded by C3 (nonce works via dynamic layout). `style-src 'unsafe-inline'` remains the only CSP residual (React style attributes). |
+| C5 | API-side CSP remains `script-src 'self'` | Unchanged. |
 
-> C3 vs C4 is a **choice**. Static marketing + PPR make full nonce painful; prefer **C4 for static JSON-LD + keep residual documented** unless operator pages can go fully dynamic.
->
-> **2026-09-20 note (Next 16 docs):** nonce CSP **requires dynamically rendered pages** (`proxy.ts` + `await connection()`). Static App Router marketing routes cannot receive a nonce at build time. Therefore `script-src 'unsafe-inline'` remains **required for static pages** until those routes are forced dynamic or SRI covers all inline scripts. Do not flip production-boot assertions to ban `unsafe-inline` until that work lands.
+> **2026-09-20 note (Next 16 docs):** nonce CSP **requires dynamically rendered pages** (`proxy.ts` + `await connection()`). Static App Router marketing routes cannot receive a nonce at build time. The root layout calls `await connection()`, so pages get a nonce; `style-src 'unsafe-inline'` remains **required** for React inline style attributes until those are nonced/hashed. Do not flip production-boot assertions to ban `unsafe-inline` in `style-src` until that work lands.
 
 ### WS-D — Product honesty leftovers (P1, code)
 | ID | Item | Done when |
 |---|---|---|
-| D1 | Active inventory path shows volume (HUD 937) + sale urgency unknown honesty | listing:pipeline report cited in PRODUCT_GAPS |
+| D1 | Active inventory path shows volume (HUD 937) + sale urgency unknown honesty | **Closed 2026-09-27.** `npm run listing:pipeline` cited in PRODUCT_GAPS with live output: active path 1000 observed, opening bid 51, urgency unknown 956/1000, hud 940 top volume. Numbers come from the report, not UI hardcodes. |
 | D2 | Opening-bid coverage | **Closed 2026-09-20.** Page-scoped count only. Do not cite 54/1000. `src/lib/inventory-honesty.ts`. |
-| D3 | Playwright suite: mark not-in-gate clearly; optional nightly job | README/PRODUCT_GAPS + optional CI `continue-on-error` |
-| D4 | Premortem residual list reconciled to PRODUCT_GAPS | One table, no contradictions |
+| D3 | Playwright suite: mark not-in-gate clearly; optional nightly job | **Closed 2026-09-27.** README marks `test:ui:e2e` as not part of the required unit gate; PRODUCT_GAPS row updated; CI keeps it in `continue-on-error` extended-suite only. |
+| D4 | Premortem residual list reconciled to PRODUCT_GAPS | **Closed 2026-09-27.** `docs/PRODUCTION_PREMORTEM.md` gained a Close-out 2026-09-27 reconciliation table matching PRODUCT_GAPS/OPEN_RESIDUALS exactly. |
 
 ### WS-E — Collection expansion (P1→P2, ops+code)
 | ID | Item | Done when |
@@ -84,7 +82,7 @@
 |---|---|---|
 | F1 | Fix `test/db.test.js` live PG: timestamp ISO normalization | **Closed 2026-09-27.** Live run vs `property_crawl`: 6/6 passed, exit 0. The round-trip now calls `verifyConnection()` first (asserts `isPg`), asserts `fetchedAt`/`sourceObservedAt` come back ISO-normalized (`…Z`), and deletes its throwaway row in `finally` (DB stayed at exactly 2093, `TEST-ROWS-LEFT:0`). `test/db.test.js`, commit `5cbc3b3`. |
 | F2 | Fix PG projection missing `bidSpread` / camelCase shape | **Closed 2026-09-27.** `bidSpread` added to the numeric-cast contract loop (`LISTING_SELECT` casts `equity_spread::float8`; `mapPgListingRow` Number()-casts leftovers); full `EXPECTED_LISTING_KEYS` shape asserted against a real PG row. Same live run: 6/6, exit 0. |
-| F3 | Optional dedicated `TEST_DATABASE_URL` for live PG suite | Open. The suite accepts `DISCOVERY_TEST_DATABASE_URL` / `TEST_DATABASE_URL` / `DATABASE_URL`; CI should point it at a service container, not a shared dev DB. |
+| F3 | Optional dedicated `TEST_DATABASE_URL` for live PG suite | **Closed 2026-09-27.** `ci.yml` `production-e2e-pg` job now runs `node test/db.test.js` against its throwaway PostGIS service container (never a shared dev DB). The suite accepts `DISCOVERY_TEST_DATABASE_URL` / `TEST_DATABASE_URL` / `DATABASE_URL`; CI passes `DATABASE_URL` pointing at the service. |
 
 ### WS-G — Operator / external (not code-closable; checklist)
 | ID | Item | Owner |
