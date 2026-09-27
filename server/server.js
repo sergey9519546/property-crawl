@@ -30,7 +30,7 @@ const handleEnrichmentGateway = require('./routes/enrichment');
 const handleWatchlistComps = require('./routes/watchlist-comps').createWatchlistCompsHandler();
 const handleNeighborhoods = require('./routes/neighborhoods').createNeighborhoodsHandler();
 const handleAuctionCalendar = require('./routes/auction-calendar').createAuctionCalendarHandler();
-const savedSearchesHandlers = require('./routes/saved-searches').createSavedSearchesHandler();
+const savedSearchesHandlers = require('./routes/saved-searches').createSavedSearchesHandler({ database: db });
 const handlePortfolioDashboard = require('./routes/portfolio-dashboard').createPortfolioDashboardHandler();
 const handlePropertyComparison = require('./routes/property-comparison').createPropertyComparisonHandler();
 const handlePriceDrop = require('./routes/price-drop').createPriceDropHandler();
@@ -157,7 +157,7 @@ async function handleRequest(req, res) {
       const readiness = await discoveryReadiness({ databaseProbe: () => probeDiscoveryDatabase(db.pool) });
       return res.status(readiness.ready ? 200 : 503).json(readiness);
     }
-    if (process.env.DISCOVERY_MODE === 'advanced' && !db.pool && url.pathname !== '/api/health') {
+    if (process.env.DISCOVERY_MODE === 'advanced' && !db.isPg && url.pathname !== '/api/health') {
       return res.status(503).json({ error: 'Advanced discovery requires PostgreSQL. No demo inventory was substituted.' });
     }
 
@@ -175,7 +175,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
     if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
     if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return handleWorkspace(req, res, url);
-    if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return handleDocumentReview(req, res);
+    if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return handleDocumentReview(req, res, { database: db });
     if (url.pathname === '/api/source-network' || url.pathname.startsWith('/api/source-network/')) return handleSourceNetwork(req, res);
     if (url.pathname.startsWith('/api/scrapers')) return handleScrapers(req, res);
     if (url.pathname === '/api/sources') {
@@ -218,10 +218,13 @@ async function handleRequest(req, res) {
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        // Honest runtime mode for operators/UI banners — never invent PG.
-        dataMode: db.pool ? 'postgres' : 'demo',
-        documentReviewStore: db.pool ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
-        documentReviewStorePath: db.pool ? null : (defaultStorePath(process.env) || null),
+        // Honest runtime mode — a Pool object is not a connection.
+        dataMode: db.dataMode(),
+        postgresConfigured: Boolean(process.env.DATABASE_URL),
+        postgresReachable: db.postgresReachable === true,
+        ...(db.postgresError ? { postgresError: db.postgresError } : {}),
+        documentReviewStore: db.isPg ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
+        documentReviewStorePath: db.isPg ? null : (defaultStorePath(process.env) || null),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),
       });
     }
@@ -279,9 +282,19 @@ server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 
-if (require.main === module) {
+async function startServer() {
+  if (typeof db.verifyConnection === 'function') {
+    await db.verifyConnection();
+  }
+
+  // Wire verified database into dependent stores (document-review, hunts durable, etc.)
+  // so they switch from file/demo to postgres when a real reachable pool exists.
+  // This is the central "connect the database" point for operator surfaces.
+  wireStoresAfterVerify(db);
+
   server.listen(PORT, () => {
-    console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}\n`);
+    console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}`);
+    console.log(`[Server] dataMode=${db.dataMode()} postgresReachable=${db.postgresReachable === true}\n`);
     if (!scheduler.shouldAllowRealScrapers(process.env)) {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
       return;
@@ -304,6 +317,34 @@ if (require.main === module) {
       scheduler.runAll().catch(err => console.error('[Server] Scheduled scrape failed:', err));
     }, intervalMs);
   });
+}
+
+if (require.main === module) {
+  startServer().catch((error) => {
+    console.error('[Server] Startup failed:', error && error.message ? error.message : error);
+    process.exit(1);
+  });
+}
+
+/**
+ * After verifyConnection has run, re-initialize stores that were created early
+ * (in demo mode) so they pick up a real pg pool when DATABASE_URL is reachable.
+ * This is the central "connect the database" point for operator surfaces.
+ */
+function wireStoresAfterVerify(database) {
+  try {
+    const docReview = require('./routes/document-review');
+    if (typeof docReview._resetForTests === 'function' && database && database.pool) {
+      // Re-create the store with the verified pool. Safe no-op in demo.
+      docReview._resetForTests({ pool: database.pool, env: process.env });
+    }
+  } catch (e) {
+    // Non-fatal; document review will stay on its current (file) store.
+  }
+
+  // Hunts durable path already inspects database.isPg + DISCOVERY_MODE at request time.
+  // Saved-searches and alert matches use the database client passed at handler creation
+  // (which has in-memory fallbacks that persist to workspace store when !isPg).
 }
 
 module.exports = server;

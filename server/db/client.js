@@ -392,6 +392,9 @@ class DatabaseClient {
 
     this.liveCacheSignature = null;
     this.liveCacheErrorSignature = null;
+    // Set only after SELECT 1 succeeds. A Pool object is not a connection.
+    this.postgresReachable = false;
+    this.postgresError = null;
     this.inMemoryData = {
       sources: {},
       listings: [],
@@ -420,12 +423,16 @@ class DatabaseClient {
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 5000,
         });
-        this.isPg = true;
-        console.log('[DB] Connected to PostgreSQL instance');
+        // Do not claim postgres until a query succeeds. Pool construction
+        // does not open a socket.
+        this.isPg = false;
+        this.postgresReachable = false;
       } catch (err) {
         if (this.env.DISCOVERY_MODE === 'advanced') throw new Error(`Advanced discovery PostgreSQL initialization failed: ${err.message}`);
         console.warn('[DB] PostgreSQL driver not initialized, using resilient in-memory provider:', err.message);
+        this.pool = null;
         this.isPg = false;
+        this.postgresError = err.message;
       }
     }
 
@@ -433,6 +440,50 @@ class DatabaseClient {
       this._loadWorkspaceStore();
       this.seedInMemory();
     }
+  }
+
+  /**
+   * Prove the configured Postgres URL answers a query. On failure, drop the
+   * unused pool and keep the already-seeded in-memory catalog so a dead
+   * DATABASE_URL cannot 503 the public listing API. Advanced discovery still
+   * fail-closes: it must not silently substitute demo inventory.
+   */
+  async verifyConnection() {
+    if (!this.pool) {
+      this.postgresReachable = false;
+      this.isPg = false;
+      return false;
+    }
+    let client;
+    try {
+      client = await this.pool.connect();
+      await client.query('SELECT 1');
+      this.postgresReachable = true;
+      this.isPg = true;
+      this.postgresError = null;
+      console.log('[DB] PostgreSQL connection verified');
+      return true;
+    } catch (err) {
+      this.postgresReachable = false;
+      this.isPg = false;
+      this.postgresError = String(err && err.message ? err.message : err).slice(0, 240);
+      const advanced = this.env.DISCOVERY_MODE === 'advanced';
+      if (!advanced) {
+        const dead = this.pool;
+        this.pool = null;
+        dead.end().catch(() => {});
+        console.warn('[DB] PostgreSQL unreachable; serving in-memory inventory:', this.postgresError);
+      } else {
+        console.error('[DB] Advanced discovery PostgreSQL is unreachable:', this.postgresError);
+      }
+      return false;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  dataMode() {
+    return this.isPg && this.postgresReachable ? 'postgres' : 'demo';
   }
 
   // ---------------------------------------------------------------------------

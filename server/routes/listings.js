@@ -246,6 +246,11 @@ async function handleListings(req, res) {
       total: INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0
         ? viewListings.length
         : result.total,
+      // Surface the same honesty signals the health endpoint provides so
+      // clients (workbench, tests) can see demo vs postgres without a second call.
+      dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'demo'),
+      postgresReachable: db.postgresReachable === true,
+      documentReviewStore: db.isPg ? 'postgres' : (require('../intelligence/document-review-store').defaultStorePath?.(process.env) ? 'file' : 'none'),
     };
     if (sinceMs !== null) {
       body.delta = true;
