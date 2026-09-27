@@ -15,7 +15,7 @@
 | Canaries | treasury, usda, **hud@OH,NJ** promoted; nationwide HUD unpromoted |
 | Last verified | quality **14/14**; e2e demo **25/25**; e2e `--with-db` **24/24**; tsc clean |
 
-**Commits:** ~60 files dirty, **uncommitted**. Phase 0 must land them.
+**Commits:** **Phase 0 landed 2026-09-27** — working tree clean; session work committed in `b85b93e` (db verify wiring), `04d23b7` (workbench restore + page-scoped copy), `2904757` (CSP nonce middleware), `43ab938` (docs + handoff backlog), `5cbc3b3` (live PG round-trip test, F1/F2). Live-PG integration verified end-to-end: `dataMode=postgres`, `total=2093`, UI proxy matches API.
 
 ---
 
@@ -34,8 +34,8 @@
 ### WS-A — Release hygiene (P0, code)
 | ID | Item | Evidence of done |
 |---|---|---|
-| A1 | Commit session work (or split commits) | Clean `git status` vs origin policy |
-| A2 | CONTEXT regenerated after final script/catalog edits | `node scripts/gen-context.js --check` |
+| A1 | Commit session work (or split commits) | **Closed 2026-09-27.** Working tree clean; five logical commits landed: `b85b93e` db wiring, `04d23b7` workbench restore, `2904757` CSP middleware, `43ab938` docs, `5cbc3b3` live-PG test. |
+| A2 | CONTEXT regenerated after final script/catalog edits | **Verified 2026-09-27** after the remote `data.js` refresh merge (seed still 2093/16 sources): `CONTEXT.md is current.` |
 | A3 | Gap docs match the seed count | **Closed 2026-09-20.** Seed is 2093. See `docs/GAP_CLOSEOUT_2026-09-20.md`. |
 | A4 | `package.json` scripts documented (`test:production-e2e`, `:db`, `test:document-review-ui`) | npm scripts list |
 
@@ -82,9 +82,9 @@
 ### WS-F — Live PG db contract (P2, code)
 | ID | Item | Done when |
 |---|---|---|
-| F1 | Fix `test/db.test.js` live PG: timestamp ISO normalization | Round-trip test passes with DATABASE_URL |
-| F2 | Fix PG projection missing `bidSpread` / camelCase shape | Same |
-| F3 | Optional dedicated `TEST_DATABASE_URL` for live PG suite | quality-gate `db-pg` suite env-gated |
+| F1 | Fix `test/db.test.js` live PG: timestamp ISO normalization | **Closed 2026-09-27.** Live run vs `property_crawl`: 6/6 passed, exit 0. The round-trip now calls `verifyConnection()` first (asserts `isPg`), asserts `fetchedAt`/`sourceObservedAt` come back ISO-normalized (`…Z`), and deletes its throwaway row in `finally` (DB stayed at exactly 2093, `TEST-ROWS-LEFT:0`). `test/db.test.js`, commit `5cbc3b3`. |
+| F2 | Fix PG projection missing `bidSpread` / camelCase shape | **Closed 2026-09-27.** `bidSpread` added to the numeric-cast contract loop (`LISTING_SELECT` casts `equity_spread::float8`; `mapPgListingRow` Number()-casts leftovers); full `EXPECTED_LISTING_KEYS` shape asserted against a real PG row. Same live run: 6/6, exit 0. |
+| F3 | Optional dedicated `TEST_DATABASE_URL` for live PG suite | Open. The suite accepts `DISCOVERY_TEST_DATABASE_URL` / `TEST_DATABASE_URL` / `DATABASE_URL`; CI should point it at a service container, not a shared dev DB. |
 
 ### WS-G — Operator / external (not code-closable; checklist)
 | ID | Item | Owner |
