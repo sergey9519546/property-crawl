@@ -156,17 +156,18 @@ test('document-review API and Next proxies require operator identity', () => {
 
 test('Next security headers are declared for the canonical UI', () => {
   const config = fs.readFileSync(path.join(__dirname, '..', 'next.config.mjs'), 'utf8');
-  assert.match(config, /Content-Security-Policy/);
+  // CSP moved to per-request middleware (src/proxy.ts) with a nonce; it must NOT
+  // remain as a static header in next.config.mjs.
+  assert.doesNotMatch(config, /Content-Security-Policy/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /poweredByHeader:\s*false/);
-  const cspMatch = config.match(/Content-Security-Policy['"]\s*,\s*value:\s*"([^"]+)"/);
-  assert.ok(cspMatch, 'CSP value present');
-  assert.doesNotMatch(cspMatch[1], /unsafe-eval/);
-  assert.match(cspMatch[1], /style-src[^;]*fonts\.googleapis\.com/);
-  assert.match(cspMatch[1], /font-src[^;]*fonts\.gstatic\.com/);
-  // Known residual: Next production bootstrap still needs script-src 'unsafe-inline'
-  // until nonce/hash CSP is wired. Tracked in PRODUCT_GAPS / memory facts.
-  assert.match(cspMatch[1], /script-src[^;]*'unsafe-inline'/);
+
+  // The CSP itself is asserted by the policy builder (dedicated unit test covers
+  // nonce/strict-dynamic/font rules); here we only prove the proxy is the carrier.
+  const proxy = fs.readFileSync(path.join(__dirname, '..', 'src/proxy.ts'), 'utf8');
+  assert.match(proxy, /Content-Security-Policy/);
+  assert.match(proxy, /buildContentSecurityPolicy/);
+  assert.match(proxy, /x-nonce/);
 });
 
 test('API rate policy wires TRUSTED_PROXY_COUNT into limiters', () => {
@@ -194,6 +195,17 @@ test('legacy marketing shells do not overclaim AI omniscience', () => {
   const manifest = fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8');
   assert.doesNotMatch(manifest, /Zillow for distressed/);
   assert.doesNotMatch(manifest, /AI that reads the fine print/);
+});
+
+test('listings API response surface includes dataMode and documentReviewStore for honesty', () => {
+  const listings = fs.readFileSync(path.join(__dirname, '..', 'server/routes/listings.js'), 'utf8');
+  // The response body must surface the same honesty signals as /api/health so
+  // clients (workbench, proxies, tests) see demo vs postgres without a second call.
+  // Uses the verified dataMode() when available (post-verifyConnection wiring).
+  assert.match(listings, /dataMode:\s*typeof db\.dataMode === 'function' \? db\.dataMode\(\) :/);
+  assert.match(listings, /postgresReachable: db\.postgresReachable === true/);
+  assert.match(listings, /documentReviewStore:/);
+  assert.match(listings, /'file'|'none'|'postgres'/);
 });
 
 test('listings API exports intelligence view for quality/opportunity sorts', () => {
