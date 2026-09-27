@@ -193,15 +193,14 @@
   ::selection {
     background: rgba(33, 66, 231, 0.3);
   }
-  /* Serif for testimonial quotes (arcade uses Droid Serif italic) */
+  /* Serif for testimonial quotes (arcade uses Droid Serif italic).
+     Droid Serif is deprecated in next/font's font-data, so it stays on the
+     Google Fonts CSS link in src/app/layout.tsx. */
   .font-serif-arcade {
     font-family: "Droid Serif", Georgia, "Times New Roman", serif;
   }
   .font-mono-arcade {
-    font-family: "Geist Mono", ui-monospace, monospace;
-  }
-  .font-display-arcade {
-    font-family: "Press Start 2P", monospace;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
   }
 }
 

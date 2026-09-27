@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import { connection } from "next/server";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -9,13 +9,21 @@ import { SeoSchema } from "@/components/site/seo-schema";
 // Arcade loads fonts via Google WebFont loader (webfont.js):
 //   families: ["Droid Serif:400,400italic,700,700italic","Geist Mono:400",
 //              "Inter:300,400,500,600,700","Press Start 2P:300,400,500,600,700"]
-// Inter is available via next/font/google. Droid Serif is deprecated in
-// next/font's font-data, so we load it (plus Geist Mono + Press Start 2P) via
-// the same <link> approach arcade's WebFont loader uses.
+// Inter + Geist Mono are self-hosted via next/font/google. Droid Serif is
+// deprecated in next/font's font-data, so it stays on a Google Fonts CSS
+// <link> (used by .font-serif-arcade testimonial quotes). Press Start 2P was
+// never referenced by any component and is not loaded at all.
 const inter = Inter({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -73,9 +81,9 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce");
 
   return (
-    <html lang="en" suppressHydrationWarning className={inter.variable}>
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${geistMono.variable}`}>
       <head>
-        {/* Exact font families arcade loads, via Google Fonts CSS (same as WebFont loader) */}
+        {/* Droid Serif only — Inter and Geist Mono are self-hosted via next/font. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -83,7 +91,7 @@ export default async function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Droid+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Geist+Mono:wght@400&family=Press+Start+2P&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Droid+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap"
           rel="stylesheet"
         />
         <SeoSchema nonce={nonce} />
