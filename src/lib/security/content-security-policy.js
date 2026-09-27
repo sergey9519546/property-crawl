@@ -7,8 +7,14 @@
  * request CSP header and attaches it to framework scripts. Development still
  * needs 'unsafe-eval' for React debug stacks.
  *
- * style-src keeps 'unsafe-inline' because React style attributes are not
- * nonced. That exception is still open.
+ * style-src: production gates style ELEMENTS with the nonce (no
+ * 'unsafe-inline'); development keeps 'unsafe-inline' because dev tooling
+ * may inject style elements without a nonce. React's style *attributes*
+ * (progress widths, motion transforms, data-driven colors) are covered by
+ * `style-src-attr 'unsafe-inline'` in every environment. Browsers that do
+ * not implement style-src-attr (Safari < 15.4) fall back to style-src; on
+ * those, React inline styles degrade cosmetically in production — the
+ * accepted trade-off for closing the style-element injection vector.
  *
  * upgrade-insecure-requests is opt-in. Local production boot is HTTP, and
  * forcing HTTPS there breaks asset loads.
@@ -24,11 +30,15 @@ function buildContentSecurityPolicy({
   }
   const scriptSrc = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (isDev) scriptSrc.push("'unsafe-eval'");
+  const styleSrc = isDev
+    ? "'self' 'unsafe-inline' https://fonts.googleapis.com"
+    : `'self' 'nonce-${nonce}' https://fonts.googleapis.com`;
 
   const directives = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(' ')}`,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    `style-src ${styleSrc}`,
+    "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' https://fonts.gstatic.com https: data:",
     "connect-src 'self' https:",

@@ -14,7 +14,11 @@ test('production script-src uses a nonce and not unsafe-inline', () => {
   assert.match(policy, /script-src 'self' 'nonce-abc123' 'strict-dynamic'/);
   assert.doesNotMatch(policy, /script-src[^;]*'unsafe-eval'/);
   assert.doesNotMatch(policy, /upgrade-insecure-requests/);
-  assert.match(policy, /style-src 'self' 'unsafe-inline' https:\/\/fonts\.googleapis\.com/);
+  // Style ELEMENTS are nonce-gated in production; React style attributes are
+  // scoped by style-src-attr. No bare 'unsafe-inline' style-src anymore.
+  assert.match(policy, /style-src 'self' 'nonce-abc123' https:\/\/fonts\.googleapis\.com/);
+  assert.doesNotMatch(policy, /style-src [^;]*'unsafe-inline'/);
+  assert.match(policy, /style-src-attr 'unsafe-inline'/);
   assert.match(policy, /font-src 'self' https:\/\/fonts\.gstatic\.com/);
 });
 
@@ -42,6 +46,10 @@ test('development script-src allows eval but not unsafe-inline', () => {
   assert.equal(scriptSrcAllowsUnsafeInline(policy), false);
   assert.match(policy, /'unsafe-eval'/);
   assert.doesNotMatch(policy, /upgrade-insecure-requests/);
+  // Dev tooling may inject style elements without a nonce, so dev keeps
+  // 'unsafe-inline' in style-src; React style attrs stay allowed everywhere.
+  assert.match(policy, /style-src 'self' 'unsafe-inline' https:\/\/fonts\.googleapis\.com/);
+  assert.match(policy, /style-src-attr 'unsafe-inline'/);
 });
 
 test('a missing nonce is rejected', () => {

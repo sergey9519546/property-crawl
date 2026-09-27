@@ -7,6 +7,7 @@ const { collectionScope } = require('../server/scrapers/collection-scope');
 const { sourcesForWave } = require('../server/discovery/contracts');
 const { SOURCE_CATALOG } = require('../server/sources/catalog');
 const { requireCollectionStorage, inspectCollectionStorage } = require('../server/discovery/storage-health');
+const { CollectionJobStore, createCollectionCoordinator } = require('../server/sources/collection-coordinator');
 
 const cadenceByAdapter = new Map(SOURCE_CATALOG.filter(source=>source.adapterKey).map(source=>[source.adapterKey,source.workflow.cadenceHours]));
 function leaseLostError(message='Discovery job lease lost'){const error=new Error(message);error.code='DISCOVERY_JOB_LEASE_LOST';return error;}
@@ -40,10 +41,26 @@ async function promotedSourcesWithinScope(store,collector,wave){
 }
 
 async function run({ wave = process.env.DISCOVERY_WAVE || 'wave1', canarySource = null, database=db, collector=scheduler, discoveryStore=null, storageProbe=inspectCollectionStorage } = {}) {
-  if (process.env.DISCOVERY_MODE !== 'advanced' || !database.isPg) throw new Error('Discovery worker requires DISCOVERY_MODE=advanced and PostgreSQL');
+  if (process.env.DISCOVERY_MODE !== 'advanced' || !database.isPg) {
+    // isPg only flips after a real SELECT 1 (verify-before-listen wiring).
+    // Standalone entrypoints (canary CLI, worker CLI) never booted the API
+    // server, so give them the same explicit verification before failing.
+    if (process.env.DISCOVERY_MODE !== 'advanced' || typeof database.verifyConnection !== 'function') throw new Error('Discovery worker requires DISCOVERY_MODE=advanced and PostgreSQL');
+    await database.verifyConnection();
+    if (!database.isPg) throw new Error('Discovery worker requires DISCOVERY_MODE=advanced and PostgreSQL');
+  }
+  // A collector constructed before verification holds an in-memory job
+  // store while canary jobs are created in the Postgres discovery store;
+  // rebuild the coordinator against the verified database so both sides
+  // see the same jobs. Test doubles without a `store` are left untouched.
+  let coordinator = collector.collectionCoordinator;
+  if (database.isPg && coordinator && coordinator.store instanceof CollectionJobStore) {
+    coordinator = createCollectionCoordinator({ scheduler: collector, database });
+    collector.collectionCoordinator = coordinator;
+  }
   requireCollectionStorage(storageProbe);
   const store=discoveryStore||createDiscoveryStore(database), scopePolicy=canarySource?{eligible:[canarySource],rejected:[]}:await promotedSourcesWithinScope(store,collector,wave),sourceIds=scopePolicy.eligible;
-  const owner=`worker:${process.pid}:${crypto.randomUUID()}`, coordinator=collector.collectionCoordinator,workerKey=wave;
+  const owner=`worker:${process.pid}:${crypto.randomUUID()}`,workerKey=wave;
   const scopeDetails=scopePolicy.rejected.length?{scopeRejections:scopePolicy.rejected}:{};
   await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'starting',details:scopeDetails});
   if(!coordinator)throw new Error('Discovery worker requires the collection coordinator');

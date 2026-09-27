@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { SeoSchema } from "@/components/site/seo-schema";
+import { NonceProvider } from "@/components/security/nonce-context";
 
 // Arcade loads fonts via Google WebFont loader (webfont.js):
 //   families: ["Droid Serif:400,400italic,700,700italic","Geist Mono:400",
@@ -97,8 +98,10 @@ export default async function RootLayout({
         <SeoSchema nonce={nonce} />
       </head>
       <body className="antialiased bg-[#F5F6F7] text-[#111827]">
-        {children}
-        <Toaster />
+        <NonceProvider nonce={nonce}>
+          {children}
+          <Toaster />
+        </NonceProvider>
       </body>
     </html>
   );
