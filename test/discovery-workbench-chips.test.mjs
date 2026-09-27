@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { computeTriageChips, chipToneClasses } from "../src/lib/triage-chips.ts";
@@ -110,4 +112,18 @@ test("missing or unparseable sourceObservedAt suppresses the isNew chip", () => 
     { now: NOW },
   );
   assert.equal(garbage.find((chip) => chip.key === "isNew"), undefined);
+});
+
+test("search results label page scope and do not present catalog total as the page", () => {
+  const workbench = fs.readFileSync(
+    path.join(import.meta.dirname, "..", "src/components/listings/discovery-workbench.tsx"),
+    "utf8",
+  );
+  assert.match(workbench, /summarizeInventoryHonesty/);
+  assert.match(workbench, /on this page/);
+  assert.match(workbench, /data-testid="inventory-honesty"/);
+  assert.doesNotMatch(
+    workbench,
+    /payload\.total\.toLocaleString\(\)\} \$\{payload\.total === 1 \? "property" : "properties"\}/,
+  );
 });
