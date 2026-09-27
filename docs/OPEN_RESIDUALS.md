@@ -6,6 +6,13 @@ Honest leftovers. These are not closed.
 
 | Item | Evidence |
 |---|---|
+| Content Security Policy `style-src 'unsafe-inline'` | **Closed 2026-09-27.** Production `style-src` is now `'self' 'nonce-…' https://fonts.googleapis.com` — style *elements* are nonce-gated (the full-stylesheet injection vector). React style *attributes* are covered by `style-src-attr 'unsafe-inline'` (progress widths, motion transforms, data-driven colors). Dev keeps `'unsafe-inline'` in `style-src` because dev tooling may inject style elements without a nonce. The one app `<style>` element (`src/components/ui/chart.tsx`) receives the nonce via `NonceProvider`/`useNonce()` from the root layout. Live production verification (`next start` :3100): CSP header carried `style-src 'self' 'nonce-…' fonts; style-src-attr 'unsafe-inline'`; `/` and `/listings` rendered fully styled (96 cards, `inventory-honesty` present, body bg computed, progress width attr applied); **zero CSP console violations**. Tests: `test/content-security-policy.test.js` (production asserts no bare `unsafe-inline` in `style-src`; dev asserts the retained dev exception). Accepted trade-off: browsers without `style-src-attr` support (Safari < 15.4) fall back to `style-src` and degrade React inline styles cosmetically in production. |
+| Live IRS canary close-out attempt | **Evidence recorded 2026-09-27.** The documented rerun path (`canary:live run --sources irs --repeat 2`) executed with working infrastructure (verify-before-guard fix + Postgres coordinator store fix): two distinct live runs fetched the IRS auction list and found **0 real-estate cards both times** (`accepted=0` → NOT_CLEAN per "empty publisher inventory is not a clean canary"). IRS stays unpromoted — correctly, on publisher-empty evidence rather than broken tooling. Report: `.cache/canary-reports/canary-2026-09-27T09-11-25-910Z-cc6b7d2f.json`; `reports/canary-irs-2026-09-27.md`. gsa remains fail-closed on the publisher robots exclusion (operator-only override, not used). |
+
+## Closed earlier
+
+| Item | Evidence |
+|---|---|
 | Onboarding direct-crawl budget ignores env clamps | `runOnboardingSource` passes clamped `maxPages` / `maxDepth` / `timeoutMs`. An explicit option still wins. `test/discovery/onboarding-source-budget.test.js` |
 | Search page invents catalog-wide opening-bid coverage | `summarizeInventoryHonesty` counts the current page only. The workbench labels `N on this page` separately from search matches and renders `data-testid="inventory-honesty"`. `src/lib/inventory-honesty.ts`, `src/components/listings/discovery-workbench.tsx`, `test/discovery-workbench-chips.test.mjs` |
 | Those two fixes were not in the default gate | `test/verify.js` suite `1c` runs the honesty and onboarding budget tests. |
@@ -17,12 +24,9 @@ Honest leftovers. These are not closed.
 
 | Item | Why it is still open |
 |---|---|
-| Content Security Policy `style-src 'unsafe-inline'` | React style attributes are not nonced. Removing this would block inline styles. Not removed. |
-| Live Postgres listing contract | Closed 2026-09-27. DATABASE_URL active in .env.local; server starts with verifyConnection success + "[DB] PostgreSQL connection verified"; /api/health emits dataMode=postgres, postgresReachable=true, documentReviewStore=postgres, postgresConfigured=true; /api/listings returns total=2093 with real records (first: 333 FORREST STREET, JERSEY CITY, NJ 07304); UI proxy on 3001 matches exactly (same total/mode/first); production-boot.test.js + inventory-honesty.test.js pass 23/23; wireStoresAfterVerify + isPg + PgHuntStore + saved-searches all take the pool path when isPg. The "best version" (verify-before-listen, honest surfaces, durable operator stores, createListing persistence) is now the running default when DATABASE_URL is reachable. |
-| gsa, irs, nationwide HUD promotion | Not promoted. Robots.txt and empty canaries are not overrides. HUD stays at the declared OH,NJ scope. |
+| gsa, irs, nationwide HUD promotion | **Policy — stays open.** Not promoted. gsa: publisher robots exclusion on `/our-listing`; collector fail-closed (operator-only override, not used). irs: 2026-09-27 live rerun with repaired canary infrastructure found **0 real-estate auction cards** on two distinct runs (`accepted=0` → NOT_CLEAN; empty publisher inventory is not a clean canary). `reports/canary-irs-2026-09-27.md`. HUD stays at the declared OH,NJ scope. |
 | Operator secrets, cache volume, webhooks, domain, legal review | Outside this repo. |
-| Nonce CSP in a live browser | **Checked 2026-09-26 on local `next dev`.** `GET http://localhost:3001` returned 200. CSP had `script-src 'self' 'nonce-…' 'strict-dynamic' 'unsafe-eval'` and no `script-src 'unsafe-inline'`. `style-src 'unsafe-inline'` was still present. The page title rendered. This was development, not a production HTTPS boot, so `upgrade-insecure-requests` was correctly absent. |
-| Listings API honesty surface (dataMode / documentReviewStore) | **Closed 2026-09-27** | `/api/listings` now emits the same `dataMode` and `documentReviewStore` fields as `/api/health`. Live probe on port 3020: `HTTP=200`, `dataMode=demo`, `documentReviewStore=file`, `TOTAL=6603`, `PAGE_LEN=1`. `server/routes/listings.js:251-252`. Prior gap: health-only surface. |
+| Production HTTPS CSP check | The 2026-09-27 production style-src verification ran on local HTTP `next start` (:3100): live header + rendered pages + zero CSP violations. A production HTTPS boot (with `upgrade-insecure-requests`) still needs the public deployment. |
 
 ## Do not do
 

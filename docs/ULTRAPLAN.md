@@ -25,7 +25,7 @@
 2. **Honest product:** every durability/coverage claim matches code + `/api/health` + Source Radar.  
 3. **Operator-ready:** one documented secret + volume checklist for Render/Fly/Koyeb/Docker.  
 4. **Collection honesty:** only declared, canary-qualified scopes look “approved”; CAPTCHA stays fail-closed.  
-5. **CSP closed or explicitly residual:** fonts work; `unsafe-inline` either removed or still a tracked residual with a concrete close-out path.
+5. **CSP closed or explicitly residual:** fonts work; script-src and style-src no longer use `unsafe-inline` in production (style attributes scoped via `style-src-attr`); dev keeps documented exceptions.
 
 ---
 
@@ -55,10 +55,11 @@
 | C1 | Keep Google Fonts hosts in CSP | Done; `fonts.googleapis.com` stays in `style-src` for Droid Serif. |
 | C2 | Migrate layout fonts to `next/font` where possible | **Closed 2026-09-27 (deliberate residual).** Inter + Geist Mono on `next/font` (self-hosted woff2 in `.next/static/media`); Google CSS link trimmed to Droid Serif only (deprecated in next/font font-data); unused Press Start 2P removed with its dead `.font-display-arcade` class. Verified: build exit 0, tsc clean, live browser `document.fonts.check` true for all three families, no new console errors. |
 | C3 | **Nonce path:** `proxy.ts` + dynamic rendering for pages that need nonce CSP | **Closed.** `middleware.ts` wires `src/proxy.ts`; live check 2026-09-26: `script-src 'self' 'nonce-…' 'strict-dynamic'` with no `unsafe-inline` for scripts. |
-| C4 | **Or SRI path:** `experimental.sri` + hash SeoSchema JSON-LD; drop script `unsafe-inline` | Superseded by C3 (nonce works via dynamic layout). `style-src 'unsafe-inline'` remains the only CSP residual (React style attributes). |
+| C4 | **Or SRI path:** `experimental.sri` + hash SeoSchema JSON-LD; drop script `unsafe-inline` | Superseded by C3 (nonce works via dynamic layout). |
 | C5 | API-side CSP remains `script-src 'self'` | Unchanged. |
+| C6 | `style-src 'unsafe-inline'` (React style attributes) | **Closed 2026-09-27.** Production `style-src` = `'self' 'nonce-…' fonts` (no unsafe-inline — style elements nonce-gated, incl. the chart `<style>` via `NonceProvider`/`useNonce`); `style-src-attr 'unsafe-inline'` scopes React style attributes; dev keeps the exception (dev tooling may inject style elements). Live production verification on `next start`:3100: strict header, `/` + `/listings` fully styled (96 cards, honesty chip, progress width attr), **0 CSP console violations**. `test/content-security-policy.test.js`. Accepted trade-off: browsers without `style-src-attr` (Safari < 15.4) degrade inline styles cosmetically in production. |
 
-> **2026-09-20 note (Next 16 docs):** nonce CSP **requires dynamically rendered pages** (`proxy.ts` + `await connection()`). Static App Router marketing routes cannot receive a nonce at build time. The root layout calls `await connection()`, so pages get a nonce; `style-src 'unsafe-inline'` remains **required** for React inline style attributes until those are nonced/hashed. Do not flip production-boot assertions to ban `unsafe-inline` in `style-src` until that work lands.
+> **2026-09-20 note (Next 16 docs):** nonce CSP **requires dynamically rendered pages** (`proxy.ts` + `await connection()`). Static App Router marketing routes cannot receive a nonce at build time. The root layout calls `await connection()`, so pages get a nonce. **2026-09-27:** the style-src close-out landed the same way — production `style-src` is nonce-gated; only React style *attributes* remain allowed via `style-src-attr` (a scoped, documented exception, not a bare `unsafe-inline`).
 
 ### WS-D — Product honesty leftovers (P1, code)
 | ID | Item | Done when |

@@ -82,8 +82,8 @@ The earlier "still open" lines above predate this pass. Current truth, aligned w
 | F3 live PG suite in CI | **Closed** | `ci.yml` `production-e2e-pg` now runs `node test/db.test.js` against the PostGIS service container (`continue-on-error`, optional per B3). |
 | C3 script-src nonce | **Closed** | `middleware.ts` wires `src/proxy.ts`; live 2026-09-26 check: nonce + `strict-dynamic`, no script `unsafe-inline`. |
 | C2 third-party font CSS | **Closed with residual** | Inter + Geist Mono on `next/font`; Google link trimmed to Droid Serif (deprecated in next/font data — deliberate); unused Press Start 2P removed. Build + browser verified. |
-| C4 style-src `unsafe-inline` | **Still open** | React style attributes are not nonced. Tracked residual with close-out path; do not flip boot assertions until that work lands. |
-| E1 gsa/irs promotion | **Still open (policy)** | Not promoted; do not promote to clear a checklist. |
+| C4 style-src `unsafe-inline` | **Closed 2026-09-27** | Production `style-src` = `'self' 'nonce-…' fonts`; React style attrs via `style-src-attr 'unsafe-inline'`; chart `<style>` nonced via NonceProvider. Live production verification (next start :3100): strict header, fully styled pages, 0 CSP violations. Browsers without style-src-attr (< Safari 15.4) degrade inline styles cosmetically — accepted. |
+| E1 gsa/irs promotion | **Still open (policy)** | 2026-09-27 live IRS rerun with repaired canary infrastructure: 0 real-estate cards on 2 distinct runs → NOT_CLEAN (publisher empty). gsa stays robots-fail-closed. `reports/canary-irs-2026-09-27.md`. Do not promote to clear a checklist. |
 | WS-G operator items | **Still open (operator)** | Secrets, volumes, domain, legal review — outside this repo. |
 
 Do not mark the remaining open rows closed without new evidence.
