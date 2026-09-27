@@ -344,6 +344,13 @@ async function run() {
   if (process.env.DATABASE_URL) {
     const db = require('../server/db/client');
     await test('Postgres path returns the same camelCase shape and numeric types', async () => {
+      // isPg only flips after a real SELECT 1 (server.js verifies before
+      // listen). Verify here so this block genuinely exercises the PG
+      // write/read projection; a dead DATABASE_URL must fail loudly, not
+      // silently round-trip the in-memory provider.
+      const verified = await db.verifyConnection();
+      assert.ok(verified && db.isPg, 'live round-trip requires verifyConnection() to succeed');
+
       // Reuse the in-memory seed craft for a throwaway round-trip.
       const seed = LISTINGS[0];
       const record = {
@@ -358,30 +365,50 @@ async function run() {
         },
       };
 
-      await db.createListing(record);
+      try {
+        await db.createListing(record);
 
-      const fetched = await db.getListingById(record.id);
-      assert.ok(fetched, 'round-tripped listing should be retrievable');
-      for (const key of EXPECTED_LISTING_KEYS) {
-        assert.ok(key in fetched, `PG row missing "${key}"`);
-      }
-      for (const numeric of ['openingBid', 'estLow', 'estHigh', 'assessed', 'mid', 'ratio', 'equity', 'dealScore', 'lat', 'lng']) {
-        const seedValue = seed[numeric];
-        if (seedValue == null) {
-          // Optional source fields stay unknown — do not invent numbers on PG.
+        const fetched = await db.getListingById(record.id);
+        assert.ok(fetched, 'round-tripped listing should be retrievable');
+        for (const key of EXPECTED_LISTING_KEYS) {
+          assert.ok(key in fetched, `PG row missing "${key}"`);
+        }
+        for (const numeric of ['openingBid', 'estLow', 'estHigh', 'assessed', 'mid', 'ratio', 'equity', 'dealScore', 'bidSpread', 'lat', 'lng']) {
+          const seedValue = seed[numeric];
+          if (seedValue == null) {
+            // Optional source fields stay unknown — do not invent numbers on PG.
+            assert.ok(
+              fetched[numeric] === null || typeof fetched[numeric] === 'number',
+              `PG "${numeric}" should be null or number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
+            );
+          } else {
+            assert.strictEqual(
+              typeof fetched[numeric], 'number',
+              `PG "${numeric}" should be a number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
+            );
+          }
+        }
+        assert.strictEqual(fetched.baths, 2.5, 'PG NUMERIC baths must be cast back to a number without truncating half-baths');
+        assert.deepStrictEqual(fetched.cashToCloseDetails, record.cashToCloseDetails, 'PG JSONB cash-to-close details must round-trip');
+        // Timestamps must come back ISO-normalized (…Z), not in PG's default
+        // "YYYY-MM-DD HH:MM:SS+00" text rendering.
+        assert.ok(
+          Number.isFinite(Date.parse(fetched.fetchedAt)) && String(fetched.fetchedAt).endsWith('Z'),
+          `PG fetchedAt must be ISO-normalized (got ${fetched.fetchedAt})`,
+        );
+        if (seed.sourceObservedAt != null) {
           assert.ok(
-            fetched[numeric] === null || typeof fetched[numeric] === 'number',
-            `PG "${numeric}" should be null or number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
-          );
-        } else {
-          assert.strictEqual(
-            typeof fetched[numeric], 'number',
-            `PG "${numeric}" should be a number (got ${typeof fetched[numeric]}: ${fetched[numeric]})`,
+            Number.isFinite(Date.parse(fetched.sourceObservedAt)) && String(fetched.sourceObservedAt).endsWith('Z'),
+            `PG sourceObservedAt must be ISO-normalized (got ${fetched.sourceObservedAt})`,
           );
         }
+      } finally {
+        // The round-trip row is throwaway evidence, not inventory. Remove it
+        // so a shared dev database keeps its published listing count honest.
+        if (db.isPg && db.pool) {
+          await db.pool.query('DELETE FROM listings WHERE id = $1', [record.id]);
+        }
       }
-      assert.strictEqual(fetched.baths, 2.5, 'PG NUMERIC baths must be cast back to a number without truncating half-baths');
-      assert.deepStrictEqual(fetched.cashToCloseDetails, record.cashToCloseDetails, 'PG JSONB cash-to-close details must round-trip');
     });
   } else {
     process.stdout.write('  ⓘ DATABASE_URL not set — skipping live Postgres round-trip\n');
