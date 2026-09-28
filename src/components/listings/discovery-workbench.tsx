@@ -152,9 +152,13 @@ export function DiscoveryWorkbench() {
     }
   }, [filters, cursor, requestKey, setCursor]);
   React.useEffect(() => {
-    void refresh();
-    return () => requestRef.current?.controller.abort();
-  }, [refresh]);
+    const delay = filters.q ? 250 : 0;
+    const timer = window.setTimeout(() => void refresh(), delay);
+    return () => {
+      window.clearTimeout(timer);
+      requestRef.current?.controller.abort();
+    };
+  }, [refresh, filters.q]);
   React.useEffect(() => {
     if (!session.authenticated) {
       setSaved(new Set());

@@ -378,19 +378,27 @@ function parseRentRollSchedule(rawNotice = '', assumptions = {}) {
     const isVacant = /\b(?:vacant|empty|unoccupied)\b/i.test(rest);
     const sqftMatch = rest.match(/(\d[\d,]*)\s*(?:sqft|sf|sq\s*ft)/i);
     const sqft = sqftMatch ? parseInt(sqftMatch[1].replace(/,/g, ''), 10) : null;
-    const rentMatch = rest.match(/(?:rent|\$)\s*[:\$]?\s*(\d[\d,]*)/i);
-    const rent = rentMatch ? parseInt(rentMatch[1].replace(/,/g, ''), 10) : (isVacant ? 0 : null);
+    const rentMatch = rest.match(/(?:rent\s*[:=]?\s*)?\$\s*(\d[\d,]*(?:\.\d+)?)\s*(\/\s*(?:mo(?:nth)?|yr|year|annual)|(?:per\s+)?(?:mo(?:nth)?|yr|year|annual))?/i)
+      || rest.match(/rent\s*[:=]?\s*(\d[\d,]*(?:\.\d+)?)\s*(\/\s*(?:mo(?:nth)?|yr|year|annual)|(?:per\s+)?(?:mo(?:nth)?|yr|year|annual))/i);
+    const rentAmount = rentMatch ? Number(rentMatch[1].replace(/,/g, '')) : null;
+    const rentPeriod = rentMatch?.[2]?.toLowerCase().replace(/\s+/g, '') || null;
+    const rent = rentAmount !== null && Number.isFinite(rentAmount) && rentPeriod
+      ? rentAmount
+      : (isVacant ? 0 : null);
+    const isAnnualRent = /yr|year|annual/.test(rentPeriod || '');
+    const monthlyRent = rent === null ? null : isAnnualRent ? rent / 12 : rent;
+    const annualRent = rent === null ? null : isAnnualRent ? rent : rent * 12;
     const leaseMatch = rest.match(/(?:exp|expires|lease\s*end)\s*[:\s]?\s*([0-9\/\-]+)/i);
     const leaseEnd = leaseMatch ? leaseMatch[1].trim() : null;
-    const status = isVacant ? 'Vacant' : rent !== null && rent > 0 ? 'Occupied' : 'Unknown';
+    const status = isVacant ? 'Vacant' : monthlyRent !== null && monthlyRent > 0 ? 'Occupied' : 'Unknown';
 
     units.push({
       unit,
       tenant,
       status,
       sqft,
-      monthlyRent: rent,
-      annualRent: rent === null ? null : rent * 12,
+      monthlyRent,
+      annualRent,
       leaseEnd
     });
   }

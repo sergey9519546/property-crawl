@@ -66,6 +66,11 @@ export async function proxyPropertyApi(request: Request, dependencies: {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
+  const watchlistCookie = (request.headers.get("cookie") || "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("pp_watchlist="));
+  if (watchlistCookie) headers.set("cookie", watchlistCookie);
   // Same-origin mutation marker for API-side CSRF checks when Origin is stripped.
   headers.set("x-workspace-request", "1");
   if (dependencies.operatorToken) headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
@@ -98,7 +103,7 @@ export async function proxyPropertyApi(request: Request, dependencies: {
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
     });
     const responseHeaders = new Headers({ "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
-    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date"]) {
+    for (const name of ["content-type", "content-disposition", "retry-after", "allow", "x-ratelimit-limit", "x-ratelimit-remaining", "x-ratelimit-reset", "referrer-policy", "cross-origin-resource-policy", "x-property-image-provider", "x-property-image-attribution", "x-property-image-distance-meters", "x-property-image-heading", "x-property-image-capture-date", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }

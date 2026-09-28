@@ -4,14 +4,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PORT=3000
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/property_crawl
-      - NODE_ENV=production
+      PORT: 3000
+      DATABASE_URL: postgres://${POSTGRES_USER:-property}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-property_crawl}
+      NODE_ENV: production
       # Operator features fail closed unless this is set on the host.
-      # - SCRAPER_ADMIN_TOKEN=
+      # SCRAPER_ADMIN_TOKEN:
       # Durable local cache (reviews, live overlays, form leads).
-      - PROPERTY_LIVE_CACHE_PATH=/app/.cache/live-listings.json
-      - PROPERTY_DOCUMENT_REVIEW_STORE_PATH=/app/.cache/document-review-store.json
+      PROPERTY_LIVE_CACHE_PATH: /app/.cache/live-listings.json
+      PROPERTY_DOCUMENT_REVIEW_STORE_PATH: /app/.cache/document-review-store.json
     volumes:
       # Persist operator state across container recreate. Without this volume,
       # document reviews / live overlays / form submissions are wiped on redeploy.
@@ -24,18 +24,18 @@ services:
   db:
     image: postgis/postgis:16-3.4-alpine
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=property_crawl
+      POSTGRES_USER: ${POSTGRES_USER:-property}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-property_crawl}
     ports:
       # Local-only Postgres for optional discovery work. Do not publish 5432
-      # on a shared network with the default postgres/postgres credentials.
-      - "127.0.0.1:5432:5432"
+      # on a shared network with default credentials.
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./server/db/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d property_crawl"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -17,3 +17,16 @@ export async function proxyPrivatePropertyApi(request: Request) {
   return proxyPropertyApi(request, { operatorToken: configuration.credential });
 }
 
+// Watchlists are readable/writable by an anonymous device (server-issued
+// HttpOnly cookie) and upgrade to the operator workspace when unlocked.
+export async function proxyWatchlistPropertyApi(request: Request) {
+  if (!["GET", "HEAD"].includes(request.method) && !workspaceMutationAllowed(request)) {
+    return error(403, "Same-origin request required");
+  }
+  const configuration = workspaceSessionConfiguration();
+  const operatorToken = configuration.configured && readWorkspaceSession(request).authenticated
+    ? configuration.credential
+    : undefined;
+  return proxyPropertyApi(request, { operatorToken });
+}
+

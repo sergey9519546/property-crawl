@@ -23,7 +23,7 @@ function sampleListing(overrides = {}) {
     cashToClose: 165000,
     sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=99999',
     sourceObservedAt: '2026-09-06T12:00:00.000Z',
-    provenance: { origin: 'live', publisher: 'CivilView', recordId: '99999' },
+     provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: '99999' },
     ...overrides,
   };
 }
@@ -81,6 +81,35 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     // Missing mid/estimates
     const missingMid = evaluateOpportunitySignals(sampleListing({ mid: null, estLow: null, estHigh: null }));
     assert.equal(missingMid.signals.find(s => s.key === 'bid_to_value_ratio').status, 'unknown');
+  });
+
+  test('does not support unsupported valuation, unmatched parcel, or unknown lien evidence', () => {
+    const result = evaluateOpportunitySignals(sampleListing({
+      estLow: 200000,
+      estHigh: null,
+      mid: null,
+      seniorLienRisk: 'unknown',
+      provenance: { origin: 'snapshot', observed: false },
+    }), { publicRecords: { parcel: { status: 'candidate', properties: { livingAreaSqft: 2000 } } } });
+    assert.equal(result.signals.find(s => s.key === 'bid_to_value_ratio').status, 'unknown');
+    assert.equal(result.signals.find(s => s.key === 'building_area_discrepancy').status, 'unknown');
+    assert.equal(result.signals.find(s => s.key === 'title_equity_unresolved').status, 'unknown');
+  });
+
+  test('requires live publisher evidence for positive signals', () => {
+    const snapshot = evaluateOpportunitySignals(sampleListing({
+      saleDate: '2028-01-01',
+      status: 're-listed',
+      provenance: { origin: 'snapshot', observed: false },
+    }), { publicRecords: { parcel: { status: 'matched', properties: { livingAreaSqft: 2000 } } } });
+    assert.equal(snapshot.signals.some((signal) => signal.status === 'supported'), false);
+  });
+
+  test('accepts observation-store bid reduction kind', () => {
+    const result = evaluateOpportunitySignals(sampleListing(), { observations: {
+      records: {}, signals: [{ listingId: 'TEST-LISTING-001', kind: 'bid_reduced' }],
+    } });
+    assert.equal(result.signals.find(s => s.key === 'bid_reduction').status, 'supported');
   });
 
   test('detects building_area_discrepancy against official cadastral records', () => {

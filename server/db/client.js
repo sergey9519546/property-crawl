@@ -15,6 +15,11 @@ const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listi
 const DEFAULT_WORKSPACE_STORE_PATH = path.resolve(__dirname, '../../.cache/workspace-store.json');
 const WORKSPACE_STORE_VERSION = 1;
 
+// A canonical STATE-COUNTY-NUMBER id (e.g. "OH-CUY-10231") is an unambiguous
+// alias for the source-namespaced record "SHERIFF-OH-CUY-10231". It is resolved
+// only when exactly one record matches — never a partial or numeric fragment.
+const NAMESPACED_ID = /^[A-Z]{2,3}-[A-Z]{2,3}-\d{2,6}$/;
+
 // GET /api/alerts/matches pagination bounds (shared by Postgres + in-memory paths).
 const ALERT_MATCHES_DEFAULT_LIMIT = 50;
 const ALERT_MATCHES_MAX_LIMIT = 200;
@@ -145,13 +150,18 @@ function optionalText(value) {
   return text || null;
 }
 function canonicalStatus(value) {
-  const raw=optionalText(value); if(!raw)return 'active';
-  if (/cancel|withdraw/i.test(raw)) return 'cancelled';
-  if (/postpon/i.test(raw)) return 'postponed';
-  if (/adjourn/i.test(raw)) return 'adjourned';
-  if (/scheduled|coming soon|pre.?auction/i.test(raw)) return 'scheduled';
-  if (/pending|closed|post.?auction|auctioned/i.test(raw)) return 'pending';
-  return ['active','stayed','STAYED_BANKRUPTCY','ACTIVE_SCHEDULED'].includes(raw) ? raw : 'active';
+  const raw = optionalText(value);
+  if (!raw) return 'unknown';
+  const normalized = raw.toLowerCase();
+  if (/cancel|withdraw/.test(normalized)) return 'cancelled';
+  if (/postpon/.test(normalized)) return 'postponed';
+  if (/adjourn/.test(normalized)) return 'adjourned';
+  if (/stay/.test(normalized)) return 'stayed';
+  if (/sold|closed|auctioned|post.?auction/.test(normalized)) return 'sold';
+  if (/scheduled|coming soon|pre.?auction/.test(normalized)) return 'scheduled';
+  if (/pending/.test(normalized)) return 'pending';
+  if (normalized === 'active') return 'active';
+  return 'unknown';
 }
 
 function normalizeProvenance(value) {
@@ -268,10 +278,22 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
   if (existing.provenance || incoming.provenance) {
     merged.provenance = { ...(existing.provenance || {}), ...(incoming.provenance || {}) };
   }
-  for (const field of ['baths', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'redemptionDays', 'seniorLienRisk', 'cashToCloseDetails', 'sourceObservedAt']) {
+  for (const field of [
+    'county', 'city', 'zip', 'beds', 'baths', 'sqft', 'year', 'assessed',
+    'openingBid', 'saleDate', 'deposit', 'occupancy', 'redemptionDays',
+    'seniorLienRisk', 'cashToClose', 'cashToCloseDetails', 'price',
+    'listingDate', 'sourceObservedAt', 'auctionProgram', 'lifecycleStatus',
+    'transactionOutcome',
+  ]) {
     if (incoming[field] === null && existing[field] !== null && existing[field] !== undefined) {
       merged[field] = existing[field];
     }
+  }
+  if (incoming.status === 'unknown' && existing.status && existing.status !== 'unknown') {
+    merged.status = existing.status;
+  }
+  if (incoming.hasDocuments !== true && existing.hasDocuments === true) {
+    merged.hasDocuments = true;
   }
   // Detect an opening-bid decrease versus the prior observation so triage can
   // surface priceDropped without a separate history table.
@@ -368,8 +390,9 @@ function applyCrossSourceBakeOff(listings) {
 class DatabaseClient {
   constructor(options = {}) {
     this.env = options.env || process.env;
-    this.isPg = false;
-    this.pool = null;
+    this.isPg = Boolean(options.pool);
+    this.pool = options.pool || null;
+    this.externalPool = Boolean(options.pool);
     this.listingSelect = LISTING_SELECT;
     const explicitLiveCachePath = Object.prototype.hasOwnProperty.call(options, 'liveCachePath')
       ? options.liveCachePath
@@ -411,6 +434,7 @@ class DatabaseClient {
   }
 
   init() {
+    if (this.externalPool) return;
     if (this.env.DISCOVERY_MODE === 'advanced' && !this.env.DATABASE_URL) {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
@@ -716,7 +740,7 @@ class DatabaseClient {
         params.push(occupancy);
       }
       if (seniorLien === 'clean') {
-        sql += ` AND senior_lien_risk IS NOT NULL AND senior_lien_risk != 'high'`;
+        sql += ` AND senior_lien_risk IS NOT NULL AND senior_lien_risk NOT IN ('high', 'unknown')`;
       } else if (seniorLien === 'risk') {
         sql += ` AND senior_lien_risk = 'high'`;
       }
@@ -761,7 +785,7 @@ class DatabaseClient {
       if (minEquity && l.equity < Number(minEquity)) return false;
       if (maxBid && (l.openingBid == null || l.openingBid > Number(maxBid))) return false;
       if (occupancy !== 'all' && l.occupancy !== occupancy) return false;
-      if (seniorLien === 'clean' && (!l.seniorLienRisk || l.seniorLienRisk === 'high')) return false;
+      if (seniorLien === 'clean' && (!l.seniorLienRisk || ['high', 'unknown'].includes(l.seniorLienRisk))) return false;
       if (seniorLien === 'risk' && l.seniorLienRisk !== 'high') return false;
       if (redemption === 'immediate' && l.redemptionDays !== 0) return false;
       if (redemption === 'redemption_active' && (!l.redemptionDays || l.redemptionDays <= 0)) return false;
@@ -794,23 +818,19 @@ class DatabaseClient {
     if (this.isPg) {
       const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return mapPgListingRow(res.rows[0]);
-      // Constrained alias: strip a source prefix, or match by suffix only when
-      // the requested id is long enough to avoid short-id false positives
-      // (e.g. id=1 must not match listing-1).
-      if (id.length >= 6) {
-        const aliasRes = await this.pool.query(
-          `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE '%' || $1 LIMIT 1`, [id]);
-        if (aliasRes.rows[0]) return mapPgListingRow(aliasRes.rows[0]);
+      if (NAMESPACED_ID.test(id)) {
+        const alias = await this.pool.query(
+          `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE $1`, [`%-${id}`]);
+        if (alias.rows.length === 1) return mapPgListingRow(alias.rows[0]);
       }
       return null;
     }
     this.refreshLiveCache();
     const exact = this.inMemoryData.listings.find(l => l.id === id);
     if (exact) return exact;
-    // Suffix match only when id is long enough to avoid short-id false positives.
-    if (id.length >= 6) {
-      const aliased = this.inMemoryData.listings.find(l => l.id.endsWith(id));
-      if (aliased) return aliased;
+    if (NAMESPACED_ID.test(id)) {
+      const alias = this.inMemoryData.listings.filter(l => typeof l.id === 'string' && l.id.endsWith(`-${id}`));
+      if (alias.length === 1) return alias[0];
     }
     return null;
   }
@@ -914,8 +934,9 @@ class DatabaseClient {
         enriched.price ?? null, enriched.listingDate ?? null,
         enriched.redemptionDays, enriched.redemptionWarning || null,
         enriched.seniorLienRisk, enriched.seniorLienWarning || null,
-        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'active',
-        enriched.auctionProgram, enriched.lifecycleStatus, enriched.transactionOutcome, enriched.hasDocuments
+        enriched.cashToClose ?? null, enriched.cashToCloseDetails, enriched.status || 'unknown',
+        enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
+        enriched.hasDocuments === true
       ];
       const result = await this.pool.query(sql, params);
       if (result.rows[0]) return mapPgListingRow(result.rows[0]);

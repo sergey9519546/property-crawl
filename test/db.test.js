@@ -138,6 +138,13 @@ async function run() {
       },
       sourceObservedAt: '2026-09-04T15:30:00-07:00',
       status: 'scheduled',
+      beds: 3,
+      sqft: 1800,
+      year: 1985,
+      assessed: 160000,
+      price: 120000,
+      listingDate: '2026-08-01',
+      cashToClose: 46000,
     };
 
     const unknown = await db.createListing({
@@ -161,6 +168,7 @@ async function run() {
     assert.strictEqual(unknown.deposit, null, 'unknown deposit terms must not become a fabricated default');
     assert.strictEqual(unknown.redemptionDays, null, 'unknown redemption period must not imply immediate possession');
     assert.strictEqual(unknown.seniorLienRisk, null, 'unknown lien risk must not be labeled normal');
+    assert.strictEqual(unknown.status, 'scheduled');
     assert.strictEqual(unknown.baths, 2.5, 'fractional bathrooms must survive in-memory ingestion');
     assert.deepStrictEqual(unknown.provenance, common.provenance, 'structured field provenance must survive ingestion');
     assert.deepStrictEqual(unknown.cashToCloseDetails, common.cashToCloseDetails, 'itemized cash-to-close evidence must survive ingestion');
@@ -190,6 +198,11 @@ async function run() {
     const cleanLienFiltered = await db.getListings({ q: noBidMarker, seniorLien: 'clean' });
     assert.strictEqual(cleanLienFiltered.total, 0, 'an unknown lien signal must not satisfy a clean-lien filter');
 
+    const sold = await db.createListing({ ...common, id: `SOLD-${suffix}`, address: `5 Sold Evidence Ave`, status: 'sold' });
+    assert.strictEqual(sold.status, 'sold', 'sold inventory must not normalize to active');
+    const stayed = await db.createListing({ ...common, id: `STAYED-${suffix}`, address: `6 Stayed Evidence Ave`, status: 'STAYED_BANKRUPTCY' });
+    assert.strictEqual(stayed.status, 'stayed', 'stayed inventory must not normalize to active');
+
     const valued = await db.createListing({
       ...common,
       id: `VALUED-${suffix}`,
@@ -218,6 +231,16 @@ async function run() {
       estLow: null,
       estHigh: null,
       saleDate: null,
+      county: null,
+      city: null,
+      zip: null,
+      beds: null,
+      sqft: null,
+      year: null,
+      assessed: null,
+      price: null,
+      listingDate: null,
+      cashToClose: null,
       baths: null,
       cashToCloseDetails: null,
       provenance: { detailPageFetched: true },
@@ -229,6 +252,16 @@ async function run() {
     assert.strictEqual(refreshed.lng, -122.558, 'a partial refresh must not erase a known geocode');
     assert.strictEqual(refreshed.saleDate, '2026-09-11', 'a partial refresh must not erase a known sale date');
     assert.strictEqual(refreshed.baths, 2.5, 'a partial refresh must not erase a known fractional bath count');
+    assert.equal(refreshed.county, common.county, 'a partial refresh must not erase a known county');
+    assert.equal(refreshed.city, common.city, 'a partial refresh must not erase a known city');
+    assert.equal(refreshed.zip, common.zip, 'a partial refresh must not erase a known ZIP code');
+    assert.equal(refreshed.beds, common.beds, 'a partial refresh must not erase known bedroom count');
+    assert.equal(refreshed.sqft, common.sqft, 'a partial refresh must not erase known square footage');
+    assert.equal(refreshed.year, common.year, 'a partial refresh must not erase known construction year');
+    assert.equal(refreshed.assessed, common.assessed, 'a partial refresh must not erase assessed value');
+    assert.equal(refreshed.price, common.price, 'a partial refresh must not erase listing price');
+    assert.equal(refreshed.listingDate, common.listingDate, 'a partial refresh must not erase listing date');
+    assert.equal(refreshed.cashToClose, common.cashToClose, 'a partial refresh must not erase cash-to-close evidence');
     assert.deepStrictEqual(refreshed.cashToCloseDetails, common.cashToCloseDetails, 'a partial refresh must not erase itemized cash-to-close evidence');
     assert.deepStrictEqual(refreshed.provenance, {
       ...common.provenance,
@@ -333,7 +366,7 @@ async function run() {
       assert.strictEqual(capturedParams.length, 46, 'INSERT retains the 42 source parameters and adds four discovery fields');
       assert.strictEqual(capturedParams[10], 2.5, 'fractional baths must occupy the baths parameter');
       assert.deepStrictEqual(capturedParams[40], cashToCloseDetails, 'cash details must occupy the JSONB parameter');
-      assert.strictEqual(capturedParams[41], 'active', 'legacy status keeps its canonical slot');
+      assert.strictEqual(capturedParams[41], 'unknown', 'legacy empty status keeps the honest unknown slot');
       assert.deepStrictEqual(capturedParams.slice(42), ['TPS', 'postponed', null, false], 'program, lifecycle, unknown outcome and explicit document absence remain separate');
     } finally {
       db.isPg = originalIsPg;

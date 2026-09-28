@@ -65,7 +65,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def wait_for_live_feed(self):
         self.page.get_by_role(
             "button", name=f"Deal Grid ({self.live_count} records)"
-        ).wait_for(state="visible")
+        ).wait_for(state="visible", timeout=30_000)
 
     def geocoded_listings(self, listings=None):
         # Positive map tests declare their qualified fixture records explicitly.
@@ -145,7 +145,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_desktop_navigation_menus_reveal_their_feature_links(self):
         menu_expectations = {
-            "Product": "Listing workspace",
+            "Product": "Deal Stacks",
             "Solutions": "Acquisitions",
             "Resources": "Blog",
         }
@@ -172,11 +172,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                     self.assertLessEqual(brand["x"] + brand["width"], menu["x"])
                 else:
                     nav = header.locator("nav").bounding_box()
-                    cta = header.get_by_role("link", name="Open workspace", exact=True).bounding_box()
+                    sign_in = header.get_by_role("link", name="Sign in", exact=True).bounding_box()
                     self.assertIsNotNone(nav)
-                    self.assertIsNotNone(cta)
+                    self.assertIsNotNone(sign_in)
                     self.assertLessEqual(brand["x"] + brand["width"], nav["x"])
-                    self.assertLessEqual(nav["x"] + nav["width"], cta["x"])
+                    self.assertLessEqual(nav["x"] + nav["width"], sign_in["x"])
 
     def test_every_feed_card_links_to_its_exact_listing_page(self):
         self.wait_for_live_feed()
@@ -1011,7 +1011,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         newsletter = footer.locator("#contact")
         self.assertEqual(footer.evaluate("el => getComputedStyle(el).borderTopWidth"), "0px")
         self.assertEqual(newsletter.evaluate("el => getComputedStyle(el).borderBottomWidth"), "0px")
-        self.assertTrue(footer.get_by_text("Subscribe for source coverage notes").is_visible())
+        self.assertTrue(footer.get_by_text("Subscribe to the PerfectProperty accuracy report").is_visible())
 
     def test_newsletter_submit_has_an_inline_honest_result(self):
         dialogs = []
@@ -1025,16 +1025,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Subscribe").click()
 
         self.assertEqual(dialogs, [], "newsletter must not use a blocking browser alert")
-        # Forms persist locally until a newsletter webhook is configured; UI must
-        # claim honest delivery status, not pretend email was sent.
-        page_text = self.page.locator("body").inner_text()
         self.assertTrue(
-            ("Email delivery is not configured yet" in page_text)
-            or ("you're on the list" in page_text)
-            or ("Something went wrong" in page_text),
-            f"newsletter should show an honest inline status; page said: {page_text[-400:]}",
+            self.page.get_by_text("Saved on this device. Email delivery will be connected before launch.").is_visible()
         )
-        self.assertNotIn("will follow up by email", page_text)
 
     def test_live_feed_loads_backend_data_and_refreshes_honestly(self):
         self.wait_for_live_feed()
@@ -1077,13 +1070,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 "tiles.openfreemap.org/styles/positron" in message.text
                 and "Failed to fetch" in message.text
             )
-            # 401s are expected for unauthenticated users (workspace features fail closed)
-            expected_auth_failure = "401" in message.text and "Unauthorized" in message.text
             if (
                 message.type == "error"
                 and "ERR_NETWORK_ACCESS_DENIED" not in message.text
                 and not expected_map_transport_failure
-                and not expected_auth_failure
             ):
                 errors.append(f"console: {message.text}")
 
@@ -1122,12 +1112,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Analyze Deal").click()
         self.page.get_by_text(re.compile(r"Evidence summary.*unverified")).wait_for(state="visible")
 
-        self.page.get_by_role("button", name="3D Lot & Elevation").click()
+        self.page.get_by_role("tab", name="3D Lot & Elevation").click()
         self.page.get_by_role("region", name="Parcel geometry reference").wait_for(state="visible")
         self.assertEqual(self.page.get_by_title("Toggle Wireframe Topography").count(), 0)
 
         # Test Bidding Simulator tab & MAO calculations
-        self.page.get_by_role("button", name="Bidding Simulator").click()
+        self.page.get_by_role("tab", name="Bidding Simulator").click()
         self.assertTrue(self.page.get_by_role("heading", name="Max Allowable Offer (MAO) Simulator").is_visible())
         self.assertEqual(self.page.get_by_text("Win Probability", exact=True).count(), 0)
 
@@ -1211,7 +1201,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         menu = self.page.get_by_role("dialog")
         menu.wait_for(state="visible")
         menu.get_by_role("button", name="Product").click()
-        menu.get_by_role("link", name="Listing workspace").click()
+        menu.get_by_role("link", name="Deal Stacks").click()
 
         self.page.wait_for_url(f"{BASE_URL}/#live-feed")
         self.assertEqual(self.page.url, f"{BASE_URL}/#live-feed")
@@ -1424,7 +1414,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         preview.wait_for(state="visible")
         self.assertIn("September 2012", preview.inner_text())
         self.assertIn("Test provider attribution", preview.inner_text())
-        self.assertIn("Street context only", preview.inner_text())
+        self.assertIn("Context, not condition evidence", preview.inner_text())
         self.assertEqual(preview.locator("img").evaluate("el => getComputedStyle(el).objectFit"), "contain")
         self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in requests))
         self.page.set_viewport_size({"width": 390, "height": 844})

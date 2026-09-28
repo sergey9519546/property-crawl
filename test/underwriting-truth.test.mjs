@@ -43,7 +43,8 @@ test('reverse scenario states the exact price or cost change needed for a target
     maxPurchasePrice: 110_000,
     priceReductionNeeded: 15_000,
     maxOtherAcquisitionCostsAtCurrentPrice: 0,
-    costReductionNeeded: 10_000,
+    costReductionNeeded: 0,
+    targetAchievableAtCurrentPrice: false,
     targetProfit: 50_000,
   });
   assert.equal(computeTargetPriceScenario({ estimatedValue: 200_000, targetMarginPct: 25, rehabBudget: 30_000, currentPrice: 125_000, otherAcquisitionCosts: null }), null);
@@ -101,6 +102,15 @@ Unit 103: Vacant Retail Suite, 1,000 sqft
 
   const modeled = parseRentRollSchedule(notice, { expenseRatio: 0.4 });
   assert.equal(modeled.inPlaceNoi, 69_840);
+});
+
+test('rent-roll parsing requires an explicit period and preserves annual rent', () => {
+  const annual = parseRentRollSchedule('Unit 201: Tenant, 1,000 sqft, rent $24,000/year');
+  assert.equal(annual.units[0].monthlyRent, 2_000);
+  assert.equal(annual.units[0].annualRent, 24_000);
+  const missingPeriod = parseRentRollSchedule('Unit 202: Tenant, 1,000 sqft, rent $2,000');
+  assert.equal(missingPeriod.units[0].monthlyRent, null);
+  assert.equal(missingPeriod.totalAnnualRent, null);
 });
 
 test('LOI draft requires buyer-supplied deal terms and makes no title conclusion', () => {

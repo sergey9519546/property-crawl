@@ -21,6 +21,16 @@ function isKnown(value) {
   return value !== null && value !== undefined && value !== '' && !Number.isNaN(value);
 }
 
+function hasPublisherEvidence(listing, observedAt) {
+  const provenance = listing.provenance || {};
+  return provenance.origin === 'live'
+    && provenance.observed === true
+    && Boolean(String(listing.sourceUrl || '').trim())
+    && Boolean(String(provenance.publisher || '').trim())
+    && Boolean(String(provenance.recordId || '').trim())
+    && Number.isFinite(Date.parse(String(observedAt || '')));
+}
+
 function evaluateOpportunitySignals(listing = {}, options = {}) {
   const {
     observations = { records: {}, signals: [] },
@@ -30,6 +40,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
 
   const observedAt = listing.sourceObservedAt || listing.provenance?.observedAt || listing.fetchedAt || new Date(now).toISOString();
   const sourceUrl = listing.sourceUrl || null;
+  const publisherObserved = hasPublisherEvidence(listing, observedAt);
   const signals = [];
 
   // 1. Sale Date Known
@@ -37,7 +48,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   if (isKnown(rawSaleDate)) {
     const parsedSale = Date.parse(String(rawSaleDate).slice(0, 10));
     const today = Date.parse(new Date(now).toISOString().slice(0, 10));
-    if (parsedSale >= today) {
+    if (publisherObserved && Number.isFinite(parsedSale) && parsedSale >= today) {
       signals.push({
         key: 'sale_date_known',
         label: 'Published sale date is confirmed',
@@ -48,7 +59,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
         reason: `Active auction scheduled for ${String(rawSaleDate).slice(0, 10)}.`,
         nextAction: 'Monitor publisher calendar and docket for postponement or stay notices.',
       });
-    } else {
+    } else if (publisherObserved && Number.isFinite(parsedSale)) {
       signals.push({
         key: 'sale_date_known',
         label: 'Recorded sale date has passed',
@@ -58,6 +69,17 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
         observedAt,
         reason: `Recorded date ${String(rawSaleDate).slice(0, 10)} has passed; post-sale disposition is unconfirmed.`,
         nextAction: 'Check whether auction occurred, postponed, or adjourned.',
+      });
+    } else {
+      signals.push({
+        key: 'sale_date_known',
+        label: 'Sale date unresolved',
+        status: 'unknown',
+        evidenceClass: 'unresolved',
+        sourceUrl: null,
+        observedAt: null,
+        reason: 'The recorded sale date is not backed by validated live publisher evidence.',
+        nextAction: 'Capture and validate the exact current publisher record.',
       });
     }
   } else {
@@ -76,7 +98,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   // 2. Bid Reduction
   const hasObservationReduction = Array.isArray(observations.signals) && observations.signals.some((sig) =>
     (sig.listingId === listing.id || sig.recordId === String(listing.provenance?.recordId))
-    && (sig.type === 'bid_reduced' || /bid.*reduc|drop|lower/i.test(sig.type || sig.label || ''))
+    && (sig.type === 'bid_reduced' || sig.kind === 'bid_reduced' || /bid.*reduc|drop|lower/i.test(sig.type || sig.kind || sig.label || ''))
   );
   if (hasObservationReduction) {
     signals.push({
@@ -107,7 +129,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   const statusStr = String(listing.status || listing.lifecycleStatus || '');
   const isReturned = /return|re-?list|adjourn.*active|reschedul/i.test(statusStr)
     || /returned to market|re-?listed|back on market/i.test(rawNotice);
-  if (isReturned) {
+  if (isReturned && publisherObserved) {
     signals.push({
       key: 'returned_to_market',
       label: 'Returned to market',
@@ -133,8 +155,12 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
 
   // 4. Bid-to-Supported-Value Ratio
   const bid = Number(listing.openingBid);
-  const mid = Number(listing.mid) || ((Number(listing.estLow) + Number(listing.estHigh)) / 2);
-  if (bid > 0 && mid > 0) {
+  const hasEstimateRange = Number.isFinite(Number(listing.estLow))
+    && Number(listing.estLow) > 0
+    && Number.isFinite(Number(listing.estHigh))
+    && Number(listing.estHigh) >= Number(listing.estLow);
+  const mid = hasEstimateRange ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : null;
+  if (publisherObserved && bid > 0 && mid > 0) {
     const ratio = bid / mid;
     const discountPct = Math.round((1 - ratio) * 100);
     if (ratio <= 1) {
@@ -175,9 +201,10 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
 
   // 5. Building Area Discrepancy
   const parcel = publicRecords?.parcel;
+  const parcelMatched = parcel?.status === 'matched';
   const advertisedSqft = Number(listing.sqft);
   const recordSqft = Number(parcel?.properties?.livingAreaSqft || parcel?.livingAreaSqft);
-  if (advertisedSqft > 0 && recordSqft > 0) {
+  if (publisherObserved && parcelMatched && advertisedSqft > 0 && recordSqft > 0) {
     const diff = Math.abs(advertisedSqft - recordSqft);
     const diffPct = diff / Math.max(advertisedSqft, recordSqft);
     if (diffPct > 0.10) {
@@ -220,7 +247,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   const hasSeniorRisk = isKnown(listing.seniorLienRisk);
   const hasRedemption = isKnown(listing.redemptionDays);
   const hasCashToClose = isKnown(listing.cashToClose);
-  if (hasSeniorRisk && hasRedemption && hasCashToClose) {
+  if (publisherObserved && hasSeniorRisk && listing.seniorLienRisk !== 'unknown' && hasRedemption && hasCashToClose) {
     signals.push({
       key: 'title_equity_unresolved',
       label: 'Core title and settlement facts available',
