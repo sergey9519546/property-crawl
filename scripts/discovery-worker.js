@@ -60,6 +60,10 @@ async function run({ wave = process.env.DISCOVERY_WAVE || 'wave1', canarySource 
   }
   requireCollectionStorage(storageProbe);
   const store=discoveryStore||createDiscoveryStore(database), scopePolicy=canarySource?{eligible:[canarySource],rejected:[]}:await promotedSourcesWithinScope(store,collector,wave),sourceIds=scopePolicy.eligible;
+  // Wire the discovery store into the collector so source runs are recorded
+  // in discovery_source_runs (Migration 014 evidence). Without this the canary
+  // reports a null runId and promotion cannot verify clean durable runs.
+  if (!collector.discoveryStore) collector.discoveryStore = store;
   const owner=`worker:${process.pid}:${crypto.randomUUID()}`,workerKey=wave;
   const scopeDetails=scopePolicy.rejected.length?{scopeRejections:scopePolicy.rejected}:{};
   await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'starting',details:scopeDetails});
