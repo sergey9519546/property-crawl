@@ -1,7 +1,7 @@
 'use strict';
 const crypto = require('node:crypto');
 const { DEFAULT_MAX_AGE_SECONDS, workerHealthStatus } = require('./worker-health');
-const { assertJobClaim, withJobFence } = require('./job-fence');
+const { assertJobClaim, withJobFence, leaseLost } = require('./job-fence');
 
 function stable(value) { if (Array.isArray(value)) return value.map(stable); if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, stable(value[k])])); return value; }
 function hash(value) { return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex'); }
@@ -131,6 +131,16 @@ class DiscoveryStore {
   async updateJob(id,update={},options={}){const current=await this.getJob(id);if(!current)throw new Error('Collection job was not found');// Claim ownership is recorded by claimJob/claimNextJob, so an update
     // that omits an explicit ownerId still fences against the current lease
     // holder rather than silently updating unfenced.
-    const ownerId=options.ownerId!==undefined?options.ownerId:(this.jobClaimOwners.get(id)||null);const stages={...(current.stages&&typeof current.stages==='object'?current.stages:{})},errors=Array.isArray(current.errors)?[...current.errors]:[];if(update.stage)stages[update.stage.name]={...(stages[update.stage.name]||{}),...update.stage.value,updatedAt:new Date().toISOString()};if(update.error)errors.push({stage:update.error.stage||'collection',message:String(update.error.message||update.error).slice(0,500),at:new Date().toISOString()});const result=update.result===undefined?null:JSON.stringify(update.result);const r=await this.pool.query('UPDATE discovery_jobs SET status=coalesce($2,status),stages=$3::jsonb,errors=$4::jsonb,result=coalesce($5::jsonb,result),started_at=CASE WHEN $6 AND started_at IS NULL THEN NOW() ELSE started_at END,completed_at=CASE WHEN $7 THEN NOW() ELSE completed_at END,revision=revision+1 WHERE id=$1 AND ($8::text IS NULL OR (lease_owner=$8 AND lease_expires_at>NOW())) RETURNING *',[id,update.status||null,JSON.stringify(stages),JSON.stringify(errors),result,Boolean(update.started),Boolean(update.completed),ownerId]);if(!r.rows[0]&&ownerId)throw new Error('Collection job lease was lost; refusing stale update');return this.jobRow(r.rows[0]);}
+    const ownerId=options.ownerId!==undefined?options.ownerId:(this.jobClaimOwners.get(id)||null);const stages={...(current.stages&&typeof current.stages==='object'?current.stages:{})},errors=Array.isArray(current.errors)?[...current.errors]:[];if(update.stage)stages[update.stage.name]={...(stages[update.stage.name]||{}),...update.stage.value,updatedAt:new Date().toISOString()};if(update.error)errors.push({stage:update.error.stage||'collection',message:String(update.error.message||update.error).slice(0,500),at:new Date().toISOString()});const result=update.result===undefined?null:JSON.stringify(update.result);const r=await this.pool.query('UPDATE discovery_jobs SET status=coalesce($2,status),stages=$3::jsonb,errors=$4::jsonb,result=coalesce($5::jsonb,result),started_at=CASE WHEN $6 AND started_at IS NULL THEN NOW() ELSE started_at END,completed_at=CASE WHEN $7 THEN NOW() ELSE completed_at END,revision=revision+1 WHERE id=$1 AND ($8::text IS NULL OR (lease_owner=$8 AND lease_expires_at>NOW())) RETURNING *',[id,update.status||null,JSON.stringify(stages),JSON.stringify(errors),result,Boolean(update.started),Boolean(update.completed),ownerId]);// This is the last line of defence for the job fence: the UPDATE above is
+// owner-scoped, so 0 rows means a successor already owns this job. The error
+// MUST be leaseLost() from ./job-fence, not a bare Error, because nine call
+// sites decide what to do next by testing error.code === 'DISCOVERY_JOB_LEASE_LOST'
+// (scheduler.js x5, collection-coordinator.js x3, discovery-worker.js). Throwing
+// an uncoded Error here made every one of those guards miss the condition and
+// fall through to the generic-error path, which tried to write status='partial'
+// and then status='failed' onto a job another worker now owns -- two more
+// losing updates -- before killing the worker as an unknown fatal error.
+// Six other places construct this same condition correctly; this one did not.
+if(!r.rows[0]&&ownerId)throw leaseLost();return this.jobRow(r.rows[0]);}
 }
 module.exports={DiscoveryStore,hash,createDiscoveryStore:(database)=>new DiscoveryStore(database.pool||database)};

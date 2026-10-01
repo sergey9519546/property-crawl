@@ -20,12 +20,18 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 
 function gitLines(args) {
-  try {
-    return execSync(`git ${args}`, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString().split('\n').map((l) => l.trim()).filter(Boolean);
-  } catch (_) {
-    return [];
-  }
+  // A git failure is NOT the same as "git ran and reported nothing", and the
+  // difference is the whole gate. Returning [] here made all three discovery
+  // sources collapse to empty at once, classifyChange([]) returned 'trivial',
+  // and the gate certified the change after a single fast suite with exit 0 --
+  // in any environment where git is absent, has no HEAD, or refuses to run over
+  // a "dubious ownership" repo. The gate reported success on a path it never
+  // exercised, which is precisely the failure mode this gate exists to catch.
+  //
+  // Propagate the error. The caller degrades to the full gate, which is slower
+  // but cannot be wrong.
+  return execSync(`git ${args}`, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+    .toString().split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
 function getChangedFiles() {
@@ -71,6 +77,24 @@ const DEPLOY_RELEVANT_PREFIXES = [
   'Dockerfile',
   '.github/',
 ];
+
+// Decide which gate to run. If git cannot tell us what changed, we must not
+// assume the answer is "nothing" -- that is the defect this fixes. Degrade to
+// the full verification gate instead: slower, but it cannot certify a change it
+// never looked at.
+function discoverChangeType() {
+  let files;
+  try {
+    files = getChangedFiles();
+  } catch (error) {
+    const detail = String((error && (error.stderr || error.message)) || error)
+      .split('\n').find((l) => l.trim()) || 'unknown git failure';
+    console.warn(`[verify-gate] git could not report changed files (${detail.trim()}).`);
+    console.warn('[verify-gate] Falling back to the FULL gate rather than assuming nothing changed.');
+    return { type: 'full', files: [], gitFailed: true };
+  }
+  return { type: classifyChange(files), files, gitFailed: false };
+}
 
 function classifyChange(files) {
   if (files.length === 0) return 'trivial';
@@ -232,8 +256,13 @@ function main() {
   const typeArg = args.find((a) => a.startsWith('--change-type'));
   const changeType = typeArg ? typeArg.split('=')[1] || args[args.indexOf(typeArg) + 1] : null;
 
-  const files = getChangedFiles();
-  const detectedType = changeType || classifyChange(files);
+  // An explicit --change-type means the caller already decided; do not make it
+// depend on git working just to print a file count.
+const discovered = changeType
+  ? { type: changeType, files: (() => { try { return getChangedFiles(); } catch (_) { return []; } })(), gitFailed: false }
+  : discoverChangeType();
+const files = discovered.files;
+const detectedType = changeType || discovered.type;
 
   const block = runGate(detectedType);
 
@@ -256,5 +285,5 @@ function main() {
   }
 }
 
-module.exports = { classifyChange, getGate, runGate, getChangedFiles };
+module.exports = { classifyChange, getGate, runGate, getChangedFiles, discoverChangeType };
 if (require.main === module) main();

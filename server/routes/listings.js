@@ -135,7 +135,21 @@ async function handleListings(req, res) {
 
   if (method === 'GET') {
     if (url.pathname === '/api/listings/map') {
-      try { return res.json(await discovery.map(db, discovery.queryFromUrl(url))); }
+      try {
+        // The map view is fed by the same filter state as the grid, so it can
+        // arrive carrying an intelligence sort (quality/opportunity) that the
+        // workbench legitimately offers. The discovery SQL layer only
+        // understands score/date/bid-asc/equity and 400s on anything else, so
+        // choosing one of those sorts and then switching to Map rendered
+        // "Invalid sort" instead of a map. The grid path already normalises
+        // this below (see the discoveryUrl rewrite); the map path has to do the
+        // same, or the whole view is dead for those filters.
+        const mapUrl = new URL(url);
+        if (INTELLIGENCE_SORTS.has(String(mapUrl.searchParams.get('sort')))) {
+          mapUrl.searchParams.set('sort', 'score');
+        }
+        return res.json(await discovery.map(db, discovery.queryFromUrl(mapUrl)));
+      }
       catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
     }
     const encodedId = url.pathname.split('/api/listings/')[1];

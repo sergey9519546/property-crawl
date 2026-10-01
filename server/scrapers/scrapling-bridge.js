@@ -10,6 +10,11 @@ const { findBotChallengeSignature } = require('./circuit-breaker');
 const MAX_INPUT_BYTES = 4 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 5000;
+// How long a killed child is given to actually exit before the bridge settles
+// anyway. Normally the 'exit' event lands in single-digit milliseconds; the
+// bound exists so a wedged child cannot mask the real error by hanging the
+// caller forever.
+const CHILD_EXIT_GRACE_MS = 2000;
 const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extract', 'hud-cards', 'treasury-detail', 'irs-detail', 'usda-table', 'civilview-sales']);
 
 /**
@@ -220,15 +225,38 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
       if (error) reject(error); else resolve(value);
     };
     const kill = () => { if (!child.killed) child.kill('SIGKILL'); };
-    const abort = () => { kill(); finish(new ScraplingBridgeError('Scrapling extraction aborted', 'SCRAPLING_ABORTED')); };
-    const timer = setTimeout(() => { kill(); finish(new ScraplingBridgeError('Scrapling extraction timed out', 'SCRAPLING_TIMEOUT')); }, timeoutMs);
+    // SIGKILL is asynchronous. The OS process keeps its file handles and its PID
+    // until Node reaps it on 'exit', so settling the promise the instant the
+    // kill is issued hands the caller a "finished" result while the child is
+    // still alive. Anything the caller does next then races that child: on
+    // Windows a temp-dir cleanup throws EPERM, elsewhere it throws EBUSY. Over
+    // a sweep of many sources that also accumulates live Python processes,
+    // since nothing ever waits for them.
+    //
+    // So terminate the child and wait for the reaped exit, bounded by
+    // CHILD_EXIT_GRACE_MS so a wedged child cannot hang the caller and mask
+    // the error that is actually being reported.
+    let terminating = false;
+    const terminate = (error) => {
+      if (terminating) return finish(error);
+      terminating = true;
+      if (child.exitCode !== null || child.signalCode !== null) return finish(error);
+      const grace = setTimeout(() => finish(error), CHILD_EXIT_GRACE_MS);
+      grace.unref?.();
+      // Registered before the kill: 'exit' can fire synchronously-ish after
+      // the signal, and a late listener would miss it and wait out the grace.
+      child.once('exit', () => finish(error));
+      kill();
+    };
+    const abort = () => terminate(new ScraplingBridgeError('Scrapling extraction aborted', 'SCRAPLING_ABORTED'));
+    const timer = setTimeout(() => terminate(new ScraplingBridgeError('Scrapling extraction timed out', 'SCRAPLING_TIMEOUT')), timeoutMs);
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) return abort();
 
     child.once('error', error => finish(new ScraplingBridgeError(`Unable to start Scrapling parser: ${error.message}`, 'SCRAPLING_SPAWN_FAILED')));
     child.stdout.on('data', chunk => {
       stdoutBytes += chunk.length;
-      if (stdoutBytes > MAX_OUTPUT_BYTES) { kill(); finish(new ScraplingBridgeError('Scrapling output exceeds 2 MB', 'SCRAPLING_OUTPUT_TOO_LARGE')); return; }
+      if (stdoutBytes > MAX_OUTPUT_BYTES) { terminate(new ScraplingBridgeError('Scrapling output exceeds 2 MB', 'SCRAPLING_OUTPUT_TOO_LARGE')); return; }
       stdout.push(chunk);
     });
     child.stderr.on('data', chunk => {
@@ -237,6 +265,10 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
     });
     child.once('close', code => {
       if (settled) return;
+      // A termination in progress already carries the error worth reporting
+      // (abort/timeout/overflow/stdin). Never let a close-derived failure --
+      // typically a nonzero exit from the kill itself -- overwrite it.
+      if (terminating) return;
       if (code !== 0) return finish(new ScraplingBridgeError(`Scrapling parser failed with exit code ${code}`, 'SCRAPLING_PROCESS_FAILED'));
       let result;
       try { result = JSON.parse(Buffer.concat(stdout).toString('utf8')); }
@@ -247,7 +279,7 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
       }
       finish(null, result);
     });
-    child.stdin.once('error', () => { kill(); finish(new ScraplingBridgeError('Unable to send HTML to Scrapling parser', 'SCRAPLING_STDIN_FAILED')); });
+    child.stdin.once('error', () => { terminate(new ScraplingBridgeError('Unable to send HTML to Scrapling parser', 'SCRAPLING_STDIN_FAILED')); });
     child.stdin.end(request);
   });
 }

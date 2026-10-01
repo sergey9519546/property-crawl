@@ -34,6 +34,19 @@ jobs:
         run: npm run promotion:gate
       - name: Quality gate report
         run: npm run quality:report
+      # The guards about the guards, and they must be BLOCKING.
+      #
+      # Until this step existed, the only CI job that ran `npm test` was
+      # extended-suite, which carries continue-on-error: true. Every regression
+      # guard in the repo therefore lived in a job whose failure was discarded,
+      # and deploy.yml gates on workflow_run.conclusion == 'success' -- which
+      # is satisfied when extended-suite fails. The gate that certifies "CI
+      # covers every test file" could not fail CI.
+      #
+      # This set needs no database, no browser and no network (814ms locally),
+      # so there is no reason for it to be advisory.
+      - name: Verification meta-guards (blocking)
+        run: npm run test:meta-guards
       - name: Foolproof scrape contracts
         run: npm run test:foolproof-p0
       - name: Scraper power / end coverage
