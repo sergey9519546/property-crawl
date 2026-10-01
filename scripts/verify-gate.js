@@ -19,21 +19,34 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
-function getChangedFiles() {
+function gitLines(args) {
   try {
-    const out = execSync('git diff --name-only HEAD', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
-      .toString().trim();
-    if (out) return out.split('\n');
-  } catch (_) {}
-  // fall back to staged + unstaged
-  try {
-    const staged = execSync('git diff --cached --name-only', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    const unstaged = execSync('git diff --name-only', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    return [...new Set([...(staged ? staged.split('\n') : []), ...(unstaged ? unstaged.split('\n') : [])])].filter(Boolean);
+    return execSync(`git ${args}`, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().split('\n').map((l) => l.trim()).filter(Boolean);
   } catch (_) {
     return [];
   }
 }
+
+function getChangedFiles() {
+  // Three sources, because any one alone is a blind spot:
+  //   diff HEAD     - tracked files modified against the last commit
+  //   diff --cached - staged additions and modifications
+  //   ls-files -o   - untracked new files, which git diff never reports
+  //
+  // A brand-new server module with a syntax error used to be invisible here:
+  // untracked files appear in no diff, so the gate classified the change from
+  // whatever else happened to be dirty and certified it without ever loading
+  // the broken file. New code is exactly where a load error is most likely.
+  return [
+    ...new Set([
+      ...gitLines('diff --name-only HEAD'),
+      ...gitLines('diff --cached --name-only'),
+      ...gitLines('ls-files --others --exclude-standard'),
+    ]),
+  ];
+}
+
 
 // package.json is treated as schema-relevant deliberately: its scripts
 // enumerate the verification surface and CONTEXT.md hashes it, so adding or
@@ -124,9 +137,17 @@ function getGate(changeType) {
       maxDuration: 5000
     },
     scraper: {
-      suites: ['node test/scrapers.test.js', 'node test/suite.test.js', 'node test/telemetry.test.js'],
-      label: 'scraper + unit + telemetry',
-      maxDuration: 30000
+      // Several scrapers (fdic, trustee, fhfa-hpi, fetch-strategy,
+      // secondary-media-collector) are lazily required by the scheduler, so the
+      // fixed suites do not execute them either. The smoke covers the change.
+      suites: [
+        'node scripts/verify-module-load.js --changed',
+        'node test/scrapers.test.js',
+        'node test/suite.test.js',
+        'node test/telemetry.test.js',
+      ],
+      label: 'module load + scraper + unit + telemetry',
+      maxDuration: 60000
     },
     schema: {
       suites: ['node --test test/sync.test.js', 'node --test test/context.test.js', 'node test/db.test.js'],
@@ -134,9 +155,20 @@ function getGate(changeType) {
       maxDuration: 15000
     },
     runtime: {
-      suites: ['node test/server.test.js', 'node test/suite.test.js', 'node test/hardening.test.js'],
-      label: 'server + unit + hardening',
-      maxDuration: 20000
+      // The first three suites cover most of the tree. The module-load smoke
+      // covers the rest: 25 of 149 server/ modules (public-records, crawlers,
+      // onboarding-pass, forms/store, audit routing, and others) are reached
+      // only through lazy requires inside handlers, so no fixed suite loads
+      // them. Without this, a change to one of those files was certified
+      // "runtime, all passed" by suites that never executed it.
+      suites: [
+        'node scripts/verify-module-load.js --changed',
+        'node test/server.test.js',
+        'node test/suite.test.js',
+        'node test/hardening.test.js',
+      ],
+      label: 'module load + server + unit + hardening',
+      maxDuration: 60000
     },
     agent: {
       suites: [

@@ -1,0 +1,45 @@
+fix(verify-gate): load the changed modules, and stop missing untracked files
+
+Two more ways the gate could certify code it never executed.
+
+1. The gate's suites do not load most of the tree.
+   Measured: test/server.test.js + test/suite.test.js + test/hardening.test.js
+   load 124 of the 149 modules under server/. The other 25 —
+   server/public-records/*, server/crawlers/*, server/discovery/onboarding-pass.js,
+   server/forms/store.js, server/audit/property-image-routing.js, and a few
+   others — are reached only through lazy require() inside request handlers.
+
+   So a change to server/public-records/florida.js classified as "runtime", ran
+   three suites, none of which loaded it, and printed "All passed: true". Same
+   failure shape as the unwired tests: an unexercised path reporting a pass.
+
+   scripts/verify-module-load.js requires the changed modules themselves, so a
+   syntax error, bad import path, throw at module scope, or broken import graph
+   now fails the gate for the file you actually touched. 25 modules in ~400ms.
+   Modules that construct a credentialed client at import time
+   (ZillowMcpClient needs ZILLOW_MCP_API_KEY) are reported config-gated rather
+   than failed, so a missing secret is not mistaken for a defect.
+
+   Added to the runtime gate and, since five scrapers are lazily required by the
+   scheduler too, to the scraper gate.
+
+2. getChangedFiles() could not see untracked files.
+   It used `git diff --name-only HEAD` and only fell back to staged + unstaged
+   diffs. Untracked files appear in no diff at all, so a brand-new server module
+   was invisible: the gate classified the change from whatever else was dirty,
+   smoke-loaded the wrong set, and reported success. Verified by creating a new
+   file with a syntax error — the gate still said "All passed: true". That is the
+   worst failure mode available to this tool, because new code is precisely
+   where a load error is most likely.
+
+   The change set now unions `diff HEAD`, `diff --cached`, and
+   `ls-files --others --exclude-standard`. Re-verified: the same planted file
+   yields "All passed: false" and gate exit 1; removed, the gate is green again.
+
+Both fixes were validated by making them fail first, not by reading the diff.
+
+Pinned by test/verify-module-load.test.js (10 tests) and
+test/verify-gate-changed-files.test.js (3 tests), both wired into test:ops.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, runtime gate green
+with the smoke reporting PASS.
