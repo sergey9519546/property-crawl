@@ -1,6 +1,10 @@
 -- Migration 004: preserve fractional bathrooms and itemized cash-to-close evidence.
-
-BEGIN;
+--
+-- No BEGIN/COMMIT here: scripts/discovery-migrate.js already wraps each
+-- migration in a transaction so the DDL and its ledger row commit together. A
+-- COMMIT inside this file used to close the runner's outer transaction early,
+-- leaving the discovery_schema_migrations insert outside it. Run directly with
+-- psql this file is simply autocommit per statement, which is equivalent.
 
 ALTER TABLE listings
   ALTER COLUMN baths TYPE NUMERIC(4, 1)
@@ -28,5 +32,3 @@ BEGIN
   END IF;
 END
 $$;
-
-COMMIT;

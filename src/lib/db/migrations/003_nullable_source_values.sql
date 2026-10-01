@@ -2,8 +2,12 @@
 --
 -- `equity_spread` is generated data, so recreating it does not discard source
 -- evidence. Run this migration once on existing PostgreSQL deployments.
-
-BEGIN;
+--
+-- No BEGIN/COMMIT here: scripts/discovery-migrate.js already wraps each
+-- migration in a transaction so the DDL and its ledger row commit together. A
+-- COMMIT inside this file used to close the runner's outer transaction early,
+-- leaving the discovery_schema_migrations insert outside it. Run directly with
+-- psql this file is simply autocommit per statement, which is equivalent.
 
 ALTER TABLE listings
   ALTER COLUMN county DROP NOT NULL,
@@ -73,5 +77,3 @@ CREATE INDEX idx_listings_deal_score
 DROP INDEX IF EXISTS idx_listings_opening_bid;
 CREATE INDEX idx_listings_opening_bid
   ON listings (opening_bid ASC NULLS LAST);
-
-COMMIT;

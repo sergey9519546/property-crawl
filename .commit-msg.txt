@@ -1,0 +1,66 @@
+fix: repair the saved-search run route, has_documents, nested migrations, and raw-payload honesty
+
+Found by four parallel audits, each claim verified before acting.
+
+1. The alerts modal "Run now" was completely dead.
+   src/lib/saved-searches.ts runSavedSearch() calls
+   /api/saved-searches/:id/run and server/routes/saved-searches.js:158 serves
+   it, but the browser proxy allowlist in src/lib/property-api.ts permitted
+   only ONE optional segment after saved-searches. The two-segment path was
+   rejected with 404 {"error":"Unknown API route"}, which the modal renders
+   verbatim - so the user was told the route does not exist rather than that
+   the run failed, for a feature that is fully implemented server-side.
+   Now: saved-searches(?:\/[^/]+(?:\/run)?)? - the trailing segment is
+   restricted to the literal "run", so an arbitrary sub-path still fails
+   closed. Verified 8/8 cases against the real regex.
+
+2. schema.sql contradicted migration 010 on has_documents.
+   schema.sql declared NOT NULL DEFAULT FALSE, but client.js:252-254 derives
+   NULL when a record carries no document array and the INSERT names the
+   column. Migration 010 drops the NOT NULL, but only when the migration
+   runner executes - and docker-compose.yml:36 bootstraps from schema.sql
+   alone, so on that path any such upsert failed a not-null check. schema.sql
+   now matches 010, with the reasoning recorded at the column.
+
+3. Migrations 003 and 004 nested their own BEGIN/COMMIT inside the
+   transaction scripts/discovery-migrate.js already opens, so the inner
+   COMMIT closed the runner's transaction early and the
+   discovery_schema_migrations ledger row was written outside the DDL
+   transaction it belongs to. Transaction control removed from both; they
+   still run correctly under psql autocommit.
+
+4. The evidence chain was being corrupted (the serious one).
+   scheduler.js computed
+     const rawPayload = originalPublisherRecord || (() => {
+       try { return JSON.parse(validation.listing.raw); }
+       catch { return validation.listing; } })();
+   raw_payload is the record of what the publisher actually returned. Only
+   six scrapers implement getRawPublisherRecord(). For every other scheduled
+   source the raw is a plain-text notice, JSON.parse throws, and the
+   NORMALIZED listing was written into the raw column - derived data labelled
+   publisher-observed, with the run still reporting success.
+   Now records null, because an absent publisher payload is unknown.
+   Migration 016 makes the column nullable so that honest value is storable.
+
+5. New guard, generalised rather than extended by name.
+   test/db.test.js asserts server and src/lib/db migration mirrors stay
+   byte-equivalent, but only for 003 and 004. Editing those two broke the
+   suite; the same edit to 006-014 would have shipped undetected. Nothing
+   executes the mirror, so it rots silently.
+   test/db/migration-mirror.test.js now discovers the mirrored set from disk
+   and requires every entry to be byte-identical, with no orphans either
+   way, so a future migration is covered the moment it is mirrored. Validated
+   by deliberately staling 015_status_contract.sql: the guard named it with
+   both byte counts, then passed again once restored.
+
+Mirrors re-synced (schema.sql and migrations 003/004/016).
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean.
+
+Not acted on, needs a human decision: the catalog declares hud-usps-vacancy
+as access 'licensed' with adapterKey null and notes that HUD access is
+restricted to registered users, while scheduler.js:103 runs the collector and
+test/source-catalog.test.js:50 asserts the null is correct. The scraper's own
+header says it defaults to the public HUD GIS open-data mirror, so the catalog
+entry looks stale - but correcting a licensing-sensitive entry is not a
+mechanical change.

@@ -104,7 +104,13 @@ CREATE TABLE IF NOT EXISTS listings (
     auction_program TEXT,
     lifecycle_status TEXT,
     transaction_outcome TEXT,
-    has_documents BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Absence of an explicit document inventory is unknown, not an observed
+    -- empty inventory, so this is nullable and has no default. client.js derives
+    -- NULL when a record carries no document array and no explicit boolean, and
+    -- the INSERT names this column. Matches migration 010_discovery_evidence.sql;
+    -- a NOT NULL here made any such upsert fail on a schema.sql-only bootstrap
+    -- (docker-compose.yml mounts this file into docker-entrypoint-initdb.d).
+    has_documents BOOLEAN,
     status VARCHAR(32) NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown', 'active', 'pending', 'sold', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

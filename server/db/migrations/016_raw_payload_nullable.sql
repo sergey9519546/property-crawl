@@ -1,0 +1,20 @@
+-- Migration 016: the publisher raw payload may be unknown.
+--
+-- discovery_snapshots.raw_payload is the record of what the publisher actually
+-- returned. server/scrapers/scheduler.js used to fall back to storing the
+-- NORMALIZED listing whenever the raw notice was not parseable JSON:
+--
+--   const rawPayload = originalPublisherRecord || (() => {
+--     try { return JSON.parse(validation.listing.raw); }
+--     catch { return validation.listing; }        // <-- derived data in a raw column
+--   })();
+--
+-- Only six scrapers implement getRawPublisherRecord(). For every other
+-- scheduled source the raw is a plain-text notice, JSON.parse throws, and the
+-- normalized listing was written into raw_payload while the run reported
+-- success. That silently corrupted the evidence chain: the raw column held
+-- derived data labelled as publisher-observed.
+--
+-- Absence of an unparsed publisher payload is unknown, not the normalized
+-- listing. Make the column nullable so the honest value can be recorded.
+ALTER TABLE discovery_snapshots ALTER COLUMN raw_payload DROP NOT NULL;

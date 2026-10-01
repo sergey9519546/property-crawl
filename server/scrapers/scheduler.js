@@ -234,7 +234,14 @@ class IngestionScheduler {
               continue;
             }
             if(this.discoveryStore&&discoveryRun){
-              const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return validation.listing;}})();
+              // raw_payload records what the publisher actually returned. Prefer the
+              // scraper's captured publisher record; otherwise use the stored raw only
+              // when it parses as JSON. If neither is available the honest value is
+              // null - an absent publisher payload is unknown, and it is NOT the
+              // normalized listing. Storing the normalized record here would label
+              // derived data as publisher-observed and quietly corrupt the evidence
+              // chain while the run reported success. See migration 016.
+              const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return null;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
               await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);},ownership);
             }else await this.database.createListing(validation.listing);
