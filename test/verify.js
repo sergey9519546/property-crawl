@@ -56,7 +56,13 @@ const suites = [
   { name: '27. Scraper Power & End Coverage Guarantee', cmd: 'npm run test:scraper-power' },
   { name: '28. Promotion Gate + Swarm Real Mode Contract', cmd: 'npm run test:promotion-gate' },
   { name: '29. Foolproof Fetch Strategy Research Contract', cmd: 'node --test test/fetch-strategy.test.js' },
-  { name: '30. Foolproof P0 (SPA XHR + Throttle + Schema)', cmd: 'node --test test/foolproof-scrape-p0.test.js' }
+  { name: '30. Foolproof P0 (SPA XHR + Throttle + Schema)', cmd: 'node --test test/foolproof-scrape-p0.test.js' },
+  // Every test file verify.js does not already reach above. This closes the
+  // gap that let 73 of 256 test files - including every regression guard added
+  // in the Sept 2026 audit - pass locally while CI never executed them.
+  // Self-maintaining: a test file added next year runs here without anyone
+  // remembering to edit this list. See scripts/verify-test-coverage.js.
+  { name: '31. Remaining test coverage (everything verify.js does not list)', cmd: 'node scripts/verify-test-coverage.js' }
 ];
 
 let totalPassed = 0;

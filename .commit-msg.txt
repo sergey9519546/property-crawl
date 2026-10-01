@@ -1,0 +1,55 @@
+fix(ci): run every test file in CI, not just the 256/73 that verify.js lists
+
+CI runs `npm test`, which is `node test/verify.js`. verify.js enumerates
+suites with hand-curated file lists plus a handful of `npm run test:*`
+invocations. A test wired into a `test:*` script that verify.js never
+calls is NOT executed in CI - it runs locally and looks green forever.
+
+Measured: 73 of 256 test files (29%) were invisible to CI, including ALL
+THIRTEEN regression guards added during the September 2026 audit:
+
+  test-wiring, verify-gate-classify, verify-module-load,
+  verify-gate-changed-files, env-docs, honest-empty-state,
+  api-reachability, raw-payload-honesty, publisher-record-capture,
+  migration-mirror, listing-id-alias, catalog-adapter-join,
+  no-vacuous-tests
+
+Every one of those guards was passing locally and enforcing nothing in
+CI. Roughly 60 of the 91 previously-orphaned tests fixed earlier were in
+the same position - that fix moved them from never-executed to
+still-not-CI-executed. Same failure shape as the 91 orphans, one level
+up: a check wired into a place nothing runs.
+
+scripts/verify-test-coverage.js
+  1. computes the set CI would already execute, parsing verify.js for
+     direct file lists and resolving each `npm run <script>` into that
+     script's file list;
+  2. runs every test file NOT in that set, in one `node --test` call;
+  3. prints the unreached list on success so it stays visible rather
+     than quietly growing.
+
+Self-maintaining: a test file added next year runs in CI without anyone
+remembering to edit verify.js. The one documented exclusion is
+test/property-title.test.js, a live third-party API integration needing
+credentials and network.
+
+test/ci-test-coverage.test.js (8 tests) pins that no file is invisible -
+each must be reached by a suite, picked up by the script, or be a
+documented skip - that the npm-run resolution hop genuinely enlarges the
+reachable set (so it cannot silently degenerate to direct-only), and that
+the skip list stays capped at 5 entries so it cannot become a hole.
+
+The repo caught this change's own first failure: the initial coverage
+run failed on test/ci-test-coverage.test.js, which was not yet wired into
+a test:* runner. test-wiring.test.js flagged it by name.
+
+Result: 979 tests across the 73 previously-invisible files, all passing.
+`npm run build` also verified green - it catches prerender and lint
+errors that `tsc --noEmit` cannot.
+
+Note: test:crawler-tools returned exit 1 once during a long sequential
+sweep, then passed 5/5 standalone and 2/2 in the same sequence as the
+failure. Not reproduced; flagged rather than declared green.
+
+Verified: all 17 test:* runners exit 0, tsc --noEmit clean, verify:gate
+green, next build succeeds.
