@@ -1,0 +1,28 @@
+test: guard against vacuous tests that can never fail
+
+Wiring 91 previously-unreferenced test files into runners was the largest
+single change of the audit series, so it warranted the same scrutiny as
+everything else: a test that asserts nothing passes regardless of the code
+under test, and looks like coverage in a report while protecting nothing.
+
+Audited all 255 test files: zero assertion-free files. The one that looked
+weakest by assertion-to-test ratio, property-api-proxy-inventory.test.js,
+turned out to have three real tests with assertions inside loops - the
+counting was naive, not the test.
+
+test/no-vacuous-tests.test.js (3 tests) makes that property permanent. Two
+details keep it from being decorative:
+
+- It verifies its own detection patterns against known-good and known-bad
+  source shapes. Without that, if the patterns ever stopped matching, the
+  guard would silently pass every file - which is exactly the failure mode
+  this audit series has been about.
+- It deliberately does not count assertions per test. One assertion inside a
+  loop can cover many cases, so a ratio threshold would flag good tests
+  alongside bad ones. Only the unambiguous case - a file with no recognised
+  assertion at all - fails.
+
+Validated by planting a test that computes 1 + 1 and asserts nothing: the
+guard failed naming that exact file, then passed once removed.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, verify:gate green.
