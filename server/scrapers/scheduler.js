@@ -220,15 +220,28 @@ class IngestionScheduler {
           }
           const items = await scraper.scrapeFeed();
           await assertLease('Collection job lease was lost after source execution');
-          if (!Array.isArray(items)) {
+          // A report-only collector ingests its own evidence and reports counts
+          // rather than returning listings. public-notices-email does this: it
+          // writes evidence packets to the intake store and has no listing rows
+          // to hand over. Treat that shape as a legitimate outcome instead of
+          // throwing, which used to make the source fail on every sweep.
+          const reportOnly = !Array.isArray(items) && items && typeof items === 'object' && 'report' in items;
+          if (!Array.isArray(items) && !reportOnly) {
             throw new TypeError(`${scraper.name} returned a non-array payload`);
+          }
+          const itemsToIngest = reportOnly ? [] : items;
+          if (reportOnly) {
+            scraper.lastRunReport = items;
+            totalRejected += items.rejected || 0;
+            rejectedForScraper += items.rejected || 0;
+            console.log(`[Scheduler] ${scraper.name} produced an evidence report (no listing rows): ${items.report?.reason || items.report?.mode || 'recorded'}`);
           }
           if (scraper.circuitBreaker && scraper.circuitBreaker.isOpen()) {
             throw new Error(`${scraper.name} returned data after its circuit breaker opened; refusing ingestion`);
           }
 
           const accepted = [];
-          for (const item of items) {
+          for (const item of itemsToIngest) {
             if (this.discoveryStore && accepted.length % 50 === 0) requireCollectionStorage(this.storageProbe);
             await assertLease('Collection job lease was lost; refusing further writes');
             const originalPublisherRecord = typeof scraper.getRawPublisherRecord === 'function' ? scraper.getRawPublisherRecord(item) : null;
@@ -279,7 +292,7 @@ class IngestionScheduler {
             await assertLease('Collection job lease was lost before source completion');
             await this.discoveryStore.finishRun(discoveryRun.id, {
               status: report?.truncated || report?.complete === false ? 'partial' : 'complete',
-              discovered: coverage.counts?.publisherDiscovered ?? items.length,
+              discovered: coverage.counts?.publisherDiscovered ?? itemsToIngest.length,
               accepted: accepted.length,
               rejected: rejectedForScraper + (coverage.counts?.parserRejected ?? coverage.counts?.malformedRows ?? 0),
               coverage,
@@ -295,7 +308,7 @@ class IngestionScheduler {
           const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
           Object.defineProperty(sourceResult,'acceptedListings',{value:accepted,enumerable:false});
           sourceResults.push(sourceResult);
-          console.log(`[Scheduler] ${scraper.name} completed successfully (${accepted.length} accepted, ${items.length - accepted.length} rejected)`);
+          console.log(`[Scheduler] ${scraper.name} completed successfully (${accepted.length} accepted, ${itemsToIngest.length - accepted.length} rejected)`);
           return accepted.length;
         } catch (err) {
           if(err?.code==='DISCOVERY_JOB_LEASE_LOST')throw err;

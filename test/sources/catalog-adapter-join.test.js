@@ -78,10 +78,36 @@ const MODULE_TO_SOURCE = new Map([['landbanksearch', 'landbank']]);
  */
 const KNOWN_UNJOINABLE = new Set();
 
+// True when a module actually provides a collector, i.e. something callable at
+// the scraper interface. Checked by loading the module rather than by reading
+// its text: a comment mentioning scrapeFeed() is not an adapter, and a
+// hand-maintained exclusion list rots the moment a helper lands beside the
+// scrapers. Support modules (scraper-interface, auto-throttle,
+// circuit-breaker, run-report, telemetry, validation, collection-scope, ...)
+// all live in the same directory and are correctly excluded.
+function providesScraper(file) {
+  let mod;
+  try {
+    // eslint-disable-next-line global-require, import/no-dynamic-require
+    mod = require(file);
+  } catch (_) {
+    return false;
+  }
+  if (!mod) return false;
+  const hasFeed = (value) =>
+    Boolean(value)
+    && (typeof value === 'function' ? typeof value.prototype?.scrapeFeed === 'function' : typeof value.scrapeFeed === 'function');
+  if (hasFeed(mod)) return true;
+  if (typeof mod === 'function') return false;
+  return Object.values(mod).some(hasFeed);
+}
+
 function scheduledSources() {
   const modules = [...schedulerSrc.matchAll(/require\('\.\/([a-z0-9-]+)'\)/g)].map((m) => m[1]);
   return [...new Set(modules)]
     .filter((m) => !SUPPORT_MODULES.has(m))
+    .filter((m) => fs.existsSync(path.join(ROOT, 'server', 'scrapers', `${m}.js`)))
+    .filter((m) => providesScraper(path.join(ROOT, 'server', 'scrapers', `${m}.js`)))
     .map((m) => MODULE_TO_SOURCE.get(m) || m);
 }
 
