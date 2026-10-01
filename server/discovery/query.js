@@ -122,6 +122,29 @@ function queryFromUrl(url) {
     throw new DiscoveryQueryError(400, "radiusKm must be between 0 and 20000");
   const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "score");
   if (!['score', 'date', 'bid-asc', 'equity'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
+  // Also dropped by the a58f76f refactor. A zoom outside the map's usable range
+  // silently produces a query the map layer cannot render; an offset combined
+  // with a cursor is ambiguous, because the two describe different positions
+  // and the layer silently prefers one. Both reject rather than guess, in line
+  // with every other unrecognised value in this function.
+  const zoom = get("zoom") == null ? null : Number(get("zoom"));
+  if (zoom !== null && (!Number.isFinite(zoom) || zoom < 0 || zoom > 20))
+    throw new DiscoveryQueryError(400, "zoom must be from 0 to 20");
+  const cursor = get("cursor");
+  if (cursor && offset) throw new DiscoveryQueryError(400, "offset cannot be combined with cursor");
+  if (minEquity !== null && minEquity > 50000000)
+    throw new DiscoveryQueryError(400, "Invalid minEquity");
+  // A reversed date range can only ever match zero rows, and "no results" is the
+  // one answer the caller cannot act on. This check was dropped by the a58f76f
+  // refactor, which inlined the two parseDate calls into the returned literal
+  // and took the ordering guard with it. The test that still guarded it had
+  // been failing ever since, invisibly: the quality gate classified every
+  // failure in this suite as skip_env because its DATABASE_URL is unset in CI.
+  // Reject, consistent with how every other unrecognised value here is handled.
+  const saleFrom = parseDate(get("saleFrom"), "saleFrom");
+  const saleTo = parseDate(get("saleTo"), "saleTo");
+  if (saleFrom && saleTo && saleFrom > saleTo)
+    throw new DiscoveryQueryError(400, "saleFrom must not be after saleTo");
   return {
     q: text(get("q")),
     state: text(get("state")),
@@ -142,13 +165,13 @@ function queryFromUrl(url) {
     hasDocuments: parseTristateBool(get("hasDocuments"), "hasDocuments"),
     bbox: parseBbox(get("bbox")),
     sort,
-    cursor: get("cursor"),
+    cursor,
     limit,
     offset,
     lat,
     lng,
     radiusKm,
-    zoom: get("zoom") == null ? null : Number(get("zoom")),
+    zoom,
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
 }
@@ -287,6 +310,8 @@ function buildFacets(rows, fields) {
     type: (r) => r.propType,
     program: (r) => derived(r).program,
     lifecycle: (r) => derived(r).lifecycle,
+    occupancy: (r) => r.occupancy,
+    freshness: (r) => derived(r).freshness,
   };
   return Object.fromEntries(
     fields
@@ -444,6 +469,16 @@ async function pgSearch(database, f) {
       type: "prop_type",
       program: "auction_program",
       lifecycle: "lifecycle_status",
+      // occupancy: nullif folds the blank-string bucket into the "unknown"
+      // sentinel, mirroring the in-memory accessor's falsy-to-"unknown" rule
+      // and pgWhere's coalesce(occupancy,'')='' test for that sentinel.
+      occupancy: "nullif(occupancy,'')",
+      // freshness is derived, not stored. The literals are exactly the buckets
+      // derived() returns and parseFreshness accepts, so every option this
+      // facet returns can be selected without a 400. The CASE is total, so it
+      // can never yield the "unknown" sentinel the freshness parser rejects.
+      freshness:
+        "CASE WHEN provenance->>'origin'='live' THEN 'observed' ELSE 'unverified' END",
     },
     facets = {};
   for (const field of f.facets) {

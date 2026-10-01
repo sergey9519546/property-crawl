@@ -20,6 +20,9 @@ function createSourceNetworkHandler(dependencies = {}) {
   // The production scheduler owns this singleton. Tests and alternative
   // schedulers may inject a coordinator explicitly.
   const coordinator = dependencies.coordinator || collector.collectionCoordinator || null;
+  // The release gate lives on the discovery store. It was never read from
+  // dependencies, so scope=all had no way to ask which sources were promoted.
+  const discoveryStore = dependencies.discoveryStore || null;
   const evidenceCollectors = dependencies.evidenceCollectors || { 'federal-register': (options) => require('../sources/federal-register').collectFederalNotices(options) };
   const evidenceJobs = new Set();
   return async function handleSourceNetwork(req, res) {
@@ -146,7 +149,28 @@ function createSourceNetworkHandler(dependencies = {}) {
           if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
           if (!collector.networkEnabled) return res.status(503).json({ error: 'Network collection is disabled in this environment' });
           if (!coordinator) return res.status(503).json({ error: 'Collection jobs are unavailable' });
-          const job = await coordinator.start({ trigger: 'source_network', idempotencyKey: req.body?.idempotencyKey });
+          // The release gate decides which sources have earned promotion, so where
+          // promotion exists it must bound a bulk collection. Consult it before
+          // starting anything: an empty gate has to fail closed, and a populated
+          // one has to restrict the job to exactly those sources.
+          //
+          // This was missing. scope=all called coordinator.start() with no
+          // sourceIds, which means no restriction at all -- every registered
+          // adapter, promoted or not -- and the route answered 202.
+          //
+          // Scoped to deployments that actually have a discovery store. Promotion
+          // is a concept of the advanced discovery mode; with no store there is
+          // no promotion record to gate on, and refusing to collect at all would
+          // be a different failure rather than a safer one.
+          let sourceIds;
+          if (discoveryStore && typeof discoveryStore.promotedSources === 'function') {
+            const promoted = await discoveryStore.promotedSources();
+            sourceIds = Array.isArray(promoted) ? promoted.filter(Boolean) : [];
+            if (!sourceIds.length) {
+              return res.status(409).json({ error: 'No source has passed the release gate; promote a source before running a full collection' });
+            }
+          }
+          const job = await coordinator.start({ trigger: 'source_network', ...(sourceIds ? { sourceIds } : {}), idempotencyKey: req.body?.idempotencyKey });
           return res.status(202).json({ status: 'collecting', sourceId: null, accepted: true, job });
         }
         const source = catalog.find((item) => item.id === req.body?.sourceId);

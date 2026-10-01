@@ -1,6 +1,11 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const path=require('node:path');const {fork}=require('node:child_process');
 const {createIsolatedDatabase}=require('./discovery-acceptance-db');const {createDiscoveryStore}=require('../server/discovery/store');
+// This file gated its Postgres test on a bare `databaseUrl` that it never
+// declared, so the ReferenceError fired while the file was still loading and
+// node:test ran NONE of the tests inside it. Declared here, using the same
+// env chain the claimant fork below already uses.
+const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 let isolated;
 test.before(async()=>{isolated=await createIsolatedDatabase({prefix:'discovery_restart'});});
 test.after(async()=>{if(isolated)await isolated.close();});

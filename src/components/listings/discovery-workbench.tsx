@@ -46,6 +46,7 @@ type Payload = {
   revision?: string;
   page?: { nextCursor?: string | null; hasMore?: boolean };
   facets?: Record<string, Facet[]>;
+  intelligence?: { sort?: string | null; minQuality?: number; note?: string };
   error?: string;
 };
 const defaults: Record<string, string> = {
@@ -259,6 +260,35 @@ export function DiscoveryWorkbench() {
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => key !== "view" && key !== "sort" && value,
   );
+  const pageLength = payload?.listings?.length ?? 0;
+  // The triage chips and distressStage are applied by this page only, never by
+  // the search: the server does not parse either (see discovery-query.ts), so
+  // they run against the records already in payload.listings.
+  const localFilterActive = anyTriageActive
+    || Boolean(distressStageFilter && distressStageFilter !== "all");
+  // `total` is a whole-search count, except once the post-annotation
+  // intelligence view is active (quality/opportunity sort, or any minQuality):
+  // there the server reports the length of the page it just built, so the number
+  // is a page count wearing the label of a search count. Both signals are
+  // checked — the server's own `intelligence` object first, then the shape a
+  // capped total always has (a count no larger than the page carrying it while
+  // more pages are still available).
+  const totalIsPageScoped = Boolean(
+    payload
+      && (payload.intelligence?.sort
+        || (payload.intelligence?.minQuality || 0) > 0
+        || (payload.page?.hasMore === true && payload.total <= pageLength)),
+  );
+  const clearLocalFilters = React.useCallback(() => {
+    setTriageFilters({
+      isNew: false,
+      priceDropped: false,
+      hasDocs: false,
+      stale: false,
+      occupancyKnown: false,
+    });
+    setFilters({ distressStage: undefined });
+  }, [setFilters]);
   const next = () => {
     const n = payload?.page?.nextCursor;
     if (!n) return;
@@ -416,9 +446,9 @@ export function DiscoveryWorkbench() {
             {chipLabel}
           </button>
         ))}
-        {(anyTriageActive || (distressStageFilter && distressStageFilter !== "all")) ? (
+        {localFilterActive ? (
           <span className="text-xs text-slate-500">
-            {filteredListings.length} of {payload?.listings?.length ?? 0} shown
+            {filteredListings.length} of {pageLength.toLocaleString()} shown on this page
           </span>
         ) : null}
       </div>
@@ -428,9 +458,14 @@ export function DiscoveryWorkbench() {
             {loading || (!payload && !error)
               ? "Updating results…"
               : payload
-                ? `${(payload.listings?.length ?? 0).toLocaleString()} on this page${
+                ? `${pageLength.toLocaleString()} on this page${
                     typeof payload.total === "number"
-                      ? ` · ${payload.total.toLocaleString()} match this search`
+                      ? ` · ${payload.total.toLocaleString()} match this search${
+                          // Without this qualifier the capped intelligence count
+                          // reads as a whole-search total: "12 match" on a
+                          // search the user knows returns thousands.
+                          totalIsPageScoped ? ", counted on this page only" : ""
+                        }`
                       : ""
                   }`
                 : "Results unavailable"}
@@ -548,18 +583,42 @@ export function DiscoveryWorkbench() {
           ) : !filteredListings.length ? (
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
               <SlidersHorizontal className="mx-auto text-slate-400" />
-              <h2 className="mt-4 text-lg font-bold">
-                No listings match your filters.
-              </h2>
-              <p className="mt-2 text-sm text-slate-600">
-                Try a different location or fewer filters.
-              </p>
-              <Link
-                href="/sources"
-                className="mt-4 inline-block text-sm font-semibold text-slate-900 underline"
-              >
-                View source coverage
-              </Link>
+              {localFilterActive && pageLength > 0 ? (
+                <>
+                  <h2 className="mt-4 text-lg font-bold">
+                    No listings on this page match this filter.
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    The filter above is applied to this page only, not to the search.{" "}
+                    {typeof payload.total === "number"
+                      ? `This search returns ${payload.total.toLocaleString()} matching listing${
+                          payload.total === 1 ? "" : "s"
+                        }, but only ${pageLength.toLocaleString()} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
+                      : `Only ${pageLength.toLocaleString()} ${pageLength === 1 ? "listing is" : "listings are"} loaded here. Later pages have not been loaded, so matches may be on them.`}
+                  </p>
+                  <button
+                    onClick={clearLocalFilters}
+                    className="mt-4 text-sm font-semibold text-slate-900 underline"
+                  >
+                    Clear this filter
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-4 text-lg font-bold">
+                    No listings match your filters.
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Try a different location or fewer filters.
+                  </p>
+                  <Link
+                    href="/sources"
+                    className="mt-4 inline-block text-sm font-semibold text-slate-900 underline"
+                  >
+                    View source coverage
+                  </Link>
+                </>
+              )}
             </div>
           ) : (
             <div aria-busy={loading} className={`mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-3 ${loading ? "pointer-events-none opacity-50" : ""}`}>
@@ -602,6 +661,22 @@ export function DiscoveryWorkbench() {
   );
 }
 
+// The calendar groups by raw saleDate, with one sentinel standing in for every
+// listing whose publisher published no date. Sorting those raw keys left the
+// unknown bucket wherever the platform collation happened to put the string
+// "Date not published" — below ISO dates only because ICU orders digits before
+// letters, and above any date a publisher wrote in words, which displayDate
+// passes through unchanged. An unknown date is not an early date; it sorts last
+// by this component's decision, and real dates keep the localeCompare order
+// they had.
+const UNKNOWN_SALE_DATE = "Date not published";
+function compareSaleDateGroups(a: string, b: string) {
+  const aUnknown = a === UNKNOWN_SALE_DATE;
+  const bUnknown = b === UNKNOWN_SALE_DATE;
+  if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
+  return a.localeCompare(b);
+}
+
 function DiscoveryCalendar({
   listings,
   filters,
@@ -613,7 +688,7 @@ function DiscoveryCalendar({
 }) {
   const groups = new Map<string, PropertyListing[]>();
   for (const listing of listings) {
-    const day = listing.saleDate || "Date not published";
+    const day = listing.saleDate || UNKNOWN_SALE_DATE;
     const items = groups.get(day) || [];
     items.push(listing);
     groups.set(day, items);
@@ -641,7 +716,7 @@ function DiscoveryCalendar({
           </p>
         )}
         {[...groups.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
+          .sort(([a], [b]) => compareSaleDateGroups(a, b))
           .map(([date, items]) => (
             <article
               key={date}
@@ -649,7 +724,7 @@ function DiscoveryCalendar({
             >
               <h3 className="flex items-center gap-2 font-semibold">
                 <CalendarDays size={15} />
-                {date === "Date not published" ? date : displayDate(date)}
+                {date === UNKNOWN_SALE_DATE ? date : displayDate(date)}
               </h3>
               <div className="mt-3 space-y-2">
                 {items.map((listing) => (

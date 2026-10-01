@@ -28,6 +28,42 @@ const SUITES = [
   { id: 'discovery-ops', cmd: [process.execPath, ['--test', 'test/discovery-worker.test.js', 'test/discovery-worker-scope.test.js', 'test/discovery-promotion-evidence.test.js']], envRequired: 'DISCOVERY_TEST_DATABASE_URL' },
 ];
 
+/**
+ * True when a suite's own output shows that tests actually failed.
+ *
+ * Kept separate and pure so the classification can be tested directly, without
+ * spawning a three-minute gate.
+ */
+function reportedTestFailure(raw) {
+  return /^\s*(?:ℹ|info)\s+fail\s+[1-9]\d*\s*$/im.test(raw)
+    || /^\s*not ok\b/im.test(raw)
+    || /^\s*✖\s*failing tests:/im.test(raw);
+}
+
+/**
+ * Decide a failing suite's status.
+ *
+ * Decide from what the suite REPORTED, not from whether its env var is set.
+ *
+ * The old rule asked the environment: `envRequired && !process.env[...]`. In
+ * CI, where DATABASE_URL and DISCOVERY_TEST_DATABASE_URL are never set, that
+ * rule relabelled every failure in the three env-gated suites -- a genuinely
+ * broken assertion in discovery-worker.test.js included -- as skip_env, counted
+ * it into `skip`, left `fail` at 0, and exited 0. The reason string was
+ * computed and printed and nothing acted on it.
+ *
+ * A suite that cannot run its env-gated tests skips them and exits 0 (verified:
+ * discovery-ops reports "fail 0, skipped 1"; db.test.js prints "DATABASE_URL not
+ * set - skipping" and exits clean). So reaching this function at all already
+ * means something went wrong, and that is true regardless of which env vars are
+ * present. The env test is kept only as the fallback for a suite that dies
+ * before producing a recognisable summary.
+ */
+function classifySuiteFailure(raw, envRequired, envPresent) {
+  if (reportedTestFailure(raw)) return 'fail';
+  return envRequired && !envPresent ? 'skip_env' : 'fail';
+}
+
 function runSuite(suite) {
   const [cmd, args] = suite.cmd;
   const started = Date.now();
@@ -47,21 +83,19 @@ function runSuite(suite) {
     });
     return { id: suite.id, status: 'pass', durationMs: Date.now() - started, envRequired: suite.envRequired };
   } catch (err) {
-    const envMissing = Boolean(suite.envRequired) && !process.env[suite.envRequired];
-    const output = [err.stdout, err.stderr]
-      .filter(Boolean)
-      .map((value) => String(value))
-      .join('\n')
+    const raw = [err.stdout, err.stderr].filter(Boolean).map((value) => String(value)).join('\n');
+    const status = classifySuiteFailure(raw, suite.envRequired, process.env[suite.envRequired]);
+    const output = raw
       .split(/\r?\n/)
       .filter((line) => /not ok|✖|Error|fail|assert|FAIL|SKIP/i.test(line))
       .slice(-12)
       .join(' | ');
     return {
       id: suite.id,
-      status: envMissing ? 'skip_env' : 'fail',
+      status,
       durationMs: Date.now() - started,
       envRequired: suite.envRequired,
-      reason: envMissing
+      reason: status === 'skip_env'
         ? `missing ${suite.envRequired}`
         : [String(err.message || err).slice(0, 160), output].filter(Boolean).join(' :: ').slice(0, 500),
     };
@@ -96,4 +130,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { SUITES, runSuite };
+module.exports = { SUITES, runSuite, classifySuiteFailure, reportedTestFailure };

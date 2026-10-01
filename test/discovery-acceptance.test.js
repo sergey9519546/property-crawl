@@ -8,9 +8,15 @@ const discovery = require('../server/discovery/query');
 const { DatabaseClient } = require('../server/db/client');
 const { createHuntsHandler } = require('../server/routes/hunts');
 const { createPgHuntStore } = require('../server/discovery/hunt-store');
+// This file gates its Postgres tests on a bare `databaseUrl` that it never
+// declared, so the ReferenceError fired while the file was still loading and
+// node:test ran NONE of the tests inside it. Declared here, using the same
+// env chain createIsolatedDatabase() and the claimant fork already use.
+const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+
 
 let isolated;
-test.before(async () => { isolated = await createIsolatedDatabase(); });
+test.before(async () => { if (!databaseUrl) return; isolated = await createIsolatedDatabase(); });
 test.after(async () => { if (isolated) await isolated.close(); });
 
 test('migrations expose PostGIS and every durable discovery table',{skip: !databaseUrl}, async () => {
@@ -43,7 +49,7 @@ test('runs, snapshots, checkpoints, jobs, and leases survive store recreation',{
   assert.equal(raw.rows[0].raw_payload.address, 'private acceptance fixture');
 });
 
-test('collection job claims are atomic and idempotency keys bind to one scope', async () => {
+test('collection job claims are atomic and idempotency keys bind to one scope', {skip: !databaseUrl}, async () => {
   const store = createDiscoveryStore(isolated.pool);
   const job = await store.createOrReuseJob({ idempotencyKey: 'atomic-job', sourceIds: ['hud'], payload: { state: 'CA' } });
   const same = await store.createOrReuseJob({ idempotencyKey: 'atomic-job', sourceIds: ['hud'], payload: { state: 'CA' } });
@@ -57,7 +63,7 @@ test('collection job claims are atomic and idempotency keys bind to one scope', 
   assert.match(persisted.rows[0].lease_owner, /^worker-/);
 });
 
-test('job stage and error JSON remains structured across repeated guarded updates', async () => {
+test('job stage and error JSON remains structured across repeated guarded updates', {skip: !databaseUrl}, async () => {
   const store=createDiscoveryStore(isolated.pool);const job=await store.createOrReuseJob({idempotencyKey:'json-stage-job',sourceIds:['irs']});
   const claimed=await store.claimJob(job.id,'json-worker',30);assert.equal(claimed.leaseOwner,'json-worker');
   const first=await store.updateJob(job.id,{stage:{name:'collection',value:{status:'running'}},error:{stage:'collection',message:'publisher timeout'}},{ownerId:'json-worker'});
@@ -67,7 +73,7 @@ test('job stage and error JSON remains structured across repeated guarded update
   assert.equal(Array.isArray(second.errors),true);assert.equal(typeof second.stages,'object');
 });
 
-test('PostgreSQL search cursor rejects inventory mutation and map uses PostGIS', async () => {
+test('PostgreSQL search cursor rejects inventory mutation and map uses PostGIS', {skip: !databaseUrl}, async () => {
   await seedListings(isolated.pool, 80);
   const database = new DatabaseClient({ env: { NODE_ENV: 'test' } });
   database.pool = isolated.pool; database.isPg = true;
@@ -84,14 +90,14 @@ test('PostgreSQL search cursor rejects inventory mutation and map uses PostGIS',
   assert.ok(map.features.length > 0);
 });
 
-test('unknown categorical facets select null and blank values with PG/memory parity', async () => {
+test('unknown categorical facets select null and blank values with PG/memory parity', {skip: !databaseUrl}, async () => {
   await isolated.pool.query("INSERT INTO listings(id,source_key,state,address,prop_type,auction_program,occupancy,status) VALUES ('unknown-null','hud','CA','Null Category',NULL,NULL,NULL,'active'),('unknown-blank','hud','CA','Blank Category','','','','active'),('known-category','hud','CA','Known Category','Land','TPS','vacant','active')");
   const pgDatabase=new DatabaseClient({env:{NODE_ENV:'test'}});pgDatabase.pool=isolated.pool;pgDatabase.isPg=true;
   for(const parameter of ['type','program','occupancy']){const parsed=discovery.queryFromUrl(new URL(`http://localhost/api/listings?q=category&${parameter}=unknown&limit=10&facets=${parameter}`));const result=await discovery.search(pgDatabase,parsed);assert.deepEqual(result.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);assert.deepEqual(result.facets[parameter],[{value:'unknown',count:2}]);
     const memory={isPg:false,getListings:async()=>({total:3,listings:[{id:'unknown-null',source:'hud',state:'CA',address:'Null Category',propType:null,auctionProgram:null,occupancy:null,status:'active'},{id:'unknown-blank',source:'hud',state:'CA',address:'Blank Category',propType:'',auctionProgram:'',occupancy:'',status:'active'},{id:'known-category',source:'hud',state:'CA',address:'Known Category',propType:'Land',auctionProgram:'TPS',occupancy:'vacant',status:'active'}]})};const memoryResult=await discovery.search(memory,parsed);assert.deepEqual(memoryResult.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);}
 });
 
-test('advanced hunt route pages and persists a baseline beyond 10000 PostgreSQL listings',{timeout:60000},async()=>{
+test('advanced hunt route pages and persists a baseline beyond 10000 PostgreSQL listings',{skip: !databaseUrl, timeout:60000},async()=>{
   await isolated.pool.query('DELETE FROM listings');await seedListings(isolated.pool,10050);
   await isolated.pool.query(`UPDATE listings SET id='HUD-CA-'||substring(id from '[0-9]+'),source_key='hud',state='CA',source_url='https://www.hudhomestore.gov/property/propertydetails?caseNumber='||substring(id from '[0-9]+'),raw_notice='Official HUD publisher record '||substring(id from '[0-9]+'),source_observed_at='2026-09-05T18:00:00Z',provenance=jsonb_build_object('origin','live','observed',true,'recordKind','source_record','publisher','HUD','recordId',substring(id from '[0-9]+'),'observedAt','2026-09-05T18:00:00Z')`);
   const database=new DatabaseClient({env:{NODE_ENV:'test'}});database.pool=isolated.pool;database.isPg=true;

@@ -1423,9 +1423,22 @@ class DatabaseClient {
     if (this.isPg) {
       // Fetch the most-recent prior snapshot for each listing by
       // joining on a max-source_observed_at subquery.
+      // Cast in SQL and normalise in JS, exactly as LISTING_SELECT + mapPgListingRow
+      // do for the main listing read. listing_history stores opening_bid/mid/
+      // deal_score as NUMERIC(14,2)/(5,2), which node-pg returns as strings, and
+      // source_observed_at/recorded_at as TIMESTAMPTZ, which it returns as Date.
+      // The in-memory branch below returns finiteOrNull numbers and ISO strings;
+      // without this the two backends return the same keys with different types,
+      // which is invisible until DATABASE_URL is set.
       const res = await this.pool.query(
         `SELECT DISTINCT ON (listing_id)
-            listing_id, source_observed_at, opening_bid, mid, deal_score, source, recorded_at
+            listing_id,
+            source_observed_at::text AS "sourceObservedAt",
+            opening_bid::float8 AS "openingBid",
+            mid::float8         AS "mid",
+            deal_score::float8  AS "dealScore",
+            source,
+            recorded_at::text   AS "recordedAt"
          FROM listing_history
          WHERE listing_id = ANY($1::text[])
          ORDER BY listing_id, source_observed_at DESC`,
@@ -1434,12 +1447,12 @@ class DatabaseClient {
       for (const row of res.rows) {
         result.set(row.listing_id, {
           listingId: row.listing_id,
-          sourceObservedAt: row.source_observed_at,
-          openingBid: row.opening_bid,
-          mid: row.mid,
-          dealScore: row.deal_score,
-          source: row.source,
-          recordedAt: row.recorded_at
+          sourceObservedAt: isoOrNull(row.sourceObservedAt),
+          openingBid: finiteOrNull(row.openingBid),
+          mid: finiteOrNull(row.mid),
+          dealScore: finiteOrNull(row.dealScore),
+          source: typeof row.source === 'string' ? row.source : null,
+          recordedAt: isoOrNull(row.recordedAt)
         });
       }
       return result;
