@@ -8,8 +8,12 @@ audit/
 scratch/
 test/
 .next/
+.next-*/
 upload/
 test_output/
+test-results/
+playwright-report/
+artifacts/
 .cache/
 .secrets/
 .env
