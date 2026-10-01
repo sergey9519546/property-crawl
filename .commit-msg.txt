@@ -1,0 +1,48 @@
+fix(verify-gate): stop classifying most of the codebase as trivial
+
+scripts/verify-gate.js decides which suites run before a change can be called
+done. Its classifier only recognised server/routes, server/scrapers, server/ai,
+server/db and src/. Everything else fell through to "trivial", which runs a
+single fast unit suite.
+
+Measured against the current tree, these were all certified after one small
+suite:
+
+  trivial   server/discovery/query.js
+  trivial   server/intelligence/signals.js
+  trivial   server/security/workspace-identity.js
+  trivial   server/sources/catalog.js
+  trivial   server/db/migrations/015_status_contract.sql
+  trivial   package.json
+  trivial   .dockerignore / docker-compose.yml / Dockerfile.production
+  trivial   scripts/build-data.js
+
+That is exactly the set of files where the a58f76f audit found real defects.
+The gate was not merely missing coverage on them — it was structurally unable
+to notice. A change to discovery/query.js or intelligence/signals.js was
+"verified" by a suite that never loads either module.
+
+package.json is treated as schema-relevant on purpose: its scripts enumerate the
+verification surface and CONTEXT.md hashes it, so adding or removing a test file
+from a runner changes what gets verified. Calling that cosmetic is how 91 test
+files stayed unwired for so long.
+
+Classifier now:
+  agent    .kilo/ .agents/ memory/ agent scripts (unchanged, still outranks all)
+  schema   data.js, every schema.sql copy, server/db/**, package.json,
+           package-lock.json, CONTEXT.md
+  scraper  server/scrapers/ server/ai/ test/scrapers (unchanged)
+  runtime  any other server/** or src/**, plus Docker / compose / next.config /
+           tsconfig / other scripts/
+  trivial  docs and test-only changes
+
+test/verify-gate-classify.test.js (7 tests) pins this. It includes a check that
+discovers server/ subdirectories from disk, so a new directory cannot silently
+default to trivial without someone deciding it should be verified.
+
+Validated by reverting the classifier: the test failed and named all ten
+unclassified directories, then passed again once restored. A guard that has
+never been seen to fail is not evidence.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, agent-system
+acceptance 10/10, verify:gate green.

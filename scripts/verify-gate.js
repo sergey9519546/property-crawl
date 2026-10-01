@@ -35,29 +35,33 @@ function getChangedFiles() {
   }
 }
 
+// package.json is treated as schema-relevant deliberately: its scripts
+// enumerate the verification surface and CONTEXT.md hashes it, so adding or
+// removing a test runner is a change to what gets verified, not a cosmetic one.
+const SCHEMA_RELEVANT = new Set([
+  'package.json',
+  'package-lock.json',
+  'CONTEXT.md',
+]);
+
+// Files that decide what the container contains or how it is built. These do
+// not change application behaviour, but a mistake here ships the wrong image —
+// so they get the runtime gate rather than the fast one.
+const DEPLOY_RELEVANT = new Set([
+  '.dockerignore',
+  'docker-compose.yml',
+  'next.config.mjs',
+  'tsconfig.json',
+]);
+
+const DEPLOY_RELEVANT_PREFIXES = [
+  'Dockerfile',
+  '.github/',
+];
+
 function classifyChange(files) {
   if (files.length === 0) return 'trivial';
 
-  const hasSchema = files.some((f) =>
-    f === 'data.js' ||
-    f === 'server/db/schema.sql' ||
-    f === 'server/db/client.js' ||
-    f.endsWith('CONTEXT.md')
-  );
-  const hasScraper = files.some((f) =>
-    f.startsWith('server/scrapers/') ||
-    f.startsWith('server/ai/') ||
-    f.startsWith('test/scrapers')
-  );
-  const hasServer = files.some((f) =>
-    f.startsWith('server/routes/') ||
-    f === 'server/server.js'
-  );
-  const hasUI = files.some((f) =>
-    f.startsWith('src/') ||
-    f === 'index.html' ||
-    f === 'app.js'
-  );
   const hasAgentSystem = files.some((f) =>
     f.startsWith('.kilo/') ||
     f.startsWith('.agents/') ||
@@ -69,11 +73,46 @@ function classifyChange(files) {
     f.startsWith('scripts/verify-gate')
   );
 
+  // Every copy of the schema, the client that writes it, the generated
+  // inventory, and the digest that verifies all of it.
+  const hasSchema = files.some((f) =>
+    f === 'data.js' ||
+    f.endsWith('schema.sql') ||
+    f.startsWith('server/db/') ||
+    f.endsWith('CONTEXT.md') ||
+    SCHEMA_RELEVANT.has(f)
+  );
+
+  const hasScraper = files.some((f) =>
+    f.startsWith('server/scrapers/') ||
+    f.startsWith('server/ai/') ||
+    f.startsWith('test/scrapers')
+  );
+
+  // Any remaining server or UI code. Previously only server/routes and src/ were
+  // recognised, so server/discovery, server/intelligence, server/security and
+  // server/sources all fell through to "trivial" and were certified after
+  // running only the fast unit suite — which is how real defects in exactly
+  // those modules passed the gate unnoticed.
+  const hasServerOrUi = files.some((f) =>
+    f.startsWith('server/') ||
+    f.startsWith('src/') ||
+    f === 'index.html' ||
+    f === 'app.js'
+  );
+
+  // Scripts that build or generate committed artifacts.
+  const hasBuildOrDeploy = files.some((f) =>
+    DEPLOY_RELEVANT.has(f) ||
+    DEPLOY_RELEVANT_PREFIXES.some((p) => f.startsWith(p)) ||
+    (f.startsWith('scripts/') && !f.startsWith('scripts/gen-context.js'))
+  );
+
   if (hasAgentSystem) return 'agent';
   if (hasSchema) return 'schema';
   if (hasScraper) return 'scraper';
-  if (hasServer || hasUI) return 'runtime';
-  // docs, config, tests-only — trivial
+  if (hasServerOrUi || hasBuildOrDeploy) return 'runtime';
+  // docs and test-only changes — trivial
   return 'trivial';
 }
 
