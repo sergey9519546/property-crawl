@@ -45,9 +45,33 @@ function parseTristateBool(v, name) {
   if (v === "unknown") return "unknown";
   throw new DiscoveryQueryError(400, `${name} must be true, false, or unknown`);
 }
+
+// The only freshness buckets the selector can distinguish. Validating at parse
+// time keeps the in-memory matcher and the SQL builder in agreement: an
+// unrecognised bucket raises a 400 instead of silently matching zero rows in
+// memory while the database path would have rejected it.
+function parseFreshness(v) {
+  if (v == null || v === "") return "";
+  const bucket = String(v).trim().toLowerCase();
+  if (bucket === "all" || bucket === "observed" || bucket === "unverified")
+    return bucket;
+  throw new DiscoveryQueryError(400, "Invalid freshness");
+}
 function parseDate(v, name) {
   if (!v) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(Date.parse(v)))
+    throw new DiscoveryQueryError(400, `Invalid ${name}`);
+  // Date.parse rolls impossible calendar dates forward instead of failing, so
+  // "2026-02-30" quietly becomes 2026-03-02 and silently shifts a sale-date
+  // window. Require the parsed date to round-trip to the same Y-M-D.
+  const [y, m, d] = v.split("-").map(Number);
+  const round = new Date(`${v}T00:00:00Z`);
+  if (
+    !Number.isFinite(round.getTime()) ||
+    round.getUTCFullYear() !== y ||
+    round.getUTCMonth() + 1 !== m ||
+    round.getUTCDate() !== d
+  )
     throw new DiscoveryQueryError(400, `Invalid ${name}`);
   return v;
 }
@@ -107,7 +131,7 @@ function queryFromUrl(url) {
     program: text(get("program")),
     lifecycle: text(get("lifecycle") || get("status")),
     occupancy: text(get("occupancy")),
-    freshness: text(get("freshness")),
+    freshness: parseFreshness(get("freshness")),
     saleFrom: parseDate(get("saleFrom"), "saleFrom"),
     saleTo: parseDate(get("saleTo"), "saleTo"),
     maxBid,
@@ -129,14 +153,24 @@ function queryFromUrl(url) {
   };
 }
 function derived(row) {
+  // Document evidence is tri-state. A record that carries document evidence is
+  // true, a record the publisher explicitly reported as having none is false, and
+  // a record that never reached a conclusion stays null. Coercing that last case
+  // to false would make `hasDocuments=unknown` unfindable and would let an
+  // unexamined record satisfy `hasDocuments=false`, which is a fail-open error.
+  const documents = row.provenance?.sourceFacts?.documents;
+  const hasDocuments =
+    row.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
+      ? true
+      : row.hasDocuments === false
+        ? false
+        : null;
   return {
     program:
       row.auctionProgram || row.provenance?.sourceFacts?.auctionProgram || null,
     lifecycle: row.lifecycleStatus || row.status || null,
     outcome: row.transactionOutcome || null,
-    hasDocuments: Boolean(
-      row.hasDocuments || row.provenance?.sourceFacts?.documents?.length,
-    ),
+    hasDocuments,
     freshness: row.provenance?.origin === "live" ? "observed" : "unverified",
   };
 }
@@ -163,8 +197,17 @@ function matches(row, f) {
     ["source", f.source],
     ["propType", f.type],
     ["occupancy", f.occupancy],
-  ])
-    if (v && v !== "all" && text(row[k]) !== v) return false;
+  ]) {
+    if (!v || v === "all") continue;
+    // "unknown" is the canonical sentinel for "this field was never determined",
+    // not a literal a publisher wrote. It must match a blank field, otherwise
+    // selecting Unknown in the workbench can never return the records it describes.
+    if (v === "unknown") {
+      if (text(row[k]) !== "") return false;
+      continue;
+    }
+    if (text(row[k]) !== v) return false;
+  }
   if (f.program && f.program !== "all" && text(d.program) !== f.program)
     return false;
   if (f.lifecycle && f.lifecycle !== "all" && text(d.lifecycle) !== f.lifecycle)
@@ -274,15 +317,23 @@ function pgWhere(f, start = 1) {
   };
   for (const [col, v] of [
     ["state", f.state],
-    ["lower(county)", f.county],
+    ["county", f.county],
     ["source_key", f.source],
-    ["lower(prop_type)", f.type],
-    ["lower(auction_program)", f.program],
-    ["lower(lifecycle_status)", f.lifecycle],
-    ["lower(occupancy)", f.occupancy],
-  ])
-    if (v && v !== "all")
-      add(`${col}=?`, col === "state" ? v.toUpperCase() : v);
+    ["prop_type", f.type],
+    ["auction_program", f.program],
+    ["lifecycle_status", f.lifecycle],
+    ["occupancy", f.occupancy],
+  ]) {
+    if (!v || v === "all") continue;
+    // Mirrors the in-memory matcher: "unknown" selects records whose field was
+    // never determined, so it must test for NULL/blank rather than the literal.
+    if (v === "unknown") {
+      const bare = col.replace(/^lower\(/, "").replace(/\)$/, "");
+      w.push(`coalesce(${bare},'')=''`);
+      continue;
+    }
+    add(`${col}=?`, col === "state" ? v.toUpperCase() : v);
+  }
   if (f.q) {
     add(
       `(coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program,'')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,

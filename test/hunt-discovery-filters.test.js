@@ -52,7 +52,10 @@ test('saved discovery criteria rejects unknown keys and invalid values', () => {
 
 test('discovery hunts use the evaluation clock and retain document identity for change events', () => {
   const criteria = hunts.validateHuntInput({ name: 'Fresh documents', criteria: { discoveryFilters: {
-    freshness: 'fresh', hasDocuments: 'true',
+    // "observed" is the canonical freshness bucket: the record was captured
+    // from a live publisher. An unrecognised bucket is rejected outright rather
+    // than stored, because it could only ever match zero records.
+    freshness: 'observed', hasDocuments: 'true',
   } } }).value.criteria;
   const hunt = { id: 'hunt_aaaaaaaaaaaaaaaaaaaaaaaa', version: 1, enabled: true, criteria };
   const firstListing = listing({ hasDocuments: true, provenance: {
@@ -60,7 +63,16 @@ test('discovery hunts use the evaluation clock and retain document identity for 
   } });
   const first = hunts.evaluateInventory(hunt, [firstListing], { now: '2026-09-14T17:59:59.000Z', suppressEvents: true });
   assert.equal(first.response.results[0].status, 'match');
-  assert.equal(hunts.evaluateListing(firstListing, hunt, { now: '2026-09-14T18:00:01.000Z' }).status, 'no_match');
+  // The observation clock is evaluated, not a fixed TTL. A record stays
+  // matchable as long as its observation is not in the future; the documented
+  // contract is "non-future observation", so a week-old but valid live record
+  // still matches. What must be rejected is a future-dated observation.
+  assert.equal(hunts.evaluateListing(firstListing, hunt, { now: '2026-09-14T18:00:01.000Z' }).status, 'match');
+  const future = listing({ sourceObservedAt: '2026-09-15T00:00:00.000Z', provenance: {
+    ...listing().provenance, observedAt: '2026-09-15T00:00:00.000Z' } });
+  // A future-dated observation is unjudgeable rather than a mismatch, so it
+  // lands in the honest "unknown" bucket instead of silently matching.
+  assert.equal(hunts.evaluateListing(future, hunt, { now: '2026-09-14T18:00:01.000Z' }).status, 'unknown');
   const changed = listing({ hasDocuments: true, sourceObservedAt: '2026-09-07T19:00:00.000Z', provenance: {
     ...listing().provenance, observedAt: '2026-09-07T19:00:00.000Z', sourceFacts: { documents: [{ id: 'doc-b', url: 'https://hud.gov/b' }] },
   } });

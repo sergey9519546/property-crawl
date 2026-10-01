@@ -5,7 +5,6 @@ import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Sparkles } from "lucide-react";
 import { computeCashToClose, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
-import { sourceDisplayText } from "@/lib/source-display";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -40,7 +39,6 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
   const openingBid = positiveNumber(listing.openingBid);
   const estimatedValue = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
-  const location = [listing.city, listing.state].filter(Boolean).join(", ");
 
   if (openingBid === null || estimatedValue === null) {
     return (
@@ -77,29 +75,25 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const handleRunAiStrategy = async () => {
     if (!reverseScenario || cash.totalAcquisitionCost === null) return;
     setLoadingStrategy(true);
-    try {
-      if (typeof window !== "undefined" && (window as any).puter?.ai?.chat) {
-        const prompt = `Review this buyer-entered acquisition scenario using only the supplied facts.
-Property: ${listing.address}${location ? `, ${location}` : ""}
-Source channel: ${sourceDisplayText(listing.source)}
-Published opening amount used as price scenario: $${openingBid.toLocaleString()}
-Supported valuation-range midpoint: $${estimatedValue.toLocaleString()}
-Explicit acquisition costs excluding price: $${otherAcquisitionCosts?.toLocaleString()}
-Explicit rehab assumption: $${rehabBudget.toLocaleString()}
-Target profit margin: ${targetMargin}%
-Maximum price meeting target: $${reverseScenario.maxPurchasePrice.toLocaleString()}
-Price reduction needed: $${reverseScenario.priceReductionNeeded.toLocaleString()}
-Published deposit text: ${listing.deposit || "Not published"}
-
-Explain the target-price math in three short points. Treat title, debt, property condition, final sale price, and any amount not listed above as unknown. Do not predict bidder behavior or recommend a bid.`;
-        const response = await (window as any).puter.ai.chat(prompt, { model: "claude-3-5-sonnet" });
-        const text = typeof response === "string" ? response : response?.message?.content || response?.toString();
-        if (text && text.trim().length > 30) { setAiStrategy(text); setLoadingStrategy(false); return; }
-      }
-    } catch (error) {
-      console.warn("Scenario explanation error:", error);
-    }
-    setAiStrategy("The explanation service is unavailable. The displayed maximum price is the supported valuation midpoint minus the selected target profit, rehab assumption, and every entered acquisition cost.");
+    // The explanation is arithmetic over figures the client already holds, so it is
+    // derived deterministically. This component must not call a client-side AI SDK:
+    // model output is not evidence, cannot be traced to a source, and would put a
+    // third-party model in the path of a bid decision. Model-backed prose belongs on
+    // the backend behind the evidence gates, never in the browser.
+    const costLine = otherAcquisitionCosts === null
+      ? "Other acquisition costs are incomplete, so they are excluded from the target."
+      : `Other acquisition costs you entered total ${displayMoney(otherAcquisitionCosts)}.`;
+    const reductionLine = reverseScenario.priceReductionNeeded > 0
+      ? `The published opening amount is ${displayMoney(reverseScenario.priceReductionNeeded)} above that target.`
+      : `The published opening amount is ${displayMoney(openingBid - reverseScenario.maxPurchasePrice)} below that target.`;
+    const feasibilityLine = reverseScenario.targetAchievableAtCurrentPrice
+      ? `Reaching the target at the opening amount requires ${displayMoney(reverseScenario.costReductionNeeded)} of cost reduction.`
+      : "The target is not achievable at the opening amount, even with zero other acquisition costs.";
+    setAiStrategy([
+      `1. Maximum price = supported valuation midpoint ${displayMoney(estimatedValue)} minus your ${targetMargin}% target profit, the ${displayMoney(rehabBudget)} rehab assumption, and every entered acquisition cost.`,
+      `2. That gives a maximum price of ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
+      `3. ${feasibilityLine} Title, debt, property condition, and final sale price remain unknown and are not estimated here.`,
+    ].join(" "));
     setLoadingStrategy(false);
   };
 

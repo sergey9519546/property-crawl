@@ -134,10 +134,29 @@ test('concurrent valid POSTs coalesce, then POST and GET use the same cached evi
   assert.deepEqual(results[0].body.publicRecords, evidence);
   assert.deepEqual(results[1].body.publicRecords, evidence);
   const third = await invoke(handler, 'POST');
-  const read = await invoke(handler, 'GET');
+  const read = await invoke(handler, 'GET', publisherFixture().id, { token: 'operator-secret' });
   assert.equal(calls, 1);
   assert.deepEqual(third.body.publicRecords, evidence);
+  // An authorized GET is served from the cache the POST populated.
   assert.deepEqual(read.body.publicRecords, evidence);
+});
+
+test('an unauthorized GET never receives cached public-record evidence', async () => {
+  // The cache is keyed per listing and shared across methods, so the
+  // authorization gate is the only thing standing between a warm cache
+  // and a caller who has not unlocked the workspace. A GET without the
+  // operator credential must be served the restricted payload with no
+  // public records, even though a POST just populated the cache.
+  let calls = 0;
+  const evidence = { parcel: null, areaContext: null, issues: ['A source is unavailable'], sources: [] };
+  const handler = handlerFor(async () => publisherFixture(), async () => { calls++; return evidence; });
+  const post = await invoke(handler, 'POST');
+  assert.deepEqual(post.body.publicRecords, evidence);
+  assert.equal(calls, 1);
+  const read = await invoke(handler, 'GET');  // no token
+  assert.equal(read.body.publicRecords, null);
+  assert.equal(read.body.researchRestricted, true);
+  assert.equal(calls, 1, 'the unauthorized GET must not trigger a rebuild');
 });
 
 test('a newer source observation invalidates the public-record cache', async () => {
