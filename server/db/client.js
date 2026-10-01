@@ -3,6 +3,7 @@ const path = require('path');
 const { randomUUID: cryptoRandomUUID } = require('crypto');
 const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
+const { createAiCacheStore } = require('./ai-cache-store');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 
 function finiteOrNull(value) {
@@ -438,6 +439,17 @@ class DatabaseClient {
       aiCache: new Map(),    // hash -> cached object
       logs: []
     };
+    // The AI cache aggregate lives behind its own seam. isPg and pool are read
+    // through accessors on purpose: init() forces isPg false, verifyConnection()
+    // flips it true once Postgres answers, and tests assign db.isPg / db.pool
+    // directly. The store therefore sees every backend switch, as the inline
+    // branches it replaced did.
+    const self = this;
+    this.aiCacheStore = createAiCacheStore({
+      get isPg() { return self.isPg; },
+      get pool() { return self.pool; },
+      seed: this.inMemoryData.aiCache,
+    });
     this.init();
   }
 
@@ -1332,24 +1344,11 @@ class DatabaseClient {
   }
 
   async getAiCache(contentHash) {
-    if (this.isPg) {
-      const res = await this.pool.query('SELECT * FROM ai_cache WHERE content_hash = $1', [contentHash]);
-      return res.rows[0] || null;
-    }
-    return this.inMemoryData.aiCache.get(contentHash) || null;
+    return this.aiCacheStore.get(contentHash);
   }
 
   async setAiCache(record) {
-    if (this.isPg) {
-      await this.pool.query(
-        `INSERT INTO ai_cache (content_hash, prompt_type, model_used, input_tokens, output_tokens, cost_usd, response_text)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (content_hash) DO NOTHING`,
-        [record.contentHash, record.promptType, record.model, record.inputTokens, record.outputTokens, record.costUsd, record.responseText]
-      );
-      return;
-    }
-    this.inMemoryData.aiCache.set(record.contentHash, record);
+    return this.aiCacheStore.set(record);
   }
 
   // ---------------------------------------------------------------------------

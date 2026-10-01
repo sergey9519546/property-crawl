@@ -116,7 +116,7 @@ class IngestionScheduler {
     // running the other twenty-three.
     const adapterContract = validateScraperAdapters(this.realScrapers);
     if (!adapterContract.ok) {
-      console.warn(`[Scheduler] ${this.realScrapers.length} scraper adapter(s) violate the scraper contract:\n  ${adapterContract.errors.join('\n  ')}`);
+      console.warn(`[Scheduler] ${adapterContract.offenders.length} of ${this.realScrapers.length} scraper adapters violate the scraper contract:\n  ${adapterContract.errors.join('\n  ')}`);
     }
     this.database = options.database || db;
     this.discoveryStore = options.discoveryStore || null;

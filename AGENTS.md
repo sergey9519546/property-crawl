@@ -24,7 +24,8 @@ listing API is a plain Node `http` server in `server/`. They share one
 
 No database is required to boot. `server/db/client.js` falls back to an
 in-memory provider seeded from `data.js` whenever `DATABASE_URL` is unset
-(2093 seed listings across 16 catalog sources; live scrapers and
+(seed listings across 16 catalog sources — read the current totals from
+CONTEXT.md, which is generated and digest-checked; live scrapers and
 `.cache/live-listings.json` can raise the served total further). Set
 `DATABASE_URL` to a Postgres+PostGIS URL only to enable persistence. The
 repo's own `docker-compose.yml` wires PostGIS, but the Base44 dev compose
@@ -42,7 +43,7 @@ closed when unset; IMAP/Sentry vars are post-launch only.
 docker compose -f docker-compose.base44.yml up -d
 # UI on http://localhost:3000, API proxied through /api/listings
 # Default list cap is typically 50 per page; total inventory is larger
-# (2093 seed listings + live-store overlays). Source label comes from the API.
+# (seed listings per CONTEXT.md, plus live-store overlays). Source label comes from the API.
 curl -sf http://localhost:3000/api/health   # dataMode + documentReviewStore
 curl -sf http://localhost:3000/api/listings # paginated listings payload
 ```
@@ -68,7 +69,8 @@ Shared: one `package.json` / `node_modules`. The Next UI reaches the API via `PR
 
 ## 3. Domain model (from `CONTEXT.md` — auto-generated, do not hand-edit)
 - **SOURCES**: 16 source types (key:label:tier). Tier A (high-trust): `fannie`, `fdic`, `freddie`, `gsa`, `hud`, `irs`, `marshals`, `treasury`, `usda`, `va`. Tier B: `bid4assets`, `civilview`, `landbank`, `servicelink`, `sheriff`, `trustee`.
-- **LISTINGS**: 2093 seed records (`data.js`). States: AK, AL, AR, AZ, CA, CO, CT, DE, FL, GA, HI, IA, ID, IL, IN, KS, KY, LA, MA, MD, ME, MI, MN, MO, MS, MT, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, PR, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY.
+- **LISTINGS**: seed records in `data.js` — see the generated `LISTINGS` count in
+`CONTEXT.md`; do not hand-copy it here. States: AK, AL, AR, AZ, CA, CO, CT, DE, FL, GA, HI, IA, ID, IL, IN, KS, KY, LA, MA, MD, ME, MI, MN, MO, MS, MT, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, PR, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY.
 - **Property types**: Commercial, Condo, Duplex, Land, Single Family, Single Family Home, Town House, Triplex, Unknown.
 - **Data contract**: camelCase (`dealScore`, `openingBid`, `propType`, ...). Postgres stores `snake_case`; `server/db/client.js` aliases back — production-only breakage risk (`CONTEXT.md` invariants).
 
@@ -162,7 +164,8 @@ Reports (`reports/`): canary promotions (`canary-promotion-*.md`), gap analysis 
 - CSP: either fully closed or tracked as an explicit residual with a concrete close-out path (`docs/ULTRAPLAN.md` §5).
 
 ## 8. Residuals / open work (`docs/ULTRAPLAN.md`, `docs/GAP_CLOSEOUT_2026-09-20.md`, `docs/OPEN_RESIDUALS.md`)
-- Session fixes (workbench restore, page-scoped result copy, CSP boot-test drift, postgres verify-before-listen wiring) were committed on 2026-09-27. Live Postgres listing round-trip is closed with evidence (`docs/OPEN_RESIDUALS.md`, `docs/PRODUCT_GAPS.md`): `dataMode=postgres`, `total=2093`, UI proxy matches API. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
+- Session fixes (workbench restore, page-scoped result copy, CSP boot-test drift, postgres verify-before-listen wiring) were committed on 2026-09-27. Live Postgres listing round-trip is closed with evidence (`docs/OPEN_RESIDUALS.md`, `docs/PRODUCT_GAPS.md`): `dataMode=postgres`, `total=2093` (the count observed on that date — for the
+current total read `CONTEXT.md`), UI proxy matches API. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
 - Nationwide HUD unpromoted; treasury, usda, hud@OH,NJ promoted.
 - Quality gate: 14/14; e2e demo: 25/25; e2e `--with-db`: 24/24; `tsc` clean (`docs/ULTRAPLAN.md` §0).
 - Budget target: $0 at MVP, under $150/month in production (`docs/STRATEGY.md` §0).

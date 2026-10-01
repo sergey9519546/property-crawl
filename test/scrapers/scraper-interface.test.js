@@ -182,7 +182,7 @@ test('validateScraperAdapters combines the fleet into one result', () => {
     validAdapter(),
     validAdapter({ name: 'Second', sourceKey: 'second' }),
   ]);
-  assert.deepEqual(result, { ok: true, errors: [] });
+  assert.deepEqual(result, { ok: true, errors: [], offenders: [] });
 });
 
 test('validateScraperAdapters reports every offender, labelled by source', () => {
@@ -203,4 +203,34 @@ test('validateScraperAdapters rejects a non-array input', () => {
   const result = validateScraperAdapters(null);
   assert.equal(result.ok, false);
   assert.ok(result.errors.length > 0);
+});
+
+test('validateScraperAdapters names the offenders, not the whole fleet', () => {
+  // The scheduler warning used the fleet size, so one bad adapter was
+  // reported as "21 adapters violate" when exactly one did. The count must
+  // be the number of offending adapters.
+  const good = validAdapter({ sourceKey: 'good', name: 'Good' });
+  const bad = validAdapter({ sourceKey: 'bad', name: 'Bad', scrapeFeed: undefined, fixtureOnly: false });
+  const exempt = validAdapter({ sourceKey: 'fixture', name: 'Fixture', scrapeFeed: undefined, fixtureOnly: true });
+  const result = validateScraperAdapters([good, bad, exempt]);
+  assert.equal(result.ok, false);
+  assert.ok(Array.isArray(result.offenders), 'offenders must be reported');
+  assert.deepEqual(result.offenders, ['Bad'], 'only the offending adapter is listed');
+  assert.notEqual(result.offenders.length, 3, 'a single bad adapter must not be counted as the whole fleet');
+});
+
+test('the scheduler warning counts offenders, not adapters', () => {
+  const src = require('node:fs').readFileSync(
+    require('node:path').resolve(__dirname, '..', '..', 'server', 'scrapers', 'scheduler.js'),
+    'utf8',
+  );
+  assert.match(
+    src,
+    /\$\{adapterContract\.offenders\.length\} of \$\{this\.realScrapers\.length\}/,
+    'the warning must report how many adapters violate, out of how many total',
+  );
+  assert.ok(
+    !/\$\{this\.realScrapers\.length\} scraper adapter\(s\) violate/.test(src),
+    'reporting the fleet size as the violation count is misleading',
+  );
 });

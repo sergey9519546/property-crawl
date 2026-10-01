@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-28T17:41:56.913Z",
+  "generatedAt": "2026-10-01T11:15:09.712Z",
   "guarantee": {
     "catalogSources": 163,
     "scheduledAdapters": 21,
     "scraplingEnabledAdapters": 8,
-    "seedListingsIndexed": 2093,
+    "seedListingsIndexed": 2094,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
     "endCoverageGaps": [],
@@ -23,10 +23,10 @@
     ]
   },
   "tiers": {
-    "P0_CATALOG_ONLY": 141,
+    "P0_CATALOG_ONLY": 140,
     "P3_LIVE_ADAPTER": 3,
     "P4_LIVE_STRONG": 7,
-    "P2_DISCOVERY_ADAPTER": 10,
+    "P2_DISCOVERY_ADAPTER": 11,
     "P2_BLOCKED_PUBLISHER": 2
   },
   "categories": {
@@ -92,7 +92,7 @@
     },
     "vacancy_evidence": {
       "total": 1,
-      "scheduled": 0,
+      "scheduled": 1,
       "strong": 0
     },
     "title_evidence": {
@@ -478,13 +478,13 @@
       "label": "Vacancy context",
       "required": false,
       "catalogEntries": 1,
-      "scheduledAdapters": 0,
+      "scheduledAdapters": 1,
       "strongAdapters": 0,
       "opportunityScheduled": 0,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
-        "hud-usps-vacancy"
+        "hud-usps-vacancy*"
       ]
     },
     {
@@ -762,7 +762,7 @@
         ]
       },
       "weakness": null,
-      "seedListings": 11
+      "seedListings": 12
     },
     {
       "id": "gsa-real-estate-sales",
@@ -1343,15 +1343,16 @@
       "category": "vacancy_evidence",
       "role": "evidence",
       "status": "DISCOVERY_ONLY",
-      "adapterKey": null,
-      "access": "licensed",
-      "discoveryUrl": "https://www.huduser.gov/portal/datasets/usps.html",
+      "adapterKey": "hud-usps-vacancy",
+      "access": "public",
+      "discoveryUrl": "https://hudgis-hud.opendata.arcgis.com/",
       "power": {
-        "tier": "P0_CATALOG_ONLY",
-        "score": 1,
-        "inScheduler": false,
+        "tier": "P2_DISCOVERY_ADAPTER",
+        "score": 3,
+        "inScheduler": true,
         "scrapling": null,
         "flags": [
+          "scheduled",
           "lastRunReport"
         ]
       },

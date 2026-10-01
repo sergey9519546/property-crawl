@@ -172,12 +172,13 @@ function validateScraperAdapters(list) {
     return { ok: false, errors: ['scraper adapters must be provided as an array'] };
   }
   const errors = [];
+  const offenders = [];
   list.forEach((scraper, index) => {
-    for (const message of validateScraperAdapter(scraper).errors) {
-      errors.push(`${label(scraper, index)}: ${message}`);
-    }
+    const result = validateScraperAdapter(scraper);
+    if (result.errors.length) offenders.push(label(scraper, index));
+    for (const message of result.errors) errors.push(`${label(scraper, index)}: ${message}`);
   });
-  return { ok: errors.length === 0, errors };
+  return { ok: errors.length === 0, errors, offenders };
 }
 
 module.exports = {

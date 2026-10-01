@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-09-28T17:41:56.913Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-01T11:15:09.712Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -10,7 +10,7 @@
 | Catalog sources (all ends) | **163** |
 | Scheduled production adapters | **21** |
 | Adapters with Scrapling profiles | **8** |
-| Seed listings in data.js | **2093** |
+| Seed listings in data.js | **2094** |
 | Required end coverage (scheduled) | **10/10** |
 
 ## End coverage (all channels)
@@ -32,7 +32,7 @@
 | Title/recorder evidence | 3 | 0 | 0 | no | catalog only |
 | Area/market context | 3 | 0 | 0 | no | catalog only |
 | Hazard/environmental screening | 3 | 0 | 0 | no | catalog only |
-| Vacancy context | 1 | 0 | 0 | no | catalog only |
+| Vacancy context | 1 | 1 | 0 | no | catalog only |
 | Zoning/land use | 1 | 0 | 0 | no | catalog only |
 
 ## Power tiers
@@ -41,9 +41,9 @@
 |---|---|---:|
 | P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 7 |
 | P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 3 |
-| P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 10 |
+| P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 11 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
-| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 141 |
+| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 140 |
 
 ## Scheduled adapters (power scorecard)
 
@@ -54,7 +54,7 @@
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 2 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 8 | — |
-| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 11 | — |
+| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 12 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
 | `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
 | `sheriff` (Ohio Sheriff Sale Auction) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
@@ -66,6 +66,7 @@
 | `fl-dor-cadastral` (FL DOR Statewide Cadastral (ArcGIS REST)) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY until two clean canaries (parcel evidence, not sale inventory) |
 | `freddie` (Freddie Mac HomeSteps) | P2_DISCOVERY_ADAPTER | — | 0 | SPA/API often unparseable; fail-closed + SPA observation_error |
 | `government-land` (State Trust/Public Land Auction Office) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
+| `hud-usps-vacancy` (HUD/USPS Vacancy Data) | P2_DISCOVERY_ADAPTER | — | 0 | — |
 | `landbank` (Land Bank Search) | P2_BLOCKED_PUBLISHER | — | 0 | Turnstile/CAPTCHA on some portals |
 | `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | — | 0 | USMS bot-protection / brokered RealLook; fail-closed |
