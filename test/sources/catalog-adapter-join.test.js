@@ -57,24 +57,26 @@ const SUPPORT_MODULES = new Set([
 const MODULE_TO_SOURCE = new Map([['landbanksearch', 'landbank']]);
 
 /*
- * Scheduled sources whose catalog entry declares adapterKey: null.
+ * Resolved, and kept as an explicit empty exception list.
  *
- * hud-usps-vacancy is the open one. Its catalog entry describes the LICENSED
- * HUD/USPS product: access 'licensed', requiredEvidence includes "registered-
- * user eligibility and sublicense", and the workflow says "Use only under
- * HUD/USPS registered-user eligibility". The scraper's own header says it
- * defaults to the PUBLIC HUD GIS open-data mirror, with
- * HUD_USPS_VACANCY_SERVICE_ROOT optionally pointing at a registered-user root.
+ * hud-usps-vacancy was the one genuine inconsistency: the scheduler collected
+ * it under the key 'hud-usps-vacancy' and SOURCE_HOSTS already listed it, but
+ * the catalog entry declared adapterKey: null and access 'licensed'. The null
+ * made the entry unjoinable - cadence fell back to 24h instead of the declared
+ * 2160h for a quarterly dataset, no access policy or robots exclusion applied,
+ * and source-network refused operator-triggered runs.
  *
- * Setting adapterKey would make the system treat it as a normally collectable
- * adapter and apply the entry's access policy and robots handling - which is
- * the licensing question, not a mechanical fix. It currently produces no
- * live listings, so the degraded cadence is not user-visible yet.
+ * The entry described the RESTRICTED HUD User product, but the collector's
+ * default service root is the public HUD GIS Open Data mirror and
+ * sanitizeServiceRoot falls back to it, so default collection never needed an
+ * entitlement. The entry was corrected to access 'public' with its own
+ * adapterKey; the restricted product is now documented as the opt-in upgrade
+ * an entitled operator reaches through HUD_USPS_VACANCY_SERVICE_ROOT.
  *
- * If this is resolved, move the id out of this list in the same commit that
- * changes the catalog, and the assertions below will confirm the join works.
+ * The set is intentionally empty and must STAY empty: a new scheduled source
+ * without a resolvable adapterKey now fails the suite above.
  */
-const KNOWN_UNJOINABLE = new Set(['hud-usps-vacancy']);
+const KNOWN_UNJOINABLE = new Set();
 
 function scheduledSources() {
   const modules = [...schedulerSrc.matchAll(/require\('\.\/([a-z0-9-]+)'\)/g)].map((m) => m[1]);
@@ -121,14 +123,22 @@ test('the known-unjoinable exception list is accurate and still needed', () => {
 
 test('the cadence join really does fall back to 24h for an unjoinable source', () => {
   // Demonstrates the consequence rather than asserting it abstractly, so the
-  // test would notice if a default changed.
+  // test would notice if a default changed. hud-usps-vacancy is the worked
+  // example: it WAS unjoinable and reported 24h for a quarterly dataset.
   const lookup = (source) =>
     SOURCE_CATALOG.find((e) => e.adapterKey === source)?.workflow.cadenceHours || 24;
-  assert.equal(lookup('hud-usps-vacancy'), 24);
+  assert.equal(lookup('landbank'),
+    SOURCE_CATALOG.find((e) => e.adapterKey === 'landbank').workflow.cadenceHours);
+  assert.equal(lookup('no-such-source'), 24, 'an unknown key must still fall back');
+});
+
+test('hud-usps-vacancy now joins and reports its real quarterly cadence', () => {
+  const lookup = (source) =>
+    SOURCE_CATALOG.find((e) => e.adapterKey === source)?.workflow.cadenceHours || 24;
   assert.equal(
-    lookup('landbank'),
-    SOURCE_CATALOG.find((e) => e.adapterKey === 'landbank').workflow.cadenceHours,
-    'a joinable source must resolve its own declared cadence',
+    lookup('hud-usps-vacancy'),
+    2160,
+    'the entry is now joinable, so a quarterly dataset must not report the 24h default',
   );
 });
 

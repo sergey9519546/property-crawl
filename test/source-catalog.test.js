@@ -47,15 +47,33 @@ test('property lookup evidence sources are explicit, unscheduled, and retain the
   assert.ok(census.requiredEvidence.some((item) => /API key/i.test(item)));
 
   assert.equal(hudUsps.propertyLookup, undefined);
-  assert.equal(hudUsps.adapterKey, null);
-  assert.equal(hudUsps.access, 'licensed');
+  // The collector defaults to the PUBLIC HUD GIS Open Data mirror, so this is
+  // collectable without entitlement and joins on its own key. It previously
+  // read adapterKey null / access 'licensed', describing the restricted HUD
+  // User product that the default path does not use.
+  assert.equal(hudUsps.adapterKey, 'hud-usps-vacancy');
+  assert.equal(hudUsps.access, 'public');
+  assert.match(hudUsps.workflow.primary, /public HUD GIS Open Data/i);
+  assert.match(hudUsps.workflow.primary, /no entitlement/i);
+  // The restricted product is still documented, as the opt-in upgrade for an
+  // entitled operator, not as a precondition.
+  assert.ok(
+    hudUsps.requiredEvidence.some((item) => /entitled operator/i.test(item)),
+    'the optional entitled service root must remain a recorded required evidence item',
+  );
+  assert.equal(hudUsps.workflow.cadenceHours, 2160, 'the dataset is quarterly');
+  // Honesty constraint that must survive the access correction.
   assert.match(hudUsps.notes, /aggregate counts/i);
   assert.match(hudUsps.notes, /particular property is vacant/i);
+  assert.ok(
+    hudUsps.workflow.steps.some((s) => /never as proof that a property is vacant/i.test(s)),
+    'the aggregate-only constraint is load-bearing and must not be edited away',
+  );
 });
 
 test('current scheduler source coverage is explicit and historical sources remain unscheduled', () => {
   assert.deepEqual([...SCHEDULED_ADAPTER_KEYS].sort(), [
-    'bid4assets', 'ca-controller-tax-sale', 'civilview', 'courtlistener', 'fannie', 'fl-dor-cadastral', 'freddie', 'government-land', 'gsa', 'hud', 'irs',
+    'bid4assets', 'ca-controller-tax-sale', 'civilview', 'courtlistener', 'fannie', 'fl-dor-cadastral', 'freddie', 'government-land', 'gsa', 'hud', 'hud-usps-vacancy', 'irs',
     'landbank', 'local-surplus', 'marshals', 'public-notices-email', 'servicelink', 'sheriff', 'treasury', 'usda', 'va'
   ]);
   assert.equal(getSource('fdic-asset-sales').adapterKey, null);

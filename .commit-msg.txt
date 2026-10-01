@@ -1,0 +1,56 @@
+fix(sources): correct the hud-usps-vacancy catalog entry to match the collector
+
+The catalog described the RESTRICTED HUD User product while the collector
+reads the PUBLIC one, and declared adapterKey: null for a source the
+scheduler actually runs. Three facts settled which side was wrong:
+
+1. DEFAULT_SERVICE_ROOT in server/scrapers/hud-usps-vacancy.js is
+   hudgis-hud.opendata.arcgis.com - a public open-data portal - and
+   sanitizeServiceRoot falls back to it when nothing is configured.
+   Default collection never touched the licensed product.
+2. SOURCE_HOSTS in server/scrapers/source-policy.js already listed
+   hud-usps-vacancy. The policy layer already treated it as a first-class
+   adapter; only the catalog entry disagreed.
+3. validateAccessForAdapter is called only by gsa.js, not by the scheduler
+   or by this scraper, so setting adapterKey is inert for the fetch path and
+   cannot quietly break collection.
+
+Changes
+- access 'licensed' -> 'public'. The declared restriction described a
+  product the default path does not use, and left an untrue impression of
+  what this project is entitled to.
+- adapterKey null -> 'hud-usps-vacancy'. This is the join key used by
+  dossier.js / listings.js (cadence), source-network.js (manual runs), and
+  catalog.js (access policy, robots exclusion). With it null the entry was
+  unjoinable: cadence fell back to 24h for a dataset that is quarterly
+  (declared 2160h), no access policy or robots exclusion applied, and
+  source-network refused operator-triggered runs with "This source uses the
+  evidence import workflow".
+- discoveryUrl -> the public portal the code actually reads.
+- The restricted product is preserved as the OPT-IN upgrade an entitled
+  operator reaches through HUD_USPS_VACANCY_SERVICE_ROOT, with a new
+  required-evidence item to record which service root answered so a public
+  read is never presented as an entitlement-backed one.
+- SCHEDULED_ADAPTER_KEYS gains 'hud-usps-vacancy'. The catalog threw
+  "Unknown scheduled adapter" on the first attempt at this change, which is
+  how the second layer of the same staleness surfaced: the declared
+  scheduled set also omitted a source the scheduler provably runs, as
+  test/hud-usps-vacancy.test.js asserts. The catalog's own self-consistency
+  guard caught the half-fix.
+
+Deliberately unchanged
+- cadenceHours 2160. The USPS Crosswalk Statistics dataset really is
+  quarterly; the 24h figure was the join fallback, not the intent.
+- "Present results as aggregate tract context, never as proof that a
+  property is vacant." Tract-level rollups never identify a specific
+  property, and that constraint is load-bearing.
+- The test that pinned the stale state (source-catalog.test.js asserting
+  adapterKey null / access licensed) is updated to assert the corrected
+  contract, and now also pins that the aggregate-only step and the 2160h
+  cadence survive the access correction.
+
+HUD_USPS_VACANCY_SERVICE_ROOT documented in .env.example, which is a real
+operator knob that was previously undocumented.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, verify:gate
+green.
