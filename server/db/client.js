@@ -17,7 +17,15 @@ const WORKSPACE_STORE_VERSION = 1;
 
 // A canonical STATE-COUNTY-NUMBER id (e.g. "OH-CUY-10231") is an unambiguous
 // alias for the source-namespaced record "SHERIFF-OH-CUY-10231". It is resolved
-// only when exactly one record matches — never a partial or numeric fragment.
+// only when exactly one record matches - never a partial or numeric fragment.
+//
+// Note this alias is currently inert: real listing ids are source-prefixed with
+// prefixes of 4+ characters (USDA-MS-6274, TRSY-27-66-804), and the first
+// segment below allows only 2-3, so it matches 0 of the 2094 ids in data.js.
+// Nothing passes a STATE-COUNTY-NUMBER form, so no lookup is mishandled - but do
+// not assume the alias works. test/db/listing-id-alias.test.js pins this, and
+// any widening must keep the exact-match and single-result requirements so
+// getListingById('1') can never match a listing ending in "-1".
 const NAMESPACED_ID = /^[A-Z]{2,3}-[A-Z]{2,3}-\d{2,6}$/;
 
 // GET /api/alerts/matches pagination bounds (shared by Postgres + in-memory paths).
