@@ -5,6 +5,12 @@ const { loadObservations, recordSourceRun } = require('../sources/observations')
 const { buildSourceNetwork, enrolledSources } = require('../sources/network');
 const { attachDiscoveryCoverage } = require('../sources/discovery-coverage');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { resolveOperatorToken } = require('../security/operator-token');
+// Cached at module load so the per-request path doesn't pay require-resolve cost
+// on every /api/source-network/unbrowse/intake or /unbrowse/status hit. The tool
+// is small but its module-graph walks scripts/, and Node caches modules anyway,
+// so this is mostly about making the dependency obvious in one place.
+const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
 
 function createSourceNetworkHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -54,7 +60,10 @@ function createSourceNetworkHandler(dependencies = {}) {
         return job ? res.json({ job }) : res.status(404).json({ error: 'Collection job was not found' });
       }
       // Raw evidence and operational mutations use the existing operator credential.
-      const configuredToken = String(env.SCRAPER_ADMIN_TOKEN || '').trim();
+      // resolveOperatorToken honours the documented PROPERTY_OPERATOR_SECRET alias,
+      // which is the name Render generates; reading SCRAPER_ADMIN_TOKEN alone would
+      // 503 every source operation on a correctly-configured Render deployment.
+      const configuredToken = resolveOperatorToken(env);
       if (!configuredToken) return res.status(503).json({ error: 'Source operations need SCRAPER_ADMIN_TOKEN on the API server. Public coverage remains available.' });
       if (!tokensMatch(presentedRunToken(req), configuredToken)) return res.status(401).json({ error: 'Source operator credential required' });
       if (url.pathname === '/api/source-network/intake') {
@@ -70,6 +79,67 @@ function createSourceNetworkHandler(dependencies = {}) {
         const { id, ...review } = req.body || {};
         if (!/^intake_[a-f0-9]{24}$/.test(id || '') || !['approve', 'reject'].includes(review.decision)) return res.status(400).json({ error: 'Evidence ID and an approve or reject decision are required' });
         return res.json({ record: intake.reviewEvidence(id, review) });
+      }
+      if (url.pathname === '/api/source-network/onboarding' && req.method === 'GET') {
+        return res.json({ items: (dependencies.onboarding || require('../discovery/onboarding-pass')).listCachedSources() });
+      }
+      if (url.pathname === '/api/source-network/onboarding' && req.method === 'POST') {
+        const body = req.body || {};
+        const onboarding = dependencies.onboarding || require('../discovery/onboarding-pass');
+        const summary = await onboarding.runOnboardingPass({
+          sources: Array.isArray(body.sources) ? body.sources : null,
+          env: process.env
+        });
+        return res.json(summary);
+      }
+      if (url.pathname === '/api/source-network/unbrowse/intake' && req.method === 'POST') {
+        // HTTP counterpart of `scripts/crawler-tools-unbrowse.cjs intake-candidate`.
+        // Validates the body against the unbrowse route-candidate schema and,
+        // on success, hands it to the same source-intake store the CLI uses.
+        // Auth is required because the intake store mutates evidence packets.
+        const intakeAdapter = dependencies.intake || require('../sources/intake');
+        let validated;
+        try { validated = unbrowseTool.validateCandidate(req.body || {}); }
+        catch (validationError) {
+          return res.status(400).json({
+            error: 'Unbrowse route candidate was rejected',
+            reason: validationError.message,
+            provenance: 'unbrowse-route-candidate',
+            candidateSchema: unbrowseTool.CANDIDATE_SCHEMA
+          });
+        }
+        try {
+          const result = unbrowseTool.candidateToIntake(req.body, { intake: intakeAdapter });
+          return res.status(result.deduplicated ? 200 : 201).json({
+            ...result,
+            schemaVersion: validated.schemaVersion,
+            source: validated.source,
+            endpointUrl: validated.evidence.endpointUrl
+          });
+        } catch (intakeError) {
+          return res.status(400).json({
+            error: 'Unbrowse intake could not be saved',
+            reason: intakeError.message,
+            provenance: 'unbrowse-route-candidate'
+          });
+        }
+      }
+      if (url.pathname === '/api/source-network/unbrowse/status' && req.method === 'GET') {
+        // Diagnostics only: the wrapper never executes Unbrowse and never
+        // contacts hosted services from this route. Token still required so
+        // the route does not leak installation probe results to anonymous
+        // callers. The tool reads UNBROWSE_PACKAGE_ROOT from process.env and
+        // falls back to UNBROWSE_CONFIG_DIR for the consent directory; we
+        // forward both so dependency-injected env values drive the probe.
+        const previousRoot = process.env.UNBROWSE_PACKAGE_ROOT;
+        const syntheticRoot = env.UNBROWSE_PACKAGE_ROOT;
+        if (syntheticRoot) process.env.UNBROWSE_PACKAGE_ROOT = syntheticRoot;
+        const configDir = env.UNBROWSE_CONFIG_DIR || unbrowseTool.DEFAULT_CONFIG_DIR;
+        try { return res.json(unbrowseTool.inspectInstallation(undefined, configDir)); }
+        finally {
+          if (previousRoot === undefined) delete process.env.UNBROWSE_PACKAGE_ROOT;
+          else process.env.UNBROWSE_PACKAGE_ROOT = previousRoot;
+        }
       }
       if (url.pathname === '/api/source-network/run' && req.method === 'POST') {
         if (req.body?.scope === 'all') {
