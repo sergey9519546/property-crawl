@@ -31,8 +31,18 @@ export function UnicornHeroBg() {
 
   // Load the UMD script exactly like arcade does (inline script that appends to head)
   React.useEffect(() => {
-    const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
+    // Feature-detect on a 1x1 canvas rather than a full-size one.
+    //
+    // getContext() is not free: it stands up a whole GL context, allocates
+    // driver resources and, on many stacks, synchronises with the GPU process.
+    // Doing that on a default-size canvas purely to ask "is WebGL available?"
+    // cost real milliseconds on every single page load, and the canvas was then
+    // discarded unused. A 1x1 probe asks the same question for a fraction of
+    // the setup, and is the conventional way to do it.
+    const probe = document.createElement("canvas");
+    probe.width = 1;
+    probe.height = 1;
+    const gl = probe.getContext("webgl2") || probe.getContext("webgl");
     if (!gl) return;
 
     const rendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
@@ -40,6 +50,11 @@ export function UnicornHeroBg() {
       ? String(gl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL) || "")
       : "";
     if (/swiftshader|software/i.test(renderer)) return;
+
+    // Release the probe's context immediately; the shader canvas is created by
+    // UnicornStudio itself, and only when it initialises.
+    const lose = gl.getExtension("WEBGL_lose_context");
+    if (lose) lose.loseContext();
 
     if (window.UnicornStudio) {
       if (!window.UnicornStudio.isInitialized) {

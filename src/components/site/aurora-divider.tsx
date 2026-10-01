@@ -1,6 +1,4 @@
-"use client";
-
-import * as React from "react";
+import type { ReactNode } from "react";
 
 /**
  * AuroraDivider — a subtle gradient mesh that breaks the page between sections.
@@ -9,6 +7,11 @@ import * as React from "react";
  *
  * Each instance picks a slightly different hue offset so the page feels alive
  * without being noisy.
+ *
+ * Deliberately NOT a client component. It renders a static gradient with no
+ * hooks, no state and no event handlers, so there is nothing for hydration to
+ * do — yet the landing page mounts twelve of them, and every "use client" here
+ * was twelve client boundaries and their JS for zero interactivity.
  */
 
 const PALETTES = [
@@ -55,7 +58,7 @@ export function AuroraDivider({ index = 0 }: { index?: number }) {
  * AuroraBackground — a full-section subtle mesh background.
  * Place inside a section to give it a whisper of color.
  */
-export function AuroraBackground({ index = 0, children }: { index?: number; children?: React.ReactNode }) {
+export function AuroraBackground({ index = 0, children }: { index?: number; children?: ReactNode }) {
   const palette = PALETTES[index % PALETTES.length];
 
   return (

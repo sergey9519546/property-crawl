@@ -1,12 +1,34 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { INITIAL_LISTINGS, PropertyListing, SOURCES } from "./property-data";
 import { PropertyDrawer } from "./property-drawer";
 import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
 import { AlertsModal } from "./alerts-modal";
-import { MarketMap } from "./market-map";
+
+/**
+ * The market map pulls in mapbox and shares the ~1 MB three/mapbox chunk with
+ * the storyteller's atlas. It only mounts once the operator has driven the
+ * terminal to the map stage, so it is not first-paint content and must not be in
+ * the initial bundle.
+ *
+ * The placeholder matches the map's responsive height so the swap cannot shift
+ * the layout.
+ */
+const MarketMap = dynamic(
+  () => import("./market-map").then((m) => m.MarketMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        aria-hidden
+        className="relative h-[520px] overflow-hidden bg-[#E8EEF2] sm:h-[600px] lg:h-[660px]"
+      />
+    ),
+  },
+);
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
 import {
   Search,

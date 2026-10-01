@@ -17,8 +17,80 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { DealDiscoveryMap as OpportunityAtlas } from "./deal-discovery-map";
+import dynamic from "next/dynamic";
 import { GsapReveal } from "./gsap-reveal";
+
+/**
+ * The atlas is a three.js + mapbox canvas — around 1 MB of JavaScript, which
+ * measured as a single shared chunk on the landing page.
+ *
+ * It only ever renders at stage "find", long after first paint, so it has no
+ * business being in the initial bundle. Lazy-loading it keeps that megabyte off
+ * the critical path entirely.
+ *
+ * The placeholder repeats the map's exact responsive height so the swap cannot
+ * shift the layout: the page currently scores CLS 0.00 and this must not trade
+ * that for a cheaper first paint.
+ */
+const OpportunityAtlas = dynamic(
+  () => import("./deal-discovery-map").then((m) => m.DealDiscoveryMap),
+  {
+    ssr: false,
+    loading: AtlasPlaceholder,
+  },
+);
+
+/** The map's exact responsive height, so mounting it later cannot shift layout. */
+function AtlasPlaceholder() {
+  return (
+    <div
+      aria-hidden
+      className="opportunity-atlas__map relative h-[390px] overflow-hidden sm:h-[480px] lg:h-[620px]"
+    />
+  );
+}
+
+/**
+ * Mount the atlas only once its section is close to the viewport.
+ *
+ * `next/dynamic` alone was not enough, and the trace proved why: the story
+ * machine's default stage IS "find", so the atlas renders on first paint, its
+ * chunk is requested immediately, and the 1 MB three/mapbox bundle — shared
+ * with the terminal's map, which is otherwise correctly deferred — loads inside
+ * the critical window.
+ *
+ * This section is the fourth on the page, so nobody can see the map without
+ * scrolling to it. One listener defers ~1 MB of JavaScript until a visitor is
+ * actually about to look at it.
+ */
+function DeferredOpportunityAtlas() {
+  const [inView, setInView] = React.useState(false);
+  const hostRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    const host = hostRef.current;
+    if (!host || inView) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      // Begin the import slightly before the section is on screen, so the swap
+      // is not visibly late on a fast scroll.
+      { rootMargin: "400px" },
+    );
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [inView]);
+
+  return <div ref={hostRef}>{inView ? <OpportunityAtlas /> : <AtlasPlaceholder />}</div>;
+}
 
 type StageKey = "find" | "verify" | "underwrite" | "act";
 
@@ -291,7 +363,7 @@ export function Storyteller() {
 }
 
 function ProductContent({ stage }: { stage: StageKey }) {
-  if (stage === "find") return <OpportunityAtlas />;
+  if (stage === "find") return <DeferredOpportunityAtlas />;
   if (stage === "verify") return <VerificationPanel />;
   if (stage === "underwrite") return <UnderwritePanel />;
   return <ActionPanel />;
