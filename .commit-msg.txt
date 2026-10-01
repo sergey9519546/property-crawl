@@ -1,0 +1,56 @@
+fix: cap unbounded request input and stop broken features rendering as correct
+
+From a second audit round covering auth gating, input validation, and UI
+error handling. The injection audit came back clean - no SQL injection, no
+path traversal, no SSRF; the pattern throughout is validate-then-interpolate-
+constant, with pgSort throwing on an unrecognized sort key and the ArcGIS
+endpoint registry frozen. No change needed for those.
+
+Server-side: unbounded request input
+- isStringArray capped element LENGTH but never COUNT, so a 2MB body held
+  ~30k keywords and filters.keywords persisted as unbounded jsonb. Now capped
+  at 100 elements.
+- POST /api/alerts/matches accepted body.matchIds uncapped and unvalidated,
+  then passed them to `id = ANY($2::uuid[])`. A watchlist-cookie holder could
+  drive a multi-megabyte single statement, and a single non-UUID string
+  aborted the entire cast - returning 500 instead of 400 AND discarding every
+  valid id in the same batch. Now capped at 500 and shape-checked against a
+  UUID pattern, with an explicit too_many_match_ids response.
+
+UI: unknown was being rendered as a confident answer
+- listSavedSearches and listAlertMatches coerced a missing response field to
+  [], so a renamed or dropped field showed "you have no saved searches" and
+  drove getUnreadAlertCount() to 0 - a broken alerts feature presented as a
+  quiet user. Both now throw via a shared requireArray helper whose message
+  says explicitly that the view is broken, not that the user has no data.
+- DataModeBanner set health to null on a failed probe, and the `!health` guard
+  then removed the banner entirely. A broken health check deleted the one
+  runtime-honesty warning that exists to catch exactly that. The health state
+  is now tri-state (undefined = not loaded, null = probe failed) and a failed
+  probe renders "Runtime mode unverified" rather than vanishing.
+- interactive-terminal's empty state told users to adjust their underwriting
+  criteria when the load had actually failed, directly contradicting the
+  error banner above it. It now distinguishes the two.
+
+Fixture fidelity
+- The new UUID validation broke test/routes/saved-searches.test.js because its
+  stub generated ids like "m_1", while the real store uses cryptoRandomUUID().
+  The fixture was exercising a shape the system can never produce. The stub now
+  generates deterministic UUID-shaped ids rather than weakening the validation.
+  Three tests added covering the new 400 responses and the array cap.
+
+test/honest-empty-state.test.js (9 tests) pins all of it, validated by
+reintroducing the Array.isArray coercion and confirming the guard failed on
+that exact line.
+
+Not changed, reported instead: src/lib/property-api.ts sets an
+x-workspace-request header described as an "API-side CSRF check" that no
+server/ code reads, and server.listen(PORT) binds every interface. Traced
+reachability rather than assuming: fly.toml, render.yaml and koyeb.yml all run
+a single service on internal_port 3000 via Dockerfile.production, which spawns
+server/server.js on 3002 - a port the platform never routes. The internet path
+is Next (CSRF-gated) -> loopback -> the API, so the raw API is not externally
+reachable. That is defense-in-depth, not an exploitable hole, and a change
+there would be theatre rather than a fix.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, verify:gate green.

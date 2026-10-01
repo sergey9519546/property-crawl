@@ -88,9 +88,21 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// A 200 whose body lacks the expected field is NOT the same as "you have no
+// saved searches". Returning [] there made a renamed or dropped response field
+// look like an empty watchlist, and getUnreadAlertCount() then drove the badge
+// to 0 — a broken alerts feature presented as a quiet user.
+function requireArray<T>(value: unknown, field: string): T[] {
+  if (Array.isArray(value)) return value as T[];
+  throw new Error(
+    `Saved-search response did not include a "${field}" array. The alerts view `
+      + `is broken; it is not reporting that you have no saved searches.`,
+  );
+}
+
 export async function listSavedSearches(): Promise<ServerSavedSearch[]> {
   const data = await api<{ searches?: ServerSavedSearch[] }>("/api/saved-searches");
-  return Array.isArray(data.searches) ? data.searches : [];
+  return requireArray<ServerSavedSearch>(data.searches, "searches");
 }
 
 export async function createSavedSearch(label: string | null, filters: Record<string, unknown>): Promise<ServerSavedSearch> {
@@ -137,7 +149,7 @@ export async function listAlertMatches(onlyUnread?: boolean, limit?: number, cur
   if (limit) q.set("limit", String(limit));
   if (cursor) q.set("cursor", cursor);
   const data = await api<{ matches?: AlertMatch[]; nextCursor?: string | null }>(`/api/alerts/matches?${q.toString()}`);
-  const matches = Array.isArray(data.matches) ? data.matches : [];
+  const matches = requireArray<AlertMatch>(data.matches, "matches");
   if (cursor !== undefined) {
     return { matches, nextCursor: data.nextCursor ?? null };
   }

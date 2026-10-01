@@ -26,8 +26,16 @@ const { runAlertsForUser } = require('../intelligence/alerts-runner');
 const ALERT_MATCHES_DEFAULT_LIMIT = 50;
 const ALERT_MATCHES_MAX_LIMIT = 200;
 
+// Element length was always capped; the COUNT was not. A 2MB body can hold
+// ~30k 64-character strings, and filters.keywords is persisted as jsonb, so a
+// single saved search could be made arbitrarily large. Cap the count too.
+const MAX_STRING_ARRAY_LENGTH = 100;
+const MAX_MARK_READ_IDS = 500;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function isStringArray(value, maxLen = 64) {
   return Array.isArray(value)
+    && value.length <= MAX_STRING_ARRAY_LENGTH
     && value.every((v) => typeof v === 'string' && v.trim().length > 0 && v.length <= maxLen);
 }
 
@@ -234,9 +242,17 @@ function createSavedSearchesHandler(dependencies = {}) {
       const body = req.body || {};
       const action = typeof body.action === 'string' ? body.action : 'mark_read';
       if (action !== 'mark_read') return res.status(400).json({ error: 'unsupported_action' });
-      const ids = Array.isArray(body.matchIds)
-        ? body.matchIds.filter((v) => typeof v === 'string')
-        : (Array.isArray(body.ids) ? body.ids.filter((v) => typeof v === 'string') : []);
+      // These reach `id = ANY($2::uuid[])`, so they are capped in count and
+      // shape-checked. Without both, a device-scoped caller could drive a
+      // multi-megabyte single statement, and a single non-UUID string would
+      // abort the whole cast and return a 500 instead of a 400.
+      const requestedIds = Array.isArray(body.matchIds)
+        ? body.matchIds
+        : (Array.isArray(body.ids) ? body.ids : []);
+      if (requestedIds.length > MAX_MARK_READ_IDS) {
+        return res.status(400).json({ error: 'too_many_match_ids', max: MAX_MARK_READ_IDS });
+      }
+      const ids = requestedIds.filter((v) => typeof v === 'string' && UUID_PATTERN.test(v));
       if (ids.length === 0) return res.status(400).json({ error: 'matchIds_required' });
       const marked = await database.markAlertMatchesRead(userId, ids);
       const markedRead = typeof marked === 'number' ? marked : (Array.isArray(marked) ? marked.length : 0);

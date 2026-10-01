@@ -36,6 +36,13 @@ function makeReq(method = 'GET', path = '/', body = null) {
   return { method, url: path, headers: { authorization: 'Bearer test-secret' }, body };
 }
 
+// Deterministic UUID-shaped ids: the production contract is a UUID, and a
+// readable counter keeps failures easy to locate.
+function stubUuid(n) {
+  const h = String(n).padStart(12, '0');
+  return `00000000-0000-4000-8000-${h}`;
+}
+
 function stubDb() {
   const searches = new Map();
   const matches = new Map();
@@ -106,7 +113,12 @@ function stubDb() {
         const key = `${searchId}:${lid}`;
         if ([...matches.values()].some(m => m.searchId === searchId && m.listingId === lid)) continue;
         const rec = {
-          id: `m_${idSeq++}`,
+          // Real alert_matches.id is a UUID from Postgres (or cryptoRandomUUID()
+          // in the in-memory store), and the mark_read route validates that shape
+          // before it reaches `id = ANY($2::uuid[])`. A stub id like "m_1" is not
+          // a shape the system can ever produce, so it made the fixture diverge
+          // from the contract it was meant to exercise.
+          id: stubUuid(idSeq++),
           searchId,
           userId,
           listingId: lid,
@@ -546,4 +558,43 @@ test('workspace-store: alert matches persist across restarts', async () => {
   assert.equal(unread.matches.length, 1);
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+test('alerts/matches: POST mark_read rejects non-UUID ids with 400, not a 500', async () => {
+  const db = stubDb();
+  const handlers = createSavedSearchesHandler({ database: db });
+  await db.recordAlertMatches(workspaceUser, 'srch_uuid', ['listing-1']);
+
+  // A non-UUID id used to abort the whole `id = ANY($2::uuid[])` cast, so the
+  // caller got a 500 instead of a 400 - and one bad id discarded every good id
+  // in the same batch.
+  const res = makeRes();
+  await handlers.handleAlertMatches(
+    makeReq('POST', '/api/alerts/matches', { action: 'mark_read', matchIds: ['not-a-uuid'] }),
+    res,
+    new URL('http://localhost/api/alerts/matches'),
+  );
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'matchIds_required');
+});
+
+test('alerts/matches: POST mark_read rejects an oversized id batch with 400', async () => {
+  const db = stubDb();
+  const handlers = createSavedSearchesHandler({ database: db });
+  const tooMany = Array.from({ length: 501 }, (_, i) => stubUuid(9000 + i));
+  const res = makeRes();
+  await handlers.handleAlertMatches(
+    makeReq('POST', '/api/alerts/matches', { action: 'mark_read', matchIds: tooMany }),
+    res,
+    new URL('http://localhost/api/alerts/matches'),
+  );
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'too_many_match_ids');
+  assert.equal(res.body.max, 500);
+});
+
+test('validateFilters rejects an oversized keyword array', () => {
+  const huge = Array.from({ length: 101 }, (_, i) => `kw-${i}`);
+  assert.equal(validateFilters({ keywords: huge }).ok, false);
+  const ok = Array.from({ length: 100 }, (_, i) => `kw-${i}`);
+  assert.equal(validateFilters({ keywords: ok }).ok, true);
 });

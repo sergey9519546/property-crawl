@@ -833,10 +833,26 @@ export function InteractiveTerminal() {
             filtered.length === 0 ? (
               <div className="p-12 text-center bg-white rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
                 <SlidersHorizontal className="w-10 h-10 mx-auto text-[#9CA3AF]" />
-                <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
-                <p className="text-xs text-[#6B7280] max-w-md mx-auto">
-                  Try adjusting your modeled score, bid spread, or opening amount range to capture more published records.
-                </p>
+                {/* An empty list because the load FAILED is not an empty list
+                    because the filters are narrow. Telling the user to adjust
+                    their criteria here contradicted the error banner above and
+                    sent them to tune filters that were never the problem. */}
+                {syncStatus === "error" ? (
+                  <>
+                    <h3 className="text-lg font-bold text-[#111827]">Inventory could not be loaded</h3>
+                    <p className="text-xs text-[#6B7280] max-w-md mx-auto">
+                      The listing feed did not load, so no properties were available to compare against
+                      your criteria. This is a connection or data-mode problem, not a filter problem.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
+                    <p className="text-xs text-[#6B7280] max-w-md mx-auto">
+                      Try adjusting your modeled score, bid spread, or opening amount range to capture more published records.
+                    </p>
+                  </>
+                )}
 
                 {searchQuery.trim() && (
                   <div className="pt-2 max-w-md mx-auto p-4 rounded-xl bg-[#0F172A] text-white space-y-2 border border-slate-700 shadow-md text-left">
