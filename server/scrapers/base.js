@@ -27,6 +27,16 @@ class BaseScraper {
     this.fetchImpl = fetchImpl;
     this.random = random;
     this.sleepImpl = sleep;
+    // Pre-normalization publisher record, keyed by the standardized listing the
+    // scheduler receives. Weak so a long run cannot leak parsed rows.
+    this._publisherRecords = new WeakMap();
+  }
+
+  // The publisher's own record for this listing, before normalization. Scrapers
+  // that capture a structured upstream record override this with their own
+  // implementation; everyone else gets whatever they parsed out of the page.
+  getRawPublisherRecord(listing) {
+    return (listing && this._publisherRecords.get(listing)) || null;
   }
 
   async executeWithRetry(fn) {
@@ -98,6 +108,21 @@ class BaseScraper {
 
   standardizeListing(raw) {
     const listing = standardizeListingRecord(raw, { sourceKey: this.sourceKey });
+    // Retain the pre-normalization publisher record, keyed by the identity the
+    // scheduler will actually receive. discovery_snapshots.raw_payload is the
+    // record of what the publisher returned; standardizeListingRecord builds a
+    // NEW object, so keying the map on `raw` would never resolve. Keying on the
+    // returned `listing` is the only mapping the scheduler can see.
+    //
+    // Before this, the scheduler had no publisher record for 13 of 19 scrapers
+    // and recorded null (migration 016). That is honest but it discards real
+    // evidence the scraper already had in hand. Scrapers that expose a
+    // structured upstream record (hud-usps-vacancy, servicelink, courtlistener,
+    // fl-dor-cadastral, ca-controller-tax-sale, fhfa-hpi) define their own
+    // getRawPublisherRecord and keep precedence over this fallback.
+    if (this._publisherRecords && raw && typeof raw === 'object') {
+      this._publisherRecords.set(listing, raw);
+    }
     // Schema-first gate (foolproof scrape P0): fail only on identity-critical
     // errors. Provenance/host policy remains the ingestion validator's job.
     const schema = validateListingShape(listing, { expectedSource: this.sourceKey });

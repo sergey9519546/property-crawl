@@ -1,0 +1,42 @@
+feat(scrapers): capture the publisher record for every scraper via the base class
+
+Follow-up to the raw_payload honesty fix in 9bbe7e8. That change made the
+scheduler record null when a scraper had no publisher record, which is
+honest but discards evidence the scraper already had in hand.
+
+Only 6 of 19 scheduled scrapers implemented getRawPublisherRecord. The
+other 13 - hud, treasury, irs, usda, fannie, freddie, gsa, marshals, fdic,
+va, sheriff, bid4assets and friends - had raw_payload permanently null
+even though standardizeListing() receives the pre-normalization parsed
+record and then discards it.
+
+No per-scraper work is needed. standardizeListing() is a single funnel all
+19 already pass through, so capturing there covers the fleet:
+
+  this._publisherRecords = new WeakMap();          // in the constructor
+  this._publisherRecords.set(listing, raw);        // in standardizeListing
+  getRawPublisherRecord(listing) { ... }           // base-class default
+
+The one detail that decides whether this works: the map must be keyed on
+the RETURNED listing, not on `raw`. standardizeListingRecord() builds a
+new object, so a WeakMap keyed on the input would never resolve for the
+item the scheduler actually holds. Verified directly rather than assumed.
+
+Precedence is preserved without special-casing. The scheduler already does
+`typeof scraper.getRawPublisherRecord === 'function' ? scraper.getRawPublisherRecord(item) : null`,
+so the six scrapers that define their own method still win - a subclass
+method shadows the base. Their structured upstream record (parsed JSON)
+is strictly better than the fallback, and it is what the base class is
+for precisely when a scraper has nothing better.
+
+WeakMap, not Map: a long collection run must not leak parsed rows.
+
+test/scrapers/publisher-record-capture.test.js (9 tests) pins the
+round-trip, the key-identity detail, no collision between two listings
+from the same scraper, null-safety for unknown input, the WeakMap choice,
+that the six structured scrapers keep their own, and that the thirteen
+inheriting scrapers reach the funnel. Validated by stripping the capture
+block and confirming the guard failed, then restoring.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, verify:gate
+green.
