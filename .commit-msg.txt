@@ -1,0 +1,51 @@
+test(sources): pin the catalog adapterKey join and the one known exception
+
+adapterKey is not decorative. Three subsystems join on it:
+
+  dossier.js / listings.js
+      find(entry => entry.adapterKey === listing.source)?.workflow.cadenceHours
+  source-network.js
+      if (!source?.adapterKey || !collector.realScraperKeys.has(source.adapterKey))
+        return 400 'This source uses the evidence import workflow'
+  catalog.js
+      getAccessPolicyForAdapter / getRobotsExclusionForAdapter
+
+An entry with adapterKey: null is therefore unjoinable: cadence silently falls
+back to 24h, no access policy or robots exclusion is applied, and an
+operator-triggered run is refused.
+
+Measured across the catalog: 141 of 163 entries have adapterKey: null, which
+is correct - they are evidence sources researched by hand, not scraped. Of
+the 24 modules the scheduler requires, 6 initially looked unjoinable. Five
+are not:
+
+  landbanksearch          required by filename, but its listings carry
+                          source "landbank" - which IS its adapterKey
+  email-ingest            a support module, not a source
+  telemetry               a support module, not a source
+  validation              a support module, not a source
+  collection-scope        a support module, not a source
+
+That leaves exactly one real inconsistency: hud-usps-vacancy. The catalog
+declares cadenceHours 2160 (90 days) with adapterKey null, so the cadence
+lookup returns 24, the access policy and robots exclusion are skipped, and
+source-network refuses a manual run while the scheduler collects it anyway.
+It currently produces no live listings, so the degraded cadence is not
+user-visible yet - which is why it sat unnoticed.
+
+Deliberately NOT fixed. The catalog entry describes the LICENSED HUD/USPS
+product: access 'licensed', requiredEvidence includes "registered-user
+eligibility and sublicense", and the workflow says "Use only under HUD/USPS
+registered-user eligibility". The scraper's own header says it defaults to
+the PUBLIC HUD GIS open-data mirror, with HUD_USPS_VACANCY_SERVICE_ROOT
+optionally pointing at a registered-user root. Setting adapterKey would make
+the system apply that entry's access policy and robots handling, which is the
+licensing question rather than a mechanical edit.
+
+The test records the state so it cannot drift unnoticed: a new scheduled
+source without a resolvable adapterKey fails the suite, and the exception
+list fails if the source stops being scheduled or starts resolving. Validated
+by appending `require('./zzz-not-in-catalog')` to the scheduler - the guard
+failed naming that source and stating the 24h consequence - then restoring.
+
+Verified: all 16 test:* runners exit 0, tsc --noEmit clean, verify:gate green.
