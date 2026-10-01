@@ -26,6 +26,7 @@ const { validateListingForIngestion } = require('./validation');
 const { requireCollectionStorage, inspectCollectionStorage } = require('../discovery/storage-health');
 const { sanitizeRunReport } = require('../discovery/run-report');
 const { collectionScope } = require('./collection-scope');
+const { validateScraperAdapters } = require('./scraper-interface');
 const { hash: scopeHash } = require('../discovery/store');
 
 const DEFAULT_INTERVAL_HOURS = 6;
@@ -108,6 +109,15 @@ class IngestionScheduler {
       governmentLand,
       localSurplus,
     ];
+    // The nine members read below were never declared anywhere, so adapter
+    // drift (a sourceKey that stopped matching the catalog, a missing publisher
+    // record) failed silently. Surface it here instead. Deliberately NOT fatal:
+    // one non-conforming adapter must not stop the scheduler from booting and
+    // running the other twenty-three.
+    const adapterContract = validateScraperAdapters(this.realScrapers);
+    if (!adapterContract.ok) {
+      console.warn(`[Scheduler] ${this.realScrapers.length} scraper adapter(s) violate the scraper contract:\n  ${adapterContract.errors.join('\n  ')}`);
+    }
     this.database = options.database || db;
     this.discoveryStore = options.discoveryStore || null;
     this.storageProbe = options.storageProbe || inspectCollectionStorage;

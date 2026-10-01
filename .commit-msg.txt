@@ -1,0 +1,86 @@
+feat(scrapers): declare the adapter interface, narrow CivilView, fence claims once
+
+Three independent pieces of work on the scraper seam, each with its own tests.
+
+## 1. The adapter interface is now declared and asserted
+
+The scheduler requires nine members of every scraper — circuitBreaker,
+fixtureOnly, getRawPublisherRecord, historicalOnly, lastRunReport, name,
+scrapeFeed, setCheckpoint, sourceKey — and there are 24 adapters, but no
+interface anywhere. `grep -r "interface Scraper\|type Scraper"` returns
+nothing. That is why two real defects were invisible: the catalog
+adapterKey drifted from the scheduler sourceKey, and getRawPublisherRecord
+existed on so few adapters that the scheduler's fallback silently stored
+derived data in the publisher-raw column.
+
+server/scrapers/scraper-interface.js exports REQUIRED_SCRAPER_MEMBERS
+(each member commented with where the scheduler reads it),
+validateScraperAdapter, and validateScraperAdapters. The rules are one per
+member: name/sourceKey are non-empty strings; scrapeFeed is a function
+unless fixtureOnly; getRawPublisherRecord is required for anything the
+scheduler ingests; circuitBreaker, setCheckpoint, fixtureOnly,
+historicalOnly and lastRunReport are legal to omit because the scheduler
+guards each, but are type-checked when declared. lastRunReport is
+deliberately not presence-required — four real adapters omit it and
+sanitizeRunReport(undefined) is safe.
+
+The scheduler calls it once when assembling realScrapers. Warn-only, so a
+new adapter cannot be added broken without the warning appearing.
+
+Swept against all 24 real adapters: 23 clean, 1 offender —
+PublicNoticesEmailScraper. Not loosened; see the follow-up note.
+
+## 2. CivilViewScraper's interface narrowed, 30 public methods -> 10
+
+733 lines of implementation behind 30 public methods, four times wider than
+its siblings for the identical role (FhfaHpiScraper: 229 lines, 6 methods).
+Eighteen pure helpers moved to module scope; two that genuinely use `this`
+became _fetchCountyListings and _resolveDetailUrl. The ten that remain are
+exactly the ones with external callers — scrapeFeed for the scheduler, and
+the rest asserted directly or stubbed by test/civilview.test.js.
+
+Behaviour-preserving: 17/17 in civilview, plus scrapers, coverage and
+enrollment suites. CRLF endings and the two em dashes preserved byte-for-byte.
+
+## 3. Claim ownership has one owner
+
+PgCollectionJobStore kept its own claimOwners Map and injected it into
+updateJob as ownerId. DiscoveryStore is directly constructible — its own
+acceptance test does — so a claim made straight through the store was
+invisible to the adapter, and the following update ran unfenced. The map
+moved to DiscoveryStore.jobClaimOwners, recorded by claimJob, and updateJob
+now defaults to it, so an update that omits an explicit ownerId still
+fences against the current lease holder.
+
+The collection-job seam keeps both adapters: it is a real seam, one adapter
+for a JSON file store and one for Postgres.
+
+## 4. Client filter enums now mirror the server
+
+src/lib/discovery-query.ts re-serialised 21 filter keys with no value
+validation, so a bookmarked /listings?freshness=fresh became a 400 instead
+of degrading. It now drops values outside the server's accepted set, on both
+the read and write paths, keeping the single keys source of truth.
+
+Verified per filter against server/discovery/query.js, including that
+listings.js:75 accepts sort=quality and sort=opportunity at the route layer
+even though the query layer does not, so the workbench's Evidence quality
+and Opportunity rank dropdowns keep working. lifecycle, occupancy, state,
+county, source, type and program have no closed server vocabulary — values
+come from database facets — and are deliberately left unvalidated.
+
+## Known remaining issue, reported not hidden
+
+PublicNoticesEmailScraper (sourceKey public-notices-email) is registered in
+realScrapers but its scrapeFeed returns a run-report object, never an array,
+so scheduler.js:224 throws "returned a non-array payload" on every sweep. It
+is not a BaseScraper and has no getRawPublisherRecord. The failure is
+contained — mapWithConcurrency wraps each item, so the sweep continues and
+only that source is recorded as rejected — but the source can never succeed
+and the fleet loses a worker slot and logs a spurious error every run. The
+validator reports it rather than being loosened to hide it.
+
+docs/module-depth-audit.md records the measurement behind all of this.
+
+Verified: tsc --noEmit clean, 58/58 across the new and adjacent tests,
+verify:gate green.

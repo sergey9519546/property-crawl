@@ -102,15 +102,21 @@ class CollectionJobStore {
     });
   }
 }
+// Postgres adapter for the collection-job store seam. Claim ownership is
+// recorded by DiscoveryStore.claimJob, so update() no longer needs to pass an
+// owner - the store fences against the current lease holder itself. Keeping
+// the map here meant two sources of truth: a claim made directly through
+// DiscoveryStore (which its own acceptance test does) was invisible to this
+// adapter, so the subsequent update ran unfenced.
 class PgCollectionJobStore {
-  constructor(discoveryStore){this.discoveryStore=discoveryStore;this.claimOwners=new Map();}
+  constructor(discoveryStore){this.discoveryStore=discoveryStore;}
   createOrReuse(input){return this.discoveryStore.createOrReuseJob(input);}
   get(id){return this.discoveryStore.getJob(id);}
   list(limit){return this.discoveryStore.listJobs(limit);}
-  update(id,update){return this.discoveryStore.updateJob(id,update,{ownerId:this.claimOwners.get(id)});}
-  async claim(id,owner,ttl){const job=await this.discoveryStore.claimJob(id,owner,ttl);if(job)this.claimOwners.set(id,owner);return job;}
+  update(id,update){return this.discoveryStore.updateJob(id,update);}
+  claim(id,owner,ttl){return this.discoveryStore.claimJob(id,owner,ttl);}
   renewClaim(id,owner,ttl){return this.discoveryStore.renewJobClaim(id,owner,ttl);}
-  bindClaim(id,owner){this.claimOwners.set(id,owner);}
+  bindClaim(id,owner){this.discoveryStore.jobClaimOwners.set(id,owner);}
 }
 
 function sourceRunUnsafe(result) {
