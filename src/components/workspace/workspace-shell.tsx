@@ -187,9 +187,23 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   </SessionContext.Provider>;
 }
 
-export function PrivateWorkspaceGate({ title = "Unlock your research workspace", children }: { title?: string; children?: React.ReactNode }) {
+export function PrivateWorkspaceGate({ title = "Unlock your research workspace", headingLevel = 2, children }: { title?: string; headingLevel?: 1 | 2 | 3; children?: React.ReactNode }) {
   const session = useWorkspaceSession();
-  if (session.loading) return <div className="rounded-2xl border border-[#E5E7EB] bg-white p-7 text-sm text-[#6B7280] shadow-sm">Checking the private workspace…</div>;
+  // headingLevel exists because the answer is not uniform.
+  //
+  // Four of the five consumers put their own <h1> inside the children, so the
+  // default of 2 is right for them: the page keeps its h1 and the lock screen
+  // is a subsection of it.
+  //
+  // research-case.tsx is the exception. Its h1 lives inside `detail &&`, so
+  // while locked there is no page heading at all, and the lock screen was the
+  // only thing on the page carrying an <h2> under no <h1>. It opts into 1.
+  //
+  // This cannot be checked statically: the h1 is in a child that the locked
+  // branch never renders. It is why the accessibility audit asserts h1 presence
+  // in the live DOM.
+  const Heading = `h${headingLevel}` as 'h1' | 'h2' | 'h3';
+  if (session.loading) return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 text-sm text-[#6B7280] shadow-sm"><Heading className="text-xl font-semibold text-[#111827]">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
   if (session.authenticated) return <>{children}</>;
-  return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm"><LockKeyhole className="text-slate-900" /><h2 className="mt-4 text-xl font-semibold">{title}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-[#6B7280]">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B]">Unlock workspace</button></section>;
+  return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm"><LockKeyhole className="text-slate-900" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-[#6B7280]">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B]">Unlock workspace</button></section>;
 }

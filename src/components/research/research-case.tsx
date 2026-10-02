@@ -130,8 +130,23 @@ export function ResearchCase({ caseId }: { caseId: string }) {
 
   return <div className="mx-auto max-w-[1380px] px-5 py-8 sm:px-8">
     <Link href={returnTo} className="inline-flex items-center gap-2 text-xs font-semibold text-[#6B7280] hover:text-[#0F172A]"><ArrowLeft size={14} />Back to research</Link>
-    <PrivateWorkspaceGate title="Unlock this research case">
-      {loading && !detail ? <p className="mt-6 flex items-center gap-2 rounded-2xl bg-white p-7 text-sm"><Loader2 size={17} className="animate-spin" />Reconstructing the case…</p> : error && !detail ? <p role="alert" className="mt-6 rounded-2xl bg-amber-100 p-6 text-sm text-amber-950">{error}</p> : detail && <>
+    <PrivateWorkspaceGate title="Unlock this research case" headingLevel={1}>
+      {loading && !detail
+        ? <>
+            {/* The h1 belongs to the loaded branch below, so these states used
+                to render a bare <p> with no page-level heading at all -- three
+                of this page's four states gave a screen-reader user nothing to
+                navigate from. Measured as h1=0 on /research/[id] while every
+                other route in the app reported h1=1. */}
+            <h1 className="mt-6 text-2xl font-semibold text-slate-900">Reconstructing this research case</h1>
+            <p className="mt-3 flex items-center gap-2 rounded-2xl bg-white p-7 text-sm"><Loader2 size={17} className="animate-spin" />Gathering the evidence recorded for this case…</p>
+          </>
+        : error && !detail
+          ? <>
+              <h1 className="mt-6 text-2xl font-semibold text-slate-900">This research case could not be opened</h1>
+              <p role="alert" className="mt-3 rounded-2xl bg-amber-100 p-6 text-sm text-amber-950">{error}</p>
+            </>
+          : detail && <>
         <header className="mt-6 rounded-3xl bg-[#0F172A] p-6 text-white sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">{detail.case.state}</span>{detail.case.reconsiderationRequired && <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-900"><RotateCcw size={12} />Second Look</span>}</div><h1 className="mt-4 text-3xl font-semibold sm:text-5xl">{sourceDisplayText(detail.case.address || detail.case.listingId)}</h1><p className="mt-3 text-xs text-slate-200/70">{sourceDisplayText(detail.case.sourceRef.sourceId)} · {sourceDisplayText(detail.case.sourceRef.recordId)} · Case revision {detail.case.revision}</p></div><div className="flex flex-wrap gap-2"><button disabled={busy} onClick={() => void downloadPacket("json")} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-[#0F172A]"><Download size={14} />JSON</button><button disabled={busy} onClick={() => void downloadPacket("md")} className="inline-flex items-center gap-2 rounded-lg border border-white/25 px-3 py-2 text-xs font-semibold"><Download size={14} />Print-ready report</button></div></div>
           {detail.case.reconsiderationRequired && <p className="mt-5 rounded-xl bg-slate-800 p-4 text-sm leading-6 text-slate-200">Relevant evidence changed. Your saved pass remains intact until you review and save a new decision.</p>}
