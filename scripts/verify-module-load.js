@@ -94,11 +94,27 @@ function changedFiles() {
   // Must match verify-gate's getChangedFiles, including untracked files: a new
   // server module with a syntax error is exactly the case worth catching, and
   // it appears in no git diff.
+  // Git failing must NOT look like "nothing changed".
+  //
+  // This used to `catch (_) { return []; }` per invocation. With git absent -
+  // not installed, wrong container, detached volume - all three calls returned
+  // empty, the candidate list came out empty, and the gate printed "no loadable
+  // server modules among the changed files" and exited 0. Verified: an
+  // untracked server/_gate-probe-broken.js containing a syntax error FAILED
+  // correctly with git available, and was silently passed with git removed.
+  //
+  // That is the exact case this gate exists for. A new server module with a
+  // syntax error "appears in no git diff", so `ls-files --others` is the one
+  // signal that finds it - and it was the signal that vanished quietly.
   const run = (args) => {
     try {
       return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
         .split('\n').map((l) => l.trim()).filter(Boolean);
-    } catch (_) { return []; }
+    } catch (error) {
+      const err = new Error(`git ${args.join(' ')} failed: ${String(error.stderr || error.message).split('\n')[0].trim()}`);
+      err.gitUnavailable = true;
+      throw err;
+    }
   };
   return [
     ...new Set([
@@ -109,15 +125,41 @@ function changedFiles() {
   ];
 }
 
+function allServerModules() {
+  const out = execFileSync('git', ['ls-files', 'server'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  return out.split('\n').map((l) => l.trim()).filter((l) => LOADABLE_SUFFIXES.includes(path.extname(l)));
+}
+
 function main() {
   const args = process.argv.slice(2);
   let files;
-  if (args.includes('--changed')) {
-    files = changedFiles();
+  if (args.includes('--all')) {
+    // Explicit full scan. `node --test` already loads most of the tree, so
+    // this is for "load every server module" runs, not for the default gate -
+    // 151 subprocess spawns is several seconds, which is too much to pay on
+    // every gate invocation.
+    try {
+      files = allServerModules();
+    } catch (error) {
+      console.error(`module-load smoke: cannot enumerate server modules - ${error.message}`);
+      process.exit(1);
+    }
+  } else if (args.includes('--changed')) {
+    try {
+      files = changedFiles();
+    } catch (error) {
+      // Fail closed. We cannot know what changed, so we must not report that
+      // everything loaded.
+      console.error(`module-load smoke: SKIPPED, not passed - ${error.message}`);
+      console.error('  Without git the changed-file set is unknown, and a new server module with a');
+      console.error('  syntax error is precisely what this gate exists to catch. Run with --all to');
+      console.error('  scan every server module instead.');
+      process.exit(1);
+    }
   } else if (args.length) {
     files = args;
   } else {
-    console.error('usage: node scripts/verify-module-load.js --changed | <file> [...]');
+    console.error('usage: node scripts/verify-module-load.js --changed | --all | <file> [...]');
     process.exit(2);
   }
 
