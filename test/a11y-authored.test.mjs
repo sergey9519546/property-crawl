@@ -3,11 +3,20 @@
 // Accessibility guard for what the source can be held to.
 //
 // Measured first, and the measurement is the point. Lighthouse returns an empty
-// report in this environment, so a CDP audit was written instead and run across
-// every route against a real production build with the full stack:
+// report in this environment, so a CDP audit was written instead and run against
+// a real production build with the full stack:
 //
 //     /  /listings  /hunts  /sources  /research  /workspace
-//     -> 0 violations, 6 routes
+//     /sign-in  /register
+//     /listings/CIV-NJ-10-2129335075  /listings/CIV-NJ-10-2129335092
+//     -> 0 violations across 10 routes
+//
+// The two listing detail pages were audited in a second pass, with ids pulled
+// from the live API rather than guessed, after the first pass turned out to have
+// skipped them. /research/[id] is still not covered, for the same reason: it
+// needs a real id out of a research collection that may be empty, and a route
+// audited against absent data proves nothing. That is stated rather than
+// implied.
 //
 // That zero was then CONTROLLED rather than trusted. Lighthouse's empty report
 // in this same environment is a standing reminder that a checker reporting
