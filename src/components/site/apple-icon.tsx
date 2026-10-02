@@ -1,3 +1,13 @@
+/**
+ * Unused. Not the Next.js `apple-icon` file convention -- that one has to live
+ * under app/ to be picked up automatically, and this is a plain exported
+ * component in components/site/.
+ *
+ * Kept rather than deleted because the brand mark is a reasonable thing to want
+ * back, and a 10-line SVG is not worth a cleanup commit. It is listed as an
+ * acknowledged orphan in test/orphan-components.test.mjs so that a genuinely new
+ * unused component still fails the build.
+ */
 export function AppleIcon({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
