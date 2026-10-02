@@ -4,7 +4,7 @@ const { buildDocumentEvidence } = require('./document-evidence');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, now = Date.now() } = {}) {
+function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, now = Date.now(), historyUnavailable = false } = {}) {
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = listing.provenance?.origin === 'live'
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
@@ -76,7 +76,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
       });
     }
   }
-  const opportunityEvaluation = evaluateOpportunitySignals(listing, { observations, publicRecords, now });
+  const opportunityEvaluation = evaluateOpportunitySignals(listing, { observations, publicRecords, now, historyUnavailable });
   const documentEvidence = buildDocumentEvidence(listing, { capturedEvidence, observedAt: timestamp, sourceUrl: source.url });
   return {
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,

@@ -36,6 +36,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     observations = { records: {}, signals: [] },
     publicRecords = null,
     now = Date.now(),
+    historyUnavailable = false,
   } = options;
 
   const observedAt = listing.sourceObservedAt || listing.provenance?.observedAt || listing.fetchedAt || new Date(now).toISOString();
@@ -110,6 +111,20 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       observedAt,
       reason: 'Opening bid was decreased on the same verified source record over time.',
       nextAction: 'Review prior bid observation history and confirm updated reserve requirements.',
+    });
+  } else if (historyUnavailable) {
+    // The observation store could not be read. "No reduction observed" would be
+    // a finding we never made, and it feeds triagePriority - so say the history
+    // is missing instead of asserting a negative.
+    signals.push({
+      key: 'bid_reduction',
+      label: 'Bid history unavailable',
+      status: 'unknown',
+      evidenceClass: 'unresolved',
+      sourceUrl,
+      observedAt,
+      reason: 'The observation history could not be read, so a bid reduction can be neither confirmed nor ruled out.',
+      nextAction: 'Restore the source observation store and re-evaluate before relying on this signal.',
     });
   } else {
     signals.push({
@@ -320,6 +335,9 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     triagePriority: roundedPriority,
     weights: SIGNAL_WEIGHTS,
     signals,
+    // True when the observation store could not be read. Any signal that would
+    // otherwise be a negative finding is marked unresolved rather than clean.
+    historyUnavailable,
     summary: {
       supported: signals.filter((s) => s.status === 'supported').length,
       unknown: signals.filter((s) => s.status === 'unknown').length,

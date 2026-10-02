@@ -65,7 +65,7 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
       const authorized = requireWorkspaceIdentity.isAuthorized
         ? requireWorkspaceIdentity.isAuthorized(req, env)
         : Boolean(snapshotId || req.method === 'POST');
-      const publicPayload = buildPropertyDossier(listing, { observations: authorized ? observations : { records: {}, signals: [] }, publicRecords: authorized ? (evidence?.result || null) : null });
+      const publicPayload = buildPropertyDossier(listing, { observations: authorized ? observations : { records: {}, signals: [] }, publicRecords: authorized ? (evidence?.result || null) : null, historyUnavailable });
       if (!authorized) {
         return res.json({ ...publicPayload, historyUnavailable, researchRestricted: true });
       }

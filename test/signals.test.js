@@ -198,6 +198,55 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(status, 400);
   });
 
+  // A store that cannot be read must not be indistinguishable from one with
+  // no history. Source-network, property-intelligence and workspace all report
+  // this; the signal route used to swallow it with an empty catch, which let
+  // the evaluation assert "no bid reduction observed" without ever looking.
+  test('an unreadable observation store is reported, not treated as no history', async () => {
+    const mockDb = { getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservations: () => { throw new Error('Source observation store exceeds size limit'); }
+    });
+
+    let status = 200;
+    let body = null;
+    const res = {
+      setHeader: () => {},
+      status: (code) => { status = code; return res; },
+      json: (data) => { body = data; return res; }
+    };
+
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
+    assert.equal(status, 200);
+    assert.equal(body.historyUnavailable, true, 'the failure must reach the response');
+    const bid = body.signals.find((s) => s.key === 'bid_reduction');
+    assert.equal(bid.label, 'Bid history unavailable');
+    assert.ok(!/No downward price adjustment recorded/.test(bid.reason));
+  });
+
+  test('a readable store with no history still reports the real negative finding', async () => {
+    const mockDb = { getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservations: () => ({ records: {}, signals: [] })
+    });
+
+    let body = null;
+    const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
+    assert.equal(body.historyUnavailable, false);
+    assert.equal(body.signals.find((s) => s.key === 'bid_reduction').label, 'No bid reduction observed');
+  });
+
+  test('the dossier carries the unavailable flag into its opportunity signals', () => {
+    const dossier = buildPropertyDossier(sampleListing(), { historyUnavailable: true });
+    const bid = dossier.opportunitySignals.find((s) => s.key === 'bid_reduction');
+    assert.equal(dossier.opportunitySignals.length, 6);
+    assert.equal(bid.label, 'Bid history unavailable');
+    assert.ok(!/No downward price adjustment recorded/.test(bid.reason));
+  });
+
   test('HTTP route handler resolves listingId from POST body', async () => {
     const mockDb = {
       getListingById: async (id) => id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null

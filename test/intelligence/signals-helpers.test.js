@@ -27,6 +27,7 @@
 //     status === 'matched', not merely a parcel object
 //   - seniorLienRisk of exactly 'unknown' never counts as resolved risk
 //   - SIGNAL_WEIGHTS sum to 1.0; triage is clamped to [1, 99]
+//   - an unreadable observation store never yields a negative finding
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
@@ -369,4 +370,49 @@ test('triage: a contradicted area record is a flag, never a score bonus', () => 
   // Only sale_date is supported: 20 pts, plus completeness 1/6 * 10 = 1.67.
   // The area contradiction contributes nothing.
   assert.equal(result.triagePriority, 22);
+});
+
+// --- UNREADABLE OBSERVATION HISTORY ------------------------------------
+//
+// The store can fail to load (oversized, or invalid JSON). A store that was
+// never read must never produce a negative finding: "no bid reduction
+// observed" is a claim about history we did not have.
+
+test('an unreadable history never produces a "no bid reduction observed" finding', () => {
+  const listing = liveListing({ openingBid: 50000, saleDate: '2099-12-31' });
+  const result = evaluateOpportunitySignals(listing, { historyUnavailable: true, now: NOW });
+  const bid = signalFor(result, 'bid_reduction');
+  assert.equal(bid.status, 'unknown');
+  assert.equal(bid.label, 'Bid history unavailable');
+  assert.ok(
+    !/No downward price adjustment recorded/.test(bid.reason),
+    `must not assert a negative finding it never made, got: ${bid.reason}`
+  );
+  assert.match(bid.reason, /could not be read/i);
+  assert.equal(result.historyUnavailable, true);
+});
+
+test('the same listing with a readable, empty history still says "no reduction"', () => {
+  // The guard must not disable the real negative finding: an empty but
+  // successfully read history IS a legitimate "nothing found".
+  const listing = liveListing({ openingBid: 50000, saleDate: '2099-12-31' });
+  const result = evaluateOpportunitySignals(listing, { observations: { records: {}, signals: [] }, now: NOW });
+  const bid = signalFor(result, 'bid_reduction');
+  assert.equal(bid.label, 'No bid reduction observed');
+  assert.match(bid.reason, /No downward price adjustment recorded/);
+  assert.equal(result.historyUnavailable, false);
+});
+
+test('an observed reduction is still reported when the store is partly unavailable', () => {
+  const listing = liveListing({ openingBid: 50000, saleDate: '2099-12-31' });
+  const observations = { records: {}, signals: [{ listingId: 'L1', type: 'bid_reduced' }] };
+  const result = evaluateOpportunitySignals(listing, { observations, historyUnavailable: true, now: NOW });
+  assert.equal(signalFor(result, 'bid_reduction').status, 'supported');
+  assert.equal(signalFor(result, 'bid_reduction').label, 'Opening bid reduced on record');
+});
+
+test('historyUnavailable defaults to false, so existing callers are unchanged', () => {
+  const result = evaluateOpportunitySignals(liveListing(), { now: NOW });
+  assert.equal(result.historyUnavailable, false);
+  assert.equal(result.signals.length, 6);
 });

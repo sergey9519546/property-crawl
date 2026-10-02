@@ -32,7 +32,7 @@ function createWorkspaceHandler(dependencies = {}) {
     catch { historyUnavailable = true; }
     const dossierNow = timestamp instanceof Date ? timestamp.getTime()
       : (typeof timestamp === 'number' ? timestamp : Date.parse(timestamp));
-    return { ...dossierBuilder(listing, { observations, now: dossierNow }), historyUnavailable };
+    return { ...dossierBuilder(listing, { observations, now: dossierNow, historyUnavailable }), historyUnavailable };
   }
 
   return async function handleWorkspace(req, res, urlInput) {

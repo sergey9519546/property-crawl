@@ -29,6 +29,8 @@ export type OpportunitySignalsData = {
   weights?: Record<string, number>;
   summary?: { supported: number; unknown: number; contradicted: number };
   disclaimer?: string;
+  /** True when the observation history could not be read, so negative findings are unverified. */
+  historyUnavailable?: boolean;
 };
 
 interface Props {
@@ -151,6 +153,18 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
           </div>
         </div>
       </div>
+
+      {/* An unreadable observation store means the "nothing found" signals were
+          never actually checked, so the score cannot be read as a clean result. */}
+      {data.historyUnavailable && (
+        <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-5 py-3 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <p>
+            Observation history could not be read, so this score is incomplete. Signals that
+            depend on prior observations are unverified rather than clear.
+          </p>
+        </div>
+      )}
 
       {/* Published Weights Accordion */}
       <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-3 text-xs">

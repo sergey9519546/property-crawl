@@ -24,11 +24,18 @@ function createPropertySignalsHandler(dependencies = {}) {
       if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
       let observations = { records: {}, signals: [] };
+      // A store that cannot be read is not the same as a store with no
+      // history. Sibling routes (source-network, property-intelligence,
+      // workspace) all report this; swallowing it here would let the
+      // evaluation assert "no bid reduction observed" without ever looking.
+      let historyUnavailable = false;
       try {
         observations = readHistory();
-      } catch (_) {}
+      } catch (_) {
+        historyUnavailable = true;
+      }
 
-      const evaluation = evaluateOpportunitySignals(listing, { observations });
+      const evaluation = evaluateOpportunitySignals(listing, { observations, historyUnavailable });
       return res.json(evaluation);
     } catch (error) {
       console.error('[Property Signals]', error.message);
