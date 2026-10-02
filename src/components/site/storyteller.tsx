@@ -21,12 +21,12 @@ import dynamic from "next/dynamic";
 import { GsapReveal } from "./gsap-reveal";
 
 /**
- * The atlas is a three.js + mapbox canvas — around 1 MB of JavaScript, which
- * measured as a single shared chunk on the landing page.
+ * The atlas is a MapLibre GL canvas — around 1 MB of JavaScript, shipped as one
+ * shared chunk that the terminal map and the listing media viewer also use.
  *
- * It only ever renders at stage "find", long after first paint, so it has no
- * business being in the initial bundle. Lazy-loading it keeps that megabyte off
- * the critical path entirely.
+ * It mounts at stage "find", long after first paint, so it has no business in
+ * the initial bundle. Lazy-loading it keeps that megabyte off the critical path
+ * until the section is actually near the viewport.
  *
  * The placeholder repeats the map's exact responsive height so the swap cannot
  * shift the layout: the page currently scores CLS 0.00 and this must not trade
@@ -51,16 +51,15 @@ function AtlasPlaceholder() {
 }
 
 /**
- * Mount the atlas only once its section is close to the viewport.
+ * The atlas is a MapLibre GL canvas. The engine ships as one ~1 MB shared chunk
+ * (the same one the terminal's map and the listing media viewer use), and this
+ * component's useEffect calls `import("maplibre-gl")` on mount.
  *
- * `next/dynamic` alone was not enough, and the trace proved why: the story
- * machine's default stage IS "find", so the atlas renders on first paint, its
- * chunk is requested immediately, and the 1 MB three/mapbox bundle — shared
- * with the terminal's map, which is otherwise correctly deferred — loads inside
- * the critical window.
- *
- * This section is the fourth on the page, so nobody can see the map without
- * scrolling to it. One listener defers ~1 MB of JavaScript until a visitor is
+ * The dynamic import alone was not enough, and the trace proved why: the story
+ * machine's default stage IS "find", so the atlas mounts on first paint, its
+ * chunk is requested immediately, and the megabyte is fetched inside the
+ * critical window. This section is the fourth on the page, so nobody can see
+ * the map without scrolling to it. One listener defers it until a visitor is
  * actually about to look at it.
  */
 function DeferredOpportunityAtlas() {

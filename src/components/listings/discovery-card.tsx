@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight, Bookmark, FileText, Loader2 } from "lucide-react";
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
@@ -36,9 +37,16 @@ function addressLines(listing: PropertyListing) {
   };
 }
 
-type Props = { listing: PropertyListing; href: string; saved: boolean; saving: boolean; onSave: () => void };
+type Props = { listing: PropertyListing; href: string; saved: boolean; saving: boolean; onSave: (id: string) => void };
 
-export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
+// Memoized on purpose: the workbench re-renders whenever any of its own state
+// moves (a triage chip, the watchlist, the loading flag), and each card re-derives
+// the address, the score band, several number parses, and the date and money
+// formatting. All of that is a pure function of `listing`, so a card whose props
+// are unchanged has nothing to recompute. `onSave` takes the id so the callback
+// identity can stay stable across renders; an inline closure here would defeat
+// the comparison, which is the usual way a memoized list stops paying off.
+export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
   const { street, locality } = addressLines(listing);
   const observed = listing.provenance?.origin === "live" && listing.provenance?.observed === true;
   const archived = listing.provenance?.origin === "archive";
@@ -78,7 +86,7 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
     <div className="relative shrink-0">
       <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} observed={observed} layout="card" />
       {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-md bg-white/95 px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm">{sourceDisplayText(program)}</span> : null}
-      <button type="button" onClick={onSave} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">
+      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">
         {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-slate-900 text-slate-900" : ""} />}
       </button>
     </div>
@@ -145,4 +153,4 @@ export function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
       </div>
     </div>
   </article>;
-}
+});

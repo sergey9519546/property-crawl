@@ -4,7 +4,23 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
+  // Browser target is declared explicitly in package.json "browserslist".
+  //
+  // Recorded here because the measured outcome was NOT what it looks like, and
+  // the next person to read this will assume it was:
+  //
+  //   * Next 16's own default is ALREADY Baseline (MODERN_BROWSERSLIST_TARGET in
+  //     next/dist/shared/lib/constants.js: chrome/edge/firefox 111, safari 16.4).
+  //     There was no conservative default to escape.
+  //   * The ~14.4 kB legacy-JS polyfill chunk is emitted by Turbopack
+  //     unconditionally and does not respond to the target. Probed with
+  //     "ie 11": same chunk, same hash, same 112,594 bytes.
+  //
+  // So declaring the target moved 0 bytes, and the polyfill is not recoverable
+  // from configuration. The value here is pinning the floor explicitly rather
+  // than inheriting a framework default that could move under us.
   reactStrictMode: true,
+
   // Keep production verification separate from an active development server.
   distDir: process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview'
     : process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'

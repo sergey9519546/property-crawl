@@ -69,6 +69,13 @@ async function run({ wave = process.env.DISCOVERY_WAVE || 'wave1', canarySource 
   await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'starting',details:scopeDetails});
   if(!coordinator)throw new Error('Discovery worker requires the collection coordinator');
   await store.failAbandonedRuns();
+  // Durable jobs need the same repair. Without it an abandoned job stays
+  // 'running' forever (nothing else moves it), and the worker's own health keeps
+  // reporting healthy while the job list shows rows frozen at 'running'. Called
+  // through an optional reference like recordWorkerHealth above, because the
+  // store is dependency-injected and some callers pass a partial double; the
+  // guard in the test suite asserts the real store is the one being swept.
+  await store.failAbandonedJobs?.();
   let job;
   if(canarySource){const queued=await store.createOrReuseJob({sourceIds:[canarySource],trigger:'discovery_canary',idempotencyKey:`canary:${canarySource}:${crypto.randomUUID()}`});job=await store.claimJob(queued.id,owner,300);}
   else{if(!sourceIds.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_promoted_sources',details:scopeDetails});return {skipped:true,reason:'no_promoted_sources',scopeRejections:scopePolicy.rejected};}job=await claimNextEligibleJob(store,owner,sourceIds);if(!job){const due=await dueSources(store,sourceIds);if(!due.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_sources_due',details:scopeDetails});return {skipped:true,reason:'no_sources_due',scopeRejections:scopePolicy.rejected};}const key=`recurring:${wave}:${due.join(',')}:${new Date().toISOString().slice(0,13)}`;const queued=await store.createOrReuseJob({sourceIds:due,trigger:'discovery_worker',idempotencyKey:key});job=await store.claimJob(queued.id,owner,300);}}

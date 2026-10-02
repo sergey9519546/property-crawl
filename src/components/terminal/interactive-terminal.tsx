@@ -9,10 +9,11 @@ import { WatchlistModal } from "./watchlist-modal";
 import { AlertsModal } from "./alerts-modal";
 
 /**
- * The market map pulls in mapbox and shares the ~1 MB three/mapbox chunk with
- * the storyteller's atlas. It only mounts once the operator has driven the
- * terminal to the map stage, so it is not first-paint content and must not be in
- * the initial bundle.
+ * The market map is MapLibre GL. It is mounted only once the operator has
+ * driven the terminal to the map stage, so it is not first-paint content and
+ * must not be in the initial bundle. It shares the ~1 MB engine chunk with the
+ * storyteller's atlas, which is why deferring that one matters even though this
+ * map was already correctly gated.
  *
  * The placeholder matches the map's responsive height so the swap cannot shift
  * the layout.

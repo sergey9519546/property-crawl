@@ -1,5 +1,5 @@
 'use strict';
-const { workerHealthStatus } = require('./discovery/worker-health');
+const { workerHealthStatus, withExpiredJobSignal } = require('./discovery/worker-health');
 const { inspectCollectionStorage } = require('./discovery/storage-health');
 const REQUIRED_TABLES=['listings','discovery_source_runs','discovery_snapshots','discovery_observations','discovery_checkpoints','discovery_jobs','discovery_leases','discovery_source_rollouts','discovery_hunts','discovery_hunt_baselines','discovery_hunt_events','discovery_listing_revision','discovery_media_references','discovery_media_assets','discovery_media_links','discovery_atlas_sources','discovery_public_record_research','discovery_worker_health'];
 async function probeDiscoveryDatabase(pool) {
@@ -49,7 +49,7 @@ async function discoveryReadiness(options = {}) {
   try {
     const details = await options.databaseProbe();
     result.checks.database = { ready: true, ...(details && typeof details === 'object' ? details : {}) };
-    result.collectionHealth=details?.collectionHealth||{status:'not_started',degraded:true,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}};
+    result.collectionHealth=withExpiredJobSignal(details?.collectionHealth||{status:'not_started',degraded:true,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}});
     const requiredTables = ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'];
     const missing = requiredTables.filter((name) => details?.tables && !details.tables.includes(name));
     if (missing.length) throw new Error(`required discovery tables are missing: ${missing.join(', ')}`);

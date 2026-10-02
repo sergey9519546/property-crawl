@@ -67,6 +67,53 @@ const filterLabels: Record<string, string> = {
   minEquity: "Min spread", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption",
   distressStage: "Distress stage", minQuality: "Min evidence quality",
 };
+// The search box owns the text being typed. While it lived in
+// DiscoveryWorkbench, every keystroke re-rendered the whole workbench and
+// therefore every result card on it. Typing a query meant re-deriving the
+// address, score band, number formatting and date formatting for every card
+// already on screen, to update one input.
+//
+// `q` and `onSearch` are both stable between searches, so this component
+// re-renders alone while the parent stays put.
+// The rendered output is unchanged: same elements, same classes, same order.
+//
+// The previous revision of this comment quoted keystroke timings. They were
+// measured by a run that did not report them, so they could not be reproduced
+// or falsified, and a number nobody can re-derive is worse than no number. The
+// mechanism above is the part that is checkable by reading the code.
+const DiscoverySearchField = React.memo(function DiscoverySearchField({
+  q,
+  onSearch,
+}: {
+  q?: string;
+  onSearch: (draft: string) => void;
+}) {
+  const [draft, setDraft] = React.useState(q || "");
+  // Re-sync when the committed search changes underneath the box (a filter
+  // chip removed, "Clear all"), so the input never shows a stale query.
+  React.useEffect(() => setDraft(q || ""), [q]);
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSearch(draft);
+      }}
+    >
+      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 px-3 focus-within:border-slate-500">
+        <span className="sr-only">Search properties</span>
+        <Search size={17} className="text-slate-400" />
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Address, parcel, court case, or keyword"
+          className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
+        />
+      </label>
+      <button type="submit" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white">Search</button>
+    </form>
+  );
+});
 export function DiscoveryWorkbench() {
   const router = useRouter();
   const session = useWorkspaceSession();
@@ -87,7 +134,11 @@ export function DiscoveryWorkbench() {
   const requestKey = `${queryKey}\n${cursor || ""}`;
   const payload = loadedResult?.key === requestKey ? loadedResult.payload : null;
   const [saved, setSaved] = React.useState<Set<string>>(new Set());
-  const [queryDraft, setQueryDraft] = React.useState(filters.q || "");
+  // `saved` is read inside toggleSaved, which must keep a stable identity so
+  // that memoized cards are not re-rendered by an unrelated state change.
+  // The ref carries the current value; the state drives the chips.
+  const savedRef = React.useRef(saved);
+  savedRef.current = saved;
   const [moreFiltersOpen, setMoreFiltersOpen] = React.useState(false);
   const requestRef = React.useRef<{ controller: AbortController; id: number } | null>(null);
   const pendingSaves = React.useRef(new Set<string>());
@@ -100,7 +151,6 @@ export function DiscoveryWorkbench() {
     stale: false,
     occupancyKnown: false,
   });
-  React.useEffect(() => setQueryDraft(filters.q || ""), [filters.q]);
   React.useEffect(() => setCursorStack([]), [queryKey]);
 
   const setFilters = React.useCallback(
@@ -191,7 +241,14 @@ export function DiscoveryWorkbench() {
       active = false;
     };
   }, [session.authenticated]);
-  const toggleSaved = async (id: string) => {
+  // Typed characters are held inside DiscoverySearchField, not here. Holding
+  // the draft in this component made every keystroke re-render all 48 result
+  // cards (~4,600 nodes) to change one input's value.
+  const onSearch = React.useCallback(
+    (draft: string) => setFilters({ q: draft.trim() || undefined }),
+    [setFilters],
+  );
+  const toggleSaved = React.useCallback(async (id: string) => {
     if (!session.authenticated) {
       session.requestUnlock();
       return;
@@ -200,7 +257,7 @@ export function DiscoveryWorkbench() {
     pendingSaves.current.add(id);
     setSavingIds(new Set(pendingSaves.current));
     setWatchlistError("");
-    const wasSaved = saved.has(id);
+    const wasSaved = savedRef.current.has(id);
     try {
       const response = await fetch("/api/alerts", {
         method: wasSaved ? "DELETE" : "POST",
@@ -230,7 +287,7 @@ export function DiscoveryWorkbench() {
       pendingSaves.current.delete(id);
       setSavingIds(new Set(pendingSaves.current));
     }
-  };
+  }, [session]);
   const facets = payload?.facets || {};
   const anyTriageActive = Object.values(triageFilters).some(Boolean);
   const distressStageFilter = filters.distressStage;
@@ -326,25 +383,7 @@ export function DiscoveryWorkbench() {
         <p className="mt-1 text-sm text-slate-600">Search by address, parcel, publisher ID, or keyword.</p>
       </header>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <form
-          className="flex gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setFilters({ q: queryDraft.trim() || undefined });
-          }}
-        >
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 px-3 focus-within:border-slate-500">
-            <span className="sr-only">Search properties</span>
-            <Search size={17} className="text-slate-400" />
-            <input
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              placeholder="Address, parcel, court case, or keyword"
-              className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
-            />
-          </label>
-          <button type="submit" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white">Search</button>
-        </form>
+        <DiscoverySearchField q={filters.q} onSearch={onSearch} />
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {(["state", "county", "type"] as const).map((field) => (
             <select
@@ -629,7 +668,7 @@ export function DiscoveryWorkbench() {
                   href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
                   saved={saved.has(listing.id)}
                   saving={savingIds.has(listing.id)}
-                  onSave={() => void toggleSaved(listing.id)}
+                  onSave={toggleSaved}
                 />
               ))}
             </div>

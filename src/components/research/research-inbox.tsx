@@ -6,6 +6,7 @@ import { ArrowRight, CheckCircle2, Clock3, Download, Eye, FileWarning, Inbox, Lo
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import type { ResearchCaseSummary } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
+import { createRequestGate } from "@/lib/latest-request";
 
 type CaseList = { items: ResearchCaseSummary[]; total: number };
 type ImportPreview = { previewHash: string; total: number; creatable: number; existing: number; accepted: { listingId: string; address?: string | null; existing: boolean }[]; rejected: { listingId: string; reason: string }[] };
@@ -43,16 +44,34 @@ export function ResearchInbox() {
   const [importing, setImporting] = React.useState(false);
   const [message, setMessage] = React.useState("");
 
+  /**
+   * Guards against out-of-order responses between the 8s poll and an
+   * operator-triggered refresh. See src/lib/latest-request.ts — the rule is
+   * extracted and unit-tested there because this project has no DOM test
+   * runner, so a guard inlined in a .tsx can only be checked by reading it.
+   */
+  const requestGate = React.useRef(createRequestGate()).current;
+
   const refresh = React.useCallback(async (quiet = false) => {
     if (!session.authenticated) return;
+    const token = requestGate.begin();
     if (!quiet) setLoading(true);
     try {
       const response = await fetch(`/api/workspace/cases?state=${state}&limit=200`, { cache: "no-store", credentials: "same-origin" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Research cases could not be loaded");
+      // A response from a superseded request is discarded: it describes a
+      // moment that has already been overtaken.
+      if (!requestGate.isCurrent(token)) return;
       setData(result); setError(""); setLastUpdated(new Date());
-    } catch (caught) { if (!quiet) setError(caught instanceof Error ? caught.message : "Research cases could not be loaded"); }
-    finally { if (!quiet) setLoading(false); }
+    } catch (caught) {
+      if (!requestGate.isCurrent(token)) return;
+      // Reported even for a quiet poll. The alternative is leaving stale cases
+      // on screen with no indication they are stale — the UI would be
+      // confidently showing an out-of-date inbox as though it were current.
+      setError(caught instanceof Error ? caught.message : "Research cases could not be loaded");
+    }
+    finally { if (requestGate.isCurrent(token) && !quiet) setLoading(false); }
   }, [session.authenticated, state]);
 
   React.useEffect(() => { void refresh(); }, [refresh]);

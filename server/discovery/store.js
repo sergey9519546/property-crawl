@@ -1,6 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
-const { DEFAULT_MAX_AGE_SECONDS, workerHealthStatus } = require('./worker-health');
+const { DEFAULT_MAX_AGE_SECONDS, workerHealthStatus, collectionDegraded } = require('./worker-health');
 const { assertJobClaim, withJobFence, leaseLost } = require('./job-fence');
 
 function stable(value) { if (Array.isArray(value)) return value.map(stable); if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, stable(value[k])])); return value; }
@@ -8,6 +8,14 @@ function hash(value) { return crypto.createHash('sha256').update(JSON.stringify(
 function collectionJobId(){return `job_${crypto.randomBytes(12).toString('hex')}`;}
 function jsonValue(value,fallback){if(value==null)return fallback;if(typeof value==='string'){try{return JSON.parse(value);}catch{return fallback;}}return value;}
 function requirePool(pool) { if (!pool?.query) throw new Error('Discovery persistence requires PostgreSQL'); return pool; }
+
+// Terminal job states that mean "this attempt ended without collecting
+// everything it was asked for". A job in one of these states is finished and
+// must never be claimed again, so it has to be reopened before it can be
+// retried. 'complete' is deliberately absent: a job that collected its full
+// scope in this hour has done the work, and reopening it would duplicate
+// collection for no reason.
+const RETRYABLE_TERMINAL_JOB_STATUSES = Object.freeze(['partial', 'failed']);
 
 const PROMOTION_EVIDENCE_SQL = `rollout.clean_canary_runs>=2 AND rollout.configured_scope<>'{}'::jsonb
   AND (SELECT count(*) FROM discovery_source_runs run
@@ -51,8 +59,25 @@ class DiscoveryStore {
   async renewLease(key,ownerId,ttlSeconds=300){const r=await this.pool.query('UPDATE discovery_leases SET expires_at=NOW()+make_interval(secs=>$3),updated_at=NOW() WHERE lease_key=$1 AND owner_id=$2 AND expires_at>NOW() RETURNING lease_key',[key,ownerId,Math.max(10,Math.min(3600,ttlSeconds))]);return r.rowCount===1;}
   async releaseLease(key,ownerId){const r=await this.pool.query('DELETE FROM discovery_leases WHERE lease_key=$1 AND owner_id=$2',[key,ownerId]);return r.rowCount===1;}
   async failAbandonedRuns(maxAgeSeconds=3600){const r=await this.pool.query("UPDATE discovery_source_runs r SET status='failed',completed_at=NOW(),error_message='worker lease expired before completion' WHERE r.status='running' AND r.started_at<NOW()-make_interval(secs=>$1) AND (r.discovery_job_id IS NULL OR NOT EXISTS(SELECT 1 FROM discovery_jobs j WHERE j.id=r.discovery_job_id AND j.status='running' AND j.lease_expires_at>NOW())) RETURNING r.id",[Math.max(60,maxAgeSeconds)]);return r.rows.map(x=>x.id);}
+  // The durable-job twin of failAbandonedRuns. That sweeper only ever repaired
+  // discovery_source_runs, so nothing moved an abandoned discovery_jobs row out
+  // of 'running': a job whose owner died mid-cycle (scheduler.js claims a job
+  // and sets it running, then runAll throws, so onCycleComplete/finalize never
+  // run) stayed 'running' with a dead lease forever. The lease itself is the
+  // only evidence of abandonment -- an expired lease can never be renewed,
+  // because renewJobClaim requires lease_expires_at>NOW() -- so the predicate is
+  // deliberately the same one collectionHealth counts with, which keeps the
+  // reported number and the repaired number from ever disagreeing. started_at
+  // is floored the way failAbandonedRuns floors it, so a job claimed this
+  // instant is not swept out from under itself.
+  //
+  // Clearing the lease is safe and load-bearing: it also stops this row from
+  // being offered to the next worker through the 'running AND lease expired'
+  // claim predicate, leaving the reopen path in createOrReuseJob as the single
+  // way back in for the current hour.
+  async failAbandonedJobs(maxAgeSeconds=3600){const r=await this.pool.query("UPDATE discovery_jobs SET status='failed',completed_at=NOW(),lease_owner=NULL,lease_expires_at=NULL,revision=revision+1,errors=errors || $2::jsonb WHERE status='running' AND lease_expires_at<NOW() AND started_at<NOW()-make_interval(secs=>$1) RETURNING id",[Math.max(60,maxAgeSeconds),JSON.stringify([{stage:'collection',message:'worker lease expired before completion; job abandoned and swept to failed',at:new Date().toISOString()}])]);return r.rows.map(x=>x.id);}
   async recordWorkerHealth(workerKey,{workerId,lastLoopStatus=null,currentJobId=null,details={}}){await this.pool.query("INSERT INTO discovery_worker_health(worker_key,worker_id,last_seen_at,last_loop_status,current_job_id,details) VALUES($1,$2,NOW(),$3,$4,$5::jsonb) ON CONFLICT(worker_key) DO UPDATE SET worker_id=EXCLUDED.worker_id,last_seen_at=NOW(),last_loop_status=EXCLUDED.last_loop_status,current_job_id=EXCLUDED.current_job_id,details=EXCLUDED.details",[workerKey,workerId,lastLoopStatus,currentJobId,JSON.stringify(details)]);}
-  async collectionHealth(workerKey='wave1',staleSeconds=DEFAULT_MAX_AGE_SECONDS){const [health,backlog]=await Promise.all([this.pool.query('SELECT * FROM discovery_worker_health WHERE worker_key=$1',[workerKey]),this.pool.query("SELECT count(*) FILTER(WHERE status='queued')::int queued,count(*) FILTER(WHERE status='running' AND lease_expires_at<NOW())::int expired FROM discovery_jobs")]);const row=health.rows[0],counts=backlog.rows[0];const status=workerHealthStatus(row,Date.now(),staleSeconds);return {status,degraded:status!=='healthy',lastSeenAt:row?.last_seen_at||null,lastLoopStatus:row?.last_loop_status||null,currentJobId:row?.current_job_id||null,backlog:{queued:counts.queued||0,expiredRunning:counts.expired||0}};}  async recordCanary(sourceKey, { clean, scope = null, runId = null }) {
+  async collectionHealth(workerKey='wave1',staleSeconds=DEFAULT_MAX_AGE_SECONDS){const [health,backlog]=await Promise.all([this.pool.query('SELECT * FROM discovery_worker_health WHERE worker_key=$1',[workerKey]),this.pool.query("SELECT count(*) FILTER(WHERE status='queued')::int queued,count(*) FILTER(WHERE status='running' AND lease_expires_at<NOW())::int expired FROM discovery_jobs")]);const row=health.rows[0],counts=backlog.rows[0];const status=workerHealthStatus(row,Date.now(),staleSeconds);const backlogCounts={queued:counts.queued||0,expiredRunning:counts.expired||0};return {status,degraded:collectionDegraded(status,backlogCounts),lastSeenAt:row?.last_seen_at||null,lastLoopStatus:row?.last_loop_status||null,currentJobId:row?.current_job_id||null,backlog:backlogCounts};}  async recordCanary(sourceKey, { clean, scope = null, runId = null }) {
     const scoped = scope && typeof scope === 'object' && !Array.isArray(scope) && Object.keys(scope).length > 0;
     if (clean && !scoped) throw new Error('Canary scope must describe the complete publisher slice');
     const scopeHash = scoped ? hash(scope) : null;
@@ -121,7 +146,32 @@ class DiscoveryStore {
       approved: row.approved === true,
     }));
   }
-  async createOrReuseJob(input={}){const key=input.idempotencyKey||null,id=collectionJobId(),sources=[...new Set((input.sourceIds||[]).map(String))].sort(),payload=input.payload||{},kind=input.kind||'property',trigger=input.trigger||'manual',scopeHash=hash({kind,trigger,sourceIds:sources,payload});const stages={collection:{status:'queued'},inventory:{status:'queued'},observations:{status:'queued'},hunts:{status:'queued'},cases:{status:'queued'}};const r=await this.pool.query("INSERT INTO discovery_jobs(id,idempotency_key,idempotency_scope_hash,kind,trigger,status,source_keys,payload,stages) VALUES($1,$2,$3,$4,$5,'queued',$6,$7::jsonb,$8::jsonb) ON CONFLICT(idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key WHERE discovery_jobs.idempotency_scope_hash=EXCLUDED.idempotency_scope_hash RETURNING *",[id,key,scopeHash,kind,trigger,sources,JSON.stringify(payload),JSON.stringify(stages)]);if(!r.rows[0])throw new Error('Idempotency key is already bound to a different collection scope');return this.jobRow(r.rows[0]);}
+  async createOrReuseJob(input={}){const key=input.idempotencyKey||null,id=collectionJobId(),sources=[...new Set((input.sourceIds||[]).map(String))].sort(),payload=input.payload||{},kind=input.kind||'property',trigger=input.trigger||'manual',scopeHash=hash({kind,trigger,sourceIds:sources,payload});const stages={collection:{status:'queued'},inventory:{status:'queued'},observations:{status:'queued'},hunts:{status:'queued'},cases:{status:'queued'}};const r=await this.pool.query("INSERT INTO discovery_jobs(id,idempotency_key,idempotency_scope_hash,kind,trigger,status,source_keys,payload,stages) VALUES($1,$2,$3,$4,$5,'queued',$6,$7::jsonb,$8::jsonb) ON CONFLICT(idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key WHERE discovery_jobs.idempotency_scope_hash=EXCLUDED.idempotency_scope_hash RETURNING *",[id,key,scopeHash,kind,trigger,sources,JSON.stringify(payload),JSON.stringify(stages)]);if(!r.rows[0])throw new Error('Idempotency key is already bound to a different collection scope');return this.jobRow(await this.reopenRetryableTerminalJob(r.rows[0],stages));}
+  // A terminal job used to poison the rest of its own idempotency window. The
+  // upsert above returns the existing row whatever status it already has, and
+  // claimJob only matches 'queued' or a 'running' row whose lease has expired,
+  // so a 'failed'/'partial' job matched neither: the caller was told the job
+  // was already claimed, and the source stayed uncollected until the UTC hour
+  // rolled over with its error invisible. Only a 'complete' source run advances
+  // the cadence, so the source remained due the whole time.
+  //
+  // The job is reopened IN PLACE rather than replaced, which is the whole point:
+  // the row keeps its id and its idempotency key, so two workers in the same
+  // hour still converge on exactly one job and the second one to claim it loses.
+  // The reopen is itself conditional on the row still being terminal, so it can
+  // never yank a job out from under a worker that has already claimed it --
+  // that race stays claimJob's atomic predicate to settle.
+  async reopenRetryableTerminalJob(row, stages) {
+    if (!RETRYABLE_TERMINAL_JOB_STATUSES.includes(row.status)) return row;
+    const reopened = await this.pool.query("UPDATE discovery_jobs SET status='queued',completed_at=NULL,started_at=NULL,lease_owner=NULL,lease_expires_at=NULL,stages=$2::jsonb,result=NULL,revision=revision+1,errors=errors || $3::jsonb WHERE id=$1 AND status=ANY($4::text[]) RETURNING *", [
+      row.id,
+      JSON.stringify(stages || {}),
+      JSON.stringify([{ stage: 'collection', message: `previous ${row.status} attempt reopened for a new attempt in the same idempotency window`, at: new Date().toISOString() }]),
+      [...RETRYABLE_TERMINAL_JOB_STATUSES],
+    ]);
+    // A concurrent worker reopened or claimed it first; its row is the truth.
+    return reopened.rows[0] || (await this.getJob(row.id)) || row;
+  }
   jobRow(row){if(!row)return null;return {id:row.id,idempotencyKey:row.idempotency_key,kind:row.kind,trigger:row.trigger,sourceIds:row.source_keys,status:row.status,revision:row.revision,createdAt:row.created_at,startedAt:row.started_at,completedAt:row.completed_at,leaseOwner:row.lease_owner||null,leaseExpiresAt:row.lease_expires_at||null,attemptCount:row.attempt_count||0,stages:jsonValue(row.stages,{}),errors:jsonValue(row.errors,[]),result:jsonValue(row.result,null)};}
   async claimJob(id,ownerId,ttlSeconds=300){const r=await this.pool.query("UPDATE discovery_jobs SET status='running',lease_owner=$2,lease_expires_at=NOW()+make_interval(secs=>$3),started_at=coalesce(started_at,NOW()),attempt_count=attempt_count+1,revision=revision+1 WHERE id=$1 AND (status='queued' OR (status='running' AND lease_expires_at<NOW())) RETURNING *",[id,ownerId,Math.max(10,Math.min(3600,ttlSeconds))]);const job=this.jobRow(r.rows[0]);if(job)this.jobClaimOwners.set(id,ownerId);return job;}
   async claimNextJob(ownerId,ttlSeconds=300){const r=await this.pool.query("WITH candidate AS (SELECT id FROM discovery_jobs WHERE status='queued' OR (status='running' AND lease_expires_at<NOW()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE discovery_jobs j SET status='running',lease_owner=$1,lease_expires_at=NOW()+make_interval(secs=>$2),started_at=coalesce(j.started_at,NOW()),attempt_count=j.attempt_count+1,revision=j.revision+1 FROM candidate WHERE j.id=candidate.id RETURNING j.*",[ownerId,Math.max(10,Math.min(3600,ttlSeconds))]);return this.jobRow(r.rows[0]);}
