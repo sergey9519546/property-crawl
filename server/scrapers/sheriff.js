@@ -200,7 +200,19 @@ class SheriffSaleScraper extends BaseScraper {
       });
       return this.parsePublicNoticeHtml(html, county);
     } catch (err) {
-      return [];
+      // Rethrow rather than return [].
+      //
+      // This is the fallback leg: fetchCountyRealauction reaches it whenever the
+      // primary portal returns no rows OR throws. Returning [] here made a
+      // county with BOTH endpoints down indistinguishable from a county that
+      // genuinely has no sheriff sales this week -- the caller then ran
+      // recordUnitSuccess(unit, 0) and the run report reported a successful
+      // county that had in fact collected nothing.
+      //
+      // Rethrowing puts it through the existing recordUnitFailure path in
+      // collect(), so a dead endpoint shows up as a failure with a reason
+      // instead of quietly becoming zero coverage.
+      throw new Error(`[${this.name}] ${county.name}, ${county.state}: primary and public-notice fallback both failed: ${err.message}`);
     }
   }
 
