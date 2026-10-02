@@ -107,20 +107,34 @@ report.unusedDeps = unusedDeps;
 // WEAK SIGNAL, kept only because it is a useful prompt for a human -- but read
 // the warning before acting on it.
 //
-// The first version of this section listed 49 server/ files as untested. It was
-// wrong. Tests exercise routes by URL path, not by module filename, so a
-// handler can be thoroughly covered while its file name appears nowhere in the
-// test corpus. Checked: the routes it flagged include property-image, export,
-// enrichment and property-intelligence, and those paths appear 53 times across
-// 11 test files.
+// History, because the shape of the bug is the point:
+//   1. The first version listed 49 server/ files as untested. It was wrong.
+//      Tests exercise routes by URL path, not by module filename, so a handler
+//      can be thoroughly covered while its file name appears nowhere.
+//   2. The second version matched `path.basename(f)` - WITH the .js extension -
+//      against the test corpus. Tests require modules EXTENSIONLESS
+//      (`require('../server/discovery/coverage-matrix')`), so that predicate was
+//      incapable of matching a required module and could only ever fire on a
+//      file no test mentions at all. It reported 48 files; 45 of them were
+//      demonstrably referenced by a test, including coverage-matrix.js, which
+//      test/coverage-matrix.test.js requires and test:ops runs.
 //
-// Treat this section as "no test names this file", never as "untested".
+// So: match the extensionless stem, and also count a test file named after the
+// module. Measured on this tree that is 48 -> 3. The three that remain are
+// genuinely unnamed by any test, which is what the label below claims.
+//
+// Treat this section as "no test names this file", never as "untested". The
+// stem match is a substring match, so it can rescue a file whose stem happens
+// to appear for unrelated reasons (e.g. "validation"). That makes the list
+// shorter, never longer than the truth; a short list is a prompt, not a claim.
 const testCorpus = files.filter((f) => rel(f).startsWith('test/'))
   .map((f) => read(f) || '').join('\n');
+const testFileNames = new Set(files.filter((f) => rel(f).startsWith('test/')).map((f) => path.basename(f)));
 const serverFiles = codeFiles.filter((f) => rel(f).startsWith('server/') && !rel(f).includes('/migrations/'));
 const untestedServer = serverFiles.filter((f) => {
-  const base = path.basename(f);
-  return !testCorpus.includes(base);
+  const stem = path.basename(f).replace(/\.(js|mjs|cjs|ts|tsx)$/, '');
+  if (testFileNames.has(`${stem}.test.js`) || testFileNames.has(`${stem}.test.mjs`)) return false;
+  return !testCorpus.includes(stem);
 }).map(rel);
 report.untestedServerNote = 'no test NAMES this file; not a coverage measurement';
 report.untestedServer = untestedServer.sort();
