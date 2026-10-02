@@ -85,7 +85,7 @@ async function main() {
         return true;
       } catch { return false; }
     })(),
-    'src/lib/db/schema.sql matches server/db/schema.sql'
+    'src/lib/db/schema.sql and all migrations match server/db/'
   ));
   findings.push(check(
     'production-e2e-gate-present',
