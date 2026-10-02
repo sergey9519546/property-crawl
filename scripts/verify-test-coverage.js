@@ -51,7 +51,17 @@ const NOT_RUNNABLE_HERE = new Map([
     'test/property-title.test.js',
     'live PropertyTitle API integration; needs third-party credentials and network',
   ],
+  [
+    'test/test-landbanksearch.js',
+    'not a test: a manual scratch script that calls the live landbanksearch.com feed, asserts '
+    + 'nothing, and exits 1 on any error. Running it from CI would contact a third party and '
+    + 'fail whenever their WAF answers with a bot challenge. Surfaced here when the collector '
+    + 'widened past *.test.js; it lives in test/ but belongs in scripts/.',
+  ],
 ]);
+
+const JS_TEST = /\.(js|mjs|cjs)$/;
+const ANY_TEST = /(?:^|[./-])test[./-][^/]*\.(py|js|mjs|cjs|ts|rb|sh)$|(?:^|\/)test_[^/]*\.py$|_test\.py$|\.test\.(js|mjs|cjs|ts)$/;
 
 function collectTestFiles(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -60,7 +70,7 @@ function collectTestFiles(dir, out = []) {
       collectTestFiles(full, out);
       continue;
     }
-    if (/\.(test\.js|test\.mjs)$/.test(entry.name)) {
+    if (ANY_TEST.test(entry.name)) {
       out.push(path.relative(ROOT, full).split(path.sep).join('/'));
     }
   }
@@ -97,25 +107,56 @@ function unreachedFiles({ resolveNpmRuns = true, skip = NOT_RUNNABLE_HERE } = {}
     .sort();
 }
 
-function main() {
-  const extra = unreachedFiles();
-
-  console.log('[test-coverage] test files verify.js does not list directly or via npm run:');
-  if (extra.length === 0) {
-    console.log('[test-coverage]   (none — verify.js reaches every test file)');
-    return;
-  }
-  for (const f of extra) console.log(`[test-coverage]   + ${f}`);
-
-  console.log(`[test-coverage] running ${extra.length} file(s) so CI actually covers them...`);
-  const result = execFileSync(
-    process.execPath,
-    ['--test', ...extra],
-    { cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000 },
-  );
-  void result;
+// Step 2 can only RUN what `node --test` understands. Test files in other
+// languages are still test files - this tool's whole reason to exist is that a
+// test nobody runs looks exactly like a passing test - so they are reported
+// rather than executed. Handing a .py path to `node --test` would fail the
+// build for the wrong reason, which is a worse lie than silence.
+//
+// Before this split, every non-JS test was invisible: the collector only matched
+// *.test.js / *.test.mjs, so test/scrapling_parser_test.py - the only direct
+// test of the Scrapling parser, and one that fails when run with the wrong
+// interpreter - could not appear in this report at all.
+function partitionUnreached(files = unreachedFiles()) {
+  const runnable = files.filter((f) => JS_TEST.test(f));
+  const other = files.filter((f) => !JS_TEST.test(f));
+  return { runnable, other };
 }
 
-module.exports = { collectTestFiles, reachableTestFiles, unreachedFiles, NOT_RUNNABLE_HERE };
+function main() {
+  const { runnable, other } = partitionUnreached();
+
+  console.log('[test-coverage] test files verify.js does not list directly or via npm run:');
+  if (runnable.length === 0) {
+    console.log('[test-coverage]   (none — verify.js reaches every JS test file)');
+  } else {
+    for (const f of runnable) console.log(`[test-coverage]   + ${f}`);
+    console.log(`[test-coverage] running ${runnable.length} file(s) so CI actually covers them...`);
+    execFileSync(process.execPath, ['--test', ...runnable], {
+      cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000,
+    });
+  }
+
+  if (other.length) {
+    // Reported, not run: these are real test files that this report previously
+    // could not see. Whether to wire them up is a decision, not something a
+    // coverage script may decide by exec'ing a Python file through Node.
+    console.log('');
+    console.log('[test-coverage] NON-JS test files not reached by verify.js (reported, not run):');
+    for (const f of other) console.log(`[test-coverage]   ! ${f}`);
+    console.log('[test-coverage]   These are tests that nothing in CI executes. They are not');
+    console.log('[test-coverage]   necessarily broken, but an unwired test is indistinguishable');
+    console.log('[test-coverage]   from a passing one, which is the failure this script exists');
+    console.log('[test-coverage]   to prevent. Wire them, or record why not.');
+  }
+}
+
+module.exports = {
+  collectTestFiles,
+  reachableTestFiles,
+  unreachedFiles,
+  partitionUnreached,
+  NOT_RUNNABLE_HERE,
+};
 
 if (require.main === module) main();
