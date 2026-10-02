@@ -256,15 +256,43 @@ function main() {
   const typeArg = args.find((a) => a.startsWith('--change-type'));
   const changeType = typeArg ? typeArg.split('=')[1] || args[args.indexOf(typeArg) + 1] : null;
 
-  // An explicit --change-type means the caller already decided; do not make it
-// depend on git working just to print a file count.
-const discovered = changeType
-  ? { type: changeType, files: (() => { try { return getChangedFiles(); } catch (_) { return []; } })(), gitFailed: false }
-  : discoverChangeType();
-const files = discovered.files;
+  // An explicit --change-type means the caller already decided the gate, and that
+  // decision must not depend on git working. The file count still does, so report
+  // the failure rather than printing a confident zero.
+  //
+  // The old line here was `catch (_) { return []; }` with `gitFailed: false`
+  // hard-coded, so a git failure printed "Files changed: 0" as if that were a fact.
+  // That also left gitFailed assigned in three places and read in none - the flag
+  // the earlier fix added was dead. The completion block now carries it, because
+  // that block is the artefact consumers actually read.
+  let discovered;
+  if (changeType) {
+    let attempt;
+    try {
+      attempt = { files: getChangedFiles(), gitFailed: false, detail: null };
+    } catch (error) {
+      const detail = String((error && (error.stderr || error.message)) || error)
+        .split('\n').find((l) => l.trim()) || 'unknown git failure';
+      attempt = { files: null, gitFailed: true, detail: detail.trim() };
+    }
+    if (attempt.gitFailed) {
+      console.warn(`[verify-gate] git could not report changed files (${attempt.detail}).`);
+      console.warn('[verify-gate] Using the caller-supplied change type; the file count is unknown.');
+    }
+    discovered = { type: changeType, files: attempt.files, gitFailed: attempt.gitFailed, gitDetail: attempt.detail };
+  } else {
+    discovered = discoverChangeType();
+  }
+  const files = discovered.files;
 const detectedType = changeType || discovered.type;
 
   const block = runGate(detectedType);
+  // Stamped here because `discovered` is main()'s, not runGate()'s. A git
+  // failure means the file list is unknown, and a consumer of the JSON block
+  // that cannot see that will read an empty list as "nothing changed" - the
+  // exact inference this gate was fixed to stop making.
+  block.gitFailed = Boolean(discovered.gitFailed);
+  block.filesChanged = files === null ? null : files.length;
 
   if (asJson) {
     console.log(JSON.stringify(block, null, 2));
@@ -272,7 +300,7 @@ const detectedType = changeType || discovered.type;
     console.log('=== COMPLETION GATE ===');
     console.log(`Change type: ${block.changeType}`);
     console.log(`Gate: ${block.gateLabel}`);
-    console.log(`Files changed: ${files.length}`);
+    console.log(`Files changed: ${files === null ? 'unknown (git unavailable)' : files.length}`);
     console.log(`Suites run: ${block.suitesRun}`);
     console.log(`All passed: ${block.allPassed}`);
     console.log(`\nEvidence:`);
