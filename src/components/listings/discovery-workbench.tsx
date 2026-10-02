@@ -78,15 +78,25 @@ const filterLabels: Record<string, string> = {
 // The rendered output is unchanged: same elements, same classes, same order.
 //
 // Measured, production build, full stack, 48 cards on screen, 19 characters
-// typed one animation frame apart:
+// typed one animation frame apart, three runs each side, swapping only the two
+// files this change touches:
 //
-//     before   647 ms total   34.0 ms per keystroke
-//     after    604 ms total   31.8 ms per keystroke
+//     before   625 / 621 / 617 ms   mean 621.0   32.7 ms per keystroke
+//     after    616 / 611 / 612 ms   mean 613.0   32.2 ms per keystroke
 //
-// So: about 6%, and 2.2 ms per keystroke. The original revision of this comment
-// claimed 2.2 s of blocking at 108 ms per keystroke. Those numbers were never
-// reproducible and were roughly an order of magnitude too high; they have been
-// replaced rather than left standing.
+// So: about 8 ms over 19 keystrokes, 0.4 ms each, 1.3%. The before-side spread
+// was itself 8 ms, so this is inside run-to-run noise and the honest reading is
+// that the end-to-end typing cost did not measurably move.
+//
+// The mechanism is still right and still worth keeping: the draft state is no
+// longer in this component, so a keystroke cannot re-derive 48 cards, and that
+// ceiling is real even though at 48 cards it was not what the frame budget was
+// actually going on. The earlier revision of this comment claimed 647 -> 604 ms
+// and a 6% win. That comparison is withdrawn: it was taken across two states
+// that differed in more than this change, so it was never a clean A/B.
+//
+// An earlier claim on this work -- "2.2s of blocking, 108ms per keystroke" -- was
+// never reproducible and was roughly an order of magnitude too high.
 const DiscoverySearchField = React.memo(function DiscoverySearchField({
   q,
   onSearch,
