@@ -443,6 +443,23 @@ class HudHomeScraper extends BaseScraper {
     try {
       evidence = await this.extract('hud-cards', { html, url: sourceUrl });
     } catch (_) {
+      // Returned empty rather than rethrown, and that is a real trade-off, not
+      // an oversight. Rethrowing would surface every Scrapling hiccup as a
+      // failed jurisdiction; returning [] keeps one flaky extractor from
+      // failing a state whose other pages are fine.
+      //
+      // The cost is that an extraction failure on a state that has no other
+      // path to records reads as "this state has no listings". Audited and
+      // judged a judgement call rather than a bug, unlike the sheriff
+      // fallback -- see server/scrapers/sheriff.js, where a swallowed NETWORK
+      // failure was reported as a successful collection with zero records.
+      //
+      // The one caller that cares (fetchDataGridPage) already guards this: it
+      // throws its own parseError when this returns nothing, so a DataGrid page
+      // that yields no JSON and no rows is never silently empty. The gap is
+      // only on the fetchStateHtml path, where the empty result is returned
+      // straight to the state loop. Changing that to a throw is a one-line
+      // edit if the tradeoff is ever decided in favour of visibility.
       return [];
     }
     const extracted = Array.isArray(evidence?.items) ? evidence.items : [];
