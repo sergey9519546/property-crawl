@@ -242,7 +242,25 @@ async function handleListings(req, res) {
     // a per-listing bake-off descriptor (preferredSource / reason / confidence).
     // presentListing preserves these fields through the spread.
     applyCrossSourceBakeOff(result.listings);
-    const presentedListings = result.listings.map(listing => presentListing(attachMedia(listing, entries)));
+    // The grid response omits `raw`; the single-listing route above still sends
+    // it. Measured on a 48-listing page: `raw` is 44.8 KB of 270.7 KB, 16.6% of
+    // the whole payload, and it is a 1,103-element array per listing -- the
+    // publisher's entire raw feed, carried on every card.
+    //
+    // Nothing reads it. Not the workbench, not the card, not the detail page,
+    // not the watchlist, and no script: `grep` for `.raw` across src/ and
+    // scripts/ finds only `String.raw` in a stylesheet and one write. It is
+    // evidence the product keeps rather than evidence it shows, and shipping a
+    // quarter-megabyte of it per page to render 48 cards is the kind of cost
+    // nobody questions once it is already on the wire.
+    //
+    // The detail route keeps it deliberately. That is where inspecting the raw
+    // publisher record is a real capability rather than a dead field, and
+    // stripping evidence from a product whose entire value is provenance is
+    // not a payload optimisation.
+    const presentedListings = result.listings
+      .map(listing => presentListing(attachMedia(listing, entries)))
+      .map(({ raw, ...rest }) => rest);
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.
     const viewListings = applyIntelligenceView(presentedListings, filters);
     const body = {
