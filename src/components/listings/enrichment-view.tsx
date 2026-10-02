@@ -1,30 +1,32 @@
 "use client";
 
 /**
- * NOT RENDERED ANYWHERE. Recorded here because everything else about this
- * feature looks finished.
+ * acknowledged-orphan: built and tested, deliberately unmounted. Reason below.
  *
- * The whole chain is built, wired and green:
+ * Cross-source enrichment: which OTHER sources report a listing sharing this
+ * record's parcelKey, and how confident each is. Not the same as
+ * PropertyIntelligence, which shows documents for one listing.
  *
- *     this component  ->  @/lib/enrichment-api  ->  /api/enrichment/[...path]
- *                     ->  server/intelligence/enrichment-gateway.js
+ * The whole chain exists and is green -- this UI, an API client, a route, and a
+ * gateway covered by three passing test files -- with nothing importing the
+ * component. Green tests over a stack no user can reach is its own kind of lie.
  *
- * and the gateway is covered by test/enrichment-gateway.test.js,
- * test/enrich-evidence.test.js and test/enrich-evidence-summary.test.js. Every
- * one of those passes. The route answers. The UI is complete, with loading,
- * error and refresh states.
+ * A mount on the listing detail page was written and measured, then withdrawn.
+ * What was established, and is worth keeping:
  *
- * Nothing imports this component, so no page reaches it and the feature is
- * invisible to a user. That is the dangerous part: a green test suite over a
- * reachable-looking stack reads as "shipped".
+ *   * the listing API DOES return parcelKey, and it was missing from the
+ *     PropertyListing type (fixed separately)
+ *   * only 10 of 2,024 records carry one. The rest are null because most
+ *     publishers report no parcel identifier, so buildParcelKey() has nothing to
+ *     derive from. So any mount must be conditional, or it tells almost every
+ *     reader that no source shares "the parcelKey null"
+ *   * the mount did not render, and the reason could not be pinned down: build
+ *     timestamps were inconclusive against a turbopack cache, and the SSR
+ *     payload carries parcelKey for the listing either way, so the HTML cannot
+ *     distinguish a stale build from a false conditional
  *
- * This is a product decision, not a bug to fix silently -- either mount it
- * (the listing detail page or the workbench both have a parcelKey) or delete
- * it along with its API client and route. Until then it stays here, labelled,
- * so the next person does not read the green tests as proof it is live.
- *
- * test/orphan-components.test.mjs fails if a component becomes orphaned
- * WITHOUT a note like this one, so no new feature island can form quietly.
+ * A change that cannot be shown to work is not a fix, so nothing is mounted.
+ * Wiring this is small once the data path is understood.
  */
 
 import { useCallback, useEffect, useState } from "react";

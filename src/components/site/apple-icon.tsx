@@ -1,4 +1,6 @@
 /**
+ * acknowledged-orphan: deliberately unmounted. Reason below.
+ *
  * Unused. Not the Next.js `apple-icon` file convention -- that one has to live
  * under app/ to be picked up automatically, and this is a plain exported
  * component in components/site/.

@@ -383,6 +383,26 @@ export default async function ListingPage({ params, searchParams }: Props) {
 
           <div id="evidence-dossier" className="mt-8 scroll-mt-6">
             <PropertyIntelligence key={listing.id} listingId={listing.id} documentsShown />
+            {/* EnrichmentView is deliberately NOT mounted here yet.
+
+                The whole enrichment stack is built and tested -- component, API
+                client, route, gateway -- with nothing importing it. The listing
+                API does return parcelKey, and I verified 10 of 2,024 records
+                carry one (the rest are null because most publishers report no
+                parcel identifier, so buildParcelKey() has nothing to derive
+                from). So a conditional mount is viable and was written.
+
+                It did not render, and I could not establish why: the build
+                timestamps were inconclusive against a turbopack cache, and the
+                SSR payload carries parcelKey for the listing regardless of the
+                conditional, so the HTML cannot distinguish "stale build" from
+                "conditional false". A mount that cannot be demonstrated
+                working is not a fix, so it is not shipped.
+
+                What is worth keeping from the investigation: the property
+                exists on the API response and was missing from the
+                PropertyListing type, which is corrected separately. Mounting
+                this is a small change once the data path is understood. */}
           </div>
 
           {/* Cross-source bake-off: when multiple sources publish the same parcel. */}

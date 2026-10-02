@@ -31,10 +31,19 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const COMPONENT_ROOT = path.join(ROOT, 'src', 'components');
 
 /**
- * Directories whose components are exempt wholesale, with the reason. Extending
- * this needs a reason, not just a path -- a bare entry is how an exemption list
- * turns into a place where things go to disappear.
+ * The acknowledgement must be an explicit marker, not prose.
+ *
+ * The first version matched words like "unused", "dead" and "orphan" anywhere in
+ * the header. That was satisfied by accident: the file documenting this very
+ * guard contains the word "orphan" in its explanation, so removing its import
+ * did not turn the check red. A check that any passing mention can satisfy is
+ * not a check.
+ *
+ * So the marker is a fixed token, and it must appear in the header. Prose about
+ * why a component is or is not mounted still belongs in the file; the marker
+ * only records that the decision was made deliberately.
  */
+const ACK_MARKER = 'acknowledged-orphan';
 const EXEMPT_DIRS = {
   'src/components/ui': 'shadcn/ui library. The generator emits the full primitive set; a project uses the subset it needs. These are a component library, not features.',
 };
@@ -59,16 +68,37 @@ const allSources = walk(path.join(ROOT, 'src'))
   .concat(walk(path.join(ROOT, 'app')))
   .map((f) => ({ f, text: fs.readFileSync(f, 'utf8') }));
 
+/**
+ * A component is reachable if some other file imports it.
+ *
+ * The import PATH is the right signal, and it is matched against the file's
+ * kebab-case name -- not the PascalCase component it exports. Two "improvements"
+ * to this function were tried and both were regressions:
+ *
+ *   - requiring a JSX usage as well, so a dangling import could not mask an
+ *     unmounted component. Broken, because `<DiscoveryCard>` never contains
+ *     the text `discovery-card`, so it reported 58 live components as orphans.
+ *   - stripping import lines and searching the remainder. Broken for the same
+ *     reason from the other side: in this codebase imports are single-line, so
+ *     stripping them removed the only mention of 58 live components.
+ *
+ * The dangling-import hole is real but it is not worth a false-positive rate
+ * this high. It is noted rather than half-fixed.
+ */
+function isReferenced(name) {
+  return allSources.some(
+    ({ f: other, text }) => other !== name && new RegExp(`[/"']${name}["']`).test(text),
+  );
+}
+
 /** Components nothing references. Route/layout/page files are entries, not leaves. */
 function orphans() {
   const found = [];
   for (const f of walk(COMPONENT_ROOT)) {
     if (/(^|[\\/])(page|layout|route|template|loading|error|not-found|default)\.tsx$/.test(f)) continue;
     const name = path.basename(f, '.tsx');
-    const referenced = allSources.some(
-      ({ f: other, text }) => other !== f && new RegExp(`[/"']${name}["']`).test(text),
-    );
-    if (!referenced) found.push(f);
+    if (isReferenced(name)) continue;
+    found.push(f);
   }
   return found;
 }
@@ -79,10 +109,7 @@ test('every orphaned component is either exempt or says so in its own file', () 
     const r = rel(f);
     if (Object.keys(EXEMPT_DIRS).some((dir) => r.startsWith(dir + '/'))) continue;
     const head = fs.readFileSync(f, 'utf8').slice(0, 900);
-    // A human wrote this, not the scaffolder: look for prose, not a marker
-    // token, so adding a component cannot satisfy the guard with a comment
-    // nobody had to think about.
-    const acknowledged = /\b(not rendered|unused|not imported|dead|deprecated|no longer|orphan)\b/i.test(head);
+    const acknowledged = head.includes(ACK_MARKER);
     if (!acknowledged) undocumented.push(r);
   }
   assert.deepEqual(undocumented, [],

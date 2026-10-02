@@ -61,6 +61,16 @@ export interface PropertyListing {
   lifecycleStatus?: string | null;
   /** Discovery pipeline state, distinct from publisher lifecycle facts. */
   discoveryStatus?: string | null;
+  /**
+   * Cross-source parcel identity: the same physical parcel seen by more than one
+   * source. Present in the listing API response, but it was missing from this
+   * type, so the cross-source enrichment view had nothing to key on.
+   *
+   * Null for the great majority of records -- most publishers report no parcel
+   * identifier, so buildParcelKey() has nothing to derive one from. Absence
+   * means "no parcel identity was captured", never "this parcel is unique".
+   */
+  parcelKey?: string | null;
   evidenceCompleteness?: { known: number; total: number; missing: string[] };
   sourceFreshness?: { observedAt: string | null; ageHours: number | null; cadenceHours: number; status: string };
   /** Whether publisher documents were observed; document contents remain evidence-backed. */

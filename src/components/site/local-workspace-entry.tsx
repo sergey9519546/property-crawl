@@ -1,4 +1,6 @@
 /**
+ * acknowledged-orphan: deliberately unmounted. Reason below.
+ *
  * Deprecated dead component — not imported by any route.
  * Kept only so the file is not silently deleted from git history awareness;
  * do not import. Product watchlists use the server operator-key model.
