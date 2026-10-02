@@ -161,10 +161,23 @@ async function main() {
   delete env.SCRAPER_ADMIN_TOKEN;
   delete env.PROPERTY_OPERATOR_SECRET;
   // Default unit-gate path pins demo mode. Opt into PG with --with-db.
+  //
+  // These are ASSIGNED EMPTY, not deleted. loadLocalEnvFiles() keeps whatever
+  // is already in process.env (`if (!key || key in merged) continue`) so cloud
+  // secret injection is never clobbered - and `key in merged` is TRUE for an
+  // empty string. Deleting the key therefore let .env.local's DATABASE_URL
+  // straight back in, and this e2e booted against whatever Postgres the
+  // developer had configured, failing "health demo-pin" on any machine whose
+  // .env.local names a database. On CI .env.local is generated without a
+  // DATABASE_URL, which is why it only ever failed locally.
+  //
+  // Empty string is falsy, so `Boolean(bootEnv.DATABASE_URL)` is false and the
+  // stack still boots in demo mode. The intent is preserved and now actually
+  // enforced.
   if (!args.withDb) {
-    delete env.DATABASE_URL;
-    delete env.DISCOVERY_MODE;
-    delete env.DISCOVERY_TEST_DATABASE_URL;
+    env.DATABASE_URL = '';
+    env.DISCOVERY_MODE = '';
+    env.DISCOVERY_TEST_DATABASE_URL = '';
   }
 
   const tokenFromFile = loadTokenFromEnvLocal();
