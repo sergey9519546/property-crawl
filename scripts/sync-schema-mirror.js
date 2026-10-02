@@ -19,12 +19,21 @@
  * Usage:
  *   node scripts/sync-schema-mirror.js          # copy server -> Next mirror
  *   node scripts/sync-schema-mirror.js --check  # fail if mirrors drift
+ *   node scripts/sync-schema-mirror.js --root <dir> [--check]
+ *
+ * --root exists so the drift tests can exercise every branch against a
+ * throwaway tree. `node --test` runs test files in parallel, and these tests
+ * used to mutate the real mirror; while they did, production-smoke-health
+ * could run the mirror check mid-drift and fail for reasons of its own.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
 
-const ROOT = path.resolve(__dirname, '..');
+const rootFlagIndex = process.argv.indexOf('--root');
+const ROOT = rootFlagIndex !== -1 && process.argv[rootFlagIndex + 1]
+  ? path.resolve(process.argv[rootFlagIndex + 1])
+  : path.resolve(__dirname, '..');
 const CANONICAL = path.join(ROOT, 'server/db/schema.sql');
 const MIRROR = path.join(ROOT, 'src/lib/db/schema.sql');
 const CANONICAL_MIGRATIONS = path.join(ROOT, 'server/db/migrations');

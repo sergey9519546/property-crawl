@@ -27,7 +27,7 @@ function httpGet(url, timeoutMs = 3000) {
     const req = http.get(url, { timeout: timeoutMs }, (res) => {
       let body = '';
       res.on('data', (c) => { body += c; });
-      res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 500, status: res.statusCode, body: body.slice(0, 200) }));
+      res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, body: body.slice(0, 200) }));
     });
     req.on('error', (err) => resolve({ ok: false, error: err.message }));
     req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'timeout' }); });
@@ -94,9 +94,16 @@ async function main() {
       && /run-production-e2e\.js/.test(fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')),
     'production boot + e2e is wired into package scripts and CI unit-gate'
   ));
+  // The finding below claims an ORDER ("logged before liveness fallback"), so
+  // verify the order. The previous test only proved the log string existed
+  // somewhere in the file, which would have passed just as happily with the
+  // log moved after the fallback - the one ordering that would hide the cause
+  // of a degraded boot.
+  const readinessFailureAt = startProd.indexOf('Advanced discovery readiness failed');
+  const livenessFallbackAt = startProd.indexOf('waitForHealth(liveUrl');
   findings.push(check(
     'production-boot-advanced-fallback',
-    /Advanced discovery readiness failed/.test(startProd),
+    readinessFailureAt !== -1 && livenessFallbackAt !== -1 && readinessFailureAt < livenessFallbackAt,
     'advanced readiness failure logged before liveness fallback'
   ));
   findings.push(check(
@@ -112,17 +119,32 @@ async function main() {
     'sign-in explains operator beta instead of dead redirect'
   ));
 
+  // Always report what the live probe found. This finding used to be wrapped
+  // in a status guard that skipped it whenever the API answered 5xx, so a
+  // reachable-but-unhealthy API produced NO line at all - the result that most
+  // deserves attention was the one case the report stayed silent about. The
+  // probe also treated any status below 500 as healthy, so a 404 (route moved,
+  // wrong path, bad deploy) was announced as "live API healthy".
+  //
+  // Three outcomes, and only one of them is a failure:
+  //   - 2xx              -> healthy
+  //   - reachable, other -> FAIL: you pointed the smoke at a live API and it
+  //                         is not serving health
+  //   - unreachable      -> pass: CI runs this with no stack running, so an
+  //                         absent API is the expected case, and the detail
+  //                         line says so explicitly.
   const apiBase = process.env.SMOKE_API_URL || 'http://127.0.0.1:3000';
   const health = await httpGet(`${apiBase}/api/health`);
-  if (health.ok || health.error === 'timeout' || health.error) {
-    findings.push(check(
-      'optional-live-api-health',
-      true,
-      health.ok
+  const reachable = typeof health.status === 'number';
+  findings.push(check(
+    'optional-live-api-health',
+    reachable ? health.ok : true,
+    reachable
+      ? (health.ok
         ? `live API healthy at ${apiBase}/api/health status=${health.status}`
-        : `no live API at ${apiBase} (static smoke only): ${health.error || health.status}`
-    ));
-  }
+        : `live API at ${apiBase} answered status=${health.status}, which is not healthy`)
+      : `no live API at ${apiBase} (static smoke only): ${health.error || 'no status'}`
+  ));
 
   console.log('=== Production smoke ===');
   for (const f of findings) {

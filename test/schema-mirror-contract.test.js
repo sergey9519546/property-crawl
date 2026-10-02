@@ -4,8 +4,13 @@
 //
 // server/db is canonical; src/lib/db is a mirror kept byte-identical by
 // scripts/sync-schema-mirror.js. The guard once compared only schema.sql, so
-// the migrations mirror drifted 9 files behind while --check still reported
-// success. These tests pin the whole mirrored surface.
+// the migrations mirror drifted 9 files behind while --check stayed green.
+//
+// NOTHING HERE MUTATES THE REAL TREE. `node --test` runs test files in
+// parallel, and an earlier version of this file deleted and recreated mirror
+// migrations in place. While it did, production-smoke-health ran the mirror
+// check mid-drift and failed for reasons of its own - two guards flaking each
+// other. Every drift case now runs against a throwaway tree via --root.
 //
 // Nothing reads the mirror at runtime, so this is a hygiene guard, not a
 // production-path guard - which is exactly why it needed to exist: a mirror
@@ -20,37 +25,37 @@ const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'sync-schema-mirror.js');
-const { CANONICAL, MIRROR } = require('../scripts/sync-schema-mirror');
-
-// Derived here rather than imported so the behavioural guards below fail on
-// what --check *does*, not on the absence of a newer export. A guard that
-// crashes before it reaches its assertion proves nothing.
 const CANONICAL_MIGRATIONS = path.join(ROOT, 'server', 'db', 'migrations');
 const MIRROR_MIGRATIONS = path.join(ROOT, 'src', 'lib', 'db', 'migrations');
 
-function runCheck() {
+function run(args, cwd = ROOT) {
   try {
-    execFileSync(process.execPath, [SCRIPT, '--check'], { cwd: ROOT, stdio: 'pipe' });
-    return { passed: true };
+    execFileSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: 'utf8', stdio: 'pipe' });
+    return { passed: true, output: '' };
   } catch (error) {
     return { passed: false, output: `${error.stdout || ''}${error.stderr || ''}` };
   }
 }
 
-test('the mirror check script exports a diff over the migrations it covers', () => {
-  // Structural: the smoke test and future tooling read this, so the surface
-  // itself is part of the contract.
-  const mirror = require('../scripts/sync-schema-mirror');
-  assert.equal(typeof mirror.diffMigrations, 'function');
-  const drift = mirror.diffMigrations();
-  assert.ok(Array.isArray(drift.missing));
-  assert.ok(Array.isArray(drift.stale));
-  assert.ok(Array.isArray(drift.changed));
-  assert.ok(drift.canonicalCount > 1, 'expected a real migrations directory, not one file');
-});
+const sql = (dir) =>
+  fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.sql')).sort() : [];
+
+// A throwaway repo-shaped tree: server/db is canonical, src/lib/db mirrors it.
+function tempTree(t, { migrations = ['001_base.sql', '002_more.sql'] } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-mirror-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  for (const sub of ['server/db/migrations', 'src/lib/db/migrations']) {
+    fs.mkdirSync(path.join(dir, sub), { recursive: true });
+  }
+  fs.writeFileSync(path.join(dir, 'server/db/schema.sql'), 'CREATE TABLE canonical();\n');
+  for (const name of migrations) {
+    fs.writeFileSync(path.join(dir, 'server/db/migrations', name), `-- ${name}\n`);
+  }
+  return dir;
+}
 
 test('the committed mirror is in sync with server/db right now', () => {
-  const sql = (n) => fs.readdirSync(n).filter((f) => f.endsWith('.sql')).sort();
+  // Read-only: the real tree is the one thing this file must never disturb.
   const canonical = sql(CANONICAL_MIGRATIONS);
   const mirror = sql(MIRROR_MIGRATIONS);
   assert.deepEqual(
@@ -65,121 +70,130 @@ test('the committed mirror is in sync with server/db right now', () => {
       `${name} differs between server/db/migrations and src/lib/db/migrations`
     );
   }
-  assert.equal(fs.readFileSync(MIRROR, 'utf8'), fs.readFileSync(CANONICAL, 'utf8'));
+  assert.equal(
+    fs.readFileSync(path.join(ROOT, 'src', 'lib', 'db', 'schema.sql'), 'utf8'),
+    fs.readFileSync(path.join(ROOT, 'server', 'db', 'schema.sql'), 'utf8')
+  );
 });
 
-test('--check passes on a synced tree', () => {
-  const result = runCheck();
+test('--check passes on the real tree', () => {
+  const result = run(['--check']);
   assert.ok(result.passed, result.output);
 });
 
-test('--check reports migrations as well as schema, not schema alone', () => {
-  // The regression: the old guard only compared schema.sql, so it stayed green
-  // with nine migrations absent. Remove one and the check must go red.
-  const victim = '014_discovery_promotion_evidence.sql';
-  const target = path.join(MIRROR_MIGRATIONS, victim);
-  assert.ok(fs.existsSync(target), `fixture missing: ${victim} should exist in the mirror`);
-  const original = fs.readFileSync(target);
-  fs.rmSync(target);
-  try {
-    const result = runCheck();
-    assert.equal(result.passed, false, '--check must fail when a mirror migration is missing');
-    assert.match(result.output, /missing from the mirror/);
-    assert.match(result.output, new RegExp(victim.replace(/\./g, '\\.')));
-  } finally {
-    fs.writeFileSync(target, original);
-  }
-  assert.ok(runCheck().passed, 'restoring the mirror must make --check pass again');
+test('--check reports migrations as well as schema, not schema alone', (t) => {
+  // The regression: the old guard compared only schema.sql, so it stayed green
+  // with nine migrations absent from the mirror.
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE canonical();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'src/lib/db/migrations/001_base.sql'), '-- 001_base.sql\n');
+
+  const result = run(['--check', '--root', dir]);
+  assert.equal(result.passed, false, '--check must fail when a mirror migration is missing');
+  assert.match(result.output, /missing from the mirror/);
+  assert.match(result.output, /002_more\.sql/);
 });
 
-test('--check reports a mirror migration whose contents changed', () => {
-  const target = path.join(MIRROR_MIGRATIONS, '015_status_contract.sql');
-  const original = fs.readFileSync(target);
-  fs.writeFileSync(target, `${original}\n-- local edit that upstream never saw\n`);
-  try {
-    const result = runCheck();
-    assert.equal(result.passed, false, '--check must fail when a mirror migration is edited');
-    assert.match(result.output, /differ from the mirror/);
-  } finally {
-    fs.writeFileSync(target, original);
+test('--check reports a mirror migration whose contents changed', (t) => {
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE canonical();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  for (const name of ['001_base.sql', '002_more.sql']) {
+    fs.writeFileSync(path.join(dir, 'src/lib/db/migrations', name), `-- ${name}\n`);
   }
+  fs.appendFileSync(path.join(dir, 'src/lib/db/migrations/002_more.sql'), '-- local edit\n');
+
+  const result = run(['--check', '--root', dir]);
+  assert.equal(result.passed, false, '--check must fail when a mirror migration is edited');
+  assert.match(result.output, /differ from the mirror/);
+  assert.match(result.output, /002_more\.sql/);
 });
 
-test('--check reports a mirror migration that no longer exists upstream', () => {
-  const ghost = path.join(MIRROR_MIGRATIONS, '999_not_a_real_migration.sql');
-  fs.writeFileSync(ghost, '-- never existed in server/db\n');
-  try {
-    const result = runCheck();
-    assert.equal(result.passed, false, '--check must fail on a mirror-only migration');
-    assert.match(result.output, /no longer exist upstream/);
-  } finally {
-    fs.rmSync(ghost);
+test('--check reports a mirror migration that no longer exists upstream', (t) => {
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE canonical();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'src/lib/db/migrations/001_base.sql'), '-- 001_base.sql\n');
+  fs.writeFileSync(path.join(dir, 'src/lib/db/migrations/999_ghost.sql'), '-- ghost\n');
+
+  const result = run(['--check', '--root', dir]);
+  assert.equal(result.passed, false, '--check must fail on a mirror-only migration');
+  assert.match(result.output, /no longer exist upstream/);
+  assert.match(result.output, /999_ghost\.sql/);
+});
+
+test('--check reports schema drift separately from migration drift', (t) => {
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE something_else();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  for (const name of ['001_base.sql', '002_more.sql']) {
+    fs.writeFileSync(path.join(dir, 'src/lib/db/migrations', name), `-- ${name}\n`);
   }
+  const result = run(['--check', '--root', dir]);
+  assert.equal(result.passed, false);
+  assert.match(result.output, /schema\.sql differs from its mirror/);
+  assert.doesNotMatch(result.output, /missing from the mirror/);
+});
+
+test('syncing repairs a drifted tree and is idempotent', (t) => {
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE stale();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'src/lib/db/migrations/999_ghost.sql'), '-- ghost\n');
+
+  assert.ok(run(['--root', dir]).passed, 'the sync itself must succeed');
+  assert.ok(run(['--check', '--root', dir]).passed, 'the tree must be synced afterwards');
+  assert.deepEqual(
+    sql(path.join(dir, 'src/lib/db/migrations')),
+    ['001_base.sql', '002_more.sql'],
+    'the sync must copy upstream migrations and drop mirror-only ones'
+  );
+
+  // Second sync changes nothing.
+  const before = fs.readFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'utf8');
+  assert.ok(run(['--root', dir]).passed);
+  assert.equal(fs.readFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'utf8'), before);
+  assert.ok(run(['--check', '--root', dir]).passed);
+});
+
+test('a new upstream migration is noticed immediately', (t) => {
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE canonical();\n');
+  fs.mkdirSync(path.join(dir, 'src/lib/db/migrations'), { recursive: true });
+  for (const name of ['001_base.sql', '002_more.sql']) {
+    fs.writeFileSync(path.join(dir, 'src/lib/db/migrations', name), `-- ${name}\n`);
+  }
+  assert.ok(run(['--check', '--root', dir]).passed);
+  fs.writeFileSync(path.join(dir, 'server/db/migrations/003_new.sql'), '-- new\n');
+  const result = run(['--check', '--root', dir]);
+  assert.equal(result.passed, false, 'a new upstream migration must fail until mirrored');
+  assert.match(result.output, /003_new\.sql/);
+});
+
+test('the sync refuses to write outside its mirror directories', (t) => {
+  // The script copies and deletes; a wrong path would rewrite or remove
+  // something in server/db. Run it on a temp tree and prove canonical is intact.
+  const dir = tempTree(t);
+  fs.writeFileSync(path.join(dir, 'src/lib/db/schema.sql'), 'CREATE TABLE stale();\n');
+  const canonicalBefore = fs.readFileSync(path.join(dir, 'server/db/schema.sql'), 'utf8');
+  const upstreamBefore = fs.readdirSync(path.join(dir, 'server/db/migrations')).sort();
+  run(['--root', dir]);
+  assert.equal(fs.readFileSync(path.join(dir, 'server/db/schema.sql'), 'utf8'), canonicalBefore);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'server/db/migrations')).sort(), upstreamBefore);
 });
 
 test('the production smoke check is labelled for what it actually verifies', () => {
   // A guard that says "schema.sql matches" while checking 15 files teaches the
   // next reader to trust coverage that is not there.
   const source = fs.readFileSync(path.join(ROOT, 'scripts', 'production-smoke.js'), 'utf8');
-  assert.ok(
-    /migrations match server\/db/.test(source),
-    'the schema-mirror-sync finding must name the migrations it now covers'
-  );
-  assert.ok(
-    /sync-schema-mirror\.js[\s\S]{0,200}--check/.test(source),
-    'production-smoke must still invoke the mirror check in --check mode'
-  );
+  assert.match(source, /migrations match server\/db/);
+  assert.match(source, /sync-schema-mirror\.js[\s\S]{0,200}--check/);
 });
 
-test('the mirror sync is idempotent', (t) => {
-  const before = fs.readdirSync(MIRROR_MIGRATIONS).sort();
-  execFileSync(process.execPath, [SCRIPT], { cwd: ROOT, stdio: 'pipe' });
-  assert.deepEqual(fs.readdirSync(MIRROR_MIGRATIONS).sort(), before);
-  assert.ok(runCheck().passed);
-  t.diagnostic('re-running the sync changed nothing');
-});
-
-// Guard against the mirror silently reappearing as a divergent fork: a new
-// migration added to server/db must be noticed by --check, not by a human.
-test('a newly added upstream migration is detected immediately', () => {
-  const probe = path.join(CANONICAL_MIGRATIONS, '998_mirror_probe.sql');
-  const ghost = path.join(MIRROR_MIGRATIONS, '998_mirror_probe.sql');
-  const restore = fs.existsSync(probe);
-  const original = restore ? fs.readFileSync(probe) : null;
-  fs.writeFileSync(probe, '-- probe\n');
-  const ghostExisted = fs.existsSync(ghost);
-  const ghostOriginal = ghostExisted ? fs.readFileSync(ghost) : null;
-  try {
-    if (ghostExisted) fs.rmSync(ghost);
-    const result = runCheck();
-    assert.equal(result.passed, false, 'a new upstream migration must fail the check until mirrored');
-    assert.match(result.output, /998_mirror_probe\.sql/);
-  } finally {
-    if (ghostExisted) fs.writeFileSync(ghost, ghostOriginal);
-    else if (fs.existsSync(ghost)) fs.rmSync(ghost);
-    if (restore) fs.writeFileSync(probe, original);
-    else fs.rmSync(probe);
-  }
-  assert.ok(runCheck().passed, 'cleanup must leave the tree synced');
-});
-
-test('the sync only ever writes inside the mirrored directories', () => {
-  // The script copies and can delete; a wrong path here would rewrite or
-  // remove something outside the mirror.
-  const source = fs.readFileSync(SCRIPT, 'utf8');
-  for (const dir of ['MIRROR', 'MIRROR_MIGRATIONS']) {
-    assert.ok(source.includes(dir), `${dir} must be defined in the sync script`);
-  }
-  assert.ok(
-    /writeFileSync\(MIRROR/.test(source) && /writeFileSync\(path\.join\(MIRROR_MIGRATIONS/.test(source),
-    'writes must target the mirror paths, never the canonical ones'
-  );
-  assert.ok(
-    !/writeFileSync\(CANONICAL/.test(source) && !/rmSync\(path\.join\(CANONICAL_MIGRATIONS/.test(source),
-    'the sync must never write or delete inside server/db'
-  );
-  for (const p of [CANONICAL, MIRROR, CANONICAL_MIGRATIONS, MIRROR_MIGRATIONS]) {
-    const rel = path.relative(ROOT, p);
-    assert.ok(rel && !rel.startsWith('..') && !path.isAbsolute(rel), `${p} escapes the repo root`);
-  }
+test('the advanced-readiness finding in production smoke verifies ordering', () => {
+  // Same species of claim: a finding whose detail says "before" must compare
+  // positions, not merely prove the string exists.
+  const source = fs.readFileSync(path.join(ROOT, 'scripts', 'production-smoke.js'), 'utf8');
+  assert.match(source, /readinessFailureAt\s*<\s*livenessFallbackAt/);
 });
