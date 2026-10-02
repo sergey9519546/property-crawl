@@ -97,13 +97,73 @@ test('HUD parseCardsWithScrapling maps a Scrapling-evidence payload to listings'
   assert.equal(listings[1].openingBid, null);
 });
 
-test('HUD parseCardsWithScrapling returns empty array when extractImpl throws', async () => {
-  const scraper = new HudHomeScraper({
+// This used to assert [] when extractImpl throws, which is what let an
+// extraction failure reach the report as an empty jurisdiction: statesEmpty
+// was incremented and the run claimed the state had no listings, which is a
+// finding nobody made. Empty and unreadable are different facts.
+test('HUD parseCardsWithScrapling throws when the extractor fails, and [] when it finds nothing', async () => {
+  const failing = new HudHomeScraper({
     useScrapling: true,
     extractImpl: async () => { throw new Error('venv down'); }
   });
-  const listings = await scraper.parseCardsWithScrapling('<html></html>', 'CA', 'https://example.test/x');
-  assert.deepEqual(listings, []);
+  await assert.rejects(
+    () => failing.parseCardsWithScrapling('<html></html>', 'CA', 'https://example.test/x'),
+    /extraction failed for CA/,
+    'an extractor failure must not look like an empty state'
+  );
+
+  const foundNothing = new HudHomeScraper({
+    useScrapling: true,
+    extractImpl: async () => ({ items: [] })
+  });
+  assert.deepEqual(
+    await foundNothing.parseCardsWithScrapling('<html></html>', 'CA', 'https://example.test/x'),
+    [],
+    'an extractor that ran and found nothing is genuinely empty'
+  );
+});
+
+test('an unreadable state is counted as failed, never as empty', async () => {
+  // The reason the throw matters: the report branches on listings.length, so a
+  // fallback that returned [] on extraction failure incremented statesEmpty and
+  // the run reported the jurisdiction as having no listings.
+  const scraper = new HudHomeScraper({
+    useScrapling: true,
+    extractImpl: async () => { throw new Error('venv down'); },
+    states: ['CA'],
+    maxPagesPerState: 1,
+  });
+  // No network for the DataGrid path, real HTML for the fallback, so the REAL
+  // parseCardsWithScrapling runs. Stubbing it would bypass the code under test
+  // and leave this green against the old behaviour.
+  scraper.requestText = async (url) => {
+    if (String(url).includes('/Home/DataGrid')) throw new Error('DataGrid 503');
+    return '<html><body><div class="card"></div></body></html>';
+  };
+
+  // scrapeFeed() already refuses to report an empty inventory when no state
+  // completed - it throws HUD_UPSTREAM_UNAVAILABLE carrying the report. The
+  // fabricated number lived inside that report: statesEmpty was incremented
+  // for a state whose extraction failed, so the per-state counts said "empty"
+  // even though the run-level outcome was already honest.
+  let report;
+  try {
+    report = await scraper.scrapeFeed();
+  } catch (error) {
+    assert.equal(error.code, 'HUD_UPSTREAM_UNAVAILABLE', `unexpected error: ${error.message}`);
+    report = error.report;
+  }
+  assert.ok(report, 'the report must be reachable, thrown or returned');
+  assert.equal(report.statesFailed, 1, `an unreadable state must be failed; report was ${JSON.stringify({
+    attempted: report.statesAttempted, empty: report.statesEmpty, failed: report.statesFailed })}`);
+  assert.equal(report.statesEmpty, 0, 'an unreadable state must never be counted as empty');
+  assert.ok(
+    report.failures.some((f) => f && f.state === 'CA' && String(f.error).length > 0),
+    `the failure must be recorded against the state it happened on, got: ${JSON.stringify(report.failures)}`
+  );
+  // The exact wording is a combined message built by fetchStateHtml from the
+  // DataGrid error and the fallback error, so it is not pinned here - the
+  // property worth pinning is that a failure is attributable to its state.
 });
 
 test('HUD parseCardsWithScrapling returns empty array for empty HTML', async () => {
