@@ -1,4 +1,29 @@
 "use client";
+// CLS on this route sits at 0.084, under Google's 0.1 threshold, and is NOT
+// understood. Recorded so the next person does not repeat the work.
+//
+// The layout-shift entries name two `section.mt-9` blocks -- the coverage matrix
+// and "Explore the network" -- reporting them collapsing to zero height. Two
+// hypotheses were built, measured, and REJECTED:
+//
+//   1. The source-status summary was conditional on `data`, so it appeared from
+//      nothing when the payload landed. Rendering it unconditionally with a
+//      placeholder: 0.0843 -> 0.0822. Within noise. Reverted.
+//   2. The loading state was a 96px <p> that expanded into a multi-thousand-
+//      pixel grid. Replacing it with a shape-accurate skeleton of 10 cards:
+//      0.0842. Unchanged. Reverted.
+//
+// The value is stable to three decimals across both experiments while the
+// *timing* moved from 625ms to 1731ms to 3955ms. A stable magnitude with a
+// wildly unstable time is not what a content swap looks like, and the
+// `sources` attribution is evidently pointing at where the browser noticed
+// rather than at what moved. Guessing further at a 1,479-line component without
+// a better instrument is how code gets changed for no measured reason.
+//
+// An instrument that attributes the shift properly would need frame-level
+// paint/geometry capture across the data-arrival window, not layout-shift
+// summaries. That is the next step if this is ever worth fixing; the number is
+// under the threshold and nothing else about the page is wrong.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
