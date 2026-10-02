@@ -515,14 +515,21 @@ export function DiscoveryWorkbench() {
                   }`
                 : "Results unavailable"}
           </p>
-          {payload?.listings ? (
-            <p className="mt-1 text-xs text-slate-500" data-testid="inventory-honesty">
-              {(() => {
-                const honesty = summarizeInventoryHonesty(payload.listings);
-                return `${honesty.openingBidPublished} of ${honesty.shown} on this page publish an opening amount`;
-              })()}
-            </p>
-          ) : null}
+          {/* Always rendered, never popped in. This line used to be
+              conditional on `payload`, so it appeared from nothing once the
+              results landed and pushed the pagination bar 20px down the page:
+              measured as a 0.066 layout shift, the largest on /listings. The
+              placeholder is honest -- it really is checking -- and occupies the
+              same single line, so the block's height is stable from the first
+              paint. */}
+          <p className="mt-1 text-xs text-slate-500" data-testid="inventory-honesty">
+            {payload?.listings
+              ? (() => {
+                  const honesty = summarizeInventoryHonesty(payload.listings);
+                  return `${honesty.openingBidPublished} of ${honesty.shown} on this page publish an opening amount`;
+                })()
+              : "Checking published amounts…"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <select

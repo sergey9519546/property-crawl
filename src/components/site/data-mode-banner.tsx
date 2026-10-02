@@ -35,7 +35,39 @@ export function DataModeBanner() {
     };
   }, []);
 
-  if (dismissed || health === undefined) return null;
+  if (dismissed) return null;
+
+  // Reserve the banner's box while the health probe is still in flight.
+  //
+  // It used to return null here and then render once the fetch resolved, which
+  // pushed the entire page down by the banner's own height -- 65px on
+  // /listings, measured as a 0.043 layout shift and the second largest on that
+  // route. A warning banner that arrives by shoving the content down is worse
+  // than one that was always there.
+  //
+  // The text is honest about what it is doing and uses the same box, so the
+  // height is identical whether the probe answers "demo" or "all clear". A
+  // distinct testid keeps this pending state separate from the real banner, so
+  // the honesty guard in test/honest-empty-state.test.js cannot mistake one for
+  // the other.
+  if (health === undefined) {
+    return (
+      <div
+        role="status"
+        data-testid="data-mode-banner-pending"
+        className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
+      >
+        {/* Same reserved box as the real banner. A one-line placeholder against
+            a two-line real message still moved the page 24px, because the
+            runtime-mode copy wraps at desktop widths. Both states therefore
+            claim two lines up front, so the answer to the probe can change the
+            words without changing the geometry. */}
+        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
+          <p className="leading-6">Checking runtime mode…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (health === null) {
     // Degraded, not dismissible into silence: we cannot confirm the runtime is
@@ -46,7 +78,7 @@ export function DataModeBanner() {
         data-testid="data-mode-banner"
         className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
       >
-        <div className="mx-auto flex max-w-[1380px] items-start justify-between gap-4">
+        <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
           <p className="leading-6">
             <strong className="font-semibold">Runtime mode unverified:</strong>{" "}
             the health check did not respond. Inventory and document storage may be
@@ -80,7 +112,7 @@ export function DataModeBanner() {
       data-testid="data-mode-banner"
       className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
     >
-      <div className="mx-auto flex max-w-[1380px] items-start justify-between gap-4">
+      <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
         <p className="leading-6">
           <strong className="font-semibold">Runtime mode:</strong>{" "}
           {parts.join(" ")}
