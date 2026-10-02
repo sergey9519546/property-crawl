@@ -74,7 +74,25 @@ class SecondaryMediaCollector {
     let urls;
     try { urls = candidates?.length ? candidates : await this.discover(listing); }
     catch { return { ...report, reason: 'search_unavailable' }; }
-    for (const url of [...new Set(urls)].slice(0, this.maxPages)) {
+    // Say how much was left behind.
+    //
+    // The candidate list is capped at maxPages (default 4) and a listing can
+    // easily have a dozen. Reporting a flat 'no_qualified_gallery' after
+    // examining 4 of 12 is indistinguishable from reporting it after examining
+    // all 4: a reader concludes the listing has no gallery when a 5th candidate
+    // might have had one. That is dropped coverage presenting itself as a
+    // finding -- the same failure as the sheriff fallback reporting a dead
+    // endpoint as a successful collection.
+    //
+    // candidatesTotal / examined / truncated make the dropped coverage legible
+    // instead of inferred. The only consumer prints the whole report
+    // (scripts/discover-property-images.js) and nothing branches on the reason
+    // string, so adding the fields and the distinct truncated reason is safe.
+    const all = [...new Set(urls)];
+    const budget = all.slice(0, this.maxPages);
+    const truncated = all.length > budget.length;
+    Object.assign(report, { candidatesTotal: all.length, examined: budget.length, truncated });
+    for (const url of budget) {
       const page = propertyPage(url);
       if (!page) { report.attempts.push({ url, reason: 'unsupported_or_non_detail_page' }); continue; }
       await crawlJitter({ sleep: this.sleep });
@@ -84,7 +102,12 @@ class SecondaryMediaCollector {
         if (result.accepted) return { ...report, accepted: true, media: result.media };
       } catch (error) { report.attempts.push({ url: page.url, reason: String(error.message).slice(0, 160) }); }
     }
-    return { ...report, reason: urls.length ? 'no_qualified_gallery' : 'no_supported_candidates' };
+    return {
+      ...report,
+      reason: all.length === 0
+        ? 'no_supported_candidates'
+        : truncated ? 'no_qualified_gallery_within_budget' : 'no_qualified_gallery',
+    };
   }
 }
 module.exports = { SecondaryMediaCollector };

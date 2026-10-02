@@ -21,7 +21,7 @@
     "test:hunt-ranking": "node --experimental-strip-types --test test/hunt-ranking.test.js test/score-bands.test.mjs test/terminal-filter-store.test.mjs test/intelligence/research-cases-helpers.test.js",
     "test:hunts": "node --test test/hunts.test.js test/hunt-ranking.test.js test/hunt-discovery-filters.test.js",
     "test:server": "node test/server.test.js",
-    "test:scrapers": "node test/scrapers.test.js test/sheriff-fallback-reports-failure.test.js",
+    "test:scrapers": "node test/scrapers.test.js test/sheriff-fallback-reports-failure.test.js test/secondary-media-budget-honesty.test.js",
     "test:scraper-reliability": "node --test test/scraper-reliability.test.js test/civilview.test.js test/national-core-reports.test.js test/irs-scraper.test.js test/scrapers/federal-scrapers.test.js test/scrapers/normalization-helpers.test.js test/scrapers/source-policy-helpers.test.js test/scrapers/auto-throttle-helpers.test.js test/scrapers/listing-schema-helpers.test.js test/scrapers/circuit-breaker-helpers.test.js test/scrapers/scraper-interface.test.js test/scrapers/report-only-collector.test.js",
     "test:source-integrity": "node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs",
     "test:property-image": "node --test test/property-image.test.js test/publisher-media.test.js",
