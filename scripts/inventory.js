@@ -58,18 +58,39 @@ report.consoleNoise = consoleNoise.sort((a, b) => b.count - a.count);
 // ---- 3. never-imported components ------------------------------------------
 // A component file that nothing else references is either dead or dynamically
 // loaded; both are worth knowing, and neither is currently recorded anywhere.
+//
+// Two very different things land in this list and the first version conflated
+// them, which is how 29 shadcn primitives ended up looking like 29 findings:
+//
+//   * src/components/ui/** -- a shadcn component library. The generator emits
+//     the full primitive set and a project uses the subset it needs. Unused
+//     ones are the normal state, not a defect.
+//   * everything else -- an app component. Unused means a feature nothing can
+//     reach, which is a real finding. src/components/listings/enrichment-view.tsx
+//     is the one that matters: a complete, tested, unreachable feature.
+//
+// page/layout/route files are entries, not leaves, so they are not orphans.
 const allSrc = files.filter((f) => CODE_EXT.test(f)).map((f) => ({ f, src: read(f) || '' }));
 const componentFiles = allSrc.filter(({ f }) => /src[\\/]components[\\/].+\.tsx$/.test(f));
+const UI_LIBRARY = 'src/components/ui/';
 const orphanComponents = [];
-for (const { f } of componentFiles) {
+const orphanLibrary = [];
+for (const { f, src } of componentFiles) {
   const base = path.basename(f).replace(/\.tsx$/, '');
-  const referenced = allSrc.some(({ f: other, src }) =>
-    other !== f && new RegExp(`[/"']${base}["']`).test(src));
-  // page.tsx-style route files and index barrels are legitimately unreferenced.
+  const referenced = allSrc.some(({ f: other, src: otherSrc }) =>
+    other !== f && new RegExp(`[/"']${base}["']`).test(otherSrc));
   const isEntry = /[\\/](page|layout|route|index)\.tsx$/.test(f);
-  if (!referenced && !isEntry) orphanComponents.push(rel(f));
+  if (referenced || isEntry) continue;
+  const r = rel(f);
+  // An orphan that explains itself in its own file has been dealt with.
+  const acknowledged = /\b(not rendered|unused|not imported|dead|deprecated|no longer|orphan)\b/i
+    .test(src.slice(0, 900));
+  (r.startsWith(UI_LIBRARY) ? orphanLibrary : orphanComponents)
+    .push(acknowledged ? `${r}  (acknowledged in-file)` : r);
 }
 report.orphanComponents = orphanComponents.sort();
+report.orphanLibraryComponents = orphanLibrary.sort();
+report.orphanNote = 'src/components/ui/* is a shadcn library; unused primitives there are expected';
 
 // ---- 4. unused dependencies ------------------------------------------------
 const pkg = JSON.parse(read(path.join(ROOT, 'package.json')));
@@ -115,7 +136,10 @@ const section = (title, rows, fmt) => {
 
 section('Debt markers', report.debtMarkers, (r) => `${r.kind.padEnd(6)} ${r.file}  ${r.text.slice(0, 60)}`);
 section('console.log/debug in src/', report.consoleNoise, (r) => `${String(r.count).padStart(3)}x ${r.file}`);
-section('Components nothing imports', report.orphanComponents, (r) => `  ${r}`);
+section('Unreferenced app components (real findings)', report.orphanComponents, (r) => `  ${r}`);
+section('Unreferenced shadcn primitives (expected)', report.orphanLibraryComponents, (r) => `  ${r}`);
+console.log(`  (${report.orphanLibraryComponents.length} of these are src/components/ui/*, a shadcn`);
+console.log('   library the generator emits in full. Unused there is normal, not a defect.)');
 section('Dependencies no source mentions', report.unusedDeps, (r) => `  ${r}`);
 section('server/ files no test NAMES (weak signal, not coverage)', report.untestedServer, (r) => `  ${r}`);
 console.log('\n(scanned ' + codeFiles.length + ' code files)');
