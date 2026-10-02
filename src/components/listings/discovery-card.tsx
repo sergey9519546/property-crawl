@@ -40,12 +40,17 @@ function addressLines(listing: PropertyListing) {
 type Props = { listing: PropertyListing; href: string; saved: boolean; saving: boolean; onSave: (id: string) => void };
 
 // Memoized on purpose: the workbench re-renders whenever any of its own state
-// moves (a triage chip, the watchlist, the loading flag), and each card re-derives
-// the address, the score band, several number parses, and the date and money
-// formatting. All of that is a pure function of `listing`, so a card whose props
-// are unchanged has nothing to recompute. `onSave` takes the id so the callback
-// identity can stay stable across renders; an inline closure here would defeat
-// the comparison, which is the usual way a memoized list stops paying off.
+// moves (a triage chip, the watchlist, the loading flag), and each card
+// re-derives the address, the score band, several number parses, and the date
+// and money formatting. All of that is a pure function of `listing`, so a card
+// whose props are unchanged has nothing to recompute. `onSave` takes the id so
+// the callback identity can stay stable across renders; an inline closure here
+// would defeat the comparison, which is the usual way a memoized list stops
+// paying off.
+//
+// Measured alongside the memoized search field (see discovery-workbench.tsx):
+// typing 19 characters over 48 cards went 647 ms -> 604 ms, about 2.2 ms saved
+// per keystroke. Worth having, and much smaller than it was first claimed to be.
 export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
   const { street, locality } = addressLines(listing);
   const observed = listing.provenance?.origin === "live" && listing.provenance?.observed === true;

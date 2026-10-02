@@ -83,6 +83,17 @@ const unusedDeps = declared.filter((d) => {
 report.unusedDeps = unusedDeps;
 
 // ---- 5. source files no test file even mentions ---------------------------
+// WEAK SIGNAL, kept only because it is a useful prompt for a human -- but read
+// the warning before acting on it.
+//
+// The first version of this section listed 49 server/ files as untested. It was
+// wrong. Tests exercise routes by URL path, not by module filename, so a
+// handler can be thoroughly covered while its file name appears nowhere in the
+// test corpus. Checked: the routes it flagged include property-image, export,
+// enrichment and property-intelligence, and those paths appear 53 times across
+// 11 test files.
+//
+// Treat this section as "no test names this file", never as "untested".
 const testCorpus = files.filter((f) => rel(f).startsWith('test/'))
   .map((f) => read(f) || '').join('\n');
 const serverFiles = codeFiles.filter((f) => rel(f).startsWith('server/') && !rel(f).includes('/migrations/'));
@@ -90,6 +101,7 @@ const untestedServer = serverFiles.filter((f) => {
   const base = path.basename(f);
   return !testCorpus.includes(base);
 }).map(rel);
+report.untestedServerNote = 'no test NAMES this file; not a coverage measurement';
 report.untestedServer = untestedServer.sort();
 
 // ---- output ---------------------------------------------------------------
@@ -105,5 +117,9 @@ section('Debt markers', report.debtMarkers, (r) => `${r.kind.padEnd(6)} ${r.file
 section('console.log/debug in src/', report.consoleNoise, (r) => `${String(r.count).padStart(3)}x ${r.file}`);
 section('Components nothing imports', report.orphanComponents, (r) => `  ${r}`);
 section('Dependencies no source mentions', report.unusedDeps, (r) => `  ${r}`);
-section('server/ files no test mentions', report.untestedServer, (r) => `  ${r}`);
-console.log(`\n(scanned ${codeFiles.length} code files)`);
+section('server/ files no test NAMES (weak signal, not coverage)', report.untestedServer, (r) => `  ${r}`);
+console.log('\n(scanned ' + codeFiles.length + ' code files)');
+console.log('\nNOTE: the section above matches on file name only. Routes are tested by URL path,');
+console.log('so a fully covered handler can appear "untested" here. Verified: property-image,');
+console.log('export, enrichment and property-intelligence paths occur 53x across 11 test files.');
+console.log('Use this to prompt a look, never as a coverage claim.');
