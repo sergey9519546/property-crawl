@@ -181,11 +181,27 @@ function derived(row) {
   // a record that never reached a conclusion stays null. Coercing that last case
   // to false would make `hasDocuments=unknown` unfindable and would let an
   // unexamined record satisfy `hasDocuments=false`, which is a fail-open error.
-  const documents = row.provenance?.sourceFacts?.documents;
+  //
+  // The mirror error is also fail-open and was live here: a document container
+  // that is PRESENT but EMPTY is a conclusion - we looked and there are none -
+  // so it must be false, not null. Reporting it as null made
+  // `hasDocuments=unknown` hunts match records that had in fact been examined.
+  //
+  // Documents count from EITHER provenance location, and this now mirrors
+  // server/intelligence/hunts.js exactly. The two disagreed: the hunt snapshot
+  // merges sourceFacts.documents and media.documents and treats a present-empty
+  // container as false, while this read only sourceFacts and treated a
+  // present-empty container as unknown. So the two halves of one hunt reached
+  // opposite conclusions about the same listing - a `hasDocuments=true` hunt
+  // missed every listing whose documents arrived through the media pipeline.
+  const documentSets = [
+    row.provenance?.sourceFacts?.documents,
+    row.provenance?.media?.documents,
+  ].filter(Array.isArray);
   const hasDocuments =
-    row.hasDocuments === true || (Array.isArray(documents) && documents.length > 0)
+    row.hasDocuments === true || documentSets.some((documents) => documents.length > 0)
       ? true
-      : row.hasDocuments === false
+      : row.hasDocuments === false || documentSets.length > 0
         ? false
         : null;
   return {

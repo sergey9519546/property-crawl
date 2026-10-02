@@ -51,6 +51,11 @@ jobs:
         run: npm run test:foolproof-p0
       - name: Scraper power / end coverage
         run: npm run test:scraper-power
+      # This suite carried two FAILING tests - both about hunts and document
+      # identity - and no workflow invoked it, so they stayed red indefinitely.
+      # A suite nothing runs is a comment, not a check.
+      - name: Property documents (was an orphan suite)
+        run: npm run test:property-documents
       # The only direct test of scripts/crawlers/scrapling_extract.py. It was
       # never executed by anything: no test:* script ran it, and no CI step did
       # either, so 16 parser tests guarded a production code path by sitting in
