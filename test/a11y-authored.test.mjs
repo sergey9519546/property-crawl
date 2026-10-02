@@ -13,10 +13,23 @@
 //
 // The two listing detail pages were audited in a second pass, with ids pulled
 // from the live API rather than guessed, after the first pass turned out to have
-// skipped them. /research/[id] is still not covered, for the same reason: it
-// needs a real id out of a research collection that may be empty, and a route
-// audited against absent data proves nothing. That is stated rather than
-// implied.
+// skipped them.
+//
+// /research/[id] is not in the dynamic list, and the split is worth being
+// precise about rather than calling it a flat gap:
+//
+//   AUTHORED MARKUP -- covered. This guard walks all 133 .tsx files under src/,
+//   which includes src/app/research/[id]/page.tsx (and every other route page).
+//   That file has no <img> and no literal tabIndex, so it passes both rules.
+//   The earlier claim that it was "not covered" came from a probe of mine that
+//   compared forward-slash paths against Windows backslash ones -- the guard was
+//   scanning it the whole time.
+//
+//   RUNTIME CONTENT -- not covered. The page renders a research case fetched
+//   from /api/workspace/cases, which is behind the operator key (401 without
+//   it). Markup produced from that data is invisible here and to the dynamic
+//   audit. Using the deployment's own key to seed a QA run is a call for the
+//   owner to make, not one to make quietly inside an audit.
 //
 // That zero was then CONTROLLED rather than trusted. Lighthouse's empty report
 // in this same environment is a standing reminder that a checker reporting
@@ -27,6 +40,16 @@
 // This guard covers the subset decidable from source, which is the subset that
 // can run in CI in a second. It cannot see markup produced at runtime, so it is
 // a floor, not the whole picture -- the dynamic audit above is the other half.
+//
+// A duplicate-id check was written here and then removed. It flagged
+// src/app/listings/[id]/page.tsx, and it was wrong to: `id="market-evidence"`
+// appears on opposite branches of one ternary -- a <div> when evidence was
+// captured, a <details> when it was not -- so exactly one renders and the
+// anchor works either way. Deciding whether two ids are mutually exclusive
+// needs control-flow analysis, not a regex, and a guard that fires on correct
+// code gets switched off. The dynamic audit checks duplicate ids in the live
+// DOM, where the question is decidable, and reports zero. That is the only
+// place this check belongs.
 
 import assert from 'node:assert/strict';
 const { default: fs } = await import('node:fs');
@@ -90,20 +113,6 @@ test('every iframe carries a title', () => {
   }
   assert.deepEqual(bad, [], 'iframe without title: ' + bad.join(' | '));
 });
-
-// A duplicate-id check was written here and removed again.
-//
-// It flagged src/app/listings/[id]/page.tsx, which turns out to be correct:
-// `<div id="market-evidence">` and `<details id="market-evidence">` sit on
-// opposite branches of one ternary, so exactly one renders and the anchor
-// works whether or not evidence was captured. The pattern is common and right,
-// and a guard that fires on it gets switched off -- which is the exact
-// outcome test/orphan-components.test.mjs was written to prevent.
-//
-// Deciding "are these two ids mutually exclusive?" needs real control-flow
-// analysis, not a regex. The dynamic audit above checks duplicate ids in the
-// live DOM, where the question is actually decidable, and reports zero. That is
-// the right place for this check and the only one it belongs in.
 
 test('the scanner can actually find each violation it claims to check', () => {
   // Prove the patterns fire, so a clean run means "clean" and not "the regex
