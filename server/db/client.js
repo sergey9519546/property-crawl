@@ -609,7 +609,24 @@ class DatabaseClient {
             fetchedAt: l.fetchedAt ?? null,
             price: l.price ?? null,
             listingDate: l.listingDate ?? null,
-            status: l.status || 'active',
+            // Routed through the SAME canonicaliser the Postgres write path
+            // uses, so a seed record and that same record persisted to
+            // PostgreSQL report the same status.
+            //
+            // It used to be `l.status || 'active'`, which labels a record with
+            // no publisher-reported status as active. The Postgres path calls
+            // canonicalStatus(), which returns 'unknown' for exactly that input.
+            // The two backends therefore disagreed about the same record, and
+            // nothing caught it: no caller passes a `status` filter to
+            // getListings, so the divergence is currently latent. It is a trap
+            // rather than a bug -- the first person to add a status filter gets
+            // 2,094 rows in memory and 0 in Postgres, with no error anywhere.
+            //
+            // 'unknown' is also the honest answer. A seed record genuinely does
+            // not have a known status, and 'active' was a guess presented as
+            // fact. Nothing user-visible changes: the listing card renders
+            // `lifecycle || lifecycleStatus`, not `status`.
+            status: canonicalStatus(l.status),
           }];
         });
         console.log(`[DB] Loaded ${this.inMemoryData.listings.length} live records (snapshots excluded) across ${Object.keys(this.inMemoryData.sources).length} sources`);
