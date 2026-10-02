@@ -51,6 +51,23 @@ jobs:
         run: npm run test:foolproof-p0
       - name: Scraper power / end coverage
         run: npm run test:scraper-power
+      # The only direct test of scripts/crawlers/scrapling_extract.py. It was
+      # never executed by anything: no test:* script ran it, and no CI step did
+      # either, so 16 parser tests guarded a production code path by sitting in
+      # the tree. It needs the pinned interpreter, because the suite asserts
+      # engineVersion == the version in scripts/crawlers/requirements.txt and
+      # the runner must be the one defaultPython() resolves. This job is the
+      # blocking one, so the parser is finally checked where a failure counts.
+      - name: Setup Python for the pinned Scrapling parser
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Scrapling parser suite (pinned runtime)
+        run: |
+          python -m venv .cache/crawler-tools/venv
+          .cache/crawler-tools/venv/bin/pip install --quiet --upgrade pip
+          .cache/crawler-tools/venv/bin/pip install --quiet -r scripts/crawlers/requirements.txt
+          npm run test:scrapling-parser
       - name: Production build
         run: npm run build
       - name: Production boot + user workflow e2e (demo-pinned)

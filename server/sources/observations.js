@@ -4,7 +4,25 @@ const crypto = require('node:crypto');
 const { validateListingForIngestion } = require('../scrapers/validation');
 
 const DEFAULT_PATH = path.resolve(__dirname, '../../.cache/source-observations.json');
-const MAX_BYTES = 40 * 1024 * 1024;
+// Was a bare 40MB literal, not overridable, while the sibling live-record store
+// has been env-configurable with a clamp for some time. This store reached
+// 39.7MB against the 40MB ceiling - about 356KB of headroom, roughly one
+// collection run from a hard failure that takes down every route reading
+// observation history.
+//
+// Raising the ceiling is not a fix for unbounded growth (pruning superseded
+// observations is), but it converts a predictable outage into a working system,
+// and it matches the sibling store's shape so there is one convention rather
+// than two. If the store does eventually exceed even this, loadObservations
+// throws and every consumer now reports historyUnavailable rather than
+// silently reporting "no bid reduction observed".
+const MAX_BYTES = Math.max(
+  8 * 1024 * 1024,
+  Math.min(
+    128 * 1024 * 1024,
+    Number.parseInt(process.env.PROPERTY_OBSERVATIONS_MAX_BYTES, 10) || 64 * 1024 * 1024,
+  ),
+);
 const FIELDS = ['openingBid', 'saleDate', 'status', 'deposit', 'address'];
 const TITLES = {
   bid_reduced: 'Published opening bid reduced',
