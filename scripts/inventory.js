@@ -125,6 +125,53 @@ const untestedServer = serverFiles.filter((f) => {
 report.untestedServerNote = 'no test NAMES this file; not a coverage measurement';
 report.untestedServer = untestedServer.sort();
 
+// ---- 6. API route handlers no client source calls -------------------------
+// Run as a NEGATIVE RESULT, recorded so the sweep is not repeated.
+//
+// 39 route handlers; 4 have no reference anywhere under src/. All four were
+// checked and all four are legitimate, so nothing is added to a guard. Matching
+// is on the STATIC PREFIX -- the path up to the first dynamic segment --
+// deliberately over-counts, so the failure mode is missing a real orphan rather
+// than accusing a live route.
+//
+//   /api/health/ready                   infrastructure, not a browser route:
+//                                      scripts/start-production.js:81 blocks
+//                                      on it as the advanced-readiness gate
+//   /api/source-network/unbrowse/status  scripts/e2e-user-workflow.js:154
+//   /api/source-network/unbrowse/intake  HTTP-level coverage in
+//                                      test/unbrowse-http.test.js
+//   /api/sources                        test/server.test.js
+//
+// No guard is written for this, and that is the point. A check that needs a
+// four-entry exemption list on its first run is not catching anything -- it is
+// documenting the codebase. The exemption list is where code goes to disappear.
+function apiRoutesWithoutClientCaller() {
+  const apiDir = path.join(ROOT, 'src', 'app', 'api');
+  if (!fs.existsSync(apiDir)) return { total: 0, orphans: [] };
+  const handlers = [];
+  (function collect(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) collect(full);
+      else if (e.name === 'route.ts') handlers.push(full);
+    }
+  })(apiDir);
+
+  const clientCorpus = files
+    .filter((f) => !f.startsWith(apiDir) && CODE_EXT.test(f))
+    .map((f) => read(f) || '').join('\n');
+
+  const orphans = [];
+  for (const f of handlers) {
+    const url = '/' + rel(f).replace(/^src\/app\//, '').replace(/\/route\.ts$/, '');
+    const staticPrefix = url.split('/').filter((seg) => !seg.startsWith('[')).join('/');
+    const re = new RegExp(staticPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
+    if (!re.test(clientCorpus)) orphans.push({ url, staticPrefix });
+  }
+  return { total: handlers.length, orphans };
+}
+report.apiRoutesWithoutClientCaller = apiRoutesWithoutClientCaller();
+
 // ---- output ---------------------------------------------------------------
 if (JSON_OUT) { console.log(JSON.stringify(report, null, 2)); process.exit(0); }
 
@@ -147,3 +194,31 @@ console.log('\nNOTE: the section above matches on file name only. Routes are tes
 console.log('so a fully covered handler can appear "untested" here. Verified: property-image,');
 console.log('export, enrichment and property-intelligence paths occur 53x across 11 test files.');
 console.log('Use this to prompt a look, never as a coverage claim.');
+
+const apiOrphans = report.apiRoutesWithoutClientCaller;
+console.log(`\n=== API route handlers with no client reference (${apiOrphans.total} total) ===`);
+if (apiOrphans.orphans.length === 0) {
+  console.log('  none -- every route handler is referenced from somewhere in the repo');
+  console.log('');
+  console.log('  Investigated 2026-10 and deliberately NOT guarded. A scan restricted to');
+  console.log('  src/ flagged four, and all four turned out to have real callers outside it:');
+  console.log('    /api/health/ready                    scripts/start-production.js:81 (boot gate)');
+  console.log('    /api/source-network/unbrowse/status  scripts/e2e-user-workflow.js:154');
+  console.log('    /api/source-network/unbrowse/intake  test/unbrowse-http.test.js');
+  console.log('    /api/sources                         test/server.test.js');
+  console.log('  A check needing a four-entry exemption list on its first run is not catching');
+  console.log('  anything; it is documenting the codebase. Exemption lists are where code goes');
+  console.log('  to disappear, so this stays a report and not a gate.');
+} else {
+  for (const o of apiOrphans.orphans) {
+    console.log(`  ${o.url}`);
+    console.log(`     static prefix: ${o.staticPrefix}`);
+  }
+  console.log('\n  Known and explained (not orphans, all verified 2026-10):');
+  console.log('    /api/health/ready                    -> scripts/start-production.js:81 (boot gate)');
+  console.log('    /api/source-network/unbrowse/status  -> scripts/e2e-user-workflow.js:154');
+  console.log('    /api/source-network/unbrowse/intake  -> test/unbrowse-http.test.js');
+  console.log('    /api/sources                         -> test/server.test.js');
+  console.log('  Any route listed above those four is a NEW finding. Matching is on the static');
+  console.log('  prefix and deliberately over-counts, so it misses rather than falsely accuses.');
+}
