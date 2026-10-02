@@ -17,13 +17,25 @@
 // *timing* moved from 625ms to 1731ms to 3955ms. A stable magnitude with a
 // wildly unstable time is not what a content swap looks like, and the
 // `sources` attribution is evidently pointing at where the browser noticed
-// rather than at what moved. Guessing further at a 1,479-line component without
-// a better instrument is how code gets changed for no measured reason.
+// rather than at what moved.
 //
-// An instrument that attributes the shift properly would need frame-level
-// paint/geometry capture across the data-arrival window, not layout-shift
-// summaries. That is the next step if this is ever worth fixing; the number is
-// under the threshold and nothing else about the page is wrong.
+// A third instrument explains why neither fix could have worked. Sampling every
+// element's bounding rect on a timer from first paint -- ignoring layout-shift
+// entirely -- shows the real change is at t=595ms and is enormous: fourteen
+// elements move by 3,962px to 29,765px, all at the same instant, all below the
+// source cards. That is the cards grid expanding and shoving the rest of the
+// page down.
+//
+// And that is exactly why fixing the loading state moved nothing. A shift of
+// 29,000px pushes an element clean out of the viewport, and CLS only scores
+// shifts inside the viewport. The two symptoms are unrelated, which is why
+// treating the first as a cause of the second produced no change.
+//
+// So the page has one real, large, unscored layout change, and a separate
+// 0.084 of in-viewport movement that no instrument here has isolated. The
+// latter is under the threshold and nothing else about the page is wrong, so
+// this stops. Closing it needs viewport-clipped geometry capture, not a bigger
+// skeleton and not another content hypothesis.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
