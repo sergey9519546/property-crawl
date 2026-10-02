@@ -48,13 +48,14 @@ type Props = { listing: PropertyListing; href: string; saved: boolean; saving: b
 // would defeat the comparison, which is the usual way a memoized list stops
 // paying off.
 //
-// Measured alongside the memoized search field, swapping only these two files:
-// typing 19 characters over 48 cards went 621.0 ms -> 613.0 ms, about 0.4 ms per
-// keystroke, which is inside the run-to-run spread. So the end-to-end typing
-// cost did not measurably move; what this buys is the ceiling -- a card whose
-// props are unchanged has nothing to recompute, and that stops mattering at 48
-// cards but would not at 500. See discovery-workbench.tsx for the full numbers,
-// including the claim that was withdrawn.
+// Measured alongside the memoized search field, with an instrument that has no
+// frame-wait floor in it: typing 19 characters over 48 cards went 302.0 ms ->
+// 316.7 ms, about 16 ms per keystroke either way. No measurable benefit here.
+//
+// What it does buy is a ceiling: a card whose props are unchanged has nothing to
+// recompute. That stops mattering at 48 cards and would not at 500. See
+// discovery-workbench.tsx for the full numbers, the two claims that were
+// withdrawn, and the harness bug that produced them.
 export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
   const { street, locality } = addressLines(listing);
   const observed = listing.provenance?.origin === "live" && listing.provenance?.observed === true;

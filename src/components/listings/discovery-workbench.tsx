@@ -77,26 +77,37 @@ const filterLabels: Record<string, string> = {
 // re-renders alone while the parent stays put.
 // The rendered output is unchanged: same elements, same classes, same order.
 //
-// Measured, production build, full stack, 48 cards on screen, 19 characters
-// typed one animation frame apart, three runs each side, swapping only the two
-// files this change touches:
+// Measured, production build, full stack, 48 cards on screen, three runs each
+// side, swapping only the two files this change touches.
 //
-//     before   625 / 621 / 617 ms   mean 621.0   32.7 ms per keystroke
-//     after    616 / 611 / 612 ms   mean 613.0   32.2 ms per keystroke
+// An earlier version of this measurement awaited two requestAnimationFrame
+// callbacks per character. That is a 33.4 ms floor PER KEYSTROKE -- 634.6 ms
+// across 19 characters, which is the entire time that harness reported. It was
+// measuring its own frame waits, not this app. The instrument below dispatches
+// every input event in one synchronous loop, so nothing waits for a frame, and
+// it verifies itself against a known 120 ms block before reporting.
 //
-// So: about 8 ms over 19 keystrokes, 0.4 ms each, 1.3%. The before-side spread
-// was itself 8 ms, so this is inside run-to-run noise and the honest reading is
-// that the end-to-end typing cost did not measurably move.
+//     before   301 / 305 / 300 ms   mean 302.0   15.9 ms per keystroke
+//     after    311 / 335 / 304 ms   mean 316.7   16.7 ms per keystroke
 //
-// The mechanism is still right and still worth keeping: the draft state is no
-// longer in this component, so a keystroke cannot re-derive 48 cards, and that
-// ceiling is real even though at 48 cards it was not what the frame budget was
-// actually going on. The earlier revision of this comment claimed 647 -> 604 ms
-// and a 6% win. That comparison is withdrawn: it was taken across two states
-// that differed in more than this change, so it was never a clean A/B.
+// So: no measurable effect. The memoised side is if anything marginally slower,
+// which is noise in the unhelpful direction, and 16 ms per keystroke with 48
+// cards is the number that actually matters.
 //
-// An earlier claim on this work -- "2.2s of blocking, 108ms per keystroke" -- was
-// never reproducible and was roughly an order of magnitude too high.
+// That is the honest result, and it is a different claim from the one this
+// comment used to make. The sequence of numbers that have been attached to
+// this change, in order: "2.2 s of blocking at 108 ms per keystroke" (never
+// reproducible, roughly an order of magnitude too high, and measured with a
+// harness carrying a 33 ms-per-keystroke floor); then "647 -> 604 ms, about
+// 6%" (withdrawn -- measured across two states that differed in more than
+// this change); and now this.
+//
+// The mechanism is still correct and the code still stays: the draft state is
+// no longer in this component, so a keystroke cannot re-derive 48 cards, and
+// the cards are memoised on props that are pure functions of the listing. That
+// ceiling is real. At 48 cards it is simply not what the frame budget is
+// going on -- something else is, and this is recorded as an open question
+// rather than a solved one.
 const DiscoverySearchField = React.memo(function DiscoverySearchField({
   q,
   onSearch,
