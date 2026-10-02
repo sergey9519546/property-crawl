@@ -71,19 +71,29 @@ const allSources = walk(path.join(ROOT, 'src'))
 /**
  * A component is reachable if some other file imports it.
  *
- * The import PATH is the right signal, and it is matched against the file's
- * kebab-case name -- not the PascalCase component it exports. Two "improvements"
- * to this function were tried and both were regressions:
+ * Matching the import PATH against the file's kebab-case name is the whole
+ * check, and it works. Three attempts were made to also require a real render,
+ * so that a dangling import could not keep a deleted component alive, and all
+ * three produced false positives rather than catching the hole:
  *
- *   - requiring a JSX usage as well, so a dangling import could not mask an
- *     unmounted component. Broken, because `<DiscoveryCard>` never contains
- *     the text `discovery-card`, so it reported 58 live components as orphans.
- *   - stripping import lines and searching the remainder. Broken for the same
- *     reason from the other side: in this codebase imports are single-line, so
- *     stripping them removed the only mention of 58 live components.
+ *   - match a JSX usage of the FILENAME. Impossible: the file is
+ *     `discovery-card.tsx` and the markup is `<DiscoveryCard>`, so this matched
+ *     nothing and reported 58 live components as orphans.
+ *   - derive the exported PascalCase name and match that. Correct in
+ *     principle, but the import-path signal still fires for a dangling import,
+ *     so the hole survived; keeping the import signal and requiring a render
+ *     both means re-exports and dynamic imports have to be special-cased too,
+ *     and every special case is another way to be wrong.
+ *   - strip import lines and search the remainder. Same 58, from the other
+ *     side: imports here are single-line, so stripping removed the only
+ *     mention of 58 live components.
  *
- * The dangling-import hole is real but it is not worth a false-positive rate
- * this high. It is noted rather than half-fixed.
+ * So the hole stands, documented: an import left behind after the usage was
+ * deleted will still read as mounted. That is a small miss, and it is cheaper
+ * than the 58 false positives that every attempt to remove it produced. The
+ * check that ships catches the case that actually happens -- a component nobody
+ * imported at all -- which is how the enrichment view was found in the first
+ * place.
  */
 function isReferenced(name) {
   return allSources.some(
