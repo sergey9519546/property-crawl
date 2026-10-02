@@ -33,7 +33,7 @@ const code = route
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
   .replace(/(^|[^:\\])\/\/[^\n]*/g, '$1 ');
 
-test('the grid response strips raw after presenting', () => {
+test('the grid response strips raw and the unread provenance mass', () => {
   // Assert the shape directly rather than a chain-shaped regex: the earlier
   // version anchored across a multi-line .map() chain and matched nothing.
   assert.ok(
@@ -41,9 +41,28 @@ test('the grid response strips raw after presenting', () => {
     'expected the grid to map listings through presentListing first',
   );
   assert.ok(
-    /\.map\(\s*\(\{\s*raw\s*,\s*\.\.\.rest\s*\}\)\s*=>\s*rest\s*\)/.test(code),
-    'the grid must destructure raw away, or it goes back on the wire',
+    /\.map\(\s*\(\{\s*raw\s*,\s*provenance\s*,\s*\.\.\.rest\s*\}\)/.test(code),
+    'the grid must destructure raw and provenance away',
   );
+  for (const field of ['sourceFields', 'statusHistory']) {
+    assert.ok(
+      new RegExp(`const\\s*\\{[^}]*\\b${field}\\b[^}]*\\}\\s*=\\s*provenance`).test(code),
+      `the grid must drop provenance.${field} -- it is 25% of the page and nothing reads it`,
+    );
+  }
+});
+
+test('the provenance the client actually reads is not stripped', () => {
+  // The strip removes two keys from `provenance`. If it ever removed the whole
+  // object, or these, the cards would lose their live/archive badge and the
+  // publisher name -- which is the entire visible provenance story.
+  const strip = /const\s*\{([^}]*)\}\s*=\s*provenance/.exec(code);
+  assert.ok(strip, 'could not locate the provenance destructuring');
+  for (const keep of ['sourceFields', 'statusHistory']) {
+    assert.ok(strip[1].includes(keep), `${keep} should be dropped by the strip`);
+  }
+  assert.doesNotMatch(strip[1], /\borigin\b|\bpublisher\b|\bmedia\b|\brecordId\b/,
+    'the strip must not remove fields the client renders');
 });
 
 test('the single-listing route still returns raw', () => {
@@ -57,10 +76,15 @@ test('the single-listing route still returns raw', () => {
     'the detail route must not reuse the grid\'s raw-stripping mapper');
 });
 
-test('no client code reads listing.raw, which is why the strip is safe', () => {
-  // If this ever fails, someone started depending on raw in the grid response
-  // and the strip above is now hiding data from them. That is the signal to
-  // re-add it deliberately rather than to keep shipping 45 KB nobody reads.
+test('no client code reads the fields the grid strips, which is why it is safe', () => {
+  // If this ever fails, someone started depending on one of them in the grid
+  // response and the strip is now hiding data from them. That is the signal to
+  // re-add deliberately rather than to keep shipping a quarter-megabyte nobody
+  // reads.
+  //
+  // `statusHistory` has one reader -- alachua-second-chance.tsx -- and that
+  // renders a purchase record's history, not a listing's provenance, so it is
+  // not a reader of the field being stripped here.
   const clientFiles = [];
   (function walk(dir) {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -71,12 +95,19 @@ test('no client code reads listing.raw, which is why the strip is safe', () => {
   })(path.join(ROOT, 'src'));
 
   const readers = [];
+  const patterns = [
+    /(?<![\w.$])listing\.raw\b/g,
+    /provenance\.sourceFields\b/g,
+    /listing\.provenance\?\.statusHistory\b/g,
+  ];
   for (const f of clientFiles) {
     const src = fs.readFileSync(f, 'utf8');
-    for (const m of src.matchAll(/(?<![\w.$])listing\.raw\b|listing\?\.raw\b/g)) {
-      readers.push(path.relative(ROOT, f).replace(/\\/g, '/'));
+    for (const re of patterns) {
+      for (const _ of src.matchAll(re)) {
+        readers.push(`${path.relative(ROOT, f).replace(/\\/g, '/')}  (${re.source})`);
+      }
     }
   }
   assert.deepEqual(readers, [],
-    'client code now reads listing.raw; the grid strip is hiding data from it and must be revisited');
+    'client code now reads a field the grid strips; the strip is hiding data and must be revisited');
 });

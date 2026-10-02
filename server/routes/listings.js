@@ -260,7 +260,19 @@ async function handleListings(req, res) {
     // not a payload optimisation.
     const presentedListings = result.listings
       .map(listing => presentListing(attachMedia(listing, entries)))
-      .map(({ raw, ...rest }) => rest);
+      .map(({ raw, provenance, ...rest }) => {
+        if (!provenance || typeof provenance !== 'object') return rest;
+        // Two more fields with no reader, same reasoning as `raw` above:
+        //   sourceFields   67.0 KB of the page (24.7%) -- the publisher's
+        //                  extracted field->value map, 1.6 KB per card
+        //   statusHistory  11.8 KB -- a 13-entry per-card audit trail
+        // The only `statusHistory` consumer in the codebase is
+        // alachua-second-chance.tsx, and that renders a purchase record's
+        // history, not a listing's provenance. `sourceFields` has no reader
+        // anywhere under src/.
+        const { sourceFields, statusHistory, ...kept } = provenance;
+        return { ...rest, provenance: kept };
+      });
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.
     const viewListings = applyIntelligenceView(presentedListings, filters);
     const body = {
