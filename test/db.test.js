@@ -296,10 +296,12 @@ async function run() {
       path.resolve(__dirname, '..', 'src', 'lib', 'db', 'migrations', '004_listing_precision_and_cash_details.sql'),
       'utf8',
     );
-    const dbClients = [
-      fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'client.js'), 'utf8'),
-      fs.readFileSync(path.resolve(__dirname, '..', 'src', 'lib', 'db', 'client.js'), 'utf8'),
-    ];
+    // The client contract is asserted against server/db/client.js, the module
+    // production loads. This used to read src/lib/db/client.js too and loop
+    // over both - a fork nine exports behind the real one, imported by nothing
+    // but a test, which made the suite look like it pinned two maintained
+    // clients. Deleted; see test/no-dead-duplicates.test.js.
+    const dbClient = fs.readFileSync(path.resolve(__dirname, '..', 'server', 'db', 'client.js'), 'utf8');
     for (const column of ['county', 'city', 'zip', 'latitude', 'longitude', 'prop_type', 'opening_bid', 'est_low', 'est_high', 'deal_score', 'sale_date']) {
       assert.match(migration, new RegExp(`ALTER COLUMN ${column} DROP NOT NULL`));
     }
@@ -315,7 +317,7 @@ async function run() {
     assert.match(precisionMigration, /ADD COLUMN IF NOT EXISTS cash_to_close_details JSONB/);
     assert.strictEqual(mirrorSchema, schema, 'server and Next schema mirrors must stay byte-equivalent');
     assert.strictEqual(mirrorPrecisionMigration, precisionMigration, 'forward migration mirrors must stay byte-equivalent');
-    for (const client of dbClients) {
+    for (const client of [dbClient]) {
       assert.match(client, /baths::float8\s+AS "baths"/);
       assert.match(client, /cash_to_close_details AS "cashToCloseDetails"/);
       assert.match(client, /Buffer\.byteLength\(serialized, 'utf8'\) > 65_536/);

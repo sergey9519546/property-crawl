@@ -1,8 +1,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const serverRules = require('../server/ai/legal-rules');
-const nextRules = require('../src/lib/ai/legal-rules');
 
 test('unknown legal inputs remain unknown instead of becoming safe defaults', () => {
   assert.equal(serverRules.parseCurrency(undefined), null);
@@ -69,12 +70,25 @@ test('legacy LOI and committee memo are evidence-review drafts, never fabricated
   assert.doesNotMatch(memo, /free and clear|deal score.*85/i);
 });
 
-test('server and Next legal-rule mirrors preserve the same truth contract', () => {
-  const input = { openingBid: 42_000, registrationFunds: 1_000, creditedDeposit: 4_000, buyersPremium: 0, sheriffPoundage: 0, transferTax: 0, delinquentTaxes: 0, settlementCosts: 0 };
-  assert.deepEqual(nextRules.computeCashToClose(input), serverRules.computeCashToClose(input));
-  assert.deepEqual(nextRules.getRedemptionRule(''), serverRules.getRedemptionRule(''));
+// The truth contract these rules must never violate is asserted above, against
+// the module production actually loads: server/ai/legal-rules.js, required by
+// server/ai/notice-parser.js and server/scrapers/normalization.js.
+//
+// This file used to end with a "mirror parity" test against
+// src/lib/ai/legal-rules.js. That copy was 33KB, differed from the server file
+// in exactly one line (its own @file header comment), and was imported by
+// nothing but that test - so every assertion in it compared a function to
+// itself. It read as coverage of two maintained implementations; it was one
+// file compared with a mirror of itself.
+//
+// The copy is deleted, and no replacement assertions are invented: the
+// properties it stood in for are already covered above. See
+// test/no-dead-duplicates.test.js.
+test('only the server copy of the legal rules exists', () => {
+  // Named explicitly so a reintroduction is caught by name.
   assert.equal(
-    nextRules.generateInvestmentCommitteeMemo({ address: 'No Defaults' }),
-    serverRules.generateInvestmentCommitteeMemo({ address: 'No Defaults' }),
+    fs.existsSync(path.join(__dirname, '..', 'src', 'lib', 'ai', 'legal-rules.js')),
+    false,
+    'src/lib/ai/legal-rules.js is back'
   );
 });

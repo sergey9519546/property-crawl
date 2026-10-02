@@ -6,14 +6,24 @@ const { afterEach, test } = require('node:test');
 const previousNodeEnv = process.env.NODE_ENV;
 process.env.NODE_ENV = 'test';
 const serverClient = require('../server/db/client');
-const nextClient = require('../src/lib/db/client');
 if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
 else process.env.NODE_ENV = previousNodeEnv;
 
+// This file used to run every case against TWO clients - server/db/client.js
+// and src/lib/db/client.js - as a parity check. The second was a fork left
+// behind by the Next.js port: 790 lines, nine exports behind the real one
+// (missing applyCrossSourceBakeOff, computeBakeOff, postgresReachable,
+// postgresError, aiCacheStore and the workspace-store fields), and reachable
+// by nothing in src/ or server/ - only by another dead file
+// (src/lib/ai/cache.js) and by this test.
+//
+// So the parity was theatre: it made the suite look like it covered two
+// maintained implementations when it covered one real client and one ghost.
+// Both copies are deleted; see test/no-dead-duplicates.test.js, which now
+// fails if a src/ copy of a server/ module reappears.
 const temporaryDirectories = [];
 const implementations = [
   ['server', serverClient.DatabaseClient],
-  ['next', nextClient.DatabaseClient],
 ];
 
 function temporaryCache() {
@@ -128,9 +138,7 @@ for (const [name, DatabaseClient] of implementations) {
 test('default live cache matches collect-source output and tests can disable it', () => {
   const collectorDefault = path.resolve(__dirname, '../.cache/live-listings.json');
   assert.equal(serverClient.DEFAULT_LIVE_CACHE_PATH, collectorDefault);
-  assert.equal(nextClient.DEFAULT_LIVE_CACHE_PATH, collectorDefault);
   assert.equal(new serverClient.DatabaseClient({ env: { NODE_ENV: 'test' } }).liveCachePath, null);
-  assert.equal(new nextClient.DatabaseClient({ env: { NODE_ENV: 'test' } }).liveCachePath, null);
 });
 
 test('Postgres mode never inspects or overlays the local live cache', () => {

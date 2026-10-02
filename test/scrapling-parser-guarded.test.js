@@ -30,11 +30,14 @@ const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 test('the parser suite is still on disk and still the only direct parser test', () => {
   assert.ok(fs.existsSync(SUITE), 'test/scrapling_parser_test.py must exist');
   // If another JS test starts covering scrapling_extract.py, this test is
-  // redundant and should be revisited rather than left to rot.
+  // redundant and should be revisited rather than left to rot. This file is
+  // excluded because it has to name the module to search for it.
   const others = spawnSync('git', ['grep', '-l', 'scrapling_extract', '--', 'test'], {
     cwd: ROOT, encoding: 'utf8',
   });
-  const files = (others.stdout || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const files = (others.stdout || '')
+    .split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    .filter((f) => f !== 'test/scrapling-parser-guarded.test.js');
   const js = files.filter((f) => /\.(test\.js|test\.mjs)$/.test(f));
   assert.deepEqual(js, [], `unexpected JS coverage of the parser: ${js.join(', ')}`);
 });
