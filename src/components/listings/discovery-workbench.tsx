@@ -102,12 +102,27 @@ const filterLabels: Record<string, string> = {
 // 6%" (withdrawn -- measured across two states that differed in more than
 // this change); and now this.
 //
+// Where the ~16 ms goes was checked rather than guessed. Same page, same
+// synchronous loop, control-validated:
+//
+//     TYPE    325 ms   17.09 ms each   value changes, event dispatched
+//     NO-OP     0 ms    0.02 ms each   event dispatched, value unchanged
+//     BARE      0 ms    0.00 ms each   property write, no event
+//
+// So it is real work rather than harness overhead -- but it is not the 48
+// cards either, since memoizing them changed nothing. It is React committing a
+// state update per character, which this harness forces by dispatching
+// synthetic events from outside React's own handler and so getting no batching.
+// Nobody typing at five characters a second incurs that.
+//
+// And there is nothing here to optimise regardless: 16 ms is roughly 8x inside
+// the 200 ms INP threshold. Written down so the next person does not spend an
+// afternoon chasing a number that is already comfortable.
+//
 // The mechanism is still correct and the code still stays: the draft state is
 // no longer in this component, so a keystroke cannot re-derive 48 cards, and
 // the cards are memoised on props that are pure functions of the listing. That
-// ceiling is real. At 48 cards it is simply not what the frame budget is
-// going on -- something else is, and this is recorded as an open question
-// rather than a solved one.
+// ceiling is real, it is just not what the frame budget is going on here.
 const DiscoverySearchField = React.memo(function DiscoverySearchField({
   q,
   onSearch,
