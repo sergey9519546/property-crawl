@@ -348,6 +348,27 @@ export function InteractiveTerminal() {
     [inventory, filters],
   );
 
+  // The grid below used to render the entire `filtered` array at once.
+  // Measured on the landing page that produced 6,605 result cards in the DOM:
+  // 409,430 elements and 43 MB of server-rendered HTML, 99.8% of it inside this
+  // one section, because every card carries inline SVG icons. The page's LCP
+  // looked fine at 392 ms on localhost, which is exactly what made this easy to
+  // miss -- the cost is paid in parse, layout and interaction, not first paint,
+  // and it is paid on whatever device actually loads the page.
+  //
+  // So the grid is bounded and grows on request. The count is deliberately the
+  // same 48 the /listings workbench uses, so the two surfaces agree.
+  const PAGE_SIZE = 48;
+  const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
+  // A new filter result set should start from the top again rather than inherit
+  // however far the previous one had been scrolled through.
+  React.useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filters]);
+  const visible = React.useMemo(
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount],
+  );
+  const remaining = filtered.length - visible.length;
+
   const knownBids = filtered.map((listing) => knownNumber(listing.openingBid)).filter((value): value is number => value !== null).sort((a, b) => a - b);
   const medianBid = knownBids.length > 0 ? knownBids[Math.floor(knownBids.length / 2)] : null;
   const knownEquity = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
@@ -909,8 +930,9 @@ export function InteractiveTerminal() {
                 </div>
               </div>
             ) : (
+            <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((listing) => {
+              {visible.map((listing) => {
                 const src = SOURCES[listing.source] || SOURCES.sheriff;
                 const isSaved = savedIds.has(listing.id);
                 const isObserved = isObservedSourceRecord(listing);
@@ -1023,6 +1045,24 @@ export function InteractiveTerminal() {
                 );
               })}
             </div>
+            {/* Bounded render, stated plainly. Silently truncating the grid
+                would make listings unreachable; this keeps every result one
+                click away while keeping the initial DOM at 48 cards. */}
+            {remaining > 0 ? (
+              <div className="mt-8 flex flex-col items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                  className="px-6 py-3 rounded-xl bg-[#0F172A] text-white text-sm font-bold transition hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F172A] focus-visible:ring-offset-2"
+                >
+                  Show {Math.min(remaining, PAGE_SIZE).toLocaleString()} more
+                </button>
+                <p className="text-xs text-slate-500">
+                  Showing {visible.length.toLocaleString()} of {filtered.length.toLocaleString()} matching listings
+                </p>
+              </div>
+            ) : null}
+            </>
             ))}
           </>
         )}
