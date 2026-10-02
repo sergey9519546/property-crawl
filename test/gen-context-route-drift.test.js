@@ -24,6 +24,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { computeFacts, computeDigest } = require('../scripts/gen-context');
 
 const ROOT = path.resolve(__dirname, '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'gen-context.js');
@@ -159,4 +160,43 @@ test('routes behind a bare startsWith() are captured, not skipped', () => {
   assert.ok(routed.includes('/api/hunts/'), 'the startsWith half must be recorded too');
   const byPath = new Map(computeFacts().routed.map((r) => [r.path, r.handler]));
   assert.equal(byPath.get('/api/listings'), 'handleListings');
+});
+
+test('CONTEXT.md does not call data.js the source of truth for the catalog', () => {
+  // CONTEXT.md's whole job is telling a reader where truth lives. It was headed
+  // "Data shape (source of truth)" and reported data.js's 16 SOURCES entries
+  // for a catalog that actually holds 163, and its 2094 seed listings for an
+  // inventory the live store and the served API both exceed. A reader following
+  // that heading would badly misjudge both numbers.
+  const facts = computeFacts();
+  const ctx = fs.readFileSync(path.join(ROOT, 'CONTEXT.md'), 'utf8');
+  assert.doesNotMatch(ctx, /## Data shape \(source of truth\)/);
+  assert.match(ctx, /## Data shape/);
+  assert.match(ctx, /seed snapshot/i);
+  // The authoritative taxonomy must be present and named as such.
+  assert.match(ctx, /server\/sources\/catalog\.js/);
+  assert.ok(
+    ctx.includes(`**${facts.catalogCount} catalog entries**`),
+    `CONTEXT.md must state the real catalog size (${facts.catalogCount})`
+  );
+  assert.ok(
+    facts.catalogCount > facts.sourceCount,
+    'fixture assumption: the catalog is much larger than data.js SOURCES'
+  );
+});
+
+test('a catalog change moves the digest', () => {
+  // The catalog is now part of what CONTEXT.md claims, so changing it must
+  // invalidate the document rather than leaving a stale one behind.
+  const facts = computeFacts();
+  // Without this, the test below would pass against a computeFacts() that has
+  // no catalog field at all - it would be guarding nothing.
+  assert.equal(
+    typeof facts.catalogCount, 'number',
+    'computeFacts must expose the catalog size for the digest to depend on it'
+  );
+  assert.ok(facts.catalogCount > 0);
+  const before = computeDigest(facts);
+  const after = computeDigest({ ...facts, catalogCount: facts.catalogCount + 1 });
+  assert.notEqual(before, after, 'catalog size must participate in the digest');
 });

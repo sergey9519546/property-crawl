@@ -101,10 +101,23 @@ function safeRead(file) {
   try { return fs.readFileSync(file, 'utf8'); } catch (_) { return ''; }
 }
 
+function loadCatalog() {
+  // The authoritative source taxonomy. This used to be absent from CONTEXT.md
+  // entirely, which left data.js's 16 SOURCES entries described as "the source
+  // of truth" for a catalog that actually has 163.
+  try {
+    const { SOURCE_CATALOG } = require('../server/sources/catalog');
+    return SOURCE_CATALOG;
+  } catch (_) {
+    return [];
+  }
+}
+
 function computeFacts() {
   const { sources, listings } = loadData();
   const scripts = loadScripts();
   const routes = loadRoutes();
+  const catalog = loadCatalog();
 
   const sourceKeys = Object.entries(sources)
     .map(([k, v]) => `${k}:${v.label || ''}:${v.tier || ''}`)
@@ -112,6 +125,9 @@ function computeFacts() {
   const states = [...new Set(listings.map((l) => l.state).filter(Boolean))].sort();
   const propTypes = [...new Set(listings.map((l) => l.propType).filter(Boolean))].sort();
   const scriptsList = Object.entries(scripts).map(([k, v]) => `${k}=${v}`).sort();
+  const catalogStatuses = catalog
+    .map((e) => e.status || 'DISCOVERY_ONLY')
+    .reduce((acc, s) => ({ ...acc, [s]: (acc[s] || 0) + 1 }), {});
 
   return {
     sourceCount: sourceKeys.length,
@@ -119,6 +135,13 @@ function computeFacts() {
     listingCount: listings.length,
     states,
     propTypes,
+    // data.js seeds the v0 static PWA and the in-memory provider. It is a
+    // seed snapshot, not the live inventory: the store on disk carries more
+    // records than data.js does, and the served totals come from the DB.
+    seedListingCount: listings.length,
+    catalogCount: catalog.length,
+    catalogStatuses,
+    catalogAdapters: catalog.filter((e) => e.adapterKey).length,
     routeModules: routes.modules,
     routed: routes.routed,
     scripts: scriptsList
@@ -145,12 +168,22 @@ sheriff sales, trustee sales, HUD/REO, IRS/Treasury/GSA dispositions.
 Three layers: static PWA (v0, \`index.html\`/\`app.js\`), Node \`http\` listing API (v1,
 \`server/\`), Next.js 16 App Router marketing site (v2, \`src/\`).
 
-## Data shape (source of truth)
-- \`SOURCES\`: ${facts.sourceCount} source types (key:label:tier)
+## Data shape
+Authoritative source taxonomy: \`server/sources/catalog.js\` -
+**${facts.catalogCount} catalog entries**, ${facts.catalogAdapters} with a live
+adapter, by status: ${Object.entries(facts.catalogStatuses).sort().map(([k, v]) => `${k}=${v}`).join(', ')}.
+
+\`data.js\` is a **seed snapshot**, not the source of truth. It seeds the v0
+static PWA and the in-memory provider, and the scraper workflow commits it back.
+It holds ${facts.seedListingCount} listings; the running app serves from the
+database and the live record store, which carry more. Treat the catalog for
+*which sources exist* and the database for *which listings exist*.
+
+- \`SOURCES\` in data.js: ${facts.sourceCount} entries (v0 taxonomy)
 ${src}
-- \`LISTINGS\`: ${facts.listingCount} records
-- states: ${facts.states.join(', ')}
-- property types: ${facts.propTypes.join(', ')}
+- data.js seed listings: ${facts.seedListingCount} records
+- states in the seed: ${facts.states.join(', ')}
+- property types in the seed: ${facts.propTypes.join(', ')}
 
 ## Server API routes
 - ${facts.routed.length} path(s) dispatched from \`server/server.js\`
@@ -198,7 +231,11 @@ function main() {
   }
 
   fs.writeFileSync(CONTEXT_PATH, renderContext(facts));
-  console.log(`Wrote ${CONTEXT_PATH} (${facts.sourceCount} sources, ${facts.listingCount} listings, ${facts.states.length} states)`);
+  console.log(
+    `Wrote ${CONTEXT_PATH} (catalog ${facts.catalogCount} sources, `
+    + `data.js seed ${facts.sourceCount} sources / ${facts.seedListingCount} listings, `
+    + `${facts.states.length} states, ${facts.routed.length} dispatched paths)`
+  );
 }
 
 module.exports = { computeFacts, computeDigest, renderContext, loadData, CONTEXT_PATH };

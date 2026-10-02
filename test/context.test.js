@@ -29,5 +29,21 @@ test('CONTEXT.md reflects a non-empty SOURCES taxonomy', () => {
   const facts = computeFacts();
   assert.ok(facts.sourceCount > 0, 'SOURCES taxonomy must be non-empty');
   const body = fs.readFileSync(CONTEXT_PATH, 'utf8');
-  assert.ok(body.includes(`${facts.sourceCount} source types`), 'source count rendered');
+  // Wording changed deliberately: the section used to call data.js's 16 entries
+  // "16 source types", which is exactly the confusion this section used to
+  // cause. 16 is the v0 seed taxonomy; the catalog is the real one.
+  assert.ok(
+    body.includes(`\`SOURCES\` in data.js: ${facts.sourceCount} entries`),
+    'the data.js seed taxonomy count must be rendered'
+  );
+  // And the number that actually answers "how many sources are there?".
+  assert.ok(
+    body.includes(`**${facts.catalogCount} catalog entries**`),
+    'the authoritative catalog size must be rendered'
+  );
+  assert.ok(
+    facts.catalogCount > facts.sourceCount,
+    'fixture assumption: the catalog is larger than the data.js seed taxonomy'
+  );
+  assert.doesNotMatch(body, /## Data shape \(source of truth\)/);
 });
