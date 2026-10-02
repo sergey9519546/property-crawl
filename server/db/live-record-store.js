@@ -13,6 +13,19 @@ const MAX_BYTES = Math.max(
   ),
 );
 
+// The one canonical answer to "which file is the live record store?", with the
+// same precedence DatabaseClient uses: PROPERTY_LIVE_CACHE_PATH wins, else the
+// repo-local default. It lives here rather than in db/client.js because
+// requiring db/client.js has import-time side effects (it loads and refreshes
+// the whole store), and read-only consumers must not pay for that.
+const DEFAULT_LIVE_STORE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
+
+function resolveLiveStorePath(explicitPath) {
+  if (explicitPath) return path.resolve(explicitPath);
+  const fromEnv = process.env.PROPERTY_LIVE_CACHE_PATH;
+  return fromEnv ? path.resolve(fromEnv) : DEFAULT_LIVE_STORE_PATH;
+}
+
 function loadLiveRecords(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return [];
   if (fs.statSync(filePath).size > MAX_BYTES) throw new Error('Live record store exceeds size limit');
@@ -82,4 +95,4 @@ function mergeLocked(filePath, candidates, options = {}) {
   return { accepted, rejected, retained: records.size, retired };
 }
 
-module.exports = { loadLiveRecords, mergeLiveRecords };
+module.exports = { loadLiveRecords, mergeLiveRecords, resolveLiveStorePath, DEFAULT_LIVE_STORE_PATH };

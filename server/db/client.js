@@ -12,7 +12,9 @@ function finiteOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-const DEFAULT_LIVE_CACHE_PATH = path.resolve(__dirname, '../../.cache/live-listings.json');
+// Shared with live-record-store so read-only consumers and the DB client can
+// never disagree about which file is the live record store.
+const DEFAULT_LIVE_CACHE_PATH = require('./live-record-store').DEFAULT_LIVE_STORE_PATH;
 const DEFAULT_WORKSPACE_STORE_PATH = path.resolve(__dirname, '../../.cache/workspace-store.json');
 const WORKSPACE_STORE_VERSION = 1;
 

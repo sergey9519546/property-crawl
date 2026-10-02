@@ -4,22 +4,34 @@
 //
 // What this module computes:
 //   - how many catalog entries reference each US state (parsed from the
-//     free-text `coverage` field), broken out by status (verified, scope
-//     limited, discovery only, blocked, retired)
-//   - how many live listings each (state, source) pair has on disk, so
-//     the UI can answer "for state X, which sources have actually
+//     free-text `coverage` and `notes` fields combined), broken out by status
+//     (verified official, verified first party, scope limited, local route,
+//     discovery only, inconclusive/blocked, retired)
+//   - how many live listings each (state, source) pair has in the live record
+//     store, so a caller can answer "for state X, which sources have actually
 //     published data?"
 //   - aggregate counts (total, byStatus, byRole, byCategory) carried over
 //     from summarizeCatalog()
 //
 // What this module does NOT do:
 //   - it does not parse county-level detail from free text (too brittle)
-//   - it does not hit the network; the live listing count is read from
-//     the local cache file the in-memory DB uses
+//   - it does not hit the network; the live listing count is read from the
+//     local live record store on disk
 //   - it does not invent coverage where the catalog says nothing
+//
+// Honesty contract for the live half: `buildLiveStateSourceCoverage` reports
+// `storeStatus` and `readError` so a store that could not be read is never
+// presented as zero coverage. Records whose state is not one of the 51 codes
+// are counted in `excludedRecords` / `excludedByState`, not dropped silently.
 
+const fs = require('node:fs');
 const { SOURCE_CATALOG, SOURCE_STATUSES, summarizeCatalog } = require('../sources/catalog');
-const { loadLiveRecords } = require('../db/live-record-store');
+const { loadLiveRecords, resolveLiveStorePath } = require('../db/live-record-store');
+
+// Re-parsing the store costs ~130ms for a 28MB file and the file only changes
+// when a collector rewrites it, so cache on its mtime+size signature. The stat
+// runs on every call; only the parse is skipped.
+let liveStoreCache = null;
 
 const US_STATE_ABBRS = Object.freeze([
   'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN',
@@ -87,24 +99,50 @@ function buildCatalogStateCoverage() {
   };
 }
 
-function buildLiveStateSourceCoverage() {
-  // Pull live listings from the in-memory cache. The cache is the canonical
-  // source-of-truth for what we have actually published; running this
-  // module never touches the network.
-  let records = [];
+function readLiveStore() {
+  const storePath = resolveLiveStorePath();
+  let signature;
   try {
-    const merged = loadLiveRecords();
-    records = Array.isArray(merged) ? merged : (Array.isArray(merged?.records) ? merged.records : []);
-  } catch (_) {
-    records = [];
+    const stats = fs.statSync(storePath);
+    if (!stats.isFile()) {
+      return { records: [], storePath, storeStatus: 'unreadable', readError: 'Live record store path is not a regular file' };
+    }
+    signature = `${stats.mtimeMs}:${stats.size}`;
+  } catch (error) {
+    // An absent store is an honest zero. Anything else is a read failure and
+    // must be reported as one, never folded into "no live coverage".
+    if (error.code === 'ENOENT') return { records: [], storePath, storeStatus: 'absent', readError: null };
+    return { records: [], storePath, storeStatus: 'unreadable', readError: `Could not inspect live record store: ${error.message}` };
   }
+  const key = `${storePath}|${signature}`;
+  if (liveStoreCache && liveStoreCache.key === key) return liveStoreCache.result;
+  let result;
+  try {
+    result = { records: loadLiveRecords(storePath), storePath, storeStatus: 'read', readError: null };
+  } catch (error) {
+    result = { records: [], storePath, storeStatus: 'unreadable', readError: error.message };
+  }
+  liveStoreCache = { key, result };
+  return result;
+}
+
+function buildLiveStateSourceCoverage() {
+  // Read the live record store - the canonical record of what we have actually
+  // published. Running this module never touches the network.
+  const { records, storePath, storeStatus, readError } = readLiveStore();
   const byStateSource = {};
   const byStateTotal = {};
+  // Records whose state is not one of the 51 codes are real published records.
+  // Dropping them without accounting would understate the store, so they are
+  // counted here and surfaced to the caller.
+  const excludedByState = {};
+  let missingSource = 0;
   for (const record of records) {
-    const state = typeof record?.state === 'string' ? record.state.toUpperCase() : null;
     const source = typeof record?.source === 'string' ? record.source : null;
-    if (!state || !source) continue;
-    if (!US_STATE_SET.has(state)) continue;
+    if (!source) { missingSource += 1; continue; }
+    const state = typeof record.state === 'string' ? record.state.toUpperCase() : null;
+    if (!state) { excludedByState['<no state>'] = (excludedByState['<no state>'] || 0) + 1; continue; }
+    if (!US_STATE_SET.has(state)) { excludedByState[state] = (excludedByState[state] || 0) + 1; continue; }
     if (!byStateSource[state]) byStateSource[state] = {};
     if (!byStateSource[state][source]) byStateSource[state][source] = { live: 0, observed: null };
     byStateSource[state][source].live += 1;
@@ -118,7 +156,21 @@ function buildLiveStateSourceCoverage() {
     }
     byStateTotal[state] = (byStateTotal[state] || 0) + 1;
   }
-  return { byStateSource, byStateTotal, totalRecords: records.length };
+  const excludedRecords = Object.values(excludedByState).reduce((a, n) => a + n, 0) + missingSource;
+  return {
+    byStateSource,
+    byStateTotal,
+    totalRecords: records.length,
+    countedRecords: records.length - excludedRecords,
+    storePath,
+    storeStatus,
+    // null when the store was read or is genuinely absent; a message when the
+    // store exists but could not be read. Consumers must not present a
+    // readError as zero coverage.
+    readError,
+    excludedRecords,
+    excludedByState
+  };
 }
 
 function summarize() {
@@ -134,6 +186,9 @@ function summarize() {
     },
     catalogByState: catalogCoverage,
     liveByState: liveCoverage,
+    // The full 51-code schema, i.e. every state the matrix can describe.
+    // This is NOT the set of states the catalog actually mentions - that is
+    // `catalogByState.states` (filtered) and `catalogByState.statesWithCoverage`.
     states: US_STATE_ABBRS,
     statusLabels: Object.fromEntries(
       Object.entries(SOURCE_STATUSES).map(([key, value]) => [key, value.label])
