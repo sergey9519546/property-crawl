@@ -22,7 +22,10 @@ const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT_ARG = process.argv.indexOf('--root');
+const ROOT = ROOT_ARG !== -1 && process.argv[ROOT_ARG + 1]
+  ? path.resolve(process.argv[ROOT_ARG + 1])
+  : path.resolve(__dirname, '..');
 const CONTEXT_PATH = path.join(ROOT, 'CONTEXT.md');
 
 function loadData() {
@@ -42,12 +45,54 @@ function loadScripts() {
 }
 
 function loadRoutes() {
-  // route handler module names under server/routes/, plus inline endpoints in server.js
+  // The old version of this returned *filenames* from server/routes plus a
+  // hardcoded `inline: ['sources','health']`, and it never opened a single file
+  // inside server/routes. So the digest moved when a route file was renamed or
+  // added, and stayed perfectly still when a route was added to, removed from,
+  // or had its path changed inside an existing handler - which is what adding
+  // an endpoint actually looks like. The header claimed a change to "server
+  // routes" is caught mechanically. It was not.
+  //
+  // Now the dispatch table and each module's served paths are both read, so
+  // editing a handler moves the digest. The inline list is derived from
+  // server.js instead of being asserted by hand.
   const dir = path.join(ROOT, 'server', 'routes');
   let files = [];
-  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => f.replace(/\.js$/, '')); } catch (_) {}
-  files.sort();
-  return { modules: files, inline: ['sources', 'health'] };
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).sort(); } catch (_) {}
+
+  const modules = files.map((name) => {
+    const src = safeRead(path.join(dir, name));
+    const paths = [...new Set(
+      [...src.matchAll(/['"`]((?:\/api)?\/[a-z0-9\-/]*(?:\/:[a-z]+)?)['"`]/gi)].map((m) => m[1])
+    )].sort();
+    return { module: name.replace(/\.js$/, ''), paths };
+  });
+
+  // server.js owns the dispatch table. Each entry records the handler it
+  // delegates to, or 'inline' when the branch serves the path itself. The
+  // handler call sits on the same line OR the next one depending on the branch,
+  // so both are inspected.
+  const serverSrc = safeRead(path.join(ROOT, 'server', 'server.js'));
+  const lines = serverSrc.split(/\r?\n/);
+  const routed = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!/url\.pathname\s*(?:===|\.startsWith)\s*'/.test(line)) continue;
+    for (const m of line.matchAll(/url\.pathname\s*(?:===|\.startsWith)\s*'([^']+)'/g)) {
+      const route = m[1];
+      if (routed.some((r) => r.path === route)) continue;
+      const window = `${line}\n${lines[i + 1] || ''}\n${lines[i + 2] || ''}`;
+      const handler = window.match(/return\s+((?:handle[A-Za-z]+)|(?:\w*[Hh]andlers\.\w+))/);
+      routed.push({ path: route, handler: handler ? handler[1] : 'inline' });
+    }
+  }
+  routed.sort((a, b) => a.path.localeCompare(b.path));
+
+  return { modules, routed };
+}
+
+function safeRead(file) {
+  try { return fs.readFileSync(file, 'utf8'); } catch (_) { return ''; }
 }
 
 function computeFacts() {
@@ -69,7 +114,7 @@ function computeFacts() {
     states,
     propTypes,
     routeModules: routes.modules,
-    inlineRoutes: routes.inline,
+    routed: routes.routed,
     scripts: scriptsList
   };
 }
@@ -102,8 +147,11 @@ ${src}
 - property types: ${facts.propTypes.join(', ')}
 
 ## Server API routes
-- modules: ${facts.routeModules.join(', ')}
-- inline: ${facts.inlineRoutes.join(', ')}
+- ${facts.routed.length} path(s) dispatched from \`server/server.js\`
+${facts.routed.map((r) => `  - \`${r.path}\` -> ${r.handler}`).join('\n')}
+- inline (served by server.js itself, no route module):
+${facts.routed.filter((r) => r.handler === 'inline').map((r) => `  - \`${r.path}\``).join('\n') || '  (none)'}
+- route modules (${facts.routeModules.length}): ${facts.routeModules.map((m) => m.module).join(', ')}
 
 ## Commands
 \`\`\`
