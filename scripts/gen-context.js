@@ -75,10 +75,16 @@ function loadRoutes() {
   const serverSrc = safeRead(path.join(ROOT, 'server', 'server.js'));
   const lines = serverSrc.split(/\r?\n/);
   const routed = [];
+  // `.startsWith(` puts a paren between the operator and the quote, so the
+  // pattern has to allow an optional "(" - omitting it silently skipped every
+  // pure-startsWith branch, which is how /api/listings, /api/scrapers and
+  // /api/watchlist/ went missing from the first version of this table.
+  const ROUTE_TEST = /url\.pathname\s*(?:===|\.startsWith)\s*\(?\s*'([^']+)'/g;
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    if (!/url\.pathname\s*(?:===|\.startsWith)\s*'/.test(line)) continue;
-    for (const m of line.matchAll(/url\.pathname\s*(?:===|\.startsWith)\s*'([^']+)'/g)) {
+    if (!/url\.pathname\s*(?:===|\.startsWith)/.test(line)) continue;
+    ROUTE_TEST.lastIndex = 0;
+    for (const m of line.matchAll(ROUTE_TEST)) {
       const route = m[1];
       if (routed.some((r) => r.path === route)) continue;
       const window = `${line}\n${lines[i + 1] || ''}\n${lines[i + 2] || ''}`;

@@ -37,6 +37,13 @@ const BASE_SERVER = [
   "if (url.pathname === '/api/coverage') {",
   '  return handleCoverage(req, res);',
   '}',
+  // `startsWith(` puts a paren between the operator and the quote. The first
+  // version of the parser required a quote immediately after the operator, so
+  // every pure-startsWith branch was skipped - /api/listings among them - and
+  // the table quietly under-reported the API. This fixture exists to keep that
+  // shape covered.
+  "if (url.pathname.startsWith('/api/listings')) return handleListings(req, res);",
+  "if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);",
   '',
 ].join('\n');
 
@@ -134,4 +141,22 @@ test('the repo CONTEXT.md is current and lists a real dispatch table', () => {
   const ctx = fs.readFileSync(path.join(ROOT, 'CONTEXT.md'), 'utf8');
   assert.match(ctx, /path\(s\) dispatched from/);
   assert.match(ctx, /-> inline/);
+});
+
+test('routes behind a bare startsWith() are captured, not skipped', () => {
+  // Regression: the parser's pre-filter required a quote straight after the
+  // comparison operator, but `.startsWith(` has a paren there. Every pure
+  // startsWith branch was therefore invisible - including /api/listings, the
+  // busiest route in the app - while the table still rendered a confident
+  // count. A guard whose fixture only used `===` could not see it.
+  const { computeFacts } = require('../scripts/gen-context');
+  const routed = computeFacts().routed.map((r) => r.path);
+  for (const expected of ['/api/listings', '/api/scrapers']) {
+    assert.ok(routed.includes(expected), `dispatch table is missing ${expected}`);
+  }
+  // startsWith branches that also carry an `===` sibling record both.
+  assert.ok(routed.includes('/api/hunts'), 'the `===` half of an A || B branch must be recorded');
+  assert.ok(routed.includes('/api/hunts/'), 'the startsWith half must be recorded too');
+  const byPath = new Map(computeFacts().routed.map((r) => [r.path, r.handler]));
+  assert.equal(byPath.get('/api/listings'), 'handleListings');
 });
