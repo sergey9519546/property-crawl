@@ -267,7 +267,11 @@ export function Storyteller() {
                         className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[10px] font-extrabold transition-colors sm:h-9 sm:w-9 sm:rounded-xl sm:text-[11px] ${
                           selected
                             ? "bg-[#0F172A] text-white"
-                            : "bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#E2E8F0]"
+                            // #64748b on #F1F5F9 measured 4.34:1 against a 4.5:1
+                            // requirement - the step number was flagged as
+                            // insufficient contrast. #475569 lands near 6.3:1 and
+                            // still reads as clearly unselected.
+                            : "bg-[#F1F5F9] text-[#475569] group-hover:bg-[#E2E8F0]"
                         }`}
                       >
                         {item.step}
@@ -306,7 +310,7 @@ export function Storyteller() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#94A3B8]">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#64748B]">
                     Output
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-[#0F172A]">
@@ -537,7 +541,7 @@ function UnderwritePanel() {
 function ModelStat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "bg-[#0F172A] text-white" : "bg-white text-[#111827]"}`}>
-      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#94A3B8]"}`}>{label}</p>
+      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#64748B]"}`}>{label}</p>
       <p className="mt-1 text-[18px] font-extrabold tabular-nums">{value}</p>
     </div>
   );
@@ -637,7 +641,7 @@ function ActionPanel() {
 function MemoMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-[#F1F5F9] px-3 py-4 text-center">
-      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#94A3B8]">{label}</p>
+      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#64748B]">{label}</p>
       <p className="mt-1 text-[19px] font-extrabold tabular-nums text-[#111827]">{value}</p>
     </div>
   );

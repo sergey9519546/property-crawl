@@ -199,7 +199,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               >
                 <div className="flex items-stretch">
                   <div className="flex w-12 shrink-0 items-center justify-center bg-[#F8FAFC] sm:w-14">
-                    <span className="text-sm font-bold tabular-nums text-[#94A3B8]">
+                    <span className="text-sm font-bold tabular-nums text-[#64748B]">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>

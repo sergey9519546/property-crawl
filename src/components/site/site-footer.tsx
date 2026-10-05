@@ -95,7 +95,7 @@ export function SiteFooter() {
             onSubmit={handleNewsletterSubmit}
             className="w-full"
           >
-            <label htmlFor="footer-email" className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#697386]">
+            <label htmlFor="footer-email" className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-[#475569]">
               Work email
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -135,7 +135,7 @@ export function SiteFooter() {
             <Link href="/" className="flex items-center" aria-label="PerfectProperty home">
               <Logo className="text-[16px]" />
             </Link>
-            <p className="mt-4 max-w-[230px] text-[14px] leading-6 text-[#647084]">
+            <p className="mt-4 max-w-[230px] text-[14px] leading-6 text-[#475569]">
               Find, compare, and underwrite distressed property opportunities in one focused workspace.
             </p>
             <div className="mt-5 flex items-center gap-3">
@@ -151,7 +151,7 @@ export function SiteFooter() {
                   href={href}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] transition-colors hover:bg-[#F5F6F7] hover:text-[#111827]"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#4B5563] transition-colors hover:bg-[#F5F6F7] hover:text-[#111827]"
                   aria-label={label}
                 >
                   <Icon className="h-4 w-4" />
@@ -162,7 +162,7 @@ export function SiteFooter() {
 
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#9CA3AF]">
+              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#5B6472]">
                 {col.title}
               </p>
               <ul className="mt-3 space-y-2.5">
@@ -183,17 +183,17 @@ export function SiteFooter() {
 
         {/* Legal row */}
         <div className="mt-16 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="text-[13px] text-[#9CA3AF]">
+          <p className="text-[13px] text-[#5B6472]">
             &copy; {new Date().getFullYear()} PerfectProperty. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
-            <Link href="/terms" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/terms" className="text-[13px] font-medium text-[#4B5563] hover:text-[#111827]">
               Terms
             </Link>
-            <Link href="/privacy" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/privacy" className="text-[13px] font-medium text-[#4B5563] hover:text-[#111827]">
               Privacy
             </Link>
-            <Link href="/security" className="text-[13px] font-medium text-[#6B7280] hover:text-[#111827]">
+            <Link href="/security" className="text-[13px] font-medium text-[#4B5563] hover:text-[#111827]">
               Security
             </Link>
           </div>

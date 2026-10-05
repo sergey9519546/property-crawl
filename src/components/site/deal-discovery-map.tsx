@@ -703,7 +703,7 @@ export function DealDiscoveryMap() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748B]">
               Next opportunities
             </p>
-            <span className="text-[10px] font-semibold text-[#94A3B8]">
+            <span className="text-[10px] font-semibold text-[#64748B]">
               Ranked by score
             </span>
           </div>
@@ -727,7 +727,7 @@ export function DealDiscoveryMap() {
                     <span className="block truncate text-[12px] font-bold text-[#111827]">
                       {deal.address}
                     </span>
-                    <span className="block truncate text-[10px] font-medium text-[#94A3B8]">
+                    <span className="block truncate text-[10px] font-medium text-[#64748B]">
                       {sourceDisplayText(deal.source)}
                     </span>
                   </span>
@@ -759,7 +759,7 @@ function OpportunityStat({
 }) {
   return (
     <div className="rounded-xl bg-[#F3F6F9] px-2 py-2.5">
-      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#94A3B8]">
+      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#64748B]">
         {label}
       </p>
       <p

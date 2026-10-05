@@ -454,7 +454,10 @@ export function InteractiveTerminal() {
             <button
               onClick={() => setIsAlertsOpen(true)}
               className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-amber-500 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
-              aria-label="Open Alerts Manager"
+              // The button reads "Saved searches". Labelling it "Open Alerts Manager" named
+              // a different feature to anyone not looking at the screen, so the
+              // label now contains the visible text.
+              aria-label="Open Saved Searches Manager"
             >
               <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
               <span>Saved searches</span>
@@ -845,7 +848,12 @@ export function InteractiveTerminal() {
                       type="button"
                       onClick={() => dispatchFilters({ type: "toggleMinDealScore", score: band.min })}
                       title={`${band.label} (${band.min}–${band.max}): ${count} deals. ${band.desc}`}
-                      aria-label={`Filter Deal Score band ${band.label}`}
+                      // The visible text is "{label}: {count}" - so the count is
+                      // visible to everyone and was missing from the accessible
+                      // name, meaning a screen-reader user could filter to a
+                      // band but never learn how many deals it holds. Keep the
+                      // action wording, include the visible text verbatim.
+                      aria-label={`Filter Deal Score band ${band.label}: ${count} deals`}
                       className={cn(
                         "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
                         minDealScore === band.min

@@ -66,7 +66,22 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
           <ImageOff size={25} strokeWidth={1.4} className="text-slate-400" aria-hidden />
           <p className="text-sm font-medium text-slate-600">Photo unavailable</p>
-          {observed ? <button type="button" disabled={status === "loading"} aria-label={`Load Street View for ${address}`} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:border-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">{status === "loading" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Camera size={14} aria-hidden />}{status === "loading" ? "Checking coverage…" : status === "unavailable" ? "Retry Street View" : "Check Street View"}</button> : null}
+          {observed ? (() => {
+            // One label for both the visible text and the accessible name.
+            // They used to be written separately and drifted: the aria-label
+            // said "Load Street View" while the button read "Check Street
+            // View", so the label named a different action than the one shown.
+            const label =
+              status === "loading" ? "Checking coverage…"
+              : status === "unavailable" ? "Retry Street View"
+              : "Check Street View";
+            return (
+              <button type="button" disabled={status === "loading"} aria-label={`${label} for ${address}`} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:border-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">
+                {status === "loading" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Camera size={14} aria-hidden />}
+                {label}
+              </button>
+            );
+          })() : null}
         </div>
       </div>
       {layout === "card" || status === "unavailable" ? <div className={caption}>{status === "unavailable" ? <p role="status">{reason}</p> : <><span>{photoFailed ? "Publisher photo could not load" : "No publisher photo available"}</span><span className="text-slate-500">{observed ? "Street View depends on local coverage" : "See the source record for available media"}</span></>}</div> : null}

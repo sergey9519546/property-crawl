@@ -35,7 +35,7 @@ INSERT INTO sources (key, label, tier, color, note, website_url) VALUES
   ('gsa', 'GSA Surplus', 'A', '#92400e', 'realestatesales.gov', 'https://realestatesales.gov'),
   ('landbank', 'Land Bank', 'B', '#059669', 'landbanksearch.com — 70+ county land bank aggregator', 'https://www.landbanksearch.com'),
   ('fdic', 'FDIC REO', 'A', '#1e3a8a', 'sales.fdic.gov — Closed sales & receivership assets', 'https://sales.fdic.gov'),
-  ('civilview', 'CivilView Sheriff', 'B', '#0d9488', 'salesweb.civilview.com — Tyler Technologies docket', 'https://salesweb.civilview.com'),
+  ('civilview', 'CivilView Sheriff', 'B', '#0f766e', 'salesweb.civilview.com — Tyler Technologies docket', 'https://salesweb.civilview.com'),
   ('bid4assets', 'Bid4Assets', 'B', '#7c3aed', 'bid4assets.com — County sheriff & tax auctions', 'https://www.bid4assets.com')
 ON CONFLICT (key) DO NOTHING;
 

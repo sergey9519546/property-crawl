@@ -54,8 +54,15 @@ export function SocialProof() {
 }
 
 function LogoMark({ name, style }: { name: string; style: string }) {
-  // Heterogeneous visual treatment — different weights/sizes, not uniform text
-  const base = "flex items-center justify-center whitespace-nowrap opacity-50 grayscale transition-all duration-200 hover:opacity-100 hover:grayscale-0";
+  // Heterogeneous visual treatment — different weights/sizes, not uniform text.
+  //
+  // Measured on the #f5f6f7 band: opacity-50 gave 2.26:1 and opacity-75 only
+  // 3.83:1, against a 4.5:1 requirement - the publisher names in the proof
+  // section were effectively unreadable at every step. The grayscale filter
+  // already makes them read as secondary, so the opacity was carrying the same
+  // signal twice and paying for it in legibility. Full opacity + grayscale
+  // measures ~15:1 and still looks deliberately muted.
+  const base = "flex items-center justify-center whitespace-nowrap grayscale transition-all duration-200 hover:grayscale-0";
   if (style === "bold") {
     return <span className={`${base} text-[18px] font-extrabold tracking-tight text-[#111827]`}>{name}</span>;
   }
