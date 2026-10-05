@@ -72,7 +72,7 @@ These cannot be closed by writing code here. Each names what would unblock it.
 
 | Blocker | Owner | Unblocked by |
 |---|---|---|
-| Isolate a real PostgreSQL and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | a Postgres instance with `DISCOVERY_TEST_DATABASE_URL` |
+| Isolate a real PostgreSQL and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | see the exact state below |
 | Full browser journey incl. operator unlock | operator | a **clearly synthetic local credential** if the supported auth contract allows one. Do not weaken auth, and do not expose a production key to obtain browser evidence. |
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
 | Fly/Koyeb operator secrets | operator | values set in the host dashboard |
@@ -81,6 +81,34 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Public live URL + custom domain | operator | DNS |
 | Production HTTPS CSP verification | operator | a live HTTPS boot; `upgrade-insecure-requests` is HTTPS-only |
 | Lawyer review of `/privacy` `/terms` | legal | counsel |
+
+### Exact state of the PostgreSQL blocker
+
+Verified on this machine, not assumed:
+
+- `.env.local` already names `DATABASE_URL=postgres://***@localhost:5432/property_crawl`.
+- **Nothing is listening on 5432**, and there is no PostgreSQL install on disk.
+- No in-memory Postgres is available (`pg-mem`, `embedded-postgres`,
+  `@electric-sql/pglite` are all absent).
+- **Docker Desktop is installed and its WSL2 distro is provisioned** — but
+  `com.docker.service` is **Stopped**, and starting it requires an elevated
+  token. The agent session is not elevated, so this cannot be self-served here.
+
+**Unblock:** start the service once from an elevated shell
+(`Start-Service com.docker.service`) or launch Docker Desktop as
+Administrator, then:
+
+```
+docker run -d --name pp-pg -e POSTGRES_PASSWORD=property-local-dev \
+  -p 55432:5432 postgis/postgis:16-3.4
+$env:DISCOVERY_TEST_DATABASE_URL='postgres://postgres:property-local-dev@127.0.0.1:55432/property_crawl'
+npm run test:discovery:operations:pg
+```
+
+That runner currently holds the two tests that are skipped everywhere else
+(`discovery-job-fence`, `discovery-promotion-evidence`) — they are the only
+coverage of job-ownership fencing and promotion evidence against real row
+locks, and nothing runs them outside a PG job.
 
 **CI `continue-on-error` is not release evidence.** Jobs that carry it are
 advisory and cannot close anything in this table.
