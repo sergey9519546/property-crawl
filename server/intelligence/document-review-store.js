@@ -29,6 +29,10 @@ function createDocumentReviewStore(options = {}) {
     ? (options.storePath == null ? null : path.resolve(options.storePath))
     : defaultStorePath(env);
   const reviews = new Map();
+  // Set when a load failed, so the health payload can say "your reviews are on
+  // disk and not loaded" instead of leaving the caller to read an empty store
+  // as "you have no reviews". Exposed through createDocumentReviewStore().
+  let lastLoadError = null;
   let pgReady = false;
 
   function ensurePgTable() {
@@ -82,6 +86,12 @@ function createDocumentReviewStore(options = {}) {
       }
       return reviews;
     } catch (err) {
+      // "starting empty" is honest about the process and dishonest about the
+      // user's data: a corrupt store means their reviews still exist on disk
+      // and are simply not loaded, and nothing anywhere said so. The health
+      // payload reports documentReviewStoreError for exactly this - the same
+      // shape seedError uses for the in-memory inventory.
+      lastLoadError = err instanceof Error ? err.message : String(err);
       console.warn('[document-review] Failed to load store; starting empty:', err.message);
       reviews.clear();
       return reviews;
@@ -192,6 +202,7 @@ function createDocumentReviewStore(options = {}) {
     get storePath() { return storePath; },
     get map() { return reviews; },
     get backend() { return pool ? 'postgres' : (storePath ? 'file' : 'none'); },
+    get loadError() { return lastLoadError; },
     get pool() { return pool; },
     load,
     loadPg,

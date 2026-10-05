@@ -228,6 +228,13 @@ async function handleRequest(req, res) {
         // in the boot log. Undefined in Postgres mode, where it does not apply.
         ...(typeof db.seeded === 'boolean' ? { seeded: db.seeded } : {}),
         ...(db.seedError ? { seedError: db.seedError } : {}),
+        // Same argument, one level down: an unreadable workspace store reads as
+        // an empty one, so the user's saved searches and alert matches are on
+        // disk and simply not loaded. It appears in no payload at all otherwise.
+        // The document-review store keeps the equivalent signal on the store
+        // object itself (store.loadError), which its own route surfaces; it
+        // already reported its location via documentReviewStore.
+        ...(db.workspaceStoreError ? { workspaceStoreError: db.workspaceStoreError } : {}),
         documentReviewStore: db.isPg ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
         documentReviewStorePath: db.isPg ? null : (defaultStorePath(process.env) || null),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),

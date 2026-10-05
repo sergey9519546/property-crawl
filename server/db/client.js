@@ -559,6 +559,12 @@ class DatabaseClient {
       this._workspaceStoreLoaded = true;
       console.log(`[DB] Loaded ${this.inMemoryData.savedSearches.size} saved searches, ${this.inMemoryData.alertMatches.size} alert matches from workspace store`);
     } catch (err) {
+      // "starting empty" is honest about the process and dishonest about the
+      // user's data: their saved searches and alert matches still exist on disk
+      // and are simply not loaded, and nothing said so. _workspaceStoreLoaded is
+      // already true, so there is no retry either. Reported through
+      // workspaceStoreError, the same shape seedError uses for the inventory.
+      this.workspaceStoreError = err instanceof Error ? err.message : String(err);
       console.warn('[DB] Failed to load workspace store; starting empty:', err.message);
     }
   }
