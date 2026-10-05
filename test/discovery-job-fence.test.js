@@ -5,7 +5,16 @@ const { createIsolatedDatabase } = require('./discovery-acceptance-db');
 const { DiscoveryStore } = require('../server/discovery/store');
 const { PgHuntStore } = require('../server/discovery/hunt-store');
 
-test('job ownership fences evidence, projection, run completion, checkpoints and hunt events', async () => {
+// This is a real PostgreSQL test: it fences job ownership against actual row
+// locks, which demo memory data cannot demonstrate. Without this guard
+// createIsolatedDatabase() threw while the file was still loading, which failed
+// the entire runner - taking the twelve files beside it that need no database
+// down with it. Skipping is the convention every sibling uses
+// (test/discovery-acceptance.test.js, test/discovery-promotion-evidence.test.js),
+// and the CI job is literally named "discovery suites skip without PG".
+const configured = Boolean(process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL);
+
+test('job ownership fences evidence, projection, run completion, checkpoints and hunt events', { skip: !configured }, async () => {
   const database = await createIsolatedDatabase({ prefix: 'job_fence' });
   const { pool } = database, store = new DiscoveryStore(pool);
   try {
