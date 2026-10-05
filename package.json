@@ -111,7 +111,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify:gate": "node scripts/verify-gate.js",
     "workspace:ready": "node scripts/workspace-readiness.js",
-    "workspace:walkthrough": "python scripts/record-workspace-walkthrough.py"
+    "workspace:walkthrough": "python scripts/record-workspace-walkthrough.py",
+    "release:gate": "node scripts/release-gate.js",
+    "release:gate:quick": "node scripts/release-gate.js --quick"
   },
   "keywords": [
     "real-estate",

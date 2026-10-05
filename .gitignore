@@ -114,3 +114,6 @@ videos/
 
 # --- Swarm runtime artifacts (never commit episodes) ---
 memory/episodes/
+
+# PP-02 release gate: per-run source-bound ledger. Committed evidence lives in reports/; this is regenerated per release run.
+reports/release-gate-ledger.json
