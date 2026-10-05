@@ -228,13 +228,26 @@ async function handleRequest(req, res) {
         // in the boot log. Undefined in Postgres mode, where it does not apply.
         ...(typeof db.seeded === 'boolean' ? { seeded: db.seeded } : {}),
         ...(db.seedError ? { seedError: db.seedError } : {}),
-        // Same argument, one level down: an unreadable workspace store reads as
-        // an empty one, so the user's saved searches and alert matches are on
-        // disk and simply not loaded. It appears in no payload at all otherwise.
-        // The document-review store keeps the equivalent signal on the store
-        // object itself (store.loadError), which its own route surfaces; it
-        // already reported its location via documentReviewStore.
+        // Same argument, one level down: an unreadable store reads as an empty
+        // one. Both stores move the unreadable file aside on a failed load so a
+        // later write cannot destroy it, and both say so here.
         ...(db.workspaceStoreError ? { workspaceStoreError: db.workspaceStoreError } : {}),
+        ...(db.workspaceStoreQuarantined ? { workspaceStoreQuarantinedTo: db.workspaceStoreQuarantined } : {}),
+        ...(db._workspaceStoreWriteBlocked ? { workspaceStoreWritesBlocked: true } : {}),
+        ...(() => {
+          // The module-scope name is handleDocumentReview; `docReview` is a
+          // const declared much further down, inside the test-reset hook, and
+          // referencing it here threw a ReferenceError that surfaced as a 503
+          // from /api/health. Caught by test/api-rate-http.test.js.
+          const reviewRoute = handleDocumentReview;
+          const store = reviewRoute && reviewRoute._getStore ? reviewRoute._getStore() : null;
+          if (!store || !store.loadError) return {};
+          return {
+            documentReviewStoreError: store.loadError,
+            ...(store.quarantined ? { documentReviewStoreQuarantinedTo: store.quarantined } : {}),
+            ...(store.writesBlocked ? { documentReviewStoreWritesBlocked: true } : {}),
+          };
+        })(),
         documentReviewStore: db.isPg ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
         documentReviewStorePath: db.isPg ? null : (defaultStorePath(process.env) || null),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),

@@ -33,6 +33,10 @@ function createDocumentReviewStore(options = {}) {
   // disk and not loaded" instead of leaving the caller to read an empty store
   // as "you have no reviews". Exposed through createDocumentReviewStore().
   let lastLoadError = null;
+  // Set when an unreadable store could not be moved aside, so persist must
+  // refuse rather than overwrite the only copy.
+  let persistBlocked = false;
+  let quarantinedPath = null;
   let pgReady = false;
 
   function ensurePgTable() {
@@ -76,6 +80,13 @@ function createDocumentReviewStore(options = {}) {
       const raw = fs.readFileSync(storePath, 'utf8');
       const data = JSON.parse(raw);
       if (!data || data.version !== STORE_VERSION) {
+        // Same destruction risk as an unreadable file, reached by a different
+        // route: the store is perfectly parseable and may hold real reviews,
+        // but we do not understand it, so we load nothing - and the next write
+        // would replace it with a v1 file containing whatever is in memory.
+        // Move it aside rather than overwriting the only copy.
+        lastLoadError = `store version mismatch (found ${data && data.version}, expected ${STORE_VERSION})`;
+        quarantineStorePath();
         console.warn('[document-review] Store version mismatch; starting empty.');
         return reviews;
       }
@@ -86,15 +97,40 @@ function createDocumentReviewStore(options = {}) {
       }
       return reviews;
     } catch (err) {
-      // "starting empty" is honest about the process and dishonest about the
-      // user's data: a corrupt store means their reviews still exist on disk
-      // and are simply not loaded, and nothing anywhere said so. The health
-      // payload reports documentReviewStoreError for exactly this - the same
-      // shape seedError uses for the in-memory inventory.
+      // "starting empty" alone is not just silent, it is destructive. Once the
+      // load failed, `reviews` is empty, and the next write persists that
+      // emptiness over the real file - so one corrupt store plus one user
+      // action erases every review on disk with no error anywhere.
+      //
+      // The file is moved aside first. The original bytes survive under a
+      // .corrupt-* name (recoverable, and the evidence an operator needs), the
+      // process starts genuinely clean, and the next persist writes a fresh
+      // store instead of destroying one.
       lastLoadError = err instanceof Error ? err.message : String(err);
+      quarantineStorePath();
       console.warn('[document-review] Failed to load store; starting empty:', err.message);
       reviews.clear();
       return reviews;
+    }
+  }
+
+  // Move an unreadable store aside rather than letting the next persist
+  // overwrite it with whatever happens to be in memory.
+  function quarantineStorePath() {
+    if (!storePath) return null;
+    try {
+      if (!fs.existsSync(storePath)) return null;
+      const quarantined = `${storePath}.corrupt-${Date.now()}`;
+      fs.renameSync(storePath, quarantined);
+      quarantinedPath = quarantined;
+      console.warn(`[document-review] Unreadable store moved aside to ${quarantined}; nothing was overwritten.`);
+      return quarantined;
+    } catch (err) {
+      // The rename failed, so the danger is still live: a later write WOULD
+      // clobber the original. Refuse to write at all in that case.
+      persistBlocked = true;
+      console.warn('[document-review] Could not set the unreadable store aside; writes are now blocked to avoid destroying it:', err.message);
+      return null;
     }
   }
 
@@ -117,6 +153,12 @@ function createDocumentReviewStore(options = {}) {
 
   function persistFile() {
     if (!storePath) return false;
+    // Set only when the store was unreadable AND could not be moved aside, so
+    // the original bytes are still on disk and a write would destroy them.
+    if (persistBlocked) {
+      console.warn('[document-review] Persist refused: the store is unreadable and could not be set aside.');
+      return false;
+    }
     try {
       fs.mkdirSync(path.dirname(storePath), { recursive: true });
       const body = JSON.stringify({
@@ -203,6 +245,8 @@ function createDocumentReviewStore(options = {}) {
     get map() { return reviews; },
     get backend() { return pool ? 'postgres' : (storePath ? 'file' : 'none'); },
     get loadError() { return lastLoadError; },
+    get quarantined() { return quarantinedPath; },
+    get writesBlocked() { return persistBlocked; },
     get pool() { return pool; },
     load,
     loadPg,

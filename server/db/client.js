@@ -565,12 +565,46 @@ class DatabaseClient {
       // already true, so there is no retry either. Reported through
       // workspaceStoreError, the same shape seedError uses for the inventory.
       this.workspaceStoreError = err instanceof Error ? err.message : String(err);
+      // Starting empty is also destructive: the maps are now empty, so the next
+      // _persistWorkspaceStore() would write that emptiness over the real file
+      // and delete everything in it. Move the unreadable store aside first, so
+      // the bytes survive and the next write starts a clean file. If the move
+      // fails, the original is still the only copy, so block writes entirely.
+      this._quarantineWorkspaceStore();
       console.warn('[DB] Failed to load workspace store; starting empty:', err.message);
+    }
+  }
+
+  // Move an unreadable store aside so a later persist cannot destroy it. If
+  // the move fails the original is still the only copy, so writes are blocked
+  // instead - losing the ability to save is strictly better than silently
+  // deleting every saved search.
+  _quarantineWorkspaceStore() {
+    if (!this.workspaceStorePath) return null;
+    try {
+      if (!fs.existsSync(this.workspaceStorePath)) return null;
+      const quarantined = `${this.workspaceStorePath}.corrupt-${Date.now()}`;
+      fs.renameSync(this.workspaceStorePath, quarantined);
+      this.workspaceStoreQuarantined = quarantined;
+      console.warn(`[DB] Unreadable workspace store moved aside to ${quarantined}; nothing was overwritten.`);
+      return quarantined;
+    } catch (err) {
+      this._workspaceStoreWriteBlocked = true;
+      console.warn('[DB] Could not set the unreadable workspace store aside; writes are now blocked to avoid destroying it:', err.message);
+      return null;
     }
   }
 
   _persistWorkspaceStore() {
     if (!this.workspaceStorePath || this.isPg) return;
+    // Set when the store was unreadable and could not be moved aside. Without
+    // this, a failed load leaves the maps empty and the next mutation - the
+    // user saves ONE search - persists a store containing only that search,
+    // silently deleting every other saved search and alert match on disk.
+    if (this._workspaceStoreWriteBlocked) {
+      console.warn('[DB] Persist refused: the workspace store is unreadable and was not set aside; writing would destroy it.');
+      return;
+    }
     try {
       fs.mkdirSync(path.dirname(this.workspaceStorePath), { recursive: true });
       const body = JSON.stringify({

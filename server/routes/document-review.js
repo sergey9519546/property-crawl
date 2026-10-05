@@ -264,6 +264,14 @@ async function handleDocumentReview(req, res, dependencies = {}) {
     return res.json({
       total: summary.total,
       byStatus: summary.byStatus,
+      // A load that failed returns an empty list, which is indistinguishable
+      // from "you have no reviews". Say so on the payload the user is already
+      // looking at, and say where the unreadable bytes went.
+      ...(store.loadError ? {
+        storeError: store.loadError,
+        ...(store.quarantined ? { storeQuarantinedTo: store.quarantined } : {}),
+        ...(store.writesBlocked ? { writesBlocked: true } : {}),
+      } : {}),
       reviews: requested.map((entry) => {
         const review = normalizeReview(entry.review || entry);
         return {

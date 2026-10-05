@@ -146,7 +146,21 @@ function createSavedSearchesHandler(dependencies = {}) {
     if (segments.length === 2 && segments[0] === 'api' && segments[1] === 'saved-searches') {
       if (method === 'GET') {
         const searches = await database.listSavedSearches(userId);
-        return res.json({ userId, count: searches.length, searches: searches.map(serializeSearch) });
+        // A workspace store that failed to load returns no searches, which is
+        // indistinguishable from the user having none. Say so here - this is the
+        // response the UI reads, so it is the only place the user will see it.
+        return res.json({
+          userId,
+          count: searches.length,
+          searches: searches.map(serializeSearch),
+          ...(database.workspaceStoreError ? {
+            storeError: database.workspaceStoreError,
+            ...(database.workspaceStoreQuarantined
+              ? { storeQuarantinedTo: database.workspaceStoreQuarantined }
+              : {}),
+            ...(database._workspaceStoreWriteBlocked ? { writesBlocked: true } : {}),
+          } : {}),
+        });
       }
       if (method === 'POST') {
         const body = req.body || {};
