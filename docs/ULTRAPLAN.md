@@ -1,4 +1,12 @@
 # ULTRAPLAN — property-crawl remaining work
+> **This document is no longer a status source.**
+> Open items, source limits and the dependency order live in
+> [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md), which is the single
+> source of truth and is guarded by `test/docs-checklist-honesty.test.js`.
+> What follows is kept for its evidence, not because its "still open" tables can
+> be trusted — they disagreed with each other and with reality.
+
+
 **Date:** 2026-09-20 · **Scope:** everything still open after the strict multi-audit session · **Mode:** evidence-gated; no “closed” without a failing-before/passing-after test or a real process run.
 
 ---

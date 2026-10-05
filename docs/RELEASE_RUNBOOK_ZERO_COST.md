@@ -1,4 +1,12 @@
 # $0 Production release runbook — Property-Crawl / PerfectProperty
+> **This document is no longer a status source.**
+> Open items, source limits and the dependency order live in
+> [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md), which is the single
+> source of truth and is guarded by `test/docs-checklist-honesty.test.js`.
+> What follows is kept for its evidence, not because its "still open" tables can
+> be trusted — they disagreed with each other and with reality.
+
+
 
 **Constraint:** $0 infrastructure cost. No paid DB/host/API unless already
 unavoidable. Demo inventory uses the in-memory seed (`data.js`); durable
