@@ -634,8 +634,24 @@ class DatabaseClient {
         console.log(`[DB] Loaded ${this.inMemoryData.listings.length} live records (snapshots excluded) across ${Object.keys(this.inMemoryData.sources).length} sources`);
       }
     } catch (err) {
+      // Seeding IS the demo inventory. Swallowing this left the process healthy
+      // with an empty provider, so the app served `total: 0` listings and
+      // /api/health still said demo, reachable, fine - one log line the only
+      // evidence. A corrupt or oversized live-listings.json (the file scrapers
+      // rewrite continuously, and loadLiveRecords throws on both) was enough.
+      //
+      // refreshLiveCache() below cannot rescue it: that one deliberately
+      // preserves current inventory when the cache is bad, which is right for a
+      // refresh and useless when the inventory it would preserve is empty.
+      //
+      // Recorded, not thrown: an operator still gets a running server, and the
+      // health and listings payloads now carry the reason - the same shape as
+      // postgresError.
+      this.seeded = false;
+      this.seedError = err instanceof Error ? err.message : String(err);
       console.error('[DB] Failed to seed in-memory provider:', err);
     }
+    if (this.seeded === undefined) this.seeded = true;
     this.refreshLiveCache({ force: true });
   }
 

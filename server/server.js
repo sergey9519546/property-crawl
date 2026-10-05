@@ -223,6 +223,11 @@ async function handleRequest(req, res) {
         postgresConfigured: Boolean(process.env.DATABASE_URL),
         postgresReachable: db.postgresReachable === true,
         ...(db.postgresError ? { postgresError: db.postgresError } : {}),
+        // In demo mode the inventory IS the seed. A seed that failed leaves a
+        // healthy server serving zero listings, so say so here rather than only
+        // in the boot log. Undefined in Postgres mode, where it does not apply.
+        ...(typeof db.seeded === 'boolean' ? { seeded: db.seeded } : {}),
+        ...(db.seedError ? { seedError: db.seedError } : {}),
         documentReviewStore: db.isPg ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
         documentReviewStorePath: db.isPg ? null : (defaultStorePath(process.env) || null),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),

@@ -294,6 +294,11 @@ async function handleListings(req, res) {
       // clients (workbench, tests) can see demo vs postgres without a second call.
       dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'demo'),
       postgresReachable: db.postgresReachable === true,
+      // A demo inventory that failed to seed reads here as an ordinary "no
+      // results", which is the one thing the caller cannot tell apart from a
+      // real empty search. Carry the reason alongside the count.
+      ...(typeof db.seeded === 'boolean' ? { seeded: db.seeded } : {}),
+      ...(db.seedError ? { seedError: db.seedError } : {}),
       documentReviewStore: db.isPg ? 'postgres' : (require('../intelligence/document-review-store').defaultStorePath?.(process.env) ? 'file' : 'none'),
     };
     if (sinceMs !== null) {
