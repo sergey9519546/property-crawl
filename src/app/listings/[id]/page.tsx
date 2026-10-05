@@ -356,7 +356,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 </div>
               ))}
             </dl>
-            {missingOptionalPropertyFacts.length ? <p className="mt-3 text-sm text-slate-500">Not published: {missingOptionalPropertyFacts.join(", ")}.</p> : null}
+            {/* slate-600, not slate-500: this sits on the #f5f6f7 card and
+                slate-500 measures 4.4:1 there, just under the 4.5:1 floor.
+                It is the one string on the page that must not be hard to read:
+                it is the notice saying the publisher did not publish these
+                facts. Every other text-slate-500 on this page is on white,
+                where it passes at 4.68:1, so this was the only one flagged. */}
+            {missingOptionalPropertyFacts.length ? <p className="mt-3 text-sm text-slate-600">Not published: {missingOptionalPropertyFacts.join(", ")}.</p> : null}
           </div>
 
           <SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} />
