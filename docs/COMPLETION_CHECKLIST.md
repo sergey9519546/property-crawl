@@ -166,10 +166,10 @@ holding at most 3 sample listings and 26 auction-run rows, used to build the
 parser against the publisher's real shape. The collector reads the live public
 API, and no record derived from that download is in the database.
 
-## Playwright UI suite — 48 of 53, with the rest diagnosed
+## Playwright UI suite — 49 of 53, with the rest diagnosed
 
 Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it. It went
-from 8 passing to 48 during the database work; the five that remain each have
+from 8 passing to 49 during the database work; the four that remain each have
 a known cause, recorded here so the diagnosis is not lost with the session.
 
 | Test | Cause |
@@ -177,7 +177,7 @@ a known cause, recorded here so the diagnosis is not lost with the session.
 | `street_view_uses_same_origin_images_and_explicit_context_disclosure` | Four stacked fixture bugs, three fixed and verified: The app asks for **`mode=walkthrough`**, but the mocks only recognised `mode=metadata`, so the disclosure request fell through to the image branch and came back as a PNG the parser rejects. The alternative-imagery probe (`mode=alternatives`) hits the same route and was also answered with a PNG, so `response.json()` threw. And Street View is refused outright without validated current coordinates, while `primary_listing` has `lat: null`. **A fourth** only shows up after those: the mocked metadata has no `panoramaId`/`panoramaLocation`, so the component has no embed to point at and never reveals the disclosure - with those added the disclosure renders and the test reaches its last assertion. That last one (`assertTrue(image_requests)`) needs the interactive embed to actually load, which needs a Google Maps key the harness deliberately blanks. So this test cannot pass in this harness as configured, and none of its fixes are committed. |
 | `feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure` | The same four defects, in its own fixture. Its `media_response` answers the first request with `available:false` and then branches on `"mode=metadata" in url` - which the app never sends, because the disclosure path asks for `mode=walkthrough`. So the retry can never succeed, and the fixture carries no `panoramaId` either. |
 | `detail_mobile_content_and_media_controls_are_not_clipped` | **Fixed.** Two distinct watchlist implementations were being conflated. The feed card's watchlist is a local per-browser list that really does persist across a reload; the detail-page toggle POSTs `/api/alerts`, which is **operator-gated** (401, then `session.requestUnlock()`). The detail test now asserts the honesty contract for the gated path - a refused save must not present as saved - and locates the toggle by `aria-pressed` rather than by label, because the label changes to "Updating watchlist." the moment it is clicked. |
-| `saved_search_persists_and_opens_matching_inventory` | Same cause. The modal now says *"Unlock the workspace to use saved searches and alerts"*; the old *"Search saved on this browser."* copy is gone because the **behaviour** is gone. |
+| `saved_search_persists_and_opens_matching_inventory` | **Fixed, and it was a product bug.** The saved-searches handlers lived only in a `[...path]` catch-all, which in the App Router does not match the bare segment - and the client lists and creates through `/api/saved-searches` with no trailing path. **Every list and create call 404'd**, so the whole feature was unreachable from the modal. Added the bare-path route; calls now return 401 *"Unlock the workspace first."* and the test asserts that refusal honestly. |
 | `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | Also watchlist-gated, and its own assertion did not reproduce under direct probing. |
 | `property_underwrite_watchlist_and_export_journey` | Passes the drawer heading and analyze step; fails later on the MAO tab. Not diagnosed. |
 

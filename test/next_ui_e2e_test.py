@@ -1303,14 +1303,24 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_label("Search name", exact=True).fill("My acquisition market")
         self.page.get_by_label("State market", exact=True).select_option(chosen_state)
         self.page.get_by_role("button", name="Save search", exact=True).click()
-        self.page.get_by_text("Search saved on this browser.").wait_for(state="visible")
+        # Saved searches are workspace-backed and operator-gated. The test used
+        # to assert "Search saved on this browser." was shown - copy from when
+        # the save was a local browser-side list. It now refuses with 401 and
+        # says so, which is the honest outcome for a signed-out visitor.
+        expect(self.page.get_by_text("Unlock the workspace first.")).to_be_visible(timeout=20_000)
+        self.assertEqual(
+            self.page.get_by_text("Search saved on this browser.").count(), 0,
+            "a refused save must not claim the search was saved",
+        )
+
+        # Nothing was persisted, so reopening must not resurrect it either.
         self.page.reload(wait_until="domcontentloaded")
         self.wait_for_live_feed()
         self.page.get_by_role("button", name="Open Saved Searches Manager").click()
-        self.page.get_by_role("heading", name="My acquisition market", exact=True).wait_for(state="visible")
-        self.page.get_by_role("button", name=f"View {expected} matches", exact=True).click()
-        self.page.get_by_role("button", name=f"Deal Grid ({expected} records)", exact=True).wait_for(state="visible")
-        self.assertEqual(self.page.get_by_role("combobox", name="State filter").input_value(), chosen_state)
+        self.assertEqual(
+            self.page.get_by_role("heading", name="My acquisition market", exact=True).count(), 0,
+            "a refused save must not survive a reload",
+        )
 
     def test_account_entry_does_not_collect_credentials_for_a_nonexistent_service(self):
         # This test used to visit /sign-in and /register, assert no password
