@@ -285,6 +285,33 @@ test('BiddingSimulator explains an explicit reverse-price scenario without a cli
   assert.ok(!bidsimContent.includes('winProbability'), 'simulator must not present a fabricated auction-win probability');
 });
 
+test('BiddingSimulator keeps the bid cost model reachable without a valuation', () => {
+  const bidsimContent = fs.readFileSync(path.join(root, 'src/components/terminal/bidding-simulator.tsx'), 'utf8');
+
+  // estLow/estHigh are null on every record in the current inventory, so gating
+  // the whole panel on a valuation rendered an amber notice and nothing else -
+  // including a cash model the component had already computed and discarded.
+  // Cost to close is arithmetic over the PUBLISHED opening bid plus costs the
+  // buyer enters; only the max-allowable-offer half needs to know what the
+  // property is worth. Coupling the two makes a working tool unreachable.
+  assert.ok(
+    !/openingBid === null\s*\|\|\s*estimatedValue === null/.test(bidsimContent),
+    'the BiddingSimulator panel must not be gated on a valuation; only the MAO half requires one',
+  );
+
+  // The computed model must actually reach the screen, not be calculated and dropped.
+  assert.ok(
+    bidsimContent.includes('Acquisition cost at the opening amount'),
+    'the computed cost model is never rendered',
+  );
+
+  // ...and withholding MAO must still be explicit about why, rather than silent.
+  assert.ok(
+    bidsimContent.includes('Price scenario unavailable'),
+    'the missing-valuation notice must remain visible when no MAO can be supported',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');

@@ -40,14 +40,25 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const openingBid = positiveNumber(listing.openingBid);
   const estimatedValue = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
 
-  if (openingBid === null || estimatedValue === null) {
+  // The bid-cost model and the max-allowable-offer calculation do not need the
+  // same inputs. Cost to close is arithmetic over the PUBLISHED opening amount
+  // plus costs the buyer enters, so it is answerable whenever the publisher gave
+  // us an opening bid. MAO is a statement about what the property is worth, so it
+  // requires a supported valuation band and is withheld when none exists.
+  //
+  // Gating the whole panel on a valuation meant that with estLow/estHigh null
+  // across the inventory (they are, on every record) this component rendered
+  // its amber notice and nothing else - including the cash model it had already
+  // computed and never displayed. That is dead code behind a gate the cost model
+  // does not need.
+  if (openingBid === null) {
     return (
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 shadow-sm">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
           <div>
             <h3 className="text-sm font-bold">Price scenario unavailable</h3>
-            <p className="mt-1 text-xs leading-relaxed text-amber-900/80">A published opening amount and supported valuation range are required. Opening amount: {displayMoney(openingBid)}. Valuation: {displayMoney(estimatedValue)}.</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-900/80">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county.</p>
           </div>
         </div>
       </div>
@@ -103,8 +114,10 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         <div className="flex items-start gap-2">
           <Calculator className="mt-0.5 h-5 w-5 text-[#0F172A]" />
           <div>
-            <h3 className="text-base font-bold text-[#111827]">Max Allowable Offer (MAO) Simulator</h3>
-            <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption.</p>
+            <h3 className="text-base font-bold text-[#111827]">{estimatedValue === null ? "Bid cost model" : "Max Allowable Offer (MAO) Simulator"}</h3>
+            <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">{estimatedValue === null
+              ? "Costs below are modeled from the published opening amount and the assumptions you enter. No fee is inferred from the source or state; enter 0 only when zero is your deliberate assumption. A maximum allowable offer is not shown because this record has no supported valuation."
+              : "No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption."}</p>
           </div>
         </div>
 
@@ -132,7 +145,34 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         </div>
 
-        {reverseScenario ? (
+        {cash.totalAcquisitionCost !== null ? (
+          <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+              <p className="text-[11px] font-bold uppercase text-[#6B7280]">Acquisition cost at the opening amount</p>
+              <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalAcquisitionCost)}</p>
+              <p className="mt-1 text-[10px] text-[#6B7280]">The published opening amount plus the acquisition costs you entered.</p>
+            </div>
+            {cash.totalCashToClose !== null ? (
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
+                <p className="text-[11px] font-bold uppercase text-[#6B7280]">Cash to close</p>
+                <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalCashToClose)}</p>
+                <p className="mt-1 text-[10px] text-[#6B7280]">Adds the registration funds and credited deposit you entered.</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900"><AlertTriangle className="h-4 w-4 shrink-0" /><p>Unknown taxes, debt, and fees are not treated as $0. Every acquisition-cost field needs a value before any total can be shown.</p></div>
+        )}
+
+        {estimatedValue === null ? (
+          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <div>
+              <h4 className="text-xs font-bold">Price scenario unavailable</h4>
+              <p className="mt-1 text-[11px] leading-relaxed text-amber-900/80">A maximum allowable offer is a statement about what this property is worth, and this record carries no supported comparable-sale valuation, so none is shown. The published opening amount is {displayMoney(openingBid)}; the cost model above uses only that amount and the assumptions you entered.</p>
+            </div>
+          </div>
+        ) : reverseScenario ? (
           <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#6B7280]">Maximum price meeting target</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-[#6B7280]">After explicit costs, rehab, and target profit.</p></div>
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#6B7280]">Change needed at opening amount</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-[#6B7280]">Required price reduction if costs stay unchanged.</p></div>
