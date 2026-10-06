@@ -177,7 +177,9 @@ export function InteractiveTerminal() {
     const generation = ++refreshGeneration.current;
     setSyncStatus(refresh ? "refreshing" : "loading");
     try {
-      const payload = await loadListingInventory<PropertyListing>();
+      // A manual refresh must bypass the shared load: it is the user asking for
+      // current records, not a second component mounting.
+      const payload = await loadListingInventory<PropertyListing>(fetch, undefined, { forceRefresh: refresh });
       if (generation !== refreshGeneration.current) return;
       const nextListings = payload.listings;
       setListings(nextListings);

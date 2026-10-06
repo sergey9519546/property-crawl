@@ -110,6 +110,7 @@
     "test:ui:discovery": "python test/discovery_ui_regression_test.py -v",
     "test:ui:e2e": "python test/next_ui_e2e_test.py",
     "test:unit": "node test/suite.test.js",
+    "test:inventory-loader": "node --test test/listing-inventory.test.js",
     "test:walkthrough-providers": "node --test test/panoramax.test.js test/panoramax-client.test.mjs test/panoramax-viewer.test.mjs test/property-image-panoramax.test.js test/property-image.test.js",
     "test:workspace": "node --test test/workspace-flows.test.mjs test/workspace-mutation-gate.test.js test/workspace-readiness.test.js test/workspace-session.test.mjs test/terminal-bounded-grid.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",

@@ -679,6 +679,34 @@ in the test rather than the environment. The pattern worth carrying: when a
 failure appears only after a change that made the data *more* correct, suspect
 the test before the product.
 
+## The home page fetched the whole inventory twice
+
+`loadListingInventory` paged the entire inventory — ~9,800 records over 10
+sequential requests — and **two** components called it independently on mount:
+the hero, for its market vocabulary, and the grid. So the home page issued 20
+requests for identical data, and nothing on it was usable until both passes
+finished. That is also why the hero's suggestions were slow enough to need a
+30s wait in a test.
+
+The loader now shares one pass, keyed on the fetch implementation so a caller
+supplying its own fetch never receives another's result, reused for a short
+window after it settles:
+
+```
+/api/listings page requests on first paint
+  before: 20   (offsets 0..9000, each requested twice)
+  after:  10   (offsets 0..9000, each requested once)
+```
+
+A **manual refresh passes `forceRefresh`** so the user's request for current
+records is never served from the shared window, and a failed pass is dropped
+rather than handed to every later caller.
+
+The first version of this did nothing at all: the in-flight entry was stamped
+`settledAt: 0`, which the freshness check reads as long expired, so nothing
+shared. The structural guards passed the whole time — they check the source, not
+the behaviour. Measuring the actual request count is what caught it.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented

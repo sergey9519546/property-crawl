@@ -1,8 +1,24 @@
 type RecordIdentity = { id: string };
 
+type InventoryResult<T> = { listings: T[]; total: number; truncated: boolean };
+
+// How long a settled load is reused before a fresh one is started. Long enough
+// for the components on the same page to share one pass, short enough that a
+// refresh is never showing yesterday's inventory.
+const SHARED_WINDOW_MS = 20_000;
+
+// The hero and the grid both load the whole inventory on mount, and the
+// inventory is ~10,000 records over 10 sequential pages. Without sharing, the
+// home page fetched all of it twice and nothing on the page was usable - not
+// even the hero's market suggestions - until both passes finished.
+//
+// Keyed on the fetch implementation so a caller supplying its own fetch (tests,
+// isolated runs) never receives another implementation's result.
+const shared = new WeakMap<typeof fetch, { result: Promise<InventoryResult<any>>; settledAt: number }>();
+
 // Load every bounded API page before replacing the visible inventory. A failed
 // refresh must not silently replace an already useful feed with demo records.
-export async function loadListingInventory<T extends RecordIdentity>(fetchImpl: typeof fetch = fetch, signal?: AbortSignal) {
+async function loadPages<T extends RecordIdentity>(fetchImpl: typeof fetch, signal?: AbortSignal): Promise<InventoryResult<T>> {
   const records = new Map<string, T>();
   const pageSize = 1000;
   const maxPages = 10;
@@ -24,4 +40,31 @@ export async function loadListingInventory<T extends RecordIdentity>(fetchImpl: 
     if (!payload.listings.length) throw new Error("Inventory changed during pagination. Refresh to retry.");
   }
   return { listings: [...records.values()], total, truncated: true };
+}
+
+export async function loadListingInventory<T extends RecordIdentity>(
+  fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal,
+  options: { forceRefresh?: boolean } = {},
+) {
+  const existing = shared.get(fetchImpl);
+  if (!options.forceRefresh && existing && Date.now() - existing.settledAt < SHARED_WINDOW_MS) {
+    return existing.result as Promise<InventoryResult<T>>;
+  }
+  const result = loadPages<T>(fetchImpl, signal).then((value) => {
+    shared.set(fetchImpl, { result: Promise.resolve(value), settledAt: Date.now() });
+    return value;
+  });
+  if (!options.forceRefresh) {
+    // Publish the in-flight promise so a concurrent second caller joins this
+    // pass instead of starting its own. The stamp is "now", not zero: the
+    // freshness check below reads it, and zero would read as long expired.
+    shared.set(fetchImpl, { result, settledAt: Date.now() });
+  }
+  // A rejected pass must not be shared: the next caller has to be able to try
+  // again rather than inherit the failure for the rest of the window.
+  return result.catch((error) => {
+    if (shared.get(fetchImpl)?.result === result) shared.delete(fetchImpl);
+    throw error;
+  }) as unknown as Promise<InventoryResult<T>>;
 }
