@@ -111,6 +111,12 @@ async function main() {
       PROPERTY_API_URL: `http://localhost:${API_PORT}`,
       GOOGLE_MAPS_API_KEY: '',
       GOOGLE_GEOCODING_API_KEY: '',
+      // The Next server reads the database server-side too, in its own
+      // process. Declaring the backend on the API alone is not enough: without
+      // this, every server component read found no database, the feed rendered
+      // empty, and the 32 inventory journeys timed out waiting for cards that
+      // were never going to arrive.
+      PROPERTY_INVENTORY_BACKEND: 'memory',
     });
     owned.push(ui);
     await waitFor(ui, UI_PORT, '/', 'Next production server', 60_000);
