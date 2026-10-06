@@ -154,9 +154,9 @@ is a freshness gap, not a set of per-row verdicts, and the two are kept apart:
 - Removal uses `server/db/listing-lifecycle.js`, which deletes **only** on a
   publisher's own word that the event finished (closed / cancelled / auctioned /
   rescinded, or an `endDate` already past). The current ledger
-  (`reports/pruned-listings.json`, written 2026-10-06) records **1,750 removed
-  and 7,976 remaining** from 9,726, broken down as 566 cancelled, 307 auctioned,
-  151 closed and 726 with a past `endDate`. **The ledger is the source of truth
+  (`reports/pruned-listings.json`, written 2026-10-06) records **1,755 removed
+  and 7,999 remaining** from 9,754, broken down as 872 closed by the publisher's
+  own `isAuctionClosed` flag, 726 with a past `endDate`, and 157 cancelled. **The ledger is the source of truth
   for these numbers** - it is rewritten on every `--apply`, so do not quote
   figures here that it does not currently contain.
 - Deliberately kept despite a signal that could have removed them: 274 records
