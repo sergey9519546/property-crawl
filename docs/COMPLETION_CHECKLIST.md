@@ -354,13 +354,45 @@ them carry a real opening bid. They are genuine auction records that simply
 never reached the database.
 
 This is an **import gap, not a collection gap**, and it is why "refresh the
-stale records" and "widen the inventory" are different pieces of work. It also
-means `npm run db:import` would add roughly 1,755 real listings, immediately
-flagged stale by the per-source signal — which is the correct, honest outcome,
-not a regression. It is still the owner's call, because it changes the shape of
-the inventory.
+stale records" and "widen the inventory" are different pieces of work.
 
-## Re-observing ServiceLink works, and is incremental by design
+**Imported.** `scripts/db-import-live.js` was confirmed upsert-only — no DELETE,
+no TRUNCATE — and run on its own, without the prune step:
+
+```
+[import] 9755 records read from live-listings.json
+[import] wrote 9755 rows
+[import] listings table now holds 9755
+    7454 servicelink   (was 5699)
+    1992 hud  122 civilview  101 fl-dor-cadastral  40 courtlistener
+      21 treasury  16 usda  6 irs  3 gsa
+```
+
+Nothing was removed, and the swept records reached the application:
+
+| | before import | after import |
+|---|---|---|
+| listings | 7,999 | **9,755** |
+| fresh against their own cadence | 2,154 | **3,682** |
+| ServiceLink inside its 6h cadence | 0 | **1,525** |
+| ServiceLink past cadence | 5,699 / 5,699 | 5,929 / 7,454 |
+
+The newly imported records are honestly flagged stale by the per-source signal,
+which is the correct outcome rather than a regression.
+
+## The hero could not reach a market by its own name
+
+Two defects, both found by the county test failing after the inventory grew:
+
+1. Publishers are inconsistent about county names — some send `Camden`, others
+   `Bergen County` — and the label appended `" County"` unconditionally, so the
+   suggestion list rendered **"Bergen County County, NJ"**. Normalised.
+2. The suggestion list was capped at six. Typing "Camden" matched four *cities*
+   (WY, AR, NJ, SC) and pushed **Camden County, NJ** — the market someone typing
+   that word most likely means — off the list entirely, so no amount of typing
+   reached it. Raised to eight.
+
+## The feed was seeded with fixture listings — fixed
 
 ServiceLink is bounded to 25 records per run with a resume checkpoint, so a full
 pass over the publisher's ~6,176 listings is ~247 invocations. 60 runs were
