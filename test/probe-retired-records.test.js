@@ -15,8 +15,10 @@ const test = require('node:test');
 
 const {
   classifyDetailResponse,
-  parseCivilViewId,
+  extractPublisherKey,
+  isStale,
   probeRetiredRecords,
+  SOURCE_SCRAPERS,
 } = require('../scripts/probe-retired-records');
 
 test('a 200 response carrying no record is NOT_SERVED, not served', () => {
@@ -37,13 +39,77 @@ test('a network or parse fault is reported as an error, never as a dead record',
   assert.equal(classifyDetailResponse({ parsed: null, error: 'parse threw' }), 'error');
 });
 
-test('publisher record keys are read from the identifier', () => {
-  assert.deepEqual(parseCivilViewId('CIV-NJ-8-2150489401'), {
-    state: 'NJ', countyId: '8', propertyId: '2150489401',
+test('publisher record keys are read from the stored URL, not guessed from the local id', () => {
+  assert.equal(
+    extractPublisherKey('civilview', 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2150489401'),
+    '2150489401',
+  );
+  assert.equal(
+    extractPublisherKey('gsa', 'https://www.gsa.gov/asset-details/?property_id=27'),
+    '27',
+  );
+  assert.equal(
+    extractPublisherKey('irs', 'https://www.irs.gov/auction/items/ad/some-listing-slug'),
+    'some-listing-slug',
+  );
+  assert.equal(
+    extractPublisherKey('treasury', 'https://treasury.gov/auctions/treasury/rp/realprop/106southbay.shtml'),
+    '106southbay.shtml',
+  );
+  // A URL that carries no key must yield null, never a guess.
+  assert.equal(extractPublisherKey('civilview', 'https://example.invalid/', 'CIV-NJ-8-1'), null);
+  assert.equal(extractPublisherKey('gsa', null, 'GSA-1'), null);
+});
+
+test('only records the publisher has not re-observed are probed', () => {
+  // "Still served" is true by definition for a fresh record, so probing the
+  // first N of a source would answer a question nobody asked. The stale ones
+  // are the subject.
+  assert.equal(isStale({ sourceFreshness: { status: 'stale' } }), true);
+  assert.equal(isStale({ sourceFreshness: { status: 'current' } }), false);
+  assert.equal(isStale({}), true, 'a record with no freshness block was never re-observed');
+
+  const probed = [];
+  const fakeScraper = {
+    fetchCounties: async () => [{ id: '8', name: 'Monmouth County', state: 'NJ' }],
+    fetchCountySummaries: async () => ({ sessionCookie: 's=1' }),
+    fetchText: async () => '<div>sale-details-list</div>',
+    parseDetailPage: (html, summary) => {
+      probed.push(summary.propertyId);
+      return { id: 'x', address: '1 Cranberry Court' };
+    },
+  };
+  return probeRetiredRecords({
+    source: 'civilview',
+    baseUrl: 'http://probe.invalid',
+    scraper: fakeScraper,
+    staleOnly: true,
+    fetchInventory: async () => [
+      {
+        id: 'CIV-NJ-8-111',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=111',
+        sourceFreshness: { status: 'stale' },
+      },
+      {
+        id: 'CIV-NJ-8-222',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=222',
+        sourceFreshness: { status: 'current' },
+      },
+    ],
+  }).then((summary) => {
+    assert.equal(summary.sampled, 1, 'the fresh record must not be probed');
+    assert.deepEqual(probed, ['111']);
   });
-  assert.equal(parseCivilViewId('servicelink:a1cVO00000CxvY1YAJ'), null);
-  assert.equal(parseCivilViewId(''), null);
-  assert.equal(parseCivilViewId(null), null);
+});
+
+test('a source with no per-record probe is reported as unsupported, not as "none gone"', () => {
+  assert.equal(Object.hasOwn(SOURCE_SCRAPERS, 'courtlistener'), false,
+    'CourtListener needs an API key to verify a docket; it must not claim a verdict it cannot reach');
+  return probeRetiredRecords({ source: 'courtlistener' }).then((summary) => {
+    assert.equal(summary.unsupported, true);
+    assert.equal(summary.sampled, 0);
+    assert.equal(summary.notServed, 0, 'an unprobed source must not be reported as entirely dead');
+  });
 });
 
 test('the probe reports served, not-served and errors separately and mutates nothing', async () => {
@@ -63,9 +129,15 @@ test('the probe reports served, not-served and errors separately and mutates not
     baseUrl: 'http://probe.invalid',
     scraper: fakeScraper,
     fetchInventory: async () => [
-      { id: 'CIV-NJ-8-111' },
-      { id: 'CIV-NJ-8-222' },
-      { id: 'servicelink:not-a-civilview-id' },
+      {
+        id: 'CIV-NJ-8-111',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=111',
+      },
+      {
+        id: 'CIV-NJ-8-222',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=222',
+      },
+      { id: 'servicelink:not-a-civilview-id', sourceUrl: 'https://example.invalid/x' },
     ],
   });
 
