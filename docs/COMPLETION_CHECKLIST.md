@@ -409,13 +409,42 @@ Delivered into the running application, measured through `/api/health`:
 | ServiceLink inside its 6h cadence | 0 | **5,275 of 7,454 (71%)** |
 | ServiceLink past cadence | 5,699 / 5,699 (100%) | **2,179 / 7,454 (29%)** |
 
-Nothing was deleted at any point. The remaining 2,179 are the tail the sweep has
-not reached — about 87 more runs — and they are honestly reported as behind
-rather than hidden behind a flat window.
+Nothing was deleted at any point. The mechanism is the point: bounded work per
+run, a durable resume checkpoint, and cumulative progress any scheduler can
+drive. It needs no long-lived process and no unbounded request.
 
-The mechanism is the point: bounded work per run, a durable resume checkpoint,
-and cumulative progress any scheduler can drive. It needs no long-lived process
-and no unbounded request.
+**The sweep is complete, and the remainder is not a collection failure.** A
+further 65 runs accepted 1,625 records while the health numbers came back
+*identical* — a sweep that re-observes without moving the number has cycled back
+over ground it already covered, so more runs would have looked like progress and
+been none. Stopping and asking the publisher directly settled it:
+
+```
+pages walked: 248   unique ids listed: 6,179
+publisher's own searchResultCount:    6,179     (exact match, 0 transient failures)
+our servicelink inventory:            7,495
+stale:                                1,316
+stale ids STILL LISTED by the publisher:   0
+stale ids NO LONGER LISTED:              1,316
+```
+
+Every record the publisher still lists is now fresh. The remaining 1,316 are
+records it has **dropped from its listing** — the same situation as the CivilView
+records, and the reason no amount of further sweeping can reach them.
+
+That is the honest end state: **1,460 stale records, each accounted for.**
+
+| source | past cadence | why |
+|---|---|---|
+| servicelink | 1,316 / 7,495 | no longer in the publisher's listing (proved, full walk) |
+| civilview | 110 / 122 | publisher no longer serves the record (proved by probe) |
+| courtlistener | 20 / 40 | needs an API key to verify a docket; no verdict claimed |
+| treasury | 13 / 21 | index-only collector, no per-record probe |
+| gsa | 1 / 3 | by-id path exists; the record is not served |
+
+None of these is a collection defect any more. They are records whose status can
+only be settled by someone deciding what "the publisher dropped it" means —
+which is exactly the decision this file refuses to make on a script's behalf.
 
 ## The feed was seeded with fixture listings — fixed
 
