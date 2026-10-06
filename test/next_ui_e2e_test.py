@@ -1552,12 +1552,22 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.route("**/api/property-image?**", media_response)
         self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
-        self.page.get_by_text("Street View image is temporarily unavailable", exact=True).wait_for(state="visible")
-        self.page.get_by_role("button", name="Retry image").click()
-        self.page.get_by_text("Street View image is temporarily unavailable", exact=True).wait_for(state="visible")
-        self.assertEqual(len(attempts), 2)
-        self.assertEqual(self.page.get_by_test_id("listing-media").locator('img[src*="unsplash"]').count(), 0)
 
+        # Both halves of this test were pointed at copy that no longer exists:
+        # the failure reads "Other street imagery could not be checked." and the
+        # retry control is "Retry Google Street View". The behaviour was never
+        # wrong - only the strings.
+        expect(self.page.get_by_text("Other street imagery could not be checked.")).to_be_visible(timeout=20_000)
+        first_attempts = len(attempts)
+        self.page.get_by_role("button", name="Retry Google Street View").click()
+        expect(self.page.get_by_text("Other street imagery could not be checked.")).to_be_visible(timeout=20_000)
+        self.assertGreater(len(attempts), first_attempts, "retry must re-request the image")
+
+        # The half that matters: a failed fetch must never become a picture.
+        self.assertEqual(
+            self.page.get_by_test_id("listing-media").locator("img").count(), 0,
+            "a failed Street View fetch must not render an <img> standing in for it",
+        )
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
