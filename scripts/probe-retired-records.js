@@ -23,6 +23,13 @@
 // This script is READ-ONLY. It reports; it never deletes or retires anything.
 // Deciding what to do about a confirmed-missing record is the owner's call.
 
+// The publisher key extraction and the staleness rule live in one place, shared
+// with the refresh path that consumes the same answers.
+const {
+  extractPublisherKey,
+  isStale,
+} = require('../server/discovery/refresh-known');
+
 const DEFAULT_LIMIT = 25;
 
 /**
@@ -41,37 +48,6 @@ function classifyDetailResponse(result) {
   return 'not_served';
 }
 
-/**
- * The publisher's own record key, read from the URL we stored for the record.
- *
- * Deliberately read from `sourceUrl` rather than reconstructed from the local
- * id: the local id is this app's naming, and assuming it round-trips is exactly
- * the kind of guess that makes a probe confidently wrong.
- */
-function extractPublisherKey(source, sourceUrl, id) {
-  const url = String(sourceUrl || '');
-  switch (source) {
-    case 'civilview': {
-      const match = /[?&]PropertyId=(\d+)/i.exec(url);
-      return match ? match[1] : null;
-    }
-    case 'gsa': {
-      const match = /[?&]property_id=(\d+)/i.exec(url);
-      return match ? match[1] : null;
-    }
-    case 'irs': {
-      const match = /\/ad\/([a-z0-9-]+)/i.exec(url);
-      return match ? match[1] : null;
-    }
-    case 'treasury': {
-      const match = /\/([^/?#]+)\/?(?:[?#].*)?$/.exec(url);
-      return match ? match[1] : null;
-    }
-    default:
-      return id ? String(id) : null;
-  }
-}
-
 /** Which scraper module and constructor serve each probeable source. */
 const SOURCE_SCRAPERS = {
   civilview: { module: '../server/scrapers/civilview', ctor: 'CivilViewScraper' },
@@ -87,13 +63,6 @@ function scraperForSource(source, options = {}) {
   const loaded = require(binding.module);
   const Ctor = loaded[binding.ctor];
   return Ctor ? new Ctor(options.constructorOptions || { maxRetries: 0, maxDetailPages: 0 }) : null;
-}
-
-function isStale(record) {
-  const freshness = record && record.sourceFreshness;
-  // A record with no freshness block has never been re-observed, which is the
-  // definition of stale here.
-  return !freshness || freshness.status !== 'current';
 }
 
 async function fetchInventory(baseUrl, source, limit) {
