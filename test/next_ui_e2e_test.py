@@ -6,7 +6,7 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 
 BASE_URL = os.environ.get("NEXT_UI_URL", "http://localhost:3001")
@@ -1058,14 +1058,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # contacted us. Assert the real contract: an inline result appears, and
         # it says which of the two things actually happened.
         status = self.page.get_by_test_id("newsletter-status")
-        status.wait_for(state="attached", timeout=15000)
-        # The element exists and is visible while empty; the result arrives from
-        # a real POST. Wait for the text, not for the element.
-        self.page.wait_for_function(
-            "() => { const el = document.querySelector('[data-testid=newsletter-status]');"
-            " return !!el && el.innerText.trim().length > 0; }",
-            timeout=20000,
-        )
+        # Poll with expect rather than wait_for_function: the page's CSP forbids
+        # 'unsafe-eval', so a JS predicate is refused outright and the test errored
+        # with "Evaluating a string as JavaScript violates ... Content Security
+        # Policy". expect() polls from the driver side and needs no eval.
+        expect(status).to_have_text(re.compile(r"\S"), timeout=20000)
         text = status.inner_text().strip()
         self.assertTrue(
             text in (
