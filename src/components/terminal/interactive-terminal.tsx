@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { INITIAL_LISTINGS, PropertyListing, SOURCES } from "./property-data";
+import { PropertyListing, SOURCES } from "./property-data";
 import { PropertyDrawer } from "./property-drawer";
 import { NoticeParser } from "./notice-parser";
 import { WatchlistModal } from "./watchlist-modal";
@@ -106,7 +106,14 @@ const STATE_LABELS: Record<string, string> = {
 };
 
 export function InteractiveTerminal() {
-  const [listings, setListings] = useState<PropertyListing[]>(INITIAL_LISTINGS);
+  // Start empty, never seeded with the fixture records in property-data.ts. Those
+  // are demo listings with invented addresses, opening bids and valuation bands;
+  // seeding the feed with them meant a visitor whose inventory request failed saw
+  // fabricated deals presented as real ones, under a notice claiming "last loaded
+  // records remain available" when nothing had ever loaded. An empty feed that
+  // says why is the honest state, and the API replaces this within a tick.
+  const [listings, setListings] = useState<PropertyListing[]>([]);
+  const hasLoadedInventory = React.useRef(false);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [watchlistHydrated, setWatchlistHydrated] = useState(false);
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
@@ -181,11 +188,17 @@ export function InteractiveTerminal() {
       setSyncCount(payload.listings.length);
       setObservedCount(nextListings.filter(isObservedSourceRecord).length);
       setInventoryNotice(payload.truncated ? `Showing ${nextListings.length} of ${payload.total} records. The local inventory safety limit was reached.` : "");
+      hasLoadedInventory.current = true;
       setSyncStatus("ready");
     } catch {
       if (generation !== refreshGeneration.current) return;
       setSyncStatus("error");
-      setInventoryNotice("Refresh failed. Last loaded records remain available; source freshness has not been confirmed.");
+      // Distinguish "a refresh failed, the records you already have may be
+      // stale" from "nothing ever loaded". The second case must not claim that
+      // last-loaded records remain, because there are none.
+      setInventoryNotice(hasLoadedInventory.current
+        ? "Refresh failed. Last loaded records remain available; source freshness has not been confirmed."
+        : "Inventory could not be loaded, so no records are shown. Unverified records are never substituted for missing ones.");
     }
   }, []);
 
@@ -202,6 +215,9 @@ export function InteractiveTerminal() {
           setListings(parsed);
           setSyncCount(parsed.length);
           setObservedCount(parsed.filter(isObservedSourceRecord).length);
+          // Genuinely-loaded records, so a later failed refresh may honestly
+          // tell the user their existing records remain.
+          hasLoadedInventory.current = true;
         }
       }
     } catch {}

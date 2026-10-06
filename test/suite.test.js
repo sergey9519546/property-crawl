@@ -312,6 +312,46 @@ test('BiddingSimulator keeps the bid cost model reachable without a valuation', 
   );
 });
 
+test('the feed is never seeded with the fixture listings', () => {
+  // property-data.ts carries demo listings with invented addresses, opening
+  // bids and valuation bands. It once seeded the feed's initial state, so a
+  // visitor whose inventory request failed saw fabricated deals presented as
+  // real ones - and cards that linked to /listings/<fixture id>, which 404s.
+  const terminal = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
+  assert.ok(
+    !/useState<PropertyListing\[\]>\(\s*INITIAL_LISTINGS\s*\)/.test(terminal),
+    'the feed must not use the fixture listings as its initial inventory',
+  );
+  assert.ok(
+    !/import\s*\{[^}]*\bINITIAL_LISTINGS\b[^}]*\}\s*from\s*["']\.\/property-data["']/.test(terminal),
+    'the feed must not import the fixture listings at all',
+  );
+  // The failure notice must not promise records that never loaded.
+  assert.ok(
+    terminal.includes('Unverified records are never substituted for missing ones'),
+    'a first-load failure must say that no records are shown, not that last-loaded records remain',
+  );
+});
+
+test('the sitemap is never built from the fixture listings', () => {
+  // Same defect through a second door: the sitemap mapped INITIAL_LISTINGS to
+  // /listings/<fixture id>, advertising pages that answer 404. Listing URLs now
+  // come from the live inventory, and the static pages stand alone when it is
+  // unreachable.
+  const sitemap = fs.readFileSync(path.join(root, 'src/app/sitemap.ts'), 'utf8');
+  // Strip comments first: this file names the fixture module in prose precisely
+  // to explain why it does not import it.
+  const sitemapCode = sitemap.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(
+    !/\bLISTINGS\b|property-data/.test(sitemapCode),
+    'the sitemap must not source listing URLs from the fixture records',
+  );
+  assert.ok(
+    /api\/listings/.test(sitemapCode),
+    'the sitemap should read listing URLs from the live inventory',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');
