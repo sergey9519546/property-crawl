@@ -166,6 +166,33 @@ holding at most 3 sample listings and 26 auction-run rows, used to build the
 parser against the publisher's real shape. The collector reads the live public
 API, and no record derived from that download is in the database.
 
+## Playwright UI suite — 45 of 53, with the rest diagnosed
+
+Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it. It went
+from 8 passing to 45 during the database work; the eight that remain each have
+a known cause, recorded here so the diagnosis is not lost with the session.
+
+| Test | Cause |
+|---|---|
+| `street_view_uses_same_origin_images_and_explicit_context_disclosure` | Three stacked fixture bugs. The app asks for **`mode=walkthrough`**, but the mocks only recognised `mode=metadata`, so the disclosure request fell through to the image branch and came back as a PNG the parser rejects. The alternative-imagery probe (`mode=alternatives`) hits the same route and was also answered with a PNG, so `response.json()` threw. And Street View is refused outright without validated current coordinates, while `primary_listing` has `lat: null`. Fixing the first two is verified; completing it needs a fixture that lets the interactive embed load. |
+| `feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure` | Same `mode=alternatives` mock bug; its fixture also asserts a disclosure test id the component no longer emits. |
+| `detail_mobile_content_and_media_controls_are_not_clipped` | Watchlists are **operator-gated**: the toggle POSTs `/api/alerts`, which returns 401 and calls `session.requestUnlock()`. A save-then-assert-saved sequence cannot pass anonymously. Needs a product decision on what an anonymous save should assert. |
+| `saved_search_persists_and_opens_matching_inventory` | Same cause. The modal now says *"Unlock the workspace to use saved searches and alerts"*; the old *"Search saved on this browser."* copy is gone because the **behaviour** is gone. |
+| `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | Also watchlist-gated, and its own assertion did not reproduce under direct probing. |
+| `property_underwrite_watchlist_and_export_journey` | Passes the drawer heading and analyze step; fails later on the MAO tab. Not diagnosed. |
+| `storyteller_map_scan_is_one_shot_and_marker_selection_is_stable` | Not diagnosed. |
+| `storyteller_uses_a_real_map_engine_with_accessible_opportunities` | Not diagnosed. |
+
+Two assertions were deliberately **left weaker** and are called out here rather
+than presented as passing:
+
+- The feed honesty banner test only checks `observed + unverified == total`, so
+  an over- or under-claim passes. Grounding the split needs the full inventory;
+  the public API caps `limit` at 1000 and the feed loads through a different
+  path. Attempted, could not be verified, reverted.
+- The header brand-overlap test passes whether or not the `min-w-0` fix is
+  present at current logo metrics, so that fix is currently inert.
+
 ## Source limits — POLICY, not backlog
 
 Deliberately not promoted. They are not gaps, and closing them would be a
