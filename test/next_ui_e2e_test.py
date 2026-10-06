@@ -1481,8 +1481,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         for width in (375, 390):
             with self.subTest(width=width):
                 self.page.set_viewport_size({"width": width, "height": 812})
-                for element in [self.page.locator("h1"), self.page.get_by_test_id("listing-media"),
-                    self.page.get_by_test_id("demo-listing-disclosure")]:
+                # demo-listing-disclosure is gone: with real source-observed
+                # inventory there is no demo listing left to disclose. The two
+                # elements that do exist still have to fit the viewport.
+                for element in [self.page.locator("h1"), self.page.get_by_test_id("listing-media")]:
                     box = element.bounding_box()
                     self.assertGreaterEqual(box["x"], 0)
                     self.assertLessEqual(box["x"] + box["width"], width)
