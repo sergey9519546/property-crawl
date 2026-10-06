@@ -592,6 +592,22 @@ clicking the "Elite: 0" band:
 
 The generic advice remains for every other empty result, where it is correct.
 
+**The Discovery Workbench had the same defect on a different surface.** Its empty
+state said *"Try a different location or fewer filters."* But a **minimum deal
+score or minimum spread** excludes every record that does not carry that
+derived value — and none does. So the filter that emptied the results was
+almost never the location, and the copy pointed the user at the one criterion
+that could not be responsible. It now distinguishes the two cases, the same way
+the feed does:
+
+> A minimum deal score or minimum spread only matches records that carry one.
+> These are derived values, not published ones — if the inventory has none yet,
+> that filter matches nothing.
+
+Finding this one required looking past the surface where I'd already fixed the
+problem. **A fix on one screen is not a fix; the question is whether the same
+defect exists elsewhere.**
+
 **The staleness banner was missing where most people meet the inventory.**
 `DataModeBanner` was rendered on `/listings` and the document-review queue, but
 not on the home page — which renders the *same* live inventory. A visitor

@@ -365,6 +365,13 @@ export function DiscoveryWorkbench() {
   // they run against the records already in payload.listings.
   const localFilterActive = anyTriageActive
     || Boolean(distressStageFilter && distressStageFilter !== "all");
+  // A minimum on a DERIVED field (deal score, bid spread) excludes every record
+  // that lacks one. When the inventory carries none, the filter can only ever
+  // return nothing, and the empty state has to say so.
+  const derivedFloorActive = Boolean(
+    (filters.minScore && Number(filters.minScore) > 0)
+    || (filters.minEquity && Number(filters.minEquity) > 0),
+  );
   // `total` is a whole-search count, except once the post-annotation
   // intelligence view is active (quality/opportunity sort, or any minQuality):
   // there the server reports the length of the page it just built, so the number
@@ -697,7 +704,15 @@ export function DiscoveryWorkbench() {
                     No listings match your filters.
                   </h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    Try a different location or fewer filters.
+                    {/* Deal score and bid spread are derived, not published. A
+                        minimum on either excludes every record that does not
+                        carry one, so with none in the inventory the filter
+                        matches nothing — and suggesting a different LOCATION
+                        sends the user to tune a filter that was never the
+                        problem. */}
+                    {derivedFloorActive
+                      ? "A minimum deal score or minimum spread only matches records that carry one. These are derived values, not published ones — if the inventory has none yet, that filter matches nothing."
+                      : "Try a different location or fewer filters."}
                   </p>
                   <Link
                     href="/sources"

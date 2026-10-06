@@ -451,6 +451,26 @@ test('the fixture listings cannot be re-imported as inventory', () => {
   );
 });
 
+test('an unsatisfiable minimum on a derived field is explained, not misattributed', () => {
+  // Deal score and bid spread are derived, not published. A minimum on either
+  // excludes every record that lacks one, so with none in the inventory the
+  // filter can only return nothing. Telling the user to "try a different
+  // location" sends them to tune a filter that was never the problem.
+  const workbench = fs.readFileSync(path.join(root, 'src/components/listings/discovery-workbench.tsx'), 'utf8');
+  assert.ok(
+    /derivedFloorActive/.test(workbench),
+    'the workbench must know a minimum on a derived field is active',
+  );
+  assert.ok(
+    /derived and not published|derived values, not published/.test(workbench),
+    'the empty state must say the value is derived rather than published',
+  );
+  assert.ok(
+    /\?\s*"A minimum deal score[\s\S]{0,400}:\s*"Try a different location/.test(workbench),
+    'the generic location advice must remain for filters that are not derived floors',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');
