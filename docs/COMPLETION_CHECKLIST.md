@@ -87,12 +87,17 @@ These cannot be closed by writing code here. Each names what would unblock it.
 Verified on this machine, not assumed:
 
 - `.env.local` already names `DATABASE_URL=postgres://***@localhost:5432/property_crawl`.
-- **Nothing is listening on 5432**, and there is no PostgreSQL install on disk.
-- No in-memory Postgres is available (`pg-mem`, `embedded-postgres`,
-  `@electric-sql/pglite` are all absent).
+- **Nothing is listening on 5432**, and there is no PostgreSQL install on disk
+  (`postgres`/`pg_ctl`/`initdb` are not on PATH).
+- `@electric-sql/pglite` **is** now a devDependency and is what serves the
+  database here — see the section below. What is still missing is a separate
+  PostgreSQL **server**, which only the two row-lock tests need.
 - **Docker Desktop is installed and its WSL2 distro is provisioned** — but
   `com.docker.service` is **Stopped**, and starting it requires an elevated
   token. The agent session is not elevated, so this cannot be self-served here.
+  Re-checked 2026-10-06: `Start-Service com.docker.service` fails with
+  *"Cannot open 'com.docker.service' service on computer '.'"*, not merely
+  "access denied" — the SCM handle itself cannot be opened.
 
 **Unblock:** start the service once from an elevated shell
 (`Start-Service com.docker.service`) or launch Docker Desktop as
