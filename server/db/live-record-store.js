@@ -5,11 +5,19 @@ const { validateListingForIngestion } = require('../scrapers/validation');
 
 // Live store must absorb multi-state HUD (~2k records) + CivilView/FL DOR
 // batches without throwing after ingest. Bounded but large enough for $0 hosts.
+//
+// Raised from 64MB to the guard's own 128MB ceiling. The store is sized for
+// observed records across every source, and a working ServiceLink sweep alone
+// discovers 6,194; at ~7KB per record the old default filled at 9,175 records
+// and the sweep could not record what it had just found. 128MB still fails
+// closed - the guard is unchanged, only sized for the workload that exists now
+// rather than the one that existed before pagination worked. Override per host
+// with PROPERTY_LIVE_STORE_MAX_BYTES.
 const MAX_BYTES = Math.max(
   8 * 1024 * 1024,
   Math.min(
     128 * 1024 * 1024,
-    Number.parseInt(process.env.PROPERTY_LIVE_STORE_MAX_BYTES, 10) || 64 * 1024 * 1024,
+    Number.parseInt(process.env.PROPERTY_LIVE_STORE_MAX_BYTES, 10) || 128 * 1024 * 1024,
   ),
 );
 

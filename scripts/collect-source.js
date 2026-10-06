@@ -18,12 +18,14 @@ function supportedSources() {
 }
 
 function parseOptions(args) {
-  const options = { targetState: 'NJ', maxCounties: 1, maxDetailPages: 12, newFirst: false, restart: false };
+  const options = { targetState: 'NJ', maxCounties: 1, maxDetailPages: 12, newFirst: false };
   const numeric = { '--counties': ['maxCounties', 10], '--limit': ['maxDetailPages', 120] };
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
     if (flag === '--new-first') { options.newFirst = true; continue; }
     // Start the sweep from page 1 and ignore any saved continuation token.
+    // Added only when passed: the parsed options object is asserted by shape in
+    // the store tests, and a default key would change that for every caller.
     if (flag === '--restart') { options.restart = true; continue; }
     if (flag === '--state') {
       const value = args[++index];
