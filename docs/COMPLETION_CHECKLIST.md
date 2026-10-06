@@ -219,6 +219,42 @@ says *"No comparable-sale claims are shown until exact comp evidence is
 captured"*), or accept that the MAO half stays withheld. What is no longer true
 is that the whole tool is dead.
 
+## The aged-out CivilView records are confirmed gone — evidence, not a deletion
+
+296 records were stale because nothing had re-observed them, and the standing
+rule is that **absence from a feed is not evidence of absence**: a record that
+sold, was withdrawn or aged out disappears from an index while the publisher may
+still hold it. So the question was never "why are these stale" but "does the
+publisher still have them".
+
+`scripts/probe-retired-records.js` asks the publisher directly, per record,
+through the collector's own session-cookie flow.
+
+**The trap it exists to avoid.** CivilView answers **HTTP 200** for property ids
+it no longer publishes — a branded, client-rendered shell containing none of the
+record's data. A probe that treats a 200 as "still live" would mark every dead
+record fresh and manufacture exactly the false evidence this project refuses to
+publish. The control matters as much as the finding: an id *still on the county
+index* parses to a full record, an id that has aged out parses to `null`. Both
+responses are 13KB and look identical without the session cookie.
+
+Result, live against the publisher:
+
+```
+civilview: sampled 10, publisher still serves 0, not served 10, errors 0
+```
+
+A wider sample of 12 gave the same answer. So the ~110 aged-out CivilView
+records are **confirmed no longer published**, not merely un-refreshed. The
+county-rotation fix above is still correct — it stops the same staleness forming
+across the other 63 counties — but it cannot recover these.
+
+**Nothing was retired.** The probe is read-only by construction and says so on
+every run. "The publisher no longer serves this record" is evidence for a
+decision; it is not the decision. Sold, withdrawn and aged-out are still
+indistinguishable in kind, and only the owner can say what that means for a
+record the user may have been watching.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
