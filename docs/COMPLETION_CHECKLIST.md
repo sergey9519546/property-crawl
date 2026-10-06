@@ -522,6 +522,13 @@ Removed, following the same precedent as the storyboard generator earlier: drop
 a control rather than point a user at an invented one. A sweep for the wider
 class — components that accept a prop and discard it — found no other instance.
 
+**The fixture listings can no longer be re-imported as inventory.** They had to
+stay in `property-data.ts`, because types elsewhere depend on it — but
+`@/data/listings` still exported them as `LISTINGS`. Nothing imported it, so it
+was dead code, and dead code that any single careless import could have put
+straight back into the product. Only the types and the source labels (which
+describe publishers, not records) are exported now, with a guard saying so.
+
 Verified in the browser: the bidding tab now renders only the Bid cost model and
 the honest MAO notice, with no "not available yet" or "under development" text
 anywhere on the page.

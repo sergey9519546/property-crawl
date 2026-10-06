@@ -436,6 +436,21 @@ test('the import does not silently drop a collector field', () => {
   );
 });
 
+test('the fixture listings cannot be re-imported as inventory', () => {
+  // property-data.ts still holds the demo dataset - types elsewhere depend on
+  // it. What must not exist is a convenient export of it as records, because
+  // that is how the feed came to render fabricated deals as real inventory.
+  const module = fs.readFileSync(path.join(root, 'src/data/listings.ts'), 'utf8');
+  assert.ok(
+    !/export const LISTINGS/.test(module),
+    'the fixture listings must not be exported as records; only types and source labels',
+  );
+  assert.ok(
+    !/\bINITIAL_LISTINGS\b/.test(module),
+    'the feed data module must not reach for the fixture listings at all',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');
