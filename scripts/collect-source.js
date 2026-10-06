@@ -130,7 +130,12 @@ async function collect(source, options = {}) {
           source,
           continuationToken: coverage.nextContinuationToken,
           sweepStartedAt: coverage.sweepStartedAt || null,
-          pagesCommitted: coverage.pagesFetched || 0,
+          // CUMULATIVE, not this run's pages. The report carries both
+          // pagesPreviouslyCommitted (resumed) and pagesFetched (this run).
+          // Storing pagesFetched alone reset the resume point to page 1 +
+          // pagesFetched every time, so every later run re-fetched the same
+          // window and the sweep could never advance.
+          pagesCommitted: (Number(coverage.pagesPreviouslyCommitted) || 0) + (Number(coverage.pagesFetched) || 0),
           savedAt: new Date().toISOString(),
         }, null, 2));
       }
