@@ -33,7 +33,7 @@ if the seed count drifts.
 | Tree | `bcc9b6b` | `git rev-parse HEAD` |
 | Release gate | **9/9**, E2E 25/25, clean tree | `npm run release:gate` |
 | Test runners green | **26/26** | every `test:*` script |
-| Seed listings (`data.js`) | **2094** | `scripts/gen-context.js` |
+| Seed listings (`data.js`) | **2095** | `scripts/gen-context.js` |
 | Source catalog entries | **163** | `server/sources/catalog.js` |
 | Dispatched API paths | **41** | `server/server.js` |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
@@ -106,7 +106,7 @@ and needs an elevated token this session does not have. That part is unchanged.
 
 What changed is the consequence. Previously an unreachable database fell back to
 a seeded in-memory catalog, so a broken database was indistinguishable from a
-working one holding 2,094 rows. **That fallback is gone.** `dataMode()` is
+working one holding 2,095 rows. **That fallback is gone.** `dataMode()` is
 `postgres`, `memory` (only under `NODE_ENV=test` or an explicit
 `PROPERTY_INVENTORY_BACKEND=memory`) or `unavailable`, and with no database the
 listing API returns `503` carrying the reason instead of an empty result that
@@ -148,9 +148,12 @@ is a freshness gap, not a set of per-row verdicts, and the two are kept apart:
   hours, `stale` past 24h) and the banner says so on every page.
 - Removal uses `server/db/listing-lifecycle.js`, which deletes **only** on a
   publisher's own word that the event finished (closed / cancelled / auctioned /
-  rescinded, or an `endDate` already past). Applied on 2026-10-05: **3,337
-  concluded listings removed, 3,202 kept**, ledger in
-  `reports/pruned-listings.json`.
+  rescinded, or an `endDate` already past). The current ledger
+  (`reports/pruned-listings.json`, written 2026-10-06) records **1,750 removed
+  and 7,976 remaining** from 9,726, broken down as 566 cancelled, 307 auctioned,
+  151 closed and 726 with a past `endDate`. **The ledger is the source of truth
+  for these numbers** - it is rewritten on every `--apply`, so do not quote
+  figures here that it does not currently contain.
 - Deliberately kept despite a signal that could have removed them: 274 records
   whose status says *postponed* while carrying a pre-postponement date (the
   rescheduled date is not in the record), and 148 whose `sale_date` is past with

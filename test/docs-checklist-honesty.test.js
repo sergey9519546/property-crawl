@@ -130,3 +130,27 @@ test('a second status document is not quietly created alongside this one', () =>
     );
   }
 });
+test('the checklist does not quote prune numbers the ledger does not contain', () => {
+  // The ledger in reports/pruned-listings.json is rewritten on every --apply,
+  // so any count hard-cited here describes a run that no longer exists. That
+  // is how "3,337 removed, 3,202 kept" ended up describing neither the run
+  // before it nor the run after it.
+  const ledgerPath = path.join(ROOT, 'reports', 'pruned-listings.json');
+  assert.ok(fs.existsSync(ledgerPath), 'the prune ledger is missing; inventory state is unrecorded');
+  const ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
+  const doc = read('docs/COMPLETION_CHECKLIST.md');
+
+  const cited = new Set();
+  for (const m of doc.matchAll(/(\d[\d,]*)\s+removed/gi)) cited.add(m[1].replace(/,/g, ''));
+  for (const m of doc.matchAll(/(\d[\d,]*)\s+(?:remaining|kept)\b/gi)) cited.add(m[1].replace(/,/g, ''));
+
+  const actual = new Set([String(ledger.removedCount), String(ledger.totalAfter)]);
+  for (const number of cited) {
+    assert.ok(
+      actual.has(number),
+      `the checklist cites "${number}" removed/kept, which the current ledger does not contain ` +
+      `(ledger: ${ledger.removedCount} removed, ${ledger.totalAfter} remaining). ` +
+      'Point at reports/pruned-listings.json instead of restating a run that has been overwritten.'
+    );
+  }
+});
