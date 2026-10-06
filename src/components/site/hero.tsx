@@ -144,7 +144,10 @@ export function Hero() {
             },
             {
               id: `county:${listing.county}:${listing.state}`,
-              label: `${listing.county} County, ${listing.state}`,
+              // Publishers are inconsistent: some send "Camden", others
+              // "Bergen County". Appending " County" unconditionally rendered
+              // "Bergen County County, NJ" in the suggestion list.
+              label: `${String(listing.county).replace(/\s+county\s*$/i, "")} County, ${listing.state}`,
               query: listing.county,
               kind: "county",
               description: "County market",
@@ -182,7 +185,11 @@ export function Hero() {
             const bStarts = b.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
             return aStarts - bStarts || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label);
           })
-          .slice(0, 6);
+          // Six was too few to reach a real market: four cities named Camden
+            // (WY, AR, NJ, SC) filled the list and pushed Camden County, NJ -
+            // the market someone typing "Camden" most likely means - out of
+            // reach entirely.
+            .slice(0, 8);
         setSuggestions(matches);
         setSuggestionsOpen(matches.length > 0);
         setActiveSuggestion(-1);
