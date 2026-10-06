@@ -1395,7 +1395,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(self.page.get_by_text("Docket Verified: Case #").count(), 0)
 
     def test_detail_mobile_content_and_media_controls_are_not_clipped(self):
-        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
         for width in (375, 390):
             with self.subTest(width=width):
                 self.page.set_viewport_size({"width": width, "height": 812})
@@ -1430,7 +1430,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 route.fulfill(content_type="image/png", body=tiny_png)
 
         self.page.route("**/api/property-image?**", media_response)
-        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
         disclosure = self.page.get_by_test_id("street-view-disclosure")
         self.assertEqual(image_requests, [])
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
@@ -1500,7 +1500,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
 
         self.page.route("**/api/property-image?**", media_response)
-        self.page.goto(f"{BASE_URL}/listings/OH-CUY-10231", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
         self.page.get_by_text("Street View image is temporarily unavailable", exact=True).wait_for(state="visible")
         self.page.get_by_role("button", name="Retry image").click()
