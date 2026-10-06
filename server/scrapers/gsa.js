@@ -1,8 +1,16 @@
 // server/scrapers/gsa.js
 //
 // REAL GSA Surplus Real Estate auction scraper.
-// Source: https://realestatesales.gov/our-listing  (public, no auth)
-// Strategy: list page → per-property detail pages at
+// Source: https://realestatesales.gov/  (public, no auth)
+//
+// Scope: the catalog permits exactly one path for this source,
+// /asset-details?property_id=<n>, and forbids /our-listing. So property ids
+// are never harvested from the index here: the collector takes known ids and
+// refreshes them one by one through the permitted path (see scrapeByIds).
+// The index route survives only as an operator-override path behind
+// SCRAPER_RESPECT_ROBOTS=0.
+//
+// Strategy: per-property detail pages at
 //   /asset-details/?property_id=N, regex-parse the hidden tour_property_*
 //   inputs (clean address) + the descriptive prose for beds/baths/sqft.
 //
@@ -38,6 +46,82 @@ class GsaSurplusScraper extends BaseScraper {
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('gsa');
     this.extract = options.extractImpl || extractWithScrapling;
+    // Known property ids to refresh through the permitted /asset-details path.
+    this.propertyIds = this.normalizePropertyIds(options.propertyIds);
+  }
+
+  // Only bare decimal ids are usable: the catalog's accessPolicy matches
+  // `property_id=\d+`, so anything else is dropped here rather than being
+  // turned into a URL the policy would (rightly) refuse at fetch time.
+  normalizePropertyIds(ids) {
+    const source = Array.isArray(ids) ? ids : (ids === undefined || ids === null ? [] : [ids]);
+    const seen = new Set();
+    for (const raw of source) {
+      const value = String(raw).trim();
+      if (/^\d+$/.test(value)) seen.add(value);
+    }
+    return [...seen];
+  }
+
+  // Refresh known property ids without the forbidden index. Every request goes
+  // through this.fetchText, so the catalog accessPolicy still gates each URL.
+  async scrapeByIds(ids) {
+    const propertyIds = this.normalizePropertyIds(ids);
+    if (propertyIds.length === 0) {
+      console.warn(`[${this.name}] No usable GSA property ids supplied; nothing to refresh.`);
+      this.lastRunReport = {
+        outcome: 'empty',
+        scope: { endpoint: '/asset-details', filters: { assetClass: 'real_estate', recordSelection: 'known_property_ids' } },
+        recordsDiscovered: 0, recordsEmitted: 0, recordsRejected: 0,
+        failures: [], complete: false, fullSweepComplete: false,
+        truncated: false, fixtureFallbackUsed: false, sweepType: 'by_identifier_refresh'
+      };
+      return [];
+    }
+    return this.executeWithRetry(async () => {
+      const listings = [];
+      const failures = [];
+      for (const id of propertyIds) {
+        try {
+          const detail = await this.fetchDetail(id, null);
+          if (detail) {
+            listings.push(detail);
+            await this.crawlJitter();
+          }
+        } catch (err) {
+          console.warn(`[${this.name}] Failed property_id=${id}: ${err.message}`);
+          failures.push({ propertyId: id, error: err.message });
+        }
+      }
+      const rejected = propertyIds.length - listings.length - failures.length;
+      const complete = failures.length === 0 && rejected === 0;
+      // fullSweepComplete stays false on purpose: refreshing ids we already
+      // know is not an inventory sweep, and without the index this adapter
+      // cannot prove it saw every live property.
+      this.lastRunReport = {
+        outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty',
+        scope: { endpoint: '/asset-details', filters: { assetClass: 'real_estate', recordSelection: 'known_property_ids' } },
+        recordsDiscovered: propertyIds.length,
+        recordsEmitted: listings.length,
+        recordsRejected: rejected,
+        failures, complete, fullSweepComplete: false,
+        truncated: false, fixtureFallbackUsed: false, sweepType: 'by_identifier_refresh'
+      };
+      console.log(`[${this.name}] Refreshed ${listings.length}/${propertyIds.length} GSA properties by id (${this.lastRunReport.outcome})`);
+      const standardized = [];
+      for (const item of listings) {
+        try {
+          standardized.push(this.standardizeListing(item));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`);
+          } else {
+            throw err;
+          }
+        }
+      }
+      return standardized;
+    });
   }
 
   async scrapeFeed() {
@@ -45,11 +129,19 @@ class GsaSurplusScraper extends BaseScraper {
     // publisher-controlled (robots.txt disallows it) and is intentionally not
     // part of the live ingestion surface; the scraper refuses to crawl it
     // unless the operator explicitly overrides with SCRAPER_RESPECT_ROBOTS=0.
+    //
+    // Refusing the index does not end the run: when known property ids were
+    // supplied, they are refreshed through /asset-details, the one path the
+    // catalog's accessPolicy allows. Only with no ids at all is the run a skip.
     const excludedPath = '/our-listing';
     if (isPathExcludedForAdapter('gsa', excludedPath)) {
       const override = process.env.SCRAPER_RESPECT_ROBOTS === '0';
       if (!override) {
-        const message = `Refusing to crawl ${this.baseUrl}${excludedPath}: catalog-declared robots exclusion. Set SCRAPER_RESPECT_ROBOTS=0 to override (operator-only).`;
+        if (this.propertyIds.length > 0) {
+          console.warn(`[${this.name}] ${this.baseUrl}${excludedPath} is catalog-forbidden; refreshing ${this.propertyIds.length} known property id(s) via the permitted /asset-details path instead.`);
+          return this.scrapeByIds(this.propertyIds);
+        }
+        const message = `Refusing to crawl ${this.baseUrl}${excludedPath}: catalog-declared robots exclusion. Set SCRAPER_RESPECT_ROBOTS=0 to override (operator-only), or supply known property ids to refresh them via /asset-details.`;
         console.warn(`[${this.name}] ${message}`);
         this.lastRunReport = {
           outcome: 'skipped_robots_exclusion',
