@@ -219,7 +219,7 @@ says *"No comparable-sale claims are shown until exact comp evidence is
 captured"*), or accept that the MAO half stays withheld. What is no longer true
 is that the whole tool is dead.
 
-## The aged-out CivilView records are confirmed gone — evidence, not a deletion
+## The aged-out records were mostly never checked properly — evidence, not a deletion
 
 296 records were stale because nothing had re-observed them, and the standing
 rule is that **absence from a feed is not evidence of absence**: a record that
@@ -238,16 +238,39 @@ publish. The control matters as much as the finding: an id *still on the county
 index* parses to a full record, an id that has aged out parses to `null`. Both
 responses are 13KB and look identical without the session cookie.
 
-Result, live against the publisher:
+Result, live against the publisher, **stale records only**:
 
 ```
+treasury:  sampled  8, publisher still serves 8, not served 0, errors 0
+gsa:       sampled  2, publisher still serves 2, not served 0, errors 0
+irs:       sampled  6, publisher still serves 6, not served 0, errors 0
 civilview: sampled 10, publisher still serves 0, not served 10, errors 0
 ```
 
-A wider sample of 12 gave the same answer. So the ~110 aged-out CivilView
-records are **confirmed no longer published**, not merely un-refreshed. The
-county-rotation fix above is still correct — it stops the same staleness forming
-across the other 63 counties — but it cannot recover these.
+## This overturns the earlier audit on three of four sources
+
+An earlier audit reported that only 2 of 296 stale records could become fresh,
+and that 292 were unrefreshable "because the publisher no longer lists them". It
+reached that by checking each publisher's **index**. Asking each publisher for
+the **record** says something different:
+
+- **treasury** — the audit said 7 of 8 were gone. All 8 are still served.
+- **irs** — the audit said all 6 were gone, with no fresh IRS record since
+  2026-09-12. All 6 are still served.
+- **gsa** — the audit called both "conditionally reachable, blocked by a policy
+  contradiction". Both are live; the permitted by-id path already reaches them.
+- **civilview** — the audit was right. These really are gone.
+
+So at least **16 records an audit declared dead are alive**, and the "292
+unrefreshable" ceiling was an artifact of testing the index instead of the
+record. Absence from a listing is exactly what a sold, withdrawn or aged-out
+auction looks like — and it is also what a record that simply fell outside this
+run's budget looks like.
+
+**The conclusion flips from "retire" to "refresh".** These records need a
+by-identifier refresh, not a deletion. That is a scheduled capability
+(`--refresh-known` per source), not a one-off query, and it is the highest-value
+remaining piece of collection work.
 
 **Nothing was retired.** The probe is read-only by construction and says so on
 every run. "The publisher no longer serves this record" is evidence for a
