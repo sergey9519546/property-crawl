@@ -640,6 +640,20 @@ The 1,947 still unknown are sources that do not report documents, which is the
 honest answer for them. A guard now derives the same list and fails if the
 conflict clause is ever narrowed again.
 
+End-to-end check after re-importing, comparing the live store against the
+database for every record:
+
+```
+records compared: 9,796
+  openingBid, saleDate, address, occupancy:  identical
+  hasDocuments: 7,849 differ - and the DATABASE is ahead,
+    because the import derives it from provenance.sourceFacts.documents
+    where the collector left the top-level field null
+```
+
+So the import now carries content, not just timestamps, and nothing regressed
+against the path it replaced.
+
 ## A hero test waited for a `<datalist>` option to become visible
 
 `test_hero_search_focus_uses_a_soft_halo_without_a_black_outline` typed a market
