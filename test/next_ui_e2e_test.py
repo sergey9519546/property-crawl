@@ -943,6 +943,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
 
     def test_storyteller_map_scan_is_one_shot_and_marker_selection_is_stable(self):
+        # Same as its sibling: the markers only exist once MapLibre has actually
+        # initialised, and that needs the local style fixture rather than live
+        # third-party tiles.
+        self.install_map_fixture()
+        self.page.reload(wait_until="domcontentloaded")
         deal_map = self.reveal_deferred_atlas()
         preview = self.page.get_by_test_id("storyteller-map-preview")
 
@@ -957,13 +962,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         replay = self.page.get_by_role("button", name="Replay market discovery")
         replay.click()
-        self.page.wait_for_function(
-            "document.querySelector('[data-testid=storyteller-deal-map]')?.dataset.scanState === 'playing'"
-        )
-        self.page.wait_for_function(
-            "document.querySelector('[data-testid=storyteller-deal-map]')?.dataset.scanState === 'complete'",
-            timeout=12_000,
-        )
+        # wait_for_function with a string predicate is refused by the page's own
+        # CSP ("unsafe-eval"), so these never ran. expect() polls driver-side.
+        expect(deal_map).to_have_attribute("data-scan-state", "playing", timeout=20_000)
+        expect(deal_map).to_have_attribute("data-scan-state", "complete", timeout=20_000)
         replayed_deal = deal_map.get_attribute("data-active-deal")
         self.page.wait_for_timeout(1_200)
         self.assertEqual(deal_map.get_attribute("data-active-deal"), replayed_deal)
