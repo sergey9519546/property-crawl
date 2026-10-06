@@ -352,6 +352,25 @@ test('the sitemap is never built from the fixture listings', () => {
   );
 });
 
+test('a ranking the inventory cannot satisfy says so instead of silently doing nothing', () => {
+  // "Modeled Triage Score (Highest)" and "Bid Spread (Highest)" rank by fields
+  // that are null on every record. compareKnown returns 0 for every pair, so
+  // the grid keeps its default order while the control claims a ranking.
+  const terminal = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
+  assert.ok(
+    terminal.includes('sort-unranked-notice'),
+    'an unsatisfiable ranking must be reported, not shown as a working ranking',
+  );
+  assert.ok(
+    /sortBy === "score"[\s\S]{0,200}No record in this view carries a modeled triage score/.test(terminal),
+    'the score ranking must state that it is not applied',
+  );
+  assert.ok(
+    /sortBy === "equity"[\s\S]{0,200}No record in this view carries a bid spread/.test(terminal),
+    'the bid-spread ranking must state that it is not applied',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');

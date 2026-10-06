@@ -526,6 +526,38 @@ Verified in the browser: the bidding tab now renders only the Bid cost model and
 the honest MAO notice, with no "not available yet" or "under development" text
 anywhere on the page.
 
+## Two rankings the inventory cannot satisfy were doing nothing, silently
+
+The grid offers **"Modeled Triage Score (Highest)"** and **"Bid Spread
+(Highest)"**. Both rank by fields that are null on every record —
+`dealScore` and `equity`. `compareKnown` returns 0 for every pair when both
+values are null, so selecting either left the grid in its default order while
+the control claimed a ranking. The user cannot tell an unranked list from a
+ranked one by looking at it.
+
+Both now say so:
+
+> No record in this view carries a modeled triage score, so this ranking is not
+> applied and the default order is shown.
+
+Verified in the browser: the notice appears for the score and bid-spread sorts
+and **not** for "Opening Bid (Lowest)", which the inventory can satisfy.
+
+This is the same family as the dead video control, and worth naming as a class:
+a control that is not obviously broken is worse than one that fails. The dead
+button announced itself; a sort that silently does nothing does not.
+
+Two related checks came back clean and are recorded so they are not re-litigated:
+
+- A card with no score renders **"Not modeled"**, not a blank or a zero.
+- `server/intelligence/hunts.js` refuses a `dealScore`/`mid`/`ratio` rule unless
+  the listing carries an `observed-valuation-range-v1` model with valid
+  `estLow`/`estHigh`. So a valuation-based hunt cannot quietly match on a
+  synthesized number — it simply cannot match at all.
+
+Both are correct given no valuation data exists. Making them *useful* is the MAO
+decision above, not an engineering task.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented

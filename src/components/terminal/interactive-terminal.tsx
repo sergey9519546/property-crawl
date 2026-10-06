@@ -390,6 +390,14 @@ export function InteractiveTerminal() {
   const knownEquity = filtered.map((listing) => knownNumber(listing.equity)).filter((value): value is number => value !== null);
   const avgEquity = knownEquity.length > 0 ? Math.round(knownEquity.reduce((sum, value) => sum + value, 0) / knownEquity.length) : null;
   const knownScores = filtered.map((listing) => knownNumber(listing.dealScore)).filter((value): value is number => value !== null);
+  // A sort by deal score or equity ranks nothing when no record carries one,
+  // and the grid cannot tell the user that from the unchanged order it shows.
+  const unrankedSortReason =
+    sortBy === "score" && knownScores.length === 0
+      ? "No record in this view carries a modeled triage score, so this ranking is not applied and the default order is shown."
+      : sortBy === "equity" && knownEquity.length === 0
+        ? "No record in this view carries a bid spread, so this ranking is not applied and the default order is shown."
+        : null;
   const scoreBandCounts = SCORE_BANDS.map((band) => ({
     band,
     count: knownScores.filter((score) => score >= band.min && score <= band.max).length,
@@ -608,6 +616,16 @@ export function InteractiveTerminal() {
                   <option value="score">Modeled Triage Score (Highest)</option>
                   <option value="images">Most Photos</option>
                 </select>
+
+                {/* A sort that ranks by a field no record carries is not a
+                    ranking. compareKnown returns 0 for every pair when the
+                    value is null on both sides, so the grid silently keeps its
+                    default order while the control claims "Highest". Say so. */}
+                {unrankedSortReason ? (
+                  <p role="status" data-testid="sort-unranked-notice" className="text-[11px] font-medium text-amber-800">
+                    {unrankedSortReason}
+                  </p>
+                ) : null}
 
                 {/* Advanced Underwriting Box Trigger */}
                 <button
