@@ -166,10 +166,10 @@ holding at most 3 sample listings and 26 auction-run rows, used to build the
 parser against the publisher's real shape. The collector reads the live public
 API, and no record derived from that download is in the database.
 
-## Playwright UI suite — 45 of 53, with the rest diagnosed
+## Playwright UI suite — 46 of 53, with the rest diagnosed
 
 Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it. It went
-from 8 passing to 45 during the database work; the eight that remain each have
+from 8 passing to 46 during the database work; the seven that remain each have
 a known cause, recorded here so the diagnosis is not lost with the session.
 
 | Test | Cause |
@@ -181,7 +181,6 @@ a known cause, recorded here so the diagnosis is not lost with the session.
 | `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | Also watchlist-gated, and its own assertion did not reproduce under direct probing. |
 | `property_underwrite_watchlist_and_export_journey` | Passes the drawer heading and analyze step; fails later on the MAO tab. Not diagnosed. |
 | `storyteller_map_scan_is_one_shot_and_marker_selection_is_stable` | Not diagnosed. |
-| `storyteller_uses_a_real_map_engine_with_accessible_opportunities` | Not diagnosed. |
 
 Two assertions were deliberately **left weaker** and are called out here rather
 than presented as passing:

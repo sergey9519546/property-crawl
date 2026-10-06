@@ -887,6 +887,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(self.page.get_by_text("Beta snapshot", exact=True).first.is_visible())
 
     def test_storyteller_uses_a_real_map_engine_with_accessible_opportunities(self):
+        # Install the local map fixture before loading. Without it this test
+        # depends on live third-party tiles being reachable, which is not a
+        # property of the code under test - every other map test here stubs the
+        # style for exactly that reason.
+        self.install_map_fixture()
+        self.page.reload(wait_until="domcontentloaded")
         deal_map = self.page.get_by_test_id("storyteller-deal-map")
         self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
         desktop_box = deal_map.bounding_box()
