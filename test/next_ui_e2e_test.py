@@ -1367,11 +1367,24 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_listings_directory_route_renders_and_loads_inventory(self):
         self.page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
-        heading = self.page.get_by_role("heading", name="Distressed property records, without hidden assumptions")
-        heading.wait_for(state="visible")
-        self.assertTrue(heading.is_visible())
-        self.assertTrue(self.page.get_by_text("Property Evidence Directory").is_visible())
-        self.page.get_by_role("button", name=f"Deal Grid ({self.live_count} records)").wait_for(state="visible")
+        # /listings is the discovery workbench now, not a directory with a
+        # "Distressed property records" heading - that copy is gone from src.
+        # Assert what the page guarantees now: it identifies itself, and it
+        # reports inventory honestly rather than just rendering cards.
+        heading = self.page.get_by_role("heading", name="Find properties")
+        expect(heading).to_be_visible(timeout=20_000)
+        expect(self.page.get_by_test_id("inventory-honesty")).to_be_visible(timeout=20_000)
+        expect(self.page.get_by_test_id("inventory-page-count")).to_be_visible(timeout=20_000)
+        # The Deal Grid button belongs to the home terminal, not this workbench.
+        # What /listings guarantees is that it loaded inventory and says so;
+        # inventory-page-count carries the number.
+        # It starts as "Updating results..." - poll rather than assert now.
+        page_count = self.page.get_by_test_id("inventory-page-count")
+        expect(page_count).to_contain_text("on this page", timeout=30_000)
+        # It reads "48 on this page - 2,095 match this search": grouped digits,
+        # and the page count is deliberately not the inventory total.
+        shown = page_count.inner_text().replace(",", "")
+        self.assertIn(str(self.live_count), shown)
 
     def test_not_found_page_renders_with_recovery_actions(self):
         self.page.goto(f"{BASE_URL}/non-existent-route-audit-404", wait_until="domcontentloaded")
