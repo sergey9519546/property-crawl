@@ -340,6 +340,47 @@ Still a coverage question per source, exactly as before: a sweep that refreshes
 one page must not make the source look fresh, so `freshListings` is counted
 inside the window rather than derived from the newest row.
 
+## The database is missing 1,755 records that were already collected
+
+The live record store holds **9,755** records; the database holds **7,999**.
+The 1,756 that exist only in the store are 1,755 ServiceLink and 1 GSA, and
+**none is marked concluded** — `lifecycleStatus` and `transactionOutcome` are
+null on every one. So they are not retired inventory that an import would
+resurrect; they were collected and never imported.
+
+Their age profile matches the database's own stale ServiceLink rows (median
+688.9h, oldest 689.7h) — they come from the same uncollected window, and 531 of
+them carry a real opening bid. They are genuine auction records that simply
+never reached the database.
+
+This is an **import gap, not a collection gap**, and it is why "refresh the
+stale records" and "widen the inventory" are different pieces of work. It also
+means `npm run db:import` would add roughly 1,755 real listings, immediately
+flagged stale by the per-source signal — which is the correct, honest outcome,
+not a regression. It is still the owner's call, because it changes the shape of
+the inventory.
+
+## Re-observing ServiceLink works, and is incremental by design
+
+ServiceLink is bounded to 25 records per run with a resume checkpoint, so a full
+pass over the publisher's ~6,176 listings is ~247 invocations. 60 runs were
+executed against the live publisher:
+
+```
+runs=60  accepted=1500   (25 per run, 0 rejected, checkpoint advancing each run)
+```
+
+Measured on the live store afterwards:
+
+| | before | after |
+|---|---|---|
+| ServiceLink records inside their 6h cadence | 0 | **1,525** |
+| oldest record | 690h | 690h (the tail the sweep has not reached) |
+
+So the mechanism does what the health fix exposed it should: bounded work,
+durable resume, and cumulative progress. It needs ~187 more runs to close the
+gap, which is a scheduling question rather than a correctness one.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
