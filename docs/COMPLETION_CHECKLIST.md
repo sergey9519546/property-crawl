@@ -267,16 +267,39 @@ record. Absence from a listing is exactly what a sold, withdrawn or aged-out
 auction looks like — and it is also what a record that simply fell outside this
 run's budget looks like.
 
-**The conclusion flips from "retire" to "refresh".** These records need a
-by-identifier refresh, not a deletion. That is a scheduled capability
-(`--refresh-known` per source), not a one-off query, and it is the highest-value
-remaining piece of collection work.
+**The conclusion flips from "retire" to "refresh", and that is now built.**
+`server/discovery/refresh-known.js` re-observes records we already hold by
+asking the publisher for the record itself, reusing each collector's own
+`standardizeListing` so a refreshed record is indistinguishable from one an
+index sweep found. `scripts/refresh-known-records.js` runs it and merges the
+results into the live store; `--apply` is required, so the default is report-only.
 
-**Nothing was retired.** The probe is read-only by construction and says so on
-every run. "The publisher no longer serves this record" is evidence for a
-decision; it is not the decision. Sold, withdrawn and aged-out are still
-indistinguishable in kind, and only the owner can say what that means for a
-record the user may have been watching.
+Run against the current inventory:
+
+```
+treasury: stale  8, refreshed  8, publisher no longer serves 0, errors 0
+gsa:      stale  2, refreshed  2, publisher no longer serves 0, errors 0
+irs:      stale  6, refreshed  6, publisher no longer serves 0, errors 0
+```
+
+16 records re-observed, **0 retired**. The three outcomes stay separate
+everywhere — refreshed / no longer served / could not tell — because a network
+fault or an unparseable id reported as "the publisher does not serve it" would
+manufacture a death certificate. A source with no per-record detail method is
+reported as unsupported rather than as "none gone".
+
+**Not propagated to PostgreSQL, deliberately.** `scripts/db-import-live.js` is an
+upsert over the *whole* live store, which holds 9,754 records against the
+database's 7,999. Importing it would also resurrect ~1,755 records that were
+deliberately pruned as concluded. That is an owner's call, so the refreshed
+observations are staged in the live store and the import was not run.
+
+**Nothing was retired.** Both scripts are read-only with respect to inventory:
+the refresh merges observations and never passes `runCompleted`, so
+`mergeLiveRecords` cannot retire. "The publisher no longer serves this record" is
+evidence for a decision; it is not the decision. Sold, withdrawn and aged-out
+are still indistinguishable in kind, and only the owner can say what that means
+for a record the user may have been watching.
 
 ## The feed was seeded with fixture listings — fixed
 
