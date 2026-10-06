@@ -1227,8 +1227,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_placeholder("Search address, county, court docket...").fill(address)
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
 
+        # Unchanged: the DRAWER heads the listing with the full address as an
+        # h2. The standalone /listings/<id> page is different - it uses the
+        # street line as an h1 - so reading one to correct the other is wrong.
         self.page.get_by_role("heading", name=address, level=2).wait_for(state="visible")
-        self.assertTrue(self.page.get_by_role("button", name="Puter AI").is_visible())
+        # The provider button was "Puter AI" and is gone from src; the analyze
+        # action the drawer now offers is the property under test.
         self.page.get_by_role("button", name="Analyze Deal").click()
         self.page.get_by_text(re.compile(r"Evidence summary.*unverified")).wait_for(state="visible")
 
