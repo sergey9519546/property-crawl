@@ -446,6 +446,34 @@ None of these is a collection defect any more. They are records whose status can
 only be settled by someone deciding what "the publisher dropped it" means —
 which is exactly the decision this file refuses to make on a script's behalf.
 
+## The loop is closed: the signal names a source, and something can act on it
+
+`scripts/refresh-known-records.js` now defaults to every source that has a
+per-record probe, so it runs unattended after a sweep without anyone naming
+sources. It merges observations only and never passes `runCompleted`, so
+`mergeLiveRecords` cannot retire.
+
+Running it reported civilview 110 not served (0 errors), treasury 13 refreshed,
+gsa 1 refreshed, irs already current. After the import, **treasury is 21 of 21
+inside its 12h cadence and has dropped off the lagging list entirely.**
+
+Two defects were fixed to get there. CivilView was listed as probeable but the
+shared refresh module had no CivilView path — it existed only in the reporting
+script — so an unattended run reported all 110 records as **errors** ("no
+per-record detail method") rather than the truth, which is that the publisher no
+longer serves them. An error and a missing record are different facts and must
+never share a verdict. The path now lives in the shared module, where both
+callers use it.
+
+Final state of the inventory:
+
+| | session start | now |
+|---|---|---|
+| listings | 7,999 | **9,796** |
+| fresh against their own cadence | 2,154 | **8,349** |
+| past cadence | 5,845 | **1,447** |
+| sources behind | unnamed | servicelink, civilview, courtlistener, gsa — each with a proven reason |
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
