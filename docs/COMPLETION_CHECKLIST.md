@@ -558,6 +558,33 @@ Two related checks came back clean and are recorded so they are not re-litigated
 Both are correct given no valuation data exists. Making them *useful* is the MAO
 decision above, not an engineering task.
 
+## An empty grid used to tell users to tune a field that no record carries
+
+Same class, found by sweeping the rest of the controls rather than waiting for
+it to surface. Clicking a deal-score band (say "Elite 70–99") filters to nothing,
+because `minDealScore` excludes any record whose score is null — and no record
+has one. That is fail-closed and correct. The **empty state** is where it went
+wrong:
+
+> No properties match these underwriting criteria.
+> Try adjusting your **modeled score**, bid spread, or opening amount range to
+> capture more published records.
+
+Two of the three criteria it names hold no values on any record, so following
+the advice cannot help. It sends the user to tune filters that were never the
+problem — the same failure the empty state already guards against for a failed
+load ("this is a connection or data-mode problem, not a filter problem"), just
+one cause further down.
+
+The empty state now distinguishes the two cases. Verified in the browser by
+clicking the "Elite: 0" band:
+
+> No properties match these underwriting criteria.
+> **No record in this view carries a modeled triage score, so a minimum-score
+> filter excludes every property here. No record has been assigned one.**
+
+The generic advice remains for every other empty result, where it is correct.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented

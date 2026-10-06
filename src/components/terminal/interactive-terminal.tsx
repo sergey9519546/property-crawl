@@ -398,6 +398,17 @@ export function InteractiveTerminal() {
       : sortBy === "equity" && knownEquity.length === 0
         ? "No record in this view carries a bid spread, so this ranking is not applied and the default order is shown."
         : null;
+  // A minimum-score or minimum-spread filter excludes every record that lacks
+  // the value, so with none carrying it the filter matches nothing at all. The
+  // empty state used to tell the user to "adjust your modeled score, bid
+  // spread, or opening amount range" - naming two fields no record has, and
+  // sending them to tune criteria that were never the problem.
+  const unvaluedFilterReason =
+    minDealScore > 0 && knownScores.length === 0
+      ? "No record in this view carries a modeled triage score, so a minimum-score filter excludes every property here. No record has been assigned one."
+      : minEquity > 0 && knownEquity.length === 0
+        ? "No record in this view carries a bid spread, so a minimum-spread filter excludes every property here. No record has one."
+        : null;
   const scoreBandCounts = SCORE_BANDS.map((band) => ({
     band,
     count: knownScores.filter((score) => score >= band.min && score <= band.max).length,
@@ -935,7 +946,8 @@ export function InteractiveTerminal() {
                   <>
                     <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
                     <p className="text-xs text-[#6B7280] max-w-md mx-auto">
-                      Try adjusting your modeled score, bid spread, or opening amount range to capture more published records.
+                      {unvaluedFilterReason
+                        ?? "Try adjusting your modeled score, bid spread, or opening amount range to capture more published records."}
                     </p>
                   </>
                 )}

@@ -369,6 +369,21 @@ test('a ranking the inventory cannot satisfy says so instead of silently doing n
     /sortBy === "equity"[\s\S]{0,200}No record in this view carries a bid spread/.test(terminal),
     'the bid-spread ranking must state that it is not applied',
   );
+  // The empty-grid copy used to tell the user to "adjust your modeled score,
+  // bid spread, or opening amount range" - naming two fields that no record
+  // carries, and sending them to tune criteria that were never the problem.
+  assert.ok(
+    /unvaluedFilterReason[\s\S]{0,600}No record in this view carries a modeled triage score/.test(terminal),
+    'an unsatisfiable minimum-score filter must be explained, not told to be adjusted',
+  );
+  assert.ok(
+    /minEquity > 0 && knownEquity\.length === 0[\s\S]{0,300}No record in this view carries a bid spread/.test(terminal),
+    'an unsatisfiable minimum-spread filter must be explained',
+  );
+  assert.ok(
+    /\{unvaluedFilterReason\s*\n?\s*\?\?/.test(terminal),
+    'the empty grid must prefer the real reason over the generic adjust-your-criteria advice',
+  );
 });
 
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
