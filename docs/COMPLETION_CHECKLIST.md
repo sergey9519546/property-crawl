@@ -743,6 +743,21 @@ The first version of this did nothing at all: the in-flight entry was stamped
 shared. The structural guards passed the whole time — they check the source, not
 the behaviour. Measuring the actual request count is what caught it.
 
+## Known, minor, and left alone deliberately
+
+Every route was rendered and checked: all fifteen return 200 with content and no
+page errors. Two observations worth recording rather than changing at this hour:
+
+- The home page fires `/api/alerts/matches` twice on load and receives 401,
+  because `interactive-terminal.tsx` refreshes the unread badge on mount without
+  an auth gate — every other gated feature checks `session.authenticated` first.
+  It is handled rather than hidden (the badge simply stays 0), so this is two
+  wasted requests and console noise, not a wrong answer. It was left rather than
+  adding a session dependency to a large component late in a long session.
+- Viewing `/sitemap.xml` directly in a browser logs a CSP inline-style warning;
+  the endpoint itself is a plain XML document and the warning comes from Chrome
+  rendering it. Not a product defect.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
