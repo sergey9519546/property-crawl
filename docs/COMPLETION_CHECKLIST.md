@@ -171,14 +171,14 @@ holding at most 3 sample listings and 26 auction-run rows, used to build the
 parser against the publisher's real shape. The collector reads the live public
 API, and no record derived from that download is in the database.
 
-## The MAO simulator has no input — this is a missing feature, not a bug
+## The MAO simulator has no input — the bid cost model now runs anyway
 
 **No listing in the inventory carries a price estimate.** Across servicelink,
 hud, civilview, fl-dor-cadastral, courtlistener, treasury, usda, irs and gsa,
 `estLow` is populated on **zero of 7,976** rows while 2,086 carry an
-`openingBid`. So `bidding-simulator.tsx` always takes its early return and
-shows the amber *"Price scenario unavailable"* panel — the Bidding Simulator has
-never run for a real record.
+`openingBid`. Measured again over a live page of 1,000 records: `estLow`,
+`estHigh`, `assessed` and `mid` are all empty on every row; `openingBid` is
+populated on 413 of them.
 
 This is not a wiring gap. Only four files in the repo write a non-null estimate
 and none of them computes one: `fannie.js`, `freddie.js`, `va.js` and `hud.js`
@@ -198,29 +198,77 @@ an "observed valuation" evidence class. `server/intelligence/hunts.js` validates
 `mid`/`dealScore` only against `observed-valuation-range-v1`; a synthesized band
 under that label misrepresents a model as a source observation.
 
-**Decision needed before any build:** if estimates must be *observed*, the MAO
-simulator stays unreachable by design and should be hidden or clearly marked
-unavailable rather than "fixed". If a *modelled* HPI band is acceptable, it
-needs a real estimator (prior-sale comps or an HPI series, which
-`server/scrapers/fhfa-hpi.js` already collects), its `evidenceClass` carried
-through to the simulator and hunt evidence, and records with no coverage left
-`null`.
+An HPI band is **not** a way out either: an index reports percentage change over
+time, not a dollar value for one house. Turning it into a per-property band would
+fabricate the very number the gate refuses to accept.
 
-## Playwright UI suite - 50 of 53, with the rest diagnosed
+**What changed:** the panel no longer gates itself on the valuation. Cost to
+close is arithmetic over the *published* opening amount plus costs the buyer
+enters, so it needs no valuation at all, and `bidding-simulator.tsx` already
+computed it and then threw it away behind that gate. The component now renders
+a **Bid cost model** whenever the record carries an opening bid, and withholds
+only the **max allowable offer**, with the existing "Price scenario unavailable"
+notice saying why. Verified in the browser: a record with a $126,000 opening
+bid and entered costs of $8,180 totals **$134,180**, with no MAO shown and the
+valuation still declared absent.
 
-Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it. It went
-from 8 passing to 50 during the database work; the two that remain each have
-a known cause, recorded here so the diagnosis is not lost with the session.
+**Still a missing feature, and the owner decision stands:** the maximum
+allowable offer itself is unreachable until estimates exist. Either capture real
+comparable-sale evidence from a publisher that publishes it (the page already
+says *"No comparable-sale claims are shown until exact comp evidence is
+captured"*), or accept that the MAO half stays withheld. What is no longer true
+is that the whole tool is dead.
+
+## Playwright UI suite - 47 of 53, with the rest diagnosed
+
+Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it.
+
+**Run it against a production build, not `next dev`.** Under `next dev` the
+same tree produced 42 of 53: on-demand route compilation blows the suite's 5s
+Playwright timeout and unrelated tests fail on latency. `next build` +
+`next start -p 3001` gives 47 of 53 in ~4 minutes.
+
+**Also raise the API rate limit for the run.** `PROPERTY_API_RATE_LIMIT`
+defaults to 120/minute; 53 tests each fetch `/api/listings` in `setUp`, so the
+limiter answers **429** and 44 tests fail with a cause that looks like a
+product regression. Start the API server with `PROPERTY_API_RATE_LIMIT=10000`.
 
 | Test | Cause |
 |---|---|
-| `street_view_uses_same_origin_images_and_explicit_context_disclosure` | Four stacked fixture bugs, three fixed and verified: The app asks for **`mode=walkthrough`**, but the mocks only recognised `mode=metadata`, so the disclosure request fell through to the image branch and came back as a PNG the parser rejects. The alternative-imagery probe (`mode=alternatives`) hits the same route and was also answered with a PNG, so `response.json()` threw. And Street View is refused outright without validated current coordinates, while `primary_listing` has `lat: null`. **A fourth** only shows up after those: the mocked metadata has no `panoramaId`/`panoramaLocation`, so the component has no embed to point at and never reveals the disclosure - with those added the disclosure renders and the test reaches its last assertion. That last one (`assertTrue(image_requests)`) needs the interactive embed to actually load, which needs a Google Maps key the harness deliberately blanks. So this test cannot pass in this harness as configured, and none of its fixes are committed. |
-| `feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure` | The same four defects, in its own fixture. Its `media_response` answers the first request with `available:false` and then branches on `"mode=metadata" in url` - which the app never sends, because the disclosure path asks for `mode=walkthrough`. So the retry can never succeed, and the fixture carries no `panoramaId` either. |
+| `street_view_detail_card_is_on_demand_and_discloses_its_context` (was `street_view_uses_same_origin_images_and_explicit_context_disclosure`) | **Fixed, and it was not only a test bug.** Three separate faults. (1) The mocks keyed on `mode=metadata`, but `listing-media.tsx:155` requests `{walkthrough:true}`, which `street-view-client.ts:150` turns into `mode=walkthrough`; the request fell through to the image branch, `response.json()` failed and the card went unavailable, so the disclosure never rendered. (2) **A real product bug:** one effect reset `streetView` whenever `publisherMediaKey` changed, so publisher photos arriving *after* the user clicked bumped the request generation, discarded the in-flight response and silently reset the card. Photo changes now reset only the carousel. (3) The name was a lie: this card renders an `InteractiveStreetView` **embed**, not a same-origin `<img>`. That guarantee belongs to the feed card and is asserted there. Renamed, and the Google embed is stubbed so the test spends no quota. The Map-tab and `aria-selected` assertions were also stale — they encoded an inventory snapshot; a Map tab now appears exactly when the record carries coordinates, and End must land on the last tab the record supports. |
+| `feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure` | **Fixed.** Same `mode=walkthrough` mismatch in its own fixture: its `media_response` answered the first call with `available:false` then branched on `"mode=metadata" in url`, which the app never sends, so the retry could never succeed. The label also renames itself to "Retry Street View" after a refusal, so one locator could not drive both clicks. Strengthened rather than relaxed: a refused check must leave **no** `<img>` behind, and the Street View frame must actually decode (`naturalWidth > 0`), not merely be requested. |
 | `detail_mobile_content_and_media_controls_are_not_clipped` | **Fixed.** Two distinct watchlist implementations were being conflated. The feed card's watchlist is a local per-browser list that really does persist across a reload; the detail-page toggle POSTs `/api/alerts`, which is **operator-gated** (401, then `session.requestUnlock()`). The detail test now asserts the honesty contract for the gated path - a refused save must not present as saved - and locates the toggle by `aria-pressed` rather than by label, because the label changes to "Updating watchlist." the moment it is clicked. |
 | `saved_search_persists_and_opens_matching_inventory` | **Fixed, and it was a product bug.** The saved-searches handlers lived only in a `[...path]` catch-all, which in the App Router does not match the bare segment - and the client lists and creates through `/api/saved-searches` with no trailing path. **Every list and create call 404'd**, so the whole feature was unreachable from the modal. Added the bare-path route; calls now return 401 *"Unlock the workspace first."* and the test asserts that refusal honestly. |
 | `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | **Fixed.** Extraction is workspace-backed and `/api/parse` answers 401 to a signed-out visitor. The test asserted an extraction appeared anyway - precisely the fabrication this product exists to avoid. Renamed to `test_notice_parser_never_fabricates_facts_when_the_workspace_is_locked`: it asserts the unlock message appears, that neither an extraction heading nor an "Add extraction" button is offered, and that the panel keeps the promise it makes - "Your text will stay on this page". Matches the message text rather than `role="alert"`, because Next ships an empty alert route-announcer that would satisfy a role-only assertion. |
 | `live_map_keeps_coincident_records_selectable_at_one_location` | **Flaky, not broken.** Fails intermittently in the full-suite run and passes twice in isolation and on the following full run. Nothing in the work touches the map; treat it as contention under load until proven otherwise. |
-| `property_underwrite_watchlist_and_export_journey` | **Fixed.** Two stale steps. The MAO simulator renders only when a listing has BOTH an opening bid and an estimate - and **no listing in the inventory has both**: opening bids exist but `estLow`/`estHigh` are null throughout, so the panel correctly shows "Price scenario unavailable". The test now accepts the simulator *or* that explicit warning, never a blank panel. And the Deal Video Teaser / storyboard generator was removed from the product (no "storyboard" string remains in src), so those steps are dropped rather than pointed at an invented control. |
+| `property_underwrite_watchlist_and_export_journey` | **Fixed.** Two stale steps. The Deal Video Teaser / storyboard generator was removed from the product (no "storyboard" string remains in src), so those steps are dropped rather than pointed at an invented control. The MAO step asserted a blank panel was impossible and that the simulator or an explicit warning appears; the simulator now renders a **Bid cost model** for any record with an opening bid, so that assertion still holds and describes more than it used to. |
+
+### The six that remain all assume the API's first listing is the feed's first card
+
+`test_every_feed_card_links_to_its_exact_listing_page`,
+`test_watchlist_persists_across_reload`, `test_hero_submit_opens_and_filters_live_feed`,
+`test_hero_suggests_and_selects_real_markets_as_user_types`,
+`test_hero_supports_state_country_zip_and_address_scopes` and
+`test_hero_can_launch_a_county_market` key their assertions to
+`self.primary_listing`, which is `listings[0]` from `/api/listings?limit=1000`.
+
+**The feed does not render that record first.** Measured on the live app:
+
+```
+api[0]      = 84 Raven Rock Rd, Lillington, NC 27546
+feed card 1 = 1121 Belmont Ave, Haddon Township, NJ 08108   (48 cards rendered)
+```
+
+The grid applies its own ranking, so the API's default order and the feed's
+render order are different lists. A test that asserts on a card belonging to
+`primary_listing` is asserting about a record that may not be on screen at all —
+it waits for a watchlist button that never appears, and times out at 5s.
+
+This is a **test-design defect, not a product defect**, and it is why the count
+cannot be raised by loosening an assertion: the assertion is about the wrong
+record. The fix is to read the first rendered card's address and assert against
+*that*, so the test follows the ranking the user actually sees. Not done here —
+it touches five tests at once and is recorded rather than half-applied.
 
 
 Two assertions were deliberately **left weaker** and are called out here rather
