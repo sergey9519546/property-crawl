@@ -474,6 +474,58 @@ Final state of the inventory:
 | past cadence | 5,845 | **1,447** |
 | sources behind | unnamed | servicelink, civilview, courtlistener, gsa — each with a proven reason |
 
+## The Street View tests were passing by luck
+
+Removing the dead control surfaced four failures that had nothing to do with it.
+The cause was that these tests keyed themselves to `primary_listing` —
+`listings[0]` from a 1,000-row API sample — and **which record that is changes as
+the inventory is swept and imported**. They had been passing only because the
+record that happened to be first satisfied what the card requires.
+
+The card needs two things from a record before it offers the control:
+
+1. **location evidence** — no coordinates, no Street View;
+2. **no publisher photo** — with a photo the card opens on Photos, and the
+   control moves inside the Street View tab under a different label
+   ("Check panorama" rather than "Check Street View").
+
+Measured on the live inventory: 9,340 of 9,796 records have coordinates, and
+**243 have coordinates and no photo**. The tests now select on both properties
+through a `street_view_listing()` helper, with a comment saying why. The
+difference between that and "whatever is first" is the difference between a test
+and a coin flip — and the sweep that improved the data quality is precisely what
+made the old selection unstable.
+
+The same helper now backs all four detail-page tests that visit
+`/listings/<id>`.
+
+## A control that could never do anything was removed from the bid screen
+
+`deal-video-generator.tsx` rendered in the **Bidding Simulator** tab — the tab a
+user opens to decide whether to bid — and did nothing:
+
+```tsx
+export function DealVideoGenerator({ listing }: DealVideoProps) {
+  void listing;                       // the only thing it did with the record
+  return <div>…Deal video generation is not available yet
+                  This feature is under development.</div>;
+}
+```
+
+It discarded its input entirely, so it could not have been made to work without
+being written. "Under development" also states something about the roadmap that
+is not established. `reports/swarm-analysis-2026-09-13.md:130` had already
+recorded this as fake; a previous pass reduced it from a 6.8KB component with a
+`generateVideo()` to this 685-byte stub and left it in place.
+
+Removed, following the same precedent as the storyboard generator earlier: drop
+a control rather than point a user at an invented one. A sweep for the wider
+class — components that accept a prop and discard it — found no other instance.
+
+Verified in the browser: the bidding tab now renders only the Bid cost model and
+the honest MAO notice, with no "not available yet" or "under development" text
+anywhere on the page.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
@@ -523,6 +575,7 @@ product regression. Start the API server with `PROPERTY_API_RATE_LIMIT=10000`.
 | `saved_search_persists_and_opens_matching_inventory` | **Fixed, and it was a product bug.** The saved-searches handlers lived only in a `[...path]` catch-all, which in the App Router does not match the bare segment - and the client lists and creates through `/api/saved-searches` with no trailing path. **Every list and create call 404'd**, so the whole feature was unreachable from the modal. Added the bare-path route; calls now return 401 *"Unlock the workspace first."* and the test asserts that refusal honestly. |
 | `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | **Fixed.** Extraction is workspace-backed and `/api/parse` answers 401 to a signed-out visitor. The test asserted an extraction appeared anyway - precisely the fabrication this product exists to avoid. Renamed to `test_notice_parser_never_fabricates_facts_when_the_workspace_is_locked`: it asserts the unlock message appears, that neither an extraction heading nor an "Add extraction" button is offered, and that the panel keeps the promise it makes - "Your text will stay on this page". Matches the message text rather than `role="alert"`, because Next ships an empty alert route-announcer that would satisfy a role-only assertion. |
 | `live_map_keeps_coincident_records_selectable_at_one_location` | **Flaky, not broken.** Fails intermittently in the full-suite run and passes twice in isolation and on the following full run. Nothing in the work touches the map; treat it as contention under load until proven otherwise. |
+| `storyteller_uses_a_real_map_engine_with_accessible_opportunities` | **Flaky, same cause.** It asserts MapLibre actually initialised (`.maplibregl-map` present). Fails occasionally in the full-suite run and passes twice in isolation. WebGL initialisation under load, not a product defect — but it is a real assertion and was not weakened. |
 | `property_underwrite_watchlist_and_export_journey` | **Fixed.** Two stale steps. The Deal Video Teaser / storyboard generator was removed from the product (no "storyboard" string remains in src), so those steps are dropped rather than pointed at an invented control. The MAO step asserted a blank panel was impossible and that the simulator or an explicit warning appears; the simulator now renders a **Bid cost model** for any record with an opening bid, so that assertion still holds and describes more than it used to. |
 
 ### Six tests assumed the API's first listing is the feed's first card — fixed

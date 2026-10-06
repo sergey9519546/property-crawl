@@ -144,6 +144,28 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "zip": record.get("zip"),
         }
 
+    def street_view_listing(self):
+        """A listing whose detail page actually offers the Street View control.
+
+        Two conditions, both required by the card rather than by convenience:
+        it needs location evidence, and the control reads "Check Street View"
+        only while the record has no publisher photo (with a photo, the card
+        opens on Photos and the control moves into the Street View tab under a
+        different label).
+
+        `primary_listing` is simply listings[0] from the API sample, and which
+        record that is changes as the inventory is swept and imported. These
+        tests passed only because the record that happened to be first
+        satisfied both. Selecting on the properties the test depends on is the
+        difference between a test and a coin flip.
+        """
+        for listing in self.listings:
+            if (listing.get("lat") is not None
+                    and listing.get("lng") is not None
+                    and not listing.get("photo")):
+                return listing
+        self.fail("no listing in the API sample offers the Street View control")
+
     def geocoded_listings(self, listings=None):
         # Positive map tests declare their qualified fixture records explicitly.
         # Finite coordinates in the application's snapshot data are not evidence.
@@ -1604,7 +1626,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(heading.is_visible())
 
     def test_listing_detail_page_renders_docket_agent_and_can_verify(self):
-        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.street_view_listing()['id']}", wait_until="domcontentloaded")
         research = self.page.locator("details#modeled-research")
         self.assertIsNone(research.get_attribute("open"), "modeled research should start collapsed")
         research.locator("summary").click()
@@ -1618,7 +1640,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(self.page.get_by_text("Docket Verified: Case #").count(), 0)
 
     def test_detail_mobile_content_and_media_controls_are_not_clipped(self):
-        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.street_view_listing()['id']}", wait_until="domcontentloaded")
         for width in (375, 390):
             with self.subTest(width=width):
                 self.page.set_viewport_size({"width": width, "height": 812})
@@ -1712,7 +1734,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         self.page.route(re.compile(r"google\.com/maps/embed"), embed_stub)
         self.page.route("**/api/property-image?**", media_response)
-        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.street_view_listing()['id']}", wait_until="domcontentloaded")
         # "Check Street View" is server-rendered, but its onClick handler only
         # exists once React hydrates. Clicking straight after domcontentloaded
         # finds the button and silently swallows the click - no metadata request,
@@ -1724,6 +1746,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(metadata_requests, [], "detail card must not request imagery before the user asks")
         self.assertEqual(image_requests, [], "detail card must not request imagery before the user asks")
 
+        # Select the Street View tab the way a user would. When the record has
+        # a publisher photo the card opens on Photos and the control only exists
+        # once Street View is showing, so clicking a button that is not on
+        # screen was never a valid step.
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
         disclosure = self.page.get_by_test_id("street-view-disclosure")
         expect(disclosure).to_be_visible(timeout=15_000)
@@ -1874,7 +1900,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
 
         self.page.route("**/api/property-image?**", media_response)
-        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.street_view_listing()['id']}", wait_until="domcontentloaded")
         # No panoramaId / panoramaLocation is returned above, on purpose. Without
         # a target the card cannot build an embed URL, and with no browser maps
         # key it declares the view unavailable straight away and falls back to
@@ -1903,3 +1929,6 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+

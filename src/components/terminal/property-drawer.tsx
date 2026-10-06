@@ -27,7 +27,6 @@ import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
 import { BiddingSimulator } from "./bidding-simulator";
-import { DealVideoGenerator } from "./deal-video-generator";
 import { DocketAgent } from "./docket-agent";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
 import { OpportunitySignalsCard } from "@/components/listings/opportunity-signals-card";
@@ -671,7 +670,6 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {activeTab === "bidding" && (
             <div id="panel-bidding" role="tabpanel" aria-labelledby="tab-bidding" className="space-y-6 animate-in fade-in">
               <BiddingSimulator listing={listing} />
-              <DealVideoGenerator listing={listing} />
             </div>
           )}
 
