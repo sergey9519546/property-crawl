@@ -171,7 +171,42 @@ holding at most 3 sample listings and 26 auction-run rows, used to build the
 parser against the publisher's real shape. The collector reads the live public
 API, and no record derived from that download is in the database.
 
-## Playwright UI suite — 50 of 53, with the rest diagnosed
+## The MAO simulator has no input — this is a missing feature, not a bug
+
+**No listing in the inventory carries a price estimate.** Across servicelink,
+hud, civilview, fl-dor-cadastral, courtlistener, treasury, usda, irs and gsa,
+`estLow` is populated on **zero of 7,976** rows while 2,086 carry an
+`openingBid`. So `bidding-simulator.tsx` always takes its early return and
+shows the amber *"Price scenario unavailable"* panel — the Bidding Simulator has
+never run for a real record.
+
+This is not a wiring gap. Only four files in the repo write a non-null estimate
+and none of them computes one: `fannie.js`, `freddie.js`, `va.js` and `hud.js`
+pass through `p.estimatedValueLow ?? null` from a GSE field the feeds do not
+populate. Every other scraper hardcodes `estLow: null`. The importer carries the
+field faithfully (`scripts/db-import-live.js`), so the value simply never
+arrives.
+
+`dealScore` and `mid` are pure functions of those two nulls
+(`server/db/client.js`), which is why the feed shows bids but no scores. The
+only place estimates are invented today is `app.js` (`bid × 1.35` / `bid × 1.70`),
+which is browser-only fixture data the running API never serves.
+
+**Do not fix this by deriving the band from the bid.** That would make
+`dealScore` a constant by construction and would publish a modelled number under
+an "observed valuation" evidence class. `server/intelligence/hunts.js` validates
+`mid`/`dealScore` only against `observed-valuation-range-v1`; a synthesized band
+under that label misrepresents a model as a source observation.
+
+**Decision needed before any build:** if estimates must be *observed*, the MAO
+simulator stays unreachable by design and should be hidden or clearly marked
+unavailable rather than "fixed". If a *modelled* HPI band is acceptable, it
+needs a real estimator (prior-sale comps or an HPI series, which
+`server/scrapers/fhfa-hpi.js` already collects), its `evidenceClass` carried
+through to the simulator and hunt evidence, and records with no coverage left
+`null`.
+
+## Playwright UI suite - 50 of 53, with the rest diagnosed
 
 Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it. It went
 from 8 passing to 50 during the database work; the two that remain each have
