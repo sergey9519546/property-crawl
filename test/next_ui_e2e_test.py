@@ -704,7 +704,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.set_viewport_size({"width": 2322, "height": 1272})
         header = self.page.locator("header").first
         brand = self.page.get_by_role("link", name="PerfectProperty home").first
-        signup = self.page.get_by_role("link", name="Operator access").first
+        # The header's right-hand control is "Operator key"; "Operator access"
+        # is a CTA further down the page. Assert the header's own control sits
+        # hard right - a page-wide .first was measuring the CTA's position.
+        signup = header.get_by_role("link", name="Operator key", exact=True)
         navigation = header.locator("nav")
         header_box = header.bounding_box()
         brand_box = brand.bounding_box()
@@ -1080,7 +1083,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         newsletter = footer.locator("#contact")
         self.assertEqual(footer.evaluate("el => getComputedStyle(el).borderTopWidth"), "0px")
         self.assertEqual(newsletter.evaluate("el => getComputedStyle(el).borderBottomWidth"), "0px")
-        self.assertTrue(footer.get_by_text("Subscribe to the PerfectProperty accuracy report").is_visible())
+        # The newsletter pitch is "Subscribe for source coverage notes" now;
+        # "accuracy report" was the old copy and is gone from src. What matters
+        # here is that the footer offers the signup, not which sentence it uses.
+        self.assertTrue(newsletter.get_by_text("Subscribe for source coverage notes").is_visible())
 
     def test_newsletter_submit_has_an_inline_honest_result(self):
         dialogs = []
