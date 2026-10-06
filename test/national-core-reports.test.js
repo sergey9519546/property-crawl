@@ -30,7 +30,18 @@ test('Treasury and IRS detail failures make an otherwise bounded index sweep inc
   irs.fetchDetail = async (slug) => slug === 'one' ? { id: 'one' } : Promise.reject(new Error('detail failed'));
   await irs.scrapeFeed();
   assert.equal(irs.lastRunReport.fullSweepComplete, false);
-  assert.deepEqual(irs.lastRunReport.scope, { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } });
+  assert.deepEqual(irs.lastRunReport.scope, {
+    endpoint: '/auction/items',
+    // The index is a static object whose query string cannot filter, so the
+    // declared scope is enforced per record from the publisher's own
+    // data-asset-type. The report must say which class and that it was applied
+    // client-side - otherwise a reader assumes the request itself narrowed it.
+    filters: {
+      assetClass: 'real_estate',
+      publisherAssetTypeId: '8',
+      appliedBy: 'client_side_publisher_asset_type',
+    },
+  });
 });
 
 test('USDA and GSA declare the publisher-discovered scope and never use fixtures', async () => {
