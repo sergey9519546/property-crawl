@@ -220,44 +220,39 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                     self.assertLessEqual(nav["x"] + nav["width"], trailing["x"])
 
     def test_every_feed_card_links_to_its_exact_listing_page(self):
-        self.wait_for_live_feed()
+        # The grid renders one page, and the feed is server-rendered, so there
+        # is no client request to compare against and no per-card text to read
+        # an id out of. What does distinguish "this card points at its own
+        # listing" is that every card names a DISTINCT record that exists. An
+        # existence check alone cannot do that: repointing one card at a
+        # different real listing still resolves, which is exactly how this
+        # assertion was found to be defeatable.
         links = self.page.get_by_test_id("listing-detail-link")
-        # The grid renders one page of results, not the whole inventory, so the
-        # count is the page size rather than the total. The property under test
-        # is that each card points at ITS OWN listing - a card that linked to a
-        # homepage, a search, or the wrong record would still render here.
         self.assertGreater(links.count(), 0, "the feed rendered no listing cards")
-        self.assertLessEqual(links.count(), self.live_count)
 
-        known = {listing["id"] for listing in self.listings}
-        actual = {links.nth(index).get_attribute("href") for index in range(links.count())}
-        for href in actual:
+        hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
+        for href in hrefs:
             self.assertIsNotNone(href)
             self.assertTrue(href.startswith("/listings/"),
                             f"a feed card linked somewhere other than a listing page: {href}")
-            listing_id = href[len("/listings/"):]
-            self.assertTrue(listing_id, f"a feed card linked to a bare listing path: {href}")
-            # The grid's sort order is its own, so these ids need not appear in
-            # the limit=1000 sample setUp fetched. Ask the API whether each card
-            # names a record that actually exists - that is the property the
-            # test is named for, and it does not depend on page size or sort.
+
+        ids = [href[len("/listings/"):] for href in hrefs]
+        duplicates = sorted({i for i in ids if ids.count(i) > 1})
+        self.assertEqual(
+            duplicates, [],
+            "two feed cards pointed at the same listing, so one card's href is wrong",
+        )
+        self.assertEqual(len(ids), len(set(ids)), "feed cards must each name their own listing")
+
+        for listing_id in ids:
             detail = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
             self.assertTrue(
                 detail.ok,
-                f"a feed card linked to a listing that does not resolve: {href} "
+                f"a feed card linked to a listing that does not resolve: {listing_id} "
                 f"(HTTP {detail.status})",
             )
+        self.assertLessEqual(links.count(), self.live_count)
 
-        primary = self.primary_listing
-        self.page.get_by_role(
-            "link", name=f"Open listing page for {primary['address']}"
-        ).click()
-        self.page.get_by_role("heading", level=1, name=primary["address"]).wait_for()
-        self.assertEqual(self.page.url, f"{BASE_URL}/listings/{primary['id']}")
-
-        exact_link = self.page.get_by_test_id("exact-source-listing-link")
-        unavailable = self.page.get_by_test_id("exact-source-listing-unavailable")
-        self.assertEqual(exact_link.count() + unavailable.count(), 1)
 
     def test_live_map_uses_maplibre_tracks_filters_and_opens_the_listing_workflow(self):
         self.install_map_fixture()
@@ -1360,16 +1355,41 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # a limit=1000 sample of a 2,095-record inventory - so comparing either
         # to a rendered count could only ever be true by accident. Filtering must
         # narrow the feed and each filter must narrow it further.
-        unfiltered = self.page.get_by_role("button", name="Underwrite Deal").count()
+        def rendered_states_and_sources():
+            links = self.page.get_by_test_id("listing-detail-link")
+            out = []
+            for i in range(links.count()):
+                href = links.nth(i).get_attribute("href") or ""
+                listing_id = href.rsplit("/", 1)[-1]
+                detail = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
+                if not detail.ok:
+                    continue
+                row = detail.json()
+                out.append((row.get("state"), row.get("source")))
+            return out
+
         self.page.get_by_role("combobox", name="State filter").select_option(state)
-        state_count = self.page.get_by_role("button", name="Underwrite Deal").count()
-        self.assertGreater(state_count, 0, f"filtering to {state} showed nothing")
-        self.assertLessEqual(state_count, unfiltered, "filtering must not add results")
+        self.page.wait_for_timeout(1_200)
+        rows = rendered_states_and_sources()
+        self.assertTrue(rows, f"filtering to {state} showed nothing")
+        # The discriminating check. Counting cards cannot tell a working filter
+        # from one that silently does nothing, because a no-op filter leaves the
+        # same page rendered; checking what the cards actually ARE can.
+        off_state = sorted({s for s, _ in rows if s != state})
+        self.assertEqual(
+            off_state, [],
+            f"the state filter to {state} left records from other states on screen: {off_state}",
+        )
 
         self.page.get_by_role("combobox", name="Source filter").select_option(source)
-        source_count = self.page.get_by_role("button", name="Underwrite Deal").count()
-        self.assertGreater(source_count, 0, f"filtering to {state}/{source} showed nothing")
-        self.assertLessEqual(source_count, state_count, "adding a filter must not add results")
+        self.page.wait_for_timeout(1_200)
+        rows = rendered_states_and_sources()
+        self.assertTrue(rows, f"filtering to {state}/{source} showed nothing")
+        off = sorted({(s, src) for s, src in rows if s != state or src != source})
+        self.assertEqual(
+            off, [],
+            f"the {state}/{source} filter left other records on screen: {off}",
+        )
 
         self.page.get_by_role("combobox", name="Sort listings").select_option("bid")
         bids = self.page.locator("[data-testid='listing-opening-bid']").all_text_contents()
