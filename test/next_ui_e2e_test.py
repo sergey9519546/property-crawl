@@ -1591,75 +1591,194 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "a refused save must not leave the watchlist toggle pressed",
         )
 
-    def test_street_view_uses_same_origin_images_and_explicit_context_disclosure(self):
-        # Deterministic transport fixture: browser tests never spend Google API quota.
+    def test_street_view_detail_card_is_on_demand_and_discloses_its_context(self):
+        # This is the listing-DETAIL card (src/components/listings/listing-media.tsx),
+        # not the feed card. It requests metadata with {walkthrough: true}, and
+        # src/lib/street-view-client.ts:150 turns that into mode=walkthrough. A
+        # previous version of this mock only recognised mode=metadata, so the
+        # walkthrough request fell through to its image branch and was fulfilled
+        # with a PNG. response.json() then failed and the card fell to its
+        # unavailable state, so the disclosure this test waits for never rendered.
+        #
+        # The available state of THIS card is an InteractiveStreetView embed - a
+        # third-party iframe - not a same-origin <img>. The same-origin proxy
+        # guarantee belongs to the feed card (listing-thumbnail.tsx) and is
+        # asserted there, in
+        # test_feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure.
+        # What this test owns is what this card actually promises: it fetches
+        # nothing until asked, and the disclosure names the provider, the
+        # provider's own credit, the capture date, the matched distance, and the
+        # fact that the frame is street context rather than condition evidence.
+        metadata_requests = []
         image_requests = []
+        embed_requests = []
         tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
 
         def media_response(route):
-            if "mode=metadata" in route.request.url:
-                route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Google", "captureDate": "2026-05", "distanceMeters": 12})
+            url = route.request.url
+            if "mode=metadata" in url or "mode=walkthrough" in url:
+                metadata_requests.append(url)
+                route.fulfill(json={"available": True, "provider": "Google Maps",
+                    "attribution": "Google", "captureDate": "2026-05", "distanceMeters": 12,
+                    "panoramaLocation": {"lat": 39.5, "lng": -104.9}, "heading": 0})
             else:
-                image_requests.append(route.request.url)
+                image_requests.append(url)
                 route.fulfill(content_type="image/png", body=tiny_png)
 
+        def embed_stub(route):
+            # The embed is a real google.com iframe. Stub it: this file's policy is
+            # that browser tests never spend Google API quota, and a live embed
+            # would also make the result depend on network reachability.
+            embed_requests.append(route.request.url)
+            route.fulfill(status=200, content_type="text/html",
+                          body="<html><body>street view embed</body></html>")
+
+        self.page.route(re.compile(r"google\.com/maps/embed"), embed_stub)
         self.page.route("**/api/property-image?**", media_response)
         self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
-        disclosure = self.page.get_by_test_id("street-view-disclosure")
-        self.assertEqual(image_requests, [])
+        # "Check Street View" is server-rendered, but its onClick handler only
+        # exists once React hydrates. Clicking straight after domcontentloaded
+        # finds the button and silently swallows the click - no metadata request,
+        # no state change, and the disclosure never appears. Wait for the page to
+        # go quiet so hydration has actually landed before driving the UI.
+        self.page.wait_for_load_state("networkidle", timeout=20_000)
+
+        # On demand: the card asks the publisher for nothing until it is clicked.
+        self.assertEqual(metadata_requests, [], "detail card must not request imagery before the user asks")
+        self.assertEqual(image_requests, [], "detail card must not request imagery before the user asks")
+
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
-        disclosure.wait_for(state="visible")
-        self.assertIn("Street-level context only", disclosure.inner_text())
-        self.assertIn("May 2026", disclosure.inner_text())
-        self.assertIn("12 m", disclosure.inner_text())
-        self.assertTrue(image_requests)
-        self.assertTrue(all(url.startswith(f"{BASE_URL}/api/property-image?") and "key=" not in url for url in image_requests))
-        image = self.page.get_by_test_id("street-view-panel").locator("img")
-        self.assertEqual(image.evaluate("node => getComputedStyle(node).objectFit"), "contain")
+        disclosure = self.page.get_by_test_id("street-view-disclosure")
+        expect(disclosure).to_be_visible(timeout=15_000)
+        self.assertTrue(metadata_requests, "clicking must actually request metadata")
+        # If this stub ever stops matching, the iframe reaches real Google, burns
+        # quota, and fails - which flips the card to unavailable and makes this
+        # whole test flaky rather than honest. Assert the interception happened.
+        self.assertTrue(embed_requests, "the Google embed must be stubbed, never requested live")
+
+        caption = disclosure.inner_text()
+        self.assertIn("Google Maps", caption)
+        self.assertIn("Google", caption)
+        self.assertIn("May 2026", caption)
+        self.assertIn("12 m", caption)
+        # The frame is street context. It must not read as evidence about the
+        # condition of this parcel, and it must say so on the record.
+        self.assertIn("Street-level context only", caption)
+        self.assertIn("Verify the facade and parcel against the publisher record", caption)
+
+        # This card embeds rather than proxying. Asserted so that changing this
+        # card to a proxied image is a deliberate, visible act rather than a drift.
+        self.assertEqual(image_requests, [], "this card renders an embed, not a proxied image")
+
         tab = self.page.get_by_role("tab", name="Street View", exact=True)
         tab.focus()
         tab.press("End")
-        # The snapshot fixture has no qualified coordinate evidence. Its last
-        # available tab is Street View, not a fabricated property map.
-        self.assertEqual(self.page.get_by_role("tab", name="Map", exact=True).count(), 0)
-        self.assertEqual(tab.get_attribute("aria-selected"), "true")
+        # A Map tab must appear exactly when the record itself carries coordinates
+        # (listing-media.tsx:46 gates it on hasCoordinates). "There is no Map tab"
+        # was a fact about a smaller inventory, not about the app, and the
+        # inventory has grown since; what has to stay true is that a property map
+        # is never fabricated for a record with no location evidence.
+        has_location = (self.primary_listing.get("lat") is not None
+                        and self.primary_listing.get("lng") is not None)
+        self.assertEqual(
+            self.page.get_by_role("tab", name="Map", exact=True).count(),
+            1 if has_location else 0,
+            "a Map tab must appear exactly when the record carries coordinates",
+        )
+        # End must land on the LAST tab this record actually supports. Which tab
+        # that is depends on the evidence the record carries - Street View when
+        # there is no location, Map when there is - so asserting a particular tab
+        # name here would only re-encode one inventory snapshot. Assert the
+        # keyboard contract instead, and that the tab we left is no longer chosen.
+        last_tab = self.page.get_by_role("tab").last
+        self.assertEqual(
+            last_tab.get_attribute("aria-selected"), "true",
+            "pressing End must select the last tab this record supports",
+        )
+        self.assertEqual(
+            tab.get_attribute("aria-selected"), "false",
+            "pressing End must not leave the previously focused tab selected",
+        )
         self.page.set_viewport_size({"width": 390, "height": 844})
         tab.click()
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
 
     def test_feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure(self):
+        # The feed card is client-hydrated, not server-rendered:
+        # loadListingInventory() fetches /api/listings from the browser, so this
+        # route stub genuinely replaces the grid. It used to be described as
+        # dead SSR, which sent a previous fix to throw away a working fixture.
+        #
+        # photo=None is load-bearing: ListingThumbnail returns the publisher photo
+        # immediately when one exists, so the on-demand control would never render.
+        # No coordinates are set because this card resolves nothing server-side -
+        # it fetches /api/property-image from the browser, which is intercepted
+        # wholesale below.
         fixture = dict(self.primary_listing, id="CIV-NJ-7-1234", source="civilview",
             address="19 West Park Avenue, Park Ridge, NJ 07656", photo=None,
             sourceUrl="https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1234",
             sourceObservedAt="2026-09-04T12:00:00Z",
             provenance={"origin": "live", "observed": True, "recordKind": "source_record", "publisher": "CivilView", "recordId": "1234"})
         self.page.route("**/api/listings?**", lambda route: route.fulfill(json={"listings": [fixture], "total": 1}))
-        requests = []
         tiny_png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aM1cAAAAASUVORK5CYII=")
+        media_calls = []
+
+        # Only the metadata mode is probed for availability; the image mode is the
+        # picture itself. Counting metadata calls (rather than total calls) keeps
+        # an image request from ever being mistaken for the first metadata call.
         def media_response(route):
-            requests.append(route.request.url)
-            if len(requests) == 1:
+            media_calls.append(route.request.url)
+            metadata_calls = sum(1 for url in media_calls if "mode=metadata" in url)
+            if metadata_calls == 1:
                 route.fulfill(json={"available": False, "reason": "Coverage temporarily unavailable"})
             elif "mode=metadata" in route.request.url:
                 route.fulfill(json={"available": True, "provider": "Google Maps", "attribution": "Test provider attribution", "captureDate": "2012-09", "distanceMeters": 24})
             else:
                 route.fulfill(content_type="image/png", body=tiny_png)
+
         self.page.route("**/api/property-image?**", media_response)
         self.page.reload(wait_until="domcontentloaded")
         self.page.get_by_role("button", name="Deal Grid (1 records)", exact=True).wait_for(state="visible")
-        self.assertEqual(requests, [], "feed must not bill for imagery before the user requests it")
-        button = self.page.get_by_role("button", name=f"Load Street View for {fixture['address']}")
-        button.click()
-        self.page.get_by_text("Coverage temporarily unavailable", exact=True).wait_for(state="visible")
-        self.assertEqual(self.page.get_by_test_id("listing-thumbnail-streetview").count(), 0)
-        button.click()
+        # On demand: nothing is fetched, and nothing is billed for, until a person asks.
+        self.assertEqual(media_calls, [], "feed must not bill for imagery before the user requests it")
+
+        # The control renames itself once coverage is known - "Check" before,
+        # "Retry" after a refusal - so one locator could never drive both clicks.
+        card = self.page.get_by_test_id("listing-thumbnail-unavailable")
+        card.get_by_role("button", name=f"Check Street View for {fixture['address']}", exact=True).click()
+        expect(self.page.get_by_text("Coverage temporarily unavailable", exact=True)).to_be_visible(timeout=15_000)
+        self.assertEqual(self.page.get_by_test_id("listing-thumbnail-streetview").count(), 0,
+            "a refused coverage check must not leave a Street View preview behind")
+        # The half that matters most: a refusal must not become a picture. This card
+        # has no publisher photo, so ANY <img> here is something the app invented.
+        self.assertEqual(card.locator("img").count(), 0,
+            "a refused Street View check must not render an <img> standing in for it")
+
+        # Recovery: the retry re-requests and this time gets a real answer.
+        card.get_by_role("button", name=f"Retry Street View for {fixture['address']}", exact=True).click()
         preview = self.page.get_by_test_id("listing-thumbnail-streetview")
         preview.wait_for(state="visible")
-        self.assertIn("September 2012", preview.inner_text())
-        self.assertIn("Test provider attribution", preview.inner_text())
-        self.assertIn("Context, not condition evidence", preview.inner_text())
-        self.assertEqual(preview.locator("img").evaluate("el => getComputedStyle(el).objectFit"), "contain")
-        self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in requests))
+        image = preview.locator("img")
+        expect(image).to_have_js_property("complete", True, timeout=15_000)
+        self.assertGreater(image.evaluate("node => node.naturalWidth"), 0,
+            "the Street View image must actually decode, not merely be requested")
+        caption = preview.inner_text()
+        # Attribution survives the render: provider, the provider's own credit
+        # line, the capture date and the match distance all stay on screen.
+        self.assertIn("Google Maps", caption)
+        self.assertIn("Test provider attribution", caption)
+        self.assertIn("Captured September 2012", caption)
+        self.assertIn("24 m from matched location", caption)
+        # ...and the frame is labelled as street context, so it cannot be read as
+        # evidence about the property's condition. The card's copy is
+        # "Street context only"; this assertion previously demanded wording
+        # ("Context, not condition evidence") that the component never rendered.
+        self.assertIn("Street context only", caption)
+        self.assertEqual(image.evaluate("node => getComputedStyle(node).objectFit"), "contain")
+        # No provider key in the browser URL and no third-party image host.
+        self.assertTrue(media_calls)
+        self.assertTrue(all(url.startswith(BASE_URL + "/api/property-image?") and "key=" not in url for url in media_calls),
+            "Street View imagery must be proxied same-origin with no provider key in the browser URL")
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
 
@@ -1667,14 +1786,26 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         attempts = []
 
         def media_response(route):
-            if "mode=metadata" in route.request.url:
+            url = route.request.url
+            # This card requests mode=walkthrough (listing-media.tsx:155), not
+            # mode=metadata. Keying only on mode=metadata sent the real request
+            # down the failure branch on the very first click.
+            if "mode=metadata" in url or "mode=walkthrough" in url:
                 route.fulfill(json={"available": True, "provider": "Google Maps", "distanceMeters": 10})
             else:
-                attempts.append(route.request.url)
+                attempts.append(url)
                 route.fulfill(status=503, content_type="application/json", body='{"error":"unavailable"}')
 
         self.page.route("**/api/property-image?**", media_response)
         self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        # No panoramaId / panoramaLocation is returned above, on purpose. Without
+        # a target the card cannot build an embed URL, and with no browser maps
+        # key it declares the view unavailable straight away and falls back to
+        # the alternative-imagery panel. Waiting on a real third-party iframe to
+        # fail instead would spend quota and depend on the sandbox's network.
+        # The control is server-rendered but only carries its handler once React
+        # hydrates; clicking earlier is silently swallowed.
+        self.page.wait_for_load_state("networkidle", timeout=20_000)
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
 
         # Both halves of this test were pointed at copy that no longer exists:

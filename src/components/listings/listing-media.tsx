@@ -63,10 +63,20 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
   const streetViewRequestGeneration = React.useRef(0);
   const tabsId = React.useId().replace(/:/g, "");
 
+  // The photo set and the Street View request are independent. Publisher media
+  // often resolves AFTER the user clicks "Check Street View"; when one effect
+  // owned both, that late arrival bumped the generation below, discarded the
+  // in-flight response, and reset the card - so the click silently did nothing.
+  // Photo changes now reset only the carousel.
   React.useEffect(() => {
-    streetViewRequestGeneration.current++;
     setPhotoIndex(0);
     setFailedPhotoUrls(new Set());
+  }, [publisherMediaKey]);
+
+  // The Street View request belongs to the listing, so only a change of listing
+  // may cancel one.
+  React.useEffect(() => {
+    streetViewRequestGeneration.current++;
     setStreetView({ status: "idle" });
 
     // Always begin in the photo slot. A map is useful context, but it must not
@@ -76,7 +86,7 @@ export function ListingMedia({ listingId, address, photo, gallery = [], lat, lng
     return () => {
       streetViewRequestGeneration.current++;
     };
-  }, [canMap, canShowPhoto, normalizedListingId, publisherMediaKey]);
+  }, [normalizedListingId]);
 
   React.useEffect(() => {
     if (mode !== "map" || !canMap || !mapContainerRef.current) return;
