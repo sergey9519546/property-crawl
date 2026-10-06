@@ -70,6 +70,8 @@ type Evaluation = {
   newEvents: Event[];
   eventsTruncated: boolean;
   rankingNote?: string;
+  unsatisfiableCriteria?: { field: string; operator: string; value?: unknown; reason: string }[];
+  unsatisfiableCriteriaNote?: string | null;
 };
 const fields = [
   ["state", "State", "text"],
@@ -805,6 +807,29 @@ export function SavedHunts() {
                         <p className="mt-2 text-[11px] leading-5 text-[#6B7280]">
                           {evaluation.rankingNote}
                         </p>
+                      ) : null}
+                      {/* A hunt whose criterion can never be satisfied is not a
+                          hunt that found nothing. Without this the user sees an
+                          ordinary empty result for a rule that no record could
+                          ever have satisfied. */}
+                      {evaluation.unsatisfiableCriteria?.length ? (
+                        <div
+                          role="status"
+                          data-testid="hunt-unsatisfiable-notice"
+                          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950"
+                        >
+                          <p className="font-bold">This hunt cannot match as written.</p>
+                          <p className="mt-1">
+                            {evaluation.unsatisfiableCriteriaNote}
+                          </p>
+                          <ul className="mt-2 list-disc space-y-1 pl-4">
+                            {evaluation.unsatisfiableCriteria.map((criterion) => (
+                              <li key={`${criterion.field}-${criterion.operator}`}>
+                                {criterion.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ) : null}
                       <label className="mt-6 flex items-center justify-between gap-3 text-sm font-semibold">
                         Inspect results

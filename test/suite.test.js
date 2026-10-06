@@ -471,6 +471,25 @@ test('an unsatisfiable minimum on a derived field is explained, not misattribute
   );
 });
 
+test('the hunt screen shows a criterion the inventory can never satisfy', () => {
+  // The engine reports `unsatisfiableCriteria`; if the UI does not render it,
+  // a hunt that could never match still looks like one that found nothing. That
+  // half was the actual risk when the engine field was added.
+  const ui = fs.readFileSync(path.join(root, 'src/components/hunts/saved-hunts.tsx'), 'utf8');
+  assert.ok(
+    /unsatisfiableCriteria/.test(ui),
+    'the hunt screen must surface criteria that cannot be satisfied',
+  );
+  assert.ok(
+    /hunt-unsatisfiable-notice/.test(ui) && /cannot match as written/i.test(ui),
+    'the notice must state that the hunt cannot match, not merely that nothing matched',
+  );
+  assert.ok(
+    /unsatisfiableCriteriaNote/.test(ui),
+    'the engine note must be shown to the user',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');
