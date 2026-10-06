@@ -657,7 +657,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.set_viewport_size({"width": 2322, "height": 1272})
         header = self.page.locator("header").first
         brand = self.page.get_by_role("link", name="PerfectProperty home").first
-        signup = self.page.get_by_role("link", name="Sign up for free").first
+        signup = self.page.get_by_role("link", name="Operator access").first
         navigation = header.locator("nav")
         header_box = header.bounding_box()
         brand_box = brand.bounding_box()
@@ -1249,7 +1249,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         menu = self.page.get_by_role("dialog")
         menu.wait_for(state="visible")
         menu.get_by_role("button", name="Product").click()
-        menu.get_by_role("link", name="Deal Stacks").click()
+        menu.get_by_role("link", name="Listing workspace").click()
 
         self.page.wait_for_url(f"{BASE_URL}/#live-feed")
         self.assertEqual(self.page.url, f"{BASE_URL}/#live-feed")
