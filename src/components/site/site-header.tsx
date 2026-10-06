@@ -192,9 +192,13 @@ export function SiteHeader() {
           }`}
           style={{ willChange: scrolled || open ? "backdrop-filter" : "auto" }}
         >
-        {/* Brand is pinned left; desktop nav is centered independently. */}
-        <div className="flex items-center">
-          <Link href="/" className="flex items-center gap-3" aria-label="PerfectProperty home">
+        {/* Brand is pinned left; desktop nav is centered independently.
+            min-w-0 on both lets the brand compress instead of colliding with the
+            menu trigger: at 320px the content box is 256px and the 40px trigger
+            leaves 216px, which the full lockup does not fit. Without this the
+            brand's box ran under the trigger by a pixel. */}
+        <div className="flex min-w-0 items-center">
+          <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="PerfectProperty home">
             <Logo className="text-[14px] min-[375px]:text-[16px] sm:text-[20px]" />
           </Link>
         </div>

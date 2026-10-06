@@ -172,11 +172,17 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                     self.assertLessEqual(brand["x"] + brand["width"], menu["x"])
                 else:
                     nav = header.locator("nav").bounding_box()
-                    sign_in = header.get_by_role("link", name="Sign in", exact=True).bounding_box()
+                    # The desktop header's trailing control is the operator-key
+                    # link, not "Sign in" - there is no Sign in link in this
+                    # header, so asserting one could never pass and the 1280px
+                    # and 1440px subtests never actually ran. The property under
+                    # test is the one that matters: brand, nav and the trailing
+                    # control must each end before the next one begins.
+                    trailing = header.get_by_role("link", name="Operator key", exact=True).bounding_box()
                     self.assertIsNotNone(nav)
-                    self.assertIsNotNone(sign_in)
+                    self.assertIsNotNone(trailing)
                     self.assertLessEqual(brand["x"] + brand["width"], nav["x"])
-                    self.assertLessEqual(nav["x"] + nav["width"], sign_in["x"])
+                    self.assertLessEqual(nav["x"] + nav["width"], trailing["x"])
 
     def test_every_feed_card_links_to_its_exact_listing_page(self):
         self.wait_for_live_feed()
@@ -1025,8 +1031,34 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Subscribe").click()
 
         self.assertEqual(dialogs, [], "newsletter must not use a blocking browser alert")
+
+        # The result is posted to a real endpoint now, so the honest outcomes are
+        # "forwarded" or "delivery not configured" - not the old localStorage
+        # copy. That copy claimed a subscription while keeping it on the
+        # visitor's own machine, which is what a beta user reads as having
+        # contacted us. Assert the real contract: an inline result appears, and
+        # it says which of the two things actually happened.
+        status = self.page.get_by_test_id("newsletter-status")
+        status.wait_for(state="attached", timeout=15000)
+        # The element exists and is visible while empty; the result arrives from
+        # a real POST. Wait for the text, not for the element.
+        self.page.wait_for_function(
+            "() => { const el = document.querySelector('[data-testid=newsletter-status]');"
+            " return !!el && el.innerText.trim().length > 0; }",
+            timeout=20000,
+        )
+        text = status.inner_text().strip()
         self.assertTrue(
-            self.page.get_by_text("Saved on this device. Email delivery will be connected before launch.").is_visible()
+            text in (
+                "Thanks — you're on the list.",
+                "Saved. Email delivery is not configured yet.",
+            ),
+            f"newsletter must report what actually happened, got: {text!r}",
+        )
+        self.assertEqual(
+            self.page.get_by_text("Saved on this device. Email delivery will be connected before launch.").count(),
+            0,
+            "the localStorage-only claim must not come back",
         )
 
     def test_live_feed_loads_backend_data_and_refreshes_honestly(self):

@@ -120,7 +120,12 @@ export function SiteFooter() {
                 <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden />
               </button>
             </div>
-            <p id="newsletter-status" aria-live="polite" className="mt-2 min-h-5 text-[12px] font-medium text-[#526071]">
+            <p
+              id="newsletter-status"
+              data-testid="newsletter-status"
+              aria-live="polite"
+              className="mt-2 min-h-5 text-[12px] font-medium text-[#526071]"
+            >
               {newsletterStatus}
             </p>
           </form>
