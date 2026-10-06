@@ -68,6 +68,30 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.close()
         self.context.close()
 
+    def reveal_deferred_atlas(self, page=None):
+        """Scroll until the deferred opportunity atlas mounts, then return it.
+
+        The atlas is mounted lazily on purpose - DeferredOpportunityAtlas
+        renders a same-height placeholder until its host enters the viewport, so
+        the page keeps CLS 0.00. Playwright's wait_for(state="visible") does not
+        scroll, so on a below-the-fold map it waited 30s on the placeholder and
+        reported the map missing. Scrolling is what a user does; this makes the
+        test do it too.
+        """
+        target = page or self.page
+        last = None
+        for _ in range(12):
+            atlas = target.get_by_test_id("storyteller-deal-map")
+            if atlas.count() and atlas.first.is_visible():
+                return atlas.first
+            try:
+                target.mouse.wheel(0, 900)
+            except Exception:
+                target.evaluate("window.scrollBy(0, 900)")
+            target.wait_for_timeout(400)
+            last = atlas.count()
+        self.fail(f"deferred atlas never mounted after scrolling (testid count={last})")
+
     def wait_for_live_feed(self):
         self.page.get_by_role(
             "button", name=f"Deal Grid ({self.live_count} records)"
@@ -892,8 +916,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
 
     def test_storyteller_map_scan_is_one_shot_and_marker_selection_is_stable(self):
-        deal_map = self.page.get_by_test_id("storyteller-deal-map")
-        deal_map.wait_for(state="visible")
+        deal_map = self.reveal_deferred_atlas()
         preview = self.page.get_by_test_id("storyteller-map-preview")
 
         self.page.get_by_test_id("storyteller-map-marker").first.wait_for(state="visible")
@@ -943,8 +966,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
         try:
             offline_page.goto(BASE_URL, wait_until="domcontentloaded")
-            deal_map = offline_page.get_by_test_id("storyteller-deal-map")
-            deal_map.wait_for(state="visible")
+            deal_map = self.reveal_deferred_atlas(offline_page)
             fallback = offline_page.get_by_role("status").filter(
                 has_text="Map tiles are unavailable"
             )
@@ -964,8 +986,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def test_storyteller_map_respects_reduced_motion(self):
         self.page.emulate_media(reduced_motion="reduce")
         self.page.reload(wait_until="domcontentloaded")
-        deal_map = self.page.get_by_test_id("storyteller-deal-map")
-        deal_map.wait_for(state="visible")
+        deal_map = self.reveal_deferred_atlas()
         self.page.wait_for_function(
             "document.querySelector('[data-testid=storyteller-deal-map]')?.dataset.scanState === 'complete'"
         )
