@@ -595,45 +595,135 @@ class DatabaseClient {
    * is worse than reporting nothing. So `freshListings` is reported alongside,
    * and `stale` is true unless every listed record sits inside the window.
    */
-  async inventoryFreshness(now = Date.now()) {
+  async inventoryFreshness(now = Date.now(), options = {}) {
     const staleAfterHours = Number(this.env.PROPERTY_STALE_AFTER_HOURS) > 0
       ? Number(this.env.PROPERTY_STALE_AFTER_HOURS)
       : DEFAULT_STALE_AFTER_HOURS;
     const cutoffMs = now - staleAfterHours * 3_600_000;
 
+    // A single flat window is wrong the moment sources declare different
+    // cadences, which they do: ServiceLink publishes every 6h, fl-dor-cadastral
+    // every 720h. Judging a 6h source against a 24h window hides a source that
+    // has not been collected in a week, and that is exactly what happened - the
+    // whole ServiceLink inventory sat at 689h old while the health endpoint
+    // reported "296 of 7999 listings" stale, because those 296 were the only
+    // ones past 24h. The per-record sourceFreshness in routes/listings.js
+    // already respects each source's cadence; this aggregate disagreed with it.
+    const cadences = options.cadences && typeof options.cadences === 'object'
+      ? options.cadences : null;
+    const cadenceHoursFor = (source) => {
+      const declared = cadences && Number(cadences[source]);
+      return Number.isFinite(declared) && declared > 0 ? declared : null;
+    };
+
     let newest = null;
     let oldest = null;
     let count = null;
     let freshCount = null;
-    if (this.isPg) {
-      const res = await this.pool.query(
-        `SELECT count(*)::int AS n,
-                count(*) FILTER (WHERE source_observed_at >= $1::timestamptz)::int AS fresh,
-                min(source_observed_at)::text AS oldest,
-                max(source_observed_at)::text AS newest
-           FROM listings`,
-        [new Date(cutoffMs).toISOString()]);
-      count = res.rows[0].n;
-      freshCount = res.rows[0].fresh;
-      oldest = res.rows[0].oldest;
-      newest = res.rows[0].newest;
-    } else if (this.memoryInventoryRequested()) {
-      const times = this.inMemoryData.listings
-        .map(l => l.sourceObservedAt)
-        .filter(isFiniteTime)
-        .map(Date.parse);
-      count = this.inMemoryData.listings.length;
-      freshCount = this.inMemoryData.listings
-        .filter(l => isFiniteTime(l.sourceObservedAt) && Date.parse(l.sourceObservedAt) >= cutoffMs).length;
-      if (times.length) {
-        oldest = new Date(Math.min(...times)).toISOString();
-        newest = new Date(Math.max(...times)).toISOString();
+    let bySource = null;
+
+    if (cadences) {
+      // One query, per-source cutoffs. Still a COVERAGE question per source:
+      // a sweep that refreshes one page must not make the source look fresh.
+      const cutoffs = Object.keys(cadences)
+        .map((source) => {
+          const hours = cadenceHoursFor(source);
+          return hours === null ? null : { source, cutoff: new Date(now - hours * 3_600_000).toISOString() };
+        })
+        .filter(Boolean);
+      if (this.isPg && cutoffs.length) {
+        // Pass the sources and their cutoffs as arrays and pair them with unnest,
+        // rather than generating a VALUES list of placeholders. A generated
+        // placeholder list has to be numbered exactly right for the extended
+        // protocol and infers each value's type from its neighbours.
+        const res = await this.pool.query(
+          `SELECT c.source::text AS source,
+                  count(l.id)::int AS n,
+                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff)::int AS fresh,
+                  max(l.source_observed_at)::text AS newest
+             FROM unnest($1::text[], $2::timestamptz[]) AS c(source, cutoff)
+             LEFT JOIN listings l ON l.source_key = c.source
+            GROUP BY c.source`,
+          [cutoffs.map((entry) => entry.source), cutoffs.map((entry) => entry.cutoff)]);
+        bySource = res.rows.map((row) => ({
+          source: row.source,
+          listings: row.n,
+          freshListings: row.fresh,
+          cadenceHours: cadenceHoursFor(row.source),
+          newestObservation: row.newest,
+          stale: row.fresh < row.n,
+        }));
+        count = bySource.reduce((total, row) => total + row.listings, 0);
+        freshCount = bySource.reduce((total, row) => total + row.freshListings, 0);
+        const times = bySource.map((row) => row.newestObservation).filter(isFiniteTime).map(Date.parse);
+        if (times.length) {
+          oldest = new Date(Math.min(...times)).toISOString();
+          newest = new Date(Math.max(...times)).toISOString();
+        }
+      } else if (this.memoryInventoryRequested()) {
+        bySource = Object.keys(cadences).map((source) => {
+          const rows = this.inMemoryData.listings.filter((listing) => listing.source === source);
+          const cutoff = now - cadenceHoursFor(source) * 3_600_000;
+          return {
+            source,
+            listings: rows.length,
+            freshListings: rows.filter((row) => isFiniteTime(row.sourceObservedAt)
+              && Date.parse(row.sourceObservedAt) >= cutoff).length,
+            cadenceHours: cadenceHoursFor(source),
+            newestObservation: rows.map((row) => row.sourceObservedAt).filter(isFiniteTime)
+              .sort()[rows.length - 1] || null,
+            stale: rows.some((row) => !isFiniteTime(row.sourceObservedAt)
+              || Date.parse(row.sourceObservedAt) < cutoff),
+          };
+        });
+        count = bySource.reduce((total, row) => total + row.listings, 0);
+        freshCount = bySource.reduce((total, row) => total + row.freshListings, 0);
+        const times = this.inMemoryData.listings.map((l) => l.sourceObservedAt)
+          .filter(isFiniteTime).map(Date.parse);
+        if (times.length) {
+          oldest = new Date(Math.min(...times)).toISOString();
+          newest = new Date(Math.max(...times)).toISOString();
+        }
+      }
+    }
+
+    if (count === null) {
+      if (this.isPg) {
+        const res = await this.pool.query(
+          `SELECT count(*)::int AS n,
+                  count(*) FILTER (WHERE source_observed_at >= $1::timestamptz)::int AS fresh,
+                  min(source_observed_at)::text AS oldest,
+                  max(source_observed_at)::text AS newest
+             FROM listings`,
+          [new Date(cutoffMs).toISOString()]);
+        count = res.rows[0].n;
+        freshCount = res.rows[0].fresh;
+        oldest = res.rows[0].oldest;
+        newest = res.rows[0].newest;
+      } else if (this.memoryInventoryRequested()) {
+        const times = this.inMemoryData.listings
+          .map(l => l.sourceObservedAt)
+          .filter(isFiniteTime)
+          .map(Date.parse);
+        count = this.inMemoryData.listings.length;
+        freshCount = this.inMemoryData.listings
+          .filter(l => isFiniteTime(l.sourceObservedAt) && Date.parse(l.sourceObservedAt) >= cutoffMs).length;
+        if (times.length) {
+          oldest = new Date(Math.min(...times)).toISOString();
+          newest = new Date(Math.max(...times)).toISOString();
+        }
       }
     }
 
     const ageHours = isFiniteTime(newest) ? (now - Date.parse(newest)) / 3_600_000 : null;
     const known = count != null && freshCount != null;
     const stale = known && freshCount < count;
+    // Name the sources that are actually behind, worst first. A single
+    // "N of M listings" line hides which publisher stopped being collected,
+    // which is the only part an operator can act on.
+    const laggingSources = bySource
+      ? bySource.filter((row) => row.stale).sort((a, b) => b.listings - a.listings)
+      : null;
     return {
       listings: count,
       freshListings: freshCount,
@@ -641,9 +731,14 @@ class DatabaseClient {
       newestObservation: newest,
       ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
       staleAfterHours,
+      bySource,
+      laggingSources,
       stale,
       staleBecause: stale
-        ? `${(count || 0) - (freshCount || 0)} of ${count || 0} listings were last observed more than ${staleAfterHours}h ago.`
+        ? (laggingSources && laggingSources.length
+          ? `${(count || 0) - (freshCount || 0)} of ${count || 0} listings are past their own source's refresh cadence. `
+            + `Behind: ${laggingSources.map((row) => `${row.source} ${row.listings - row.freshListings}/${row.listings} (every ${row.cadenceHours}h)`).join(', ')}.`
+          : `${(count || 0) - (freshCount || 0)} of ${count || 0} listings were last observed more than ${staleAfterHours}h ago.`)
         : null,
     };
   }
@@ -1703,3 +1798,4 @@ module.exports.LISTING_SELECT = LISTING_SELECT;
 module.exports.prepareListingForPersistence = prepareListingForPersistence;
 module.exports.applyCrossSourceBakeOff = applyCrossSourceBakeOff;
 module.exports.computeBakeOff = computeBakeOff;
+

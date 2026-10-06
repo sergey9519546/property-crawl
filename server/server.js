@@ -44,6 +44,26 @@ const apiLimiter = createApiRatePolicy({
   maxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
 });
 
+/** Each source's declared refresh cadence, keyed by the adapter key records carry. */
+function sourceCadences() {
+  try {
+    const catalog = require('./sources/catalog').SOURCE_CATALOG || [];
+    const cadences = {};
+    for (const source of catalog) {
+      const key = source.adapterKey || source.id;
+      const hours = source.workflow && source.workflow.cadenceHours;
+      if (key && Number.isFinite(Number(hours)) && Number(hours) > 0) {
+        cadences[key] = Number(hours);
+      }
+    }
+    return cadences;
+  } catch {
+    // No catalog, no per-source cadences: the caller falls back to the flat
+    // window rather than inventing cadences.
+    return {};
+  }
+}
+
 function configuredCorsOrigins(env = process.env) {
   return new Set(String(env.CORS_ALLOWED_ORIGINS || '')
     .split(',')
@@ -222,7 +242,11 @@ async function handleRequest(req, res) {
       let freshness = null;
       if (typeof db.inventoryFreshness === 'function') {
         try {
-          freshness = await db.inventoryFreshness();
+          // Judge each source against the cadence it declares rather than one
+          // flat window. routes/listings.js already does this per record; the
+          // aggregate has to agree with it or health understates a source that
+          // stopped being collected.
+          freshness = await db.inventoryFreshness(Date.now(), { cadences: sourceCadences() });
         } catch (error) {
           freshness = { error: String(error && error.message ? error.message : error).slice(0, 160) };
         }
