@@ -581,27 +581,40 @@ class DatabaseClient {
   }
 
   /**
-   * How old is the newest observation in the inventory?
+   * How much of the inventory is stale, and how stale is the rest?
    *
-   * Reported, never acted on. Stale means the collector has not run; it does
-   * not mean a listing has expired. Deleting on age would throw away live
-   * auctions, and the prune rule already refuses to do exactly that.
+   * Reported, never acted on. Stale means the collector has not observed a
+   * listing recently; it does not mean the opportunity passed. Deleting on age
+   * would throw away live auctions, and the prune rule already refuses to.
+   *
+   * Freshness is a COVERAGE question, not a max(). Collection is deliberately
+   * bounded - one page per sweep, resumed by continuation token - so a single
+   * successful sweep makes `max(source_observed_at)` seconds old while the
+   * other 6,500 rows are three weeks old. Deriving `stale` from the newest row
+   * would then report "fresh" on a sweep that refreshed a rounding error, which
+   * is worse than reporting nothing. So `freshListings` is reported alongside,
+   * and `stale` is true unless every listed record sits inside the window.
    */
   async inventoryFreshness(now = Date.now()) {
     const staleAfterHours = Number(this.env.PROPERTY_STALE_AFTER_HOURS) > 0
       ? Number(this.env.PROPERTY_STALE_AFTER_HOURS)
       : DEFAULT_STALE_AFTER_HOURS;
+    const cutoffMs = now - staleAfterHours * 3_600_000;
 
     let newest = null;
     let oldest = null;
     let count = null;
+    let freshCount = null;
     if (this.isPg) {
       const res = await this.pool.query(
         `SELECT count(*)::int AS n,
+                count(*) FILTER (WHERE source_observed_at >= $1::timestamptz)::int AS fresh,
                 min(source_observed_at)::text AS oldest,
                 max(source_observed_at)::text AS newest
-           FROM listings`);
+           FROM listings`,
+        [new Date(cutoffMs).toISOString()]);
       count = res.rows[0].n;
+      freshCount = res.rows[0].fresh;
       oldest = res.rows[0].oldest;
       newest = res.rows[0].newest;
     } else if (this.memoryInventoryRequested()) {
@@ -610,6 +623,8 @@ class DatabaseClient {
         .filter(isFiniteTime)
         .map(Date.parse);
       count = this.inMemoryData.listings.length;
+      freshCount = this.inMemoryData.listings
+        .filter(l => isFiniteTime(l.sourceObservedAt) && Date.parse(l.sourceObservedAt) >= cutoffMs).length;
       if (times.length) {
         oldest = new Date(Math.min(...times)).toISOString();
         newest = new Date(Math.max(...times)).toISOString();
@@ -617,13 +632,19 @@ class DatabaseClient {
     }
 
     const ageHours = isFiniteTime(newest) ? (now - Date.parse(newest)) / 3_600_000 : null;
+    const known = count != null && freshCount != null;
+    const stale = known && freshCount < count;
     return {
       listings: count,
+      freshListings: freshCount,
       oldestObservation: oldest,
       newestObservation: newest,
       ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
       staleAfterHours,
-      stale: ageHours == null ? false : ageHours > staleAfterHours,
+      stale,
+      staleBecause: stale
+        ? `${(count || 0) - (freshCount || 0)} of ${count || 0} listings were last observed more than ${staleAfterHours}h ago.`
+        : null,
     };
   }
 

@@ -1,79 +1,13 @@
 {
-  "decidedAt": "2026-10-06T01:20:20.264Z",
+  "decidedAt": "2026-10-06T05:33:32.328Z",
   "applied": true,
   "totalBefore": 6539,
   "removed": [
-    {
-      "id": "servicelink:a1cVO000000lcxwYAA",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T15:57:16.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO0000039vwbYAA",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T16:01:32.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo0000011DTCIA2",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T17:58:16.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004pXeFAAU",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T18:53:06.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004kUV8AAM",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T15:58:55.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004f9MYAAY",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T16:04:23.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004p90VAAQ",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-24T15:56:19.000Z"
-    },
     {
       "id": "servicelink:a1cDo00000118JhIAI",
       "source": "servicelink",
       "verdict": "publisher_status_closed",
       "evidence": "publisher status: auction closed"
-    },
-    {
-      "id": "servicelink:a1c3k000004pOEFAA2",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T18:49:18.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004SfQvAAK",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T16:31:57.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004xKCBAA2",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T18:54:32.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gWDWIA2",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T17:05:56.000Z"
     },
     {
       "id": "servicelink:a1cDo00000118CGIAY",
@@ -82,94 +16,10 @@
       "evidence": "publisher endDate passed: 2026-09-16T18:16:20.000Z"
     },
     {
-      "id": "servicelink:a1cDo0000011B0tIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T19:03:34.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gW2xIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T17:26:22.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo0000011CduIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T16:32:11.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gXfrIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T15:22:20.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gY0jIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-24T15:27:05.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gY43IAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T17:34:31.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gYOAIA2",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T15:07:50.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gYfzIAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-24T16:16:59.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gYiHIAU",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T15:41:21.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gYq3IAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-22T15:55:36.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo000000gYzWIAU",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T16:40:30.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004oIV6AAM",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-23T16:00:21.000Z"
-    },
-    {
-      "id": "servicelink:a1c3k000004Tb63AAC",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-24T16:36:14.000Z"
-    },
-    {
       "id": "servicelink:a1cDo000000gaGWIAY",
       "source": "servicelink",
       "verdict": "publisher_status_closed",
       "evidence": "publisher status: auction closed"
-    },
-    {
-      "id": "servicelink:a1cDo000000ozOBIAY",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T17:08:47.000Z"
     },
     {
       "id": "servicelink:a1cDo000000ozdIIAQ",
@@ -280,6 +130,12 @@
       "evidence": "publisher endDate passed: 2026-09-10T18:03:20.000Z"
     },
     {
+      "id": "servicelink:a1cVO000000lcxwYAA",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T15:57:16.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000000rzlJYAQ",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -298,16 +154,16 @@
       "evidence": "publisher endDate passed: 2026-09-09T16:40:16.000Z"
     },
     {
+      "id": "servicelink:a1cVO00000BJKkfYAH",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T15:18:18.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000000yE3JYAU",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T17:03:47.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO00000BrXVmYAN",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000000zgVNYAY",
@@ -472,6 +328,12 @@
       "evidence": "publisher endDate passed: 2026-09-10T16:56:40.000Z"
     },
     {
+      "id": "servicelink:a1cVO000001jyYvYAI",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T16:17:13.000Z"
+    },
+    {
       "id": "servicelink:a1cDo0000020dqKIAQ",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -542,12 +404,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T15:28:16.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000001jyYvYAI",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T16:17:13.000Z"
     },
     {
       "id": "servicelink:a1cVO000001kUtlYAE",
@@ -634,12 +490,6 @@
       "evidence": "publisher endDate passed: 2026-09-10T18:10:13.000Z"
     },
     {
-      "id": "servicelink:a1cVO000002XbFlYAK",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T18:11:21.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000002BAFpYAO",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -652,16 +502,16 @@
       "evidence": "publisher status: auction closed"
     },
     {
+      "id": "servicelink:a1cVO000003HRWjYAO",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T16:26:29.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000002FjLRYA0",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T17:00:56.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000002YKeIYAW",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T16:56:54.000Z"
     },
     {
       "id": "servicelink:a1cVO000002GvZ3YAK",
@@ -710,6 +560,18 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T15:21:37.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000002XbFlYAK",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T18:11:21.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000002YKeIYAW",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T16:56:54.000Z"
     },
     {
       "id": "servicelink:a1cVO000002aCJFYA2",
@@ -898,6 +760,12 @@
       "evidence": "publisher endDate passed: 2026-09-08T15:56:33.000Z"
     },
     {
+      "id": "servicelink:a1cVO0000039vwbYAA",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T16:01:32.000Z"
+    },
+    {
       "id": "servicelink:a1cVO0000039wvtYAA",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -952,22 +820,10 @@
       "evidence": "publisher endDate passed: 2026-09-09T16:57:22.000Z"
     },
     {
-      "id": "servicelink:a1cVO000003HRWjYAO",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T16:26:29.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000003Hgp7YAC",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T18:12:03.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000002JxrHYAS",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000003I5h3YAC",
@@ -1786,12 +1642,6 @@
       "evidence": "publisher endDate passed: 2026-09-10T16:54:17.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BzESzYAN",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO0000054GXxYAM",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -1876,12 +1726,6 @@
       "evidence": "publisher endDate passed: 2026-09-09T16:53:06.000Z"
     },
     {
-      "id": "servicelink:a1cVO000006GqQbYAK",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T18:02:15.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000005EZ6HYAW",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -1922,12 +1766,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T17:42:18.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO00000BzFQQYA3",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000005HYLlYAO",
@@ -1976,12 +1814,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T18:11:10.000Z"
-    },
-    {
-      "id": "servicelink:a1cDo0000020dsdIAA",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000005J0UTYA0",
@@ -2386,12 +2218,6 @@
       "evidence": "publisher endDate passed: 2026-09-09T16:22:27.000Z"
     },
     {
-      "id": "servicelink:a1cVO0000070t3hYAA",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T17:41:10.000Z"
-    },
-    {
       "id": "servicelink:a1cVO0000026crHYAQ",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -2426,6 +2252,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T15:20:40.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000006GqQbYAK",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T18:02:15.000Z"
     },
     {
       "id": "servicelink:a1cVO000006K90TYAS",
@@ -2936,6 +2768,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_closed",
       "evidence": "publisher status: auction closed"
+    },
+    {
+      "id": "servicelink:a1cVO0000070t3hYAA",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T17:41:10.000Z"
     },
     {
       "id": "servicelink:a1cVO0000070tTVYAY",
@@ -4078,12 +3916,6 @@
       "evidence": "publisher status: auction closed"
     },
     {
-      "id": "servicelink:a1cVO000008BLEDYA4",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T16:03:55.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000008BKObYAO",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -4154,6 +3986,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_closed",
       "evidence": "publisher status: auction closed"
+    },
+    {
+      "id": "servicelink:a1cVO000008BLEDYA4",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T16:03:55.000Z"
     },
     {
       "id": "servicelink:a1cVO000008BKTRYA4",
@@ -4312,6 +4150,12 @@
       "evidence": "publisher endDate passed: 2026-09-08T15:28:16.000Z"
     },
     {
+      "id": "servicelink:a1cVO000008E9jZYAS",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T15:14:01.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000008DXZRYA4",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -4334,12 +4178,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T15:19:58.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000008E9jZYAS",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T15:14:01.000Z"
     },
     {
       "id": "servicelink:a1cVO000008E9lBYAS",
@@ -4696,12 +4534,6 @@
       "evidence": "publisher endDate passed: 2026-09-09T16:52:09.000Z"
     },
     {
-      "id": "servicelink:a1cVO000008WhlBYAS",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T15:48:57.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000008RT2vYAG",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -4820,6 +4652,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000008WhlBYAS",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T15:48:57.000Z"
     },
     {
       "id": "servicelink:a1cVO000008WjlNYAS",
@@ -6136,6 +5974,12 @@
       "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO000009zBm9YAE",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T16:08:40.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000009RjofYAC",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -6146,12 +5990,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T15:04:31.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000009YmLBYA0",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T18:06:11.000Z"
     },
     {
       "id": "servicelink:a1cVO000009Rk1ZYAS",
@@ -6254,6 +6092,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-19T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000009YmLBYA0",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T18:06:11.000Z"
     },
     {
       "id": "servicelink:a1cVO000009YmDGYA0",
@@ -6602,12 +6446,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T15:10:42.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000009zBm9YAE",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T16:08:40.000Z"
     },
     {
       "id": "servicelink:a1cVO000009jKgXYAU",
@@ -7456,12 +7294,6 @@
       "evidence": "publisher endDate passed: 2026-09-08T17:43:15.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000AFb4jYAD",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO00000A8LBHYA3",
       "source": "servicelink",
       "verdict": "publisher_status_closed",
@@ -7688,6 +7520,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T17:45:51.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO00000AFb4jYAD",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1c3k000004U80SAAS",
@@ -8116,12 +7954,6 @@
       "evidence": "publisher endDate passed: 2026-09-10T16:31:29.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000ANh6XYAT",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T17:05:56.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000ANhCzYAL",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -8144,6 +7976,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T16:33:51.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO00000ANh6XYAT",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T17:05:56.000Z"
     },
     {
       "id": "servicelink:a1cVO00000ANhRVYA1",
@@ -8536,12 +8374,6 @@
       "evidence": "publisher status: auction closed"
     },
     {
-      "id": "servicelink:a1cVO000002FzyNYAS",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000AWjsHYAT",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -8686,16 +8518,16 @@
       "evidence": "publisher endDate passed: 2026-09-10T15:25:54.000Z"
     },
     {
+      "id": "servicelink:a1cVO000008Lw7iYAC",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
+    },
+    {
       "id": "servicelink:a1cVO00000AYiP3YAL",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T16:59:59.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000008Lw4ZYAS",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO000007kKffYAE",
@@ -8990,6 +8822,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T17:52:31.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000001B2u1YAC",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000008sMyDYAU",
@@ -9350,12 +9188,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-08T15:47:03.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000008Lw7iYAC",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000006D8sLYAS",
@@ -10042,6 +9874,12 @@
       "evidence": "publisher endDate passed: 2026-09-19T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO000002FzyNYAS",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000006Ph9aYAC",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -10324,6 +10162,12 @@
       "evidence": "publisher endDate passed: 2026-09-16T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO000008Lw4ZYAS",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T06:00:00.000Z"
+    },
+    {
       "id": "servicelink:a1cVO00000B4gaDYAR",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -10594,12 +10438,6 @@
       "evidence": "publisher endDate passed: 2026-09-08T15:25:25.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BAQHRYA5",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T15:50:37.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000B8OwTYAV",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -10640,6 +10478,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T16:07:14.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO00000BAQHRYA5",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T15:50:37.000Z"
     },
     {
       "id": "servicelink:a1cVO00000BAQEDYA5",
@@ -10700,6 +10544,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000005Uks9YAC",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-04-02T17:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO000003ktG0YAI",
@@ -10880,12 +10730,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T18:14:12.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000005Uks9YAC",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-04-02T17:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO00000BE6tdYAD",
@@ -11216,12 +11060,6 @@
       "source": "servicelink",
       "verdict": "publisher_status_closed",
       "evidence": "publisher status: auction closed"
-    },
-    {
-      "id": "servicelink:a1cVO00000BJKkfYAH",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T15:18:18.000Z"
     },
     {
       "id": "servicelink:a1cVO0000034zrBYAQ",
@@ -12256,12 +12094,6 @@
       "evidence": "publisher endDate passed: 2026-09-08T17:36:07.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BOojhYAD",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO00000BOhOrYAL",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -12590,6 +12422,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO00000BOojhYAD",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000AtnwtYAB",
@@ -12934,22 +12772,10 @@
       "evidence": "publisher endDate passed: 2026-09-18T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO000001B2u1YAC",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO000001B2vpYAC",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-19T06:00:00.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000006qNOVYA2",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000003bE7hYAE",
@@ -13090,6 +12916,12 @@
       "evidence": "publisher endDate passed: 2026-09-10T15:28:45.000Z"
     },
     {
+      "id": "servicelink:a1cVO00000BZYy9YAH",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T17:07:50.000Z"
+    },
+    {
       "id": "servicelink:a1cVO00000BUuhZYAT",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -13148,6 +12980,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T16:06:46.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO0000012AFeYAM",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BWILFYA5",
@@ -13402,12 +13240,6 @@
       "evidence": "publisher endDate passed: 2026-09-08T17:34:13.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BZYy9YAH",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T17:07:50.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000B0B5DYAV",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -13634,6 +13466,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T15:04:31.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000009DaEzYAK",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1c3k000004xS4SAAU",
@@ -13918,12 +13756,6 @@
       "evidence": "publisher endDate passed: 2026-09-09T17:52:06.000Z"
     },
     {
-      "id": "servicelink:a1c3k000004p94EAAQ",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO00000Be4g5YAB",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -14002,12 +13834,6 @@
       "evidence": "publisher endDate passed: 2026-09-12T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO0000012AFeYAM",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO00000Bed4MYAR",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -14054,6 +13880,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO00000BgMQnYAN",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T15:30:11.000Z"
     },
     {
       "id": "servicelink:a1cVO000008sVgiYAE",
@@ -14116,16 +13948,22 @@
       "evidence": "publisher status: auctioned"
     },
     {
-      "id": "servicelink:a1cVO000006y34PYAQ",
+      "id": "servicelink:a1cVO00000BfphlYAB",
       "source": "servicelink",
-      "verdict": "publisher_status_closed",
-      "evidence": "publisher status: auction closed"
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T17:38:05.000Z"
     },
     {
       "id": "servicelink:a1cVO00000AzdwbYAB",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-13T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000006qNOVYA2",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BfUztYAF",
@@ -14158,10 +13996,10 @@
       "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BghlPYAR",
+      "id": "servicelink:a1cVO000002O83PYAS",
       "source": "servicelink",
-      "verdict": "publisher_status_closed",
-      "evidence": "publisher status: auction closed"
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BKOPfYAP",
@@ -14188,6 +14026,12 @@
       "evidence": "publisher endDate passed: 2026-09-08T17:31:36.000Z"
     },
     {
+      "id": "servicelink:a1cVO000007tWL1YAM",
+      "source": "servicelink",
+      "verdict": "publisher_status_auctioned",
+      "evidence": "publisher status: auctioned"
+    },
+    {
       "id": "servicelink:a1cVO00000BfpgBYAR",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -14210,12 +14054,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T17:33:34.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO00000BfphlYAB",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T17:38:05.000Z"
     },
     {
       "id": "servicelink:a1cVO000008NsJPYA0",
@@ -14264,12 +14102,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T15:14:15.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO00000BgMQnYAN",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T15:30:11.000Z"
     },
     {
       "id": "servicelink:a1cVO00000BgMSRYA3",
@@ -14344,6 +14176,12 @@
       "evidence": "publisher endDate passed: 2026-09-10T16:00:07.000Z"
     },
     {
+      "id": "servicelink:a1cVO000005QZQrYAO",
+      "source": "servicelink",
+      "verdict": "publisher_status_auctioned",
+      "evidence": "publisher status: auctioned"
+    },
+    {
       "id": "servicelink:a1cVO00000BgP6wYAF",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -14408,6 +14246,18 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T15:53:42.000Z"
+    },
+    {
+      "id": "servicelink:a1c3k000004p94EAAQ",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
+    },
+    {
+      "id": "servicelink:a1cVO00000BghlPYAR",
+      "source": "servicelink",
+      "verdict": "publisher_status_closed",
+      "evidence": "publisher status: auction closed"
     },
     {
       "id": "servicelink:a1cVO00000BghlNYAR",
@@ -14758,12 +14608,6 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO000007MVSZYA4",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO000004Xj93YAC",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
@@ -14840,6 +14684,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-10-03T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000007MVSZYA4",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000AglmOYAR",
@@ -15010,12 +14860,6 @@
       "evidence": "publisher endDate passed: 2026-09-19T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO000002O83PYAS",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO0000077fKFYAY",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
@@ -15032,12 +14876,6 @@
       "source": "servicelink",
       "verdict": "publisher_status_cancelled",
       "evidence": "publisher status: cancelled"
-    },
-    {
-      "id": "servicelink:a1cVO000005QZQrYAO",
-      "source": "servicelink",
-      "verdict": "publisher_status_auctioned",
-      "evidence": "publisher status: auctioned"
     },
     {
       "id": "servicelink:a1cVO000007e1avYAA",
@@ -15268,12 +15106,6 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO000004e1PxYAI",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO000006VFVbYAO",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
@@ -15323,12 +15155,6 @@
     },
     {
       "id": "servicelink:a1cVO00000BgTTzYAN",
-      "source": "servicelink",
-      "verdict": "publisher_status_auctioned",
-      "evidence": "publisher status: auctioned"
-    },
-    {
-      "id": "servicelink:a1cVO000007tWL1YAM",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
@@ -15490,6 +15316,12 @@
       "evidence": "publisher status: auctioned"
     },
     {
+      "id": "servicelink:a1cVO00000BpHwXYAV",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-08T17:30:25.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000004SyaEYAS",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
@@ -15536,6 +15368,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO000007kKuAYAU",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BhkiqYAB",
@@ -15874,12 +15712,6 @@
       "evidence": "publisher endDate passed: 2026-09-08T17:30:11.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BpHwXYAV",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-08T17:30:25.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000AjeOXYAZ",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -15904,16 +15736,16 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO000007kKuAYAU",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO000009JTkHYAW",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-08-26T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000004e1PxYAI",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000004MfdLYAS",
@@ -15968,6 +15800,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO000006y34PYAQ",
+      "source": "servicelink",
+      "verdict": "publisher_status_closed",
+      "evidence": "publisher status: auction closed"
     },
     {
       "id": "servicelink:a1cVO00000BqeMPYAZ",
@@ -16504,6 +16342,12 @@
       "evidence": "publisher endDate passed: 2026-09-25T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO000001RsPYYA0",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
+    },
+    {
       "id": "servicelink:a1cVO00000BtLn3YAF",
       "source": "servicelink",
       "verdict": "publisher_status_closed",
@@ -16786,12 +16630,6 @@
       "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO000001RsPYYA0",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
       "id": "servicelink:a1cVO000001qOCLYA2",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -16868,6 +16706,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO00000BrXVmYAN",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000005QZYjYAO",
@@ -17038,12 +16882,6 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO000009DaEzYAK",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1c3k000004U4qSAAS",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -17104,12 +16942,6 @@
       "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO000008Lq5TYAS",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000007e2YaYAI",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -17141,6 +16973,12 @@
     },
     {
       "id": "servicelink:a1cVO000005VepVYAS",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000008Lq5TYAS",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-10T06:00:00.000Z"
@@ -17416,6 +17254,12 @@
       "evidence": "publisher endDate passed: 2026-09-08T15:08:19.000Z"
     },
     {
+      "id": "servicelink:a1cVO000009JRE1YAO",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
+    },
+    {
       "id": "servicelink:a1cVO00000Bx1rRYAR",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -17462,12 +17306,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T18:22:31.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000009JRE1YAO",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO000003Q7NjYAK",
@@ -17596,12 +17434,6 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO000002GzMZYA0",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000AcxEDYAZ",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
@@ -17636,6 +17468,24 @@
       "source": "servicelink",
       "verdict": "publisher_status_cancelled",
       "evidence": "publisher status: cancelled"
+    },
+    {
+      "id": "servicelink:a1cVO000002GzMZYA0",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-11T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000002JxrHYAS",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
+    },
+    {
+      "id": "servicelink:a1cVO00000BzESxYAN",
+      "source": "servicelink",
+      "verdict": "publisher_status_auctioned",
+      "evidence": "publisher status: auctioned"
     },
     {
       "id": "servicelink:a1cVO00000BMiX7YAL",
@@ -17836,6 +17686,12 @@
       "evidence": "publisher status: auctioned"
     },
     {
+      "id": "servicelink:a1cVO000003t1UdYAI",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
+    },
+    {
       "id": "servicelink:a1cVO000003e8BoYAI",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -17848,16 +17704,16 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO00000654E9YAI",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-12T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000AETGPYA5",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO000003t1WmYAI",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-15T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO00000AzOalYAF",
@@ -17912,6 +17768,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
+    },
+    {
+      "id": "servicelink:a1cVO00000654E9YAI",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-12T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO00000BtRMGYA3",
@@ -18022,13 +17884,13 @@
       "evidence": "publisher endDate passed: 2026-09-12T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO00000BzESsYAN",
+      "id": "servicelink:a1cVO00000BzESzYAN",
       "source": "servicelink",
-      "verdict": "publisher_status_auctioned",
-      "evidence": "publisher status: auctioned"
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO00000BzESxYAN",
+      "id": "servicelink:a1cVO00000BzESsYAN",
       "source": "servicelink",
       "verdict": "publisher_status_auctioned",
       "evidence": "publisher status: auctioned"
@@ -18056,6 +17918,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-20T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO00000BzFQQYA3",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BzFQPYA3",
@@ -18125,18 +17993,6 @@
     },
     {
       "id": "servicelink:a1cVO000002mZ2WYAU",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-15T06:00:00.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000003t1UdYAI",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
-    },
-    {
-      "id": "servicelink:a1cVO000003t1WmYAI",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-15T06:00:00.000Z"
@@ -18224,6 +18080,12 @@
       "source": "servicelink",
       "verdict": "publisher_status_cancelled",
       "evidence": "publisher status: cancelled"
+    },
+    {
+      "id": "servicelink:a1cVO000009YvMuYAK",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-10-01T06:00:00.000Z"
     },
     {
       "id": "servicelink:a1cVO0000098BuAYAU",
@@ -18335,12 +18197,6 @@
     },
     {
       "id": "servicelink:a1c3k0000050mT3AAI",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-10-01T06:00:00.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000009YvMuYAK",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-10-01T06:00:00.000Z"
@@ -19552,12 +19408,6 @@
       "evidence": "publisher endDate passed: 2026-09-16T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cDo000000ozGFIAY",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-18T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1c3k000004U57VAAS",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -19570,6 +19420,12 @@
       "evidence": "publisher endDate passed: 2026-09-16T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO00000C2udVYAR",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-10T15:01:54.000Z"
+    },
+    {
       "id": "servicelink:a1cVO0000017AaDYAU",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -19580,6 +19436,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-18T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cDo0000020dsdIAA",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cDo0000020bqMIAQ",
@@ -19622,12 +19484,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-16T06:00:00.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO000000hEhRYAU",
-      "source": "servicelink",
-      "verdict": "publisher_status_cancelled",
-      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO000007e31dYAA",
@@ -19702,6 +19558,12 @@
       "evidence": "publisher endDate passed: 2026-09-16T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cDo000000ozGFIAY",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-18T06:00:00.000Z"
+    },
+    {
       "id": "servicelink:a1cVO00000654FiYAI",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -19724,6 +19586,12 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-18T06:00:00.000Z"
+    },
+    {
+      "id": "servicelink:a1cVO000000hEhRYAU",
+      "source": "servicelink",
+      "verdict": "publisher_status_cancelled",
+      "evidence": "publisher status: cancelled"
     },
     {
       "id": "servicelink:a1cVO00000BzFP5YAN",
@@ -19780,12 +19648,6 @@
       "evidence": "publisher status: cancelled"
     },
     {
-      "id": "servicelink:a1cVO00000C2udVYAR",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-10T15:01:54.000Z"
-    },
-    {
       "id": "servicelink:a1cVO00000C2unBYAR",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -19834,6 +19696,12 @@
       "evidence": "publisher status: auctioned"
     },
     {
+      "id": "servicelink:a1cVO00000C34ubYAB",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-09T15:01:54.000Z"
+    },
+    {
       "id": "servicelink:a1cVO00000BHjIXYA1",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -19880,12 +19748,6 @@
       "source": "servicelink",
       "verdict": "publisher_date_passed",
       "evidence": "publisher endDate passed: 2026-09-09T15:01:26.000Z"
-    },
-    {
-      "id": "servicelink:a1cVO00000C34ubYAB",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-09T15:01:54.000Z"
     },
     {
       "id": "servicelink:a1cVO00000C34zRYAR",
@@ -19960,6 +19822,12 @@
       "evidence": "publisher endDate passed: 2026-09-09T06:00:00.000Z"
     },
     {
+      "id": "servicelink:a1cVO000000NTsbYAG",
+      "source": "servicelink",
+      "verdict": "publisher_date_passed",
+      "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
+    },
+    {
       "id": "servicelink:a1cVO000008ZuaeYAC",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -20008,12 +19876,6 @@
       "evidence": "publisher endDate passed: 2026-09-19T06:00:00.000Z"
     },
     {
-      "id": "servicelink:a1cVO000000NTsbYAG",
-      "source": "servicelink",
-      "verdict": "publisher_date_passed",
-      "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
-    },
-    {
       "id": "servicelink:a1cVO000000NVmIYAW",
       "source": "servicelink",
       "verdict": "publisher_date_passed",
@@ -20026,33 +19888,39 @@
       "evidence": "publisher endDate passed: 2026-09-17T06:00:00.000Z"
     }
   ],
-  "removedCount": 3337,
+  "removedCount": 3314,
   "removedByVerdict": {
-    "publisher_date_passed": 2824,
     "publisher_status_closed": 115,
-    "publisher_status_cancelled": 237,
+    "publisher_date_passed": 2801,
     "publisher_status_auctioned": 160,
+    "publisher_status_cancelled": 237,
     "publisher_status_rescinded": 1
   },
-  "keptCount": 3202,
+  "keptCount": 3225,
   "keptByReason": {
-    "sale_date_passed": 148,
+    "sale_date_passed": 171,
     "no_conclusive_signal": 2239,
     "postponed": 541,
     "postponed_after_past_date": 274
   },
   "keptBySource": {
     "civilview": 110,
+    "usda": 15,
+    "servicelink": 986,
+    "hud": 1971,
     "gsa": 2,
     "irs": 6,
-    "usda": 15,
     "fl-dor-cadastral": 100,
-    "servicelink": 963,
-    "hud": 1971,
     "treasury": 15,
     "courtlistener": 20
   },
   "conflictingKept": [
+    {
+      "id": "CIV-NJ-8-2129337658",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
     {
       "id": "CIV-NJ-8-2129337692",
       "source": "civilview",
@@ -20060,259 +19928,19 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "CIV-NJ-7-2129273608",
+      "id": "CIV-NJ-7-2130239659",
       "source": "civilview",
       "status": "scheduled",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "CIV-NJ-7-2129274371",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275024",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275667",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275751",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275773",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275785",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275861",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275942",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275962",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129275996",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129276239",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129335953",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129335992",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336044",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336080",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336222",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336316",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336351",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336607",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336639",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336644",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336656",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2129336876",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335075",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335092",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335291",
+      "id": "CIV-NJ-7-2130239739",
       "source": "civilview",
       "status": "scheduled",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
       "id": "CIV-NJ-8-2129337732",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335310",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335374",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335389",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335410",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335462",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335468",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335499",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335502",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-10-2129335515",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129336687",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129336880",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129336979",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129337282",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129337531",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-8-2129337658",
       "source": "civilview",
       "status": "scheduled",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
@@ -20348,42 +19976,6 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "IRS-TX-CUTE-STARTER-HOME-",
-      "source": "irs",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "IRS-GA-COMMERCIAL-PROPERT",
-      "source": "irs",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "IRS-NH-RARE-RIVERFRONT-VA",
-      "source": "irs",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "IRS-IL-IRS-PUBLIC-AUCTION",
-      "source": "irs",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2130239659",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-7-2130239739",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
       "id": "TRSY-26-66-189",
       "source": "treasury",
       "status": null,
@@ -20391,48 +19983,6 @@
     },
     {
       "id": "TRSY-26-66-167",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-26-66-708",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-26-66-718",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-26-66-877",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-26-66-878",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-26-66-968",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-27-66-801",
-      "source": "treasury",
-      "status": null,
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "TRSY-27-66-701",
       "source": "treasury",
       "status": null,
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
@@ -20454,12 +20004,6 @@
       "source": "servicelink",
       "status": "Status: Active",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO000003j2r0YAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000001e2lkYAA",
@@ -20508,12 +20052,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005n631YAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000006E8NUYA0",
@@ -20570,12 +20108,6 @@
       "why": "Record carries a past endDate of 2026-10-04T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000006pEjrYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000001EP8IYAW",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -20607,12 +20139,6 @@
     },
     {
       "id": "servicelink:a1cVO000005f2CqYAI",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000004yQGlYAM",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
@@ -20714,12 +20240,6 @@
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000001Y2OhYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000004WYh9YAG",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -20736,12 +20256,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000081fqvYAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000008SeFhYAK",
@@ -20768,22 +20282,10 @@
       "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000005mY4gYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000009KrUPYA0",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1c3k000004x5g6AAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000006qKK9YAM",
@@ -20792,46 +20294,10 @@
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO00000934bRYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009QB7aYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000007kKnkYAE",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000010o9DYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000008qa2oYAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006PgqFYAS",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000003IFV8YAO",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000007e3UbYAI",
@@ -20844,30 +20310,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005ZaIkYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000082s2yYAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000080WrqYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000008SX31YAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000008fF8DYAU",
@@ -20912,12 +20354,6 @@
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000006gH4DYAU",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO0000072NYxYAM",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -20928,12 +20364,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005tHNEYA2",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000006VaAGYA0",
@@ -20954,22 +20384,10 @@
       "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000008CDOIYA4",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000002bOS8YAM",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1c3k000004x5cOAAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000009kGCjYAM",
@@ -20978,22 +20396,10 @@
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000008sN4gYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000007e1ccYAA",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006DxOzYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000003t1kwYAA",
@@ -21020,34 +20426,10 @@
       "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000004SiLaYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000007XKqLYAW",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000009HCArYAO",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000007ntsAYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000A2Cx6YAF",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO0000075SvlYAE",
@@ -21062,28 +20444,10 @@
       "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000008sVS1YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO00000APYTmYAP",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000004GqgOYAS",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000ANq9tYAD",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000006YT2aYAG",
@@ -21092,52 +20456,10 @@
       "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000006Ph38YAC",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000009GtcsYAC",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000003ksyGYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009KGxuYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000098CtFYAU",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000007BO9cYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009F2NkYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000Ad7boYAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000007xZ2XYAU",
@@ -21146,70 +20468,10 @@
       "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cDo00000119YDIAY",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000091SI7YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006PgF8YAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000004YGHoYAO",
-      "source": "servicelink",
-      "status": "Status: Active - Outbid Period",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO000009SZk1YAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1c3k000004TgQwAAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1c3k000004TdDgAAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000AWuULYA1",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO0000072JugYAE",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000008ZkYFYA0",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000A2FBkYAN",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000007e20hYAA",
@@ -21230,31 +20492,7 @@
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000000ncOBYAY",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000004XjFcYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO0000067x6SYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006VaBqYAK",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006Pg75YAC",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
@@ -21278,30 +20516,6 @@
       "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO00000Ae3hVYAR",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000Ae3j0YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000Ae3j2YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000AWt5IYAT",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO00000AWsxHYAT",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -21309,36 +20523,6 @@
     },
     {
       "id": "servicelink:a1cVO000003YzguYAC",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000Ae3j6YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009JTqjYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000080b35YAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000097tDwYAI",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1c3k000004TsPFAA0",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
@@ -21374,64 +20558,10 @@
       "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO00000ASmqNYAT",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000003m0VSYAY",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000008LrAXYA0",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000ATCGBYA5",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000ATG8VYAX",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009pQD0YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000003IFa8YAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000615SEYAY",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000004eBX8YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cDo000000gZBaIAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-26T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000003e8OdYAI",
@@ -21470,30 +20600,6 @@
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1c3k000004U863AAC",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009p7S5YAI",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000BF1v8YAD",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000ASms0YAD",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000002vtjOYAQ",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -21518,25 +20624,7 @@
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000007ihLPYAY",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009JS9vYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000008sUmpYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000As6x8YAB",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
@@ -21546,24 +20634,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000As5uqYAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000072KJxYAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "CIV-NJ-10-2150486890",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
       "id": "servicelink:a1cVO00000B8QAWYA3",
@@ -21590,30 +20660,6 @@
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO00000Ae3j8YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000Ae3j7YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009We0QYAS",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000006FewFYAS",
-      "source": "servicelink",
-      "status": "Status: Active - Outbid Period",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
       "id": "servicelink:a1cVO000008a2wRYAQ",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -21626,40 +20672,10 @@
       "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1c3k000004x6njAAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO0000035LYeYAM",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-26T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005tHbpYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000AYv7nYAD",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000AETSdYAP",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cDo000000gWbWIAU",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO00000AcFErYAN",
@@ -21716,34 +20732,16 @@
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000009JUbVYAW",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "CIV-NJ-10-2150486977",
       "source": "civilview",
       "status": "scheduled",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "servicelink:a1cVO000009v7ysYAA",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO00000BPbZHYA1",
       "source": "servicelink",
       "status": "Status: Active",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO00000BPbZAYA1",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000002N9j5YAC",
@@ -21768,12 +20766,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "CIV-NJ-8-2150489401",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
       "id": "CIV-NJ-17-2150507049",
@@ -21824,12 +20816,6 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "servicelink:a1cVO00000Ae3j4YAB",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "CIV-NJ-17-2150507425",
       "source": "civilview",
       "status": "scheduled",
@@ -21878,24 +20864,6 @@
       "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000009ctrBYAQ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000008SXMHYA4",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009SZk5YAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000007ie7QYAQ",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -21920,40 +20888,10 @@
       "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000001qO91YAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO00000BMLkDYAX",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000ATK5eYAH",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005QYZTYA4",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "CIV-NJ-17-2150507579",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "CIV-NJ-17-2150507114",
-      "source": "civilview",
-      "status": "scheduled",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
       "id": "servicelink:a1cVO000009cqoQYAQ",
@@ -21992,36 +20930,6 @@
       "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000000kHqkYAE",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cDo000000gYPuIAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000007UxbNYAS",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000BHjIcYAL",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005QZ5sYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000006MYz2YAG",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -22044,12 +20952,6 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009Q2SWYA0",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000003oOANYA2",
@@ -22112,18 +21014,6 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "servicelink:a1cVO000004qdWEYAY",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO00000BoOf7YAF",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO00000BoOfBYAV",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -22178,15 +21068,81 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
+      "id": "CIV-NJ-7-2129273608",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
       "id": "servicelink:a1cVO00000BZU3hYAH",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000008SYVCYA4",
-      "source": "servicelink",
-      "status": "Status: Active",
+      "id": "CIV-NJ-7-2129274371",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275024",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275667",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275751",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275773",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275785",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275861",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275942",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275962",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129275996",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129276239",
+      "source": "civilview",
+      "status": "scheduled",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
@@ -22194,18 +21150,6 @@
       "source": "servicelink",
       "status": "Status: Active - Outbid Period",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO0000023jZ7YAI",
-      "source": "servicelink",
-      "status": "Status: Active",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO00000As1GAYAZ",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO00000BMJInYAP",
@@ -22226,31 +21170,7 @@
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
-      "id": "servicelink:a1cDo0000020c5LIAQ",
-      "source": "servicelink",
-      "status": "Status: Active",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO0000067x84YAA",
-      "source": "servicelink",
-      "status": "Status: Active",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
       "id": "servicelink:a1cVO000006qDXBYA2",
-      "source": "servicelink",
-      "status": "Status: Active",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO00000ArGgbYAF",
-      "source": "servicelink",
-      "status": "Status: Active",
-      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
-    },
-    {
-      "id": "servicelink:a1cVO00000BMiaQYAT",
       "source": "servicelink",
       "status": "Status: Active",
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
@@ -22262,40 +21182,10 @@
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
-      "id": "servicelink:a1cVO000003VT44YAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
       "id": "servicelink:a1cVO000009F2PLYA0",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000087SW2YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000009KGxvYAG",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO000005tHDcYAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
-    },
-    {
-      "id": "servicelink:a1cVO0000072KF9YAM",
-      "source": "servicelink",
-      "status": "Status: Active - Postponed",
-      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "servicelink:a1cVO000008ZkYDYA0",
@@ -22328,6 +21218,24 @@
       "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
+      "id": "CIV-NJ-7-2129335953",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129335992",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336044",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
       "id": "servicelink:a1cVO00000BzET0YAN",
       "source": "servicelink",
       "status": "Status: Active - Postponed",
@@ -22344,6 +21252,66 @@
       "source": "servicelink",
       "status": "Status: Active - Postponed",
       "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "CIV-NJ-7-2129336080",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336222",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336316",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336351",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336607",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336639",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336644",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336656",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-7-2129336876",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335075",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
     },
     {
       "id": "servicelink:a1cVO0000067DwTYAU",
@@ -22368,6 +21336,1038 @@
       "source": "irs",
       "status": null,
       "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335092",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-8-2129337282",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335291",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335310",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335374",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335389",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335410",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-8-2129337531",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335462",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335468",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335499",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335502",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-10-2129335515",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-8-2129336687",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-8-2129336880",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-8-2129336979",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "IRS-TX-CUTE-STARTER-HOME-",
+      "source": "irs",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "IRS-GA-COMMERCIAL-PROPERT",
+      "source": "irs",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "IRS-NH-RARE-RIVERFRONT-VA",
+      "source": "irs",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "IRS-IL-IRS-PUBLIC-AUCTION",
+      "source": "irs",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo0000011DTCIA2",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004pXeFAAU",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004kUV8AAM",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004f9MYAAY",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004p90VAAQ",
+      "source": "servicelink",
+      "status": "Auction Begins: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004pOEFAA2",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004SfQvAAK",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004xKCBAA2",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gWDWIA2",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo0000011B0tIAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gW2xIAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo0000011CduIAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gXfrIAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gY0jIAE",
+      "source": "servicelink",
+      "status": "Auction Begins: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gY43IAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYOAIA2",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYfzIAE",
+      "source": "servicelink",
+      "status": "Auction Begins: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYiHIAU",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYq3IAE",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYzWIAU",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004oIV6AAM",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 07, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-26-66-708",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-26-66-718",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-26-66-877",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-26-66-878",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-26-66-968",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-27-66-801",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "TRSY-27-66-701",
+      "source": "treasury",
+      "status": null,
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004Tb63AAC",
+      "source": "servicelink",
+      "status": "Auction Begins: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cDo000000ozOBIAY",
+      "source": "servicelink",
+      "status": "Auction Ends: Oct 06, 2026",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO000003j2r0YAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005n631YAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006pEjrYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004yQGlYAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000001Y2OhYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000081fqvYAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005mY4gYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004x5g6AAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000934bRYAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009QB7aYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000010o9DYAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008qa2oYAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006PgqFYAS",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000003IFV8YAO",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005ZaIkYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000082s2yYAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000080WrqYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008SX31YAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006gH4DYAU",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005tHNEYA2",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008CDOIYA4",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004x5cOAAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008sN4gYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006DxOzYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004SiLaYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000007XKqLYAW",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000007ntsAYAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000A2Cx6YAF",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008sVS1YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004GqgOYAS",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ANq9tYAD",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006Ph38YAC",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000003ksyGYAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009KGxuYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000098CtFYAU",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000007BO9cYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009F2NkYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ad7boYAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cDo00000119YDIAY",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000091SI7YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006PgF8YAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004YGHoYAO",
+      "source": "servicelink",
+      "status": "Status: Active - Outbid Period",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO000009SZk1YAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004TgQwAAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004TdDgAAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000AWuULYA1",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008ZkYFYA0",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000A2FBkYAN",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000000ncOBYAY",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004XjFcYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006VaBqYAK",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006Pg75YAC",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3hVYAR",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j0YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j2YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000AWt5IYAT",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j6YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009JTqjYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000080b35YAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000097tDwYAI",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004TsPFAA0",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ASmqNYAT",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008LrAXYA0",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ATCGBYA5",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ATG8VYAX",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009pQD0YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000003IFa8YAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000615SEYAY",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004eBX8YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cDo000000gZBaIAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-26T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1c3k000004U863AAC",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009p7S5YAI",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000BF1v8YAD",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ASms0YAD",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000007ihLPYAY",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009JS9vYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000As6x8YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000As5uqYAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000072KJxYAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j8YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j7YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009We0QYAS",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000006FewFYAS",
+      "source": "servicelink",
+      "status": "Status: Active - Outbid Period",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1c3k000004x6njAAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005tHbpYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000AYv7nYAD",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-25T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000AETSdYAP",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cDo000000gWbWIAU",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "CIV-NJ-10-2150486890",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO000009JUbVYAW",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "CIV-NJ-8-2150489401",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "CIV-NJ-17-2150507579",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO000009v7ysYAA",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "CIV-NJ-17-2150507114",
+      "source": "civilview",
+      "status": "scheduled",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO00000BPbZAYA1",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-30T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000Ae3j4YAB",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009ctrBYAQ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008SXMHYA4",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009SZk5YAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000001qO91YAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000ATK5eYAH",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005QYZTYA4",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000000kHqkYAE",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cDo000000gYPuIAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000007UxbNYAS",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000BHjIcYAL",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-22T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005QZ5sYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009Q2SWYA0",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-23T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000004qdWEYAY",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-29T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO00000BoOf7YAF",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000008SYVCYA4",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO0000023jZ7YAI",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO00000As1GAYAZ",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-02T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cDo0000020c5LIAQ",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO0000067x84YAA",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO00000ArGgbYAF",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO00000BMiaQYAT",
+      "source": "servicelink",
+      "status": "Status: Active",
+      "why": "sale_date is in the past but the publisher reported no closed/cancelled status; kept because this date alone does not prove the opportunity ended."
+    },
+    {
+      "id": "servicelink:a1cVO000003VT44YAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-01T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000087SW2YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000009KGxvYAG",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-09-24T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO000005tHDcYAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
+    },
+    {
+      "id": "servicelink:a1cVO0000072KF9YAM",
+      "source": "servicelink",
+      "status": "Status: Active - Postponed",
+      "why": "Record carries a past endDate of 2026-10-03T06:00:00.000Z but says postponed; the rescheduled date is not in this record, so the opportunity may still be open."
     },
     {
       "id": "CIV-NJ-7-2150486641",
@@ -22588,8 +22588,8 @@
   ],
   "collectionFreshness": {
     "oldestObservation": "2026-09-04T20:12:48.000Z",
-    "newestObservation": "2026-09-19T22:30:21.000Z",
+    "newestObservation": "2026-10-06T05:31:35.000Z",
     "note": "Every record predates this run. The collector has not run since the newest observation above; nothing here was re-observed to decide it."
   },
-  "totalAfter": 3202
+  "totalAfter": 3225
 }

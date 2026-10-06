@@ -4,9 +4,11 @@ import * as React from "react";
 
 type InventoryFreshness = {
   listings?: number | null;
+  freshListings?: number | null;
   ageHours?: number | null;
   stale?: boolean;
   staleAfterHours?: number;
+  staleBecause?: string | null;
   newestObservation?: string | null;
 };
 
@@ -17,11 +19,6 @@ type Health = {
   inventoryUnavailableReason?: string;
   inventoryFreshness?: InventoryFreshness;
 };
-
-function ageLabel(hours: number): string {
-  if (hours < 48) return `${Math.round(hours)} hours`;
-  return `${Math.round(hours / 24)} days`;
-}
 
 /**
  * Honest runtime banner: an unavailable database means there is no inventory to
@@ -116,7 +113,6 @@ export function DataModeBanner() {
   // is how a stale inventory ends up presented as current.
   const freshness = health.inventoryFreshness;
   const stale = Boolean(freshness?.stale) && typeof freshness?.ageHours === "number";
-  const age = typeof freshness?.ageHours === "number" ? ageLabel(freshness.ageHours) : "";
 
   if (health.dataMode !== "unavailable" && health.documentReviewStore !== "file" && !stale) return null;
 
@@ -133,9 +129,15 @@ export function DataModeBanner() {
     // A database full of rows is not the same claim as an inventory somebody
     // checked today. "Active" on a record nobody has re-observed in three weeks
     // is the exact thing a buyer is relying on and cannot check for themselves.
+    //
+    // Say how much is stale, not how fresh the newest row is. Collection is
+    // bounded, so a fresh sweep makes the newest record minutes old while the
+    // rest is untouched - "last observed 0 hours ago" would be true and useless.
     parts.push(
-      `Inventory was last observed ${age} ago and has not been re-collected. ` +
-        `Records are kept as observed, but sale status and availability are unverified.`
+      (typeof freshness?.staleBecause === "string" && freshness.staleBecause
+        ? freshness.staleBecause
+        : `Inventory has not been re-collected within ${freshness?.staleAfterHours ?? 24}h.`) +
+        " Records are kept as observed, but sale status and availability are unverified."
     );
   }
   if (health.documentReviewStore === "file") {
