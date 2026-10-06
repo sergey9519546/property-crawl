@@ -52,7 +52,12 @@ async function main() {
     return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
   };
   const apply = args.includes('--apply');
-  const sources = (argValue('--source', 'treasury,gsa,irs') || '')
+  // Default to every source that has a per-record probe, so this can be run
+  // unattended after a sweep without anyone naming sources. An index sweep can
+  // only refresh what the index currently lists; this covers the rest, and
+  // it never retires anything, so running it repeatedly is safe.
+  const requested = argValue('--source', null);
+  const sources = (requested || Object.keys(SOURCE_SCRAPERS).join(','))
     .split(',').map((value) => value.trim()).filter(Boolean);
 
   const baseUrl = process.env.PROPERTY_API_URL || 'http://localhost:3000';

@@ -69,6 +69,25 @@ function classifyRefresh(result) {
   return 'not_served';
 }
 
+/** CivilView needs a county session cookie before any detail page is readable. */
+async function refreshCivilViewRecord(scraper, record) {
+  const identity = /^CIV-([A-Z]{2})-(\d+)-(\d+)$/.exec(String(record.id || ''));
+  const propertyId = extractPublisherKey('civilview', record.sourceUrl);
+  // A record we cannot address is an error, never "the publisher does not
+  // serve it" - conflating the two would manufacture a death certificate.
+  if (!identity) return { error: 'identifier does not encode a county and property id' };
+  if (!propertyId) return { error: 'stored source URL carries no PropertyId' };
+  const counties = await scraper.fetchCounties();
+  const county = counties.find((candidate) => String(candidate.id) === String(identity[2]));
+  if (!county) return { error: `county ${identity[2]} is not published` };
+  const { sessionCookie } = await scraper.fetchCountySummaries(county);
+  const url = `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${propertyId}`;
+  const html = await scraper.fetchText(url, 20000, sessionCookie);
+  return { listing: scraper.parseDetailPage(html, {
+    propertyId, county: { id: identity[2], state: identity[1] }, detailUrl: url,
+  }) };
+}
+
 /**
  * Re-observe one record.
  *
@@ -77,6 +96,11 @@ function classifyRefresh(result) {
 async function refreshKnownRecord(scraper, source, record) {
   const id = record && record.id;
   try {
+    if (source === 'civilview') {
+      const probed = await refreshCivilViewRecord(scraper, record);
+      if (probed.error) return { id, verdict: 'error', detail: probed.error };
+      return { id, verdict: classifyRefresh(probed), listing: probed.listing };
+    }
     if (!scraper || typeof scraper.fetchDetail !== 'function') {
       return { id, verdict: 'error', detail: `${source} has no per-record detail method` };
     }
