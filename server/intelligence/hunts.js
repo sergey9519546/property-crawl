@@ -560,8 +560,24 @@ function evaluateInventory(hunt, listings, options = {}) {
   const baselineCreated = !previousBaseline;
   const candidates = new Map();
   const invalidResults = [];
+  // A criterion can be UNSATISFIABLE rather than merely unmatched: if every
+  // record reports the field as unavailable, no amount of re-running this hunt
+  // could establish it. That is the case for a rule on a derived value when
+  // nothing carries the evidence it is computed from. It has to be reported,
+  // because "this rule could never match" and "this hunt simply found nothing"
+  // are indistinguishable in a bare no-match result.
+  const clauseTally = new Map();
   for (const original of listings) {
     const evaluated = evaluateListing(original, hunt, { now: evaluatedAt });
+    for (const clause of evaluated.clauseResults || []) {
+      const key = `${clause.field}|${clause.operator}|${canonicalJson(clause.value ?? null)}`;
+      const tally = clauseTally.get(key)
+        || { field: clause.field, operator: clause.operator, value: clause.value ?? null, match: 0, noMatch: 0, unknown: 0 };
+      if (clause.status === 'match') tally.match += 1;
+      else if (clause.status === 'unknown') tally.unknown += 1;
+      else tally.noMatch += 1;
+      clauseTally.set(key, tally);
+    }
     if (evaluated.validationErrors.length) {
       invalidResults.push(evaluated);
       continue;
@@ -627,6 +643,14 @@ function evaluateInventory(hunt, listings, options = {}) {
     } : {}),
   })).concat(invalidResults);
   const results = sortHuntResults(rawResults).slice(0, MAX_RETURNED_RESULTS);
+  const unsatisfiableCriteria = [...clauseTally.values()]
+    .filter((tally) => tally.unknown > 0 && tally.match === 0 && tally.noMatch === 0)
+    .map((tally) => ({
+      field: tally.field,
+      operator: tally.operator,
+      value: tally.value,
+      reason: `${tally.field} is unavailable on every record in this inventory, so this criterion cannot be established.`,
+    }));
   return {
     baseline: { huntVersion: hunt.version, evaluatedAt, records: nextRecords },
     events: options.suppressEvents ? [] : events,
@@ -644,6 +668,10 @@ function evaluateInventory(hunt, listings, options = {}) {
       },
       results,
       resultsTruncated: candidates.size + invalidResults.length > MAX_RETURNED_RESULTS,
+      unsatisfiableCriteria,
+      unsatisfiableCriteriaNote: unsatisfiableCriteria.length
+        ? 'One or more criteria could not be evaluated against any record in this inventory. A hunt with an unsatisfiable criterion cannot match, however often it runs.'
+        : null,
       newEvents: options.suppressEvents ? [] : events.slice(0, MAX_RETURNED_EVENTS),
       eventsTruncated: !options.suppressEvents && events.length > MAX_RETURNED_EVENTS,
       rankingNote: 'Match results are ordered by evidence-backed triage rank (criterion closeness, research quality, sale urgency, modeled deal-score band). Rank is not an appraisal or legal verification.',

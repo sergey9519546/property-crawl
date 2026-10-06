@@ -615,21 +615,38 @@ no rules and no dependencies, and it falls through to the generic *"a supported
 state, county, property type, published amount, or sale-date criterion"* message.
 That is the right answer, and it predates this work.
 
-**Still open: the form-built hunt.** `saved-hunts.tsx` exposes `minScore` and
+**Now fixed: the form-built hunt.** `saved-hunts.tsx` exposes `minScore` and
 `minEquity` as hunt filters, and `hunts.js` accepts them as criteria
 (`minScore`, `minEquity` are in the allowed set). A hunt saved that way can
 therefore **never** match — `supportedDerivedValue` requires an
 `observed-valuation-range-v1` model with valid `estLow`/`estHigh`, and no record
-carries one — yet the UI reports it as an ordinary hunt that simply has no
+carries one — yet the UI reported it as an ordinary hunt that simply had no
 matches. Unlike the two empty states, this one is a saved, recurring thing the
 user believes is working.
 
-Not fixed here on purpose. The hunt surface is workspace-gated, so it cannot be
-exercised end to end in this session, and the hunt engine is dense and heavily
-tested — a speculative change there would be a worse trade than writing the gap
-down precisely. The fix belongs where the answer exists: the engine should report
-a criterion it can never satisfy, and the UI should surface that the way
-`missingDependencies` already does for unsupported phrases.
+`evaluateInventory` now tallies every clause's outcome and reports the
+distinction:
+
+```
+response.unsatisfiableCriteria: [{ field, operator, value,
+  reason: "dealScore is unavailable on every record in this inventory, so this
+           criterion cannot be established." }]
+response.unsatisfiableCriteriaNote: "One or more criteria could not be
+  evaluated against any record in this inventory. A hunt with an unsatisfiable
+  criterion cannot match, however often it runs."
+```
+
+The tally is computed inside the existing evaluation loop, so listings are still
+evaluated once. Crucially the guard is one-directional: a criterion the
+inventory **can** evaluate and that every record merely fails — say
+`openingBid >= 500,000` against bids of $50k and $75k — is a genuine no-match
+and is **not** labelled unsatisfiable. Calling that unsatisfiable would be its
+own lie, and there is a test for it.
+
+The first attempt at this was deferred on the grounds that the hunt surface is
+workspace-gated and cannot be exercised here. That was half right: the surface
+is gated, but the engine is a plain module, and the behaviour is testable
+without unlocking anything.
 
 **The staleness banner was missing where most people meet the inventory.**
 `DataModeBanner` was rendered on `/listings` and the document-review queue, but

@@ -118,7 +118,8 @@
     "workspace:ready": "node scripts/workspace-readiness.js",
     "workspace:walkthrough": "python scripts/record-workspace-walkthrough.py",
     "release:gate": "node scripts/release-gate.js",
-    "release:gate:quick": "node scripts/release-gate.js --quick"
+    "release:gate:quick": "node scripts/release-gate.js --quick",
+    "test:hunt-criteria": "node --test test/hunt-unsatisfiable-criteria.test.js"
   },
   "keywords": [
     "real-estate",
