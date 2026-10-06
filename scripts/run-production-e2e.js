@@ -144,6 +144,10 @@ async function main() {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), `property-e2e-state-${publicPort}-`));
   const reviewStorePath = path.join(stateDir, 'document-review-store.json');
   const liveCachePath = path.join(stateDir, 'live-listings.json');
+  // The embedded database gets its own directory in the same throwaway state
+  // dir. Sharing .cache/pgdata would mean this run writing document reviews and
+  // saved searches into the developer's real inventory.
+  const isolatedPgDataDir = path.join(stateDir, 'pgdata');
   const logPath = path.join(ROOT, '.cache', `production-e2e-${publicPort}.log`);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, 'a');
@@ -160,27 +164,32 @@ async function main() {
   // Force the production orchestrator to load secrets from .env.local.
   delete env.SCRAPER_ADMIN_TOKEN;
   delete env.PROPERTY_OPERATOR_SECRET;
-  // Default unit-gate path pins demo mode. Opt into PG with --with-db.
+  // Default path pins an ISOLATED embedded database; --with-db uses an external
+  // one.
   //
-  // These are ASSIGNED EMPTY, not deleted. loadLocalEnvFiles() keeps whatever
-  // is already in process.env (`if (!key || key in merged) continue`) so cloud
-  // secret injection is never clobbered - and `key in merged` is TRUE for an
-  // empty string. Deleting the key therefore let .env.local's DATABASE_URL
-  // straight back in, and this e2e booted against whatever Postgres the
-  // developer had configured, failing "health demo-pin" on any machine whose
-  // .env.local names a database. On CI .env.local is generated without a
-  // DATABASE_URL, which is why it only ever failed locally.
+  // The isolation is the point. Without it this run boots against the
+  // developer's own .cache/pgdata and then WRITES to it - document reviews and
+  // saved searches both persist in PostgreSQL now, so an e2e sharing the real
+  // inventory directory mutates real state.
   //
-  // Empty string is falsy, so `Boolean(bootEnv.DATABASE_URL)` is false and the
-  // stack still boots in demo mode. The intent is preserved and now actually
-  // enforced.
+  // These are ASSIGNED, not deleted. loadLocalEnvFiles() keeps whatever is
+  // already in process.env (`if (!key || key in merged) continue`), so cloud
+  // secret injection is never clobbered, and `key in merged` is TRUE for an
+  // empty string. Deleting the key let .env.local's value straight back in.
   if (!args.withDb) {
     env.DATABASE_URL = '';
     env.DISCOVERY_MODE = '';
     env.DISCOVERY_TEST_DATABASE_URL = '';
+    env.PROPERTY_DB = 'embedded';
+    env.PROPERTY_PG_DATA_DIR = isolatedPgDataDir;
   }
 
   const tokenFromFile = loadTokenFromEnvLocal();
+  if (!args.withDb) {
+    const { seedIsolatedDatabase } = require('./isolated-fixtures');
+    const seeded = await seedIsolatedDatabase(isolatedPgDataDir);
+    console.log(`[production-e2e] seeded ${seeded} fixture listings into the isolated database`);
+  }
   console.log(`[production-e2e] booting start:production UI=${publicPort} API=${apiPort}`);
   console.log(`[production-e2e] isolated review store=${reviewStorePath}`);
   console.log(`[production-e2e] log=${logPath}`);
@@ -209,8 +218,8 @@ async function main() {
         console.warn('[production-e2e] WARNING: SCRAPER_ADMIN_TOKEN missing in .env.local; operator checks will fail');
       }
       console.log(`[production-e2e] running e2e against ${baseUrl} (timeout ${E2E_TIMEOUT_MS}ms, withDb=${args.withDb})`);
-      if (!args.withDb) process.env.E2E_EXPECT_DEMO = '1';
-      else delete process.env.E2E_EXPECT_DEMO;
+      if (!args.withDb) process.env.E2E_EXPECT_DATABASE = '1';
+      else delete process.env.E2E_EXPECT_DATABASE;
       e2eCode = await runE2e(baseUrl, tokenFromFile);
     }
   } finally {

@@ -74,6 +74,12 @@ async function main() {
     if (await probe(API_PORT, '/api/health')) {
       throw new Error(`[ui-suite] API test port :${API_PORT} is already in use; choose UI_SUITE_API_PORT.`);
     } else {
+      // This suite proves the UI, not the database - production-e2e does that
+      // against a real isolated PostgreSQL. So it declares the in-memory
+      // provider explicitly rather than leaving the API to discover a
+      // backend. It used to get this implicitly, because an unreachable or
+      // cleared DATABASE_URL fell back to the seed; with that fallback gone it
+      // would serve nothing and all 45 journeys would fail on an empty feed.
       console.log(`[ui-suite] booting isolated Node API on :${API_PORT}...`);
       const api = startCmd(process.execPath, ['server/server.js'], {
         PORT: String(API_PORT),
@@ -82,7 +88,8 @@ async function main() {
         // Forty-five journeys share one proxy socket. Test the default budget
         // separately; keep this isolated load run below its explicit ceiling.
         PROPERTY_API_RATE_LIMIT: '1000',
-        DATABASE_URL: ''
+        DATABASE_URL: '',
+        PROPERTY_INVENTORY_BACKEND: 'memory'
       });
       owned.push(api);
       await waitFor(api, API_PORT, '/api/health', 'Node API');

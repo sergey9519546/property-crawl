@@ -3,6 +3,13 @@ const { execSync } = require('child_process');
 // An immutable test build must not overwrite the developer's running .next.
 process.env.NEXT_VERIFY_BUILD = '1';
 
+// There is no longer an undeclared in-memory fallback, so every suite that
+// expects listings must say which backend it means. These suites are unit and
+// route tests using the in-memory provider as a test double; it is inherited by
+// every child process below. A suite that configures its own DATABASE_URL still
+// gets PostgreSQL - init() only seeds when no pool exists.
+process.env.PROPERTY_INVENTORY_BACKEND = 'memory';
+
 console.log('====================================================');
 console.log('🚀 PROPERTY_CRAWL — COMPLETE VERIFICATION LOOP');
 console.log('====================================================\n');

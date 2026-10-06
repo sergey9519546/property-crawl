@@ -41,7 +41,7 @@ test('loadLocalEnvFiles keeps a key that is present but empty', () => {
   }
 });
 
-test('the e2e pins demo mode by assigning empty, not by deleting', () => {
+test('the e2e pins an ISOLATED database, and never demo mode', () => {
   // Strip line comments before scanning. The fix's own comment quotes the old
   // line, so a raw scan matches the prose rather than the code.
   //
@@ -74,6 +74,48 @@ test('the e2e pins demo mode by assigning empty, not by deleting', () => {
       `deleting ${key} lets .env.local put it back - that is the bug`
     );
   }
+  // Demo mode no longer exists, so the default path must land on a real
+  // database rather than clearing the URL and falling back.
+  assert.equal(
+    src.includes("env.PROPERTY_DB = 'embedded'"),
+    true,
+    'the default path must boot a database, not clear the URL and serve nothing'
+  );
+  // Isolation is the part that is easy to drop and expensive to skip: the run
+  // writes document reviews and saved searches, both of which persist in
+  // PostgreSQL now. Pointing it at the developer's .cache/pgdata mutates real
+  // state.
+  assert.equal(
+    src.includes('env.PROPERTY_PG_DATA_DIR = isolatedPgDataDir'),
+    true,
+    'the embedded database must live in the throwaway state dir, never the real .cache/pgdata'
+  );
+  assert.equal(
+    src.includes("path.join(stateDir, 'pgdata')"),
+    true,
+    'isolatedPgDataDir must be derived from the per-run state directory'
+  );
+});
+
+test('nothing in the runtime path can still select demo mode', () => {
+  // This guard reads the client rather than a doc, because a guard that matches
+  // its own prose is worth nothing.
+  const client = fs.readFileSync(path.join(ROOT, 'server', 'db', 'client.js'), 'utf8');
+  const body = client
+    .split(/\r?\n/)
+    .filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l))
+    .join('\n');
+  assert.equal(
+    /return\s+'demo'/.test(body),
+    false,
+    "dataMode() must never return 'demo'"
+  );
+  const workflow = fs.readFileSync(path.join(ROOT, 'scripts', 'e2e-user-workflow.js'), 'utf8');
+  assert.equal(
+    workflow.includes("=== 'demo'"),
+    false,
+    'the e2e must not assert a demo dataMode'
+  );
 });
 
 test('the demo pin only applies to the default path, never to --with-db', () => {

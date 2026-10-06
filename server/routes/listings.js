@@ -200,6 +200,22 @@ async function handleListings(req, res) {
     }
 
     const usesDiscovery = true;
+    // Refuse before querying. With no database the query below would answer
+    // `total: 0`, and an outage would render as "no listings match" - the one
+    // result a caller cannot tell apart from a real finding. Say what is wrong
+    // instead. An explicit PROPERTY_INVENTORY_BACKEND=memory run still serves.
+    if (typeof db.inventoryUnavailableReason === 'function') {
+      const unavailable = db.inventoryUnavailableReason();
+      if (unavailable) {
+        return res.status(503).json({
+          error: 'No inventory is being served.',
+          reason: unavailable,
+          dataMode: typeof db.dataMode === 'function' ? db.dataMode() : null,
+          listings: [],
+          total: 0,
+        });
+      }
+    }
     let result;
     try {
       if (usesDiscovery) {
@@ -292,7 +308,7 @@ async function handleListings(req, res) {
         : result.total,
       // Surface the same honesty signals the health endpoint provides so
       // clients (workbench, tests) can see demo vs postgres without a second call.
-      dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'demo'),
+      dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'unavailable'),
       postgresReachable: db.postgresReachable === true,
       // A demo inventory that failed to seed reads here as an ordinary "no
       // results", which is the one thing the caller cannot tell apart from a

@@ -172,7 +172,22 @@ test('the health payload evaluates - an undefined name there is a 503', () => {
               assert.equal(res.statusCode, 200, `health returned ${res.statusCode}: ${body.slice(0, 200)}`);
               const parsed = JSON.parse(body);
               assert.equal(parsed.status, 'ok');
-              assert.equal(typeof parsed.seeded, 'boolean', 'the seed signal must be present');
+              // The canary used to be `seeded`, which existed only because a
+              // failed demo seed could leave a healthy server serving zero
+              // listings. There is no runtime seed any more, so the fields that
+              // now carry that truth are dataMode and postgresReachable - and a
+              // typo in either is the same 503-shaped bug this guard exists for.
+              assert.equal(typeof parsed.dataMode, 'string', 'dataMode must be present');
+              assert.ok(['postgres', 'memory', 'unavailable'].includes(parsed.dataMode),
+                `dataMode must be one of the three honest values, got ${parsed.dataMode}`);
+              assert.equal(typeof parsed.postgresReachable, 'boolean',
+                'postgresReachable must be present');
+              // When nothing is served, the payload must say why rather than
+              // leaving the caller to guess between an outage and an empty DB.
+              if (parsed.dataMode === 'unavailable') {
+                assert.equal(typeof parsed.inventoryUnavailableReason, 'string',
+                  'an unavailable inventory must carry a reason');
+              }
               // Absent is correct when nothing failed; a boolean false is not.
               assert.ok(
                 parsed.workspaceStoreError === undefined || typeof parsed.workspaceStoreError === 'string',

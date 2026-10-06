@@ -51,14 +51,20 @@ async function main() {
     typeof health.json?.dataMode === 'string' && typeof health.json?.documentReviewStore === 'string',
     `dataMode=${health.json?.dataMode} store=${health.json?.documentReviewStore}`
   );
-  // When the orchestrator pins demo mode (no DATABASE_URL), require honest labels.
-  const pinDemo = process.env.E2E_EXPECT_DEMO === '1';
-  if (pinDemo) {
+  // The default path pins an ISOLATED embedded database, not demo mode. Demo
+  // mode no longer exists, and the pin must never point at the developer's own
+  // .cache/pgdata - the run writes document reviews and saved searches.
+  //
+  // This is the check that matters most here: a real database, and never the
+  // seeded in-memory catalog that used to stand in for one.
+  const pinEmbedded = process.env.E2E_EXPECT_DATABASE === '1';
+  if (pinEmbedded) {
     record(
-      'health demo-pin',
-      health.json?.dataMode === 'demo'
-        && (health.json?.documentReviewStore === 'file' || health.json?.documentReviewStore === 'none'),
-      `dataMode=${health.json?.dataMode} store=${health.json?.documentReviewStore}`
+      'health pins an isolated database',
+      health.json?.dataMode === 'postgres'
+        && health.json?.documentReviewStore === 'postgres'
+        && health.json?.dataMode !== 'demo',
+      `dataMode=${health.json?.dataMode} store=${health.json?.documentReviewStore} engine=${health.json?.postgresEngine || 'n/a'}`
     );
   }
 

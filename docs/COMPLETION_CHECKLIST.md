@@ -46,7 +46,7 @@ Nothing below depends on anything later in the list.
 |---|---|---|---|
 | 1 | **PP-01** corrupt persisted stores: user/operator visibility + no silent overwrite | — | — |
 | 2 | **PP-02** source-bound release gate | — | — |
-| 3 | **PP-03** real isolated PostgreSQL: discovery/contracts, restart durability, lease loss/retry/worker soak | #2 | a Postgres instance |
+| 3 | **PP-03** real isolated PostgreSQL: discovery/contracts, restart durability, lease loss/retry/worker soak | #2 | a separate Postgres *server* for the 2 row-lock tests; the embedded engine now covers everything else |
 | 4 | **PP-03** browser journey: operator unlock → hunt → evidence/document review → saved-search → export, on desktop, mobile and keyboard, with a11y/CLS/LCP | #3 | a running stack + an operator credential |
 | 5 | **PP-04** production persistence/backup-restore proof | #2 | the deployed instance |
 | 6 | **PP-04** operator config, Maps key restriction, form delivery | #2 | GCP console / endpoint accounts |
@@ -72,7 +72,7 @@ These cannot be closed by writing code here. Each names what would unblock it.
 
 | Blocker | Owner | Unblocked by |
 |---|---|---|
-| Isolate a real PostgreSQL and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | see the exact state below |
+| Isolate a real PostgreSQL **server** and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | see the exact state below; the embedded engine covers the rest |
 | Full browser journey incl. operator unlock | operator | a **clearly synthetic local credential** if the supported auth contract allows one. Do not weaken auth, and do not expose a production key to obtain browser evidence. |
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
 | Fly/Koyeb operator secrets | operator | values set in the host dashboard |
@@ -98,6 +98,36 @@ Verified on this machine, not assumed:
 (`Start-Service com.docker.service`) or launch Docker Desktop as
 Administrator, then:
 
+### PostgreSQL: how the database is now served
+
+`DATABASE_URL` still names `postgres://***@localhost:5432` and **nothing listens
+there**: no PostgreSQL install on disk, and `com.docker.service` is **Stopped**
+and needs an elevated token this session does not have. That part is unchanged.
+
+What changed is the consequence. Previously an unreachable database fell back to
+a seeded in-memory catalog, so a broken database was indistinguishable from a
+working one holding 2,094 rows. **That fallback is gone.** `dataMode()` is
+`postgres`, `memory` (only under `NODE_ENV=test` or an explicit
+`PROPERTY_INVENTORY_BACKEND=memory`) or `unavailable`, and with no database the
+listing API returns `503` carrying the reason instead of an empty result that
+reads as "no listings match".
+
+To get a real database without elevation, the API can run the **embedded
+PostgreSQL engine** (`PROPERTY_DB=embedded`, `.cache/pgdata`): a genuine
+PostgreSQL build with PostGIS 3.6, persisted to disk, surviving restart. It is
+embedded in the API process and single-connection — enough for this operator
+beta, not a substitute for a real server under concurrent load. Point
+`DATABASE_URL` at a real server and this code is never loaded.
+
+Verified against it, not assumed: the full `schema.sql` plus all 16 migrations
+apply (33 tables), `FOR UPDATE SKIP LOCKED` job claiming runs, transactions
+commit and roll back, errors carry SQLSTATE, and rows survive a close/reopen.
+
+For the tests that need a **separate server** — the two skipped
+`discovery-job-fence` and `discovery-promotion-evidence` tests, which are the
+only coverage of job-ownership fencing against real row locks — the embedded
+engine's single connection is not enough, and a real server is still required:
+
 ```
 docker run -d --name pp-pg -e POSTGRES_PASSWORD=property-local-dev \
   -p 55432:5432 postgis/postgis:16-3.4
@@ -105,13 +135,33 @@ $env:DISCOVERY_TEST_DATABASE_URL='postgres://postgres:property-local-dev@127.0.0
 npm run test:discovery:operations:pg
 ```
 
-That runner currently holds the two tests that are skipped everywhere else
-(`discovery-job-fence`, `discovery-promotion-evidence`) — they are the only
-coverage of job-ownership fencing and promotion evidence against real row
-locks, and nothing runs them outside a PG job.
-
 **CI `continue-on-error` is not release evidence.** Jobs that carry it are
 advisory and cannot close anything in this table.
+
+## Inventory state
+
+The live record store was last written **2026-09-19**; the collector has not run
+since, so everything in it was 16–31 days old when reviewed on 2026-10-05. That
+is a freshness gap, not a set of per-row verdicts, and the two are kept apart:
+
+- `/api/health` now carries `inventoryFreshness` (newest observation, age in
+  hours, `stale` past 24h) and the banner says so on every page.
+- Removal uses `server/db/listing-lifecycle.js`, which deletes **only** on a
+  publisher's own word that the event finished (closed / cancelled / auctioned /
+  rescinded, or an `endDate` already past). Applied on 2026-10-05: **3,337
+  concluded listings removed, 3,202 kept**, ledger in
+  `reports/pruned-listings.json`.
+- Deliberately kept despite a signal that could have removed them: 274 records
+  whose status says *postponed* while carrying a pre-postponement date (the
+  rescheduled date is not in the record), and 148 whose `sale_date` is past with
+  no publisher terminal status. Deleting a live auction to tidy a table is the
+  expensive mistake.
+
+The ServiceLink material under `.cache/reference-audit/servicelink/` (210 files,
+20 MB) is **reference input**, not inventory: nine user-supplied PDFs/CSVs/JSONs
+holding at most 3 sample listings and 26 auction-run rows, used to build the
+parser against the publisher's real shape. The collector reads the live public
+API, and no record derived from that download is in the database.
 
 ## Source limits — POLICY, not backlog
 

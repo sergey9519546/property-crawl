@@ -36,7 +36,12 @@ INSERT INTO sources (key, label, tier, color, note, website_url) VALUES
   ('landbank', 'Land Bank', 'B', '#059669', 'landbanksearch.com — 70+ county land bank aggregator', 'https://www.landbanksearch.com'),
   ('fdic', 'FDIC REO', 'A', '#1e3a8a', 'sales.fdic.gov — Closed sales & receivership assets', 'https://sales.fdic.gov'),
   ('civilview', 'CivilView Sheriff', 'B', '#0f766e', 'salesweb.civilview.com — Tyler Technologies docket', 'https://salesweb.civilview.com'),
-  ('bid4assets', 'Bid4Assets', 'B', '#7c3aed', 'bid4assets.com — County sheriff & tax auctions', 'https://www.bid4assets.com')
+  ('bid4assets', 'Bid4Assets', 'B', '#7c3aed', 'bid4assets.com — County sheriff & tax auctions', 'https://www.bid4assets.com'),
+  -- Discovery-only evidence sources. Their collector adapters are registered and
+  -- they have produced observed records, but neither has been promoted out of
+  -- DISCOVERY_ONLY, so the note says so rather than implying a live listing feed.
+  ('fl-dor-cadastral', 'FL DOR Statewide Cadastral', 'B', '#047857', 'Florida DOR statewide cadastral parcels (ArcGIS REST); DISCOVERY_ONLY - parcel screening evidence, not a sale listing or a survey', 'https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0'),
+  ('courtlistener', 'CourtListener / RECAP', 'B', '#4338ca', 'courtlistener.com / RECAP docket archive; DISCOVERY_ONLY - a filing is not a sale', 'https://www.courtlistener.com')
 ON CONFLICT (key) DO NOTHING;
 
 -- 2. Property Listings Table
@@ -75,10 +80,13 @@ CREATE TABLE IF NOT EXISTS listings (
       END
     ) STORED,
     sale_date DATE,
-    plaintiff VARCHAR(255),
-    defendant VARCHAR(255),
+    -- Party names are free-form legal text. CivilView defendant strings list
+    -- every heir and successor and run past 800 characters; VARCHAR(255)
+    -- rejected real observed records. See migration 017_party_names_text.sql.
+    plaintiff TEXT,
+    defendant TEXT,
     judgment_amount NUMERIC(14, 2),
-    attorney VARCHAR(255),
+    attorney TEXT,
     occupancy VARCHAR(64),
     deposit_terms TEXT,
     photo_url TEXT,

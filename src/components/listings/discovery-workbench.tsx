@@ -535,7 +535,7 @@ export function DiscoveryWorkbench() {
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold text-slate-500" data-testid="inventory-page-count">
+          <p className="text-xs font-semibold text-slate-600" data-testid="inventory-page-count">
             {loading || (!payload && !error)
               ? "Updating results…"
               : payload
@@ -558,7 +558,7 @@ export function DiscoveryWorkbench() {
               placeholder is honest -- it really is checking -- and occupies the
               same single line, so the block's height is stable from the first
               paint. */}
-          <p className="mt-1 text-xs text-slate-500" data-testid="inventory-honesty">
+          <p className="mt-1 text-xs text-slate-600" data-testid="inventory-honesty">
             {payload?.listings
               ? (() => {
                   const honesty = summarizeInventoryHonesty(payload.listings);

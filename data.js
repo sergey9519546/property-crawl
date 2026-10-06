@@ -121,7 +121,7 @@ window.SOURCES = {
     "key": "civilview",
     "label": "CivilView Sheriff",
     "tier": "B",
-    "color": "#0d9488",
+    "color": "#0f766e",
     "note": "salesweb.civilview.com — Tyler Technologies docket",
     "websiteUrl": "https://salesweb.civilview.com"
   },

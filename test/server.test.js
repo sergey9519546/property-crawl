@@ -1,3 +1,9 @@
+// Declared, not assumed. The runtime has no in-memory fallback, so a suite that
+// expects listings has to say which backend it means. This one exercises route
+// wiring with the provider as a test double; it is not claiming to test a
+// database. Suites that want PostgreSQL configure DATABASE_URL instead.
+process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
+
 const assert = require('assert');
 const http = require('http');
 const server = require('../server/server');

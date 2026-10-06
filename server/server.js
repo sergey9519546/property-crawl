@@ -214,6 +214,19 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/health') {
       const { defaultStorePath } = require('./intelligence/document-review-store');
+      const unavailableReason = db.inventoryUnavailableReason();
+      // Freshness is an extra fact, not a precondition. If the query fails the
+      // health check must still answer - otherwise a slow COUNT turns a
+      // readable health endpoint into a 503, which is the outage it exists to
+      // report.
+      let freshness = null;
+      if (typeof db.inventoryFreshness === 'function') {
+        try {
+          freshness = await db.inventoryFreshness();
+        } catch (error) {
+          freshness = { error: String(error && error.message ? error.message : error).slice(0, 160) };
+        }
+      }
       return res.json({
         status: 'ok',
         uptime: process.uptime(),
@@ -222,7 +235,12 @@ async function handleRequest(req, res) {
         dataMode: db.dataMode(),
         postgresConfigured: Boolean(process.env.DATABASE_URL),
         postgresReachable: db.postgresReachable === true,
+        ...(db.postgresEngine ? { postgresEngine: db.postgresEngine } : {}),
         ...(db.postgresError ? { postgresError: db.postgresError } : {}),
+        // The one thing a caller needs when dataMode is 'unavailable': why.
+        // 'ok' above describes the process, not the inventory, and the two must
+        // not be read as the same claim.
+        ...(unavailableReason ? { inventoryUnavailableReason: unavailableReason } : {}),
         // In demo mode the inventory IS the seed. A seed that failed leaves a
         // healthy server serving zero listings, so say so here rather than only
         // in the boot log. Undefined in Postgres mode, where it does not apply.
@@ -250,6 +268,10 @@ async function handleRequest(req, res) {
         })(),
         documentReviewStore: db.isPg ? 'postgres' : (defaultStorePath(process.env) ? 'file' : 'none'),
         documentReviewStorePath: db.isPg ? null : (defaultStorePath(process.env) || null),
+        // How old the newest observation is. A database full of rows is not the
+        // same claim as an inventory somebody checked today, and the difference
+        // is exactly what a buyer is relying on when they read "active".
+        ...(freshness ? { inventoryFreshness: freshness } : {}),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),
       });
     }
@@ -307,19 +329,56 @@ server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 
+/**
+ * Bring up the embedded PostgreSQL engine when it is asked for.
+ *
+ * `PROPERTY_DB=embedded` (or a bare `PROPERTY_PG_DATA_DIR`) starts a real
+ * PostgreSQL engine in-process against a directory on disk. It exists because
+ * `.env.local` names postgres://localhost:5432 and nothing listens there on
+ * this machine, and the alternative used to be serving seeded in-memory
+ * inventory - which is not inventory.
+ *
+ * It wins over DATABASE_URL only when asked for explicitly, and says so in the
+ * log when it does. An unset PROPERTY_DB with a set DATABASE_URL always uses
+ * the external server: silently swapping a configured production database for
+ * an embedded one would be the exact class of surprise this change exists to
+ * remove. A DATABASE_URL that is set but unreachable is reported as an outage,
+ * never quietly replaced.
+ */
+async function attachEmbeddedDatabaseIfRequested() {
+  const explicitlyEmbedded = process.env.PROPERTY_DB === 'embedded';
+  const dataDirGiven = Boolean(process.env.PROPERTY_PG_DATA_DIR);
+  if (!explicitlyEmbedded && !dataDirGiven) return null;
+  if (process.env.DATABASE_URL) {
+    console.log('[Server] PROPERTY_DB/PROPERTY_PG_DATA_DIR is set, so the embedded engine is used and DATABASE_URL is ignored for this process.');
+  }
+
+  const { startEmbeddedPostgres } = require('./db/pglite-pool');
+  const started = await startEmbeddedPostgres({ log: console.log });
+  const { migrate } = require('../scripts/discovery-migrate');
+  await migrate(started.pool);
+  db.attachPostgres(started.pool, started.engine);
+  console.log('[Server] discovery migrations applied to the embedded database');
+  return started;
+}
+
 async function startServer() {
+  await attachEmbeddedDatabaseIfRequested();
+
   if (typeof db.verifyConnection === 'function') {
     await db.verifyConnection();
   }
 
   // Wire verified database into dependent stores (document-review, hunts durable, etc.)
-  // so they switch from file/demo to postgres when a real reachable pool exists.
+  // so they switch from file-backed to postgres when a reachable pool exists.
   // This is the central "connect the database" point for operator surfaces.
   wireStoresAfterVerify(db);
 
   server.listen(PORT, () => {
     console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}`);
     console.log(`[Server] dataMode=${db.dataMode()} postgresReachable=${db.postgresReachable === true}\n`);
+    const reason = db.inventoryUnavailableReason();
+    if (reason) console.log(`[Server] NO INVENTORY WILL BE SERVED - ${reason}\n`);
     if (!scheduler.shouldAllowRealScrapers(process.env)) {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
       return;

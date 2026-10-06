@@ -2,15 +2,30 @@
 
 import * as React from "react";
 
+type InventoryFreshness = {
+  listings?: number | null;
+  ageHours?: number | null;
+  stale?: boolean;
+  staleAfterHours?: number;
+  newestObservation?: string | null;
+};
+
 type Health = {
   status?: string;
   dataMode?: string;
   documentReviewStore?: string;
+  inventoryUnavailableReason?: string;
+  inventoryFreshness?: InventoryFreshness;
 };
 
+function ageLabel(hours: number): string {
+  if (hours < 48) return `${Math.round(hours)} hours`;
+  return `${Math.round(hours / 24)} days`;
+}
+
 /**
- * Honest runtime banner: demo inventory / file-only reviews are not a
- * production-durable PostgreSQL deployment. Dismissible per browser session.
+ * Honest runtime banner: an unavailable database means there is no inventory to
+ * serve, and file-only reviews are not a production-durable deployment.
  */
 export function DataModeBanner() {
   // `undefined` = not yet loaded, `null` = the health probe FAILED. The two must
@@ -81,8 +96,8 @@ export function DataModeBanner() {
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
           <p className="leading-6">
             <strong className="font-semibold">Runtime mode unverified:</strong>{" "}
-            the health check did not respond. Inventory and document storage may be
-            running in demo/in-memory mode.
+            the health check did not respond, so we cannot confirm a database is
+            serving inventory.
           </p>
           <button
             type="button"
@@ -96,15 +111,39 @@ export function DataModeBanner() {
     );
   }
 
-  if (health.dataMode !== "demo" && health.documentReviewStore !== "file") return null;
+  // `stale` is decided by the API, not recomputed here: the browser has no
+  // trustworthy clock for "when did we last collect", and guessing it in the UI
+  // is how a stale inventory ends up presented as current.
+  const freshness = health.inventoryFreshness;
+  const stale = Boolean(freshness?.stale) && typeof freshness?.ageHours === "number";
+  const age = typeof freshness?.ageHours === "number" ? ageLabel(freshness.ageHours) : "";
+
+  if (health.dataMode !== "unavailable" && health.documentReviewStore !== "file" && !stale) return null;
 
   const parts: string[] = [];
-  if (health.dataMode === "demo") {
-    parts.push("Demo/in-memory inventory (DATABASE_URL unset) — listings are seed + local live-store, not a shared production database.");
+  if (health.dataMode === "unavailable") {
+    // Not dismissible: there is no inventory behind this page. A warning the
+    // user can wave away would leave an empty result looking like a finding.
+    parts.push(
+      health.inventoryUnavailableReason
+        ? `No inventory is being served — ${health.inventoryUnavailableReason}`
+        : "No inventory is being served — no database is available."
+    );
+  } else if (stale) {
+    // A database full of rows is not the same claim as an inventory somebody
+    // checked today. "Active" on a record nobody has re-observed in three weeks
+    // is the exact thing a buyer is relying on and cannot check for themselves.
+    parts.push(
+      `Inventory was last observed ${age} ago and has not been re-collected. ` +
+        `Records are kept as observed, but sale status and availability are unverified.`
+    );
   }
   if (health.documentReviewStore === "file") {
     parts.push("Document reviews persist to a host-local file store; attach a volume or PostgreSQL for redeploy durability.");
   }
+
+  // An outage is not a notice. Only the document-store half can be dismissed.
+  const mayDismiss = health.dataMode !== "unavailable" && !stale;
 
   return (
     <div
@@ -114,16 +153,20 @@ export function DataModeBanner() {
     >
       <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
         <p className="leading-6">
-          <strong className="font-semibold">Runtime mode:</strong>{" "}
+          <strong className="font-semibold">
+            {health.dataMode === "unavailable" ? "No inventory:" : "Runtime mode:"}
+          </strong>{" "}
           {parts.join(" ")}
         </p>
-        <button
-          type="button"
-          className="shrink-0 rounded border border-amber-300 px-2 py-0.5 text-xs font-semibold text-amber-900"
-          onClick={() => setDismissed(true)}
-        >
-          Dismiss
-        </button>
+        {mayDismiss && (
+          <button
+            type="button"
+            className="shrink-0 rounded border border-amber-300 px-2 py-0.5 text-xs font-semibold text-amber-900"
+            onClick={() => setDismissed(true)}
+          >
+            Dismiss
+          </button>
+        )}
       </div>
     </div>
   );

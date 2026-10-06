@@ -40,7 +40,7 @@ const gates = [
   // next's bin directly: `npm` is npm.cmd on Windows and spawnSync without a
   // shell never starts it, which failed in 2ms and read as a broken build.
   { id: 'next-build', desc: 'production bundle', cmd: node, args: ['node_modules/next/dist/bin/next', 'build'], slow: true },
-  { id: 'production-e2e', desc: 'full stack, 25 checks, demo-pinned', cmd: node, args: ['scripts/run-production-e2e.js'], env: { ...process.env, DATABASE_URL: '', DISCOVERY_MODE: '' }, slow: true },
+  { id: 'production-e2e', desc: 'full stack, 25 checks, isolated embedded database', cmd: node, args: ['scripts/run-production-e2e.js'], env: { ...process.env, DATABASE_URL: '', DISCOVERY_MODE: '' }, slow: true },
 ];
 
 const selected = quick ? gates.filter((g) => !g.slow) : gates;

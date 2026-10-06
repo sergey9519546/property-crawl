@@ -398,6 +398,24 @@ function applyCrossSourceBakeOff(listings) {
   return annotated;
 }
 
+// The collector's own cadence is six hours. Four missed cycles is a full day
+// without a new observation, at which point nothing in the table can still be
+// called current - and "still active" is exactly the claim a buyer makes.
+const DEFAULT_STALE_AFTER_HOURS = 24;
+
+function isFiniteTime(value) {
+  const t = Date.parse(value || '');
+  return Number.isFinite(t);
+}
+
+/**
+ * How old is the inventory, and is that old enough to matter?
+ *
+ * This is deliberately NOT used to delete anything. A record being stale says
+ * the collector has not run; it does not say the opportunity passed. It is a
+ * separate, reportable fact - the whole store can be one cycle behind while
+ * every row in it is still live.
+ */
 class DatabaseClient {
   constructor(options = {}) {
     this.env = options.env || process.env;
@@ -484,15 +502,41 @@ class DatabaseClient {
 
     if (!this.isPg) {
       this._loadWorkspaceStore();
-      this.seedInMemory();
+      // There is no runtime in-memory inventory. A listing served from a seeded
+      // JS array is not a listing: it looks current, scores like a real one and
+      // cannot be traced to an observation. So the provider below is reachable
+      // only when a caller asks for it explicitly - tests do; the runtime does
+      // not. With no database configured, dataMode() is 'unavailable' and the
+      // listing routes say so instead of inventing an answer.
+      if (this.memoryInventoryRequested()) {
+        this.seedInMemory();
+      }
     }
   }
 
   /**
+   * Adopt a PostgreSQL pool that something else built. Used by the embedded
+   * engine, which has to start asynchronously and so cannot be built inside the
+   * synchronous constructor.
+   */
+  attachPostgres(pool, engine = 'postgres') {
+    if (!pool) throw new Error('attachPostgres requires a pool');
+    this.pool = pool;
+    this.isPg = true;
+    this.externalPool = true;
+    this.postgresReachable = false;
+    this.postgresError = null;
+    this.postgresEngine = engine;
+  }
+
+  /**
    * Prove the configured Postgres URL answers a query. On failure, drop the
-   * unused pool and keep the already-seeded in-memory catalog so a dead
-   * DATABASE_URL cannot 503 the public listing API. Advanced discovery still
-   * fail-closes: it must not silently substitute demo inventory.
+   * unused pool and report the reason. There is deliberately nothing to fall
+   * back to: a dead DATABASE_URL used to keep serving seeded in-memory
+   * inventory so the public listing API would not 503, which meant a broken
+   * database was indistinguishable from a working one that happened to hold
+   * those rows. Now the API reports the outage instead. Advanced discovery
+   * still fail-closes.
    */
   async verifyConnection() {
     if (!this.pool) {
@@ -518,7 +562,7 @@ class DatabaseClient {
         const dead = this.pool;
         this.pool = null;
         dead.end().catch(() => {});
-        console.warn('[DB] PostgreSQL unreachable; serving in-memory inventory:', this.postgresError);
+        console.warn('[DB] PostgreSQL unreachable; no inventory will be served:', this.postgresError);
       } else {
         console.error('[DB] Advanced discovery PostgreSQL is unreachable:', this.postgresError);
       }
@@ -529,7 +573,97 @@ class DatabaseClient {
   }
 
   dataMode() {
-    return this.isPg && this.postgresReachable ? 'postgres' : 'demo';
+    // 'demo' is gone. There is no state in which seeded in-memory inventory is
+    // the product. 'memory' is reachable only by an explicit declaration, and
+    // 'unavailable' means what it says: nothing is being served.
+    if (this.isPg && this.postgresReachable) return 'postgres';
+    return this.memoryInventoryRequested() ? 'memory' : 'unavailable';
+  }
+
+  /**
+   * How old is the newest observation in the inventory?
+   *
+   * Reported, never acted on. Stale means the collector has not run; it does
+   * not mean a listing has expired. Deleting on age would throw away live
+   * auctions, and the prune rule already refuses to do exactly that.
+   */
+  async inventoryFreshness(now = Date.now()) {
+    const staleAfterHours = Number(this.env.PROPERTY_STALE_AFTER_HOURS) > 0
+      ? Number(this.env.PROPERTY_STALE_AFTER_HOURS)
+      : DEFAULT_STALE_AFTER_HOURS;
+
+    let newest = null;
+    let oldest = null;
+    let count = null;
+    if (this.isPg) {
+      const res = await this.pool.query(
+        `SELECT count(*)::int AS n,
+                min(source_observed_at)::text AS oldest,
+                max(source_observed_at)::text AS newest
+           FROM listings`);
+      count = res.rows[0].n;
+      oldest = res.rows[0].oldest;
+      newest = res.rows[0].newest;
+    } else if (this.memoryInventoryRequested()) {
+      const times = this.inMemoryData.listings
+        .map(l => l.sourceObservedAt)
+        .filter(isFiniteTime)
+        .map(Date.parse);
+      count = this.inMemoryData.listings.length;
+      if (times.length) {
+        oldest = new Date(Math.min(...times)).toISOString();
+        newest = new Date(Math.max(...times)).toISOString();
+      }
+    }
+
+    const ageHours = isFiniteTime(newest) ? (now - Date.parse(newest)) / 3_600_000 : null;
+    return {
+      listings: count,
+      oldestObservation: oldest,
+      newestObservation: newest,
+      ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
+      staleAfterHours,
+      stale: ageHours == null ? false : ageHours > staleAfterHours,
+    };
+  }
+
+  /**
+   * Is the in-memory provider explicitly requested?
+   *
+   * It answers "declared" only for an explicit PROPERTY_INVENTORY_BACKEND, or
+   * under NODE_ENV=test. Both are deliberate: the env var is an operator asking
+   * for it, and NODE_ENV=test is the test runner saying so. A production or dev
+   * process cannot reach this branch, which is what keeps 'demo' from coming
+   * back as an undeclared fallback.
+   */
+  memoryInventoryRequested() {
+    return this.env.PROPERTY_INVENTORY_BACKEND === 'memory' || this.env.NODE_ENV === 'test';
+  }
+
+  /**
+   * Which backend is actually serving listings: 'postgres', 'memory' (only
+   * when explicitly asked for), or null for neither.
+   */
+  inventorySource() {
+    if (this.dataMode() === 'postgres') return 'postgres';
+    if (this.memoryInventoryRequested()) return 'memory';
+    return null;
+  }
+
+  /**
+   * Why there is no inventory, in one sentence, for health and error payloads.
+   * Null whenever listings genuinely can be served.
+   */
+  inventoryUnavailableReason() {
+    if (this.dataMode() === 'postgres') return null;
+    // An explicit opt-in is a declared source, not a silent fallback. It is
+    // never the runtime default; PROPERTY_INVENTORY_BACKEND must be set.
+    if (this.memoryInventoryRequested()) return null;
+    if (this.postgresError) return `PostgreSQL is not answering: ${this.postgresError}`;
+    if (!this.env.DATABASE_URL && !this.pool) {
+      return 'No database is configured. Set DATABASE_URL, or PROPERTY_DB=embedded to run the embedded PostgreSQL engine.';
+    }
+    return 'PostgreSQL is configured but has not been verified as reachable.';
   }
 
   // ---------------------------------------------------------------------------
