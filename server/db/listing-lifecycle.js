@@ -41,6 +41,54 @@ const TERMINAL_STATUS = [
 const POSTPONED_STATUS = /\bpostpon(ed)?\b|\bactive - postponed\b/i;
 
 /**
+ * Wording that claims the opportunity is still live. This vetoes the publisher's
+ * own closed flag.
+ *
+ * It has to. A record reading `isAuctionClosed: true` alongside
+ * "Status: Active" and "Scheduled for Auction: Oct 06, 2026" is an auction
+ * happening that day, not a finished one - the flag covers the previous run.
+ * Trusting the flag alone would delete a live auction, which is the one mistake
+ * this whole rule exists to avoid.
+ */
+const OPEN_STATE_TEXT = /\bactive\b|\bupcoming\b|\bscheduled\b|\bcoming soon\b|\bpre-?auction\b|\bin auction\b/i;
+
+/** The publisher's own structured flags inside `listingStatus`. */
+function publisherStatusFlags(raw) {
+  if (!raw) return null;
+  let parsed;
+  try {
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (_) {
+    return null;
+  }
+  const status = parsed && typeof parsed === 'object' ? parsed.listingStatus : null;
+  return status && typeof status === 'object' ? status : null;
+}
+
+/**
+ * Does the publisher's structured state say this event is over?
+ *
+ * The classifier originally read only `statusText`, which is prose. The payload
+ * also carries flags the publisher sets directly, and 859 kept records carry
+ * `isAuctionClosed: true` while the prose did not say so. Requiring all three
+ * conditions keeps the flag from becoming a blunt instrument:
+ *   - the closed flag is set, and
+ *   - no flag says the opportunity is live (in-pre-auction / in-auction /
+ *     coming-soon), and
+ *   - the prose does not claim an open state.
+ */
+function publisherReportsClosed(raw, lifecycleText) {
+  const flags = publisherStatusFlags(raw);
+  if (!flags) return false;
+  if (flags.isAuctionClosed !== true) return false;
+  if (flags.isInPreAuction === true || flags.isInAuction === true || flags.isComingSoon === true) {
+    return false;
+  }
+  if (OPEN_STATE_TEXT.test(String(lifecycleText || ""))) return false;
+  return true;
+}
+
+/**
  * Read the publisher's event dates out of the stored raw payload.
  *
  * Only `endDate` is returned as conclusive evidence. `startDate` in the past
@@ -73,9 +121,23 @@ function publisherEventTimes(raw) {
 function classifyListing(record = {}, now = Date.now()) {
   const lifecycle = String(record.lifecycleStatus ?? record.lifecycle_status ?? '');
   const canonical = String(record.status ?? '');
+  const raw = record.rawNotice ?? record.raw_notice;
 
   const keep = (verdict, label, note = null, conflicting = false) =>
     ({ concluded: false, verdict, label, conflicting, note });
+
+  // The publisher's own structured state, checked before the prose. It is the
+  // more authoritative of the two, and the prose is what the original rule read
+  // exclusively.
+  if (publisherReportsClosed(raw, lifecycle)) {
+    return {
+      concluded: true,
+      verdict: 'publisher_flag_closed',
+      label: 'publisher listingStatus.isAuctionClosed with no open-state flag',
+      conflicting: false,
+      note: null,
+    };
+  }
 
   for (const rule of TERMINAL_STATUS) {
     if (rule.pattern.test(lifecycle)) {

@@ -94,3 +94,67 @@ test('an unrecognised status is kept rather than guessed at', () => {
   assert.equal(d.concluded, false);
   assert.equal(d.verdict, 'no_conclusive_signal');
 });
+test('the publisher structured closed flag is conclusive on its own', () => {
+  // The rule originally read only statusText, which is prose. The payload also
+  // carries flags the publisher sets directly, and 859 kept records carried
+  // isAuctionClosed: true while the prose did not say so.
+  const raw = JSON.stringify({
+    listingStatus: {
+      statusText: "Status: Auctioned - Pending Results",
+      isAuctionClosed: true, isInAuction: false, isInPreAuction: false, isComingSoon: false,
+    },
+  });
+  const d = classifyListing({ lifecycleStatus: "Status: Auctioned - Pending Results", rawNotice: raw }, NOW);
+  assert.equal(d.concluded, true);
+  assert.equal(d.verdict, 'publisher_flag_closed');
+});
+
+test('an open-state flag vetoes the closed flag', () => {
+  const base = {
+    isAuctionClosed: true, isInAuction: false, isInPreAuction: false, isComingSoon: false,
+  };
+  for (const open of ["isInAuction", "isInPreAuction", "isComingSoon"]) {
+    // Non-terminal prose: "Auctioned" would conclude on its own and prove
+    // "Auctioned" prose would conclude on its own and prove nothing about the veto.
+    const d = classifyListing({
+      lifecycleStatus: "Status: Scheduled",
+      rawNotice: JSON.stringify({ listingStatus: { ...base, [open]: true } }),
+    }, NOW);
+    assert.equal(d.concluded, false, `${open} must veto the closed flag`);
+  }
+});
+
+test('prose claiming a live event vetoes the closed flag', () => {
+  // Real payload: isAuctionClosed true, "Status: Active", "Scheduled for
+  // Auction: Oct 06, 2026". The flag covers the PREVIOUS run; deleting this
+  // would remove a live auction, which is the one mistake the rule must not make.
+  const raw = JSON.stringify({
+    listingStatus: {
+      statusText: "Status: Active",
+      statusTextSRP: "Scheduled for Auction: Oct 06, 2026",
+      isAuctionClosed: true, isInAuction: false, isInPreAuction: false, isComingSoon: false,
+    },
+  });
+  const d = classifyListing({ lifecycleStatus: "Status: Active", rawNotice: raw }, NOW);
+  assert.equal(d.concluded, false);
+});
+
+test('a missing or unparseable payload cannot conclude anything', () => {
+  for (const raw of [null, undefined, "", "not json", "{}", JSON.stringify({ listingStatus: {} })]) {
+    const d = classifyListing({ lifecycleStatus: "Status: Scheduled", rawNotice: raw }, NOW);
+    assert.equal(d.verdict !== 'publisher_flag_closed', true,
+      `payload ${JSON.stringify(raw)} must not conclude via the flag`);
+  }
+});
+
+test('postponed still wins over everything, including the closed flag', () => {
+  const raw = JSON.stringify({
+    listingStatus: {
+      statusText: "Status: Active - Postponed",
+      isAuctionClosed: true, isInAuction: false, isInPreAuction: false, isComingSoon: false,
+    },
+  });
+  const d = classifyListing({ lifecycleStatus: "Status: Active - Postponed", rawNotice: raw }, NOW);
+  assert.equal(d.concluded, false);
+  assert.equal(d.verdict.startsWith('postponed'), true);
+});
