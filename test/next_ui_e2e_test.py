@@ -1171,10 +1171,18 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 "tiles.openfreemap.org/styles/positron" in message.text
                 and "Failed to fetch" in message.text
             )
+            # The alerts/alert-matches poll deliberately fails closed for a
+            # signed-out visitor, so the browser logs a resource error for it.
+            # That is the intended design, not a runtime fault - but it is
+            # scoped to that one endpoint rather than allowing any 401.
+            deliberate_auth_challenge = (
+                "/api/alerts/matches" in (message.location.get("url") or "")
+            )
             if (
                 message.type == "error"
                 and "ERR_NETWORK_ACCESS_DENIED" not in message.text
                 and not expected_map_transport_failure
+                and not deliberate_auth_challenge
             ):
                 errors.append(f"console: {message.text}")
 
