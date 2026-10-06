@@ -167,7 +167,12 @@ export function Hero() {
           for (const suggestion of suggestionsForListing) {
             if (!suggestion.label || !suggestion.query || /\b(?:unknown|undefined|null)\b/i.test(suggestion.label)) continue;
             if (suggestion.kind === "area" && (!/^\d{5}$/.test(listing.zip) || listing.zip === "00000")) continue;
-            markets.set(suggestion.id, suggestion);
+            // Dedupe on the normalized label, not the id. Publisher data carries
+            // the same market in different cases ("Haddon Township" and
+            // "HADDON TOWNSHIP"), and a case-sensitive key let both through - the
+            // user typed one city and got it offered twice. The filter below
+            // already matches case-insensitively, so the key should too.
+            markets.set(`${suggestion.kind}:${suggestion.label.toLowerCase()}`, suggestion);
           }
         }
         const matches = Array.from(markets.values())
