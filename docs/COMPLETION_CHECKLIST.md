@@ -392,26 +392,30 @@ Two defects, both found by the county test failing after the inventory grew:
    that word most likely means — off the list entirely, so no amount of typing
    reached it. Raised to eight.
 
-## The feed was seeded with fixture listings — fixed
+## Re-observing ServiceLink works, and is incremental by design
 
 ServiceLink is bounded to 25 records per run with a resume checkpoint, so a full
-pass over the publisher's ~6,176 listings is ~247 invocations. 60 runs were
-executed against the live publisher:
+pass over the publisher's ~6,176 listings is ~247 invocations. **210 runs were
+executed against the live publisher** (60, then 150), each advancing the
+checkpoint and re-observing 25 records with 0 rejected.
 
-```
-runs=60  accepted=1500   (25 per run, 0 rejected, checkpoint advancing each run)
-```
+Delivered into the running application, measured through `/api/health`:
 
-Measured on the live store afterwards:
-
-| | before | after |
+| | session start | after 210 runs + import |
 |---|---|---|
-| ServiceLink records inside their 6h cadence | 0 | **1,525** |
-| oldest record | 690h | 690h (the tail the sweep has not reached) |
+| listings | 7,999 | **9,755** |
+| fresh against their own cadence | 2,154 | **7,432** |
+| past cadence | 5,845 | **2,323** |
+| ServiceLink inside its 6h cadence | 0 | **5,275 of 7,454 (71%)** |
+| ServiceLink past cadence | 5,699 / 5,699 (100%) | **2,179 / 7,454 (29%)** |
 
-So the mechanism does what the health fix exposed it should: bounded work,
-durable resume, and cumulative progress. It needs ~187 more runs to close the
-gap, which is a scheduling question rather than a correctness one.
+Nothing was deleted at any point. The remaining 2,179 are the tail the sweep has
+not reached — about 87 more runs — and they are honestly reported as behind
+rather than hidden behind a flat window.
+
+The mechanism is the point: bounded work per run, a durable resume checkpoint,
+and cumulative progress any scheduler can drive. It needs no long-lived process
+and no unbounded request.
 
 ## The feed was seeded with fixture listings — fixed
 
