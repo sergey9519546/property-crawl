@@ -386,6 +386,45 @@ test('a ranking the inventory cannot satisfy says so instead of silently doing n
   );
 });
 
+test('the import does not silently drop a collector field', () => {
+  // The import writes an explicit column list. A field missing from it is
+  // discarded no matter what the collector computed: has_documents was absent,
+  // so all 9,796 records imported NULL while discovery/query.js answered the
+  // same question from provenance. The feed badge never rendered and the
+  // "Documents available" filter matched nothing.
+  const importer = fs.readFileSync(path.join(root, 'scripts/db-import-live.js'), 'utf8');
+  assert.ok(
+    /\['has_documents',\s*r\s*=>/.test(importer),
+    'the import must persist has_documents; a missing column silently discards the evidence',
+  );
+
+  // And the conflict clause must refresh EVERY imported column, derived from
+  // the same list so the two cannot drift apart. It used to name six columns
+  // by hand, so re-collecting a record discarded 39 of 46 - a revised opening
+  // bid, a slipped sale date, a corrected estimate all kept their original
+  // values while source_observed_at advanced and made the row look freshly
+  // observed.
+  const insertable = /const INSERTABLE = \[([\s\S]*?)\n\];/.exec(importer);
+  assert.ok(insertable, 'INSERTABLE should be readable');
+  const columns = [...insertable[1].matchAll(/\['(\w+)'/g)].map((match) => match[1]);
+  assert.ok(columns.length > 6, `INSERTABLE should be a real column list, saw ${columns.length}`);
+
+  assert.ok(
+    /const UPDATE_SET_SQL = INSERTABLE/.test(importer),
+    'the conflict clause must be derived from INSERTABLE so it cannot fall behind it',
+  );
+  // The ONLY column the conflict clause may skip is the conflict key itself.
+  const skips = [...importer.matchAll(/\.filter\(\(name\) => ([^)]*)\)/g)].map((match) => match[1]);
+  assert.deepEqual(
+    skips, ["name !== 'id'"],
+    `the conflict clause must exclude nothing but the conflict key, saw: ${skips.join(' | ')}`,
+  );
+  assert.ok(
+    /geog = EXCLUDED\.geog/.test(importer),
+    'geog is derived from the coordinates and must refresh with them',
+  );
+});
+
 test('NoticeParser keeps AI candidates separate from source-stated notice fields', () => {
   const parserContent = fs.readFileSync(path.join(root, 'src/components/terminal/notice-parser.tsx'), 'utf8');
   assert.ok(parserContent.includes('fetch("/api/parse"'), 'notice extraction must use the evidence-aware server route');

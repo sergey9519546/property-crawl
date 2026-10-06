@@ -82,9 +82,30 @@ const INSERTABLE = [
   ['auction_program', r => r.auctionProgram],
   ['lifecycle_status', r => r.lifecycleStatus],
   ['transaction_outcome', r => r.transactionOutcome],
+  // Without this column the import dropped every record's document evidence.
+  // The HUD collector derives it carefully - and discovery/query.js reads it
+  // from EITHER provenance location - so the import left has_documents NULL for
+  // all 9,796 records while the discovery query answered from provenance. The
+  // feed's document badge never rendered, "Documents available" matched
+  // nothing, and the two halves of one hunt disagreed about the same listing.
+  ['has_documents', r => (typeof r.hasDocuments === 'boolean' ? r.hasDocuments : null)],
 ];
 
 const COLUMNS_SQL = INSERTABLE.map(([name]) => name).join(', ');
+
+// Re-observing a record must refresh everything the collector reports, not a
+// hand-picked few. The conflict clause used to update only six columns, so 39 of
+// the 46 imported columns - opening_bid, sale_date, est_low, est_high, address,
+// latitude, longitude, photo_url, has_documents and more - kept their ORIGINAL
+// value no matter how many times the record was re-collected. Worse, because
+// source_observed_at WAS refreshed, the row then looked freshly observed while
+// carrying stale content. `geog` is derived from the coordinates and was
+// insert-only for the same reason.
+const UPDATE_SET_SQL = INSERTABLE
+  .map(([name]) => name)
+  .filter((name) => name !== 'id')
+  .map((name) => `${name} = EXCLUDED.${name}`)
+  .join(',\n       ');
 
 const INSERT_SQL =
   `INSERT INTO listings (${COLUMNS_SQL}, geog) VALUES (${INSERTABLE
@@ -92,12 +113,8 @@ const INSERT_SQL =
     .join(', ')}, CASE WHEN $8::float8 IS NULL OR $9::float8 IS NULL THEN NULL
        ELSE ST_SetSRID(ST_MakePoint($9, $8), 4326)::geography END)
    ON CONFLICT (id) DO UPDATE SET
-     source_observed_at = EXCLUDED.source_observed_at,
-     status            = EXCLUDED.status,
-     provenance        = EXCLUDED.provenance,
-     raw_notice        = EXCLUDED.raw_notice,
-     source_url        = EXCLUDED.source_url,
-     deal_score        = EXCLUDED.deal_score`;
+       ${UPDATE_SET_SQL},
+       geog = EXCLUDED.geog`;
 
 function paramsFor(record) {
   return INSERTABLE.map(([, pick]) => pick(record));

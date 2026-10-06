@@ -585,6 +585,46 @@ clicking the "Elite: 0" band:
 
 The generic advice remains for every other empty result, where it is correct.
 
+## The import refreshed 6 of 46 columns — no re-collected record ever updated its content
+
+Found by sweeping the filterable fields for ones with no values at all, which
+turned up `hasDocuments` present on **0 of 9,796** records. The HUD collector
+derives document evidence carefully — and `discovery/query.js` reads it from
+*either* provenance location — yet the listings API reported none of it.
+
+The import writes an explicit column list, and two things were wrong:
+
+1. **`has_documents` was not in the list at all**, so it was discarded whatever
+   the collector computed.
+2. **`ON CONFLICT (id) DO UPDATE SET` named only six columns**:
+   `source_observed_at, status, provenance, raw_notice, source_url, deal_score`.
+   Every other column was insert-only. **39 of 46 imported columns kept their
+   original value however many times the record was re-collected** —
+   `opening_bid`, `sale_date`, `est_low`, `est_high`, `address`, `latitude`,
+   `longitude`, `photo_url`, `occupancy`, `has_documents` and more.
+
+That second one is the serious one. A publisher revises an opening bid, a sale
+date slips, an estimate is corrected — the import re-writes six fields, keeps the
+rest, and **advances `source_observed_at` anyway**, so the row looks freshly
+observed while carrying stale content. Everything this document reports about
+freshness is undermined by that: the sweep could only ever move the timestamp,
+never the data.
+
+The conflict clause is now derived from `INSERTABLE` with exactly one exclusion
+(`id`, the conflict key), so it cannot fall behind the column list again, and
+`geog` refreshes with the coordinates it is derived from.
+
+Measured after re-importing:
+
+| | before | after |
+|---|---|---|
+| records with `hasDocuments: true` | **0** of 9,796 | **7,849** of 9,796 |
+| columns refreshed on re-collection | 6 of 46 | **45 of 46** (+ `geog`) |
+
+The 1,947 still unknown are sources that do not report documents, which is the
+honest answer for them. A guard now derives the same list and fails if the
+conflict clause is ever narrowed again.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
@@ -634,7 +674,7 @@ product regression. Start the API server with `PROPERTY_API_RATE_LIMIT=10000`.
 | `saved_search_persists_and_opens_matching_inventory` | **Fixed, and it was a product bug.** The saved-searches handlers lived only in a `[...path]` catch-all, which in the App Router does not match the bare segment - and the client lists and creates through `/api/saved-searches` with no trailing path. **Every list and create call 404'd**, so the whole feature was unreachable from the modal. Added the bare-path route; calls now return 401 *"Unlock the workspace first."* and the test asserts that refusal honestly. |
 | `notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist` | **Fixed.** Extraction is workspace-backed and `/api/parse` answers 401 to a signed-out visitor. The test asserted an extraction appeared anyway - precisely the fabrication this product exists to avoid. Renamed to `test_notice_parser_never_fabricates_facts_when_the_workspace_is_locked`: it asserts the unlock message appears, that neither an extraction heading nor an "Add extraction" button is offered, and that the panel keeps the promise it makes - "Your text will stay on this page". Matches the message text rather than `role="alert"`, because Next ships an empty alert route-announcer that would satisfy a role-only assertion. |
 | `live_map_keeps_coincident_records_selectable_at_one_location` | **Flaky, not broken.** Fails intermittently in the full-suite run and passes twice in isolation and on the following full run. Nothing in the work touches the map; treat it as contention under load until proven otherwise. |
-| `storyteller_uses_a_real_map_engine_with_accessible_opportunities` | **Flaky, same cause.** It asserts MapLibre actually initialised (`.maplibregl-map` present). Fails occasionally in the full-suite run and passes twice in isolation. WebGL initialisation under load, not a product defect — but it is a real assertion and was not weakened. |
+| `storyteller_uses_a_real_map_engine_with_accessible_opportunities` | **Was flaky, now fixed.** It asserted MapLibre's init class with a one-shot `evaluate`, which raced the engine's async load — it failed roughly one run in four *in isolation*, not only under load. Now uses `expect(...).to_have_class(...)`, which waits. Same assertion, still fails if the class never arrives. Verified 5 runs in a row. |
 | `property_underwrite_watchlist_and_export_journey` | **Fixed.** Two stale steps. The Deal Video Teaser / storyboard generator was removed from the product (no "storyboard" string remains in src), so those steps are dropped rather than pointed at an invented control. The MAO step asserted a blank panel was impossible and that the simulator or an explicit warning appears; the simulator now renders a **Bid cost model** for any record with an opening bid, so that assertion still holds and describes more than it used to. |
 
 ### Six tests assumed the API's first listing is the feed's first card — fixed

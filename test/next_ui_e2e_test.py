@@ -998,11 +998,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(deal_map.get_attribute("data-map-engine"), "maplibre")
         map_container = self.page.get_by_test_id("maplibre-map")
         map_container.wait_for(state="visible")
-        self.assertTrue(
-            map_container.evaluate(
-                "element => element.classList.contains('maplibregl-map') || Boolean(element.querySelector('.maplibregl-map'))"
-            )
-        )
+        # MapLibre adds its class during an async init, so sampling it once
+        # races the engine loading - it failed roughly one run in four. Wait for
+        # the class instead: the same assertion, no longer racing. It still
+        # fails if the class never arrives.
+        expect(map_container).to_have_class(re.compile(r"maplibregl-map"), timeout=15_000)
         map_canvas = map_container.locator("canvas.maplibregl-canvas")
         map_canvas.wait_for(state="visible")
         self.assertEqual(map_canvas.count(), 1)
