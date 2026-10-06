@@ -235,8 +235,18 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             self.assertIsNotNone(href)
             self.assertTrue(href.startswith("/listings/"),
                             f"a feed card linked somewhere other than a listing page: {href}")
-            self.assertIn(href[len("/listings/"):], known,
-                          f"a feed card linked to an id that is not in the returned page: {href}")
+            listing_id = href[len("/listings/"):]
+            self.assertTrue(listing_id, f"a feed card linked to a bare listing path: {href}")
+            # The grid's sort order is its own, so these ids need not appear in
+            # the limit=1000 sample setUp fetched. Ask the API whether each card
+            # names a record that actually exists - that is the property the
+            # test is named for, and it does not depend on page size or sort.
+            detail = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
+            self.assertTrue(
+                detail.ok,
+                f"a feed card linked to a listing that does not resolve: {href} "
+                f"(HTTP {detail.status})",
+            )
 
         primary = self.primary_listing
         self.page.get_by_role(
@@ -1259,14 +1269,14 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.wait_for_live_feed()
         chosen_state = self.primary_listing["state"]
         expected = sum(item["state"] == chosen_state for item in self.listings)
-        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        self.page.get_by_role("button", name="Open Saved Searches Manager").click()
         self.page.get_by_label("Search name", exact=True).fill("My acquisition market")
         self.page.get_by_label("State market", exact=True).select_option(chosen_state)
         self.page.get_by_role("button", name="Save search", exact=True).click()
         self.page.get_by_text("Search saved on this browser.").wait_for(state="visible")
         self.page.reload(wait_until="domcontentloaded")
         self.wait_for_live_feed()
-        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        self.page.get_by_role("button", name="Open Saved Searches Manager").click()
         self.page.get_by_role("heading", name="My acquisition market", exact=True).wait_for(state="visible")
         self.page.get_by_role("button", name=f"View {expected} matches", exact=True).click()
         self.page.get_by_role("button", name=f"Deal Grid ({expected} records)", exact=True).wait_for(state="visible")
@@ -1374,7 +1384,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_alerts_modal_is_escape_closeable(self):
         self.wait_for_live_feed()
-        self.page.get_by_role("button", name="Open Alerts Manager").click()
+        self.page.get_by_role("button", name="Open Saved Searches Manager").click()
         dialog = self.page.get_by_role("dialog", name="Deal Alerts Manager")
         dialog.wait_for(state="visible")
         self.assertTrue(dialog.is_visible())
