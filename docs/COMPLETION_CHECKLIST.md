@@ -219,7 +219,34 @@ says *"No comparable-sale claims are shown until exact comp evidence is
 captured"*), or accept that the MAO half stays withheld. What is no longer true
 is that the whole tool is dead.
 
-## Playwright UI suite - 47 of 53, with the rest diagnosed
+## The feed was seeded with fixture listings — fixed
+
+`src/components/terminal/property-data.ts` holds demo listings: invented
+addresses, opening bids and valuation bands, with ids like `GA-FULT-60281`.
+`interactive-terminal.tsx` used that array as its **initial state**:
+
+```ts
+const [listings, setListings] = useState<PropertyListing[]>(INITIAL_LISTINGS);
+```
+
+So a visitor whose inventory request failed was shown fabricated deals as real
+ones, under a notice reading *"Refresh failed. Last loaded records remain
+available; source freshness has not been confirmed."* — when nothing had ever
+loaded. It also produced cards linking to `/listings/GA-FULT-60281`, which the
+API answers **404**, because the fixture id is not a real record.
+
+This is what `test_every_feed_card_links_to_its_exact_listing_page` caught:
+*"a feed card linked to a listing that does not resolve: GA-FULT-60281 (HTTP
+404)"*. The test was right; the product was wrong.
+
+The feed now starts empty and is replaced by the API within a tick, and the
+failure notice distinguishes *"records you already had may be stale"* from
+*"nothing loaded, so nothing is shown"*. `listing-inventory.ts` already said the
+right thing in a comment — *"a failed refresh must not silently replace an
+already useful feed with demo records"* — while the state initializer did the
+opposite.
+
+## Playwright UI suite - 53 of 53
 
 Not in `scripts/release-gate.js`, so the 9/9 does **not** cover it.
 
@@ -243,13 +270,13 @@ product regression. Start the API server with `PROPERTY_API_RATE_LIMIT=10000`.
 | `live_map_keeps_coincident_records_selectable_at_one_location` | **Flaky, not broken.** Fails intermittently in the full-suite run and passes twice in isolation and on the following full run. Nothing in the work touches the map; treat it as contention under load until proven otherwise. |
 | `property_underwrite_watchlist_and_export_journey` | **Fixed.** Two stale steps. The Deal Video Teaser / storyboard generator was removed from the product (no "storyboard" string remains in src), so those steps are dropped rather than pointed at an invented control. The MAO step asserted a blank panel was impossible and that the simulator or an explicit warning appears; the simulator now renders a **Bid cost model** for any record with an opening bid, so that assertion still holds and describes more than it used to. |
 
-### The six that remain all assume the API's first listing is the feed's first card
+### Six tests assumed the API's first listing is the feed's first card — fixed
 
 `test_every_feed_card_links_to_its_exact_listing_page`,
 `test_watchlist_persists_across_reload`, `test_hero_submit_opens_and_filters_live_feed`,
 `test_hero_suggests_and_selects_real_markets_as_user_types`,
 `test_hero_supports_state_country_zip_and_address_scopes` and
-`test_hero_can_launch_a_county_market` key their assertions to
+`test_hero_can_launch_a_county_market` keyed their assertions to
 `self.primary_listing`, which is `listings[0]` from `/api/listings?limit=1000`.
 
 **The feed does not render that record first.** Measured on the live app:
@@ -259,16 +286,23 @@ api[0]      = 84 Raven Rock Rd, Lillington, NC 27546
 feed card 1 = 1121 Belmont Ave, Haddon Township, NJ 08108   (48 cards rendered)
 ```
 
-The grid applies its own ranking, so the API's default order and the feed's
-render order are different lists. A test that asserts on a card belonging to
-`primary_listing` is asserting about a record that may not be on screen at all —
-it waits for a watchlist button that never appears, and times out at 5s.
+The grid applies its own ranking across the whole inventory, so the API's default
+order and the feed's render order are different lists — and the rendered card is
+often not even inside the 1,000-row sample. A test asserting on it waits for a
+control that can never appear.
 
-This is a **test-design defect, not a product defect**, and it is why the count
-cannot be raised by loosening an assertion: the assertion is about the wrong
-record. The fix is to read the first rendered card's address and assert against
-*that*, so the test follows the ranking the user actually sees. Not done here —
-it touches five tests at once and is recorded rather than half-applied.
+Fixed with a `rendered_listing()` helper that reads the first rendered card and
+resolves that record (via the API when it is outside the sample). The hero tests
+also asserted `count()` immediately after clicking Search, sampling the DOM
+before the async re-filter; those now use `expect(...).to_have_count/_be_visible`,
+which retries. Two of them derived an expected count from the sample, which is
+wrong by construction for a market outside it — they now assert the grid
+narrowed, using the count the grid header itself advertises.
+
+That left one genuine product defect underneath: **the hero offered the same
+market twice.** The suggestion map was keyed on a case-sensitive id, and the
+inventory carries "Haddon Township" *and* "HADDON TOWNSHIP", so typing one city
+produced two identical-looking options. The key is now the normalized label.
 
 
 Two assertions were deliberately **left weaker** and are called out here rather
