@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { CivilViewScraper } = require('../server/scrapers/civilview');
+const { CivilViewScraper, rotateCounties } = require('../server/scrapers/civilview');
 const { validateListingForIngestion } = require('../server/scrapers/validation');
 
 const COUNTY = { id: '7', name: 'Bergen County', state: 'NJ', fullName: 'Bergen County, NJ' };
@@ -327,6 +327,89 @@ test('CivilView legacy state sample cannot claim a complete promotable scope', a
   assert.equal(subject.lastRunReport.truncated, true);
   assert.equal(subject.lastRunReport.complete, false);
   assert.equal(subject.lastRunReport.fullSweepComplete, false);
+});
+
+// A scraper that spans several counties in the target state and records which
+// ones a run actually reached.
+function rotatingScraper(maxCounties = 2) {
+  const subject = scraper({
+    countyId: null, targetState: 'NJ', maxCounties, maxDetailPages: 10,
+  });
+  const counties = ['7', '10', '8', '17', '2', '13', '21'].map((id) => ({
+    id, name: `County ${id}`, state: 'NJ',
+  }));
+  subject.fetchCounties = async () => counties;
+  subject.attempted = [];
+  subject.fetchCountySummaries = async (county) => {
+    subject.attempted.push(String(county.id));
+    return {
+      sessionCookie: 'ASP.NET_SessionId=test',
+      summaries: [{
+        propertyId: `p-${county.id}`,
+        county,
+        detailUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=p-${county.id}`,
+      }],
+    };
+  };
+  subject.fetchText = async () => '<div class="sale-details-list">valid detail</div>';
+  subject.parseDetailPage = (_html, summary) => ({
+    id: `CIV-NJ-${summary.county.id}-${summary.propertyId}`,
+    provenance: { propertyId: summary.propertyId },
+  });
+  subject.passesFilter = () => true;
+  return subject;
+}
+
+test('CivilView advances through counties across runs instead of re-sampling the same ones', async () => {
+  const subject = rotatingScraper(2);
+  await subject.scrapeFeed();
+  const first = [...subject.attempted];
+
+  // Cold start keeps the declared priority counties.
+  assert.deepEqual(first, ['7', '10']);
+
+  // The scheduler hands the previous run's cursor back before the next run.
+  const token = subject.lastRunReport.nextContinuationToken;
+  assert.ok(token, 'a run that cannot cover every county must report where to resume');
+  subject.setCheckpoint({ continuationToken: token });
+  await subject.scrapeFeed();
+  const second = subject.attempted.slice(first.length);
+
+  assert.deepEqual(first, ['7', '10']);
+  assert.deepEqual(second, ['8', '17'],
+    'a second run must reach counties the first never attempted');
+  assert.deepEqual(second.filter((id) => first.includes(id)), [],
+    'the two runs must not overlap, or the rotation buys no new coverage');
+});
+
+test('CivilView keeps the priority counties first and reports no cursor once all are covered', async () => {
+  const subject = rotatingScraper(9); // budget covers every county
+  await subject.scrapeFeed();
+
+  assert.deepEqual([...subject.attempted], ['7', '10', '8', '17', '2', '13', '21']);
+  assert.equal(subject.lastRunReport.nextContinuationToken, null,
+    'a run that reached every county has nothing left to resume from');
+});
+
+test('an unparseable cursor restarts the rotation instead of guessing an offset', () => {
+  const subject = rotatingScraper(2);
+  for (const bad of [{}, { continuationToken: 'not-a-number' }, { continuationToken: -4 }, null]) {
+    subject.setCheckpoint(bad);
+    assert.equal(subject.countyRotationOffset, 0, JSON.stringify(bad));
+  }
+  subject.setCheckpoint({ continuationToken: '3' });
+  assert.equal(subject.countyRotationOffset, 3);
+});
+
+test('rotateCounties wraps and never returns more than the budget', () => {
+  const counties = ['a', 'b', 'c', 'd', 'e'];
+  assert.deepEqual(rotateCounties(counties, 0, 2), ['a', 'b']);
+  assert.deepEqual(rotateCounties(counties, 2, 2), ['c', 'd']);
+  assert.deepEqual(rotateCounties(counties, 4, 2), ['e', 'a'], 'must wrap past the last county');
+  assert.deepEqual(rotateCounties(counties, 7, 2), ['c', 'd'], 'an offset beyond the end still resolves');
+  assert.deepEqual(rotateCounties(counties, 0, 9), counties, 'a budget larger than the list returns everything');
+  assert.deepEqual(rotateCounties(counties, 0, 0), []);
+  assert.deepEqual(rotateCounties([], 0, 2), []);
 });
 
 test('CivilView rejects malformed explicit state and county configuration', () => {

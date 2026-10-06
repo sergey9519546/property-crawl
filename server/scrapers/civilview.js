@@ -165,6 +165,33 @@ function orderCounties(counties) {
   ];
 }
 
+/**
+ * Take a bounded window of counties that ADVANCES across runs.
+ *
+ * orderCounties() is deterministic - the same priority list every time - so
+ * slicing its head meant every run re-selected the same four counties and the
+ * collector never once reached the other sixty-three it had discovered. That is
+ * why the stale CivilView records never refreshed: they sit inside the frozen
+ * window, not outside a coverage gap.
+ *
+ * The scheduler persists a cursor between runs (see hud.js, which carries its
+ * sweep position the same way), so the window starts where the previous run
+ * stopped and wraps back to the start after the last county.
+ */
+function rotateCounties(counties, startIndex, limit) {
+  if (!Array.isArray(counties) || counties.length === 0) return [];
+  const size = Math.max(0, Math.floor(Number(limit) || 0));
+  if (size === 0) return [];
+  if (size >= counties.length) return [...counties];
+  const length = counties.length;
+  const start = ((Math.floor(Number(startIndex) || 0) % length) + length) % length;
+  const window = [];
+  for (let index = 0; index < size; index += 1) {
+    window.push(counties[(start + index) % length]);
+  }
+  return window;
+}
+
 function toSummary(cells, county, pageUrl, detailUrl) {
   const [sheriffNumber, saleDateRaw, plaintiff, defendant, addressRaw] = cells;
   const propertyId = new URL(detailUrl).searchParams.get('PropertyId');
@@ -258,6 +285,22 @@ class CivilViewScraper extends BaseScraper {
       options.userAgent ||
       'property-crawl-bot/2.0 (+https://github.com/property-crawl; contact: ops@property-crawl.example)';
     this.lastRunReport = null;
+    // Which county the next run starts from. The scheduler hands the previous
+    // run's cursor back through setCheckpoint before each scrapeFeed.
+    this.countyRotationOffset = 0;
+  }
+
+  /**
+   * Accept the rotation cursor the scheduler persisted from the previous run.
+   * Matches the shape hud.js uses: the token is an opaque string there and an
+   * index here, and anything unparseable restarts the rotation from the top
+   * rather than guessing.
+   */
+  setCheckpoint(checkpoint) {
+    const token = checkpoint?.continuationToken;
+    const parsed = typeof token === 'string' ? Number.parseInt(token, 10) : Number.NaN;
+    this.countyRotationOffset = Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+    return this;
   }
 
   async scrapeFeed() {
@@ -290,6 +333,11 @@ class CivilViewScraper extends BaseScraper {
       this.lastRunReport = report;
       const counties = await this.fetchCounties();
       report.countiesDiscovered = counties.length;
+      // Counties eligible for the rotating window. A run pinned to one county, or
+      // given an explicit county list, has nothing to rotate through.
+      const rotationTotal = (this.nationwide || this.countyId || this.extraCountyIds.length > 0)
+        ? 0
+        : counties.filter((county) => county.state === this.targetState).length;
       let ordered;
       if (this.nationwide) {
         // Bounded sample across all participating states (nationwide set).
@@ -315,7 +363,7 @@ class CivilViewScraper extends BaseScraper {
         } else if (this.countyId) {
           ordered = stateCounties.filter((county) => String(county.id) === this.countyId);
         } else {
-          ordered = orderCounties(stateCounties).slice(0, this.maxCounties);
+          ordered = rotateCounties(orderCounties(stateCounties), this.countyRotationOffset, this.maxCounties);
         }
       }
 
@@ -423,6 +471,14 @@ class CivilViewScraper extends BaseScraper {
         report.unattemptedSummaries === 0,
       );
       report.fullSweepComplete = report.complete;
+      // Hand the next start position back so the following run covers different
+      // counties. The scheduler persists nextContinuationToken as this source's
+      // cursor and feeds it to setCheckpoint before the next scrapeFeed. A null
+      // token means the window already covered every county, so the rotation
+      // restarts from the priority list rather than staying wedged.
+      report.nextContinuationToken = rotationTotal > this.maxCounties
+        ? String((this.countyRotationOffset + this.maxCounties) % rotationTotal)
+        : null;
       report.outcome = report.failures.length > 0
         ? 'partial_failure'
         : emitted.length > 0
@@ -764,3 +820,5 @@ class CivilViewScraper extends BaseScraper {
 const civilView = new CivilViewScraper();
 module.exports = civilView;
 module.exports.CivilViewScraper = CivilViewScraper;
+module.exports.orderCounties = orderCounties;
+module.exports.rotateCounties = rotateCounties;
