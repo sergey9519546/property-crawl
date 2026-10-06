@@ -660,9 +660,21 @@ Measured after re-importing:
 | records with `hasDocuments: true` | **0** of 9,796 | **7,849** of 9,796 |
 | columns refreshed on re-collection | 6 of 46 | **45 of 46** (+ `geog`) |
 
-The 1,947 still unknown are sources that do not report documents, which is the
+The 1,447 still unknown are sources that do not report documents, which is the
 honest answer for them. A guard now derives the same list and fails if the
 conflict clause is ever narrowed again.
+
+### The ServiceLink sweep is converged — stop running it
+
+A further **150 sweep runs re-observed 3,726 records and changed the stale count
+by zero**: still exactly 1,316 of 7,497 past the 6h cadence. Combined with the
+full 248-page publisher walk (0 of those ids still listed), the conclusion is
+settled — the sweep has completed a cycle and the remainder is records the
+publisher no longer lists.
+
+**Further sweeping is now provably futile and costs the publisher real requests.**
+The remaining budget should go to the sources that can still move, not to
+ServiceLink.
 
 End-to-end check after re-importing, comparing the live store against the
 database for every record:
