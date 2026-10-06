@@ -419,9 +419,20 @@ test('the import does not silently drop a collector field', () => {
     skips, ["name !== 'id'"],
     `the conflict clause must exclude nothing but the conflict key, saw: ${skips.join(' | ')}`,
   );
+  // Importing must never be more destructive than a live collection. The
+  // runtime upsert uses COALESCE so a field the new observation lacks cannot
+  // erase one we already hold; a plain `= EXCLUDED.` would.
   assert.ok(
-    /geog = EXCLUDED\.geog/.test(importer),
-    'geog is derived from the coordinates and must refresh with them',
+    /return `\$\{column\} = COALESCE\(EXCLUDED\.\$\{column\}, listings\.\$\{column\}\)`/.test(importer),
+    'a field absent from the new observation must not erase a known value',
+  );
+  assert.ok(
+    /EXCLUDED\.est_low IS NOT NULL AND EXCLUDED\.est_high IS NOT NULL/.test(importer),
+    'est_low and est_high are one piece of evidence and must move together',
+  );
+  assert.ok(
+    /geog = COALESCE\(EXCLUDED\.geog, listings\.geog\)/.test(importer),
+    'geog is derived from the coordinates and must follow them',
   );
 });
 

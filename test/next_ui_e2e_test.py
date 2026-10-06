@@ -956,7 +956,17 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         city = self.market_listing["city"]
         search.fill(city)
-        self.page.get_by_role("option").first.wait_for(state="visible")
+        # Scope to the suggestion list. A bare get_by_role("option") also matches
+        # the <datalist> options, which are never rendered and so can never be
+        # visible - the test meant "a suggestion appeared", not "some option
+        # element exists".
+        #
+        # The wait also needs to be explicit: the hero builds its vocabulary from
+        # the WHOLE inventory, paging the API before it can offer anything, and
+        # that exceeds the suite's 5s default once the machine is loaded.
+        self.page.get_by_role("listbox").get_by_role("option").first.wait_for(
+            state="visible", timeout=30_000
+        )
         search.evaluate("element => { element.blur(); element.focus(); }")
         self.page.wait_for_timeout(180)
         self.assertTrue(self.page.get_by_role("listbox").is_visible())

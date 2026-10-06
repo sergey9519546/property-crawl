@@ -614,6 +614,21 @@ The conflict clause is now derived from `INSERTABLE` with exactly one exclusion
 (`id`, the conflict key), so it cannot fall behind the column list again, and
 `geog` refreshes with the coordinates it is derived from.
 
+Its per-column semantics **mirror the runtime ingest upsert** in
+`server/db/client.js`, so importing can never be more destructive than a live
+collection:
+
+- a field the new observation does not carry is `COALESCE`d, so it cannot erase
+  a value already held;
+- `est_low` and `est_high` move together or not at all — accepting one without
+  the other would publish half a valuation band;
+- only `source_key`, `state` and `address` are replaced outright, matching the
+  runtime path.
+
+The first version of this fix used a plain `= EXCLUDED.` for every column, which
+would have erased exactly the values the runtime path protects. It was caught by
+checking the change against the behaviour it had to preserve, not by running it.
+
 Measured after re-importing:
 
 | | before | after |
@@ -624,6 +639,31 @@ Measured after re-importing:
 The 1,947 still unknown are sources that do not report documents, which is the
 honest answer for them. A guard now derives the same list and fails if the
 conflict clause is ever narrowed again.
+
+## A hero test waited for a `<datalist>` option to become visible
+
+`test_hero_search_focus_uses_a_soft_halo_without_a_black_outline` typed a market
+and then waited on `get_by_role("option").first` to be visible. That selector
+matches **both** the rendered suggestion list *and* the `<datalist>`'s
+`<option>` elements, which are never rendered and can never be visible. `.first`
+resolved to a hidden datalist option, so the wait timed out.
+
+It passed before because the datalist happened to sort after the suggestions; a
+larger inventory changed that ordering and exposed it. The intent — "a
+suggestion appeared" — is now scoped to the listbox the very next line asserts on.
+Same assertion, precise target.
+
+There was a second problem behind it: the hero builds its suggestion vocabulary
+by paging the **entire** inventory before it can offer anything, so on a loaded
+machine that exceeds the suite's 5s default. The wait is now explicit. That is
+worth knowing about the product rather than the test — **nothing is suggestible
+until ~10,000 records have been paged in**, which is a real latency cost on the
+home page's primary control.
+
+Third time today a "flaky" or "passing" test has turned out to be a real defect
+in the test rather than the environment. The pattern worth carrying: when a
+failure appears only after a change that made the data *more* correct, suspect
+the test before the product.
 
 ## The feed was seeded with fixture listings — fixed
 

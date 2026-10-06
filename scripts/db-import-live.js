@@ -101,10 +101,29 @@ const COLUMNS_SQL = INSERTABLE.map(([name]) => name).join(', ');
 // source_observed_at WAS refreshed, the row then looked freshly observed while
 // carrying stale content. `geog` is derived from the coordinates and was
 // insert-only for the same reason.
+//
+// The per-column semantics deliberately MIRROR the runtime ingest upsert in
+// server/db/client.js, so importing can never be more destructive than a live
+// collection: a field the new observation does not carry must not erase a value
+// we already hold, and the est_low/est_high pair moves together or not at all.
+const DIRECT_REPLACE = new Set(['source_key', 'state', 'address']);
+// est_low and est_high are one piece of evidence. Accepting one without the
+// other would publish half a valuation band.
+const PAIR_COLUMNS = new Set(['est_low', 'est_high']);
+
+function conflictAssignment(column) {
+  if (DIRECT_REPLACE.has(column)) return `${column} = EXCLUDED.${column}`;
+  if (PAIR_COLUMNS.has(column)) {
+    return `${column} = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL`
+      + ` THEN EXCLUDED.${column} ELSE listings.${column} END`;
+  }
+  return `${column} = COALESCE(EXCLUDED.${column}, listings.${column})`;
+}
+
 const UPDATE_SET_SQL = INSERTABLE
   .map(([name]) => name)
   .filter((name) => name !== 'id')
-  .map((name) => `${name} = EXCLUDED.${name}`)
+  .map(conflictAssignment)
   .join(',\n       ');
 
 const INSERT_SQL =
@@ -114,7 +133,7 @@ const INSERT_SQL =
        ELSE ST_SetSRID(ST_MakePoint($9, $8), 4326)::geography END)
    ON CONFLICT (id) DO UPDATE SET
        ${UPDATE_SET_SQL},
-       geog = EXCLUDED.geog`;
+       geog = COALESCE(EXCLUDED.geog, listings.geog)`;
 
 function paramsFor(record) {
   return INSERTABLE.map(([, pick]) => pick(record));
