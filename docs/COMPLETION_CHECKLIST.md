@@ -606,7 +606,30 @@ the feed does:
 
 Finding this one required looking past the surface where I'd already fixed the
 problem. **A fix on one screen is not a fix; the question is whether the same
-defect exists elsewhere.**
+defect exists elsewhere.** It does, in two more places — one already handled,
+one not.
+
+**Already handled: the natural-language hunt builder.** `compileHuntQuery` has
+no rule for deal score or valuation, so "deals with a deal score over 70" yields
+no rules and no dependencies, and it falls through to the generic *"a supported
+state, county, property type, published amount, or sale-date criterion"* message.
+That is the right answer, and it predates this work.
+
+**Still open: the form-built hunt.** `saved-hunts.tsx` exposes `minScore` and
+`minEquity` as hunt filters, and `hunts.js` accepts them as criteria
+(`minScore`, `minEquity` are in the allowed set). A hunt saved that way can
+therefore **never** match — `supportedDerivedValue` requires an
+`observed-valuation-range-v1` model with valid `estLow`/`estHigh`, and no record
+carries one — yet the UI reports it as an ordinary hunt that simply has no
+matches. Unlike the two empty states, this one is a saved, recurring thing the
+user believes is working.
+
+Not fixed here on purpose. The hunt surface is workspace-gated, so it cannot be
+exercised end to end in this session, and the hunt engine is dense and heavily
+tested — a speculative change there would be a worse trade than writing the gap
+down precisely. The fix belongs where the answer exists: the engine should report
+a criterion it can never satisfy, and the UI should surface that the way
+`missingDependencies` already does for unsupported phrases.
 
 **The staleness banner was missing where most people meet the inventory.**
 `DataModeBanner` was rendered on `/listings` and the document-review queue, but
