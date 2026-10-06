@@ -426,6 +426,22 @@ class PublicNoticesEmailScraper {
     };
   }
 
+  /**
+   * This collector emits no listing rows. scrapeFeed() parses messages into
+   * evidence packets, writes them to a store and reports counts with
+   * `publicationStatus: 'evidence_only'` - there is never a listing for the
+   * scheduler to key a publisher record against, so this is never called with
+   * anything meaningful.
+   *
+   * Declaring it explicitly is what the adapter contract requires, and null is
+   * the honest value: the publisher payload is absent, not derived. Returning a
+   * constructed object here would put a shape into raw_payload that no publisher
+   * ever sent.
+   */
+  getRawPublisherRecord() {
+    return null;
+  }
+
   async scrapeFeed() {
     const reports = [];
     let packets = [];

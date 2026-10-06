@@ -9,8 +9,8 @@
 // historicalOnly, getRawPublisherRecord, setCheckpoint, lastRunReport) and
 // NOTHING declared that contract. With no interface, drift degrades silently
 // instead of failing: a catalog adapterKey that stopped matching any
-// sourceKey, and a scheduler fallback that wrote derived data into the
-// publisher-raw column for adapters without getRawPublisherRecord.
+// sourceKey, and an adapter that omitted getRawPublisherRecord and left
+// raw_payload to a silent lossy fallback.
 //
 // These tests pin the CONTRACT, not today's fleet. Adapter-specific defects
 // (e.g. an adapter that returns a run report where the scheduler expects an
@@ -101,12 +101,45 @@ test('a missing required member is reported by name', () => {
 });
 
 test('a production adapter without getRawPublisherRecord is reported by name', () => {
-  // scheduler.js falls back to JSON.parse(listing.raw) when this is missing,
-  // which labels derived normalized data as publisher-observed evidence.
+  // scheduler.js falls back to JSON.parse(listing.raw) when this is missing, and
+  // to null when that does not parse. The normalized listing is never stored, but
+  // the fallback is silent, so the contract still requires the method.
   const adapter = validAdapter();
   delete adapter.getRawPublisherRecord;
   const errors = errorsFor(adapter);
   assert.equal(mentions(errors, 'getRawPublisherRecord'), true, errors.join(' | '));
+});
+
+test('the email evidence adapter declares a publisher record instead of omitting it', () => {
+  // PublicNoticesEmail emits evidence packets, never listing rows, so there is
+  // no publisher record to key. It must still DECLARE that, because a missing
+  // method is what the contract treats as drift - and its answer must be null,
+  // because a constructed object would put a shape into raw_payload that no
+  // publisher ever sent.
+  const { PublicNoticesEmailScraper } = require('../../server/scrapers/email-ingest');
+  const adapter = new PublicNoticesEmailScraper({ env: {} });
+  const result = validateScraperAdapter(adapter);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.ok, true);
+  assert.equal(adapter.getRawPublisherRecord({ id: 'anything' }), null);
+});
+
+test('the whole repo fleet satisfies the contract', () => {
+  // One non-conforming adapter printed a startup warning on every boot, which
+  // is exactly how contract drift stays invisible until someone reads logs.
+  const names = ['treasury', 'gsa', 'irs', 'usda', 'landbanksearch', 'civilview',
+    'bid4assets', 'servicelink', 'sheriff', 'hud', 'fannie', 'freddie', 'va',
+    'marshals', 'fl-dor-cadastral', 'ca-controller-tax-sale', 'courtlistener',
+    'hud-usps-vacancy', 'fhfa-hpi', 'email-ingest'];
+  const adapters = names.map((name) => {
+    const mod = require(`../../server/scrapers/${name}`);
+    return name === 'email-ingest'
+      ? new mod.PublicNoticesEmailScraper({ env: {} })
+      : mod;
+  });
+  const result = validateScraperAdapters(adapters);
+  assert.deepEqual(result.errors, [], result.errors.join(' | '));
+  assert.deepEqual(result.offenders, []);
 });
 
 test('sourceKey and name must be non-empty strings', () => {

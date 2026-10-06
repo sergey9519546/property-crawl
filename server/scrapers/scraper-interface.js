@@ -150,11 +150,13 @@ function validateScraperAdapter(scraper) {
     errors.push('lastRunReport, when declared, must be an object or null');
   }
 
-  // The publisher record is the one absence the scheduler cannot compensate
-  // for: without it, derived data is written into the publisher-raw column.
+  // Without a publisher record the scheduler falls back to JSON.parse of the
+  // listing's own `raw` field, and to null when that does not parse. It does NOT
+  // store the normalized listing - but that fallback is silent and lossy, so
+  // requiring the method keeps the absence visible instead of incidental.
   if (typeof scraper.getRawPublisherRecord !== 'function' && !skipsIngestion(scraper)) {
     errors.push(
-      'getRawPublisherRecord must be a function; without it the scheduler writes derived listing data into the publisher-raw column'
+      'getRawPublisherRecord must be a function; without it raw_payload falls back to the listing\'s own raw field and then to null, so the publisher payload is never recorded'
     );
   }
 
