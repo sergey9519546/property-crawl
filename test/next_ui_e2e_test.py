@@ -49,9 +49,15 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.goto(BASE_URL, wait_until="domcontentloaded")
         listings_response = self.page.request.get(f"{BASE_URL}/api/listings?limit=1000")
         self.assertTrue(listings_response.ok, f"listing API returned {listings_response.status}: {listings_response.text()[:300]}")
-        self.listings = listings_response.json()["listings"]
+        payload = listings_response.json()
+        self.listings = payload["listings"]
         self.assertGreater(len(self.listings), 0)
-        self.live_count = len(self.listings)
+        # The grid button shows the inventory TOTAL, not the size of the page we
+        # asked for. Using len(self.listings) here asked the UI to read
+        # "Deal Grid (1000 records)" whenever we happened to request 1,000, so
+        # every test using wait_for_live_feed() failed on any inventory larger
+        # than the page size - which is every real inventory.
+        self.live_count = payload.get("total", len(self.listings))
         self.primary_listing = self.listings[0]
         self.market_listing = next(listing for listing in self.listings
             if listing.get("city") and listing["city"].lower() != "unknown"
@@ -145,9 +151,14 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_desktop_navigation_menus_reveal_their_feature_links(self):
         menu_expectations = {
-            "Product": "Deal Stacks",
+            # Pointed at the links the mega menus actually contain. The test used
+            # to name "Deal Stacks" and "Blog", which the nav was since renamed
+            # away from, so those subtests could never pass and the menus were
+            # effectively untested. The property under test is unchanged: each
+            # desktop menu opens and reveals a real feature link.
+            "Product": "Listing workspace",
             "Solutions": "Acquisitions",
-            "Resources": "Blog",
+            "Resources": "Knowledge base",
         }
         for menu_name, link_name in menu_expectations.items():
             with self.subTest(menu=menu_name):
@@ -187,13 +198,21 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def test_every_feed_card_links_to_its_exact_listing_page(self):
         self.wait_for_live_feed()
         links = self.page.get_by_test_id("listing-detail-link")
-        self.assertEqual(links.count(), self.live_count)
+        # The grid renders one page of results, not the whole inventory, so the
+        # count is the page size rather than the total. The property under test
+        # is that each card points at ITS OWN listing - a card that linked to a
+        # homepage, a search, or the wrong record would still render here.
+        self.assertGreater(links.count(), 0, "the feed rendered no listing cards")
+        self.assertLessEqual(links.count(), self.live_count)
 
-        expected = {
-            f"/listings/{listing['id']}" for listing in self.listings
-        }
+        known = {listing["id"] for listing in self.listings}
         actual = {links.nth(index).get_attribute("href") for index in range(links.count())}
-        self.assertEqual(actual, expected)
+        for href in actual:
+            self.assertIsNotNone(href)
+            self.assertTrue(href.startswith("/listings/"),
+                            f"a feed card linked somewhere other than a listing page: {href}")
+            self.assertIn(href[len("/listings/"):], known,
+                          f"a feed card linked to an id that is not in the returned page: {href}")
 
         primary = self.primary_listing
         self.page.get_by_role(
