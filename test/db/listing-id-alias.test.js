@@ -28,6 +28,7 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -37,7 +38,7 @@ const { DatabaseClient } = require('../../server/db/client');
 // changes its pattern, this test should notice and be updated on purpose.
 const NAMESPACED_ID = /^[A-Z]{2,3}-[A-Z]{2,3}-\d{2,6}$/;
 
-function readListingIds() {
+function readSeedListings() {
   const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'data.js'), 'utf8');
   const start = src.indexOf('window.LISTINGS =');
   assert.ok(start >= 0, 'expected data.js to define window.LISTINGS');
@@ -54,7 +55,11 @@ function readListingIds() {
   assert.ok(end > from, 'expected a parseable LISTINGS array');
   const text = src.slice(from, end).replace(/,(\s*[}\]])/g, '$1');
   // eslint-disable-next-line no-eval
-  return eval(`(${text})`).map((l) => String(l.id));
+  return eval(`(${text})`);
+}
+
+function readListingIds() {
+  return readSeedListings().map((l) => String(l.id));
 }
 
 const IDS = readListingIds();
@@ -104,24 +109,45 @@ test('real ids are source-prefixed with prefixes longer than the pattern allows'
   }
 });
 
-test('an exact id lookup still works regardless of the alias path', async () => {
-  const db = new DatabaseClient();
-  const target = IDS[0];
-  const found = await db.getListingById(target);
-  assert.ok(found, `expected exact lookup of ${target} to resolve`);
-  assert.equal(String(found.id), target);
+// The end-to-end lookups below used to run against the real live store while
+// taking their ids from data.js - two different datasets. The test therefore
+// broke whenever a sweep changed the live inventory, for reasons that had
+// nothing to do with the alias logic it exists to test.
+//
+// It now builds its own store from ONE committed seed record, so it depends on
+// nothing that a sweep can move.
+const SEED = readSeedListings()[0];
+const FIXTURE_ID = SEED ? String(SEED.id) : null;
+
+function fixtureStore(t) {
+  assert.ok(SEED, 'expected data.js to contain a listing to use as the fixture');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-alias-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'live-listings.json');
+  fs.writeFileSync(file, JSON.stringify({
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    listings: [{ ...SEED, provenance: { ...SEED.provenance, origin: 'live', recordKind: 'source_record' } }],
+  }));
+  return file;
+}
+
+test('an exact id lookup still works regardless of the alias path', async (t) => {
+  const db = new DatabaseClient({ liveCachePath: fixtureStore(t), workspaceStorePath: null });
+  const found = await db.getListingById(FIXTURE_ID);
+  assert.ok(found, `expected exact lookup of ${FIXTURE_ID} to resolve`);
+  assert.equal(String(found.id), FIXTURE_ID);
 });
 
-test('a non-aliasable short id is not resolved by suffix matching', async () => {
-  const db = new DatabaseClient();
+test('a non-aliasable short id is not resolved by suffix matching', async (t) => {
+  const db = new DatabaseClient({ liveCachePath: fixtureStore(t), workspaceStorePath: null });
   // Guards the "never a partial or numeric fragment" guarantee end to end.
-  const target = IDS[0];
-  const numericFragment = String(target).split('-').pop();
-  if (!/^\d{2,6}$/.test(numericFragment)) return; // nothing to assert for this id
+  const numericFragment = String(FIXTURE_ID).split('-').pop();
+  assert.match(numericFragment, /^\d{2,6}$/);
   const found = await db.getListingById(numericFragment);
   assert.equal(
     found,
     null,
-    `numeric fragment ${numericFragment} must not resolve to ${target}`,
+    `numeric fragment ${numericFragment} must not resolve to ${FIXTURE_ID}`,
   );
 });
