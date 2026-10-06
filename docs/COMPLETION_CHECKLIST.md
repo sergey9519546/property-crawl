@@ -301,6 +301,45 @@ evidence for a decision; it is not the decision. Sold, withdrawn and aged-out
 are still indistinguishable in kind, and only the owner can say what that means
 for a record the user may have been watching.
 
+## The staleness signal was hiding a source that had not been collected in a month
+
+`inventoryFreshness` applied **one flat 24-hour window to every source**, while
+each source declares its own cadence: ServiceLink publishes every 6h,
+fl-dor-cadastral every 720h, CourtListener every 168h. The per-record
+`sourceFreshness` in `server/routes/listings.js` already respected the cadence —
+the aggregate disagreed with it.
+
+The consequence was not subtle. Measured against the real database:
+
+| | before (flat 24h) | after (per-source cadence) |
+|---|---|---|
+| stale listings reported | **296** of 7,999 | **5,845** of 7,999 |
+| worst source named | none | **servicelink 5,699 / 5,699, every 6h** |
+
+Not one ServiceLink record had been collected in **689 hours — about 29 days** —
+and the health endpoint, which the UI banner and every operator reads, said
+"296 of 7999 listings were last observed more than 24h ago". A reassuringly
+small number that understated the problem twentyfold and named no publisher.
+
+`/api/health` now reports per-source coverage and names the sources that are
+behind, worst first:
+
+```
+5845 of 7999 listings are past their own source's refresh cadence. Behind:
+servicelink 5699/5699 (every 6h), civilview 110/122 (every 12h),
+courtlistener 20/40 (every 168h), treasury 8/21 (every 12h),
+irs 6/6 (every 12h), gsa 2/2 (every 24h).
+```
+
+A single "N of M" line says nothing an operator can act on; which publisher
+stopped being collected is the whole point. The flat window remains the
+fallback when no cadences are supplied, so the existing contract and its tests
+are unchanged.
+
+Still a coverage question per source, exactly as before: a sweep that refreshes
+one page must not make the source look fresh, so `freshListings` is counted
+inside the window rather than derived from the newest row.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
