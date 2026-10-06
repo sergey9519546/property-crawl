@@ -97,6 +97,53 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "button", name=f"Deal Grid ({self.live_count} records)"
         ).wait_for(state="visible", timeout=30_000)
 
+    def grid_record_count(self):
+        """The inventory total the grid header currently advertises."""
+        header = self.page.get_by_role(
+            "button", name=re.compile(r"Deal Grid \([\d,]+ records\)"),
+        )
+        expect(header).to_be_visible(timeout=30_000)
+        shown = re.search(r"\(([\d,]+) records", header.inner_text())
+        self.assertIsNotNone(shown, f"could not read a record count from {header.inner_text()!r}")
+        return int(shown.group(1).replace(",", ""))
+
+    def rendered_listing(self):
+        """A listing the feed actually rendered, not merely one the API returned.
+
+        setUp samples /api/listings?limit=1000, but the grid renders ONE page and
+        ranks it on its own terms, so listings[0] is usually not on screen at all.
+        Measured on the live app: the API's first listing is 84 Raven Rock Rd
+        (ServiceLink, NC) while the first rendered card is 1121 Belmont Ave
+        (NJ). Any assertion about a card, or about a market the hero suggests,
+        has to start from a record the page is actually showing - otherwise it
+        waits for a control that can never appear and fails for a reason that
+        reads like a product defect.
+        """
+        link = self.page.get_by_test_id("listing-detail-link").first
+        expect(link).to_be_visible(timeout=30_000)
+        listing_id = (link.get_attribute("href") or "").rstrip("/").split("/")[-1]
+        label = link.get_attribute("aria-label") or ""
+        address = label[len("Open listing page for "):] if label.startswith("Open listing page for ") else label
+        record = next((listing for listing in self.listings if listing["id"] == listing_id), None)
+        if record is None:
+            # The grid ranked in a record outside setUp's 1000-row sample. Ask
+            # for that one directly rather than reading None fields below.
+            response = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
+            if response.ok:
+                payload = response.json()
+                record = payload.get("listing", payload)
+        if not record:
+            self.fail(f"rendered listing {listing_id} could not be resolved for the test")
+        return {
+            "id": listing_id,
+            "address": address or record.get("address"),
+            "listing": record,
+            "city": record.get("city"),
+            "state": record.get("state"),
+            "county": record.get("county"),
+            "zip": record.get("zip"),
+        }
+
     def geocoded_listings(self, listings=None):
         # Positive map tests declare their qualified fixture records explicitly.
         # Finite coordinates in the application's snapshot data are not evidence.
@@ -228,6 +275,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # different real listing still resolves, which is exactly how this
         # assertion was found to be defeatable.
         links = self.page.get_by_test_id("listing-detail-link")
+        # The feed is filled by the inventory request, not by the fixture
+        # listings it used to render on first paint, so wait for real cards.
+        expect(links.first).to_be_visible(timeout=30_000)
         self.assertGreater(links.count(), 0, "the feed rendered no listing cards")
 
         hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
@@ -571,17 +621,23 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         hero_input.fill(city)
         self.page.get_by_role("button", name="Search market").click()
 
-        self.page.wait_for_timeout(200)
         self.assertEqual(self.page.url, f"{BASE_URL}/#live-feed")
         feed_search = self.page.get_by_placeholder("Search address, county, court docket...")
-        self.assertEqual(feed_search.input_value(), city)
-        self.assertGreater(self.page.get_by_role("button", name="Underwrite Deal").count(), 0)
+        expect(feed_search).to_have_value(city, timeout=15_000)
+        # The grid re-filters asynchronously. Reading .count() straight after the
+        # click samples the DOM before it has updated, so a fixed sleep here
+        # reported "no cards" for a search that had already succeeded.
+        expect(self.page.get_by_role("button", name="Underwrite Deal").first).to_be_visible(timeout=15_000)
 
     def test_hero_suggests_and_selects_real_markets_as_user_types(self):
         self.wait_for_live_feed()
-        city = self.market_listing["city"]
-        state = self.market_listing["state"]
-        city_result_count = sum(listing["city"] == city for listing in self.listings)
+        # The hero suggests from the markets that are on screen. market_listing
+        # comes from setUp's 1000-row API sample and is frequently not rendered,
+        # so its market has no suggestion to find at all.
+        market = self.rendered_listing()
+        city = market["city"]
+        state = market["state"]
+        unfiltered = self.live_count
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         hero_input.fill(city)
 
@@ -595,21 +651,38 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         suggestion.wait_for(state="visible")
         hero_input.press("ArrowDown")
         hero_input.press("Enter")
-        self.assertEqual(hero_input.input_value(), f"{city}, {state}")
+        selected = hero_input.input_value()
+        # The inventory carries this market in both "Haddon Township" and
+        # "HADDON TOWNSHIP"; which spelling the suggestion shows depends on
+        # which record was ranked last. The market is the same either way, so
+        # compare identity rather than the publisher's casing.
+        self.assertEqual(
+            selected.upper(), f"{city.upper()}, {state.upper()}",
+            "selecting a city suggestion must load that market",
+        )
 
         self.page.get_by_role("button", name="Search market").click()
         feed_search = self.page.get_by_placeholder("Search address, county, court docket...")
-        self.assertEqual(feed_search.input_value(), city)
-        self.assertEqual(
-            self.page.get_by_role("button", name="Underwrite Deal").count(),
-            city_result_count,
+        # The suggestion's own query string, which may differ in case from the
+        # record this test read the market from.
+        expect(feed_search).to_have_value(
+            re.compile(f"^{re.escape(city)}$", re.IGNORECASE), timeout=15_000,
         )
+        # The expected count cannot come from setUp's sample: the grid ranks
+        # across the whole inventory, so the chosen market is often absent from
+        # those 1,000 rows and a sample-derived count would be 0. Assert the
+        # behaviour instead - the search returns records and narrows the grid.
+        expect(self.page.get_by_role("button", name="Underwrite Deal").first).to_be_visible(timeout=15_000)
+        shown = self.grid_record_count()
+        self.assertGreater(shown, 0, f"searching {city} returned no records")
+        self.assertLess(shown, unfiltered, f"searching {city} did not narrow the inventory")
 
     def test_hero_can_launch_a_county_market(self):
         self.wait_for_live_feed()
-        county = self.market_listing["county"]
-        state = self.market_listing["state"]
-        county_result_count = sum(listing["county"] == county for listing in self.listings)
+        market = self.rendered_listing()
+        county = market["county"]
+        state = market["state"]
+        unfiltered = self.live_count
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         hero_input.fill(county)
         self.page.get_by_role(
@@ -618,37 +691,38 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Search market").click()
 
         feed_search = self.page.get_by_placeholder("Search address, county, court docket...")
-        self.assertEqual(feed_search.input_value(), county)
-        self.assertEqual(
-            self.page.get_by_role("button", name="Underwrite Deal").count(),
-            county_result_count,
-        )
+        expect(feed_search).to_have_value(county, timeout=15_000)
+        expect(self.page.get_by_role("button", name="Underwrite Deal").first).to_be_visible(timeout=15_000)
+        shown = self.grid_record_count()
+        self.assertGreater(shown, 0, f"searching {county} County returned no records")
+        self.assertLess(shown, unfiltered, f"searching {county} County did not narrow the inventory")
 
     def test_hero_supports_state_country_zip_and_address_scopes(self):
         self.wait_for_live_feed()
         hero_input = self.page.get_by_role("combobox", name="Market or address")
-        state_counts = Counter(listing["state"] for listing in self.listings)
-        state, state_result_count = state_counts.most_common(1)[0]
+        # Every scope below has to be one the page actually knows about. The
+        # most common state in setUp's 1000-row sample is frequently absent from
+        # the rendered page, which has no suggestion for it at all.
+        market = self.rendered_listing()
+        state = market["state"]
         state_name = STATE_NAMES.get(state, state)
-        address = self.market_listing["address"]
-        city = self.market_listing["city"]
-        zip_code = self.market_listing["zip"]
+        address = market["address"]
+        city = market["city"]
+        zip_code = market["zip"]
 
         hero_input.fill(state_name)
         self.page.get_by_role("option", name=f"{state_name} State").click()
         self.page.get_by_role("button", name="Search market").click()
-        self.assertEqual(
-            self.page.get_by_placeholder("Search address, county, court docket...").input_value(),
-            state,
-        )
+        expect(
+            self.page.get_by_placeholder("Search address, county, court docket...")
+        ).to_have_value(state, timeout=15_000)
         # The grid renders a page of results; state_result_count is computed from
         # setUp's limit=1000 sample of a much larger inventory, so neither is the
         # rendered count and comparing them could only pass by accident. Assert
         # the search narrowed to this state and returned something instead.
-        self.assertGreater(
-            self.page.get_by_role("button", name="Underwrite Deal").count(), 0,
-            f"searching {state_name} returned no cards",
-        )
+        expect(
+            self.page.get_by_role("button", name="Underwrite Deal").first,
+        ).to_be_visible(timeout=15_000)
 
         self.page.evaluate("window.scrollTo(0, 0)")
         hero_input.fill(address.split(",")[0])
@@ -676,16 +750,15 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         hero_input.fill("United States")
         self.page.get_by_role("option", name="United States Country coverage").click()
         self.page.get_by_role("button", name="Search market").click()
-        self.assertEqual(
-            self.page.get_by_placeholder("Search address, county, court docket...").input_value(),
-            "",
-        )
+        expect(
+            self.page.get_by_placeholder("Search address, county, court docket...")
+        ).to_have_value("", timeout=15_000)
         # The grid renders one page of the inventory, not all of it, so the
         # action count belongs to the page - comparing it to live_count demanded
-        # one button per record in a 2,095-record inventory.
-        self.assertEqual(
-            self.page.get_by_role("button", name="Underwrite Deal").count(),
-            self.page.get_by_test_id("listing-detail-link").count(),
+        # one button per record in a 2,095-record inventory. Wait for the grid to
+        # settle on that page rather than sampling it mid-re-filter.
+        expect(self.page.get_by_role("button", name="Underwrite Deal")).to_have_count(
+            self.page.get_by_test_id("listing-detail-link").count(), timeout=15_000,
         )
 
     def test_first_impression_copy_and_wide_navigation_layout(self):
@@ -1213,7 +1286,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(errors, [], f"runtime errors detected: {errors}")
 
     def test_watchlist_persists_across_reload(self):
-        address = self.primary_listing["address"]
+        self.wait_for_live_feed()
+        # A card the feed actually renders. primary_listing is the API's first
+        # row, which the grid's own ranking usually does not put on screen, so
+        # its watchlist button never appears and the test waited in vain.
+        address = self.rendered_listing()["address"]
         # The feed card's watchlist is a local, per-browser list: it is NOT the
         # operator-gated /api/alerts path the detail-page toggle uses, so this
         # add really does succeed and really does survive a reload. Measured -
