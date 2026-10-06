@@ -7,6 +7,7 @@ import { AuroraDivider } from "@/components/site/aurora-divider";
 import { SocialProof } from "@/components/site/social-proof";
 import { Storyteller } from "@/components/site/storyteller";
 import { InteractiveTerminal } from "@/components/terminal/interactive-terminal";
+import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { SecondLookShowcase } from "@/components/site/second-look-showcase";
 import { AiComparison } from "@/components/site/ai-comparison";
 import { Testimonial } from "@/components/site/testimonial";
@@ -39,6 +40,11 @@ export default function PerfectPropertyPage() {
 
       {/* Live Interactive Property Triage Terminal */}
       <AuroraDivider index={2} />
+      {/* The honesty banner sits directly above the feed. This page renders the
+          same live inventory as /listings, and a visitor meeting deals here for
+          the first time is exactly the person who must be told that part of the
+          inventory is past its source's refresh cadence. */}
+      <DataModeBanner />
       <InteractiveTerminal />
 
       {/* Product workflow preview */}

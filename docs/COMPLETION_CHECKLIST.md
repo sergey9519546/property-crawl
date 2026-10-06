@@ -592,6 +592,23 @@ clicking the "Elite: 0" band:
 
 The generic advice remains for every other empty result, where it is correct.
 
+**The staleness banner was missing where most people meet the inventory.**
+`DataModeBanner` was rendered on `/listings` and the document-review queue, but
+not on the home page — which renders the *same* live inventory. A visitor
+arriving for the first time and scrolling to the deals saw no notice that part of
+it is past its source's refresh cadence, which is exactly the person the banner
+exists for. It now sits directly above the feed on `/` as well.
+
+Smoke-checked end to end in the browser: the home page renders live cards,
+carries the banner, the banner names both the per-source cadence and the lagging
+publisher, unscored deals read "Not modeled", the bidding tab shows the cost
+model, no dead control appears anywhere, and there are no page errors.
+
+The public API surface was swept at the same time and is healthy: gated
+endpoints answer with the unlock message rather than an HTML error page, and
+`/api/property-signals` returns a real triage score computed from the evidence a
+record actually carries.
+
 ## The import refreshed 6 of 46 columns — no re-collected record ever updated its content
 
 Found by sweeping the filterable fields for ones with no values at all, which
