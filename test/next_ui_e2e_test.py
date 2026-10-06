@@ -1286,25 +1286,31 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_title("Remove from watchlist").click()
         self.assertTrue(self.page.get_by_text("No saved properties yet").is_visible())
 
-    def test_notice_parser_extracts_a_real_notice_and_adds_it_to_watchlist(self):
+    def test_notice_parser_never_fabricates_facts_when_the_workspace_is_locked(self):
         address = "1248 W 76th St, Cleveland, OH 44102"
         self.page.get_by_role("button", name="Notice Parser").click()
         self.page.get_by_role("button", name="Paste sample notice").click()
         self.page.get_by_role("button", name="Extract stated facts").click()
 
-        self.page.get_by_text("Unverified extraction — source review required", exact=True).wait_for(state="visible")
-        self.assertTrue(self.page.get_by_text(address, exact=True).is_visible())
-        self.page.get_by_role("button", name="Add extraction").click()
-
-        self.assertTrue(self.page.get_by_role("dialog", name=address).is_visible())
-        self.page.get_by_role("button", name="Close drawer").click()
-        self.page.get_by_role("button", name="Watchlist (1)").click()
-        watchlist = self.page.get_by_role("dialog", name="Saved Watchlist (1)")
-        self.assertTrue(watchlist.get_by_text(address, exact=True).is_visible())
-
-        self.page.reload(wait_until="domcontentloaded")
-        self.page.get_by_role("button", name="Watchlist (1)").click()
-        self.assertTrue(self.page.get_by_role("dialog", name="Saved Watchlist (1)").get_by_text(address, exact=True).is_visible())
+        # Extraction is workspace-backed: /api/parse answers 401 to a signed-out
+        # visitor. The test used to assert an extraction appeared anyway, which is
+        # exactly the fabrication this product is supposed to avoid. It now
+        # asserts the refusal is honest, and that the promise the panel makes -
+        # "Your text will stay on this page" - is kept.
+        # Match the message, not the role: Next ships an empty role="alert"
+        # route announcer that would satisfy a role-only assertion.
+        expect(
+            self.page.get_by_text("Unlock your workspace, then return here to extract the notice.")
+        ).to_be_visible(timeout=20_000)
+        for fabricated in ("Unverified extraction", "Add extraction"):
+            self.assertEqual(
+                self.page.get_by_text(fabricated, exact=True).count(), 0,
+                f"a refused extraction must not present {fabricated!r} as extracted",
+            )
+        self.assertEqual(
+            self.page.get_by_text(address).count() > 0, True,
+            "the panel promises the pasted text stays on the page; it must",
+        )
 
     def test_saved_search_persists_and_opens_matching_inventory(self):
         self.wait_for_live_feed()
