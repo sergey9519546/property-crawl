@@ -1291,10 +1291,22 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(self.page.get_by_role("combobox", name="State filter").input_value(), chosen_state)
 
     def test_account_entry_does_not_collect_credentials_for_a_nonexistent_service(self):
-        for path in ["sign-in", "register"]:
-            self.page.goto(f"{BASE_URL}/{path}", wait_until="domcontentloaded")
-            self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
-            self.page.wait_for_url(re.compile(rf"{re.escape(BASE_URL)}/(?:#live-feed|listings)"))
+        # This test used to visit /sign-in and /register, assert no password
+        # field, and then wait to be redirected to the feed - on the premise
+        # that neither service existed. Both exist now and say what they are:
+        # sign-in is a shared operator key, registration is closed. The original
+        # concern still holds and is now checked directly - neither page takes a
+        # password, so neither can collect credentials for something that is not
+        # a self-serve account.
+        sign_in = self.page.goto(f"{BASE_URL}/sign-in", wait_until="domcontentloaded")
+        self.assertEqual(sign_in.status, 200)
+        expect(self.page.get_by_role("heading", name="Operator sign-in")).to_be_visible(timeout=20_000)
+        self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
+
+        register = self.page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded")
+        self.assertEqual(register.status, 200)
+        expect(self.page.get_by_role("heading", name="Registration is not open")).to_be_visible(timeout=20_000)
+        self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
 
     def test_watchlist_modal_is_escape_closeable(self):
         self.page.get_by_role("button", name="Watchlist (0)").click()
@@ -1312,8 +1324,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         menu.get_by_role("button", name="Product").click()
         menu.get_by_role("link", name="Listing workspace").click()
 
-        self.page.wait_for_url(f"{BASE_URL}/#live-feed")
-        self.assertEqual(self.page.url, f"{BASE_URL}/#live-feed")
+        # "Listing workspace" is the renamed nav entry and it routes to
+        # /listings, not to the old #live-feed anchor on the home page.
+        self.page.wait_for_url(f"{BASE_URL}/listings", wait_until="commit")
+        self.assertEqual(self.page.url, f"{BASE_URL}/listings")
         self.assertEqual(menu.count(), 0)
 
     def test_live_feed_filters_and_sort_controls_change_results(self):
