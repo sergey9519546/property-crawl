@@ -260,7 +260,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                     <span>{signal.nextAction}</span>
                   </div>
 
-                  <div className="text-slate-400 flex items-center gap-2">
+                  <div className="text-slate-600 flex items-center gap-2">
                     <span className="text-xs">{signal.evidenceClass.replace(/_/g, ' ')}</span>
                     {signal.observedAt && (
                       <span className="text-[10px]">

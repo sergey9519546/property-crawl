@@ -116,7 +116,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
                 Official source required
               </span>
             </div>
-            <p className="mt-1 max-w-2xl text-xs text-slate-400">
+            <p className="mt-1 max-w-2xl text-xs text-slate-600">
               Checks whether court, recorder, tax, and bankruptcy evidence is actually attached. It never infers legal status from an address or AI response.
             </p>
           </div>
@@ -183,7 +183,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
 
           {!isVerified && result.missingEvidence?.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Evidence still required</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Evidence still required</p>
               <ul className="mt-2 grid gap-1.5 text-xs text-slate-200 sm:grid-cols-2">
                 {result.missingEvidence.map((item) => (
                   <li key={item} className="flex items-start gap-2">

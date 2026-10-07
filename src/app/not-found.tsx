@@ -15,7 +15,7 @@ export default function NotFound() {
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             Listing or Page Unavailable
           </h1>
-          <p className="text-sm text-slate-400 leading-relaxed">
+          <p className="text-sm text-slate-600 leading-relaxed">
             The foreclosure docket or route you requested could not be located. It may have cleared auction or been updated.
           </p>
         </div>
