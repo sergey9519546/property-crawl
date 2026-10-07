@@ -148,7 +148,10 @@ type Network = {
     needsAttention: number;
     importSources: number;
     observedRecords: number;
+    /** Observation-history index size. Retains entries for records the store no longer holds, so it is NOT the inventory count. */
     trackedRecords: number;
+    /** Records currently in the store, summed per distinct adapter. Matches /api/listings total. */
+    storedRecords?: number;
   };
   atlas?: SourceAtlasData;
   storageMode?: string;
@@ -701,7 +704,12 @@ export function SourceNetwork() {
               {[
                 [data?.summary.catalogSources, "Source workflows"],
                 [data?.summary.automatedCollectors, "Collectors registered"],
-                [data?.summary.trackedRecords, "Records tracked"],
+                // What is actually in the store, not the observation index.
+                // trackedRecords counts every record ever observed, including
+                // ones the store no longer holds - live it read 11,080 against
+                // a store of 9,831, on a page whose job is answering "how much
+                // inventory do we have".
+                [data?.summary.storedRecords ?? data?.summary.trackedRecords, "Records in store"],
               ].map(([value, text]) => (
                 <div key={String(text)}>
                   <p className="text-2xl font-semibold tabular-nums">

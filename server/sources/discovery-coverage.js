@@ -131,9 +131,26 @@ async function attachDiscoveryCoverage(network, database, env = process.env) {
   const needsAttention = network.sources.filter((source) =>
     ['attention', 'stale', 'empty'].includes(source.status)
     || ['attention', 'stale', 'partial', 'blocked'].includes(source.discoveryStatus)).length;
+  // Sum over distinct adapters, not over catalog entries. civilview and
+  // civilview-nationwide are two workflows registered against one source_key, and
+  // the inventory aggregate is grouped by that key - so both entries report the
+  // SAME rows. Summing them counted every civilview record twice and the page
+  // read 9,965 against a store of 9,831. Within an adapter the counts are
+  // identical, so the group collapses to one of them rather than adding them.
+  // Per-source rows keep their own counts (each workflow does hold those
+  // records); it is only the total that must not double-count.
+  const sumByAdapter = (field) => {
+    const perAdapter = new Map();
+    for (const source of network.sources) {
+      const key = source.adapterKey || source.id;
+      const count = Number(source[field] || 0);
+      perAdapter.set(key, Math.max(perAdapter.get(key) || 0, count));
+    }
+    return [...perAdapter.values()].reduce((total, count) => total + count, 0);
+  };
   return { ...network, atlas, collectionHealth, storageMode: database.pool ? 'postgres' : 'demo',
     summary: { ...network.summary, collected, needsAttention,
-      observedRecords: network.sources.reduce((n,s)=>n+Number(s.observedRecords||0),0),
-      storedRecords: network.sources.reduce((n,s)=>n+Number(s.storedRecords||s.observedRecords||0),0), atlasBacklog: atlas.total } };
+      observedRecords: sumByAdapter('observedRecords'),
+      storedRecords: sumByAdapter('storedRecords'), atlasBacklog: atlas.total } };
 }
 module.exports = { attachDiscoveryCoverage };

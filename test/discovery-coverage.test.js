@@ -25,6 +25,37 @@ function makePool({ runs = [], inventory = [], rollouts = [], checkpoints = [] }
   } };
 }
 
+// The headline record count on the operator page must be the count of records
+// the store holds, for two reasons that both bit in production.
+//
+// One: two catalog entries can share a source_key. civilview and
+// civilview-nationwide are two workflows over one adapter, and the inventory
+// aggregate is grouped by that key - summing per catalog entry counted every
+// civilview record twice, so the page read 9,965 against a store of 9,831.
+//
+// Two: the observation index retains entries for records the store no longer
+// holds. It read 11,080 - the number behind the tile until this was fixed.
+test('the record total counts each adapter once, not each catalog entry', async () => {
+  const network = {
+    sources: [
+      { id: 'civilview', adapterKey: 'civilview', automated: true, workflow: { cadenceHours: 12 }, lastRun: { lastRunAt: new Date().toISOString(), acceptedCount: 5, error: null } },
+      { id: 'civilview-nationwide', adapterKey: 'civilview', automated: true, workflow: { cadenceHours: 12 }, lastRun: { lastRunAt: new Date().toISOString(), acceptedCount: 5, error: null } },
+      { id: 'hud-homestore', adapterKey: 'hud-homestore', automated: true, workflow: { cadenceHours: 24 }, lastRun: { lastRunAt: new Date().toISOString(), acceptedCount: 7, error: null } },
+    ],
+    summary: { catalogSources: 3, automatedCollectors: 3, collected: 0, needsAttention: 0, importSources: 0, observedRecords: 0, trackedRecords: 99 },
+  };
+  const result = await attachDiscoveryCoverage(network, { pool: makePool({ inventory: [
+    { source_key: 'civilview', count: 134, archived: 0, observed_at: new Date().toISOString(), states: ['NJ'] },
+    { source_key: 'hud-homestore', count: 1992, archived: 0, observed_at: new Date().toISOString(), states: ['OH'] },
+  ] }) }, { DISCOVERY_MODE: 'advanced' });
+
+  assert.equal(result.summary.storedRecords, 2126,
+    'civilview is one adapter behind two catalog entries and must be counted once');
+  assert.equal(result.summary.observedRecords, 2126);
+  assert.equal(result.sources.filter((s) => s.adapterKey === 'civilview').length, 2,
+    'per-source rows keep their own count; only the total dedupes');
+});
+
 test('advanced coverage recomputes counters from durable runs and clears file-backed no-run history', async () => {
   const now = new Date().toISOString();
   const runs = [
