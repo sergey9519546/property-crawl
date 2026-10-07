@@ -74,24 +74,40 @@ const suites = [
 
 let totalPassed = 0;
 let totalFailed = 0;
+const skippedSuites = [];
+const { skippedIn, skippedNote } = require('../scripts/verify-summary');
+
+// A suite whose tests are all skipped exits 0 and looks identical to one that
+// genuinely passed. Roughly fifteen tests here are gated on DATABASE_URL, and a
+// summary that cannot tell "verified" from "never ran" is a false all-clear -
+// the same failure this codebase keeps fixing one layer down. Surface them.
 
 for (const suite of suites) {
   console.log(`Running ${suite.name}...`);
   try {
     const output = execSync(suite.cmd, { stdio: 'pipe' }).toString();
     console.log(output);
+    const skipped = skippedIn(output);
+    if (skipped > 0) {
+      skippedSuites.push({ name: suite.name, skipped });
+      console.log(`NOTE: ${suite.name} skipped ${skipped} test(s) - these did not run.`);
+    }
     totalPassed++;
   } catch (err) {
     console.error(`FAILED: ${suite.name}`);
     if (err.stdout) console.error(err.stdout.toString());
     if (err.stderr) console.error(err.stderr.toString());
     if (!err.stdout && !err.stderr) console.error(err.message);
+    const skipped = skippedIn(`${err.stdout || ''}${err.stderr || ''}`);
+    if (skipped > 0) skippedSuites.push({ name: suite.name, skipped });
     totalFailed++;
   }
 }
 
 console.log('====================================================');
 console.log(`VERIFICATION RESULT: ${totalPassed}/${suites.length} Suites Passed (${totalFailed} Failed)`);
+const note = skippedNote(skippedSuites);
+if (note) console.log(note);
 console.log('====================================================');
 
 if (totalFailed > 0) {

@@ -114,3 +114,65 @@ test('the module-load script exists where the gates invoke it', () => {
     'scripts/verify-module-load.js is referenced by the gates but does not exist',
   );
 });
+
+// --- verify.js must not report "not run" as "passed" ---
+
+// Same shape as the gap above, one layer up. verify.js counts suites by exit
+// code, and a suite whose tests are all skipped exits 0 - so "50/50 Suites
+// Passed (0 Failed)" was produced while roughly fifteen tests gated on
+// DATABASE_URL never executed. A summary that cannot tell "verified" from
+// "never ran" is a false all-clear.
+// Assert the behaviour, not the text of the script. Checking that verify.js
+// contains a particular sentence is the same mistake this file already
+// documents one layer down: it passes while the sentence sits in a module the
+// runner never reads. Require the helper instead, and assert it is the same one
+// verify.js imports.
+test('the verifier summary reports skipped tests instead of folding them into passes', () => {
+  const { skippedIn, skippedNote } = require('../scripts/verify-summary');
+  const verifySource = require('node:fs').readFileSync(path.join(ROOT, 'test', 'verify.js'), 'utf8');
+  assert.match(
+    verifySource,
+    /require\('\.\.\/scripts\/verify-summary'\)/,
+    'verify.js must use the shared summary helper rather than its own copy',
+  );
+  assert.match(
+    verifySource,
+    /skippedNote\(skippedSuites\)/,
+    'verify.js must print the skip note in its summary',
+  );
+  // The parser itself is exercised against real reporter output in the next
+  // test. It is not re-derived here by spawning a nested `node --test`: inside
+  // the runner, a child test process reports differently and this assertion
+  // would be testing the harness rather than the contract.
+  const note = skippedNote([{ name: 'suite', skipped: 2 }]);
+  assert.match(note, /not a passing test/);
+  assert.match(note, /2 test\(s\) were SKIPPED/);
+});
+
+test('the skip counter reads the reporter line and ignores clean output', () => {
+  const { skippedIn } = require('../scripts/verify-summary');
+  const { spawnSync } = require('node:child_process');
+  assert.equal(skippedIn('ℹ skipped 3\nℹ pass 10\n'), 3);
+  assert.equal(skippedIn('# skipped 1\n# pass 4\n'), 1);
+  assert.equal(skippedIn('ℹ pass 10\nℹ fail 0\n'), 0);
+  assert.equal(skippedIn(undefined), 0);
+  // Against a real gated run. NODE_TEST_CONTEXT is stripped because this file
+  // is itself running under the runner, and a grandchild that inherits it
+  // reports differently - the assertion would then be testing the harness.
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const run = spawnSync('node', ['--test', 'test/discovery-acceptance-restart.test.js'], { encoding: 'utf8', env });
+  assert.ok(
+    skippedIn(`${run.stdout || ''}\n${run.stderr || ''}`) > 0,
+    'a suite gated on DATABASE_URL must register as skipped, not as a pass',
+  );
+});
+
+test('the skip note is absent when nothing was skipped', () => {
+  const { skippedNote } = require('../scripts/verify-summary');
+  assert.equal(skippedNote([]), '');
+  const note = skippedNote([{ name: '9. Some Suite', skipped: 2 }]);
+  assert.match(note, /2 test\(s\) were SKIPPED/);
+  assert.match(note, /9\. Some Suite \(2\)/);
+  assert.match(note, /not a passing test/);
+});
