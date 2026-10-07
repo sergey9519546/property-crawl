@@ -118,6 +118,14 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
 
 const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.status === 'supported').length;
   const contradictedCount = data.summary?.contradicted ?? data.signals.filter((s) => s.status === 'contradicted').length;
+  // Say the unresolved ones out loud. The score is a headline number resting on
+  // whichever signals actually resolved, and "1 supported · 0 conflicting" alone
+  // reads like a clean bill of health. Today one of six signals resolves at all,
+  // because there are no valuation bands to score a bid against - the per-signal
+  // badges below do say "Needs checking", but this is the line the reader sees
+  // first when they ask how the number was reached.
+  const unknownCount = data.summary?.unknown
+    ?? data.signals.filter((s) => s.status === 'unknown').length;
   const weights = data.weights ?? {};
 
   return (
@@ -175,7 +183,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         >
           <span className="flex items-center gap-1.5">
             <Scale className="w-3.5 h-3.5 text-slate-500" />
-            <span>How this score works ({supportedCount} supported · {contradictedCount} conflicting)</span>
+            <span>How this score works ({supportedCount} supported{unknownCount ? ` · ${unknownCount} needing checks` : ''} · {contradictedCount} conflicting)</span>
           </span>
           {showWeights ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
         </button>
