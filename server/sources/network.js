@@ -1,5 +1,9 @@
 const { validateListingForIngestion } = require('../scrapers/validation');
 
+// How many collection-change signals travel in one payload. The rest stay in
+// the observation store; signalsTotal/signalsTruncated say so.
+const SIGNAL_LIMIT = 100;
+
 function buildSourceNetwork({ catalog, adapters, observations, listings = [], evidenceCollectors = [], evidenceSummary = {}, now = Date.now() }) {
   const registered = new Set(adapters.map((adapter) => adapter.sourceKey));
   const counts = new Map();
@@ -59,7 +63,16 @@ function buildSourceNetwork({ catalog, adapters, observations, listings = [], ev
       observedRecords: sources.reduce((sum, source) => sum + source.observedRecords, 0),
       trackedRecords: Object.keys(observations.records).length,
     },
-    signals: observations.signals.slice(0, 100),
+    // Signals are stored newest-first and only the first 100 travel. Against the
+    // live observation store that is 100 of 2,000 -- 5% -- and the payload used
+    // to carry no count at all, so a reader saw a hundred "collection changes"
+    // with no way to know nineteen hundred more existed. The store is read
+    // whole; the RESULT is the slice, so the slice gets its own fields rather
+    // than borrowing a truncation flag that describes the read.
+    signals: observations.signals.slice(0, SIGNAL_LIMIT),
+    signalsTotal: observations.signals.length,
+    signalsReturned: Math.min(observations.signals.length, SIGNAL_LIMIT),
+    signalsTruncated: observations.signals.length > SIGNAL_LIMIT,
     scope: 'Catalog entries describe source workflows. A registered collector does not imply complete geographic coverage or a successful collection. Imported evidence requires review.',
   };
 }

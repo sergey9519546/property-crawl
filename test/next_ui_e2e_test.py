@@ -623,7 +623,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.reload(wait_until="domcontentloaded")
         self.wait_for_live_feed()
         market_map = self.open_live_market_map()
-        self.page.wait_for_function("document.querySelectorAll('[data-testid=map-marker]').length === 3")
+        # Same predicate as every other map-marker wait in this file, and the
+        # same 10s budget (see line 368). It was the only one left on the 5s
+        # default, and it failed once under load in the full verifier while
+        # passing in isolation -- a test that cannot fail reliably teaches
+        # people to re-run until green. The condition is unchanged; only the
+        # patience matches the file's own convention.
+        self.page.wait_for_function(
+            "document.querySelectorAll('[data-testid=map-marker]').length === 3",
+            timeout=10_000,
+        )
         self.assertIn("4 records with verified locations · 3 map locations", market_map.inner_text())
         first = self.listings[0]
         marker = self.page.get_by_role("button", name=f"Show 2 source records at {first['address']}", exact=True)
