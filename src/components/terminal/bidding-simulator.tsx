@@ -115,7 +115,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <Calculator className="mt-0.5 h-5 w-5 text-[#0F172A]" />
           <div>
             <h3 className="text-base font-bold text-[#111827]">{estimatedValue === null ? "Bid cost model" : "Max Allowable Offer (MAO) Simulator"}</h3>
-            <p className="mt-1 text-xs leading-relaxed text-[#6B7280]">{estimatedValue === null
+            <p className="mt-1 text-xs leading-relaxed text-[#5B6472]">{estimatedValue === null
               ? "Costs below are modeled from the published opening amount and the assumptions you enter. No fee is inferred from the source or state; enter 0 only when zero is your deliberate assumption. A maximum allowable offer is not shown because this record has no supported valuation."
               : "No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption."}</p>
           </div>
@@ -126,7 +126,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <label key={field} className="space-y-1 text-xs font-semibold text-[#374151]">
               <span>{label}</span>
               <div className="flex items-center rounded-lg border border-[#D1D5DB] bg-white px-3 focus-within:border-[#0F172A]">
-                <span className="text-[#9CA3AF]">$</span>
+                <span className="text-[#5B6472]">$</span>
                 <input inputMode="decimal" value={scenario[field as ScenarioField]} onChange={(event) => updateScenario(field as ScenarioField, event.target.value)} placeholder="Unresolved" aria-label={`${label} assumption`} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm font-semibold text-[#111827] outline-none" />
               </div>
             </label>
@@ -148,15 +148,15 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         {cash.totalAcquisitionCost !== null ? (
           <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
-              <p className="text-[11px] font-bold uppercase text-[#6B7280]">Acquisition cost at the opening amount</p>
+              <p className="text-[11px] font-bold uppercase text-[#5B6472]">Acquisition cost at the opening amount</p>
               <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalAcquisitionCost)}</p>
-              <p className="mt-1 text-[10px] text-[#6B7280]">The published opening amount plus the acquisition costs you entered.</p>
+              <p className="mt-1 text-[10px] text-[#5B6472]">The published opening amount plus the acquisition costs you entered.</p>
             </div>
             {cash.totalCashToClose !== null ? (
               <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
-                <p className="text-[11px] font-bold uppercase text-[#6B7280]">Cash to close</p>
+                <p className="text-[11px] font-bold uppercase text-[#5B6472]">Cash to close</p>
                 <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalCashToClose)}</p>
-                <p className="mt-1 text-[10px] text-[#6B7280]">Adds the registration funds and credited deposit you entered.</p>
+                <p className="mt-1 text-[10px] text-[#5B6472]">Adds the registration funds and credited deposit you entered.</p>
               </div>
             ) : null}
           </div>
@@ -174,12 +174,12 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         ) : reverseScenario ? (
           <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#6B7280]">Maximum price meeting target</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-[#6B7280]">After explicit costs, rehab, and target profit.</p></div>
-            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#6B7280]">Change needed at opening amount</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-[#6B7280]">Required price reduction if costs stay unchanged.</p></div>
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Maximum price meeting target</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-[#5B6472]">After explicit costs, rehab, and target profit.</p></div>
+            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Change needed at opening amount</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-[#5B6472]">Required price reduction if costs stay unchanged.</p></div>
             <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3 sm:col-span-2">
-              <p className="text-[11px] font-bold uppercase text-[#6B7280]">Cost alternative</p>
+              <p className="text-[11px] font-bold uppercase text-[#5B6472]">Cost alternative</p>
               <p className="mt-1 text-sm font-bold text-[#111827]">At the opening amount, other acquisition costs may total at most {displayMoney(reverseScenario.maxOtherAcquisitionCostsAtCurrentPrice)}.</p>
-              <p className="mt-1 text-xs text-[#6B7280]">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
+              <p className="mt-1 text-xs text-[#5B6472]">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
             </div>
           </div>
         ) : (

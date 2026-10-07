@@ -167,7 +167,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             <Bookmark className="w-5 h-5 text-[#16A34A] fill-[#16A34A]" />
             <h3 id="watchlist-title" className="text-lg font-bold text-[#111827]">Saved Watchlist ({savedListings.length})</h3>
           </div>
-          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F5F6F7]">
+          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -205,7 +205,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             </div>
 
             <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex items-center justify-between">
-              <span className="text-xs text-[#6B7280] font-medium">Saved source records</span>
+              <span className="text-xs text-[#5B6472] font-medium">Saved source records</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={exportCsv}
@@ -229,8 +229,8 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         {/* Listings List */}
         <div className="p-6 overflow-y-auto space-y-3 flex-1">
           {savedListings.length === 0 ? (
-            <div className="text-center py-12 text-[#6B7280] space-y-2">
-              <Bookmark className="w-10 h-10 mx-auto text-[#9CA3AF]" />
+            <div className="text-center py-12 text-[#5B6472] space-y-2">
+              <Bookmark className="w-10 h-10 mx-auto text-[#5B6472]" />
               <p className="font-semibold text-[#111827]">No saved properties yet</p>
               <p className="text-xs">Click the bookmark icon on any auction listing or parsed notice to track it here.</p>
             </div>
@@ -251,13 +251,13 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   {photoUrl ? (
                     <img src={photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F7] text-[#9CA3AF]" aria-label="No source photo published">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F7] text-[#5B6472]" aria-label="No source photo published">
                       <ImageOff className="h-4 w-4" />
                     </div>
                   )}
                   <div className="min-w-0">
                     <p className="font-bold text-sm text-[#111827] truncate">{l.address}</p>
-                    <p className="text-xs text-[#6B7280] truncate">
+                    <p className="text-xs text-[#5B6472] truncate">
                       {displayMoney(l.openingBid)} · Sale: {displayDate(l.saleDate)}
                     </p>
                   </div>
@@ -270,7 +270,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   <button
                     onClick={() => onRemove(l.id)}
                     aria-label={`Remove ${l.address} from watchlist`}
-                    className="p-1.5 text-[#9CA3AF] hover:text-[#B91C1C] transition"
+                    className="p-1.5 text-[#5B6472] hover:text-[#B91C1C] transition"
                     title="Remove from watchlist"
                   >
                     <Trash2 className="w-4 h-4" />

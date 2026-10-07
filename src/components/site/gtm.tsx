@@ -114,7 +114,7 @@ export function Gtm() {
                 onClick={() => setActive(i)}
                 aria-pressed={active === i}
                 className={`relative rounded-xl px-5 py-2.5 text-[14px] font-medium transition-colors ${
-                  active === i ? "text-[#111827]" : "text-[#6B7280] hover:text-[#111827]"
+                  active === i ? "text-[#111827]" : "text-[#5B6472] hover:text-[#111827]"
                 }`}
               >
                 {active === i && (
@@ -147,7 +147,7 @@ export function Gtm() {
                     PerfectProperty for {team.label}
                   </p>
                   <p
-                    className="mt-4 text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]"
+                    className="mt-4 text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]"
                   >
                     {team.desc}
                   </p>
@@ -157,7 +157,7 @@ export function Gtm() {
                         key={c.label}
                         className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#111827]"
                       >
-                        <c.icon className="h-4 w-4 text-[#6B7280]" />
+                        <c.icon className="h-4 w-4 text-[#5B6472]" />
                         {c.label}
                       </span>
                     ))}
@@ -201,7 +201,7 @@ function GtmVisual({ team }: { team: string }) {
           />
         </div>
         <p className="mt-3 text-[13px] font-bold text-[#111827]">123 Main St</p>
-        <p className="text-[11px] text-[#6B7280]">ARV $340k &middot; Profit $52k</p>
+        <p className="text-[11px] text-[#5B6472]">ARV $340k &middot; Profit $52k</p>
       </div>
     );
   }
@@ -236,7 +236,7 @@ function GtmVisual({ team }: { team: string }) {
     return (
       <div className="w-full max-w-[300px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_28px_rgba(0,0,0,0.08)]">
         <p className="text-[13px] font-bold text-[#111827]">Share deal memo</p>
-        <p className="mt-1 text-[11px] text-[#6B7280]">perfectproperty.app/d/123-main</p>
+        <p className="mt-1 text-[11px] text-[#5B6472]">perfectproperty.app/d/123-main</p>
         <div className="mt-3 flex gap-2">
           {["Link", "Embed", "PDF", "Video"].map((b) => (
             <span
@@ -250,7 +250,7 @@ function GtmVisual({ team }: { team: string }) {
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#F3F4F6]">
           <div className="h-full w-[64%] rounded-full bg-[#0F172A]" />
         </div>
-        <p className="mt-1 text-[11px] text-[#6B7280]">64% opened by partners</p>
+        <p className="mt-1 text-[11px] text-[#5B6472]">64% opened by partners</p>
       </div>
     );
   }
@@ -268,7 +268,7 @@ function GtmVisual({ team }: { team: string }) {
         <Row label="Offer" value="$248k" />
         <Row label="Profit" value="$52k" green />
       </div>
-      <p className="mt-3 rounded-lg bg-[#F5F6F7] p-2 text-[11px] leading-snug text-[#6B7280]">
+      <p className="mt-3 rounded-lg bg-[#F5F6F7] p-2 text-[11px] leading-snug text-[#5B6472]">
         &ldquo;Occupied; Ohio allows confirmation delays; 10% deposit due day-of.&rdquo;
       </p>
     </div>
@@ -278,7 +278,7 @@ function GtmVisual({ team }: { team: string }) {
 function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
   return (
     <div className="flex items-center justify-between text-[12px]">
-      <span className="text-[#6B7280]">{label}</span>
+      <span className="text-[#5B6472]">{label}</span>
       <span className={`font-bold ${green ? "text-[#16A34A]" : "text-[#111827]"}`}>
         {value}
       </span>

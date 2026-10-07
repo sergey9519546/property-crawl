@@ -209,7 +209,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/" className="hidden items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-[#6B7280] hover:bg-[#F3F4F6] md:flex"><Home size={14} />Site</Link>
+            <Link href="/" className="hidden items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-[#5B6472] hover:bg-[#F3F4F6] md:flex"><Home size={14} />Site</Link>
             {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? "Locking…" : "Lock"}</button>
               : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1E293B]"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
           </div>
@@ -251,7 +251,7 @@ export function PrivateWorkspaceGate({ title = "Unlock your research workspace",
   // branch never renders. It is why the accessibility audit asserts h1 presence
   // in the live DOM.
   const Heading = `h${headingLevel}` as 'h1' | 'h2' | 'h3';
-  if (session.loading) return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 text-sm text-[#6B7280] shadow-sm"><Heading className="text-xl font-semibold text-[#111827]">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
+  if (session.loading) return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 text-sm text-[#5B6472] shadow-sm"><Heading className="text-xl font-semibold text-[#111827]">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
   if (session.authenticated) return <>{children}</>;
-  return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm"><LockKeyhole className="text-slate-900" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-[#6B7280]">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B]">Unlock workspace</button></section>;
+  return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm"><LockKeyhole className="text-slate-900" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-[#5B6472]">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B]">Unlock workspace</button></section>;
 }

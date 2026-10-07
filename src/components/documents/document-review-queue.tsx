@@ -182,7 +182,7 @@ export function DocumentReviewQueue() {
             <FileWarning size={17} /> Document review
           </p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Document review queue</h1>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-[#6B7280]">
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-[#5B6472]">
             Publisher documents from the listing evidence pipeline, plus any
             decisions you record. Approve, reject, or request more evidence
             before an item is treated as reviewed. Decisions write through to
@@ -214,7 +214,7 @@ export function DocumentReviewQueue() {
                 {STATUS_LABEL[key]}
               </p>
               <p className="mt-3 text-3xl font-semibold tabular-nums">{data?.byStatus[key] ?? 0}</p>
-              <p className="mt-1 text-xs text-[#9CA3AF]">documents</p>
+              <p className="mt-1 text-xs text-[#5B6472]">documents</p>
             </div>
           ))}
         </div>
@@ -224,7 +224,7 @@ export function DocumentReviewQueue() {
 
         <div className="mt-8 flex flex-wrap items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
           <ShieldQuestion size={16} className="text-slate-500" />
-          <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-[#6B7280]">Reviewer identifier</label>
+          <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-[#5B6472]">Reviewer identifier</label>
           <input
             id="document-review-reviewer"
             type="text"
@@ -233,7 +233,7 @@ export function DocumentReviewQueue() {
             placeholder="operator-7"
             className="min-w-[12rem] flex-1 rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm"
           />
-          <p className="text-xs leading-5 text-[#9CA3AF]">Required for every terminal action. Notes are required when rejecting or requesting follow-up.</p>
+          <p className="text-xs leading-5 text-[#5B6472]">Required for every terminal action. Notes are required when rejecting or requesting follow-up.</p>
         </div>
 
         <div className="mt-6 space-y-4">
@@ -247,7 +247,7 @@ export function DocumentReviewQueue() {
             <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white p-8">
               <Inbox className="text-slate-900" />
               <h2 className="mt-4 text-xl font-semibold">No pending documents.</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6B7280]">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5B6472]">
                 The build-data extraction pipeline has nothing waiting for review. Refresh the page after the next cycle to inspect new captures.
               </p>
             </div>
@@ -264,20 +264,20 @@ export function DocumentReviewQueue() {
                       <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${STATUS_TONE[entry.review.status]}`}>
                         {STATUS_LABEL[entry.review.status]}
                       </span>
-                      <span className="text-[11px] text-[#9CA3AF]">
+                      <span className="text-[11px] text-[#5B6472]">
                         Document {entry.documentIndex != null ? `#${entry.documentIndex}` : "(unindexed)"} · Revision {entry.review.revision}
                       </span>
                       {entry.review.priorStatus && (
-                        <span className="text-[11px] text-[#9CA3AF]">Previously {STATUS_LABEL[entry.review.priorStatus as Review["status"]] ?? entry.review.priorStatus}</span>
+                        <span className="text-[11px] text-[#5B6472]">Previously {STATUS_LABEL[entry.review.priorStatus as Review["status"]] ?? entry.review.priorStatus}</span>
                       )}
                     </div>
                     <h2 className="mt-3 font-mono text-sm font-semibold">{entry.listingId}</h2>
                     {href && (
-                      <a href={href} target="_blank" rel="noreferrer" className="mt-1 inline-flex max-w-full break-all text-xs text-[#6B7280] underline decoration-slate-300 underline-offset-4 hover:decoration-slate-950">
+                      <a href={href} target="_blank" rel="noreferrer" className="mt-1 inline-flex max-w-full break-all text-xs text-[#5B6472] underline decoration-slate-300 underline-offset-4 hover:decoration-slate-950">
                         {href}
                       </a>
                     )}
-                    <p className="mt-1 text-xs text-[#9CA3AF]">
+                    <p className="mt-1 text-xs text-[#5B6472]">
                       Extracted {formatDate(entry.review.extractedAt)}{entry.review.reviewedAt ? ` · Last decision ${formatDate(entry.review.reviewedAt)}` : ""}{entry.review.reviewer ? ` · ${entry.review.reviewer}` : ""}
                     </p>
                     {entry.review.notes && (
@@ -290,7 +290,7 @@ export function DocumentReviewQueue() {
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                   <label className="block">
-                    <span className="text-xs font-semibold text-[#6B7280]">Reviewer note (required for reject / needs more)</span>
+                    <span className="text-xs font-semibold text-[#5B6472]">Reviewer note (required for reject / needs more)</span>
                     <textarea
                       rows={2}
                       value={note}
@@ -331,7 +331,7 @@ export function DocumentReviewQueue() {
                 </div>
 
                 {pendingId === entry.id && (
-                  <p className="mt-3 flex items-center gap-2 text-xs text-[#6B7280]">
+                  <p className="mt-3 flex items-center gap-2 text-xs text-[#5B6472]">
                     <Loader2 size={14} className="animate-spin" />
                     Saving review…
                   </p>

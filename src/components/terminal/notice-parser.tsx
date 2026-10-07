@@ -216,7 +216,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
       />
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-[#6B7280]">All extracted fields require comparison with the source document.</span>
+        <span className="text-xs text-[#5B6472]">All extracted fields require comparison with the source document.</span>
         <button
           type="button"
           onClick={handleParse}

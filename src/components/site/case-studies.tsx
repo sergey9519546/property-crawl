@@ -83,7 +83,7 @@ export function CaseStudies() {
                 {m.value}
               </p>
               <p className="mt-1 text-[15px] font-semibold text-[#111827]">{m.label}</p>
-              <p className="mt-2 text-[14px] leading-[1.6] text-[#6B7280]">{m.desc}</p>
+              <p className="mt-2 text-[14px] leading-[1.6] text-[#5B6472]">{m.desc}</p>
             </div>
           ))}
         </GsapStaggerGroup>
@@ -106,9 +106,9 @@ export function CaseStudies() {
               </span>
               <div className="flex-1">
                 <p className="text-[14px] font-medium text-[#111827]">{c.text}</p>
-                <p className="text-[12px] text-[#6B7280]">Open the workflow</p>
+                <p className="text-[12px] text-[#5B6472]">Open the workflow</p>
               </div>
-              <ArrowRight className="h-4 w-4 text-[#9CA3AF] transition-colors group-hover:text-[#0F172A]" />
+              <ArrowRight className="h-4 w-4 text-[#5B6472] transition-colors group-hover:text-[#0F172A]" />
             </a>
           ))}
         </GsapStaggerGroup>

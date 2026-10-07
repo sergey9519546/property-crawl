@@ -377,7 +377,7 @@ export function Hero() {
             }
             placeholder={placeholder}
             autoComplete="off"
-            className="min-w-0 flex-1 bg-transparent text-[18px] leading-none text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[18px] leading-none text-[#111827] placeholder:text-[#5B6472] focus:outline-none"
           />
           <button
             type="submit"

@@ -85,7 +85,7 @@ export function FastestWay() {
                 <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
                   From posted notice to bid, in one afternoon.
                 </h2>
-                <p className="mt-4 max-w-[420px] text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]">
+                <p className="mt-4 max-w-[420px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
                   Federal auctions update by the hour. County sheriffs post on
                   Tuesdays. Here&rsquo;s the loop from notice to bid &mdash; how
                   PerfectProperty turns a legal-prose filing into a deal you can
@@ -125,15 +125,15 @@ function BentoCard({ step, delay }: { step: Step; delay: number }) {
         {/* Text content (bottom ~40%) */}
         <div className="flex flex-1 flex-col gap-2 p-6">
           <div className="flex items-center gap-2">
-            <step.icon className="h-4 w-4 text-[#6B7280]" />
-            <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#9CA3AF]">
+            <step.icon className="h-4 w-4 text-[#5B6472]" />
+            <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#5B6472]">
               {step.label}
             </p>
           </div>
           <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-[#111827]">
             {step.title}
           </h3>
-          <p className="mt-1 text-[14px] leading-[1.6] text-[#6B7280]">
+          <p className="mt-1 text-[14px] leading-[1.6] text-[#5B6472]">
             {step.desc}
           </p>
         </div>
@@ -154,15 +154,15 @@ function DealKitVisual() {
       </div>
       <div className="mt-3 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#6B7280]">ARV formula</span>
+          <span className="text-[#5B6472]">ARV formula</span>
           <span className="font-mono text-[#111827]">comps × 0.92</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#6B7280]">Offer rule</span>
+          <span className="text-[#5B6472]">Offer rule</span>
           <span className="font-mono text-[#111827]">ARV × 0.70</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#6B7280]">Market</span>
+          <span className="text-[#5B6472]">Market</span>
           <span className="font-medium text-[#111827]">Cleveland, OH</span>
         </div>
       </div>
@@ -176,18 +176,18 @@ function ParcelContextVisual() {
       <div className="col-span-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <MapPin className="h-4 w-4 text-[#0F172A]" />
         <span className="text-[12px] font-semibold text-[#111827]">123 Main St</span>
-        <span className="ml-auto text-[11px] text-[#6B7280]">Cleveland, OH</span>
+        <span className="ml-auto text-[11px] text-[#5B6472]">Cleveland, OH</span>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#9CA3AF]">Assessor</p>
+        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Assessor</p>
         <p className="mt-1 text-[11px] text-[#111827]">$182k assessed</p>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#9CA3AF]">Distress</p>
+        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Distress</p>
         <p className="mt-1 text-[11px] text-[#B91C1C]">Code violation</p>
       </div>
       <div className="col-span-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#9CA3AF]">Photos</p>
+        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Photos</p>
         <div className="mt-1.5 flex gap-1">
           {[0,1,2,3].map(i => <div key={i} className="h-8 flex-1 rounded bg-[#F3F4F6]" />)}
         </div>
@@ -201,7 +201,7 @@ function PromptVisual() {
     <div className="w-full max-w-[300px] space-y-2">
       <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <Sparkles className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] text-[#6B7280]">Generate deal memo for 123 Main St</span>
+        <span className="text-[12px] text-[#5B6472]">Generate deal memo for 123 Main St</span>
       </div>
       <div className="rounded-lg border border-[#0F172A] bg-[#0F172A]/5 p-3">
         <div className="flex items-center gap-1.5">
@@ -241,7 +241,7 @@ function SliderRow({ label, value, pct, accent }: { label: string; value: string
   return (
     <div>
       <div className="flex items-center justify-between text-[11px]">
-        <span className="text-[#6B7280]">{label}</span>
+        <span className="text-[#5B6472]">{label}</span>
         <span className={`font-bold ${accent ? "text-[#3aaf57]" : "text-[#111827]"}`}>{value}</span>
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#F3F4F6]">
@@ -265,7 +265,7 @@ function DownloadVisual() {
         { icon: FileText, label: "Embed" },
       ].map(({ icon: Icon, label }) => (
         <div key={label} className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-          <Icon className="h-3.5 w-3.5 text-[#6B7280]" />
+          <Icon className="h-3.5 w-3.5 text-[#5B6472]" />
           <span className="text-[11px] font-medium text-[#111827]">{label}</span>
         </div>
       ))}

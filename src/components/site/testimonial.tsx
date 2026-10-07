@@ -19,7 +19,7 @@ export function Testimonial() {
             </div>
             <div className="text-left">
               <p className="text-[15px] font-semibold text-[#111827]">Our research standard</p>
-              <p className="text-[13px] text-[#6B7280]">
+              <p className="text-[13px] text-[#5B6472]">
                 Published facts first. Assumptions made visible.
               </p>
             </div>

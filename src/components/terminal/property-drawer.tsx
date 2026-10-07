@@ -220,7 +220,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             >
               {source.label}
             </span>
-            <span className="text-xs font-bold text-[#6B7280]">Tier {source.tier}</span>
+            <span className="text-xs font-bold text-[#5B6472]">Tier {source.tier}</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -239,7 +239,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F5F6F7] transition"
+              className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7] transition"
               aria-label="Close drawer"
             >
               <X className="w-5 h-5" />
@@ -260,7 +260,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
               activeTab === "underwrite"
                 ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
-                : "text-[#6B7280] hover:text-[#111827]"
+                : "text-[#5B6472] hover:text-[#111827]"
             )}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -278,7 +278,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
               activeTab === "3d"
                 ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
-                : "text-[#6B7280] hover:text-[#111827]"
+                : "text-[#5B6472] hover:text-[#111827]"
             )}
           >
             <Box className="w-3.5 h-3.5 text-[#22C55E]" />
@@ -296,7 +296,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
               activeTab === "bidding"
                 ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
-                : "text-[#6B7280] hover:text-[#111827]"
+                : "text-[#5B6472] hover:text-[#111827]"
             )}
           >
             <Sparkles className="w-3.5 h-3.5 text-[#0F172A]" />
@@ -314,7 +314,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition",
               activeTab === "signals"
                 ? "bg-white text-[#111827] shadow-sm border border-[#E5E7EB]"
-                : "text-[#6B7280] hover:text-[#111827]"
+                : "text-[#5B6472] hover:text-[#111827]"
             )}
           >
             <Activity className="w-3.5 h-3.5 text-emerald-700" />
@@ -329,13 +329,13 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
             {photoUrl ? (
               <img src={photoUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm font-semibold text-[#6B7280]">No source photo published</div>
+              <div className="flex h-full items-center justify-center text-sm font-semibold text-[#5B6472]">No source photo published</div>
             )}
             {dealScore !== null && (
               <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/80 shadow-md">
-                <span className="text-xs text-[#6B7280] font-semibold uppercase">Modeled score: </span>
+                <span className="text-xs text-[#5B6472] font-semibold uppercase">Modeled score: </span>
                 <span className="text-sm font-extrabold text-[#111827]">{dealScore}/99</span>
-                <span className="block text-[9px] text-[#6B7280]">Bid-to-midpoint triage · see Signals tab</span>
+                <span className="block text-[9px] text-[#5B6472]">Bid-to-midpoint triage · see Signals tab</span>
               </div>
             )}
           </div>
@@ -345,8 +345,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         <div className="p-6 space-y-6 flex-1">
           <div>
             <h2 id="property-drawer-title" className="text-2xl font-bold text-[#111827]">{listing.address}</h2>
-            <p className="text-sm text-[#6B7280] flex items-center gap-1.5 mt-1">
-              <MapPin className="w-4 h-4 text-[#9CA3AF]" />
+            <p className="text-sm text-[#5B6472] flex items-center gap-1.5 mt-1">
+              <MapPin className="w-4 h-4 text-[#5B6472]" />
               {displayText(listing.city)}, {listing.state} {displayText(listing.zip, "")} · {displayText(listing.county, "County not published")}
             </p>
           </div>
@@ -357,11 +357,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               {/* Core Valuation Matrix */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-[#F5F6F7] rounded-2xl border border-[#E5E7EB]">
                 <div>
-                  <p className="text-[11px] font-bold text-[#6B7280] uppercase">Opening Bid</p>
+                  <p className="text-[11px] font-bold text-[#5B6472] uppercase">Opening Bid</p>
                   <p className="text-lg font-extrabold text-[#111827]">{displayMoney(openingBid)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#6B7280] uppercase">Est. Low / High</p>
+                  <p className="text-[11px] font-bold text-[#5B6472] uppercase">Est. Low / High</p>
                   <p className="text-sm font-bold text-[#374151]">
                     {estLow !== null && estHigh !== null ? `${displayMoney(estLow)}–${displayMoney(estHigh)}` : "Not published"}
                   </p>
@@ -369,10 +369,10 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <div>
                   <p className="text-[11px] font-bold text-[#16A34A] uppercase">Bid Spread</p>
                   <p className="text-lg font-extrabold text-[#16A34A]">{bidSpread === null ? "Not modeled" : displayMoney(bidSpread)}</p>
-                  <p className="text-[9px] text-[#6B7280]">Valuation midpoint minus opening amount</p>
+                  <p className="text-[9px] text-[#5B6472]">Valuation midpoint minus opening amount</p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#6B7280] uppercase">Sale Date</p>
+                  <p className="text-[11px] font-bold text-[#5B6472] uppercase">Sale Date</p>
                   <p className="text-sm font-bold text-[#111827] flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
                     {displayDate(listing.saleDate)}
@@ -414,7 +414,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 </div>
 
                 {aiLoading && (
-                  <p className="text-xs text-[#6B7280] animate-pulse">Reviewing available listing evidence...</p>
+                  <p className="text-xs text-[#5B6472] animate-pulse">Reviewing available listing evidence...</p>
                 )}
 
                 {aiAnalysis ? (
@@ -423,7 +423,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                 ) : (
                   !aiLoading && (
-                    <p className="text-xs text-[#6B7280]">
+                    <p className="text-xs text-[#5B6472]">
                       Analyze the available source record and surface evidence gaps. Official title, lien, docket, and occupancy checks remain separate.
                     </p>
                   )
@@ -454,11 +454,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <div className="p-4 rounded-2xl border border-[#E5E7EB] bg-white space-y-3 text-xs">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <span className="text-[#6B7280] block text-[11px]">Normalized source category:</span>
+                      <span className="text-[#5B6472] block text-[11px]">Normalized source category:</span>
                       <span className="font-bold text-[#111827]">{source.label}</span>
                     </div>
                     <div>
-                      <span className="text-[#6B7280] block text-[11px]">Lien-priority status:</span>
+                      <span className="text-[#5B6472] block text-[11px]">Lien-priority status:</span>
                       <span className="font-bold text-amber-800">Unverified</span>
                     </div>
                   </div>
@@ -510,7 +510,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     </h3>
                     <span className="text-xs font-extrabold text-emerald-700">{displayMoney(cashToClose.totalAcquisitionCost)}</span>
                   </div>
-                  <p className="text-[11px] leading-relaxed text-[#6B7280]">Every amount below is tagged as published evidence or an explicit scenario assumption. Missing terms remain unresolved.</p>
+                  <p className="text-[11px] leading-relaxed text-[#5B6472]">Every amount below is tagged as published evidence or an explicit scenario assumption. Missing terms remain unresolved.</p>
                   <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
                     {([
                       ["Purchase-price scenario", "purchasePrice", cashToClose.purchasePrice],
@@ -523,7 +523,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                       ["Other settlement costs", "settlementCosts", cashToClose.settlementCosts],
                     ] as const).map(([label, field, amount]) => (
                       <div key={field} className="p-3 flex items-center justify-between gap-3">
-                        <span className="text-[#6B7280]">{label}<span className="ml-1 text-[9px] uppercase">({cashToClose.basis[field] ?? "unresolved"})</span></span>
+                        <span className="text-[#5B6472]">{label}<span className="ml-1 text-[9px] uppercase">({cashToClose.basis[field] ?? "unresolved"})</span></span>
                         <span className="font-semibold text-[#374151]">{displayMoney(amount)}</span>
                       </div>
                     ))}
@@ -551,11 +551,11 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                      <p className="text-[#6B7280] text-[10px] uppercase font-bold">Net Operating Income</p>
+                      <p className="text-[#5B6472] text-[10px] uppercase font-bold">Net Operating Income</p>
                       <p className="font-extrabold text-sm text-[#111827]">${creMetrics.netOperatingIncome.toLocaleString()}/yr</p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
-                      <p className="text-[#6B7280] text-[10px] uppercase font-bold">Estimated DSCR</p>
+                      <p className="text-[#5B6472] text-[10px] uppercase font-bold">Estimated DSCR</p>
                       <p className="font-extrabold text-sm text-slate-800">{creMetrics.estimatedDscr}x</p>
                     </div>
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200">
@@ -568,7 +568,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
 
               <button type="button" onClick={() => setActiveTab("bidding")} className="w-full rounded-2xl border border-[#0F172A]/15 bg-[#F8FAFC] p-4 text-left transition hover:border-[#0F172A]">
                 <span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-[#111827]"><Calculator className="h-4 w-4" />Price and cost reverse scenario</span>
-                <span className="mt-1 block text-xs leading-relaxed text-[#6B7280]">Enter the costs you can support, then see the maximum price or cost reduction that meets your target. Unknown fees and debt stay unresolved.</span>
+                <span className="mt-1 block text-xs leading-relaxed text-[#5B6472]">Enter the costs you can support, then see the maximum price or cost reduction that meets your target. Unknown fees and debt stay unresolved.</span>
               </button>
 
               {/* Comparable-sale evidence */}
@@ -578,7 +578,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     <Home className="w-4 h-4 text-[#0F172A]" />
                     <span>Comparable-sale evidence</span>
                   </h3>
-                  <span className="text-xs text-[#6B7280]">{displayText(listing.city)}, {listing.state}</span>
+                  <span className="text-xs text-[#5B6472]">{displayText(listing.city)}, {listing.state}</span>
                 </div>
                 <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-4 text-xs leading-relaxed text-[#475569]">
                   No verified comparable-sale records were captured with this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
@@ -590,19 +590,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide">Legal Docket & Deposit Terms</h3>
                 <div className="divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl bg-white text-xs">
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-[#6B7280] font-semibold">Plaintiff</span>
+                    <span className="text-[#5B6472] font-semibold">Plaintiff</span>
                     <span className="font-medium text-[#111827]">{displayText(listing.plaintiff)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-[#6B7280] font-semibold">Defendant</span>
+                    <span className="text-[#5B6472] font-semibold">Defendant</span>
                     <span className="font-medium text-[#111827]">{displayText(listing.defendant)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-[#6B7280] font-semibold">Attorney of Record</span>
+                    <span className="text-[#5B6472] font-semibold">Attorney of Record</span>
                     <span className="font-medium text-[#111827]">{displayText(listing.attorney)}</span>
                   </div>
                   <div className="p-3.5 flex justify-between">
-                    <span className="text-[#6B7280] font-semibold">Deposit Terms</span>
+                    <span className="text-[#5B6472] font-semibold">Deposit Terms</span>
                     <span className="font-medium text-[#111827]">{displayText(listing.deposit)}</span>
                   </div>
                 </div>
@@ -649,7 +649,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </button>
                 </div>
                 {(openingBid === null || estHigh === null) && (
-                  <p className="text-[11px] leading-relaxed text-[#6B7280]">Documents remain disabled until the source record includes the financial evidence each template requires.</p>
+                  <p className="text-[11px] leading-relaxed text-[#5B6472]">Documents remain disabled until the source record includes the financial evidence each template requires.</p>
                 )}
               </div>
             </div>
@@ -659,7 +659,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {activeTab === "3d" && (
             <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" className="space-y-4 animate-in fade-in">
               <Parcel3DVisualizer listing={listing} />
-              <div className="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] text-xs text-[#6B7280] space-y-1.5">
+              <div className="p-4 bg-[#F8FAFC] rounded-2xl border border-[#E5E7EB] text-xs text-[#5B6472] space-y-1.5">
                 <span className="font-bold text-[#111827] block">Concept visualization only</span>
                 <p>This view is not a boundary survey, elevation certificate, zoning determination, or FEMA flood finding. Attach official parcel geometry and hazard records before relying on dimensions or setbacks.</p>
               </div>

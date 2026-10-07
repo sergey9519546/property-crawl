@@ -110,7 +110,7 @@ export function SiteFooter() {
                 }}
                 aria-describedby="newsletter-status"
                 placeholder="you@company.com"
-                className="h-12 min-w-0 flex-1 rounded-[12px] border border-[#CBD5E1] bg-white px-4 text-[14px] text-[#111827] shadow-sm placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/20"
+                className="h-12 min-w-0 flex-1 rounded-[12px] border border-[#CBD5E1] bg-white px-4 text-[14px] text-[#111827] shadow-sm placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/20"
               />
               <button
                 type="submit"

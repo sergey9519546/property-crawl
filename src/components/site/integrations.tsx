@@ -32,7 +32,7 @@ export function Integrations() {
           </h2>
         </GsapReveal>
         <GsapReveal delay={0.7}>
-          <p className="mx-auto mt-4 max-w-[600px] text-center text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]">
+          <p className="mx-auto mt-4 max-w-[600px] text-center text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
             Sources and tools on our integration roadmap. Inclusion here does not
             mean a native integration is active; availability depends on the
             connector, credentials, and source permissions.

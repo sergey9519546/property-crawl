@@ -79,7 +79,7 @@ export function ContactForm() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Jane Doe"
-            className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
+            className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
           />
         </div>
         <div>
@@ -93,13 +93,13 @@ export function ContactForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="jane@company.com"
-            className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
+            className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
           />
         </div>
       </div>
       <div>
         <label htmlFor="contact-company" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
-          Company <span className="font-normal text-[#9CA3AF]">(optional)</span>
+          Company <span className="font-normal text-[#5B6472]">(optional)</span>
         </label>
         <input
           id="contact-company"
@@ -107,7 +107,7 @@ export function ContactForm() {
           value={company}
           onChange={(e) => setCompany(e.target.value)}
           placeholder="BlueLine Capital"
-          className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
+          className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
         />
       </div>
       <div>
@@ -121,7 +121,7 @@ export function ContactForm() {
           onChange={(e) => setMessage(e.target.value)}
           rows={5}
           placeholder="Tell us about your acquisitions workflow or what you need from the beta…"
-          className="w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
+          className="w-full rounded-xl border border-[#D1D5DB] bg-white px-4 py-3 text-sm text-[#111827] placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
         />
       </div>
       {submitError && (

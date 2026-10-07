@@ -28,7 +28,7 @@ export function SocialProof() {
             </span>{" "}
             using public property and market data sources
           </p>
-          <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-5 text-[#6B7280]">
+          <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-5 text-[#5B6472]">
             Names below mark the source/tooling landscape this beta models or
             evaluates. They are not customer logos, partnerships, or proof of
             live commercial integrations.

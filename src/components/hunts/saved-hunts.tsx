@@ -312,7 +312,7 @@ export function SavedHunts() {
           <br />
           The evidence that fits.
         </h1>
-        <p className="mt-5 max-w-2xl text-base leading-7 text-[#6B7280]">
+        <p className="mt-5 max-w-2xl text-base leading-7 text-[#5B6472]">
           Save what you are looking for. Run it against collected property
           records. See why each property matches, what remains unknown, and what
           changed since your last run.
@@ -320,7 +320,7 @@ export function SavedHunts() {
         <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-[#E5E7EB] bg-white p-5">
           <div>
             <p className="text-sm font-semibold">Private operator workspace</p>
-            <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+            <p className="mt-1 text-xs leading-5 text-[#5B6472]">
               One HttpOnly session opens hunts, cases, evidence, and collection
               controls for eight hours.
             </p>
@@ -417,7 +417,7 @@ export function SavedHunts() {
                 <h2 className="text-lg font-semibold">
                   Start with a hunt that has a job
                 </h2>
-                <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                <p className="mt-1 text-xs leading-5 text-[#5B6472]">
                   Load a template into the same editable criteria builder used
                   by every saved hunt.
                 </p>
@@ -476,7 +476,7 @@ export function SavedHunts() {
                   <span className="block text-xs font-semibold">
                     {template.name}
                   </span>
-                  <span className="mt-1 block text-[10px] leading-4 text-[#6B7280]">
+                  <span className="mt-1 block text-[10px] leading-4 text-[#5B6472]">
                     {template.description}
                   </span>
                 </button>
@@ -641,7 +641,7 @@ export function SavedHunts() {
                 >
                   <Plus size={14} /> Add criterion
                 </button>
-                <p className="mt-4 text-xs leading-5 text-[#6B7280]">
+                <p className="mt-4 text-xs leading-5 text-[#5B6472]">
                   Missing facts stay unknown. Only source-observed records enter
                   the hunt; a missing record never means sold.
                 </p>
@@ -667,14 +667,14 @@ export function SavedHunts() {
                       <span className="block text-sm font-semibold">
                         {hunt.name}
                       </span>
-                      <span className="mt-1 block text-xs text-[#6B7280]">
+                      <span className="mt-1 block text-xs text-[#5B6472]">
                         Version {hunt.version} ·{" "}
                         {hunt.enabled ? "Enabled" : "Paused"}
                       </span>
                     </button>
                   ))}
                   {!hunts.length && (
-                    <p className="text-sm text-[#6B7280]">
+                    <p className="text-sm text-[#5B6472]">
                       Your first hunt starts above.
                     </p>
                   )}
@@ -697,7 +697,7 @@ export function SavedHunts() {
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
                       </h2>
-                      <p className="mt-2 text-xs text-[#6B7280]">
+                      <p className="mt-2 text-xs text-[#5B6472]">
                         {"discoveryFilters" in selected.criteria
                           ? "Matches the filters saved from Discover."
                           : `${selected.criteria.mode === "all" ? "Every" : "Any"} criterion must match.`}
@@ -772,7 +772,7 @@ export function SavedHunts() {
                   >
                     {selected.enabled ? "Pause this hunt" : "Enable this hunt"}
                   </button>
-                  <p className="mt-3 text-xs leading-5 text-[#6B7280]">
+                  <p className="mt-3 text-xs leading-5 text-[#5B6472]">
                     Enabled searches are also checked as new source collections finish.
                   </p>
                   {evaluation ? (
@@ -790,13 +790,13 @@ export function SavedHunts() {
                             <p className="text-2xl font-semibold">
                               {evaluation.counts[key] || 0}
                             </p>
-                            <p className="mt-1 text-[11px] text-[#6B7280]">
+                            <p className="mt-1 text-[11px] text-[#5B6472]">
                               {title}
                             </p>
                           </div>
                         ))}
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-[#6B7280]">
+                      <p className="mt-3 text-xs leading-5 text-[#5B6472]">
                         {evaluation.counts.accepted} validated records
                         evaluated. {evaluation.counts.rejected || 0} unverified
                         records excluded. {evaluation.counts.notObserved || 0}{" "}
@@ -804,7 +804,7 @@ export function SavedHunts() {
                         or disappearance is inferred.
                       </p>
                       {evaluation.rankingNote ? (
-                        <p className="mt-2 text-[11px] leading-5 text-[#6B7280]">
+                        <p className="mt-2 text-[11px] leading-5 text-[#5B6472]">
                           {evaluation.rankingNote}
                         </p>
                       ) : null}
@@ -882,12 +882,12 @@ export function SavedHunts() {
                                 </span>
                               </div>
                             </div>
-                            <p className="mt-2 text-xs text-[#6B7280]">
+                            <p className="mt-2 text-xs text-[#5B6472]">
                               {sourceDisplayText(result.sourceId)} · Observed{" "}
                               {new Date(result.observedAt).toLocaleString()}
                             </p>
                             {result.status === "match" && result.relevance ? (
-                              <p className="mt-2 text-[11px] leading-5 text-[#6B7280]">
+                              <p className="mt-2 text-[11px] leading-5 text-[#5B6472]">
                                 Triage rank uses criterion closeness, evidence quality
                                 {result.relevance.researchQualityScore != null
                                   ? ` (${result.relevance.researchQualityScore}/100)`
@@ -908,7 +908,7 @@ export function SavedHunts() {
                               <div className="mt-3 space-y-3">
                                 {result.relevance?.factors?.length ? (
                                   <div className="rounded-lg bg-[#F5F6F7] p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">
                                       Ranking factors
                                     </p>
                                     <ul className="mt-2 space-y-1.5">
@@ -918,7 +918,7 @@ export function SavedHunts() {
                                           {" · "}
                                           {factor.detail}
                                           {" "}
-                                          <span className="text-[#6B7280]">({factor.weight})</span>
+                                          <span className="text-[#5B6472]">({factor.weight})</span>
                                         </li>
                                       ))}
                                     </ul>
@@ -933,10 +933,10 @@ export function SavedHunts() {
                                       {label(clause.field)} ·{" "}
                                       {clause.status.replaceAll("_", " ")}
                                     </p>
-                                    <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                                    <p className="mt-1 text-xs leading-5 text-[#5B6472]">
                                       {sourceDisplayText(clause.reason)}
                                     </p>
-                                    <p className="mt-1 text-[10px] text-[#6B7280]">
+                                    <p className="mt-1 text-[10px] text-[#5B6472]">
                                       Observed value: {display(clause.actual)} ·{" "}
                                       {clause.evidenceClass.replaceAll(
                                         "_",
@@ -966,7 +966,7 @@ export function SavedHunts() {
                           </article>
                         ))}
                         {!results.length && (
-                          <p className="rounded-xl bg-[#F5F6F7] p-5 text-sm leading-6 text-[#6B7280]">
+                          <p className="rounded-xl bg-[#F5F6F7] p-5 text-sm leading-6 text-[#5B6472]">
                             No returned results in this category. Try another
                             filter or collect more source evidence.
                           </p>
@@ -983,7 +983,7 @@ export function SavedHunts() {
                   ) : (
                     <div className="mt-6 rounded-xl bg-[#F5F6F7] p-6">
                       <h3 className="font-semibold">Start with a comparison</h3>
-                      <p className="mt-2 text-sm leading-6 text-[#6B7280]">
+                      <p className="mt-2 text-sm leading-6 text-[#5B6472]">
                         Run this hunt to inspect the available evidence and save
                         a comparison point. Future runs separate newly matching
                         records, changed facts, and records that no longer fit.
@@ -1005,20 +1005,20 @@ export function SavedHunts() {
                                 event.address || event.listingId,
                               )}
                             </p>
-                            <p className="mt-2 text-xs leading-6 text-[#6B7280]">
+                            <p className="mt-2 text-xs leading-6 text-[#5B6472]">
                               {sourceDisplayText(event.message)}
                             </p>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm leading-6 text-[#6B7280]">
+                      <p className="mt-3 text-sm leading-6 text-[#5B6472]">
                         No comparison events yet. A first run establishes the
                         baseline; later runs require changed evidence before
                         reporting a change.
                       </p>
                     )}
-                    <p className="mt-4 text-xs leading-5 text-[#6B7280]">
+                    <p className="mt-4 text-xs leading-5 text-[#5B6472]">
                       Hunts run when you choose Run hunt. No email or text
                       notifications are sent.
                     </p>
@@ -1030,7 +1030,7 @@ export function SavedHunts() {
                   <h2 className="mt-4 text-2xl font-semibold">
                     Make the search yours.
                   </h2>
-                  <p className="mt-3 max-w-md text-sm leading-7 text-[#6B7280]">
+                  <p className="mt-3 max-w-md text-sm leading-7 text-[#5B6472]">
                     Create a hunt or open a saved one. Every match will show the
                     source observation and a reason for each criterion.
                   </p>

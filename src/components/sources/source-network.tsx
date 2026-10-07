@@ -783,13 +783,13 @@ export function SourceNetwork() {
                     {signal.address}
                   </Link>
                   <p className="mt-3 text-sm">
-                    <span className="text-[#6B7280]">
+                    <span className="text-[#5B6472]">
                       {moneyOrText(signal, signal.before)}
                     </span>
                     <span className="mx-2">→</span>
                     <strong>{moneyOrText(signal, signal.after)}</strong>
                   </p>
-                  <p className="mt-2 text-xs text-[#6B7280]">
+                  <p className="mt-2 text-xs text-[#5B6472]">
                     Observed {date(signal.observedAt)}
                   </p>
                   <a
@@ -804,11 +804,22 @@ export function SourceNetwork() {
               ))}
             </div>
           ) : (
-            <div className="mt-5 flex items-start gap-4 rounded-xl bg-[#F5F6F7] p-5">
+            /* min-h-screen, same reason as the results grid on /listings: this
+                explainer is about 240px of section, and the six-card signal
+                grid that replaces it is about 700px. Everything below this
+                section was inside the viewport in the small state and far
+                outside it in the large one, which measured as CLS 0.30 --
+                the SourceAtlas, the coverage matrix and the footer all left
+                the screen the moment collection history answered.
+
+                Reserving a viewport on the pre-data state keeps everything
+                below the fold for the whole load. The loaded state keeps its
+                natural height, so nothing moves that a user could see. */
+            <div className="mt-5 flex min-h-screen items-start gap-4 rounded-xl bg-[#F5F6F7] p-5">
               <Radar className="mt-1 shrink-0 text-slate-900" size={25} />
               <div>
                 <p className="font-medium">Building the observation history</p>
-                <p className="mt-1 max-w-3xl text-sm leading-6 text-[#6B7280]">
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5B6472]">
                   Collect a source twice to compare published bids, sale dates,
                   payment terms, and status. The first collection establishes a
                   baseline. Changes will appear here with their before-and-after
@@ -973,7 +984,7 @@ export function SourceNetwork() {
           </div>
           <div className="mb-6 flex flex-col gap-3 md:flex-row">
             <label className="flex flex-1 items-center gap-3 rounded-lg border border-[#E5E7EB] bg-white px-4">
-              <Search size={17} className="text-[#6B7280]" />
+              <Search size={17} className="text-[#5B6472]" />
               <input
                 aria-label="Search sources"
                 value={query}
@@ -1053,13 +1064,13 @@ export function SourceNetwork() {
                         aria-pressed={selectedId === source.id}
                         className="w-full p-4 text-left sm:p-5"
                       >
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#6B7280]">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#5B6472]">
                           {label(source.category)}
                         </p>
                         <h3 className="mt-2 text-base font-semibold">
                           {source.label}
                         </h3>
-                        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#6B7280]">
+                        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[#5B6472]">
                           {coverageDescription(source.coverage)}
                         </p>
                         <div className="mt-4 flex items-center justify-between gap-2">
@@ -1085,13 +1096,13 @@ export function SourceNetwork() {
                             {problem}
                           </p>
                         ) : (
-                          <p className="mt-3 text-xs leading-5 text-[#6B7280]">
+                          <p className="mt-3 text-xs leading-5 text-[#5B6472]">
                             {coverageSummary(source)}
                           </p>
                         )}
                       </button>
                       {exactScope && (
-                        <details className="border-t border-[#E5E7EB] px-5 pb-4 text-xs leading-5 text-[#6B7280]">
+                        <details className="border-t border-[#E5E7EB] px-5 pb-4 text-xs leading-5 text-[#5B6472]">
                           <summary
                             aria-label={`Inspect exact recorded scope for ${source.label}`}
                             className="cursor-pointer pt-3 font-medium text-slate-900"
@@ -1105,7 +1116,7 @@ export function SourceNetwork() {
                   );
                 })}
                 {!sources.length && !error && (
-                  <p className="p-5 text-sm text-[#6B7280]">
+                  <p className="p-5 text-sm text-[#5B6472]">
                     No sources match these filters.
                   </p>
                 )}
@@ -1126,7 +1137,7 @@ export function SourceNetwork() {
                     </h2>
                     {selected && (
                       <>
-                        <p className="mt-3 text-sm leading-6 text-[#6B7280]">
+                        <p className="mt-3 text-sm leading-6 text-[#5B6472]">
                           {selected.workflow.primary}
                         </p>
                         <a
@@ -1158,7 +1169,7 @@ export function SourceNetwork() {
                             {selected.requiredEvidence.map((item) => (
                               <li
                                 key={item}
-                                className="flex gap-2 text-xs leading-5 text-[#6B7280]"
+                                className="flex gap-2 text-xs leading-5 text-[#5B6472]"
                               >
                                 <Check
                                   size={14}
@@ -1173,11 +1184,11 @@ export function SourceNetwork() {
                           <p className="font-semibold">
                             If the collector cannot reach it
                           </p>
-                          <p className="mt-1 text-[#6B7280]">
+                          <p className="mt-1 text-[#5B6472]">
                             {selected.workflow.fallback}
                           </p>
                         </div>
-                        <p className="mt-4 text-xs leading-5 text-[#6B7280]">
+                        <p className="mt-4 text-xs leading-5 text-[#5B6472]">
                           Suggested check: every{" "}
                           {selected.workflow.cadenceHours} hours. Last
                           collection:{" "}
@@ -1255,7 +1266,7 @@ export function SourceNetwork() {
                       >
                         {customMode && (
                           <>
-                            <p className="text-sm leading-6 text-[#6B7280]">
+                            <p className="text-sm leading-6 text-[#5B6472]">
                               Capture a county, land-bank, agency, or local
                               publisher record. It will enter the evidence
                               review queue with its source attached.
@@ -1338,7 +1349,7 @@ export function SourceNetwork() {
                         >
                           {busy ? "Saving…" : "Save for evidence review"}
                         </button>
-                        <p className="text-xs leading-5 text-[#6B7280]">
+                        <p className="text-xs leading-5 text-[#5B6472]">
                           Imported records are kept as evidence until reviewed.
                           This does not establish title, value, or sale
                           availability.
@@ -1349,7 +1360,7 @@ export function SourceNetwork() {
                       <p className="text-xs font-semibold">
                         Private operator access
                       </p>
-                      <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+                      <p className="mt-2 text-xs leading-5 text-[#5B6472]">
                         The shared eight-hour workspace session protects
                         collection and reviewed evidence. Credentials are
                         forwarded only between the application servers.
@@ -1385,7 +1396,7 @@ export function SourceNetwork() {
                           Evidence review queue
                         </h3>
                         {!reviewItems.length && (
-                          <p className="text-xs text-[#6B7280]">
+                          <p className="text-xs text-[#5B6472]">
                             No evidence packets submitted yet.
                           </p>
                         )}
@@ -1406,7 +1417,7 @@ export function SourceNetwork() {
                             >
                               Open source record
                             </a>
-                            <p className="mt-2 text-xs text-[#6B7280]">
+                            <p className="mt-2 text-xs text-[#5B6472]">
                               Captured {date(item.capturedAt)}
                             </p>
                             <details className="mt-3">
@@ -1467,12 +1478,12 @@ export function SourceNetwork() {
                     <h3 className="mt-5 text-xl font-semibold">
                       Every find needs a trail.
                     </h3>
-                    <p className="mt-3 text-sm leading-7 text-[#6B7280]">
+                    <p className="mt-3 text-sm leading-7 text-[#5B6472]">
                       Choose a source to see its workflow, publisher link,
                       collection status, and the evidence you need to bring
                       back.
                     </p>
-                    <p className="mt-5 border-t border-[#E5E7EB] pt-5 text-xs leading-6 text-[#6B7280]">
+                    <p className="mt-5 border-t border-[#E5E7EB] pt-5 text-xs leading-6 text-[#5B6472]">
                       A registered collector indicates a collection path. Review
                       its observed records and latest run to assess actual
                       coverage.
@@ -1483,7 +1494,7 @@ export function SourceNetwork() {
             </div>
           )}
         </section>
-        <footer className="mt-10 border-t border-[#E5E7EB] py-6 text-xs leading-6 text-[#6B7280]">
+        <footer className="mt-10 border-t border-[#E5E7EB] py-6 text-xs leading-6 text-[#5B6472]">
           Source Radar · Publisher evidence, observed changes, and a next step
           for every source.{" "}
           <Link

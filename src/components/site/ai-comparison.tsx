@@ -54,7 +54,7 @@ export function AiComparison() {
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
             Know what is ready. Know what needs review.
           </h2>
-          <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#6B7280] sm:text-[18px]">
+          <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
             The research workspace is free during beta. Source evidence, modeled
             scenarios, and unfinished services are kept separate so you can make
             an informed next move.
@@ -83,7 +83,7 @@ export function AiComparison() {
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[13px] font-medium text-[#6B7280]">{col.tag}</p>
+              <p className="mt-1 text-[13px] font-medium text-[#5B6472]">{col.tag}</p>
               <ul className="mt-5 space-y-3">
                 {col.features.map((f) => (
                   <li key={f.label} className="flex items-center gap-2.5">
@@ -93,12 +93,12 @@ export function AiComparison() {
                       </span>
                     ) : (
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#F3F4F6]">
-                        <X className="h-3 w-3 text-[#9CA3AF]" />
+                        <X className="h-3 w-3 text-[#5B6472]" />
                       </span>
                     )}
                     <span
                       className={`text-[14px] ${
-                        f.ok ? "text-[#111827]" : "text-[#9CA3AF]"
+                        f.ok ? "text-[#111827]" : "text-[#5B6472]"
                       }`}
                     >
                       {f.label}

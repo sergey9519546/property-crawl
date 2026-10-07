@@ -584,7 +584,7 @@ export function InteractiveTerminal() {
               <div className="flex flex-wrap items-center gap-3">
                 {/* Search */}
                 <div className="relative flex-1 min-w-[240px]">
-                  <Search className="w-4 h-4 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-[#5B6472] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={searchQuery}
@@ -695,7 +695,7 @@ export function InteractiveTerminal() {
                 <div className="pt-3 border-t border-[#E5E7EB] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
                   {/* Min Deal Score */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Min Deal Score
                     </label>
                     <select
@@ -712,7 +712,7 @@ export function InteractiveTerminal() {
 
                   {/* Minimum modeled bid spread */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Min Bid Spread
                     </label>
                     <select
@@ -730,7 +730,7 @@ export function InteractiveTerminal() {
 
                   {/* Max Opening Bid */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Max Opening Bid
                     </label>
                     <select
@@ -748,7 +748,7 @@ export function InteractiveTerminal() {
 
                   {/* Property Type */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Property Type
                     </label>
                     <select
@@ -766,7 +766,7 @@ export function InteractiveTerminal() {
 
                   {/* Senior Lien / Title Risk */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Senior Title Risk
                     </label>
                     <select
@@ -782,7 +782,7 @@ export function InteractiveTerminal() {
 
                   {/* Statutory Redemption */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#6B7280] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
                       Redemption Status
                     </label>
                     <select
@@ -801,7 +801,7 @@ export function InteractiveTerminal() {
               {/* Active Filter Chips */}
               {activeFiltersCount > 0 && (
                 <div className="pt-2 border-t border-[#F1F5F9] flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="text-[11px] font-bold text-[#6B7280] mr-1">Active:</span>
+                  <span className="text-[11px] font-bold text-[#5B6472] mr-1">Active:</span>
                   {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
                   {selectedState !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
@@ -878,7 +878,7 @@ export function InteractiveTerminal() {
                   <LayoutGrid className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
+                  <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
                   <p className="text-base font-extrabold text-[#111827]">{filtered.length} Records</p>
                 </div>
               </div>
@@ -888,7 +888,7 @@ export function InteractiveTerminal() {
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
+                  <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
                   <p className="text-base font-extrabold text-[#111827]">{displayMoney(medianBid)}</p>
                 </div>
               </div>
@@ -905,7 +905,7 @@ export function InteractiveTerminal() {
 
               {/* Interactive Deal Score Band Spectrum */}
               <div className="flex flex-col justify-center">
-                <p className="text-[#6B7280] text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
+                <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
                 <div className="flex items-center gap-1">
                   {scoreBandCounts.map(({ band, count }) => (
                     <button
@@ -937,7 +937,7 @@ export function InteractiveTerminal() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] leading-4 text-[#6B7280]" title={DEAL_SCORE_MEANING}>
+                <p className="mt-1 text-[10px] leading-4 text-[#5B6472]" title={DEAL_SCORE_MEANING}>
                   {DEAL_SCORE_MEANING}
                 </p>
               </div>
@@ -949,7 +949,7 @@ export function InteractiveTerminal() {
             /* Listings Grid */
             filtered.length === 0 ? (
               <div className="p-12 text-center bg-white rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                <SlidersHorizontal className="w-10 h-10 mx-auto text-[#9CA3AF]" />
+                <SlidersHorizontal className="w-10 h-10 mx-auto text-[#5B6472]" />
                 {/* An empty list because the load FAILED is not an empty list
                     because the filters are narrow. Telling the user to adjust
                     their criteria here contradicted the error banner above and
@@ -957,7 +957,7 @@ export function InteractiveTerminal() {
                 {syncStatus === "error" ? (
                   <>
                     <h3 className="text-lg font-bold text-[#111827]">Inventory could not be loaded</h3>
-                    <p className="text-xs text-[#6B7280] max-w-md mx-auto">
+                    <p className="text-xs text-[#5B6472] max-w-md mx-auto">
                       The listing feed did not load, so no properties were available to compare against
                       your criteria. This is a connection or data-mode problem, not a filter problem.
                     </p>
@@ -965,7 +965,7 @@ export function InteractiveTerminal() {
                 ) : (
                   <>
                     <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
-                    <p className="text-xs text-[#6B7280] max-w-md mx-auto">
+                    <p className="text-xs text-[#5B6472] max-w-md mx-auto">
                       {unvaluedFilterReason
                         ?? "Try adjusting your modeled score, bid spread, or opening amount range to capture more published records."}
                     </p>
@@ -1054,7 +1054,7 @@ export function InteractiveTerminal() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <h3 className="font-bold text-base text-[#111827] line-clamp-1">{listing.address}</h3>
-                            <p className="text-xs text-[#6B7280]">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
+                            <p className="text-xs text-[#5B6472]">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
                             {sourceRecordCountAtAddress && (
                               <p className="mt-1 text-xs font-semibold text-slate-900">
                                 {sourceRecordCountAtAddress} source records at this address
@@ -1079,7 +1079,7 @@ export function InteractiveTerminal() {
                         {/* Metric Row */}
                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E5E7EB] text-xs">
                           <div>
-                            <span className="text-[#6B7280] block">Opening Bid:</span>
+                            <span className="text-[#5B6472] block">Opening Bid:</span>
                             <span data-testid="listing-opening-bid" className="font-bold text-[#111827] text-sm">{displayMoney(listing.openingBid)}</span>
                           </div>
                           <div>
@@ -1088,8 +1088,8 @@ export function InteractiveTerminal() {
                           </div>
                         </div>
 
-                        <p className="text-xs text-[#6B7280] flex items-center gap-1 pt-1">
-                          <Calendar className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                        <p className="text-xs text-[#5B6472] flex items-center gap-1 pt-1">
+                          <Calendar className="w-3.5 h-3.5 text-[#5B6472]" />
                           Auction: <span className="font-semibold text-[#111827]">{displayDate(listing.saleDate)}</span>
                         </p>
                       </div>

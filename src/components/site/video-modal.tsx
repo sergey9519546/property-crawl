@@ -42,7 +42,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
             <Sparkles className="w-5 h-5 text-[#16A34A]" />
             <h3 id="video-preview-title" className="text-lg font-bold text-[#111827]">Live Underwriting Walkthrough Demo</h3>
           </div>
-          <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-xl text-[#6B7280] hover:text-[#111827] hover:bg-[#F5F6F7]">
+          <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -53,14 +53,14 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               <span className="text-xs font-mono font-bold px-2.5 py-1 bg-[#16A34A]/10 text-[#16A34A] rounded-md">
                 Cuyahoga County Judicial Sale CV-24-991204
               </span>
-              <span className="text-xs font-bold text-[#6B7280]">Appraisal: $110,000</span>
+              <span className="text-xs font-bold text-[#5B6472]">Appraisal: $110,000</span>
             </div>
 
             <h4 className="text-xl font-bold text-[#111827]">3841 E 55th St, Cleveland, OH 44105</h4>
 
             <div className="grid grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#6B7280] block">Opening Bid:</span><strong className="text-sm font-bold text-[#111827]">$38,000</strong></div>
-              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#6B7280] block">Median Comp:</span><strong className="text-sm font-bold text-[#111827]">$118,500</strong></div>
+              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Opening Bid:</span><strong className="text-sm font-bold text-[#111827]">$38,000</strong></div>
+              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Median Comp:</span><strong className="text-sm font-bold text-[#111827]">$118,500</strong></div>
               <div className="p-3 bg-[#E7FAEF] rounded-xl border border-[#3AAF57]/30"><span className="text-[#16A34A] font-bold block">Gross Spread:</span><strong className="text-sm font-bold text-[#16A34A]">+$80,500</strong></div>
             </div>
 

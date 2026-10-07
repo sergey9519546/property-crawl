@@ -142,7 +142,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
                   <span className="block text-[14px] font-semibold text-[#111827]">
                     {l.label}
                   </span>
-                  <span className="block text-[13px] leading-snug text-[#6B7280]">
+                  <span className="block text-[13px] leading-snug text-[#5B6472]">
                     {l.desc}
                   </span>
                 </span>
@@ -341,7 +341,7 @@ export function SiteHeader() {
                                 <span className="block text-[14px] font-semibold text-[#111827]">
                                   {l.label}
                                 </span>
-                                <span className="block text-[12px] text-[#6B7280]">
+                                <span className="block text-[12px] text-[#5B6472]">
                                   {l.desc}
                                 </span>
                               </span>
