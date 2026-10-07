@@ -166,6 +166,25 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 return listing
         self.fail("no listing in the API sample offers the Street View control")
 
+    def docket_agent_listing(self):
+        """A listing the court-record evidence check can actually run against.
+
+        `canCheck` in docket-agent.tsx requires an address, a county and a
+        state; without all three the "Check official evidence" button renders
+        but stays disabled, and Playwright waits on a disabled button exactly as
+        long as it waits on a missing one. Opening the detail page on
+        street_view_listing() and clicking it therefore only worked when that
+        record also carried all three - the same coin flip
+        street_view_listing() already had to be fixed for, in a different
+        dimension.
+        """
+        for listing in self.listings:
+            if (listing.get("address")
+                    and listing.get("county")
+                    and listing.get("state")):
+                return listing
+        self.fail("no listing in the API sample carries address, county and state")
+
     def geocoded_listings(self, listings=None):
         # Positive map tests declare their qualified fixture records explicitly.
         # Finite coordinates in the application's snapshot data are not evidence.
@@ -1644,7 +1663,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(heading.is_visible())
 
     def test_listing_detail_page_renders_docket_agent_and_can_verify(self):
-        self.page.goto(f"{BASE_URL}/listings/{self.street_view_listing()['id']}", wait_until="domcontentloaded")
+        self.page.goto(f"{BASE_URL}/listings/{self.docket_agent_listing()['id']}", wait_until="domcontentloaded")
         research = self.page.locator("details#modeled-research")
         self.assertIsNone(research.get_attribute("open"), "modeled research should start collapsed")
         research.locator("summary").click()
