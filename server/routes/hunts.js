@@ -6,7 +6,6 @@ const { presentedRunToken, tokensMatch } = require('./scrapers');
 const hunts = require('../intelligence/hunts');
 const discoveryQuery = require('../discovery/query');
 
-const MAX_INVENTORY = 10000;
 
 function createHuntsHandler(dependencies = {}) {
   const database = dependencies.database || db;
@@ -68,7 +67,7 @@ function createHuntsHandler(dependencies = {}) {
       }
       if (action === 'evaluate') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST to evaluate a hunt' });
-        // Read the whole store, not `limit: MAX_INVENTORY`.
+        // Read the whole store. This used to be `getListings({ limit: MAX_INVENTORY })` with
         //
         // The old ceiling was 169 listings away on the live store (9,831 with a
         // 10,000 cap), and the store grows every collection cycle -- ServiceLink
@@ -111,4 +110,4 @@ function createHuntsHandler(dependencies = {}) {
 
 module.exports = createHuntsHandler();
 module.exports.createHuntsHandler = createHuntsHandler;
-module.exports.MAX_INVENTORY = MAX_INVENTORY;
+

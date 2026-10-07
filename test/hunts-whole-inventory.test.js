@@ -23,7 +23,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
 
-const { createHuntsHandler, MAX_INVENTORY } = require('../server/routes/hunts');
+const { createHuntsHandler } = require('../server/routes/hunts');
 
 const TOKEN = 'secret-operator-token';
 
@@ -83,8 +83,10 @@ async function invoke(handler, method, urlPath, body = {}) {
   return res;
 }
 
-test('hunt evaluation covers a store larger than MAX_INVENTORY instead of refusing', async () => {
-  const beyond = MAX_INVENTORY + 2000;
+test('hunt evaluation covers a store larger than any former ceiling instead of refusing', async () => {
+  // Deliberately far above any former ceiling (10,000): this used to be
+  // MAX_INVENTORY + 2000, anchored on a constant that the fix removed.
+  const beyond = 12000;
   const database = pagedDb(beyond);
   const handler = createHuntsHandler({
     database,
@@ -104,8 +106,8 @@ test('hunt evaluation covers a store larger than MAX_INVENTORY instead of refusi
 
   assert.equal(
     evaluated.statusCode, 200,
-    `a store of ${beyond} records must still evaluate; MAX_INVENTORY is ${MAX_INVENTORY} `
-      + 'and the live store is 9,831, so this ceiling breaks a wired feature rather soon',
+    `a store of ${beyond} records must still evaluate. The removed ceiling was 10,000 `
+      + 'and the live store was 9,831, so 169 listings from breaking a wired feature',
   );
   assert.equal(evaluated.body.evaluation.counts.inventory, beyond,
     'every listing must be evaluated, not the first page of them');
@@ -115,7 +117,7 @@ test('hunt evaluation still refuses when the store genuinely cannot be read whol
   // The 409 is the right behaviour -- it is only wrong when triggered by an
   // arbitrary ceiling rather than by an incomplete read. This pins that a
   // backend which reports more than it will serve is still refused.
-  const capped = MAX_INVENTORY;
+  const capped = 10000; // the old ceiling
   const database = {
     isPg: false,
     async getListings({ limit = 1000, offset = 0 } = {}) {
@@ -144,3 +146,4 @@ test('hunt evaluation still refuses when the store genuinely cannot be read whol
   assert.match(evaluated.body.error || '', /complete inventory/i,
     'the refusal must say the inventory was incomplete, not blame a record cap');
 });
+

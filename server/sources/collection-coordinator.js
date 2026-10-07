@@ -8,7 +8,6 @@ const path = require('node:path');
 
 const DEFAULT_JOB_PATH = path.resolve(__dirname, '../../.cache/collection-jobs.json');
 const MAX_JOBS = 200;
-const MAX_INVENTORY = 10_000;
 const ID = /^job_[a-f0-9]{24}$/;
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,160}$/;
 
@@ -273,4 +272,5 @@ class CollectionCoordinator {
   }
 }
 
-module.exports = { CollectionCoordinator, CollectionJobStore, PgCollectionJobStore, DEFAULT_JOB_PATH, MAX_INVENTORY, createCollectionCoordinator: (options) => new CollectionCoordinator(options), huntSafety, optionalCaseSink };
+module.exports = { CollectionCoordinator, CollectionJobStore, PgCollectionJobStore, DEFAULT_JOB_PATH, createCollectionCoordinator: (options) => new CollectionCoordinator(options), huntSafety, optionalCaseSink };
+
