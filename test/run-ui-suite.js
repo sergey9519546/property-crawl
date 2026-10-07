@@ -24,6 +24,45 @@ const API_PORT = process.env.UI_SUITE_API_PORT ? Number(process.env.UI_SUITE_API
 const UI_PORT = process.env.UI_SUITE_PORT ? Number(process.env.UI_SUITE_PORT) : 3100;
 process.env.NEXT_VERIFY_BUILD = '1';
 
+const BUILD_ID_PATH = path.join(ROOT, '.next-verify', 'BUILD_ID');
+
+// Newest mtime under src/, or 0 when there is no src to compare.
+function newestSourceMtime(dir) {
+  let newest = 0;
+  const walk = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else {
+        const { mtimeMs } = fs.statSync(full);
+        if (mtimeMs > newest) newest = mtimeMs;
+      }
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return newest;
+}
+
+// Is the bundle on disk older than the source it was built from?
+//
+// The suite used to rebuild ONLY when .next-verify/BUILD_ID was missing, so a
+// bundle left over from an earlier run was reused forever and every UI change
+// after that first build was invisible. The tests then exercised the old
+// bundle and reported it faithfully -- the worst shape of failure, a correct
+// suite describing code that no longer exists.
+//
+// This cost a full debugging cycle: a property-drawer focus fix was written,
+// typechecked, and "failed" twice because the bundle predated it by ninety
+// minutes. Both attempts were reverted as wrong before this was found.
+//
+// Comparing mtimes costs one directory walk and turns a silent wrong answer
+// into an ordinary rebuild.
+function bundleIsStale() {
+  if (!fs.existsSync(BUILD_ID_PATH)) return true;
+  const builtAt = fs.statSync(BUILD_ID_PATH).mtimeMs;
+  return newestSourceMtime(path.join(ROOT, 'src')) > builtAt;
+}
+
 function probe(port, route = '/') {
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port, path: route, timeout: 2000 }, (res) => {
@@ -95,15 +134,19 @@ async function main() {
       await waitFor(api, API_PORT, '/api/health', 'Node API');
     }
 
-    if (!fs.existsSync(path.join(ROOT, '.next-verify', 'BUILD_ID'))) {
-      console.log('[ui-suite] no production build found — running next build...');
-      const build = spawnSync('npx', ['next', 'build'], {
-        cwd: ROOT,
-        stdio: 'inherit',
-        shell: process.platform === 'win32',
-      });
-      if (build.status !== 0) throw new Error('[ui-suite] next build failed');
-    }
+if (bundleIsStale()) {
+        console.log(
+          fs.existsSync(BUILD_ID_PATH)
+            ? '[ui-suite] src/ is newer than .next-verify - rebuilding so the suite runs current code...'
+            : '[ui-suite] no production build found - running next build...',
+        );
+        const build = spawnSync('npx', ['next', 'build'], {
+          cwd: ROOT,
+          stdio: 'inherit',
+          shell: process.platform === 'win32',
+        });
+        if (build.status !== 0) throw new Error('[ui-suite] next build failed');
+      }
 
     const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
     console.log(`[ui-suite] booting Next production server on :${UI_PORT}...`);
