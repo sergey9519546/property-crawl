@@ -1799,8 +1799,15 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # was a fact about a smaller inventory, not about the app, and the
         # inventory has grown since; what has to stay true is that a property map
         # is never fabricated for a record with no location evidence.
-        has_location = (self.primary_listing.get("lat") is not None
-                        and self.primary_listing.get("lng") is not None)
+        #
+        # Read the coordinates from the record under test, not primary_listing.
+        # This page was opened on street_view_listing(), which is selected
+        # precisely because it has coordinates, while primary_listing is simply
+        # listings[0]. Comparing the rendered tab against a different record
+        # asserted 0 tabs on a page that correctly shows one.
+        under_test = self.street_view_listing()
+        has_location = (under_test.get("lat") is not None
+                        and under_test.get("lng") is not None)
         self.assertEqual(
             self.page.get_by_role("tab", name="Map", exact=True).count(),
             1 if has_location else 0,
