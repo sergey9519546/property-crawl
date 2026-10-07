@@ -296,6 +296,18 @@ async function handleRequest(req, res) {
         // same claim as an inventory somebody checked today, and the difference
         // is exactly what a buyer is relying on when they read "active".
         ...(freshness ? { inventoryFreshness: freshness } : {}),
+        // The observation store is the one backing store that provably fills
+        // up and then degrades, so it publishes its own capacity rather than
+        // waiting until loadObservations starts throwing. Reporting is not
+        // pruning: what to drop stays a product decision.
+        ...(() => {
+          try {
+            const { observationStoreCapacity } = require('./sources/observations');
+            return { observationStore: observationStoreCapacity() };
+          } catch {
+            return {};
+          }
+        })(),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),
       });
     }
