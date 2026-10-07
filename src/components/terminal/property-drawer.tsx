@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X,
   Bookmark,
@@ -68,6 +68,50 @@ function explicitCashScenario(listing: Listing, openingBid: number | null) {
 }
 
 export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: PropertyDrawerProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // aria-modal="true" is a promise: the content behind this drawer is inert.
+  // It was not kept. Opening the drawer left focus on the trigger behind the
+  // overlay, so a keyboard or screen-reader user had no indication the drawer
+  // existed and could tab through the obscured page; focus also never came back
+  // on close, dropping them at the top of the document.
+  //
+  // This mirrors AlertsModal exactly -- a document-level keydown listener
+  // rather than onKeyDown on the panel, and focus moved to the first button
+  // inside. The listener has to be on the document: the drawer is a sibling
+  // overlay, so focus can legitimately land outside the panel and a handler
+  // bound to the panel would never see the Tab.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    panel.querySelector<HTMLButtonElement>("button")?.focus();
+
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const elements: HTMLElement[] = Array.from(
+        panel.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select, [tabindex="0"]'),
+      );
+      if (!elements.length) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.body.style.overflow = overflow;
+      document.removeEventListener("keydown", keydown);
+      if (previousFocus && document.contains(previousFocus)) previousFocus.focus();
+    };
+  }, [listing?.id]);
   const [activeTab, setActiveTab] = useState<"underwrite" | "signals" | "3d" | "bidding">("underwrite");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -206,6 +250,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="property-drawer-title"

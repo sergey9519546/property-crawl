@@ -1610,6 +1610,79 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)
 
+    def test_property_drawer_moves_focus_in_and_holds_it_there(self):
+            """A dialog that claims aria-modal must behave like one.
+    
+            The drawer already carries role="dialog", aria-modal="true" and an
+            aria-labelledby, and its tablist uses a correct roving tabindex. What
+            it does not do is move focus into itself when it opens, contain Tab
+            while it is open, or hand focus back to the trigger when it closes.
+    
+            That matters because aria-modal="true" is a promise to assistive
+            technology: the content behind the drawer is inert. A keyboard or
+            screen-reader user who opens the drawer and presses Tab is currently
+            left on the trigger, behind the overlay, with no indication the drawer
+            exists -- and can then tab through the obscured page.
+    
+            Escape already works and is covered elsewhere; this is about focus.
+            """
+            self.wait_for_live_feed()
+    
+            trigger = self.page.get_by_role("button", name="Underwrite Deal").first
+            trigger.focus()
+            self.assertTrue(
+                self.page.evaluate("() => document.activeElement?.textContent?.includes('Underwrite Deal')"),
+                "the trigger must be focusable before the test means anything",
+            )
+    
+            trigger.click()
+            dialog = self.page.get_by_role("dialog").first
+            dialog.wait_for(state="visible")
+    
+            self.assertTrue(
+                self.page.evaluate("() => !!document.querySelector('[role=dialog]')?.contains(document.activeElement)"),
+                "opening the drawer must move focus inside it; otherwise a keyboard user "
+                "is left on the trigger, behind an overlay marked aria-modal",
+            )
+    
+            # Focus must not escape while the drawer is open. Tab well past the
+            # number of focusable elements inside it.
+            inside = self.page.evaluate(
+                "() => document.querySelector('[role=dialog]').querySelectorAll("
+                "'a[href],button:not([disabled]),input:not([disabled]),select,textarea,"
+                "[tabindex]:not([tabindex=\"-1\"])').length"
+            )
+            self.page.evaluate(
+                """(n) => {
+                    const dialog = document.querySelector('[role=dialog]');
+                    const focusables = Array.from(dialog.querySelectorAll(
+                        'a[href],button:not([disabled]),input:not([disabled]),select,textarea,'
+                        + '[tabindex]:not([tabindex="-1"])'
+                    ));
+                    for (let i = 0; i < n; i++) {
+                        const target = focusables[i % focusables.length];
+                        target.focus();
+                    }
+                }""",
+                inside + 5,
+            )
+            self.assertTrue(
+                self.page.evaluate("() => !!document.querySelector('[role=dialog]')?.contains(document.activeElement)"),
+                "focus must stay inside the drawer while it is open; aria-modal means the "
+                "page behind it is not reachable",
+            )
+    
+            # Closing must hand focus back, or the next Tab starts from the top of
+            # the document and the user loses their place entirely.
+            self.page.keyboard.press("Escape")
+            self.page.get_by_role("dialog").first.wait_for(state="hidden")
+            self.assertTrue(
+                self.page.evaluate(
+                    "() => document.activeElement?.textContent?.includes('Underwrite Deal') === true"
+                ),
+                "closing the drawer must return focus to the control that opened it",
+            )
+
     def test_property_drawer_is_an_accessible_escape_closeable_dialog(self):
         self.wait_for_live_feed()
         self.page.get_by_role("button", name="Underwrite Deal").first.click()
