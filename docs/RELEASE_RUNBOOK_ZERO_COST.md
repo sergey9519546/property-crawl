@@ -46,6 +46,27 @@ docker run -d -p 3200:3000 -e SCRAPER_BACKGROUND_ENABLED=0 property-crawl:produc
 # npm run start:production   then curl http://127.0.0.1:3000/api/health
 ```
 
+### A build replaces the bundle a running server is serving
+
+`next build` rewrites `.next` in place. A `next start` that was already running
+keeps serving the bundle it booted with, so after a build the running server and
+the on-disk bundle disagree. The symptom is a page that renders its server HTML
+and then silently does nothing: labels appear with no data, the console shows a
+404 for a `/_next/static/chunks/*.js`, and a 4007 timeout is nowhere in sight.
+
+This bites hardest right after `npm run release:gate`, because the gate's
+`next-build` step rebuilds. Anything you inspect in a browser afterwards -
+Playwright suites included - is testing the previous build until you restart.
+
+```powershell
+# after any build or gate run:
+Get-NetTCPConnection -State Listen -LocalPort 3001 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+node node_modules/next/dist/bin/next start -p 3001
+```
+
+Treat "the UI shows the new labels but no values" as this until proven otherwise.
+It is not a data problem and not a hydration failure.
+
 ## Deploy options ranked ($0)
 
 | Rank | Host | Why | Config |
