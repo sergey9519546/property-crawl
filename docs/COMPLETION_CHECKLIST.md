@@ -834,6 +834,39 @@ page errors. Two observations worth recording rather than changing at this hour:
   the endpoint itself is a plain XML document and the warning comes from Chrome
   rendering it. Not a product defect.
 
+## The sweep only holds until the data drifts back — and that is a config switch
+
+Everything above was done by hand: 365 invocations of
+`scripts/collect-source.js servicelink`. ServiceLink declares a **6-hour**
+cadence, and the 6,181 records re-observed at ~12:47 were measured fresh again
+at 17:10 — 4.4 hours of their 6-hour window consumed. They cross over again
+within two hours.
+
+That drift is not a code defect. It is that **nothing ever collected on a
+schedule**: the server has always printed
+
+```
+[Server] Manual source collection enabled; background collection is disabled.
+```
+
+`server/server.js:410` gates the scheduler on `SCRAPER_BACKGROUND_ENABLED === '1'`
+(and `DISCOVERY_MODE !== 'advanced'`), and that flag is off here. So the cadence
+declared in the source catalog — which `routes/listings.js` and the health
+endpoint both judge records against — has no process behind it. Nothing
+contradicts the cadences; nothing acts on them either.
+
+**Enabling it is a deployment decision, not a code fix,** and it was not flipped
+here: it would put roughly twenty publishers on a timer on this machine,
+continuously, unattended. The change is one line in the environment:
+
+```
+SCRAPER_BACKGROUND_ENABLED=1     # and DISCOVERY_MODE not "advanced"
+```
+
+Until then, expect the same measured decay: ServiceLink returns to 100% stale
+roughly every six hours, and `npm run refresh:known -- --apply` is the manual
+answer for everything the index sweep cannot reach.
+
 ## The feed was seeded with fixture listings — fixed
 
 `src/components/terminal/property-data.ts` holds demo listings: invented
