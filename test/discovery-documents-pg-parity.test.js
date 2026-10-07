@@ -339,3 +339,63 @@ test('date sort puts upcoming sales first and concluded ones last', async () => 
     ['soon-upcoming', 'later-upcoming', 'old-concluded'],
   );
 });
+
+// Pagination is the last major surface the parity matrix does not cover: filters
+// decide WHICH rows match, but the cursor decides which of them appear on page
+// two. The two backends paginate completely differently - the memory path finds
+// the pivot and slices, the SQL path uses a keyset row-comparison - so they can
+// disagree about the page boundary while agreeing perfectly about the row set.
+//
+// The seeded rows are ordered so every sort exercises the tie-break: equal
+// deal_score and equal sale_date force the id tie-break to decide, which is
+// exactly where an unstable or mismatched boundary drops or repeats a row.
+test('paging returns the same rows in the same order on both backends', async () => {
+  await pool.query('DELETE FROM listings');
+  const rows = [
+    { id: 'p1', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p2', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p3', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p4', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p5', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p6', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+    { id: 'p7', deal_score: 50, sale_date: '2026-11-01', opening_bid: 100 },
+  ];
+  for (const row of rows) {
+    await pool.query(
+      'INSERT INTO listings (id, deal_score, sale_date, opening_bid, source_key) VALUES ($1,$2,$3,$4,$5)',
+      [row.id, row.deal_score, row.sale_date, row.opening_bid, 'hud'],
+    );
+  }
+  const memoryDatabase = {
+    getListings: async () => ({
+      total: rows.length,
+      listings: rows.map((r) => ({
+        ...r, source: 'hud', state: null, county: null, address: null, propType: null,
+        occupancy: null, status: null, lat: null, lng: null, equity: null,
+        provenance: { origin: 'live' }, sourceObservedAt: '2026-10-06T00:00:00.000Z',
+      })),
+    }),
+  };
+  const pgDatabase = { isPg: true, pool, listingSelect: 'id, deal_score::float8 AS "dealScore", opening_bid::float8 AS "openingBid"' };
+
+  for (const sort of ['score', 'date', 'bid-asc']) {
+    const walk = async (database) => {
+      const seen = [];
+      let cursor;
+      for (let page = 0; page < 6; page += 1) {
+        const url = new URL(`http://localhost/api/listings?limit=3&sort=${sort}`
+          + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''));
+        const result = await query.search(database, query.queryFromUrl(url));
+        seen.push(...result.listings.map((l) => l.id));
+        cursor = result.page.nextCursor;
+        if (!cursor) break;
+      }
+      return seen;
+    };
+    const memory = await walk(memoryDatabase);
+    const postgres = await walk(pgDatabase);
+    assert.equal(new Set(postgres).size, postgres.length, `postgres repeated a row paging by ${sort}`);
+    assert.deepEqual(postgres, memory, `the two backends page differently under sort=${sort}`);
+    assert.equal(postgres.length, rows.length, `sort=${sort} lost rows across pages`);
+  }
+});

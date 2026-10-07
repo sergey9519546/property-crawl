@@ -328,7 +328,15 @@ function compare(a, b, sort) {
   if (ak !== bk) return ak ? -1 : 1;
   if (ak && Number(av) !== Number(bv))
     return asc ? Number(av) - Number(bv) : Number(bv) - Number(av);
-  return String(a.id).localeCompare(String(b.id));
+  // The id tie-break has to follow the sort direction, because pgSearch orders
+  // `expr ${dir}, id ${dir}`. It used to always compare ascending, so every
+  // DESC sort - score and equity, the two defaults that matter - returned
+  // p1..p7 here and p7..p1 there. With the whole inventory scoring null, that
+  // tie-break is the ONLY thing deciding the order, so the two backends showed
+  // opposite rankings for identical data.
+  return asc
+    ? String(a.id).localeCompare(String(b.id))
+    : String(b.id).localeCompare(String(a.id));
 }
 function buildFacets(rows, fields) {
   const allowed = {
@@ -483,6 +491,12 @@ function pgWhere(f, start = 1) {
   }
   return { sql: w.length ? ` WHERE ${w.join(" AND ")}` : "", params: p };
 }
+// One rule, one place. pgSearch orders `expr dir, id dir` and the memory path
+// now tie-breaks ids the same way, so both read the direction from here rather
+// than each deciding it.
+function sortDirection(sort) {
+  return sort === "date" || sort === "bid-asc" ? "ASC" : "DESC";
+}
 function pgSort(f) {
   // "Date" means soonest opportunity first, not oldest record first. Ascending
   // sale_date put every concluded auction ahead of every upcoming one - and
@@ -499,10 +513,10 @@ function pgSort(f) {
     return {
       expr: "(CASE WHEN sale_date >= CURRENT_DATE THEN extract(epoch from sale_date) "
         + "ELSE 1e30 + extract(epoch from sale_date) END)",
-      dir: "ASC",
+      dir: sortDirection("date"),
     };
   if (f.sort === "bid-asc")
-    return { expr: "coalesce(opening_bid,1e30)", dir: "ASC" };
+    return { expr: "coalesce(opening_bid,1e30)", dir: sortDirection("bid-asc") };
   // Score and equity are DERIVED, exactly as the projection and matches() read
   // them: null unless the record carries an opening amount and an estimate
   // range. Sorting on the stored column ranked records by a number the API then
@@ -519,8 +533,8 @@ function pgSort(f) {
   // equity spread is >= 0 (GREATEST(0, ...)) and deal_score is constrained to
   // 1..99, so nothing real collides with the sentinel.
   if (f.sort === "equity")
-    return { expr: `coalesce(${derivedEquity},-1)`, dir: "DESC" };
-  if (f.sort === "score") return { expr: `coalesce(${derivedScore},-1)`, dir: "DESC" };
+    return { expr: `coalesce(${derivedEquity},-1)`, dir: sortDirection("equity") };
+  if (f.sort === "score") return { expr: `coalesce(${derivedScore},-1)`, dir: sortDirection("score") };
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
 async function pgRevision(database) {
@@ -703,6 +717,8 @@ async function search(database, f) {
       throw new DiscoveryQueryError(400, "Cursor does not match this query");
     after = c.id;
   }
+  // compare() carries the id tie-break, direction-aware, so paging matches
+  // pgSearch's `expr ${dir}, id ${dir}` without a second comparator here.
   const filtered = all
     .filter((r) => matches(r, f))
     .sort((a, b) => compare(a, b, f.sort));
