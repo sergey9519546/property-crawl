@@ -281,11 +281,26 @@ function applyFilters(listings, f){
 // array; the caller's input is never mutated. Falls back to deal-score
 // desc for an unknown key. Ties break on listing id (lexicographic) so
 // the visible order is stable across renders.
+// "Soonest sale date" means the soonest UPCOMING sale, so upcoming rows come
+// first and concluded/past ones follow, whatever the date inside each group.
+// Plain ascending sale_date did the opposite: it put every past auction ahead of
+// every future one, so the page opened on long-concluded sales.
+function compareSaleDate(a, b){
+  const at = a.saleDate ? new Date(a.saleDate).getTime() : NaN;
+  const bt = b.saleDate ? new Date(b.saleDate).getTime() : NaN;
+  const now = Date.now();
+  const aPast = Number.isFinite(at) && at < now;
+  const bPast = Number.isFinite(bt) && bt < now;
+  if (aPast !== bPast) return aPast ? 1 : -1;
+  const av = Number.isFinite(at) ? at : Infinity;
+  const bv = Number.isFinite(bt) ? bt : Infinity;
+  return av - bv;
+}
 const SORT_CMP = {
   'score':   (a, b) => b.dealScore  - a.dealScore,
   'equity':  (a, b) => b.equity     - a.equity,
   'bid-asc': (a, b) => a.openingBid - b.openingBid,
-  'date':    (a, b) => new Date(a.saleDate) - new Date(b.saleDate),
+  'date':    compareSaleDate,
 };
 function applySort(listings, key){
   const cmp = SORT_CMP[key] || SORT_CMP['score'];

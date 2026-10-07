@@ -302,10 +302,16 @@ function compare(a, b, sort) {
   let av,
     bv,
     asc = false;
+  const now = Date.now();
   if (sort === "date") {
     av = a.saleDate ? Date.parse(a.saleDate) : null;
     bv = b.saleDate ? Date.parse(b.saleDate) : null;
     asc = true;
+    // Same rule as pgSort's date expression: upcoming sales first, concluded
+    // and past ones after them, whatever the date inside each group.
+    const aPast = av !== null && Number.isFinite(av) && av < now;
+    const bPast = bv !== null && Number.isFinite(bv) && bv < now;
+    if (aPast !== bPast) return aPast ? 1 : -1;
   } else if (sort === "bid-asc") {
     av = a.openingBid;
     bv = b.openingBid;
@@ -478,9 +484,21 @@ function pgWhere(f, start = 1) {
   return { sql: w.length ? ` WHERE ${w.join(" AND ")}` : "", params: p };
 }
 function pgSort(f) {
+  // "Date" means soonest opportunity first, not oldest record first. Ascending
+  // sale_date put every concluded auction ahead of every upcoming one - and
+  // there are 2,026 of the former against 1,906 of the latter, so the first
+  // page was entirely past sales. The served legacy UI has always labelled this
+  // "Soonest sale date", which the plain ascending sort contradicted outright.
+  //
+  // Past dates are pushed beyond every future one by adding 1e30 to their
+  // epoch, which keeps the expression a SINGLE float8 scalar: the cursor builds
+  // a row-comparison `(${expr}, id) < ($n, $m)` and selects `${expr}::float8`,
+  // so a tuple expression would break pagination. Undated rows stay NULL and
+  // sort last, as before.
   if (f.sort === "date")
     return {
-      expr: "coalesce(extract(epoch from sale_date),253402300799)",
+      expr: "(CASE WHEN sale_date >= CURRENT_DATE THEN extract(epoch from sale_date) "
+        + "ELSE 1e30 + extract(epoch from sale_date) END)",
       dir: "ASC",
     };
   if (f.sort === "bid-asc")

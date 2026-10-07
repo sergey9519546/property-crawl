@@ -312,3 +312,30 @@ test('sorting uses the same derived values the API returns', async () => {
   );
   assert.equal(derivedScores['scored-but-withheld'], null);
 });
+
+// "Soonest sale date" has to mean the soonest UPCOMING sale. Plain ascending
+// sale_date put every concluded auction ahead of every upcoming one, and the
+// inventory has more past sales (2,026) than future (1,906), so the first page
+// of this sort was entirely concluded records - while index.html labels the
+// option "Soonest sale date" and the served API host renders that page.
+test('date sort puts upcoming sales first and concluded ones last', async () => {
+  const now = Date.now();
+  const iso = (offsetDays) => new Date(now + offsetDays * 86_400_000).toISOString().slice(0, 10);
+  await pool.query('DELETE FROM listings');
+  for (const row of [
+    { id: 'old-concluded', sale_date: iso(-400) },
+    { id: 'soon-upcoming', sale_date: iso(3) },
+    { id: 'later-upcoming', sale_date: iso(40) },
+  ]) {
+    await pool.query('INSERT INTO listings (id, sale_date) VALUES ($1, $2)', [row.id, row.sale_date]);
+  }
+  const database = { isPg: true, pool, listingSelect: 'id, sale_date::text AS "saleDate"' };
+  const sorted = await query.search(
+    database,
+    query.queryFromUrl(new URL('http://localhost/api/listings?sort=date&limit=10')),
+  );
+  assert.deepEqual(
+    sorted.listings.map((l) => l.id),
+    ['soon-upcoming', 'later-upcoming', 'old-concluded'],
+  );
+});
