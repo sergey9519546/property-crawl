@@ -216,6 +216,7 @@ test('every facet bucket the workbench offers can be selected and reproduces its
     has_documents boolean, provenance jsonb,
     sale_date date, opening_bid numeric, equity_spread numeric,
     senior_lien_risk text, redemption_days int,
+    est_low numeric, est_high numeric,
     latitude float8, longitude float8
   )`);
 
@@ -268,4 +269,46 @@ const FIELDS = ['state', 'county', 'source', 'type', 'program', 'lifecycle', 'oc
     }
   }
   assert.deepEqual(failures, [], `the workbench offers facet counts it cannot reproduce:\n  ${failures.join('\n  ')}`);
+});
+
+// Sorting is the same mirrored-pair hazard as faceting, one function over:
+// pgSort ordered by the STORED column while the projection returns, and the UI
+// shows, the DERIVED one. dealScore is null unless the record has an opening
+// amount and an estimate range, so `sort=score` could rank a record by a number
+// the API deliberately withholds - and the in-memory matcher, which sorts on
+// a.dealScore, would put it elsewhere.
+//
+// Masked today only because no record in the live store carries a deal_score.
+// That is a property of the current data, not of the query.
+test('sorting uses the same derived values the API returns', async () => {
+  // Same table the facet sweep above builds, cleared so the rows are only these
+  // two. est_low/est_high live on that table because sort=score is defined in
+  // terms of them.
+  await pool.query('DELETE FROM listings');
+  // "scored-but-withheld": a stored deal_score of 90, which the projection
+  // withholds because there is no estimate range. "genuinely-scored": 50 with
+  // the estimate range present, so the projection returns 50.
+  for (const row of [
+    { id: 'scored-but-withheld', deal_score: 90, opening_bid: 60000, est_low: null, est_high: null, equity_spread: null, sale_date: '2026-11-05' },
+    { id: 'genuinely-scored', deal_score: 50, opening_bid: 60000, est_low: 80000, est_high: 100000, equity_spread: 30000, sale_date: '2026-11-10' },
+  ]) {
+    const keys = Object.keys(row);
+    await pool.query(
+      `INSERT INTO listings (${keys.join(',')}) VALUES (${keys.map((_, i) => `$${i + 1}`).join(',')})`,
+      keys.map((k) => row[k]),
+    );
+  }
+
+  const database = { isPg: true, pool, listingSelect: 'id, deal_score::float8 AS "dealScore"' };
+  const scored = await query.search(database, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+
+  // The projection is what the UI reads. Only the row with an estimate range
+  // carries a score; the other is withheld, so it sorts last.
+  const derivedScores = { 'scored-but-withheld': null, 'genuinely-scored': 50 };
+  assert.deepEqual(
+    scored.listings.map((l) => l.id),
+    ['genuinely-scored', 'scored-but-withheld'],
+    'sort=score must rank by the derived score the API returns, withholding first',
+  );
+  assert.equal(derivedScores['scored-but-withheld'], null);
 });

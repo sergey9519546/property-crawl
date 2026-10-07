@@ -485,10 +485,24 @@ function pgSort(f) {
     };
   if (f.sort === "bid-asc")
     return { expr: "coalesce(opening_bid,1e30)", dir: "ASC" };
+  // Score and equity are DERIVED, exactly as the projection and matches() read
+  // them: null unless the record carries an opening amount and an estimate
+  // range. Sorting on the stored column ranked records by a number the API then
+  // withheld, so `sort=score` could put a scored-but-unquotable record first
+  // while its card showed no score - and the in-memory matcher, which sorts on
+  // the derived value, put it elsewhere. Masked only because no record in the
+  // live store carries a deal_score today, which is a fact about the data and
+  // not about the query.
+  const derivedEquity = "CASE WHEN opening_bid > 0 AND est_low > 0 AND est_high >= est_low "
+    + "THEN GREATEST(0, ((est_low + est_high) / 2.0) - opening_bid) ELSE NULL END";
+  const derivedScore = "CASE WHEN opening_bid > 0 AND est_low > 0 AND est_high >= est_low "
+    + "THEN deal_score ELSE NULL END";
+  // -1 sorts last for both, matching compare()'s value-before-null: a real
+  // equity spread is >= 0 (GREATEST(0, ...)) and deal_score is constrained to
+  // 1..99, so nothing real collides with the sentinel.
   if (f.sort === "equity")
-    return { expr: "coalesce(equity_spread,-1)", dir: "DESC" };
-  if (f.sort === "score")
-    return { expr: "coalesce(deal_score,-1)", dir: "DESC" };
+    return { expr: `coalesce(${derivedEquity},-1)`, dir: "DESC" };
+  if (f.sort === "score") return { expr: `coalesce(${derivedScore},-1)`, dir: "DESC" };
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
 async function pgRevision(database) {
