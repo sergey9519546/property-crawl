@@ -277,3 +277,27 @@ test('every text facet filter compares case-insensitively, like the in-memory ma
   assert.equal(matches(row, filter), true,
     'the in-memory matcher lowercases both sides, so it must still accept these');
 });
+
+// The facet and the filter must bucket on the SAME expression, or the workbench
+// advertises a count that selecting it cannot reproduce.
+//
+// This was live. pgWhere was changed to filter lifecycle on the derived value
+// (lifecycle_status falling back to status) so it would agree with matches(),
+// while the facet kept grouping by the bare lifecycle_status column. Records
+// whose derived value is present landed in the facet's 'unknown' bucket, so
+// /listings offered "unknown (207)" and selecting it returned 0.
+//
+// Both sides are one string literal in this module, so assert they are the same
+// literal rather than standing up a database to compare every bucket.
+test('the lifecycle facet and the lifecycle filter name the same expression', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../../server/discovery/query.js'), 'utf8');
+  const facet = source.match(/^\s*lifecycle:\s*"([^"]+)",/m);
+  const filter = source.match(/\[\s*"([^"]*lifecycle_status[^"]*)",\s*f\.lifecycle\s*\]/);
+  assert.ok(facet, 'the facet allowlist must declare lifecycle');
+  assert.ok(filter, 'pgWhere must filter lifecycle through a declared expression');
+  assert.equal(
+    facet[1],
+    filter[1],
+    'the facet buckets on a different expression than the filter uses, so its count cannot be reproduced by selecting it',
+  );
+});

@@ -543,7 +543,13 @@ async function pgSearch(database, f) {
       source: "source_key",
       type: "prop_type",
       program: "auction_program",
-      lifecycle: "lifecycle_status",
+      // Lifecycle is derived - lifecycle_status falling back to status, exactly as
+      // matches() reads it and exactly as pgWhere filters it. Grouping the facet
+      // by the bare column put records whose derived value is present into the
+      // 'unknown' bucket, so the facet advertised 207 and selecting it returned
+      // none: a value the app offered and then could not deliver. Facet and
+      // filter have to bucket on the same expression or the count lies.
+      lifecycle: "coalesce(nullif(lifecycle_status,''), status)",
       // The buckets here group by the stored string exactly as the publisher
       // wrote it, while pgWhere matches case-insensitively - the same rule the
       // in-memory matcher applies. So a facet count can be narrower than the
