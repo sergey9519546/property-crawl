@@ -636,16 +636,37 @@ class DatabaseClient {
         // rather than generating a VALUES list of placeholders. A generated
         // placeholder list has to be numbered exactly right for the extended
         // protocol and infers each value's type from its neighbours.
+        //
+        // One statement, one scan. The store-wide oldest has to come from each
+        // source's OLDEST observation and then be minimised across sources.
+        // Taking min() over the per-source NEWEST - which is what this did -
+        // returns the least-recently-refreshed source's newest row, so the
+        // reported "oldest" was a few hours old while the store held rows over a
+        // month old. Live health answered 2026-10-06T07:34Z, which was exactly
+        // HUD's newest record. On an endpoint whose stated job is "a database full
+        // of rows is not the same claim as an inventory somebody checked today",
+        // that understated the oldest data by weeks; the flat-window branch below
+        // used a true min(), so the same field meant two different things
+        // depending on which branch ran.
+        //
+        // The extra aggregate rides along in the grouped scan rather than as a
+        // second pool.query or an uncorrelated subquery. Both were measured on
+        // the same warm process against a 79ms baseline: a second round trip ran
+        // 156ms and the subquery form 240ms, because a store-wide aggregate
+        // re-scans this 46-column table and listings.source_observed_at has no
+        // index. The data-mode banner fetches this endpoint on every page render,
+        // so the per-source column is the only version that costs nothing.
         const res = await this.pool.query(
           `SELECT c.source::text AS source,
                   count(l.id)::int AS n,
                   count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff)::int AS fresh,
-                  max(l.source_observed_at)::text AS newest
+                  max(l.source_observed_at)::text AS newest,
+                  min(l.source_observed_at)::text AS oldest
              FROM unnest($1::text[], $2::timestamptz[]) AS c(source, cutoff)
              LEFT JOIN listings l ON l.source_key = c.source
             GROUP BY c.source`,
           [cutoffs.map((entry) => entry.source), cutoffs.map((entry) => entry.cutoff)]);
-        bySource = res.rows.map((row) => ({
+        const rows = res.rows.map((row) => ({
           source: row.source,
           listings: row.n,
           freshListings: row.fresh,
@@ -653,13 +674,20 @@ class DatabaseClient {
           newestObservation: row.newest,
           stale: row.fresh < row.n,
         }));
-        count = bySource.reduce((total, row) => total + row.listings, 0);
-        freshCount = bySource.reduce((total, row) => total + row.freshListings, 0);
-        const times = bySource.map((row) => row.newestObservation).filter(isFiniteTime).map(Date.parse);
-        if (times.length) {
-          oldest = new Date(Math.min(...times)).toISOString();
-          newest = new Date(Math.max(...times)).toISOString();
-        }
+        // A catalog source that holds nothing contributes no information to a
+        // breakdown of the store, and this payload is polled by the data-mode
+        // banner on every page render. LEFT JOINing the whole catalog put 152
+        // empty rows into the response - 18KB of the 20.5KB, describing nothing.
+        bySource = rows.filter((row) => row.listings > 0);
+        count = rows.reduce((total, row) => total + row.listings, 0);
+        freshCount = rows.reduce((total, row) => total + row.freshListings, 0);
+        // The per-source minimum is read here rather than carried into bySource:
+        // it exists to compute the store-wide oldest, and shipping it on every
+        // row would put a field no consumer reads back into the polled payload.
+        const oldestTimes = res.rows.map((row) => row.oldest).filter(isFiniteTime).map(Date.parse);
+        if (oldestTimes.length) oldest = new Date(Math.min(...oldestTimes)).toISOString();
+        const newestTimes = rows.map((row) => row.newestObservation).filter(isFiniteTime).map(Date.parse);
+        if (newestTimes.length) newest = new Date(Math.max(...newestTimes)).toISOString();
       } else if (this.memoryInventoryRequested()) {
         bySource = Object.keys(cadences).map((source) => {
           const rows = this.inMemoryData.listings.filter((listing) => listing.source === source);
@@ -675,8 +703,10 @@ class DatabaseClient {
             stale: rows.some((row) => !isFiniteTime(row.sourceObservedAt)
               || Date.parse(row.sourceObservedAt) < cutoff),
           };
-        });
-        count = bySource.reduce((total, row) => total + row.listings, 0);
+        }).filter((row) => row.listings > 0);
+        // Count every stored listing, not only those whose source declared a
+        // cadence, so both backends report the same population.
+        count = this.inMemoryData.listings.length;
         freshCount = bySource.reduce((total, row) => total + row.freshListings, 0);
         const times = this.inMemoryData.listings.map((l) => l.sourceObservedAt)
           .filter(isFiniteTime).map(Date.parse);

@@ -104,3 +104,91 @@ test('no cadences supplied falls back to the flat window unchanged', async () =>
   assert.equal(f.bySource, null);
   assert.match(f.staleBecause, /were last observed more than 24h ago/);
 });
+
+// The production path (postgres + cadences) is the only one that ever ran against
+// real inventory, and it is the one that got oldestObservation wrong: the value
+// was derived from each source's NEWEST observation, so the reported "oldest" was
+// the least-recently-refreshed source's newest record. Live health answered
+// 2026-10-06T07:34Z - exactly HUD's newest row - while ServiceLink held rows far
+// older. The endpoint exists to say "a database full of rows is not the same claim
+// as an inventory somebody checked today", so understating the oldest data by weeks
+// defeats its only job. The flat-window path already used a true min(); one field,
+// two meanings, chosen by which branch ran.
+test('postgres reports the oldest observation in the store, not the oldest per-source newest', async () => {
+  const rows = [
+    // servicelink: one fresh row, two long-stale ones.
+    ['servicelink', 1], ['servicelink', 30], ['servicelink', 40],
+    // hud: fresh within its own 24h cadence.
+    ['hud', 2],
+  ];
+  const iso = (ageHours) => new Date(NOW - ageHours * HOUR).toISOString();
+  const pool = {
+    query: async (sql) => {
+      if (!sql.includes('unnest')) throw new Error(`Unexpected query: ${sql}`);
+      // One statement: per-source rows, each carrying the store-wide scalars.
+      return { rows: [
+        { source: 'servicelink', n: 3, fresh: 1, newest: iso(1), oldest: iso(40) },
+        { source: 'hud', n: 1, fresh: 1, newest: iso(2), oldest: iso(40) },
+      ] };
+    },
+  };
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, pool, liveCachePath: null, workspaceStorePath: null });
+  const f = await db.inventoryFreshness(NOW, { cadences: { servicelink: 6, hud: 24 } });
+
+  assert.equal(f.oldestObservation, iso(40), 'the 40h-old row is the oldest in the store');
+  assert.equal(f.newestObservation, iso(1));
+  assert.equal(f.listings, 4);
+  assert.equal(f.freshListings, 2, 'freshness still respects each source cadence');
+  assert.equal(f.stale, true);
+});
+
+// A cadence-declared-source gap: records whose source_key is not in the catalog
+// are outside both this breakdown and its total, because counting the whole
+// table means a second scan of a 46-column table with no index on
+// source_observed_at - measured at 156ms against a 79ms baseline for an endpoint
+// the banner fetches on every page render. Recorded here so the tradeoff is
+// deliberate: the totals are exactly the sources the catalog declares a cadence
+// for, and today that is every source holding inventory.
+test('the freshness breakdown covers exactly the cadence-declared sources', async () => {
+  const iso = (ageHours) => new Date(NOW - ageHours * HOUR).toISOString();
+  const pool = {
+    query: async (sql) => {
+      if (!sql.includes('unnest')) throw new Error(`Unexpected query: ${sql}`);
+      return { rows: [
+        { source: 'servicelink', n: 3, fresh: 1, newest: iso(1), oldest: iso(40) },
+      ] };
+    },
+  };
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, pool, liveCachePath: null, workspaceStorePath: null });
+  const f = await db.inventoryFreshness(NOW, { cadences: { servicelink: 6 } });
+
+  assert.equal(f.listings, 3);
+  assert.equal(f.freshListings, 1);
+  assert.equal(f.stale, true);
+  assert.match(f.staleBecause, /Behind: servicelink 2\/3 \(every 6h\)\./);
+});
+
+// 161 catalog sources were LEFT JOINed into the health payload on every poll, 152
+// of them with zero listings. That is 18KB of the 20.5KB response describing
+// nothing, fetched on every page render by the data-mode banner, and read by no
+// consumer outside the tests. laggingSources already carries the actionable subset.
+test('the health payload omits catalog sources that hold no listings', async () => {
+  const iso = (ageHours) => new Date(NOW - ageHours * HOUR).toISOString();
+  const pool = {
+    query: async (sql) => {
+      if (!sql.includes('unnest')) throw new Error(`Unexpected query: ${sql}`);
+      return { rows: [
+        { source: 'servicelink', n: 3, fresh: 1, newest: iso(1), oldest: iso(30) },
+        { source: 'county-tax-sale-template', n: 0, fresh: 0, newest: null, oldest: null },
+        { source: 'mls-licensed-feed', n: 0, fresh: 0, newest: null, oldest: null },
+      ] };
+    },
+  };
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, pool, liveCachePath: null, workspaceStorePath: null });
+  const f = await db.inventoryFreshness(NOW, { cadences: { servicelink: 6, 'county-tax-sale-template': 24, 'mls-licensed-feed': 6 } });
+
+  assert.deepEqual(f.bySource.map((r) => r.source), ['servicelink']);
+  assert.equal(f.listings, 3, 'dropping zero rows must not change the totals');
+  assert.equal(f.freshListings, 1);
+  assert.equal(f.stale, true);
+});
