@@ -74,6 +74,38 @@ const PARAM_CAPS = Object.freeze({
 
 const INTELLIGENCE_SORTS = new Set(['quality', 'opportunity']);
 
+/**
+ * What the `total` in this response counts, and how many listings were actually
+ * examined to produce it.
+ *
+ * Once the intelligence view is active the ranking and any minimum-quality
+ * threshold are applied AFTER the database page is fetched, so `total` becomes
+ * how many survived on that page. Nothing said so, and a client reading it as a
+ * search total gets an unproven negative presented as a counted one: live,
+ * minQuality=95 over 9,798 listings answered `total: 0`, not because the store
+ * holds nothing above 95 but because none of the 20 rows loaded on that page
+ * cleared the threshold. The store was never counted.
+ *
+ * `evaluated` is what was loaded, `matched` is what survived - which is the
+ * only honest way to describe an empty page in this mode, and it lets the UI
+ * say "none of the 20 listings loaded here met the threshold" instead of "this
+ * search returns 0 matching listings".
+ */
+function intelligenceScope(evaluated, matched, filters) {
+  const sort = String(filters.sort || '');
+  const minQuality = Number(filters.minQuality) || 0;
+  const totalIsPageScoped = INTELLIGENCE_SORTS.has(sort) || minQuality > 0;
+  return {
+    sort: INTELLIGENCE_SORTS.has(sort) ? sort : null,
+    minQuality,
+    totalIsPageScoped,
+    pageScope: { evaluated, matched },
+    note: totalIsPageScoped
+      ? 'Quality and opportunity ranking, and any minimum-quality threshold, are applied after this page is loaded. total counts matches on this page, not in the whole search.'
+      : 'quality/opportunity sorts apply after listing intelligence annotation.',
+  };
+}
+
 function applyIntelligenceView(presentedListings, filters) {
   let view = presentedListings;
   const minQuality = Number(filters.minQuality) || 0;
@@ -296,11 +328,7 @@ async function handleListings(req, res) {
       page,
       revision: result.revision || null,
       facets: result.facets || {},
-      intelligence: {
-        sort: INTELLIGENCE_SORTS.has(String(filters.sort)) ? String(filters.sort) : null,
-        minQuality: Number(filters.minQuality) || 0,
-        note: 'quality/opportunity sorts apply after listing intelligence annotation.',
-      },
+      intelligence: intelligenceScope(presentedListings.length, viewListings.length, filters),
       pipeline: summarizeInventory(viewListings),
       listings: viewListings,
       total: INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0
@@ -330,3 +358,4 @@ async function handleListings(req, res) {
 module.exports = handleListings;
 module.exports.presentListing = presentListing;
 module.exports.applyIntelligenceView = applyIntelligenceView;
+module.exports.intelligenceScope = intelligenceScope;

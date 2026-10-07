@@ -46,7 +46,14 @@ type Payload = {
   revision?: string;
   page?: { nextCursor?: string | null; hasMore?: boolean };
   facets?: Record<string, Facet[]>;
-  intelligence?: { sort?: string | null; minQuality?: number; note?: string };
+  intelligence?: {
+    sort?: string | null;
+    minQuality?: number;
+    note?: string;
+    /** Server-declared: `total` counts this page, not the whole search. */
+    totalIsPageScoped?: boolean;
+    pageScope?: { evaluated: number; matched: number };
+  };
   error?: string;
 };
 const defaults: Record<string, string> = {
@@ -375,16 +382,23 @@ export function DiscoveryWorkbench() {
   // `total` is a whole-search count, except once the post-annotation
   // intelligence view is active (quality/opportunity sort, or any minQuality):
   // there the server reports the length of the page it just built, so the number
-  // is a page count wearing the label of a search count. Both signals are
-  // checked — the server's own `intelligence` object first, then the shape a
+  // is a page count wearing the label of a search count. The server now declares
+  // this outright; the checks below are the fallbacks for a response that
+  // predates the field — its own `intelligence` object first, then the shape a
   // capped total always has (a count no larger than the page carrying it while
   // more pages are still available).
   const totalIsPageScoped = Boolean(
     payload
-      && (payload.intelligence?.sort
+      && (payload.intelligence?.totalIsPageScoped === true
+        || payload.intelligence?.sort
         || (payload.intelligence?.minQuality || 0) > 0
         || (payload.page?.hasMore === true && payload.total <= pageLength)),
   );
+  // How many listings the server actually loaded and examined, which is not the
+  // same as how many the search holds once ranking/thresholds run after the
+  // page is built. Falls back to the page length for a response without the field.
+  const evaluated =
+    payload?.intelligence?.pageScope?.evaluated ?? pageLength;
   const clearLocalFilters = React.useCallback(() => {
     setTriageFilters({
       isNew: false,
@@ -686,9 +700,17 @@ export function DiscoveryWorkbench() {
                   <p className="mt-2 text-sm text-slate-600">
                     The filter above is applied to this page only, not to the search.{" "}
                     {typeof payload.total === "number"
-                      ? `This search returns ${payload.total.toLocaleString()} matching listing${
-                          payload.total === 1 ? "" : "s"
-                        }, but only ${pageLength.toLocaleString()} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
+                      ? totalIsPageScoped
+                        // `total` is what survived on the loaded page, not what
+                        // the search holds. Reading it as a search count here
+                        // states an unproven negative: live, minQuality=95
+                        // emptied a 20-row page over a store of 9,798, and this
+                        // line would have claimed "this search returns 0
+                        // matching listings". Say what was actually examined.
+                        ? `This page loaded ${evaluated.toLocaleString()} ${evaluated === 1 ? "listing" : "listings"}, and none of them met the ranking or quality threshold applied here. Later pages have not been loaded, so matches may be on them.`
+                        : `This search returns ${payload.total.toLocaleString()} matching listing${
+                            payload.total === 1 ? "" : "s"
+                          }, but only ${pageLength.toLocaleString()} ${pageLength === 1 ? "is" : "are"} loaded here. Later pages have not been loaded, so matches may be on them.`
                       : `Only ${pageLength.toLocaleString()} ${pageLength === 1 ? "listing is" : "listings are"} loaded here. Later pages have not been loaded, so matches may be on them.`}
                   </p>
                   <button

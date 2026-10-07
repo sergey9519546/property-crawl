@@ -35,16 +35,23 @@ const workbench = fs.readFileSync(
 
 const UNKNOWN_SALE_DATE = "Date not published";
 
+// Guards match source, and a comment sitting between a condition and the branch
+// it explains is not a behavioural difference. Strip comments so an assertion
+// cannot fail - or quietly pass for the wrong reason - because someone moved or
+// reworded a note. Line comments only: this is .tsx with no block comments, and a
+// naive block-comment strip would eat the "//" inside any string URL.
+const workbenchCode = workbench.replace(/^[^\S\n]*\/\/[^\n]*/gm, "");
+
 // --- 1. a page-scoped empty state must not claim an empty search ------------
 
 // The slice covers the whole empty-state ternary, from its condition to the
 // source-coverage link that ends the server-empty branch.
-function emptyStateBranch() {
-  const start = workbench.indexOf("!filteredListings.length ?");
+function emptyStateBranch(source = workbench) {
+  const start = source.indexOf("!filteredListings.length ?");
   assert.ok(start > -1, "expected the empty-state branch to still exist");
-  const end = workbench.indexOf("View source coverage", start);
+  const end = source.indexOf("View source coverage", start);
   assert.ok(end > start, "expected the server-empty branch to end at its link");
-  return workbench.slice(start, end);
+  return source.slice(start, end);
 }
 
 test("a filter that empties the page says so, instead of claiming no listings match", () => {
@@ -119,11 +126,22 @@ test("the genuinely empty search keeps its narrow-filter copy", () => {
 // --- 2. a capped count must not wear the label of a search total -----------
 
 test("the intelligence view is detected as the capped-count case", () => {
+  // Whitespace-tolerant on purpose. This used to be anchored to the single-line
+  // shape `intelligence?: { sort?: ...; minQuality?: ...`, so reformatting that
+  // one type broke a guard whose actual property - "the Payload type declares the
+  // two fields the client needs" - was still intact. What is asserted here is the
+  // declaration, not the line it sits on.
   assert.match(
     workbench,
-    /intelligence\?: \{ sort\?: string \| null; minQuality\?: number/,
+    /intelligence\?:\s*\{[^}]*sort\?:\s*string \| null[^}]*minQuality\?:\s*number/,
     "the client cannot recognise a capped total without the server's own "
       + "intelligence object; its absence here means the check cannot be made",
+  );
+  assert.match(
+    workbench,
+    /payload\.intelligence\?\.totalIsPageScoped === true/,
+    "the server now declares the capped count outright; the client must prefer "
+      + "that over inferring it from the sort and threshold alone",
   );
   assert.match(workbench, /const totalIsPageScoped = Boolean\(/);
   assert.match(
@@ -141,6 +159,34 @@ test("the intelligence view is detected as the capped-count case", () => {
     /payload\.page\?\.hasMore === true && payload\.total <= pageLength/,
     "a total no larger than its own page while more pages exist is a capped "
       + "count even when the server sent no intelligence object to say so",
+  );
+});
+
+// A capped count is only honest if every place that prints it qualifies it. The
+// counter line was qualified and the empty state was not, so the one branch that
+// renders a capped count of zero - the case where "this search returns 0 matching
+// listings" is an unproven negative about a store of thousands - stated it as a
+// counted fact. Live: minQuality=95 emptied a 20-row page and the empty state
+// would have claimed the search matched nothing.
+test("the empty state never spends a capped count as a search total", () => {
+  const branch = emptyStateBranch(workbenchCode);
+  assert.match(
+    branch,
+    /totalIsPageScoped\s*\?\s*`This page loaded/,
+    "with a page-scoped count the empty state must report what was examined, "
+      + "not assert a whole-search total the server never computed",
+  );
+  assert.match(
+    branch,
+    /none of them met the ranking or quality threshold applied here/,
+    "the honest description of an empty page under ranking: nothing loaded met "
+      + "the threshold, later pages are still unsearched",
+  );
+  assert.match(
+    branch,
+    /: `This search returns \$\{payload\.total/,
+    "the unqualified whole-search sentence stays, but only on the branch where "
+      + "the server really did count the search",
   );
 });
 
