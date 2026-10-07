@@ -686,12 +686,77 @@ function runHunt(id, listings, options = {}) {
   const now = currentIso(options.now);
   return mutateStore(options.filePath, (store) => {
     const hunt = findHunt(store, id);
-    const evaluated = evaluateInventory(hunt, listings, { now, previousBaseline: store.baselines[id] });
+    // Evaluate in pages, the way the durable path does, rather than handing
+    // evaluateInventory the whole array at once.
+    //
+    // evaluateInventory refuses more than MAX_BASELINE_RECORDS listings in a
+    // single call, so a store past 10,000 could not be evaluated at all --
+    // and this path is the live one wherever DISCOVERY_MODE is not "advanced",
+    // which is the current embedded-PGlite deployment. The live store was 169
+    // listings from that ceiling. The durable path already pages with
+    // baselineLimit: Infinity and has a 10,050-record acceptance test; this is
+    // the same loop for the file-backed store.
+    const previousBaseline = store.baselines[id];
+    const initial = !previousBaseline;
+    const observedKeys = new Set();
+    const events = [];
+    const results = [];
+    const counts = {};
+    let evaluated = null;
+    const pageSize = 1000;
+    const total = Array.isArray(listings) ? listings.length : 0;
+
+    for (let offset = 0; offset < total || (total === 0 && offset === 0); offset += pageSize) {
+      const page = listings.slice(offset, offset + pageSize);
+      for (const listing of page) {
+        const recordId = listing?.provenance?.recordId;
+        if (listing?.source && recordId) observedKeys.add(identityKey(listing.source, String(recordId)));
+      }
+      evaluated = evaluateInventory(hunt, page, {
+        now,
+        previousBaseline: evaluated ? evaluated.baseline : previousBaseline,
+        baselineLimit: Infinity,
+        suppressEvents: initial,
+      });
+      events.push(...evaluated.events);
+      for (const [key, value] of Object.entries(evaluated.response.counts || {})) {
+        if (['notObserved', 'newMatch', 'materialChange', 'noLongerMatches', 'evidenceUnknown'].includes(key)) continue;
+        counts[key] = (counts[key] || 0) + Number(value || 0);
+      }
+      if (results.length < MAX_RETURNED_RESULTS) {
+        results.push(...(evaluated.response.results || []).slice(0, MAX_RETURNED_RESULTS - results.length));
+      }
+    }
+    if (!evaluated) {
+      evaluated = evaluateInventory(hunt, [], {
+        now, previousBaseline, baselineLimit: Infinity, suppressEvents: initial,
+      });
+    }
+
+    const response = {
+      ...evaluated.response,
+      evaluatedAt: now,
+      baselineCreated: initial,
+      counts: {
+        ...evaluated.response.counts,
+        ...counts,
+        notObserved: Object.keys(previousBaseline?.records || {}).filter((key) => !observedKeys.has(key)).length,
+        newMatch: events.filter((event) => event.type === 'new_match').length,
+        materialChange: events.filter((event) => event.type === 'material_change').length,
+        noLongerMatches: events.filter((event) => event.type === 'no_longer_matches').length,
+        evidenceUnknown: events.filter((event) => event.type === 'evaluation_unknown').length,
+      },
+      results,
+      resultsTruncated: (counts.accepted || 0) + (counts.rejected || 0) > results.length,
+      newEvents: initial ? [] : events.slice(0, MAX_RETURNED_EVENTS),
+      eventsTruncated: !initial && events.length > MAX_RETURNED_EVENTS,
+    };
+
     store.baselines[id] = evaluated.baseline;
     const existing = new Set(store.events.map((event) => event.id));
-    store.events = [...evaluated.events.filter((event) => !existing.has(event.id)), ...store.events]
+    store.events = [...events.filter((event) => !existing.has(event.id)), ...store.events]
       .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt)).slice(0, MAX_EVENTS);
-    return { value: evaluated.response };
+    return { value: response };
   }, { now });
 }
 

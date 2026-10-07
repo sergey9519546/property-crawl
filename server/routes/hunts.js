@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const hunts = require('../intelligence/hunts');
 const discoveryQuery = require('../discovery/query');
@@ -67,12 +68,25 @@ function createHuntsHandler(dependencies = {}) {
       }
       if (action === 'evaluate') {
         if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST to evaluate a hunt' });
-        const inventory = await database.getListings({ limit: MAX_INVENTORY, offset: 0 });
-        const listings = Array.isArray(inventory) ? inventory : inventory?.listings;
-        const total = Array.isArray(inventory) ? inventory.length : Number(inventory?.total);
-        if (!Array.isArray(listings)) throw new Error('Listing inventory is unavailable');
-        if (Number.isFinite(total) && total > listings.length) {
-          return res.status(409).json({ error: `Hunt evaluation needs a complete inventory of at most ${MAX_INVENTORY} records` });
+        // Read the whole store, not `limit: MAX_INVENTORY`.
+        //
+        // The old ceiling was 169 listings away on the live store (9,831 with a
+        // 10,000 cap), and the store grows every collection cycle -- ServiceLink
+        // alone holds 7,498 and refreshes every six hours. Past it, this
+        // answered 409 for every hunt on a feature that does have UI callers,
+        // with nothing to say the limit was approaching.
+        //
+        // The 409 itself was right and stays: it means the inventory read came
+        // back incomplete. It was firing on an arbitrary record cap instead,
+        // which is a different claim.
+        const { pool: listings, scanned, availableTotal, truncated } = await scanAllListings(database);
+        if (!Array.isArray(listings) || listings.length === 0) throw new Error('Listing inventory is unavailable');
+        if (truncated) {
+          return res.status(409).json({
+            error: 'Hunt evaluation needs a complete inventory, and the store could not be read whole',
+            scanned,
+            availableTotal,
+          });
         }
         return res.json({ evaluation: hunts.runHunt(id, listings, { filePath, now: now() }) });
       }
