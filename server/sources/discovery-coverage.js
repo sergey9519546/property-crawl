@@ -61,10 +61,61 @@ async function attachDiscoveryCoverage(network, database, env = process.env) {
           : run.status === 'failed' ? (/403|429|challenge|blocked/i.test(run.error_message || '') ? 'blocked' : 'attention')
             : run.status === 'running' ? 'collecting' : !complete ? 'partial' : run.accepted_count === 0 ? 'empty' : stale ? 'stale' : rollout?.approved !== true ? 'partial' : 'operational';
       } else {
-        source.lastRun = null;
+        // No ledger run is a missing *coverage attestation*, not proof that
+        // nothing was ever collected.
+        //
+        // Two collectors write here. The scheduler records a row in this ledger;
+        // collect-source.js records every run in the observation store and writes
+        // the listings straight to the store. A source can therefore hold a real
+        // run, thousands of stored records, and no ledger row at all. This branch
+        // used to null the run and claim awaiting_run unconditionally, which made
+        // the network report ServiceLink - 7,497 records, due again in six hours -
+        // as "collector registered, not run", while dueAt in the very same payload
+        // was computed from the run it had just discarded.
+        //
+        // What stays null is the coverage claim. Without a ledger row there is no
+        // acquisition scope, no sweep completeness and no release-gate promotion to
+        // report, and synthesising any of them is precisely the overclaim this
+        // guard exists to prevent. Only what the store can evidence is derived.
+        const observedRun = source.lastRun && typeof source.lastRun === 'object' && source.lastRun.lastRunAt
+          ? source.lastRun : null;
+        const cadenceHours = Number(source.workflow?.cadenceHours) || 24;
+        const lastActivityAt = observedRun ? observedRun.lastRunAt : source.latestObservation || null;
+        const ageMs = lastActivityAt === null ? null : Date.now() - Date.parse(lastActivityAt);
+        const overdue = ageMs !== null && Number.isFinite(ageMs) && ageMs > cadenceHours * 3600_000;
+        if (!source.automated) {
+          source.discoveryStatus = 'manual';
+        } else if (source.status === 'history_unavailable' || source.automatedEvidence === true) {
+          // buildSourceNetwork resolved these from the same observation store.
+          // Recomputing here would discard "history unavailable" and hand a source
+          // whose history could not be read a "collected" verdict.
+          if (source.status === 'history_unavailable') source.discoveryStatus = 'attention';
+        } else if (!observedRun && !(source.observedRecords > 0)) {
+          // Genuinely nothing: no run in either store and not one stored record.
+          source.discoveryStatus = 'awaiting_run';
+          source.status = 'awaiting_run';
+        } else if (observedRun && observedRun.error) {
+          source.status = 'attention';
+          source.discoveryStatus = /403|429|challenge|blocked/i.test(observedRun.error) ? 'blocked' : 'attention';
+        } else if (overdue) {
+          // Judged against this source's own cadence, not one flat window.
+          source.status = 'stale';
+          source.discoveryStatus = 'stale';
+        } else if (observedRun && !(observedRun.acceptedCount > 0)) {
+          // The run is the collector's own verdict and it produced nothing. Stored
+          // records do not contradict that - they arrived by import or by an
+          // earlier run, and observedRecords is reported alongside this either way.
+          // Calling this "collected" would hide a collector that is currently
+          // returning nothing, which is exactly the GSA robots-block case.
+          source.status = 'empty';
+          source.discoveryStatus = 'empty';
+        } else {
+          source.status = 'collected';
+          // Never "operational": operational requires a complete sweep and an
+          // approved release gate, and there is no ledger row to attest either.
+          source.discoveryStatus = 'partial';
+        }
         source.coverage = null;
-        source.discoveryStatus = source.automated ? 'awaiting_run' : 'manual';
-        source.status = source.automated ? 'awaiting_run' : source.status;
       }
     }
     atlas = { sources: sources.rows.map(s => ({ ...s.record, automationStatus: s.automation_status })),
