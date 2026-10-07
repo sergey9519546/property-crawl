@@ -21,6 +21,8 @@
 
 'use strict';
 
+const { canonicalPropType } = require('./property-type');
+
 const DEFAULT_WINDOW_DAYS = 60;
 
 function finiteOrNull(value) {
@@ -114,7 +116,7 @@ function buildAuctionCalendar(pool, options = {}) {
     for (const listing of bucket.listings) {
       const src = typeof listing.source === 'string' ? listing.source : 'unknown';
       sources[src] = (sources[src] || 0) + 1;
-      const t = typeof listing.propType === 'string' ? listing.propType : 'unknown';
+      const t = canonicalPropType(listing.propType);
       propTypes[t] = (propTypes[t] || 0) + 1;
     }
     const sorted = [...bucket.listings].sort((a, b) => parseDate(a.saleDate) - parseDate(b.saleDate));

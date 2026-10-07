@@ -1176,13 +1176,25 @@ class DatabaseClient {
       return true;
     });
 
-    if (sort === 'equity') results.sort((a, b) => compareNumbersUnknownLast(a.equity, b.equity));
-    else if (sort === 'bid-asc') results.sort((a, b) => compareNumbersUnknownLast(a.openingBid, b.openingBid, false));
+    // Postgres ends every one of these sorts with `id ASC`; see the ORDER BY
+    // clauses in the isPg branch above. The same tie-break is applied here so
+    // the two backends agree on what "tied" means, and -- the part that
+    // actually bites -- so the order is a total order. Offset paging is only
+    // safe over a total order: with ties left to the sort's discretion two
+    // pages can repeat a row or skip one, and the caller cannot tell.
+    //
+    // The collation is Node's, not the server's, so the two do not have to
+    // agree byte-for-byte on exotic ids. What matters is that this ordering is
+    // deterministic and self-consistent across pages.
+    const thenId = (cmp) => (a, b) => cmp(a, b) || String(a.id).localeCompare(String(b.id));
+
+    if (sort === 'equity') results.sort(thenId((a, b) => compareNumbersUnknownLast(a.equity, b.equity)));
+    else if (sort === 'bid-asc') results.sort(thenId((a, b) => compareNumbersUnknownLast(a.openingBid, b.openingBid, false)));
     else if (sort === 'date') {
-      results.sort((a, b) => compareNumbersUnknownLast(Date.parse(a.saleDate), Date.parse(b.saleDate), false));
+      results.sort(thenId((a, b) => compareNumbersUnknownLast(Date.parse(a.saleDate), Date.parse(b.saleDate), false)));
     } else if (sort === 'images') {
-      results.sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
-    } else results.sort((a, b) => compareNumbersUnknownLast(a.dealScore, b.dealScore));
+      results.sort(thenId((a, b) => (b.images?.length || 0) - (a.images?.length || 0)));
+    } else results.sort(thenId((a, b) => compareNumbersUnknownLast(a.dealScore, b.dealScore)));
 
     const total = results.length;
     const paginated = results.slice(Number(offset), Number(offset) + Number(limit));

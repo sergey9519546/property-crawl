@@ -159,3 +159,98 @@ test('serializeBucket: rounds float fields and preserves structure', () => {
   assert.equal(out.medianDiscount, 0.25);
   assert.equal(out.sources.hud, 1);
 });
+// --- pool coverage -------------------------------------------------------
+//
+// Same bug the auction calendar had: loadPool read `getListings({ limit:
+// 1000 })` once and said nothing. Every number this route returns -- median
+// opening bid, the propType tally, the per-source tallies -- is a statistic
+// over the pool, so a 1,000-row slice is not a neighborhood profile.
+
+function pagedDb(pool, pageSize = 1000) {
+  return {
+    calls: [],
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      const lim = Number(filters.limit) || 0;
+      this.calls.push({ limit: lim, offset: off });
+      return { total: pool.length, listings: pool.slice(off, off + lim) };
+    }
+  };
+}
+
+function bigPool(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `N${i}`,
+    source: 'treasury',
+    state: 'TX',
+    city: 'Houston',
+    zip: '77001',
+    openingBid: 1000 + i,
+    sourceObservedAt: OBSERVED
+  }));
+}
+
+test('createNeighborhoodsHandler: reads past the first page to cover the whole store', async () => {
+  const pool = bigPool(2500);
+  const database = pagedDb(pool);
+  const handler = createNeighborhoodsHandler({ database, now: FIXED_NOW });
+  const res = makeRes();
+  await handler(makeReq('GET', '/api/neighborhoods'), res, new URL('http://localhost/api/neighborhoods'));
+
+  // One zip in the fixture, so the whole store lands in one bucket.
+  assert.equal(res.body.neighborhoods.length, 1);
+  assert.equal(res.body.neighborhoods[0].count, 2500,
+    'every listing is counted -- not just the first 1,000 rows');
+  assert.ok(database.calls.length > 1, 'the pool is read in more than one page');
+});
+
+test('createNeighborhoodsHandler: publishes how much of the store it actually read', async () => {
+  const handler = createNeighborhoodsHandler({ database: pagedDb(bigPool(2500)), now: FIXED_NOW });
+  const res = makeRes();
+  await handler(makeReq('GET', '/api/neighborhoods'), res, new URL('http://localhost/api/neighborhoods'));
+
+  assert.equal(res.body.scanned, 2500);
+  assert.equal(res.body.availableTotal, 2500);
+  assert.equal(res.body.truncated, false);
+});
+
+test('createNeighborhoodsHandler: says so when the store is bigger than what it could read', async () => {
+  const capped = bigPool(1000);
+  const truncatedDb = {
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      return { total: 9831, listings: capped.slice(off, off + 1000) };
+    }
+  };
+  const handler = createNeighborhoodsHandler({ database: truncatedDb, now: FIXED_NOW });
+  const res = makeRes();
+  await handler(makeReq('GET', '/api/neighborhoods'), res, new URL('http://localhost/api/neighborhoods'));
+
+  assert.equal(res.body.scanned, 1000);
+  assert.equal(res.body.availableTotal, 9831);
+  assert.equal(res.body.truncated, true);
+});
+
+test('createNeighborhoodsHandler: the single-neighborhood form discloses scope too', async () => {
+  const handler = createNeighborhoodsHandler({ database: pagedDb(bigPool(2500)), now: FIXED_NOW });
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/neighborhoods/zip:77001'),
+    res,
+    new URL('http://localhost/api/neighborhoods/zip:77001')
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.neighborhood.count, 2500);
+  assert.equal(res.body.scanned, 2500);
+  assert.equal(res.body.truncated, false,
+    'a single neighborhood profile carries the same scope disclosure');
+});
+
+test('createNeighborhoodsHandler: reports the full store for a small pool too', async () => {
+  const handler = createNeighborhoodsHandler({ database: stubDb(POOL), now: FIXED_NOW });
+  const res = makeRes();
+  await handler(makeReq('GET', '/api/neighborhoods'), res, new URL('http://localhost/api/neighborhoods'));
+  assert.equal(res.body.scanned, POOL.length);
+  assert.equal(res.body.truncated, false);
+});

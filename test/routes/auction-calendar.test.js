@@ -103,6 +103,101 @@ test('createAuctionCalendarHandler: windowDays caps the planning horizon', async
   assert.ok(res.body.dropped.outsideWindow >= 1, 'D (Dec 25) is outside window');
 });
 
+// --- pool coverage -------------------------------------------------------
+//
+// The calendar used to read `getListings({ limit: 1000 })` once. Against the
+// real store (9,831 rows) that silently described 10% of the inventory as
+// though it were the whole auction calendar, and the `dropped` counters it
+// published described that slice rather than the store -- so "noDate: 866"
+// read as a claim about the inventory when it was a claim about page 1.
+//
+// The engine is handed a pool; it has no idea how big the store was. These
+// tests pin the two properties that make the endpoint honest: it reads to the
+// end of the store, and when it cannot, it says so.
+
+// A paged stub that behaves like the real Postgres path: honours limit/offset
+// and reports the full match count alongside each page.
+function pagedDb(pool, pageSize = 1000) {
+  return {
+    calls: [],
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      const lim = Number(filters.limit) || 0;
+      this.calls.push({ limit: lim, offset: off });
+      return { total: pool.length, listings: pool.slice(off, off + lim) };
+    }
+  };
+}
+
+function datedPool(n, weekOffsetDays = 0) {
+  const base = NOW_MS + (7 + weekOffsetDays) * 86_400_000;
+  return Array.from({ length: n }, (_, i) => ({
+    id: `X${i}`,
+    source: 'treasury',
+    state: 'TX',
+    // Spread across two ISO weeks so the buckets are not all one row.
+    saleDate: new Date(base + (i % 10) * 86_400_000).toISOString(),
+    propType: 'Single Family'
+  }));
+}
+
+test('createAuctionCalendarHandler: reads past the first page to cover the whole store', async () => {
+  const big = datedPool(2500);
+  const database = pagedDb(big);
+  const handler = createAuctionCalendarHandler({ database, now: FIXED_NOW });
+  const res = makeRes();
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+  await handler(makeReq('GET'), res, url);
+
+  const totalCount = res.body.weeks.reduce((sum, w) => sum + w.count, 0);
+  assert.equal(totalCount, 2500,
+    'every in-window listing is counted -- not just the first 1,000 rows');
+  assert.ok(database.calls.length > 1, 'the pool is read in more than one page');
+});
+
+test('createAuctionCalendarHandler: publishes how much of the store it actually read', async () => {
+  const big = datedPool(2500);
+  const handler = createAuctionCalendarHandler({ database: pagedDb(big), now: FIXED_NOW });
+  const res = makeRes();
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+  await handler(makeReq('GET'), res, url);
+
+  assert.equal(res.body.scanned, 2500, 'scanned rows is the pool actually handed to the engine');
+  assert.equal(res.body.availableTotal, 2500, 'availableTotal is the store size');
+  assert.equal(res.body.truncated, false, 'nothing was left unread, so nothing is truncated');
+});
+
+test('createAuctionCalendarHandler: says so when the store is bigger than what it could read', async () => {
+  // A backend that reports 9,831 available but has only 1,000 rows to hand
+  // over: offset past 1,000 and it returns nothing. Truncation must be visible
+  // in the payload, not just inferable by comparing counts.
+  const capped = datedPool(1000);
+  const truncatedDb = {
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      return { total: 9831, listings: capped.slice(off, off + 1000) };
+    }
+  };
+  const handler = createAuctionCalendarHandler({ database: truncatedDb, now: FIXED_NOW });
+  const res = makeRes();
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+  await handler(makeReq('GET'), res, url);
+
+  assert.equal(res.body.scanned, 1000);
+  assert.equal(res.body.availableTotal, 9831);
+  assert.equal(res.body.truncated, true,
+    'a pool smaller than the store is reported as truncated');
+});
+
+test('createAuctionCalendarHandler: reports the full store for a small pool too', async () => {
+  const handler = createAuctionCalendarHandler({ database: stubDb(POOL), now: FIXED_NOW });
+  const res = makeRes();
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+  await handler(makeReq('GET'), res, url);
+  assert.equal(res.body.scanned, POOL.length);
+  assert.equal(res.body.truncated, false);
+});
+
 test('createAuctionCalendarHandler: bogus params fall back to defaults', async () => {
   const handler = createAuctionCalendarHandler({ database: stubDb(POOL), now: FIXED_NOW });
   const res = makeRes();

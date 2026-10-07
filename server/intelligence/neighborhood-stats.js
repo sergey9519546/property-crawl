@@ -23,6 +23,8 @@
 
 'use strict';
 
+const { canonicalPropType } = require('./property-type');
+
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
@@ -126,7 +128,7 @@ function computeNeighborhoodStats(pool, options = {}) {
     for (const listing of bucket.listings) {
       const src = typeof listing.source === 'string' ? listing.source : 'unknown';
       sources[src] = (sources[src] || 0) + 1;
-      const t = typeof listing.propType === 'string' ? listing.propType : 'unknown';
+      const t = canonicalPropType(listing.propType);
       propTypes[t] = (propTypes[t] || 0) + 1;
     }
     out.push({
