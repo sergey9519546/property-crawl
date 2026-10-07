@@ -105,7 +105,30 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         <span className="font-medium text-slate-600">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
         {lifecycle ? <><span aria-hidden>·</span><span>{sourceDisplayText(lifecycle.replace(/_/g, " "))}</span></> : null}
         {!observed ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-900">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
-        {listing.triage && listing.triage.staleDays > 30 ? <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-600">Stale</span> : null}
+        {(() => {
+          // Prefer the server's verdict. It is cadence-aware per source, so a
+          // record 11 hours old against a 6-hour cadence is stale, while a
+          // 40-day-old fl-dor record on a 720-hour cadence is not. The old
+          // `triage.staleDays > 30` test could express neither: it floored to
+          // 0 under 24 hours, so with background collection off every ServiceLink
+          // listing read as current while /api/health reported all 7,497 as past
+          // cadence. That test is kept only as the fallback for a response that
+          // carries no freshness verdict at all.
+          const verdict = listing.sourceFreshness?.status;
+          const stale = verdict
+            ? verdict === "stale"
+            : Boolean(listing.triage && listing.triage.staleDays > 30);
+          if (!stale) return null;
+          const { ageHours, cadenceHours } = listing.sourceFreshness || {};
+          const explain = typeof ageHours === "number" && typeof cadenceHours === "number"
+            ? `Publisher record last observed ${Math.round(ageHours)}h ago; ${SOURCES[listing.source]?.label || listing.source} refreshes every ${cadenceHours}h.`
+            : "The publisher record is past its refresh cadence.";
+          return (
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-600" title={explain}>
+              Stale
+            </span>
+          );
+        })()}
         {(() => {
           const stage = listing.triage?.distressStage;
           if (!stage || stage === "unknown") return null;

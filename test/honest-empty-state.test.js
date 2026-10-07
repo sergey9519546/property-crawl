@@ -110,3 +110,32 @@ test('mark_read ids are capped and shape-checked before reaching the uuid cast',
   );
   assert.match(savedSearchesRoute, /too_many_match_ids/);
 });
+
+// Every listing carries a server-computed, cadence-aware freshness verdict
+// (sourceFreshness.status, plus ageHours and cadenceHours) and the card rendered
+// none of it. Its only staleness signal was a whole-day count past a month.
+//
+// Under real drift that hides everything. With background collection off,
+// ServiceLink's 6h cadence elapsed and all 7,497 of its records sat at
+// ageHours 11 against cadenceHours 6. The day count floored to 0, so the card
+// showed no badge at all on listings the API was simultaneously reporting as
+// past cadence: two fields on the same record disagreeing, with the card
+// rendering the one that says "fine".
+test('the card badges staleness from the cadence-aware verdict, not a 30-day guess', () => {
+  const card = read('src/components/listings/discovery-card.tsx');
+  assert.match(
+    card,
+    /listing\.sourceFreshness\?\.status/,
+    'the card must read the server cadence-aware freshness verdict',
+  );
+  assert.match(
+    card,
+    /cadenceHours/,
+    'a stale badge should be able to say why: how old the record is against its source cadence',
+  );
+  assert.doesNotMatch(
+    card,
+    /triage && listing\.triage\.staleDays > 30 \?/,
+    'the 30-day threshold must not be the sole signal; it stays only as the fallback for a response with no freshness verdict',
+  );
+});
