@@ -14,9 +14,16 @@ async function main() {
   const listings = Array.isArray(inventory) ? inventory : inventory?.listings || [];
   const presented = listings.map((listing) => presentListing(listing));
   const summary = summarizeInventory(presented);
+  const storeTotal = Array.isArray(inventory) ? null : Number(inventory?.total) || null;
 
   console.log('=== Listing pipeline quality ===');
-  console.log(`Total: ${summary.total}`);
+  // This report summarises the first 1,000 listings in the default order, not
+  // the store. "Total: 1000" on a store of 9,798 reads as the inventory size,
+  // and this output is cited as evidence in docs/PRODUCT_GAPS.md and ULTRAPLAN.md
+  // - so the sample boundary has to be the first line, not a footnote.
+  console.log(storeTotal && storeTotal > summary.total
+    ? `Sample: ${summary.total} of ${storeTotal} listings (first page of the default order)`
+    : `Sample: ${summary.total} listings (all the store returned)`);
   console.log(`Observed (live/source-backed): ${summary.observed}`);
   console.log(`With opening bid: ${summary.withOpeningBid}`);
   console.log(`Cross-source linked: ${summary.crossSourceLinked}`);

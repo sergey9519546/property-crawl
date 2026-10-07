@@ -170,7 +170,19 @@ function annotateListing(listing, now = Date.now()) {
 }
 
 /**
- * Inventory pipeline summary for /api/listings responses.
+ * Quality summary for the listings a response actually carries.
+ *
+ * Every number here - `total`, the band counts, the `bySource` breakdown - is
+ * computed over the page that response returns, never over the store. It used to
+ * describe itself as an "Inventory quality summary", which is exactly how a
+ * consumer reads it: docs/SCRAPER_LISTING_10X.md documents
+ * `curl "/api/listings?limit=5" | jq .pipeline`, so `bySource: {"servicelink": 2}`
+ * reads as "ServiceLink holds 2 listings" when it means "2 of the 5 rows on this
+ * page came from ServiceLink". Live against 9,798 listings, limit=2 reported a
+ * total of 2 and only whichever sources sorted first.
+ *
+ * The scope is stated in the payload rather than left to the reader, and the
+ * response's own `total` remains the count of the whole search.
  */
 function summarizeInventory(listings = [], now = Date.now()) {
   const annotated = listings.map((l) => annotateListing(l, now));
@@ -203,6 +215,7 @@ function summarizeInventory(listings = [], now = Date.now()) {
 
   const total = annotated.length;
   return {
+    scope: 'returned-page',
     total,
     observed,
     withOpeningBid: withBid,
@@ -213,7 +226,7 @@ function summarizeInventory(listings = [], now = Date.now()) {
     bySaleUrgency: byUrgency,
     bySource,
     model: 'listing-intelligence-v1',
-    note: 'Inventory quality summary. Scores support triage; they are not appraisals.',
+    note: 'Quality summary of the returned page, not the whole store. Scores support triage; they are not appraisals.',
   };
 }
 

@@ -101,3 +101,21 @@ test('summarizeInventory buckets bands and urgency', () => {
   assert.equal(summary.byQualityBand.strong + summary.byQualityBand.usable + summary.byQualityBand.thin + summary.byQualityBand.weak, 2);
   assert.ok(summary.bySaleUrgency.imminent >= 1);
 });
+
+// This object is computed over the page the response carries, and it ships with
+// its own `total` and a `bySource` breakdown - both page-sized - while calling
+// itself an "Inventory quality summary". docs/SCRAPER_LISTING_10X.md documents
+// the consumer as `curl "/api/listings?limit=5" | jq .pipeline`, so the natural
+// reading of `bySource: {"servicelink": 2}` is "ServiceLink holds 2 listings".
+// Live against a store of 9,798: limit=2 reported total 2 and only the sources
+// that happened to sort first. The scope has to be stated in the payload, not
+// left to whoever curls it.
+test('the inventory summary declares that it describes the returned page', () => {
+  const summary = summarizeInventory([
+    { id: 'A', source: 'servicelink', state: 'OH', address: '1 A St', provenance: { origin: 'live', observed: true } },
+    { id: 'B', source: 'servicelink', state: 'OH', address: '2 B St', provenance: { origin: 'live', observed: true } },
+  ]);
+  assert.equal(summary.scope, 'returned-page');
+  assert.match(summary.note, /returned page/);
+  assert.doesNotMatch(summary.note, /Inventory quality summary/);
+});
