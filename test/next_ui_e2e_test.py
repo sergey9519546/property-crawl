@@ -707,8 +707,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         unfiltered = self.live_count
         hero_input = self.page.get_by_role("combobox", name="Market or address")
         hero_input.fill(county)
+        # Mirror the label the hero actually builds. Publishers are
+        # inconsistent: some send "Camden", others "Bergen County", and the
+        # hero strips a trailing "County" before appending its own so the
+        # suggestion reads "Bergen County, NJ" rather than "Bergen County
+        # County, NJ". This test was appending unconditionally to the raw
+        # value, so on a publisher that already includes the suffix it looked
+        # for "Hudson County County, NJ County market" and timed out.
+        county_label = re.sub(r"\s+county\s*$", "", str(county), flags=re.I)
         self.page.get_by_role(
-            "option", name=f"{county} County, {state} County market"
+            "option", name=f"{county_label} County, {state} County market"
         ).click()
         self.page.get_by_role("button", name="Search market").click()
 
