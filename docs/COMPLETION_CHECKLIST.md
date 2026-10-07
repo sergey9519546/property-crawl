@@ -145,12 +145,22 @@ advisory and cannot close anything in this table.
 
 ## Inventory state
 
-The live record store was last written **2026-09-19**; the collector has not run
-since, so everything in it was 16–31 days old when reviewed on 2026-10-05. That
-is a freshness gap, not a set of per-row verdicts, and the two are kept apart:
+With `SCRAPER_BACKGROUND_ENABLED` off, the store decays: every source's records
+fall past that source's own refresh cadence after a few hours. That is a gap, not
+a set of per-row verdicts, and the two are kept apart:
 
-- `/api/health` now carries `inventoryFreshness` (newest observation, age in
-  hours, `stale` past 24h) and the banner says so on every page.
+- `/api/health` carries `inventoryFreshness` (newest and oldest observation,
+  per-source cadence, `staleBecause` naming the lagging publishers) and the
+  banner repeats it on every page. **Do not transcribe its counts here** - they
+  move every time the collector runs. Ask the endpoint; this line records that
+  the gap is reported rather than hidden.
+- Restoring it is a bounded operation, not a rebuild: a sweep is *state based*,
+  so `--restart` is required once one has completed, and the per-run page budget
+  comes from the scraper's env knobs rather than `collect-source --limit`. See
+  "Restoring freshness after a collection gap" in the discovery runbook.
+- `npm run db:import` only upserts. Deleting concluded records is a separate,
+  deliberate, ledger-backed step - `npm run db:prune`, a dry run unless the
+  operator passes `--apply`; the combined path is `npm run db:import:prune`.
 - Removal uses `server/db/listing-lifecycle.js`, which deletes **only** on a
   publisher's own word that the event finished (closed / cancelled / auctioned /
   rescinded, or an `endDate` already past). The current ledger
