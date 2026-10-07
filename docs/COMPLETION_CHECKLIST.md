@@ -732,6 +732,26 @@ publisher no longer lists.
 The remaining budget should go to the sources that can still move, not to
 ServiceLink.
 
+**A per-record probe is impossible for ServiceLink, and that is now proven rather
+than assumed.** The CivilView probe answered the same question because CivilView's
+detail endpoint genuinely distinguishes a live record from an aged-out one.
+ServiceLink does not: with a fresh record as the control,
+
+```
+FRESH: HTTP 200, 1,053 bytes, no street, no record fields
+STALE: HTTP 200, 1,053 bytes, no street, no record fields
+```
+
+byte-identical. The property page is fully client-rendered and carries no record
+data at all, so it cannot answer "is this still live" for either. The only
+source that can is the JSON feed — which is what the 248-page walk already
+exhaustively covered.
+
+Without the fresh control this would have looked like "110 records are gone,
+confirmed". With it, the honest answer is: **this cannot be determined per record
+with the access available, and the feed is the authority.** The control is what
+separated those two conclusions.
+
 End-to-end check after re-importing, comparing the live store against the
 database for every record:
 
