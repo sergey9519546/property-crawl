@@ -1,4 +1,4 @@
-// test/orphan-components.test.js
+// test/orphan-components.test.mjs
 //
 // A component that nothing imports is not a bug. A feature whose entire stack
 // is green and reachable-looking, and which no page mounts, is.
@@ -142,4 +142,99 @@ test('the detector can actually find an orphan', () => {
   const foundByScan = allSources.some(({ f, text }) => f !== fake.f && new RegExp(`[/"']${name}["']`).test(text));
   assert.equal(foundByScan, false, 'an unreferenced name must not appear to be imported');
   assert.ok(allSources.length > 50, 'the corpus being scanned should be substantial');
+});
+
+// --- src/lib is a second orphan surface ---------------------------------
+//
+// The component scan above only walks .tsx under src/components, which is how
+// intelligence-client.ts got through: it is a .ts module, it exports three
+// typed and tested functions, and nothing imports it. The file reads as a
+// client, the three routes read as features, the proxy forwards to them --
+// and no user can reach any of it.
+//
+// Same rule applies: a module nothing imports must SAY so, in its own file.
+// Two differences from the component case:
+//
+//   - a lib module may legitimately be used by scripts/ or test/ rather than
+//     by the UI, so "imported" is checked against all three corpora. A module
+//     used only by a CLI is not an orphan.
+//   - .d.ts files are ambient declarations by definition and are never
+//     imported. Requiring a marker from them would be noise, so they are
+//     excluded outright rather than acknowledged.
+
+const LIB_ROOT = path.join(ROOT, 'src', 'lib');
+const ACK_HEAD_BYTES = 900;
+
+function walkAll(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkAll(full, out);
+    else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) out.push(full);
+  }
+  return out;
+}
+
+const libModules = walkAll(LIB_ROOT);
+
+// The import corpus must include every source extension, not just .tsx. The
+// component scan above reuses the .tsx-only walker because components are
+// .tsx; a first attempt here reused it too and reported six orphans, four of
+// which are src/app/api/*/route.ts files that import the lib module they use.
+// Those are .ts, and a .tsx-only corpus cannot see them.
+function walkSource(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkSource(full, out);
+    else if (/\.(ts|tsx|js|mjs)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) out.push(full);
+  }
+  return out;
+}
+
+function walkTestFiles(dir = path.join(ROOT, 'test'), out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walkTestFiles(full, out);
+    else if (/\.(ts|tsx|mjs|js)$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+// src + app, plus scripts and test: a lib module consumed only by a CLI or a
+// test is used, not orphaned.
+const nonUiCorpus = walkSource(path.join(ROOT, 'src'))
+  .concat(walkSource(path.join(ROOT, 'app')))
+  .concat(walkTestFiles())
+  .map((f) => ({ f, text: fs.readFileSync(f, 'utf8') }));
+
+function libIsReferenced(file) {
+  const base = path.basename(file).replace(/\.(ts|tsx)$/, '');
+  return nonUiCorpus.some((o) => o.f !== file && new RegExp(`[/"']${base}["']`).test(o.text));
+}
+
+test('every unimported src/lib module is either exempt or says so in its own file', () => {
+  const undocumented = [];
+  for (const f of libModules) {
+    if (libIsReferenced(f)) continue;
+    const head = fs.readFileSync(f, 'utf8').slice(0, ACK_HEAD_BYTES);
+    if (!head.includes(ACK_MARKER)) undocumented.push(rel(f));
+  }
+  assert.deepEqual(undocumented, [],
+    `these src/lib modules are imported by nothing -- not by src, scripts or tests -- and `
+    + `do not say so. Either use them or record why they are unused, in the file: `
+    + `${undocumented.join(', ')}`);
+});
+
+test('the lib detector can actually find an unimported module', () => {
+  // Same self-test discipline as the component scan: prove the corpus is real
+  // and that the reference check is not trivially true for everything.
+  assert.ok(libModules.length > 5, 'the corpus being scanned should be substantial');
+  assert.equal(libModules.some((f) => f.endsWith('.d.ts')), false,
+    '.d.ts files are ambient declarations and are never imported; they are excluded, not acknowledged');
+  const unreferenced = libModules.filter((f) => !libIsReferenced(f));
+  assert.ok(unreferenced.length >= 1,
+    'expected at least intelligence-client.ts to be unreferenced; if none are, the reference '
+    + 'check is matching too loosely to be useful');
 });
