@@ -39,7 +39,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
       >
         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-[#16A34A]" />
+            <Sparkles className="w-5 h-5 text-[#15803D]" />
             <h3 id="video-preview-title" className="text-lg font-bold text-[#111827]">Live Underwriting Walkthrough Demo</h3>
           </div>
           <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
@@ -50,7 +50,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
         <div className="p-8 space-y-6 bg-[#F5F6F7]">
           <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-sm space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold px-2.5 py-1 bg-[#16A34A]/10 text-[#16A34A] rounded-md">
+              <span className="text-xs font-mono font-bold px-2.5 py-1 bg-[#16A34A]/10 text-[#15803D] rounded-md">
                 Cuyahoga County Judicial Sale CV-24-991204
               </span>
               <span className="text-xs font-bold text-[#5B6472]">Appraisal: $110,000</span>
@@ -61,14 +61,14 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Opening Bid:</span><strong className="text-sm font-bold text-[#111827]">$38,000</strong></div>
               <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Median Comp:</span><strong className="text-sm font-bold text-[#111827]">$118,500</strong></div>
-              <div className="p-3 bg-[#E7FAEF] rounded-xl border border-[#3AAF57]/30"><span className="text-[#16A34A] font-bold block">Gross Spread:</span><strong className="text-sm font-bold text-[#16A34A]">+$80,500</strong></div>
+              <div className="p-3 bg-[#E7FAEF] rounded-xl border border-[#3AAF57]/30"><span className="text-[#15803D] font-bold block">Gross Spread:</span><strong className="text-sm font-bold text-[#15803D]">+$80,500</strong></div>
             </div>
 
             <div className="p-4 bg-[#F8FAFC] rounded-xl border border-[#E5E7EB] text-xs leading-relaxed space-y-2">
               <p className="font-bold text-[#111827]">⚡ AI "Here's the Catch" Findings:</p>
               <div className="space-y-1.5 text-[#374151]">
-                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" /> First mortgage foreclosure with complete defendant service.</p>
-                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#16A34A]" /> Statutory 2/3 minimum bid requirement satisfied.</p>
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" /> First mortgage foreclosure with complete defendant service.</p>
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" /> Statutory 2/3 minimum bid requirement satisfied.</p>
                 <p className="flex items-center gap-1.5 text-[#B91C1C]"><ShieldAlert className="w-3.5 h-3.5 text-[#B91C1C]" /> $1,240 municipal utility lien must be settled at closing.</p>
               </div>
             </div>

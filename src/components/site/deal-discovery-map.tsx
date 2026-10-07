@@ -672,7 +672,7 @@ export function DealDiscoveryMap() {
             <h3 className="mt-1 truncate text-[20px] font-bold tracking-[-0.02em] text-[#111827]">
               {activeDeal.address}
             </h3>
-            <p className="mt-1 text-[12px] font-medium text-[#64748B]">
+            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">
               {activeDeal.area} · Cleveland, OH
             </p>
           </div>
@@ -700,10 +700,10 @@ export function DealDiscoveryMap() {
 
         <div className="mt-5 border-t border-[#E8EDF3] pt-4">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748B]">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">
               Next opportunities
             </p>
-            <span className="text-[10px] font-semibold text-[#64748B]">
+            <span className="text-[10px] font-semibold text-[#5B6472]">
               Ranked by score
             </span>
           </div>
@@ -727,7 +727,7 @@ export function DealDiscoveryMap() {
                     <span className="block truncate text-[12px] font-bold text-[#111827]">
                       {deal.address}
                     </span>
-                    <span className="block truncate text-[10px] font-medium text-[#64748B]">
+                    <span className="block truncate text-[10px] font-medium text-[#5B6472]">
                       {sourceDisplayText(deal.source)}
                     </span>
                   </span>
@@ -759,7 +759,7 @@ function OpportunityStat({
 }) {
   return (
     <div className="rounded-xl bg-[#F3F6F9] px-2 py-2.5">
-      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#64748B]">
+      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#5B6472]">
         {label}
       </p>
       <p

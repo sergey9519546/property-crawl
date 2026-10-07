@@ -279,7 +279,7 @@ function Row({ label, value, green }: { label: string; value: string; green?: bo
   return (
     <div className="flex items-center justify-between text-[12px]">
       <span className="text-[#5B6472]">{label}</span>
-      <span className={`font-bold ${green ? "text-[#16A34A]" : "text-[#111827]"}`}>
+      <span className={`font-bold ${green ? "text-[#15803D]" : "text-[#111827]"}`}>
         {value}
       </span>
     </div>

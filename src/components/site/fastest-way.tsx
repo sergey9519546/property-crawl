@@ -150,7 +150,7 @@ function DealKitVisual() {
       <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2">
         <Palette className="h-4 w-4 text-[#0F172A]" />
         <span className="text-[12px] font-semibold text-[#111827]">Deal Kit</span>
-        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#3aaf57]">Active</span>
+        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">Active</span>
       </div>
       <div className="mt-3 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
@@ -214,8 +214,8 @@ function PromptVisual() {
         </div>
       </div>
       <div className="flex items-center gap-2 rounded-lg border border-[#e7faef] bg-[#e7faef]/50 p-2.5">
-        <TrendingUp className="h-4 w-4 text-[#3aaf57]" />
-        <span className="text-[11px] font-semibold text-[#3aaf57]">ARV $340k · Profit $52k</span>
+        <TrendingUp className="h-4 w-4 text-[#15803D]" />
+        <span className="text-[11px] font-semibold text-[#15803D]">ARV $340k · Profit $52k</span>
       </div>
     </div>
   );
@@ -242,7 +242,7 @@ function SliderRow({ label, value, pct, accent }: { label: string; value: string
     <div>
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-[#5B6472]">{label}</span>
-        <span className={`font-bold ${accent ? "text-[#3aaf57]" : "text-[#111827]"}`}>{value}</span>
+        <span className={`font-bold ${accent ? "text-[#15803D]" : "text-[#111827]"}`}>{value}</span>
       </div>
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#F3F4F6]">
         <div className={`h-full rounded-full ${accent ? "bg-[#3aaf57]" : "bg-[#0F172A]"}`} style={{ width: `${pct}%` }} />

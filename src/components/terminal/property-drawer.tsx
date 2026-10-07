@@ -229,7 +229,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               className={cn(
                 "p-2 rounded-xl border transition flex items-center gap-1.5 text-xs font-semibold",
                 isSaved
-                  ? "bg-[#16A34A]/10 border-[#16A34A] text-[#16A34A]"
+                  ? "bg-[#16A34A]/10 border-[#16A34A] text-[#15803D]"
                   : "bg-white border-[#E5E7EB] text-[#374151] hover:bg-[#F5F6F7]"
               )}
             >
@@ -367,8 +367,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] font-bold text-[#16A34A] uppercase">Bid Spread</p>
-                  <p className="text-lg font-extrabold text-[#16A34A]">{bidSpread === null ? "Not modeled" : displayMoney(bidSpread)}</p>
+                  <p className="text-[11px] font-bold text-[#15803D] uppercase">Bid Spread</p>
+                  <p className="text-lg font-extrabold text-[#15803D]">{bidSpread === null ? "Not modeled" : displayMoney(bidSpread)}</p>
                   <p className="text-[9px] text-[#5B6472]">Valuation midpoint minus opening amount</p>
                 </div>
                 <div>
@@ -527,7 +527,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                         <span className="font-semibold text-[#374151]">{displayMoney(amount)}</span>
                       </div>
                     ))}
-                    <div className="p-3 flex justify-between bg-[#F8FAFC]"><span className="font-bold text-[#111827]">Total acquisition cash</span><span className="font-extrabold text-[#16A34A]">{displayMoney(cashToClose.totalAcquisitionCost)}</span></div>
+                    <div className="p-3 flex justify-between bg-[#F8FAFC]"><span className="font-bold text-[#111827]">Total acquisition cash</span><span className="font-extrabold text-[#15803D]">{displayMoney(cashToClose.totalAcquisitionCost)}</span></div>
                     <div className="p-3 flex justify-between bg-[#F8FAFC]"><span className="font-bold text-[#111827]">Cash remaining at settlement</span><span className="font-extrabold text-[#111827]">{displayMoney(cashToClose.cashDueAtSettlement)}</span></div>
                   </div>
                 </div>

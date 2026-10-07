@@ -69,7 +69,7 @@ export function ContactForm() {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label htmlFor="contact-name" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+          <label htmlFor="contact-name" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#5B6472]">
             Name
           </label>
           <input
@@ -83,7 +83,7 @@ export function ContactForm() {
           />
         </div>
         <div>
-          <label htmlFor="contact-email" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+          <label htmlFor="contact-email" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#5B6472]">
             Work email
           </label>
           <input
@@ -98,7 +98,7 @@ export function ContactForm() {
         </div>
       </div>
       <div>
-        <label htmlFor="contact-company" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+        <label htmlFor="contact-company" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#5B6472]">
           Company <span className="font-normal text-[#5B6472]">(optional)</span>
         </label>
         <input
@@ -111,7 +111,7 @@ export function ContactForm() {
         />
       </div>
       <div>
-        <label htmlFor="contact-message" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+        <label htmlFor="contact-message" className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#5B6472]">
           How can we help?
         </label>
         <textarea

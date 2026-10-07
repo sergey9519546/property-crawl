@@ -164,7 +164,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
-            <Bookmark className="w-5 h-5 text-[#16A34A] fill-[#16A34A]" />
+            <Bookmark className="w-5 h-5 text-[#15803D] fill-[#16A34A]" />
             <h3 id="watchlist-title" className="text-lg font-bold text-[#111827]">Saved Watchlist ({savedListings.length})</h3>
           </div>
           <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
@@ -264,7 +264,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 </button>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#16A34A]">
+                  <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#15803D]">
                     {score === null ? "Not modeled" : `${Math.round(score)}/99`}
                   </span>
                   <button

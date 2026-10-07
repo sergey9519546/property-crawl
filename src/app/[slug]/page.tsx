@@ -153,7 +153,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
         <div className="mx-auto max-w-3xl">
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#64748B] transition-colors hover:text-[#111827]"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#5B6472] transition-colors hover:text-[#111827]"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to PerfectProperty
@@ -162,7 +162,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0F172A] text-white shadow-sm">
               <Icon className="h-5 w-5" />
             </span>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#64748B]">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#5B6472]">
               {page.eyebrow}
             </p>
           </div>
@@ -180,7 +180,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
             <div className="mb-8 overflow-hidden rounded-3xl border border-[#E2E8F0] bg-white shadow-sm">
               <div className="border-b border-[#E2E8F0] bg-[#F8FAFC] px-6 py-5 sm:px-8">
                 <h2 className="text-xl font-bold text-[#111827]">Send us a message</h2>
-                <p className="mt-1 text-sm text-[#64748B]">
+                <p className="mt-1 text-sm text-[#5B6472]">
                   Messages are stored for operator review. Outbound email is only active when a webhook is configured on the server.
                 </p>
               </div>
@@ -199,7 +199,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               >
                 <div className="flex items-stretch">
                   <div className="flex w-12 shrink-0 items-center justify-center bg-[#F8FAFC] sm:w-14">
-                    <span className="text-sm font-bold tabular-nums text-[#64748B]">
+                    <span className="text-sm font-bold tabular-nums text-[#5B6472]">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                   </div>

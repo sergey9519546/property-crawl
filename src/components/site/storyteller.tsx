@@ -208,7 +208,7 @@ export function Storyteller() {
           <h2 className="mt-4 text-[36px] font-semibold leading-[1.12] tracking-[-0.025em] text-[#111827] sm:text-[48px]">
             A lead is not a deal until it survives all four.
           </h2>
-          <p className="mx-auto mt-5 max-w-[650px] text-[16px] leading-[1.65] text-[#64748B] sm:text-[17px]">
+          <p className="mx-auto mt-5 max-w-[650px] text-[16px] leading-[1.65] text-[#5B6472] sm:text-[17px]">
             Find the signal, verify the filing, pressure-test the spread, and leave
             with a next move your team can defend.
           </p>
@@ -222,7 +222,7 @@ export function Storyteller() {
                 </p>
                 <p className="mt-1 text-[16px] font-semibold text-[#111827]">
                   {DEMO_DEAL.address}
-                  <span className="ml-2 font-medium text-[#64748B]">{DEMO_DEAL.market}</span>
+                  <span className="ml-2 font-medium text-[#5B6472]">{DEMO_DEAL.market}</span>
                 </p>
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800">
@@ -253,7 +253,7 @@ export function Storyteller() {
                     onClick={() => setStage(item.key)}
                     onKeyDown={(event) => selectFromKeyboard(event, index)}
                     className={`group relative min-h-[82px] bg-white px-3 py-4 text-left transition-colors sm:min-h-[94px] sm:px-5 ${
-                      selected ? "text-[#111827]" : "text-[#64748B] hover:bg-[#F8FAFC]"
+                      selected ? "text-[#111827]" : "text-[#5B6472] hover:bg-[#F8FAFC]"
                     }`}
                   >
                     <span
@@ -280,7 +280,7 @@ export function Storyteller() {
                         <span className="block text-[12px] font-extrabold tracking-[-0.01em] sm:text-[15px] sm:tracking-normal">
                           {item.label}
                         </span>
-                        <span className="mt-0.5 block text-[10px] font-semibold leading-[1.3] text-[#64748B] sm:text-[11px]">
+                        <span className="mt-0.5 block text-[10px] font-semibold leading-[1.3] text-[#5B6472] sm:text-[11px]">
                           {item.summary}
                         </span>
                       </span>
@@ -305,12 +305,12 @@ export function Storyteller() {
                   <h3 className="mt-1 text-[23px] font-bold tracking-[-0.02em] text-[#111827]">
                     {activeStage.headline}
                   </h3>
-                  <p className="mt-1.5 max-w-[720px] text-[13px] font-medium leading-[1.55] text-[#64748B] sm:text-[14px]">
+                  <p className="mt-1.5 max-w-[720px] text-[13px] font-medium leading-[1.55] text-[#5B6472] sm:text-[14px]">
                     {activeStage.description}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#64748B]">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">
                     Output
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-[#0F172A]">
@@ -325,7 +325,7 @@ export function Storyteller() {
             </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-[#E8EDF3] bg-white px-5 py-4 sm:px-7">
-              <div className="hidden items-center gap-2 text-[11px] font-semibold text-[#64748B] sm:flex">
+              <div className="hidden items-center gap-2 text-[11px] font-semibold text-[#5B6472] sm:flex">
                 <span className="text-[#0F172A]">{activeIndex + 1} of {STAGES.length}</span>
                 <span aria-hidden>·</span>
                 <span>Keep the same opportunity in view</span>
@@ -435,7 +435,7 @@ function VerificationPanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#64748B]">Source-by-source check</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">Source-by-source check</p>
             <h4 className="mt-1 text-[20px] font-bold text-[#111827]">What is known—and what is not</h4>
           </div>
           <ShieldCheck className="h-7 w-7 text-emerald-600" aria-hidden />
@@ -448,7 +448,7 @@ function VerificationPanel() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-[#111827]">{check.label}</span>
-                <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#64748B]">{check.detail}</span>
+                <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#5B6472]">{check.detail}</span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
                 check.tone === "emerald"
@@ -489,7 +489,7 @@ function UnderwritePanel() {
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Demo assumptions</p>
             <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Build the walk-away number</h4>
-            <p className="mt-1 text-[12px] font-medium text-[#64748B]">Every estimate stays visible, editable, and attributable.</p>
+            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Every estimate stays visible, editable, and attributable.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-900">
             <Calculator className="h-4 w-4" aria-hidden /> Conservative model
@@ -541,7 +541,7 @@ function UnderwritePanel() {
 function ModelStat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "bg-[#0F172A] text-white" : "bg-white text-[#111827]"}`}>
-      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#64748B]"}`}>{label}</p>
+      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#5B6472]"}`}>{label}</p>
       <p className="mt-1 text-[18px] font-extrabold tabular-nums">{value}</p>
     </div>
   );
@@ -585,7 +585,7 @@ function ActionPanel() {
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748B]">Why it advances</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Why it advances</p>
               <ul className="mt-3 space-y-2">
                 {["$53k gross value spread", "Three source matches", "Eight-day decision window"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
@@ -595,7 +595,7 @@ function ActionPanel() {
               </ul>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#64748B]">Conditions</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Conditions</p>
               <ul className="mt-3 space-y-2">
                 {["Clear senior lien position", "Confirm occupancy", "Hold $4k risk reserve"].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
@@ -614,7 +614,7 @@ function ActionPanel() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Next-action board</p>
             <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Move before the deadline</h4>
           </div>
-          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#64748B] shadow-sm">1 of 3 done</span>
+          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">1 of 3 done</span>
         </div>
         <div className="mt-5 space-y-2.5">
           {actions.map((action) => (
@@ -624,9 +624,9 @@ function ActionPanel() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-[#111827]">{action.label}</span>
-                <span className="mt-0.5 block text-[11px] font-medium text-[#64748B]">{action.detail}</span>
+                <span className="mt-0.5 block text-[11px] font-medium text-[#5B6472]">{action.detail}</span>
               </span>
-              <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#64748B]">{action.owner}</span>
+              <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#5B6472]">{action.owner}</span>
             </div>
           ))}
         </div>
@@ -641,7 +641,7 @@ function ActionPanel() {
 function MemoMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-[#F1F5F9] px-3 py-4 text-center">
-      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#64748B]">{label}</p>
+      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#5B6472]">{label}</p>
       <p className="mt-1 text-[19px] font-extrabold tabular-nums text-[#111827]">{value}</p>
     </div>
   );
