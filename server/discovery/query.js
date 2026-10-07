@@ -247,9 +247,15 @@ function matches(row, f) {
     }
     if (text(row[k]) !== v) return false;
   }
-  if (f.program && f.program !== "all" && text(d.program) !== f.program)
+  // "unknown" is the canonical sentinel for "this field was never determined",
+  // and it applies to the derived fields too. Without it, program=unknown
+  // matched nothing at all here while the facet offered the bucket and the SQL
+  // returned it - a filter value the caller could select and never get.
+  if (f.program && f.program !== "all"
+      && (f.program === "unknown" ? text(d.program) !== "" : text(d.program) !== f.program))
     return false;
-  if (f.lifecycle && f.lifecycle !== "all" && text(d.lifecycle) !== f.lifecycle)
+  if (f.lifecycle && f.lifecycle !== "all"
+      && (f.lifecycle === "unknown" ? text(d.lifecycle) !== "" : text(d.lifecycle) !== f.lifecycle))
     return false;
   if (f.freshness && f.freshness !== "all" && d.freshness !== f.freshness)
     return false;
@@ -357,12 +363,22 @@ function pgWhere(f, start = 1) {
     p.push(v);
   };
   for (const [col, v] of [
+    // Order matters: it is the order the bound parameters appear in, and the
+    // discovery backend suite pins which filter lands at which position.
     ["state", f.state],
     ["county", f.county],
     ["source_key", f.source],
     ["prop_type", f.type],
-    ["auction_program", f.program],
-    ["lifecycle_status", f.lifecycle],
+    // These two are derived, not stored: matches() reads the column first and
+    // falls back - auction_program to provenance.sourceFacts.auctionProgram,
+    // lifecycle_status to status. The SQL has to carry the same fallback or the
+    // two backends select different records. Measured against the live store the
+    // columns happen to be populated, which is exactly why this stayed hidden:
+    // a row whose value only exists in the fallback matched in memory and not
+    // in SQL. lifecycle_status also needs nullif, because '' is falsy for the
+    // memory accessor and coalesce would happily return it instead of status.
+    ["coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram')", f.program],
+    ["coalesce(nullif(lifecycle_status,''), status)", f.lifecycle],
     ["occupancy", f.occupancy],
   ]) {
     if (!v || v === "all") continue;
@@ -401,8 +417,36 @@ function pgWhere(f, start = 1) {
   else if (f.seniorLien === "risk") w.push("senior_lien_risk='high'");
   if (f.redemption === "immediate") w.push("redemption_days=0");
   else if (f.redemption === "redemption_active") w.push("redemption_days>0");
-  if (f.hasDocuments === "unknown") w.push("has_documents IS NULL");
-  else if (f.hasDocuments != null) add("has_documents=?", f.hasDocuments);
+  // Document evidence is tri-state and can arrive in three places, exactly as
+  // derived() reads them: the has_documents column, and the sourceFacts.documents
+  // and media.documents arrays. The SQL used to test `has_documents IS NULL`
+  // alone, so a record whose documents arrived through either provenance
+  // container was memory-true but SQL-unknown - the parity suite caught it
+  // returning 16 rows where memory returned 4. A container that is present but
+  // EMPTY is still a conclusion ("we looked, there are none") and must be false,
+  // which is what the separate PRESENCE terms below exist for. jsonb_typeof
+  // guards jsonb_array_length, which raises on a non-array, so a malformed
+  // container is ignored rather than exploding the query.
+  const documentArray = (container) =>
+    `(CASE WHEN jsonb_typeof(provenance->'${container}'->'documents')='array' `
+    + `THEN jsonb_array_length(provenance->'${container}'->'documents') END)`;
+  const documentPresent = (container) =>
+    `(jsonb_typeof(provenance->'${container}'->'documents')='array')`;
+  // Both predicates must be total. `has_documents IS TRUE` is NULL when the
+  // column is NULL, and jsonb_typeof(NULL) is NULL too, so an unguarded OR
+  // chain collapses the whole comparison to NULL and `NOT NULL` filters the row
+  // out instead of classifying it. Everything folds to false first.
+  const docsTrue = `(coalesce(has_documents IS TRUE,false) OR greatest(coalesce(${documentArray("sourceFacts")},0),coalesce(${documentArray("media")},0))>0)`;
+  const docsFalseRaw = `(coalesce(has_documents IS FALSE,false) OR coalesce(${documentPresent("sourceFacts")},false) OR coalesce(${documentPresent("media")},false))`;
+  // A present container is a conclusion, but only a non-empty one means "yes",
+  // and true has to win: a row whose sourceFacts.documents holds a document is
+  // true even though the column is NULL and the container is "present". So
+  // false is "concluded absent" AND NOT "concluded present" - the same ordering
+  // derived() uses.
+  const docsFalse = `((${docsFalseRaw}) AND NOT ${docsTrue})`;
+  if (f.hasDocuments === "unknown") w.push(`NOT ${docsTrue} AND NOT ${docsFalse}`);
+  else if (f.hasDocuments === true) w.push(docsTrue);
+  else if (f.hasDocuments === false) w.push(docsFalse);
   if (f.freshness && f.freshness !== "all") {
     if (f.freshness === "observed") w.push("provenance->>'origin'='live'");
     else if (f.freshness === "unverified")

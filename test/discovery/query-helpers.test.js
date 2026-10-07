@@ -257,10 +257,15 @@ test('every text facet filter compares case-insensitively, like the in-memory ma
     + '&program=TPS&lifecycle=Status%3A%20Active&occupancy=Vacant&state=AZ&source=HUD',
   ));
   const where = pgWhere(filter);
-  for (const column of ['county', 'prop_type', 'auction_program', 'lifecycle_status', 'occupancy', 'state', 'source_key']) {
+  for (const column of ['county', 'prop_type', 'occupancy', 'state', 'source_key']) {
     assert.match(where.sql, new RegExp(`lower\\(${column}\\)=\\$\\d+`),
       `${column} must be compared with lower() against the normalised filter value`);
   }
+  // Program and lifecycle are derived, so the SQL has to carry the same
+  // fallback matches() reads - a row whose value lives only in provenance must
+  // not be invisible to the database path.
+  assert.match(where.sql, /lower\(coalesce\(auction_program, provenance->'sourceFacts'->>'auctionProgram'\)\)=\$\d+/);
+  assert.match(where.sql, /lower\(coalesce\(nullif\(lifecycle_status,''\), status\)\)=\$\d+/);
   // The memory matcher already agreed with the normalised value; this pins that
   // the two backends are answering the same question.
   const row = {

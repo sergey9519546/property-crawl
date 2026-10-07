@@ -2,13 +2,31 @@
 
 const assert = require('node:assert/strict');
 const { after, before, test } = require('node:test');
-const { Pool } = require('pg');
 const query = require('../server/discovery/query');
 
 const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 let pool;
 
-before(() => { if (databaseUrl) pool = new Pool({ connectionString: databaseUrl, max: 1 }); });
+// Prefer an external server when one is configured, but do not require one.
+// PGlite is Postgres compiled to WASM, so this suite can check the real SQL
+// semantics in-process rather than skipping itself in every default run - which
+// is exactly what let pgWhere compare 'maricopa' to 'Maricopa' while the
+// in-memory matcher lowercased both sides. A guard that only proves itself when
+// an operator exports a variable is not a guard.
+before(async () => {
+  if (databaseUrl) {
+    const { Pool } = require('pg');
+    pool = new Pool({ connectionString: databaseUrl, max: 1 });
+    return;
+  }
+  const { PGlite } = require('@electric-sql/pglite');
+  const pglite = new PGlite();
+  await pglite.query('SELECT 1');
+  pool = {
+    query: (sql, params) => pglite.query(sql, params),
+    end: async () => { await pglite.close(); },
+  };
+});
 after(async () => { if (pool) await pool.end(); });
 
 const documentStates = {
@@ -41,7 +59,7 @@ for (const column of [null, true, false]) {
   }
 }
 
-for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} document bucket matches explicit dual-container semantics`, { skip: !databaseUrl }, async () => {
+for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} document bucket matches explicit dual-container semantics`, async () => {
   const expectedValue = bucket === 'unknown' ? null : bucket === 'true';
   const expected = documentCases.filter((item) => item.expected === expectedValue).map((item) => item.id).sort();
   const filter = query.queryFromUrl(new URL(`http://localhost/api/listings?hasDocuments=${bucket}`));
@@ -54,7 +72,7 @@ for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} docu
   assert.deepEqual(result.rows.map((row) => row.id), expected, 'Postgres query must match the stated tri-state contract');
 });
 
-test('Postgres program and lifecycle fallbacks match canonical memory semantics', { skip: !databaseUrl }, async () => {
+test('Postgres program and lifecycle fallbacks match canonical memory semantics', async () => {
   const rows = [
     { id: 'fallback', auctionProgram: null, lifecycleStatus: '', status: 'active', provenance: { sourceFacts: { auctionProgram: 'HUD REO' } } },
     { id: 'other', auctionProgram: 'Other', lifecycleStatus: 'closed', status: 'active', provenance: {} },
