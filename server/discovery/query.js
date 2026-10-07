@@ -369,11 +369,22 @@ function pgWhere(f, start = 1) {
     // Mirrors the in-memory matcher: "unknown" selects records whose field was
     // never determined, so it must test for NULL/blank rather than the literal.
     if (v === "unknown") {
-      const bare = col.replace(/^lower\(/, "").replace(/\)$/, "");
-      w.push(`coalesce(${bare},'')=''`);
+      w.push(`coalesce(${col},'')=''`);
       continue;
     }
-    add(`${col}=?`, col === "state" ? v.toUpperCase() : v);
+    // Every value above reached here through text(), which lowercases it, and
+    // matches() lowercases the row too - so the two backends only agree if the
+    // SQL lowercases the column. It did not: `col=?` compared 'maricopa'
+    // against 'Maricopa', and on Postgres - the backend production runs on -
+    // every filter whose stored values contain an uppercase letter returned
+    // nothing. The workbench rendered those facets with real counts
+    // ("Single Family Home" 5,661, "TPS" 4,533, "Status: Active" 2,239,
+    // "Vacant" 2,044, "Maricopa" 186) and every one of them filtered to zero.
+    //
+    // `state` used to be special-cased back to upper case, which only worked
+    // because every state code is already stored uppercase; lower() on both
+    // sides is the same rule the memory matcher applies, applied once.
+    add(`lower(${col})=?`, v);
   }
   if (f.q) {
     add(
@@ -485,6 +496,22 @@ async function pgSearch(database, f) {
       type: "prop_type",
       program: "auction_program",
       lifecycle: "lifecycle_status",
+      // The buckets here group by the stored string exactly as the publisher
+      // wrote it, while pgWhere matches case-insensitively - the same rule the
+      // in-memory matcher applies. So a facet count can be narrower than the
+      // filter it produces, and publishers that vary casing get several chips
+      // for one concept. Live: occupancy offers 'Occupied' (4,316),
+      // 'OCCUPIED' (16), 'OWNER OCCUPIED' (4) and 'TENANT OCCUPIED' (1), and
+      // filtering 'occupied' correctly returns all 4,332.
+      //
+      // The sentinel collision beside it is deliberate, not an oversight:
+      // 'unknown' is the documented token for "never determined", meaning
+      // blank/NULL, which is also what the in-memory matcher tests. Publishers
+      // that wrote the literal text 'Unknown' (162 on type, 40 + 7 on
+      // occupancy) therefore occupy their own facet bucket that no single
+      // filter value can isolate. Separating them needs a distinct token in
+      // the filter API, not a query change.
+      //
       // occupancy: nullif folds the blank-string bucket into the "unknown"
       // sentinel, mirroring the in-memory accessor's falsy-to-"unknown" rule
       // and pgWhere's coalesce(occupancy,'')='' test for that sentinel.
@@ -639,4 +666,8 @@ module.exports = {
   matches,
   parseBbox,
   revisionOf,
+  // Exported so the PG/memory parity test can build the same WHERE the store
+  // runs. It was referenced there but missing here, which meant that suite only
+  // ever proved itself when DATABASE_URL was set and otherwise stayed silent.
+  pgWhere,
 };

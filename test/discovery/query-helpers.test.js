@@ -23,6 +23,8 @@ const {
   parseBbox,
   queryFromUrl,
   search,
+  pgWhere,
+  matches,
 } = require('../../server/discovery/query');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -230,4 +232,43 @@ test('parseBbox: accepts boundary values (lng=-180, lat=90, lat=-90)', () => {
   // -180 / 90 / -90 are valid bounds; the parser should accept them.
   const out = parseBbox('-180,-90,180,90');
   assert.deepEqual(out, [-180, -90, 180, 90]);
+});
+
+// queryFromUrl normalises every filter value through text() - trim, then
+// lowercase - and the in-memory matcher lowercases the row too, so the
+// in-memory backend has always found "Maricopa" from county=maricopa.
+// pgWhere compared that lowercased parameter against the case-preserved
+// column, so on Postgres - the backend production actually runs on - every
+// filter whose stored values contain an uppercase letter matched nothing.
+//
+// Measured against the live store, clicking a facet the app itself rendered:
+//
+//   type      "Single Family Home"   5,661 -> 0
+//   program   "TPS"                  4,533 -> 0
+//   lifecycle "Status: Active"       2,239 -> 0
+//   occupancy "Vacant"               2,044 -> 0
+//   county    "Maricopa"               186 -> 0
+//
+// Only state (uppercased back) and source (already lowercase) survived, which
+// is why the breakage looked like a lifecycle-only problem at first.
+test('every text facet filter compares case-insensitively, like the in-memory matcher', () => {
+  const filter = queryFromUrl(new URL(
+    'http://localhost/api/listings?county=Maricopa&type=Single%20Family%20Home'
+    + '&program=TPS&lifecycle=Status%3A%20Active&occupancy=Vacant&state=AZ&source=HUD',
+  ));
+  const where = pgWhere(filter);
+  for (const column of ['county', 'prop_type', 'auction_program', 'lifecycle_status', 'occupancy', 'state', 'source_key']) {
+    assert.match(where.sql, new RegExp(`lower\\(${column}\\)=\\$\\d+`),
+      `${column} must be compared with lower() against the normalised filter value`);
+  }
+  // The memory matcher already agreed with the normalised value; this pins that
+  // the two backends are answering the same question.
+  const row = {
+    id: 'A', source: 'hud', state: 'AZ', county: 'Maricopa', address: '1 Main St',
+    propType: 'Single Family Home', status: 'Status: Active', lat: 33, lng: -112,
+    dealScore: 50, sourceObservedAt: '2026-10-01T00:00:00.000Z', provenance: { origin: 'live' },
+    auctionProgram: 'TPS', occupancy: 'Vacant',
+  };
+  assert.equal(matches(row, filter), true,
+    'the in-memory matcher lowercases both sides, so it must still accept these');
 });
