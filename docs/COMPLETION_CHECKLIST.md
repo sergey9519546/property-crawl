@@ -128,16 +128,33 @@ Verified against it, not assumed: the full `schema.sql` plus all 16 migrations
 apply (33 tables), `FOR UPDATE SKIP LOCKED` job claiming runs, transactions
 commit and roll back, errors carry SQLSTATE, and rows survive a close/reopen.
 
-For the tests that need a **separate server** — the two skipped
-`discovery-job-fence` and `discovery-promotion-evidence` tests, which are the
-only coverage of job-ownership fencing against real row locks — the embedded
-engine's single connection is not enough, and a real server is still required:
+**Eighteen tests do not run in a default `npm test`**, and the verifier now says
+so rather than counting them as passes:
+
+```
+VERIFICATION RESULT: 50/50 Suites Passed (0 Failed)
+NOTE: 18 test(s) were SKIPPED and did not execute. A skipped test is not a passing test.
+  skipped: 3i. Discovery backend (16)
+  skipped: 3j. Discovery operations (2)
+```
+
+They are gated on `DATABASE_URL`, and **PGlite cannot substitute for them** —
+checked, not assumed. `discovery-acceptance.test.js` asserts
+`pg_extension` contains `pg_trgm`, which the embedded engine does not ship
+(`extension "pg_trgm" is not available`), and `createIsolatedDatabase()` issues
+`CREATE DATABASE`. On top of that, `hunt-store-pg-concurrency` is the only
+coverage of job-ownership fencing against real row locks, and one embedded
+connection cannot exercise it at all.
+
+Earlier rows here named only two tests as needing a real server. The scope is
+eighteen. A real server, plus `DISCOVERY_TEST_DATABASE_URL`, is what runs them:
 
 ```
 docker run -d --name pp-pg -e POSTGRES_PASSWORD=property-local-dev \
   -p 55432:5432 postgis/postgis:16-3.4
 $env:DISCOVERY_TEST_DATABASE_URL='postgres://postgres:property-local-dev@127.0.0.1:55432/property_crawl'
-npm run test:discovery:operations:pg
+npm run test:discovery
+npm run test:discovery:operations
 ```
 
 **CI `continue-on-error` is not release evidence.** Jobs that carry it are
