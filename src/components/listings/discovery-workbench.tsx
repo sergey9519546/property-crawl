@@ -587,6 +587,22 @@ export function DiscoveryWorkbench() {
                 })()
               : "Checking published amounts…"}
           </p>
+          {/* "Modeled score" is the default sort, and it orders by a value the
+              API withholds unless a record has both an opening amount and an
+              estimated range. While no record carries one, every row ties and
+              the order is decided by the id tie-break - so the page looks
+              ranked by deal quality while ranking nothing. The empty state
+              covers the minScore filter but cannot help here, because this
+              returns results. Counted from the records in hand, same as the
+              line above; never a catalog-wide claim. */}
+          {payload?.listings
+            && (filters.sort || "score") === "score"
+            && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
+            && payload.listings.length > 0 ? (
+              <p className="mt-1 text-xs text-slate-600" data-testid="score-sort-honesty">
+                No listing on this page carries a modeled score yet, so this order is not ranking by score. Scores need a published opening amount and an estimated range.
+              </p>
+            ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <select
