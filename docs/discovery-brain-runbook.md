@@ -146,6 +146,14 @@ Three things about this sequence are not obvious and each one costs a wasted run
   HUD's from `HUD_MAX_PAGES_PER_STATE` / `HUD_PAGE_SIZE`. Left at defaults a
   ServiceLink run walks one 25-record page; with the budget raised it walks up
   to the cap.
+- **Turning `SCRAPER_BACKGROUND_ENABLED` on is necessary but not sufficient.**
+  The coordinator runs each adapter once per cycle and passes no per-adapter
+  page budget, so ServiceLink takes its default of **one 25-record page per
+  cycle** against a 7,498-record source - and reports itself as a truncated,
+  incomplete sweep rather than a clean cycle, which the recovery checkpoint
+  below already records. Set `SERVICELINK_MAX_PAGES` before expecting background
+  collection to hold freshness; otherwise the store keeps ageing from the
+  largest source and the cycle reports success.
 - **`npm run db:import` no longer deletes anything.** It is
   `db-import-live.js` alone, so it only upserts. The combined import-and-prune
   path is `npm run db:import:prune`, and `npm run db:prune` stays a dry run
