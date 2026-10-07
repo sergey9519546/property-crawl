@@ -87,18 +87,36 @@ function createNeighborhoodsHandler(dependencies = {}) {
     if (!remaining) {
       const stats = computeNeighborhoodStats(pool, { maxAgeDays, nowMs: now() });
       const buckets = stats.slice(0, limit).map(serializeBucket);
+
+      // `truncated` above describes the STORE READ, and the read is complete.
+      // It says nothing about the result, which is the top `limit` buckets --
+      // and on the live store that is 100 of 5,815 buckets covering 869 of
+      // 9,831 listings, 8.8%. A payload that reads "scanned 9831, truncated
+      // false" alongside a hundred rows invites the reading that nothing was
+      // dropped. So the result gets its own counts.
+      const bucketsTotal = stats.length;
+      const listingsBucketed = stats.reduce((sum, b) => sum + b.count, 0);
+      const listingsCovered = stats.slice(0, limit).reduce((sum, b) => sum + b.count, 0);
+
       res.setHeader('Cache-Control', 'no-store');
       return res.json({
         schema: 'property-crawl.neighborhoods/v1',
         count: buckets.length,
         maxAgeDays,
         state: stateFilter,
-        // What the medians and tallies above were computed from. `count` is the
-        // number of neighborhoods returned after `limit`, not the number of
-        // listings read, so neither figure alone tells you the coverage.
+        // The store read, and whether it came back whole.
         scanned,
         availableTotal,
         truncated,
+        // The result, and how much of the inventory these rows actually cover.
+        bucketsTotal,
+        bucketsReturned: buckets.length,
+        bucketsTruncated: buckets.length < bucketsTotal,
+        listingsBucketed,
+        listingsCovered,
+        listingsNotCovered: listingsBucketed - listingsCovered,
+        // Rows the bucketer could not place: no zip, and no city+state pair.
+        rowsWithoutNeighborhoodKey: scanned - listingsBucketed,
         neighborhoods: buckets
       });
     }
