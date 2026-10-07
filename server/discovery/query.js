@@ -403,8 +403,12 @@ function pgWhere(f, start = 1) {
     add(`lower(${col})=?`, v);
   }
   if (f.q) {
+    // The same derived program matches() searches: a record whose program only
+    // exists in provenance is findable by keyword there and was invisible here,
+    // which the parity matrix caught (q=hud reo returned [] against memory's
+    // ["b"]).
     add(
-      `(coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program,'')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,
+      `(coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,
       `%${f.q}%`,
     );
   }
