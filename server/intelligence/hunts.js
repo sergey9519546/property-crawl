@@ -13,6 +13,9 @@ const MAX_RULES = 20;
 const MAX_CRITERIA_BYTES = 16 * 1024;
 const MAX_RETURNED_RESULTS = 500;
 const MAX_RETURNED_EVENTS = 200;
+// How many lifecycle events a hunt detail response carries. The store keeps far
+// more; recentEventsTotal and recentEventsTruncated say by how much.
+const RECENT_EVENT_LIMIT = 20;
 const MAX_VERSIONS = 20;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
@@ -274,6 +277,7 @@ function listHunts(options = {}) {
 function getHunt(id, options = {}) {
   const store = loadStore(options.filePath);
   const hunt = findHunt(store, id);
+  const huntEvents = store.events.filter((event) => event.huntId === id);
   return {
     hunt: {
       ...summary(hunt),
@@ -285,7 +289,12 @@ function getHunt(id, options = {}) {
       })),
     },
     baseline: summarizeBaseline(store.baselines[id]),
-    recentEvents: store.events.filter((event) => event.huntId === id).slice(0, 20),
+    // The store holds far more than this cap -- 2,000 events, and 69 for one
+    // hunt on the live store. Twenty is a reasonable thing to render and an
+    // unreasonable thing to publish silently, so the count travels with it.
+    recentEvents: huntEvents.slice(0, RECENT_EVENT_LIMIT),
+    recentEventsTotal: huntEvents.length,
+    recentEventsTruncated: huntEvents.length > RECENT_EVENT_LIMIT,
   };
 }
 
@@ -804,3 +813,4 @@ module.exports = {
   validateCriteria,
   validateHuntInput,
 };
+
