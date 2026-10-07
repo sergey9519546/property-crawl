@@ -121,6 +121,41 @@ never qualifies as complete county coverage. Two clean observed runs of the
 same declared county scope are still required before promotion. These controls
 are tested, but do not establish a successful live county run by themselves.
 
+## Restoring freshness after a collection gap
+
+With `SCRAPER_BACKGROUND_ENABLED` off, inventory decays: every source's records
+fall past that source's own refresh cadence after a few hours, and `GET
+/api/health` reports them under `inventoryFreshness.staleBecause`. That is a
+report, not a repair. To re-observe records:
+
+```
+node scripts/collect-source.js <source> [--restart]
+npm run db:import
+```
+
+Three things about this sequence are not obvious and each one costs a wasted run:
+
+- **`--restart` is required once a sweep has completed.** A sweep is *state
+  based*, not a refresh. HUD reporting `fullSweepComplete: true` and
+  `remainingStates: []` then accepting 21 records is not a publisher failure -
+  the run simply had nothing left to visit. Without `--restart` the checkpoint
+  is resumed as complete and re-running changes nothing.
+- **The CLI flags do not raise a scraper's page budget.** `collect-source
+  --limit` maps to `maxDetailPages`, which ServiceLink ignores; its per-run
+  budget comes from `SERVICELINK_MAX_PAGES` (and `SERVICELINK_PAGE_SIZE`),
+  HUD's from `HUD_MAX_PAGES_PER_STATE` / `HUD_PAGE_SIZE`. Left at defaults a
+  ServiceLink run walks one 25-record page; with the budget raised it walks up
+  to the cap.
+- **`npm run db:import` no longer deletes anything.** It is
+  `db-import-live.js` alone, so it only upserts. The combined import-and-prune
+  path is `npm run db:import:prune`, and `npm run db:prune` stays a dry run
+  that prints what it would delete. Records a publisher has delisted are kept on
+  purpose: "the publisher no longer lists it" is a fact to report, not a reason
+  to drop the record.
+
+Re-importing never retires anything. Records whose publisher no longer lists
+them simply stay stale, and that is the honest end state.
+
 ## Shared discovery contract
 
 `GET /api/listings` retains `listings`, `total`, and offset compatibility, and adds facets, revision, and page cursor metadata. Filters cover query identifiers, state/county, source/type, program/lifecycle, date window, published amount, occupancy, source recency, documents, and existing modeled-score inputs. Unknown fields remain unknown. Cursors bind filters and inventory revision; a changed revision returns 409 and requires refresh.
