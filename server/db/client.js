@@ -1622,7 +1622,16 @@ class DatabaseClient {
       if (onlyUnread && match.readAt) continue;
       out.push(match);
     }
-    out.sort((a, b) => b.matchedAt.localeCompare(a.matchedAt));
+    // Same order as the SQL above: matched_at DESC, id DESC. The id tie-break
+    // is not cosmetic. Alerts are written in batches, so several matches share
+    // a matched_at to the millisecond, and the cursor is (matchedAt, id). A
+    // sort on matched_at alone leaves equal elements in arrival order, so the
+    // pivot the cursor names could sit anywhere inside a tied run - letting a
+    // page repeat a row or skip one. Sorting the same way the database does is
+    // what makes the two paths return the same pages in the same order.
+    out.sort(
+      (a, b) => b.matchedAt.localeCompare(a.matchedAt) || String(b.id).localeCompare(String(a.id)),
+    );
 
     if (cursor) {
       const sepIdx = cursor.indexOf('|');

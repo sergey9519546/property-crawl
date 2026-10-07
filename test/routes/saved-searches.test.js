@@ -598,3 +598,42 @@ test('validateFilters rejects an oversized keyword array', () => {
   const ok = Array.from({ length: 100 }, (_, i) => `kw-${i}`);
   assert.equal(validateFilters({ keywords: ok }).ok, true);
 });
+// Alerts are written in batches, so several matches routinely share a
+// matched_at to the millisecond. Postgres paginates them with a deterministic
+// `matched_at DESC, id DESC`, and its cursor is (date, id). The in-memory path
+// sorted on matched_at alone, which is not a stable order: Array#sort leaves
+// equal elements in whatever order they arrived, so the pivot the cursor names
+// could land anywhere in the tied run. Paging through a batch of equal
+// timestamps could then repeat a row or skip one, and the cursor built from the
+// last row of a page would not identify where the next page starts.
+test('alert matches with identical timestamps still paginate deterministically', async () => {
+  const os = require('node:os');
+  const { DatabaseClient } = require('../../server/db/client');
+  const storePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pc-alert-tie-')), 'workspace.json');
+  const db = new DatabaseClient({
+    workspaceStorePath: storePath,
+    liveCachePath: null,
+    env: { NODE_ENV: 'test' },
+  });
+  const search = await db.createSavedSearch('workspace:operator', {
+    label: 'Tied timestamps',
+    filters: { states: ['TX'] },
+  });
+  await db.recordAlertMatches('workspace:operator', search.id, ['listing-1', 'listing-2', 'listing-3', 'listing-4']);
+
+  // Force every match onto one timestamp - the batch case the tie-break exists for.
+  const stamp = new Date('2026-10-06T12:00:00.000Z').toISOString();
+  for (const match of db.inMemoryData.alertMatches.values()) match.matchedAt = stamp;
+
+  const seen = [];
+  let cursor;
+  for (let page = 0; page < 10; page += 1) {
+    const result = await db.listAlertMatches('workspace:operator', { limit: 1, cursor });
+    seen.push(...result.matches.map((match) => match.id));
+    cursor = result.nextCursor;
+    if (!cursor) break;
+  }
+  assert.equal(seen.length, 4, 'every match must be reachable exactly once across pages');
+  assert.equal(new Set(seen).size, 4, 'no match may be repeated when timestamps tie');
+  assert.deepEqual(seen, [...seen].sort().reverse(), 'ties must resolve by descending id, matching the SQL');
+});
