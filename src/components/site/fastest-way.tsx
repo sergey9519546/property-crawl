@@ -35,7 +35,15 @@ const STEPS: Step[] = [
   {
     label: "Score",
     title: "Score against comps",
-    desc: "Opening bid ÷ estimated value band. The Deal Score is a heuristic, not an appraisal — title and valuation still require verification.",
+    // Kept honest against what the pipeline actually produces. A score needs a
+    // supported valuation band, and no record in the inventory carries one yet:
+    // est_low/est_high are null throughout, so deal_score is null too and
+    // minScore matches nothing. The detail page already says "Not modeled" and
+    // "No comparable-sale claims are shown until exact comp evidence is
+    // captured", and the workbench now says its default sort is not ranking by
+    // score. A marketing page that asserted the capability without that
+    // qualifier would be describing a number no record can produce.
+    desc: "Opening bid ÷ estimated value band, when a comp-supported band exists. The Deal Score is a heuristic, not an appraisal — title and valuation still require verification, and a record with no captured comp evidence is shown without one rather than given a modelled number.",
     icon: FileStack,
     visual: <ParcelContextVisual />,
   },
