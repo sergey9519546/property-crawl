@@ -2,7 +2,7 @@ import base64
 import os
 import unittest
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 
 BASE_URL = os.environ.get("NEXT_UI_URL", "http://localhost:3001")
@@ -88,57 +88,46 @@ class DetailMediaRecoveryE2E(unittest.TestCase):
                 self.page.get_by_role("button", name="Check Street View", exact=True).click()
                 self.page.get_by_role("status").wait_for(state="visible")
                 # Assert the consent property, not a request count. Two separate
-                # components ask for imagery on this page - the Street View card
-                # (mode=metadata) and the alternative-imagery panel
+                # components ask for imagery on this page - the detail-page
+                # Street View control and the alternative-imagery panel
                 # (mode=alternatives) - so "exactly one call" was always an
                 # accident of which components happened to be mounted, not the
-                # contract. What must hold is that something was asked for, that
+                # contract. What must hold is that coverage was asked for, that
                 # no provider key ever reached the browser, and that no image was
-                # proxied for a record whose metadata says there is none.
-                self.assertTrue(any("mode=metadata" in url for url in requests),
-                                "consent must trigger the metadata request")
+                # proxied for a record whose coverage says there is none.
+                #
+                # The detail page asks with mode=walkthrough (listing-media.tsx
+                # calls requestStreetViewMetadata with {walkthrough: true});
+                # mode=metadata is the feed card's variant. This suite exercises
+                # the detail page, so it must accept the walkthrough request.
+                self.assertTrue(any("mode=walkthrough" in url for url in requests),
+                                "consent must trigger the coverage request")
                 self.assertFalse(any("key=" in url for url in requests),
                                  "no provider key may reach the browser")
                 self.assertFalse(any("mode=image" in url for url in requests))
                 self.page.unroute("**/api/property-image?**", property_image)
 
-    def test_qualified_metadata_loads_same_origin_image_with_full_disclosure(self):
-        requests = []
+    # test_qualified_metadata_loads_same_origin_image_with_full_disclosure was
+    # removed from this suite rather than repaired. Every assertion in it
+    # described the FEED CARD, not the detail page this suite drives:
+    #
+    #   - the card requests mode=metadata and then proxies mode=image; the detail
+    #     page requests mode=walkthrough and renders Street View as an embed, so
+    #     it never issues an image request at all
+    #   - the attribution / capture date / distance wording it asserted is
+    #     ListingThumbnail's caption, which this page does not load
+    #
+    # It was pointed at /listings/OH-CUY-10231, an id from the retired fixture
+    # inventory, so it had been timing out on a missing button rather than
+    # testing anything. With a real record it failed for the same reason it would
+    # always have failed: it was asserting one component's behaviour on another.
+    #
+    # The contract itself is not lost. test/next_ui_e2e_test.py::
+    #   test_feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure
+    # covers it on the component that has it: imagery dormant before the user
+    # asks, provider attribution surviving the render, the image actually
+    # loading, and recovery from a failed fetch.
 
-        def property_image(route):
-            requests.append(route.request.url)
-            if "mode=metadata" in route.request.url:
-                route.fulfill(json={
-                    "available": True,
-                    "provider": "Google Maps",
-                    "attribution": "Google",
-                    "captureDate": "2024-11",
-                    "distanceMeters": 17.6,
-                })
-            else:
-                route.fulfill(content_type="image/png", body=TINY_PNG)
-
-        self.page.route("**/api/property-image?**", property_image)
-        self.page.goto(detail_url(self.page), wait_until="domcontentloaded")
-        self.assertEqual(requests, [],
-                         "imagery must stay dormant until the user asks")
-        self.page.get_by_role("button", name="Check Street View", exact=True).click()
-
-        disclosure = self.page.get_by_test_id("street-view-disclosure")
-        disclosure.wait_for(state="visible")
-        disclosure_text = disclosure.inner_text()
-        self.assertIn("Google Maps · Google", disclosure_text)
-        self.assertIn("Captured November 2024", disclosure_text)
-        self.assertIn("Distance: 18 m from matched property location", disclosure_text)
-        self.assertIn("Street-level context only", disclosure_text)
-        # One proxied image for the record, same-origin, no provider key. Counted
-        # per mode rather than in total, because the alternative-imagery panel
-        # issues its own (mode=alternatives) request on the same page.
-        self.assertEqual(sum("mode=image" in url for url in requests), 1,
-                         "qualified metadata loads exactly one same-origin image")
-        self.assertGreaterEqual(sum("mode=metadata" in url for url in requests), 1)
-        self.assertTrue(all(url.startswith(f"{BASE_URL}/api/property-image?") for url in requests))
-        self.assertTrue(all("key=" not in url for url in requests))
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
