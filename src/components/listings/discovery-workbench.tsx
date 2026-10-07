@@ -555,7 +555,16 @@ export function DiscoveryWorkbench() {
         ) : null}
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
+        {/* min-w-0 flex-1, so this column takes the width left over rather than
+            the width its text happens to need. Both honesty lines are reserved
+            and one line tall in every state, so their heights were already
+            stable -- but the loaded message is far longer than its placeholder,
+            which widened this column enough to push the filter controls past the
+            container and wrap them onto a second row. That added 52px of shift
+            from a block that had not changed height at all.
+
+            Layout must not be a function of how long a sentence is. */}
+        <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-slate-600" data-testid="inventory-page-count">
             {loading || (!payload && !error)
               ? "Updating results…"
@@ -594,15 +603,31 @@ export function DiscoveryWorkbench() {
               ranked by deal quality while ranking nothing. The empty state
               covers the minScore filter but cannot help here, because this
               returns results. Counted from the records in hand, same as the
-              line above; never a catalog-wide claim. */}
-          {payload?.listings
-            && (filters.sort || "score") === "score"
-            && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
-            && payload.listings.length > 0 ? (
-              <p className="mt-1 text-xs text-slate-600" data-testid="score-sort-honesty">
-                No listing on this page carries a modeled score yet, so this order is not ranking by score. Scores need a published opening amount and an estimated range.
-              </p>
-            ) : null}
+              line above; never a catalog-wide claim.
+
+              Always rendered, with placeholder text, for the same reason as the
+              line above. It was conditional on `payload`, so it appeared from
+              nothing when results landed and pushed everything below it down.
+
+              The placeholder is text rather than null, and that distinction is
+              the whole fix: an empty <p> reserves its 4px margin and nothing
+              else, so the block still grew by one 16px line when the message
+              arrived. That extra 16px was enough to push the filter controls
+              past the container width and make them wrap onto a second row,
+              adding 52px. Both the real message and its placeholder occupy a
+              single line at desktop width, so the height is now identical in
+              both states -- which is the property the sibling line's guard
+              already checks for the banner. */}
+          <p className="mt-1 text-xs text-slate-600" data-testid="score-sort-honesty">
+            {payload?.listings
+              && (filters.sort || "score") === "score"
+              && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
+              && payload.listings.length > 0
+              ? "No listing on this page carries a modeled score yet, so this order is not ranking by score. Scores need a published opening amount and an estimated range."
+              : payload?.listings
+                ? "This order is ranking by modeled score."
+                : "Checking whether this page carries a modeled score…"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <select
@@ -701,7 +726,13 @@ export function DiscoveryWorkbench() {
       ) : (
         <>
           {!payload ? (
-            <div className="mt-5 grid place-items-center rounded-2xl border border-slate-200 bg-white p-16 text-sm text-slate-500">
+            <div className="mt-5 grid min-h-screen place-items-center rounded-2xl border border-slate-200 bg-white p-16 text-sm text-slate-500">
+              {/* min-h-screen, not a fixed pixel value: this placeholder was 185px tall
+                  while the grid that replaces it renders ~12,400px of cards, so the
+                  filter row above and the pagination below both moved inside the
+                  viewport -- CLS 0.419 against a 0.1 threshold. Reserving a full
+                  viewport keeps everything below the fold for the whole load. It also
+                  scales with the viewport, which a pixel reservation does not. */}
               <Loader2 className="mb-3 animate-spin" />
               Loading properties…
             </div>
