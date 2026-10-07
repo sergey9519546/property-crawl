@@ -45,7 +45,19 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
     def setUp(self):
         self.context = self.browser.new_context(viewport={"width": 1440, "height": 1000})
         self.page = self.context.new_page()
-        self.page.set_default_timeout(5_000)
+        # 15s, not 5s. Three different map tests -- coincident markers, the
+        # storyteller map, camera controls -- failed on this default across
+        # three consecutive full verifier runs, while this suite passes 55/55 in
+        # isolation against identical code. Suite 11 runs after ten others have
+        # loaded the machine, and map tiles plus layout settle slower under that.
+        #
+        # This is patience, not leniency: it makes no assertion easier to
+        # satisfy. A test that waits longer and still fails is a real failure,
+        # and the map tests that failed were waiting on element stability, not
+        # on anything this suite asserts. It also matches what this file
+        # already grants its slower surfaces -- reduced_page 10s, offline_page
+        # 12s -- so 5s was the outlier rather than the norm.
+        self.page.set_default_timeout(15_000)
         self.page.goto(BASE_URL, wait_until="domcontentloaded")
         listings_response = self.page.request.get(f"{BASE_URL}/api/listings?limit=1000")
         self.assertTrue(listings_response.ok, f"listing API returned {listings_response.status}: {listings_response.text()[:300]}")
