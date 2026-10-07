@@ -42,6 +42,54 @@ export function useWorkspaceSession() {
   return value ?? defaultSession;
 }
 
+/**
+ * The session, or null while it is still unknown.
+ *
+ * `useWorkspaceSession` returns `defaultSession` when there is no provider
+ * above, which reports authenticated: false. That is a fine default for
+ * anything that only renders, but it is a lie to anything that *acts*: a
+ * caller cannot tell "not signed in" from "have not asked yet", and a badge
+ * that fetches on that answer issues a request guaranteed to 401.
+ *
+ * The home page has no WorkspaceShell -- it keeps the marketing header -- so it
+ * has no provider and no real answer. Rather than force the whole marketing
+ * page into the workspace shell, this hook asks the server itself when there is
+ * no provider, and returns null until that answer lands. Pages that do have a
+ * shell keep using it and make no extra request.
+ */
+export function useResolvedWorkspaceSession(): SessionState | null {
+  const fromContext = React.useContext(SessionContext);
+  const [probed, setProbed] = React.useState<SessionState | null>(null);
+
+  React.useEffect(() => {
+    // A provider exists: it already probes, and it owns the answer.
+    if (fromContext) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/workspace/session", { cache: "no-store", credentials: "same-origin" });
+        const result = await response.json();
+        if (cancelled) return;
+        setProbed({
+          authenticated: Boolean(response.ok && result.authenticated),
+          configured: result.configured !== false,
+          expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : null,
+          loading: false,
+          requestUnlock: () => {},
+          refresh: async () => false,
+        });
+      } catch {
+        if (!cancelled) {
+          setProbed({ ...defaultSession, loading: false });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fromContext]);
+
+  return fromContext ?? probed;
+}
+
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [authenticated, setAuthenticated] = React.useState(false);

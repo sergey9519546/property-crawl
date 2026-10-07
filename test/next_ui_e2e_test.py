@@ -1971,6 +1971,83 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "a failed Street View fetch must not render an <img> standing in for it",
         )
 
+    def test_anonymous_load_makes_no_failing_request_and_logs_no_console_error(self):
+        """A page load must not issue a request it knows will fail.
+
+        /api/alerts/matches is behind the workspace session. The terminal used
+        to fetch it on mount regardless, twice -- once from the initial-load
+        effect and once from the "modal closed" effect, which also runs on
+        mount because the modal starts closed. Every anonymous visit therefore
+        produced two 401s and two console errors, and Lighthouse's best-practices
+        audit failed on it. The user saw nothing either way, because the badge
+        renders 0 for an anonymous visitor regardless.
+
+        The badge must still populate for an unlocked operator, so the fix is
+        not to delete the fetch -- it is to wait until the session is actually
+        known. This asserts the anonymous half of that: a clean load.
+        """
+        context = self.browser.new_context(viewport={"width": 1440, "height": 1000})
+        page = context.new_page()
+        api_failures = []
+        console_errors = []
+        try:
+            page.on("response", lambda r: api_failures.append((r.url, r.status))
+                    if "/api/" in r.url and r.status >= 400 else None)
+            page.on("console", lambda m: console_errors.append(m.text) if m.type == "error" else None)
+
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            # The live feed is the last thing on the home page to settle, and it
+            # is the component that owns the alerts badge.
+            expect(page.locator("section#live-feed")).to_be_visible(timeout=20_000)
+            page.wait_for_timeout(3_000)
+
+            alert_calls = [u for u, _ in api_failures if "/api/alerts" in u]
+            self.assertEqual(
+                alert_calls, [],
+                "an anonymous visitor must not be sent to an authenticated endpoint",
+            )
+            self.assertEqual(
+                api_failures, [],
+                "no /api request may fail during an anonymous page load",
+            )
+            self.assertEqual(
+                console_errors, [],
+                "a clean load must not log console errors",
+            )
+        finally:
+            context.close()
+
+    def test_session_probe_runs_before_any_alerts_request(self):
+        """The gate must be a real answer, not an assumption.
+
+        useResolvedWorkspaceSession returns null until the server has replied,
+        and null must mean "do not fetch yet" rather than "not signed in". If
+        that ever collapses to a boolean default, the anonymous case above
+        still passes -- but the operator case breaks silently, which is the
+        direction a test on the anonymous path cannot see.
+        """
+        context = self.browser.new_context(viewport={"width": 1440, "height": 1000})
+        page = context.new_page()
+        order = []
+        try:
+            page.on("request", lambda r: order.append(r.url)
+                    if "/api/workspace/session" in r.url or "/api/alerts" in r.url else None)
+            page.goto(BASE_URL, wait_until="domcontentloaded")
+            expect(page.locator("section#live-feed")).to_be_visible(timeout=20_000)
+            page.wait_for_timeout(3_000)
+
+            self.assertTrue(
+                any("/api/workspace/session" in u for u in order),
+                "the session must actually be probed, not assumed either way",
+            )
+            self.assertFalse(
+                any("/api/alerts" in u for u in order),
+                "an anonymous load must not request alerts at all",
+            )
+        finally:
+            context.close()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

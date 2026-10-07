@@ -63,6 +63,7 @@ import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media
 import { sourceDisplayText } from "@/lib/source-display";
 import type { SavedSearch } from "@/lib/saved-searches";
 import { getUnreadAlertCount } from "@/lib/saved-searches";
+import { useResolvedWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
 import {
   countActiveFilters,
@@ -157,15 +158,32 @@ export function InteractiveTerminal() {
     }
   }, []);
 
-  useEffect(() => {
-    void refreshUnreadAlerts();
-  }, [refreshUnreadAlerts]);
+  // /api/alerts/matches is behind the workspace session, so an anonymous
+  // visitor's request is a guaranteed 401. This used to fire on mount anyway,
+  // twice -- once from the effect below and once from the "modal closed"
+  // effect, which also runs on mount because the modal starts closed. Every
+  // anonymous page load therefore produced two console errors and fetched a
+  // badge nobody could see.
+  //
+  // The session is a cookie the client cannot read, and the home page has no
+  // WorkspaceShell to provide it, so `authenticated` is null until the hook has
+  // actually asked. Null means "not known yet" and must not be treated as
+  // either answer.
+  const session = useResolvedWorkspaceSession();
+  const alertsAuthorized = session?.authenticated === true;
 
-  // Refresh badge when alerts modal closes (a run may have created matches).
   useEffect(() => {
-    if (!isAlertsOpen) {
-      void refreshUnreadAlerts();
-    }
+    if (!alertsAuthorized) return;
+    void refreshUnreadAlerts();
+  }, [alertsAuthorized, refreshUnreadAlerts]);
+
+  // Refresh the badge when the alerts modal closes (a run may have created
+  // matches). Skips the first render so closing nothing is not a refresh --
+  // the effect above already covered the initial load.
+  const alertsWasOpen = React.useRef(false);
+  useEffect(() => {
+    if (alertsWasOpen.current && !isAlertsOpen) void refreshUnreadAlerts();
+    alertsWasOpen.current = isAlertsOpen;
   }, [isAlertsOpen, refreshUnreadAlerts]);
 
   useEffect(() => {
@@ -1113,7 +1131,12 @@ export function InteractiveTerminal() {
                 >
                   Show {Math.min(remaining, PAGE_SIZE).toLocaleString()} more
                 </button>
-                <p className="text-xs text-slate-500">
+                {/* slate-600, not slate-500: this sits on the #F5F6F7 page
+                    background, where slate-500 measures 4.4:1 and WCAG AA wants
+                    4.5:1. On white the same class passes, so this is a
+                    background problem rather than a bad token -- changing the
+                    token globally would move every other page for one line. */}
+                <p className="text-xs text-slate-600">
                   Showing {visible.length.toLocaleString()} of {filtered.length.toLocaleString()} matching listings
                 </p>
               </div>
