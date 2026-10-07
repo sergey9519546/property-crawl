@@ -542,7 +542,14 @@ async function pgSearch(database, f) {
       county: "county",
       source: "source_key",
       type: "prop_type",
-      program: "auction_program",
+      // Program is derived too - auction_program falling back to
+      // provenance.sourceFacts.auctionProgram, exactly as matches() reads it and
+      // exactly as pgWhere filters it. Grouping by the bare column put any
+      // record whose program lives only in provenance into the 'unknown' bucket,
+      // so the facet would count it as undetermined while the filter could still
+      // find it by its real program: the same lie the lifecycle facet was
+      // telling, on the other field with the same fallback.
+      program: "coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram')",
       // Lifecycle is derived - lifecycle_status falling back to status, exactly as
       // matches() reads it and exactly as pgWhere filters it. Grouping the facet
       // by the bare column put records whose derived value is present into the
@@ -563,8 +570,11 @@ async function pgSearch(database, f) {
       // blank/NULL, which is also what the in-memory matcher tests. Publishers
       // that wrote the literal text 'Unknown' (162 on type, 40 + 7 on
       // occupancy) therefore occupy their own facet bucket that no single
-      // filter value can isolate. Separating them needs a distinct token in
-      // the filter API, not a query change.
+      // filter value can isolate. Lifecycle hits the same collision: fl-dor
+      // publishes status = 'unknown' as a real value for 207 records, so the
+      // facet buckets them as 'unknown' while `lifecycle=unknown` - which means
+      // blank - returns none of them. Splitting the two needs a distinct token
+      // in the filter API, not a query change.
       //
       // occupancy: nullif folds the blank-string bucket into the "unknown"
       // sentinel, mirroring the in-memory accessor's falsy-to-"unknown" rule
