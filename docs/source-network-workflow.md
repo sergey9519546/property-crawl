@@ -26,8 +26,9 @@ Next.js proxies these routes to the same Node API used by the listing feed. `SCR
 
 ## Persistence and operation
 
-- `.cache/live-listings.json`: canonical validated live observations, merged without rewriting fixture/seed files.
-- `.cache/source-observations.json`: source runs, latest snapshots, up to 20 changed snapshots per record and 2,000 recent change signals. Up to 40 MB; exhaustion surfaces an error instead of silently deleting history.
+- `.cache/live-listings.json`: canonical validated live observations, merged without rewriting fixture/seed files. **128 MB** default (`PROPERTY_LIVE_STORE_MAX_BYTES`), ceiling 128 MB.
+- `.cache/source-observations.json`: source runs, latest snapshots, up to 20 changed snapshots per record and 2,000 recent change signals. **64 MB** default (`PROPERTY_OBSERVATIONS_MAX_BYTES`), ceiling 128 MB; exhaustion surfaces an error instead of silently deleting history, and every consumer then reports `historyUnavailable` rather than a confident negative finding.
+  - This was 40 MB until the store sat at 39.7 MB against it and every route reading history began failing together. Raised deliberately; the ceiling is a fail-closed guard, not a quota. **Check the file size rather than transcribing it here** - it grows with every collection run, and how close it is to the ceiling is the operational fact that matters, not its value on any given day.
 - `.cache/source-intake.json`: review evidence, up to 2,000 packets / 20 MB. Each packet is bounded. Exhaustion surfaces an error and requires an operator archive/export policy.
 - Writes use exclusive locks and temporary-file rename. Do not remove an active lock. Mount these stores on a persistent volume for container operation. This file-backed implementation assumes a single shared writer host; use transactional database storage before scaling independent hosts.
 - Network collectors keep the existing six-hour scheduler by default (`SCRAPE_INTERVAL_HOURS`). Source-specific catalog cadences are suggested check intervals displayed in Source Radar, not individually enforced scheduler schedules.
