@@ -33,7 +33,7 @@ if the seed count drifts.
 | Tree | `bcc9b6b` | `git rev-parse HEAD` |
 | Release gate | **9/9**, E2E 25/25, clean tree | `npm run release:gate` |
 | Test runners green | **26/26** | every `test:*` script |
-| Seed listings (`data.js`) | **2095** | `scripts/gen-context.js` |
+| Seed listings (`data.js`) | **2090** | `scripts/gen-context.js` |
 | Source catalog entries | **163** | `server/sources/catalog.js` |
 | Dispatched API paths | **41** | `server/server.js` |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
