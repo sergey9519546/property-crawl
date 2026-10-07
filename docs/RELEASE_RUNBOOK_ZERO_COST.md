@@ -67,6 +67,54 @@ node node_modules/next/dist/bin/next start -p 3001
 Treat "the UI shows the new labels but no values" as this until proven otherwise.
 It is not a data problem and not a hydration failure.
 
+### The UI suite rebuilds only when its bundle is missing
+
+`test/run-ui-suite.js` serves a production build out of `.next-verify`. It used
+to rebuild only when `.next-verify/BUILD_ID` was absent, so a bundle from any
+earlier run was reused forever and **every UI change made after that first
+build was invisible to the suite**. It now also rebuilds when the newest mtime
+under `src/` is newer than the build.
+
+The failure this causes is nasty, because nothing looks wrong. The suite
+passes, and it passes honestly - it is reporting on the previous bundle. A UI
+fix that changes what the suite observes comes back "still failing", which
+reads exactly like a fix that did not work.
+
+Symptom worth knowing: **a change to `src/` appears to have no effect on the UI
+suite at all.** Before writing a second fix, delete `.next-verify` and re-run.
+
+```powershell
+rm -- '.next-verify'
+node test/run-ui-suite.js
+```
+
+### Suites 11 and 31 are load-sensitive; isolate before believing a red
+
+Both have failed under full-verifier load and passed standalone against the
+same tree:
+
+- **Suite 11 (Playwright UI browser suite)** failed three times, each time on a
+  *different* map test -- coincident markers, the storyteller map, camera
+  controls. The shared cause was the 5s page default while the machine was
+  loaded by the ten suites before it; it is now 15s, and the suite has been
+  green repeatedly since.
+- **Suite 31 (the catch-all `node --test` over ~120 files)** has failed once.
+  The failing test was never identified, because it does not reproduce
+  standalone.
+
+So a red in either suite is not yet evidence of a regression:
+
+```powershell
+# isolate it
+node test/run-ui-suite.js                  # suite 11
+node scripts/verify-test-coverage.js       # suite 31
+```
+
+Stop the API on `:3000` and Next on `:3001` first. Both hold the whole
+inventory and a second copy of the bundle in memory, and leaving them up is
+what produces `FATAL ERROR: Zone Allocation failed - process out of memory` and
+three failures that pass in isolation.
+
 ## Deploy options ranked ($0)
 
 | Rank | Host | Why | Config |
