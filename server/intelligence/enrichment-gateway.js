@@ -32,6 +32,7 @@
 //     enrichment adapters themselves enforce that contract.
 
 const { applyCrossSourceBakeOff } = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const courtlistener = require('../scrapers/courtlistener');
 const flDor = require('../scrapers/fl-dor-cadastral');
 const caController = require('../scrapers/ca-controller-tax-sale');
@@ -141,10 +142,13 @@ function confidenceBand(confidence) {
   return 'unknown';
 }
 
+// A parcelKey lookup has to consider every listing: a duplicate notice can
+// sit anywhere in the store, not just the first 100,000. pageSize keeps this
+// to a single round trip today while still reading to the end if the store
+// ever exceeds it.
 async function loadListingsForParcelKey(parcelKey, database) {
-  const inventory = await database.getListings({ limit: 100000 });
-  const all = Array.isArray(inventory?.listings) ? inventory.listings : [];
-  return all.filter((listing) => listing && listing.parcelKey === parcelKey);
+  const { pool } = await scanAllListings(database, {}, { pageSize: 100000 });
+  return pool.filter((listing) => listing && listing.parcelKey === parcelKey);
 }
 
 function buildView(parcelKey, listings) {

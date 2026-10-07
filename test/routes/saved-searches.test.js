@@ -637,3 +637,88 @@ test('alert matches with identical timestamps still paginate deterministically',
   assert.equal(new Set(seen).size, 4, 'no match may be repeated when timestamps tie');
   assert.deepEqual(seen, [...seen].sort().reverse(), 'ties must resolve by descending id, matching the SQL');
 });
+
+// --- whole-store coverage ------------------------------------------------
+//
+// A saved search is a standing claim that the user wants to hear about every
+// matching listing. Running it against `getListings({ limit: 1000 })` meant the
+// alert silently covered ~10% of a 9,831-row store -- and published
+// `scanned: 1000`, which reads as the size of the search rather than the size
+// of the slice it happened to look at.
+//
+// The listing that matters below sits at row 1,400. Nothing about the store
+// size makes it special; that is the point.
+
+function pagedDb(overrides = {}) {
+  const rows = Array.from({ length: 2500 }, (_, i) => ({
+    id: `L-${String(i).padStart(5, '0')}`,
+    state: 'TX',
+    source: 'treasury',
+    openingBid: 1000,
+    dealScore: 50,
+    // One match, deliberately far past the old 1,000-row cap.
+    ...(i === 1400 ? { id: 'L-MATCH', state: 'TX', source: 'treasury', dealScore: 91 } : {})
+  }));
+  return {
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      const lim = Number(filters.limit) || 0;
+      return { total: rows.length, listings: rows.slice(off, off + lim) };
+    },
+    ...overrides,
+  };
+}
+
+test('run: finds a match that sits past the first 1,000 rows', async () => {
+  const handler = createSavedSearchesHandler({
+    database: pagedDb({
+      async getSavedSearchById() {
+        return { id: 'S1', userId: 'operator', label: 'tx', filters: { states: ['TX'], minScore: 90 } };
+      },
+      async recordAlertMatches(userId, searchId, ids) {
+        return ids.map((listingId) => ({ listingId }));
+      },
+    }),
+  }).handleSavedSearches;
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/saved-searches/S1/run'),
+    res,
+    new URL('http://localhost/api/saved-searches/S1/run')
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.newMatches, 1, 'the only qualifying listing is at row 1,400');
+  assert.equal(res.body.scanned, 2500, 'the whole store was searched, not a 1,000-row slice');
+  assert.equal(res.body.truncated, false);
+});
+
+test('run: says so when the search could not cover the whole store', async () => {
+  const capped = Array.from({ length: 1000 }, (_, i) => ({
+    id: `L-${i}`, state: 'TX', source: 'treasury', dealScore: 50
+  }));
+  const handler = createSavedSearchesHandler({
+    database: {
+      async getListings(filters = {}) {
+        const off = Number(filters.offset) || 0;
+        return { total: 9831, listings: capped.slice(off, off + 1000) };
+      },
+      async getSavedSearchById() {
+        return { id: 'S1', userId: 'operator', label: 'tx', filters: { states: ['TX'] } };
+      },
+      async recordAlertMatches() { return []; },
+    },
+  }).handleSavedSearches;
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/saved-searches/S1/run'),
+    res,
+    new URL('http://localhost/api/saved-searches/S1/run')
+  );
+
+  assert.equal(res.body.scanned, 1000);
+  assert.equal(res.body.availableTotal, 9831);
+  assert.equal(res.body.truncated, true,
+    'an alert that only covered a slice must not read as a complete search');
+});
+

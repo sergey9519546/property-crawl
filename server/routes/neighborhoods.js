@@ -14,6 +14,7 @@
 //   limit       — cap on rows returned by the list endpoint (default 100)
 
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const { computeNeighborhoodStats, getNeighborhoodStats } = require('../intelligence/neighborhood-stats');
 
 function boundedInt(raw, fallback, min, max) {
@@ -22,50 +23,6 @@ function boundedInt(raw, fallback, min, max) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
-}
-
-// Reads the whole store, in pages, and reports how much it read.
-//
-// This was `getListings({ limit: 1000 })`, once, and said nothing about it --
-// the identical bug the auction calendar had. Every count below (median
-// opening bid, the propType tally, the per-source tallies) is a statistic over
-// the pool, so a 1,000-row slice is not a neighborhood profile, it is an
-// anecdote with a number attached. Fixed here rather than in a shared helper
-// because each route decides its own scan budget; the invariant both now keep
-// is `truncated` is true whenever `scanned < availableTotal`.
-//
-// `sort: 'date'` makes offset paging safe: every Postgres sort in db/client.js
-// ends in `id ASC`, so the order is total and no row can be skipped or repeated
-// across page boundaries.
-const SCAN_PAGE_SIZE = 1000;
-const SCAN_MAX_ROWS = 200_000;
-
-async function loadPool(database = db, filters = {}) {
-  const rows = [];
-  let offset = 0;
-  let availableTotal = null;
-
-  for (;;) {
-    const page = await database.getListings({
-      limit: SCAN_PAGE_SIZE,
-      offset,
-      sort: 'date',
-      ...filters
-    });
-    const batch = Array.isArray(page?.listings) ? page.listings : [];
-    const reported = Number(page?.total);
-    if (Number.isFinite(reported)) availableTotal = reported;
-
-    rows.push(...batch);
-    offset += batch.length;
-
-    if (batch.length === 0) break;
-    if (batch.length < SCAN_PAGE_SIZE) break;
-    if (availableTotal !== null && rows.length >= availableTotal) break;
-    if (rows.length >= SCAN_MAX_ROWS) break;
-  }
-
-  return { pool: rows, availableTotal, scanned: rows.length };
 }
 
 function parseKey(remaining) {
@@ -125,7 +82,7 @@ function createNeighborhoodsHandler(dependencies = {}) {
 
     const filters = {};
     if (stateFilter) filters.state = stateFilter;
-    const { pool, availableTotal, scanned } = await loadPool(database, filters);
+    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, filters);
 
     if (!remaining) {
       const stats = computeNeighborhoodStats(pool, { maxAgeDays, nowMs: now() });
@@ -141,7 +98,7 @@ function createNeighborhoodsHandler(dependencies = {}) {
         // listings read, so neither figure alone tells you the coverage.
         scanned,
         availableTotal,
-        truncated: availableTotal === null ? false : scanned < availableTotal,
+        truncated,
         neighborhoods: buckets
       });
     }
@@ -162,7 +119,7 @@ function createNeighborhoodsHandler(dependencies = {}) {
       // was read, and the pool is only the whole store if truncated is false.
       scanned,
       availableTotal,
-      truncated: availableTotal === null ? false : scanned < availableTotal,
+      truncated,
       neighborhood: serializeBucket(bucket)
     });
   };

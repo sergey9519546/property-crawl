@@ -23,13 +23,21 @@ const {
   summarizeReviews,
 } = require('../intelligence/document-review');
 const { createDocumentReviewStore } = require('../intelligence/document-review-store');
+const { scanAllListings } = require('../db/listings-scan');
 const { resolveOperatorToken } = require('../security/operator-token');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 
 const MAX_DOCUMENT_ID_LENGTH = 200;
 const MAX_LISTING_ID_LENGTH = 200;
 const MAX_BODY_BYTES = 32 * 1024;
-const HYDRATION_LISTING_LIMIT = 500;
+// Seeds the review queue from the store's listings, newest sale date first.
+//
+// This read the first 500 rows of an arbitrarily-ordered store and called it
+// hydration. Against 9,831 listings the queue was seeded from ~5% of the
+// inventory and said nothing, so documents belonging to the other 9,331
+// listings were simply never queued. HYDRATION_TOTAL_LIMIT already bounds the
+// work; bounding the input as well only guaranteed which documents were the
+// ones that got reviewed.
 const HYDRATION_PER_LISTING_LIMIT = 20;
 const HYDRATION_TOTAL_LIMIT = 200;
 
@@ -196,8 +204,10 @@ async function hydratePendingCandidates(database) {
   if (!database || typeof database.getListings !== 'function') return [];
   let listings = [];
   try {
-    const result = await database.getListings({ limit: HYDRATION_LISTING_LIMIT });
-    listings = Array.isArray(result?.listings) ? result.listings : [];
+    // sort:'date' walks newest first, so HYDRATION_TOTAL_LIMIT takes the most
+    // recent listings rather than whichever ones happened to sort first.
+    const { pool } = await scanAllListings(database, {}, { pageSize: 1000, sort: 'date' });
+    listings = pool;
   } catch {
     return [];
   }

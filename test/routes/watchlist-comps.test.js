@@ -134,3 +134,50 @@ test('loadTargetAndPool returns 404-shaped error when listing is missing', async
   const loaded = await loadTargetAndPool('NOPE', stubDb(null, []));
   assert.equal(loaded.error.status, 404);
 });
+// --- whole-store coverage ------------------------------------------------
+//
+// Comps are picked from the pool by proximity and similarity, so a fixed-size
+// slice does not just under-report -- it changes which listings can be
+// returned. The closest comparable property in the fixture sits at row 1,400,
+// well past the old `getListings({ limit: 1000 })`, and was invisible however
+// near it was.
+
+function pagedStubDb(target, pool, pageSize = 1000) {
+  return {
+    async getListingById(id) {
+      return target && target.id === id ? target : null;
+    },
+    async getListings(filters = {}) {
+      const off = Number(filters.offset) || 0;
+      const lim = Number(filters.limit) || 0;
+      return { total: pool.length, listings: pool.slice(off, off + lim) };
+    }
+  };
+}
+
+test('comps: finds the nearest comparable that sits past the first 1,000 rows', async () => {
+  const near = { ...TARGET, id: 'NEAR-1', lat: 27.4501, lng: -98.8801 };
+  const far = { ...TARGET, id: 'FAR-1', lat: 28.50, lng: -99.50 };
+  // The good comp is deliberately last in the store.
+  const pool = Array.from({ length: 1400 }, (_, i) => ({
+    ...far, id: `NOISE-${i}`, lat: 28.50, lng: -99.50
+  })).concat([near]);
+
+  const handler = createWatchlistCompsHandler({
+    database: pagedStubDb(TARGET, pool),
+    now: () => Date.parse('2026-09-16T12:00:00.000Z')
+  });
+  const res = makeRes();
+  await handler(
+    makeReq('GET', '/api/watchlist/TARGET-1/comps'),
+    res,
+    new URL('http://localhost/api/watchlist/TARGET-1/comps')
+  );
+
+  assert.equal(res.statusCode, 200);
+  const ids = res.body.comps.map((c) => c.listing.id);
+  assert.ok(ids.includes('NEAR-1'),
+    `the nearest comp was dropped; got ${JSON.stringify(ids.slice(0, 5))}`);
+  assert.equal(ids[0], 'NEAR-1', 'and it ranks first, because it is the nearest');
+  assert.ok(res.body.comps[0].distanceKm < 1, 'at ~14 metres from the target');
+});

@@ -13,32 +13,15 @@
 //   sampleSize  — listings per week to surface in `sample` (1..10, default 3)
 
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const { buildAuctionCalendar } = require('../intelligence/auction-calendar');
 
-// How much of the store the calendar reads.
-//
-// This used to be `getListings({ limit: 1000 })`, once. Against the real store
-// that is ~10% of the inventory, and nothing in the response said so: the
-// `dropped` counters describe the rows that were read, not the rows that
-// exist, so a reader saw "noDate: 866" as a fact about the inventory when it
-// was a fact about page 1. Measured on the 9,831-row store, the endpoint
-// reported 28 upcoming auctions against 3,417 actually in the window -- a 122x
-// understatement. (It also mislabelled 866 rows as undated; only 2,270 of the
-// 9,831 really have no sale date.)
-//
-// Read in pages to the end instead, and publish how much was read so the
-// numbers can never be silently a slice again.
-//
-// Measured cost of the correctness: ~3.2s for a 60-day window on the
-// 9,831-row store, against ~1.3s for the old single 1,000-row page. No page
-// calls this yet (getAuctionCalendar in src/lib/intelligence-client.ts is
-// exported but unused), so the price is not currently user-visible. If it ever
-// is, cache the computed calendar for a short TTL and publish its age rather
-// than reintroducing a row cap.
-const SCAN_PAGE_SIZE = 1000;
-// Backstop against a pathological store. If this ever bites, `truncated` goes
-// true and the payload admits it.
-const SCAN_MAX_ROWS = 200_000;
+// Measured cost of reading the whole store: ~3.2s for a 60-day window on the
+// 9,831-row store, against ~1.3s for the single 1,000-row page this replaced.
+// No page calls this yet (getAuctionCalendar in src/lib/intelligence-client.ts
+// is exported but unused), so the price is not currently user-visible. If it
+// ever is, cache the computed calendar for a short TTL and publish its age --
+// do not reintroduce a row cap.
 
 function boundedInt(raw, fallback, min, max) {
   if (raw === null || raw === undefined || raw === '') return fallback;
@@ -46,39 +29,6 @@ function boundedInt(raw, fallback, min, max) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return fallback;
   if (n < min || n > max) return fallback;
   return n;
-}
-
-// Returns the whole pool plus what the backend said the pool's size was.
-//
-// `sort: 'date'` is not cosmetic. Offset paging is only safe when the sort is
-// a total order; every Postgres sort in db/client.js ends in `id ASC`, so any
-// of them qualifies, and 'date' is the natural order for a calendar.
-async function loadPool(database = db, filters = {}) {
-  const rows = [];
-  let offset = 0;
-  let availableTotal = null;
-
-  for (;;) {
-    const page = await database.getListings({
-      limit: SCAN_PAGE_SIZE,
-      offset,
-      sort: 'date',
-      ...filters
-    });
-    const batch = Array.isArray(page?.listings) ? page.listings : [];
-    const reported = Number(page?.total);
-    if (Number.isFinite(reported)) availableTotal = reported;
-
-    rows.push(...batch);
-    offset += batch.length;
-
-    if (batch.length === 0) break;
-    if (batch.length < SCAN_PAGE_SIZE) break;       // short page: end of stream
-    if (availableTotal !== null && rows.length >= availableTotal) break;
-    if (rows.length >= SCAN_MAX_ROWS) break;        // disclosed by truncated
-  }
-
-  return { pool: rows, availableTotal, scanned: rows.length };
 }
 
 function parseStates(raw) {
@@ -112,7 +62,7 @@ function createAuctionCalendarHandler(dependencies = {}) {
       ? Number(url.searchParams.get('startMs'))
       : null;
 
-    const { pool, availableTotal, scanned } = await loadPool(database);
+    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database);
 
     const result = buildAuctionCalendar(pool, {
       windowDays,
@@ -135,7 +85,7 @@ function createAuctionCalendarHandler(dependencies = {}) {
       // which means we read to end-of-stream rather than to a known total.
       scanned,
       availableTotal,
-      truncated: availableTotal === null ? false : scanned < availableTotal,
+      truncated,
       dropped: {
         noDate: result.droppedNoDate,
         outsideWindow: result.droppedOutside,

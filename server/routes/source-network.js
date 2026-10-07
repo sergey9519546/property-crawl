@@ -1,4 +1,5 @@
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const scheduler = require('../scrapers/scheduler');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const { loadObservations, recordSourceRun } = require('../sources/observations');
@@ -33,7 +34,11 @@ function createSourceNetworkHandler(dependencies = {}) {
     const env = dependencies.env || process.env;
     try {
       if (req.method === 'GET' && url.pathname === '/api/source-network') {
-        const inventory = await database.getListings({ limit: 10000 });
+        // A cap of 10,000 against a 9,831-row store is correct today and silently
+        // wrong at 10,001. The store grows every collection cycle, so read to
+        // the end and report whether we got it all.
+        const scanned = await scanAllListings(database, {}, { pageSize: 10000 });
+        const inventory = scanned.pool;
         let packets = [], evidenceQueueError = false, historyUnavailable = false;
         const completeEvidenceSummaries = typeof intake.listEvidenceSummaries === 'function';
         let history;
@@ -44,10 +49,10 @@ function createSourceNetworkHandler(dependencies = {}) {
         try { history = observations(); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [] }; }
         const evidenceSummary = {};
         for (const packet of packets) { evidenceSummary[packet.sourceId] ||= { count: 0 }; evidenceSummary[packet.sourceId].count++; }
-        const network = buildSourceNetwork({ catalog: [...catalog, ...enrolledSources(packets, catalog)], adapters: collector.realScrapers, observations: history, listings: inventory.listings, evidenceCollectors: Object.keys(evidenceCollectors), evidenceSummary });
+        const network = buildSourceNetwork({ catalog: [...catalog, ...enrolledSources(packets, catalog)], adapters: collector.realScrapers, observations: history, listings: inventory, evidenceCollectors: Object.keys(evidenceCollectors), evidenceSummary });
         if (historyUnavailable) for (const source of network.sources) { if (source.automated) source.status = 'history_unavailable'; }
         const discoveryNetwork = await attachDiscoveryCoverage(network, database, env);
-        return res.json({ ...discoveryNetwork, inventoryTruncated: !database.pool && inventory.total > inventory.listings.length, evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200, evidenceQueueError, historyUnavailable, collectionRunning: collector.isRunning || evidenceJobs.size > 0 });
+        return res.json({ ...discoveryNetwork, inventoryTruncated: scanned.truncated, evidenceSummaryLimited: !completeEvidenceSummaries && packets.length === 200, evidenceQueueError, historyUnavailable, collectionRunning: collector.isRunning || evidenceJobs.size > 0 });
       }
       if (req.method === 'GET' && url.pathname === '/api/source-network/jobs') {
         if (!requireWorkspaceIdentity(req, res, env)) return;

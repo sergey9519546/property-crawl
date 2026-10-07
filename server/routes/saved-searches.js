@@ -19,6 +19,7 @@
 // Cursor: "<matchedAtISO>|<matchId>" — pipe only; underscore is invalid.
 
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 const { runAlertsForUser } = require('../intelligence/alerts-runner');
 
@@ -114,20 +115,24 @@ function unwrapAlertMatches(result) {
   return { matches, nextCursor };
 }
 
+// A saved search is a standing claim that the user wants to hear about every
+// listing matching it. Running it against a 1,000-row slice means the alert
+// silently covers ~10% of the inventory and reports `scanned: 1000`, which a
+// reader takes for the size of the search.
 async function runSearchAgainstPool(database, search) {
-  const inventory = await database.getListings({ limit: 1000 });
-  const pool = Array.isArray(inventory?.listings) ? inventory.listings : [];
+  const { pool, scanned, availableTotal, truncated } = await scanAllListings(database);
   const { matchListingAgainstSearch } = require('../intelligence/saved-search-alerts');
   const matchingIds = [];
   for (const listing of pool) {
     const verdict = matchListingAgainstSearch(listing, search);
     if (verdict.match) matchingIds.push(listing.id);
   }
+  const scope = { scanned, availableTotal, truncated };
   if (matchingIds.length === 0) {
-    return { newMatches: 0, scanned: pool.length };
+    return { newMatches: 0, ...scope };
   }
   const records = await database.recordAlertMatches(search.userId, search.id, matchingIds);
-  return { newMatches: records.length, scanned: pool.length };
+  return { newMatches: records.length, ...scope };
 }
 
 function createSavedSearchesHandler(dependencies = {}) {
@@ -185,7 +190,11 @@ function createSavedSearchesHandler(dependencies = {}) {
           searchId: id,
           label: search.label,
           newMatches: result.newMatches,
-          scanned: result.scanned
+          scanned: result.scanned,
+          // scanned alone reads as "this is how much there is". These say how
+          // much of it the search actually looked at.
+          availableTotal: result.availableTotal,
+          truncated: result.truncated
         });
       }
       if (action === undefined && method === 'PATCH') {

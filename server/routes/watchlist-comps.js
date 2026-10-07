@@ -14,6 +14,7 @@
 //   limit       — cap on returned comps (1..50, default 8)
 
 const db = require('../db/client');
+const { scanAllListings } = require('../db/listings-scan');
 const { findWatchlistComps } = require('../intelligence/watchlist-comps');
 
 function boundedInt(raw, fallback, min, max) {
@@ -32,11 +33,14 @@ function boundedFloat(raw, fallback, min, max) {
   return n;
 }
 
+// Comps are chosen from the pool by proximity and similarity, so a fixed-size
+// slice does not merely under-report -- it changes which listings can be
+// returned. A comparable property that happens to sit on row 1,400 of the
+// store was previously invisible no matter how close it was.
 async function loadTargetAndPool(listingId, database = db) {
   const target = await database.getListingById(listingId);
   if (!target) return { error: { status: 404, body: { error: 'listing_not_found', listingId } } };
-  const inventory = await database.getListings({ limit: 1000 });
-  const pool = Array.isArray(inventory?.listings) ? inventory.listings : [];
+  const { pool } = await scanAllListings(database);
   return { target, pool };
 }
 
