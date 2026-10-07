@@ -188,3 +188,84 @@ test('every filter pgWhere can express selects the same rows as matches()', asyn
   }
   assert.deepEqual(failures, [], `memory and Postgres disagree on:\n  ${failures.join('\n  ')}`);
 });
+
+// The facet-versus-filter sweep that caught the lifecycle drift, turned into a
+// standing test that runs against real SQL instead of being repeated by hand.
+//
+// Two bugs in this family shipped the same way: pgWhere was corrected to use a
+// derived expression (lifecycle_status falling back to status; auction_program
+// falling back to provenance) so it would agree with matches(), and the FACET
+// kept grouping by the bare column. /listings then advertised a count that
+// selecting it could not reproduce. Asserting the two string literals in the
+// module catches that specific edit; this catches the whole class, including
+// any future field, by asking the product its own question twice and comparing.
+//
+// It drives search(), so the SQL under test is the SQL the workbench runs.
+test('every facet bucket the workbench offers can be selected and reproduces its own count', async () => {
+  // Only the columns the facet and filter paths touch. listingSelect is set to
+  // `id` so the projection stays out of it; pgRevision needs updated_at and the
+  // default sort needs deal_score.
+  await pool.query(`DROP TABLE IF EXISTS listings`);
+  await pool.query(`CREATE TABLE listings (
+    id text PRIMARY KEY,
+    updated_at timestamptz DEFAULT now(),
+    deal_score int,
+    state text, county text, city text, address text,
+    source_key text, prop_type text, occupancy text,
+    auction_program text, lifecycle_status text, status text,
+    has_documents boolean, provenance jsonb,
+    sale_date date, opening_bid numeric, equity_spread numeric,
+    senior_lien_risk text, redemption_days int,
+    latitude float8, longitude float8
+  )`);
+
+  // Two rows that differ only where the derived fallbacks bite: one stores the
+  // value in its column, the other carries it in provenance / in `status`.
+  const seeded = [
+    { id: 'col-a', state: 'AZ', county: 'Maricopa', city: 'Phoenix', address: '1 Oak St', source_key: 'servicelink', prop_type: 'Condo', occupancy: 'Vacant', auction_program: 'TPS', lifecycle_status: 'Status: Active', status: 'ignored', has_documents: true, provenance: { origin: 'live', recordId: 'r-a' }, deal_score: 90, sale_date: '2026-11-10', opening_bid: 60000, equity_spread: 5000, senior_lien_risk: 'high', redemption_days: 0, latitude: 33.45, longitude: -112.07 },
+    { id: 'prov-b', state: 'AZ', county: 'Maricopa', city: 'Phoenix', address: '2 Elm St', source_key: 'hud', prop_type: 'Condo', occupancy: 'OCCUPIED', auction_program: null, lifecycle_status: '', status: 'Status: Active', has_documents: null, provenance: { origin: 'live', recordId: 'r-b', sourceFacts: { auctionProgram: 'HUD REO' } }, deal_score: 70, sale_date: '2026-11-12', opening_bid: 20000, equity_spread: 1000, senior_lien_risk: 'low', redemption_days: 12, latitude: 33.46, longitude: -112.08 },
+  ];
+  for (const row of seeded) {
+    const keys = Object.keys(row);
+    const placeholders = keys.map((_, i) => `$${i + 1}`);
+    await pool.query(
+      `INSERT INTO listings (${keys.join(',')}) VALUES (${placeholders.join(',')})`,
+      keys.map((k) => (k === 'provenance' ? JSON.stringify(row[k]) : row[k])),
+    );
+  }
+
+  const database = { isPg: true, pool, listingSelect: 'id' };
+  // Only the fields the facet allowlist actually serves. hasDocuments is a filter
+// with no facet, so it belongs to the matrix above and not to this sweep.
+const FIELDS = ['state', 'county', 'source', 'type', 'program', 'lifecycle', 'occupancy', 'freshness'];
+  const unfiltered = await query.search(database, query.queryFromUrl(new URL('http://localhost/api/listings')));
+
+  const failures = [];
+  for (const field of FIELDS) {
+    const withFacets = await query.search(
+      database,
+      query.queryFromUrl(new URL(`http://localhost/api/listings?facets=${field}&limit=100`)),
+    );
+    for (const facet of withFacets.facets[field] || []) {
+      let selected;
+      try {
+        selected = await query.search(
+          database,
+          query.queryFromUrl(new URL(`http://localhost/api/listings?${field}=${encodeURIComponent(facet.value)}&limit=100`)),
+        );
+      } catch (error) {
+        failures.push(`${field}="${facet.value}" advertised by the facet cannot be selected: ${error.message}`);
+        continue;
+      }
+      if (Number(selected.total) !== Number(facet.count)) {
+        failures.push(`${field}="${facet.value}" facet says ${facet.count}, selecting it returns ${selected.total}`);
+      }
+    }
+    // Every bucket must also be accounted for in the whole-store count.
+    const summed = (withFacets.facets[field] || []).reduce((total, facet) => total + Number(facet.count), 0);
+    if (summed !== Number(unfiltered.total)) {
+      failures.push(`${field} buckets sum to ${summed}, the store holds ${unfiltered.total}`);
+    }
+  }
+  assert.deepEqual(failures, [], `the workbench offers facet counts it cannot reproduce:\n  ${failures.join('\n  ')}`);
+});
