@@ -189,6 +189,10 @@ test('the readiness report surfaces the wedge without taking the API out of serv
   };
   const value = await discoveryReadiness({
     env: { DATABASE_URL: 'configured' },
+    // Same reason as the stub 40 lines below: readiness folds collector-local
+    // free disk space into `ready`, so without this the assertion measures the
+    // host's free bytes instead of the wedged-collector policy it exists to pin.
+    storageProbe: () => ({ ready: true, freeBytes: 10 * 1024 * 1024 * 1024, minimumFreeBytes: 1024 * 1024 * 1024, scope: 'collector_local_volume' }),
     databaseProbe: async () => ({
       postgis: true,
       tables: ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'],
