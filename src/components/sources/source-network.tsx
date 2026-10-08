@@ -141,6 +141,16 @@ type Network = {
   inventoryTruncated: boolean;
   evidenceQueueError: boolean;
   historyUnavailable: boolean;
+  /** Capacity of the observation store this page's change history reads from. Absent when it could not be measured. */
+  observationStore?: {
+    bytes: number;
+    capBytes: number;
+    headroomBytes: number;
+    usedFraction: number;
+    bytesPerDay: number | null;
+    estimatedDaysRemaining: number | null;
+    willExceedCeiling: boolean;
+  } | null;
   summary: {
     catalogSources: number;
     automatedCollectors: number;
@@ -1042,6 +1052,29 @@ export function SourceNetwork() {
               remain fully listed.
             </p>
           )}
+          {data?.observationStore?.estimatedDaysRemaining !== null &&
+            data?.observationStore !== null &&
+            data?.observationStore !== undefined && (
+              <p
+                className={`mb-4 text-sm ${
+                  data.observationStore.willExceedCeiling
+                    ? "bg-red-100 p-3 rounded-lg text-red-950"
+                    : data.observationStore.estimatedDaysRemaining <= 14
+                      ? "bg-amber-100 p-3 rounded-lg text-amber-950"
+                      : "text-slate-600"
+                }`}
+              >
+                Observation history is {Math.round(
+                  data.observationStore.usedFraction * 100,
+                )}
+                % of its {Math.round(
+                  data.observationStore.capBytes / (1024 * 1024),
+                )}MB store, about {data.observationStore.estimatedDaysRemaining}{" "}
+                days of room left at the current collection rate.
+                {data.observationStore.willExceedCeiling &&
+                  " Past the ceiling, change history stops loading and every source above falls back to History unavailable."}
+              </p>
+            )}
           {loading && !data ? (
             <p className="flex items-center gap-2 py-12">
               <Loader2 size={18} className="animate-spin" /> Loading source

@@ -148,7 +148,20 @@ async function attachDiscoveryCoverage(network, database, env = process.env) {
     }
     return [...perAdapter.values()].reduce((total, count) => total + count, 0);
   };
-  return { ...network, atlas, collectionHealth, storageMode: database.pool ? 'postgres' : 'demo',
+  // The store this page's own change history comes from has a hard ceiling and
+  // throws when it is reached, at which point every source below flips to
+  // history_unavailable. /api/health reports the numbers; an operator who
+  // needs to act on them is looking at this page, so they travel with it.
+  //
+  // A failure to read them must not take the page down with it -- the page is
+  // more useful before the capacity report than without it.
+  let observationStore = null;
+  try {
+    observationStore = require('./observations').publicObservationStoreCapacity();
+  } catch {
+    observationStore = null;
+  }
+  return { ...network, atlas, collectionHealth, observationStore, storageMode: database.pool ? 'postgres' : 'demo',
     summary: { ...network.summary, collected, needsAttention,
       observedRecords: sumByAdapter('observedRecords'),
       storedRecords: sumByAdapter('storedRecords'), atlasBacklog: atlas.total } };

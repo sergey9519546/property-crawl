@@ -12,6 +12,7 @@ const {
   statesFromEntry,
   buildCatalogStateCoverage,
   buildLiveStateSourceCoverage,
+  describeLiveStoreError,
   US_STATE_ABBRS
 } = require('../server/discovery/coverage-matrix');
 const { SOURCE_CATALOG } = require('../server/sources/catalog');
@@ -273,6 +274,67 @@ test('an absent live store is an honest zero, distinct from a failed read', (t) 
   assert.equal(result.readError, null, 'an absent store is not a read failure');
   assert.equal(result.totalRecords, 0);
   assert.deepEqual(result.byStateSource, {});
+});
+
+test('the coverage matrix does not publish the server store path', (t) => {
+  // storePath was useful while diagnosing the corrupt-store work and nothing
+  // consumes it: no component in src/ reads storePath, storeStatus or
+  // readError. What it does do is hand the OS username and the deployment
+  // layout to anyone who can reach /api/coverage, for no reader benefit.
+  const { write } = useStore(t);
+  write([liveRecord()]);
+  const matrix = summarize();
+  assert.equal('storePath' in matrix.liveByState, false,
+    'the store path is an internal detail, not part of the coverage report');
+  const serialized = JSON.stringify(matrix);
+  assert.ok(!/[A-Za-z]:\\\\/.test(serialized), 'no Windows path may appear in the coverage payload');
+  assert.ok(!/^"|(?<=[,"])(\/Users\/|\/home\/[a-z])/m.test(serialized),
+    'no absolute unix path may appear in the coverage payload');
+});
+
+test('a readError names the failure without naming the file', (t) => {
+  const { file } = useStore(t);
+  fs.writeFileSync(file, '{incomplete');
+  const result = buildLiveStateSourceCoverage();
+  assert.equal(result.storeStatus, 'unreadable');
+  assert.ok(result.readError, 'the failure must still be reported -- this is not about hiding it');
+  assert.ok(!result.readError.includes(file),
+    'readError carries the store path; it must describe the failure instead');
+  assert.ok(!/[A-Za-z]:\\\\/.test(result.readError), 'no Windows path may appear in readError');
+});
+
+test('a stat failure on the store does not leak the path through readError', () => {
+  // The malformed-JSON case above never reaches the interpolating branch: that
+  // error comes from JSON.parse, which has no path in it. The stat branch does,
+  // because Node puts the full path in every fs error message --
+  //   "EACCES: permission denied, stat 'C:\Users\<name>\...'"
+  //
+  // That branch is not reachable by pointing the store at a file used as a
+  // directory: on win32 statSync answers ENOENT for that, which is handled as
+  // an absent store, so the trick tests nothing here and would test something
+  // else on Linux. So the sanitiser is exercised directly with the error shape
+  // Node actually produces, rather than through a platform-dependent setup.
+  const secret = 'C:\\Users\\somebody\\deploy\\property-crawl\\.cache\\live-listings.json';
+  const eacces = Object.assign(
+    new Error(`EACCES: permission denied, stat '${secret}'`),
+    { code: 'EACCES', syscall: 'stat', path: secret, errno: -4048 },
+  );
+
+  const described = describeLiveStoreError(eacces);
+  assert.ok(described, 'a failure must still be described');
+  assert.ok(!described.includes(secret), 'the store path must not survive into readError');
+  assert.ok(!/[A-Za-z]:\\\\/.test(described), 'no Windows path may appear in readError');
+  assert.match(described, /EACCES/, 'naming the code keeps the diagnostic value');
+  assert.match(described, /stat/, 'naming the syscall keeps the diagnostic value');
+
+  // The fallbacks must not fall back to the message either.
+  const codeOnly = describeLiveStoreError(Object.assign(new Error(`nope: ${secret}`), { code: 'EPERM' }));
+  assert.ok(!codeOnly.includes(secret));
+  assert.match(codeOnly, /EPERM/);
+
+  const bare = describeLiveStoreError(new Error(`something went wrong at ${secret}`));
+  assert.ok(!bare.includes(secret), 'an error with no code must not fall back to error.message');
+  assert.ok(bare.length > 0, 'and it must still say something');
 });
 
 test('records outside the 51-state set are accounted for, not dropped silently', (t) => {

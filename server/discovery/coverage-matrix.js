@@ -99,6 +99,18 @@ function buildCatalogStateCoverage() {
   };
 }
 
+// Node's fs errors carry the full path in .message -- "EACCES: permission
+// denied, stat 'C:\...'" -- and this string is served by /api/coverage. The
+// failure is worth reporting; the OS username and deployment layout it drags
+// along are not. .code and .syscall carry the entire diagnostic on their own.
+function describeLiveStoreError(error) {
+  const code = error && error.code;
+  const syscall = error && error.syscall;
+  if (code && syscall) return `${code} while running ${syscall} on the live record store`;
+  if (code) return `${code} reading the live record store`;
+  return 'Could not read the live record store';
+}
+
 function readLiveStore() {
   const storePath = resolveLiveStorePath();
   let signature;
@@ -112,7 +124,7 @@ function readLiveStore() {
     // An absent store is an honest zero. Anything else is a read failure and
     // must be reported as one, never folded into "no live coverage".
     if (error.code === 'ENOENT') return { records: [], storePath, storeStatus: 'absent', readError: null };
-    return { records: [], storePath, storeStatus: 'unreadable', readError: `Could not inspect live record store: ${error.message}` };
+    return { records: [], storePath, storeStatus: 'unreadable', readError: `Could not inspect live record store: ${describeLiveStoreError(error)}` };
   }
   const key = `${storePath}|${signature}`;
   if (liveStoreCache && liveStoreCache.key === key) return liveStoreCache.result;
@@ -120,7 +132,7 @@ function readLiveStore() {
   try {
     result = { records: loadLiveRecords(storePath), storePath, storeStatus: 'read', readError: null };
   } catch (error) {
-    result = { records: [], storePath, storeStatus: 'unreadable', readError: error.message };
+    result = { records: [], storePath, storeStatus: 'unreadable', readError: describeLiveStoreError(error) };
   }
   liveStoreCache = { key, result };
   return result;
@@ -129,7 +141,7 @@ function readLiveStore() {
 function buildLiveStateSourceCoverage() {
   // Read the live record store - the canonical record of what we have actually
   // published. Running this module never touches the network.
-  const { records, storePath, storeStatus, readError } = readLiveStore();
+  const { records, storeStatus, readError } = readLiveStore();
   const byStateSource = {};
   const byStateTotal = {};
   // Records whose state is not one of the 51 codes are real published records.
@@ -162,11 +174,14 @@ function buildLiveStateSourceCoverage() {
     byStateTotal,
     totalRecords: records.length,
     countedRecords: records.length - excludedRecords,
-    storePath,
-    storeStatus,
+    // storePath is deliberately absent. It is useful while diagnosing the store on
+// disk, but this object is served by /api/coverage and nothing in src/ reads
+// the path -- it only hands over the OS username and the deployment layout.
+storeStatus,
     // null when the store was read or is genuinely absent; a message when the
     // store exists but could not be read. Consumers must not present a
-    // readError as zero coverage.
+    // readError as zero coverage. The message names the failure code, never the
+    // path, because Node's fs errors put the full path in error.message.
     readError,
     excludedRecords,
     excludedByState
@@ -202,5 +217,6 @@ module.exports = {
   statesFromEntry,
   buildCatalogStateCoverage,
   buildLiveStateSourceCoverage,
+  describeLiveStoreError,
   US_STATE_ABBRS
 };

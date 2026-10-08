@@ -302,8 +302,8 @@ async function handleRequest(req, res) {
         // pruning: what to drop stays a product decision.
         ...(() => {
           try {
-            const { observationStoreCapacity } = require('./sources/observations');
-            return { observationStore: observationStoreCapacity() };
+            const { publicObservationStoreCapacity } = require('./sources/observations');
+            return { observationStore: publicObservationStoreCapacity() };
           } catch {
             return {};
           }

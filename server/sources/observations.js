@@ -107,6 +107,18 @@ function resolvedPath(options = {}) {
   return options.filePath || process.env.PROPERTY_OBSERVATIONS_PATH || DEFAULT_PATH;
 }
 
+// The measured path belongs in a log line and in a test -- the number is only
+// meaningful next to the file it was read from. It does not belong on the wire:
+// this report is served to anything that can reach the API, and /sources is the
+// public page, so the absolute path hands over the OS username and the whole
+// deployment layout in exchange for nothing the reader of a runway number
+// needs. Strip it at the edge rather than at the measurement, so both call
+// sites cannot disagree about what gets published.
+function publicObservationStoreCapacity(options = {}) {
+  const { path: _measuredFile, ...capacity } = observationStoreCapacity(options);
+  return capacity;
+}
+
 function loadObservations(options = {}) {
   const filePath = resolvedPath(options);
   if (!fs.existsSync(filePath)) return { version: 1, runs: {}, records: {}, signals: [] };
@@ -244,5 +256,5 @@ function recordSourceRun(sourceId, run, options = {}) {
 
 module.exports = {
   DEFAULT_PATH, MAX_BYTES, compareSnapshots, loadObservations,
-  observationStoreCapacity, recordSourceRun, updateObservations,
+  observationStoreCapacity, publicObservationStoreCapacity, recordSourceRun, updateObservations,
 };
