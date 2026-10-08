@@ -40,6 +40,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { sourceDisplayText } from "@/lib/source-display";
+import { taxonomySummary } from "@/lib/source-taxonomy";
 import {
   formatSourceScope,
   formatSourceScopeSummary,
@@ -107,6 +108,8 @@ type Source = {
   notes: string;
   automated: boolean;
   status: string;
+  /** Catalog trust taxonomy. Distinct vocabulary from `status` -- see src/lib/source-taxonomy.ts. */
+  trustStatus?: string;
   observedRecords: number;
   observedStates: string[];
   latestObservation: string | null;
@@ -267,17 +270,10 @@ function taxonomyBadge(status: string | undefined) {
   return SOURCE_STATUSES[status] ?? null;
 }
 
-function taxonomySummary(sources: Source[]) {
-  let verified = 0, scopeLimited = 0, discoveryOnly = 0, blocked = 0;
-  for (const s of sources) {
-    const st = s.status;
-    if (st === "VERIFIED_OFFICIAL" || st === "VERIFIED_FIRST_PARTY") verified++;
-    else if (st === "SCOPE_LIMITED" || st === "LOCAL_ROUTE") scopeLimited++;
-    else if (st === "DISCOVERY_ONLY") discoveryOnly++;
-    else if (st === "INCONCLUSIVE_BLOCKED") blocked++;
-  }
-  return `${verified} verified · ${scopeLimited} scope-limited · ${discoveryOnly} discovery-only · ${blocked} blocked`;
-}
+// Counting the trust taxonomy lives in src/lib/source-taxonomy.ts so a test can
+// reach it. It used to live here reading `status`, which is the OPERATIONAL
+// state (collected / attention / stale / ...) and shares no values with the
+// taxonomy -- so all four buckets printed 0, permanently.
 /** Known per-county coverage presets keyed by catalog source id or adapterKey. */
 type CoverageDimension =
   | "assessor"
