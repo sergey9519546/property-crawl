@@ -52,4 +52,64 @@ function taxonomySummary(sources) {
   return `${verified} verified · ${scopeLimited} scope-limited · ${discoveryOnly} discovery-only · ${blocked} blocked`;
 }
 
-module.exports = { taxonomySummary };
+/** Per-source trust badge. Mirrors the SOURCE_STATUSES taxonomy in
+ * server/sources/catalog.js, and is keyed by the SAME vocabulary as
+ * taxonomySummary -- so it takes `trustStatus`.
+ *
+ * This map used to live in the component and be rendered from `source.status`,
+ * which meant SOURCE_STATUSES['collected'] was undefined for every source and
+ * the badge rendered zero times. Same defect as the summary above, one function
+ * over: trust was simply absent from the page.
+ */
+const SOURCE_STATUSES = {
+  VERIFIED_OFFICIAL: {
+    label: 'Verified official',
+    description: 'Government first-party publisher with a confirmed working collector.',
+    color: 'bg-emerald-100 text-emerald-800',
+  },
+  VERIFIED_FIRST_PARTY: {
+    label: 'Verified first-party',
+    description: 'Commercial first-party publisher with a confirmed working collector.',
+    color: 'bg-blue-100 text-blue-800',
+  },
+  SCOPE_LIMITED: {
+    label: 'Scope limited',
+    description: 'Works, but only for specific jurisdictions or a bounded program.',
+    color: 'bg-amber-100 text-amber-800',
+  },
+  LOCAL_ROUTE: {
+    label: 'Local route',
+    description: 'Requires per-jurisdiction enrollment and verification before use.',
+    color: 'bg-amber-100 text-amber-800',
+  },
+  DISCOVERY_ONLY: {
+    label: 'Discovery only',
+    description: 'Catalog entry for investigation; no live collector yet.',
+    color: 'bg-gray-100 text-gray-600',
+  },
+  INCONCLUSIVE_BLOCKED: {
+    label: 'Blocked',
+    description: 'Access denied by robots, CAPTCHA/Turnstile, or equivalent publisher control.',
+    color: 'bg-red-100 text-red-800',
+  },
+  RETIRED: {
+    label: 'Retired',
+    description: 'No longer functional; kept for provenance and migration only.',
+    color: 'bg-gray-100 text-gray-500',
+  },
+};
+
+/**
+ * Badge for one source's trust, or null when it has no recorded trust.
+ *
+ * An unknown or operational value yields null rather than a guess: showing no
+ * badge is honest, showing a wrong one is not.
+ *
+ * @param {string | undefined} trustStatus
+ */
+function taxonomyBadge(trustStatus) {
+  if (!trustStatus) return null;
+  return SOURCE_STATUSES[trustStatus] ?? null;
+}
+
+module.exports = { taxonomySummary, taxonomyBadge };

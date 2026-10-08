@@ -40,7 +40,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { sourceDisplayText } from "@/lib/source-display";
-import { taxonomySummary } from "@/lib/source-taxonomy";
+import { taxonomySummary, taxonomyBadge } from "@/lib/source-taxonomy";
 import {
   formatSourceScope,
   formatSourceScopeSummary,
@@ -226,54 +226,13 @@ const STATUS: Record<string, { label: string; color: string }> = {
   },
 };
 
-/** SOURCE_STATUSES taxonomy — mirrors server/sources/catalog.js. */
-const SOURCE_STATUSES: Record<string, { label: string; description: string; color: string }> = {
-  VERIFIED_OFFICIAL: {
-    label: "Verified official",
-    description: "Government first-party publisher with a confirmed working collector.",
-    color: "bg-emerald-100 text-emerald-800",
-  },
-  VERIFIED_FIRST_PARTY: {
-    label: "Verified first-party",
-    description: "Commercial first-party publisher with a confirmed working collector.",
-    color: "bg-blue-100 text-blue-800",
-  },
-  SCOPE_LIMITED: {
-    label: "Scope limited",
-    description: "Works, but only for specific jurisdictions or a bounded program.",
-    color: "bg-amber-100 text-amber-800",
-  },
-  LOCAL_ROUTE: {
-    label: "Local route",
-    description: "Requires per-jurisdiction enrollment and verification before use.",
-    color: "bg-amber-100 text-amber-800",
-  },
-  DISCOVERY_ONLY: {
-    label: "Discovery only",
-    description: "Catalog entry for investigation; no live collector yet.",
-    color: "bg-gray-100 text-gray-600",
-  },
-  INCONCLUSIVE_BLOCKED: {
-    label: "Blocked",
-    description: "Access denied by robots, CAPTCHA/Turnstile, or equivalent publisher control.",
-    color: "bg-red-100 text-red-800",
-  },
-  RETIRED: {
-    label: "Retired",
-    description: "No longer functional; kept for provenance and migration only.",
-    color: "bg-gray-100 text-gray-500",
-  },
-};
+// Both the trust summary and the per-source trust badge live in
+// src/lib/source-taxonomy.ts so a test can reach them. Each used to live here,
+// and each read `status` -- the OPERATIONAL state (collected / attention /
+// stale / ...), which shares no values with the catalog taxonomy. The summary
+// printed four permanent zeros; the badge resolved to null and never rendered
+// once, so the page showed no trust information at all.
 
-function taxonomyBadge(status: string | undefined) {
-  if (!status) return null;
-  return SOURCE_STATUSES[status] ?? null;
-}
-
-// Counting the trust taxonomy lives in src/lib/source-taxonomy.ts so a test can
-// reach it. It used to live here reading `status`, which is the OPERATIONAL
-// state (collected / attention / stale / ...) and shares no values with the
-// taxonomy -- so all four buckets printed 0, permanently.
 /** Known per-county coverage presets keyed by catalog source id or adapterKey. */
 type CoverageDimension =
   | "assessor"
@@ -1109,12 +1068,12 @@ export function SourceNetwork() {
                             >
                               {status.label}
                             </span>
-                            {taxonomyBadge(source.status) ? (
+                            {taxonomyBadge(source.trustStatus) ? (
                               <span
-                                title={taxonomyBadge(source.status)!.description}
-                                className={`rounded px-2 py-1 text-[10px] font-semibold ${taxonomyBadge(source.status)!.color}`}
+                                title={taxonomyBadge(source.trustStatus)!.description}
+                                className={`rounded px-2 py-1 text-[10px] font-semibold ${taxonomyBadge(source.trustStatus)!.color}`}
                               >
-                                {taxonomyBadge(source.status)!.label}
+                                {taxonomyBadge(source.trustStatus)!.label}
                               </span>
                             ) : null}
                           </div>

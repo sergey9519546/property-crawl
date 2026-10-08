@@ -82,3 +82,29 @@ test('the component calls the shared helper rather than counting inline', () => 
   assert.doesNotMatch(src, /function taxonomySummary/,
     'the inline copy must be gone, not merely unused');
 });
+
+test('the per-source trust badge is looked up by trustStatus, not status', () => {
+  // The second half of the same defect, still live when the summary was fixed.
+  // SOURCE_STATUSES is keyed by the CATALOG taxonomy, and the badge was rendered
+  // from source.status -- the operational field -- so
+  // `SOURCE_STATUSES['collected'] ?? null` was null for every source and the
+  // badge never appeared once. The page showed no trust information at all.
+  const src = fs.readFileSync(COMPONENT, 'utf8');
+  assert.doesNotMatch(src, /taxonomyBadge\(source\.status\)/,
+    'the badge must not be looked up by the operational status');
+  assert.match(src, /taxonomyBadge\(source\.trustStatus\)/,
+    'the badge must be looked up by trustStatus, which is what SOURCE_STATUSES is keyed by');
+});
+
+test('an unknown or absent trust status yields no badge rather than a wrong one', () => {
+  const { taxonomyBadge } = require(path.join(ROOT, 'src', 'lib', 'source-taxonomy.js'));
+  assert.equal(taxonomyBadge('VERIFIED_OFFICIAL').label, 'Verified official');
+  assert.equal(taxonomyBadge('INCONCLUSIVE_BLOCKED').label, 'Blocked');
+  // Operational values must resolve to nothing, not to a misleading badge.
+  for (const operational of ['collected', 'attention', 'stale', 'import_available', 'empty']) {
+    assert.equal(taxonomyBadge(operational), null,
+      `${operational} is an operational state and has no trust badge`);
+  }
+  assert.equal(taxonomyBadge(undefined), null);
+  assert.equal(taxonomyBadge('SOMETHING_NEW'), null, 'unknown values degrade to no badge');
+});
