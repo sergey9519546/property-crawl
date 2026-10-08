@@ -119,7 +119,48 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertIsNotNone(shown, f"could not read a record count from {header.inner_text()!r}")
         return int(shown.group(1).replace(",", ""))
 
-    def rendered_listing(self):
+    def _record_for(self, listing_id):
+        """Resolve a rendered card's listing id to its record, asking the API when
+        the grid ranked in something outside setUp's 1000-row sample."""
+        record = next((listing for listing in self.listings if listing["id"] == listing_id), None)
+        if record is None:
+            response = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
+            if response.ok:
+                payload = response.json()
+                record = payload.get("listing", payload)
+        return record
+
+    def rendered_card_index_where(self, predicate, limit=25):
+        """Index of the first RENDERED card whose listing satisfies `predicate`.
+
+        Why this exists: 1,990 of the 2,091 seeded records carry no county -- all
+        of them treasury -- and DocketAgent disables "Check official evidence"
+        unless address, county and state are all present. Tests that drove that
+        control used to take whichever card the grid happened to rank first. When
+        that card had no county, the control was CORRECTLY disabled and Playwright
+        timed out after 15s, which reads like a product defect rather than like
+        "this particular record has no county".
+
+        The same assumption produced a second failure: Locator.fill(None), where
+        Playwright's locals_to_params drops None values, so the call degraded to
+        Frame.fill(selector) and raised a TypeError from inside the library.
+
+        Picking a card that actually carries the field keeps both tests testing
+        what they claim, instead of asserting around missing data.
+        """
+        total = min(self.page.get_by_test_id("listing-detail-link").count(), limit)
+        for index in range(total):
+            link = self.page.get_by_test_id("listing-detail-link").nth(index)
+            listing_id = (link.get_attribute("href") or "").rstrip("/").split("/")[-1]
+            record = self._record_for(listing_id)
+            if record and predicate(record):
+                return index
+        self.skipTest(f"no rendered card among the first {total} matched")
+
+    def has_county(self, record):
+        return bool(str(record.get("county") or "").strip())
+
+    def rendered_listing(self, require_county=False):
         """A listing the feed actually rendered, not merely one the API returned.
 
         setUp samples /api/listings?limit=1000, but the grid renders ONE page and
@@ -130,20 +171,19 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         has to start from a record the page is actually showing - otherwise it
         waits for a control that can never appear and fails for a reason that
         reads like a product defect.
+
+        require_county=True picks the first rendered card that carries a county,
+        for the tests whose subject requires one. See rendered_card_index_where.
         """
-        link = self.page.get_by_test_id("listing-detail-link").first
+        index = 0
+        if require_county:
+            index = self.rendered_card_index_where(self.has_county)
+        link = self.page.get_by_test_id("listing-detail-link").nth(index)
         expect(link).to_be_visible(timeout=30_000)
         listing_id = (link.get_attribute("href") or "").rstrip("/").split("/")[-1]
         label = link.get_attribute("aria-label") or ""
         address = label[len("Open listing page for "):] if label.startswith("Open listing page for ") else label
-        record = next((listing for listing in self.listings if listing["id"] == listing_id), None)
-        if record is None:
-            # The grid ranked in a record outside setUp's 1000-row sample. Ask
-            # for that one directly rather than reading None fields below.
-            response = self.page.request.get(f"{BASE_URL}/api/listings/{listing_id}")
-            if response.ok:
-                payload = response.json()
-                record = payload.get("listing", payload)
+        record = self._record_for(listing_id)
         if not record:
             self.fail(f"rendered listing {listing_id} could not be resolved for the test")
         return {
@@ -741,7 +781,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_hero_can_launch_a_county_market(self):
         self.wait_for_live_feed()
-        market = self.rendered_listing()
+        market = self.rendered_listing(require_county=True)
         county = market["county"]
         state = market["state"]
         unfiltered = self.live_count
@@ -1733,7 +1773,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def test_docket_agent_runs_verification_in_property_drawer(self):
         self.wait_for_live_feed()
-        self.page.get_by_role("button", name="Underwrite Deal").first.click()
+        # Drive the card that actually carries a county. The control is disabled
+        # without one -- correctly -- so clicking the top-ranked card timed out
+        # on a 15s actionability timeout that read like a broken drawer.
+        index = self.rendered_card_index_where(self.has_county)
+        self.page.get_by_role("button", name="Underwrite Deal").nth(index).click()
         dialog = self.page.get_by_role("dialog").first
         dialog.wait_for(state="visible")
         self.assertTrue(self.page.get_by_text("Court-record evidence check").is_visible())
