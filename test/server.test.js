@@ -42,6 +42,13 @@ function request(path, options = {}) {
       });
     });
     req.on('error', reject);
+    // A route that is wired wrong can accept the request and then never write a
+    // response, which is indistinguishable from "slow" from the client's side.
+    // Without a bound here that hangs the whole suite instead of failing one
+    // test, so the failure never arrives at all.
+    req.setTimeout(15000, () => {
+      req.destroy(new Error(`request timed out after 15s: ${path}`));
+    });
     if (options.body) {
       req.write(typeof options.body === 'object' ? JSON.stringify(options.body) : options.body);
     }
@@ -98,6 +105,56 @@ async function run() {
       const res = await request(path);
       assert.strictEqual(res.status, 404, path);
     }
+  });
+
+  await test('GET /api/enrichment lists the registered adapters', async () => {
+    const res = await request('/api/enrichment');
+    assert.strictEqual(res.status, 200);
+    assert.ok(Array.isArray(res.body.adapters),
+      'the adapter list is documented as a no-auth, no-side-effect read');
+    assert.ok(res.body.adapters.length > 0, 'no adapters registered');
+    for (const adapter of res.body.adapters) {
+      assert.ok(typeof adapter.source === 'string', 'each adapter must name its source');
+    }
+  });
+
+  await test('GET /api/enrichment/:parcelKey answers 404 for an unknown parcel', async () => {
+    const res = await request('/api/enrichment/NO-SUCH-PARCEL-KEY-0001');
+    assert.strictEqual(res.status, 404,
+      'an unknown parcel is a 404, not a hang and not a 200 with no view');
+  });
+
+  await test('every documented API route answers instead of hanging', async () => {
+    // The enrichment route shipped wired as a factory that was never called, so
+    // the request was accepted and nothing was ever written back. Every test
+    // above still passed, because none of them asked that route anything.
+    //
+    // A wrong-wired route does not throw -- it holds the socket open. So the
+    // only thing that catches it is actually asking each route and requiring a
+    // reply. Auth failures count: a 401 is a response, a timeout is not.
+    const routes = [
+      '/api/health', '/api/sources', '/api/listings?limit=1', '/api/coverage',
+      '/api/enrichment', '/api/enrichment/NO-SUCH-PARCEL-KEY-0001',
+      '/api/neighborhoods?limit=1', '/api/auction-calendar', '/api/source-network',
+      '/api/hunts', '/api/saved-searches', '/api/alerts', '/api/watchlist/x/comps',
+      '/api/parse', '/api/enrich', '/api/export?format=json', '/api/scrapers',
+      '/api/portfolio/dashboard', '/api/price-drops', '/api/verify-docket',
+      '/api/parcel-boundary', '/api/property-image/providers', '/api/property-intelligence',
+      '/api/property-signals', '/api/document-review', '/api/workspace',
+    ];
+    const stalled = [];
+    for (const path of routes) {
+      try {
+        const res = await request(path);
+        assert.ok(res.status >= 200 && res.status < 600,
+          `${path} returned an impossible status`);
+      } catch (err) {
+        stalled.push(`${path} (${err.message})`);
+      }
+    }
+    assert.deepEqual(stalled, [],
+      'these routes never answered -- a route wired as an un-called factory '
+        + 'accepts the request and writes nothing, which looks exactly like slowness');
   });
 
   await test('GET /api/sources returns verified sources list', async () => {
