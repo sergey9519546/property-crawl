@@ -188,10 +188,14 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.fail(f"{message} (waited {timeout_ms}ms)")
 
     def wait_for_map_attr(self, attr, predicate, message, timeout_ms=10_000, page=None):
-        """Wait until the market map's data-<attr> satisfies `predicate`."""
+        """Wait until the market map's data-<attr> or data-map-<attr> satisfies `predicate`."""
+        attr_name = attr if attr.startswith("map-") else f"map-{attr}"
 
         def check(target):
-            raw = target.get_by_test_id("market-map").get_attribute(f"data-{attr}")
+            el = target.get_by_test_id("market-map")
+            raw = el.get_attribute(f"data-{attr_name}")
+            if raw is None:
+                raw = el.get_attribute(f"data-{attr}")
             if raw is None:
                 return None
             return raw if predicate(raw) else None
@@ -1756,13 +1760,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # reports inventory honestly rather than just rendering cards.
         heading = self.page.get_by_role("heading", name="Find properties")
         expect(heading).to_be_visible(timeout=20_000)
-        expect(self.page.get_by_test_id("inventory-honesty")).to_be_visible(timeout=20_000)
-        expect(self.page.get_by_test_id("inventory-page-count")).to_be_visible(timeout=20_000)
+        expect(self.page.locator("main").get_by_test_id("inventory-honesty")).to_be_visible(timeout=20_000)
+        expect(self.page.locator("main").get_by_test_id("inventory-page-count")).to_be_visible(timeout=20_000)
         # The Deal Grid button belongs to the home terminal, not this workbench.
         # What /listings guarantees is that it loaded inventory and says so;
         # inventory-page-count carries the number.
         # It starts as "Updating results..." - poll rather than assert now.
-        page_count = self.page.get_by_test_id("inventory-page-count")
+        page_count = self.page.locator("main").get_by_test_id("inventory-page-count")
         expect(page_count).to_contain_text("on this page", timeout=30_000)
         # It reads "48 on this page - 2,095 match this search": grouped digits,
         # and the page count is deliberately not the inventory total.
