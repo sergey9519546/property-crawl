@@ -17,7 +17,15 @@ const BOT_CHALLENGE_SIGNATURES = [
   'please verify you are a human',
   'verify you are human',
   'security check',
-  'captcha'
+  'captcha',
+  'datadome',
+  'incapsula',
+  'imperva',
+  'perimeterx',
+  'px-captcha',
+  'aws waf',
+  'are you a human',
+  'hcaptcha'
 ];
 
 function findBotChallengeSignature(body = '') {

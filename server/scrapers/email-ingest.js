@@ -36,6 +36,12 @@ const DEFAULT_KEYWORDS = [
   'mortgage foreclosure',
   'notice of default',
   'lis pendens',
+  'tax deed sale',
+  'master commissioner sale',
+  'judicial sale',
+  'notice of sale',
+  'reo property',
+  'treasury seizure'
 ];
 
 const DEFAULT_STORE_PATH = path.resolve(process.cwd(), '.cache', 'email-notices.json');
