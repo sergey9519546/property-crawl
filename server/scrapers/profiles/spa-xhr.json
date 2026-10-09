@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "description": "Scrapling SPA Profile & XHR Capture Configuration for Distressed Portals",
+  "identityFields": [
+    "caseNumber",
+    "parcelId",
+    "apn",
+    "auctionId",
+    "propertyId",
+    "docketNumber"
+  ],
+  "presentationFields": [
+    "openingBid",
+    "currentBid",
+    "saleDateText",
+    "addressText",
+    "occupancyStatus",
+    "judgmentAmount"
+  ],
+  "sources": {
+    "fannie": {
+      "name": "Fannie Mae HomePath",
+      "portalUrl": "https://homepath.fanniemae.com",
+      "capturePattern": "*search-service*",
+      "timeoutMs": 15000,
+      "requiresBrowser": true,
+      "adaptiveEnabled": true
+    },
+    "freddie": {
+      "name": "Freddie Mac HomeSteps",
+      "portalUrl": "https://www.homesteps.com",
+      "capturePattern": "*propertysearch*",
+      "timeoutMs": 15000,
+      "requiresBrowser": true,
+      "adaptiveEnabled": true
+    },
+    "va": {
+      "name": "VA VRM Properties",
+      "portalUrl": "https://vrmproperties.com",
+      "capturePattern": "*properties*",
+      "timeoutMs": 15000,
+      "requiresBrowser": true,
+      "adaptiveEnabled": true
+    },
+    "bid4assets": {
+      "name": "Bid4Assets Foreclosure & Tax Sales",
+      "portalUrl": "https://www.bid4assets.com",
+      "capturePattern": "*auction*|*property*",
+      "timeoutMs": 20000,
+      "requiresBrowser": true,
+      "adaptiveEnabled": true
+    },
+    "realauction": {
+      "name": "RealAuction Sheriff Foreclosures",
+      "portalUrl": "https://sheriffsaleauction.ohio.gov",
+      "capturePattern": "*auction*|*sales*",
+      "timeoutMs": 20000,
+      "requiresBrowser": true,
+      "adaptiveEnabled": true
+    }
+  }
+}

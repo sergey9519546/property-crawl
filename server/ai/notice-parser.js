@@ -99,8 +99,8 @@ function deterministicParse(rawNotice = '') {
   const addressMatch = clean.match(/(\d+\s+[A-Za-z0-9\.\s,]+?,\s*([A-Za-z\s]+?),\s*([A-Z]{2})\s*(\d{5})?)/);
   // Extract Case Number: e.g. "Case No. 2024-CV-1092"
   const caseMatch = clean.match(/(?:case\s*(?:no\.?|#)|docket\s*#?)\s*([0-9A-Za-z\-\/]+)/i);
-  // Extract Judgment Amount: e.g. "Judgment: $142,500.00"
-  const judgmentMatch = clean.match(/(?:judgment|amount\s+due|debt)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+  // Extract Judgment Amount: e.g. "Judgment: $142,500.00" or "Judgment amount: $245,000.00"
+  const judgmentMatch = clean.match(/(?:judgment(?:\s+amount)?|amount\s+due|debt)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
   // Extract Opening Bid: e.g. "Opening bid: $50,000" or "Minimum bid: $50,000"
   const bidMatch = clean.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
   // Extract Plaintiff: e.g. "Wells Fargo Bank, N.A. vs."

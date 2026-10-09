@@ -119,7 +119,7 @@ except Exception as exc:
  * @param {string} opts.sourceKey
  * @param {(url:string, opts?:object)=>Promise<string>} opts.nativeFetch
  */
-async function waterfallFetch({ url, sourceKey, nativeFetch, timeoutMs = 8000, env = process.env }) {
+async function waterfallFetch({ url, sourceKey, nativeFetch, timeoutMs = 8000, env = process.env, enableSpaXhr = false }) {
   const attempts = [];
   if (typeof nativeFetch === 'function') {
     try {
@@ -142,6 +142,24 @@ async function waterfallFetch({ url, sourceKey, nativeFetch, timeoutMs = 8000, e
       return { ok: true, tier: 'scrapling-http', html: result.html, attempts, sourceKey, url };
     }
   }
+  let spaEnabled = Boolean(enableSpaXhr);
+  try {
+    const { spaXhrEnabled } = require('./spa-xhr');
+    if (spaXhrEnabled(sourceKey, env)) spaEnabled = true;
+  } catch (_) {}
+  if (spaEnabled) {
+    try {
+      const { captureSpaXhr } = require('./spa-xhr');
+      const spaResult = await captureSpaXhr(url, { sourceKey, timeoutMs, env });
+      const ok = Boolean(spaResult && spaResult.ok && (spaResult.itemCount > 0 || (spaResult.items && spaResult.items.length > 0)));
+      attempts.push({ tier: 'spa-xhr', ok, error: spaResult?.error || null, count: spaResult?.itemCount || 0 });
+      if (ok) {
+        return { ok: true, tier: 'spa-xhr', items: spaResult.items, attempts, sourceKey, url };
+      }
+    } catch (spaErr) {
+      attempts.push({ tier: 'spa-xhr', ok: false, error: String(spaErr?.message || spaErr).slice(0, 200) });
+    }
+  }
   return {
     ok: false,
     tier: 'fail-closed',
@@ -153,10 +171,14 @@ async function waterfallFetch({ url, sourceKey, nativeFetch, timeoutMs = 8000, e
   };
 }
 
+const FULL_TIER_ORDER = ['native', 'scrapling-http', 'spa-xhr', 'fail-closed'];
+
 module.exports = {
   TIER_ORDER,
+  FULL_TIER_ORDER,
   pythonRuntime,
   impersonationEnabled,
   scraplingHttpGet,
   waterfallFetch,
 };
+

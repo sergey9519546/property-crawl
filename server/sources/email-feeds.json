@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "description": "Statewide Press Association Statutory Legal Notice Subscription Feeds",
+  "policy": {
+    "zeroScraping": true,
+    "method": "email-as-api",
+    "rationale": "Press association websites enforce aggressive anti-bot ToS (e.g. IL $10k liquidated damages). Statutory notices are subscribed via free keyword email alerts delivered hours after publication."
+  },
+  "feeds": {
+    "FL": {
+      "state": "FL",
+      "name": "Florida Public Notices",
+      "operator": "Florida Press Association",
+      "portalUrl": "https://www.floridapublicnotices.com",
+      "senderDomains": ["floridapublicnotices.com", "flpress.com"],
+      "statute": "Fla. Stat. § 50.011",
+      "standardKeywords": ["foreclosure sale", "sheriff sale", "final judgment of foreclosure", "certificate of sale"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Terminates upon issuance of certificate of sale (Fla. Stat. § 45.0315)"
+    },
+    "IL": {
+      "state": "IL",
+      "name": "Public Notice Illinois",
+      "operator": "Illinois Press Association",
+      "portalUrl": "https://www.publicnoticeillinois.com",
+      "senderDomains": ["publicnoticeillinois.com", "illinoispress.org"],
+      "statute": "735 ILCS 5/15-1507",
+      "standardKeywords": ["notice of sale", "mortgage foreclosure", "judicial sales corporation"],
+      "defaultRedemptionDays": 210,
+      "redemptionRule": "7 months from service or 3 months from judgment (735 ILCS 5/15-1603)"
+    },
+    "TX": {
+      "state": "TX",
+      "name": "Texas Public Notices",
+      "operator": "Texas Press Association",
+      "portalUrl": "https://www.texaspublicnotices.com",
+      "senderDomains": ["texaspublicnotices.com", "texaspress.com"],
+      "statute": "Tex. Prop. Code § 51.002",
+      "standardKeywords": ["notice of trustee's sale", "substitute trustee", "foreclosure auction"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "No statutory redemption after deed of trust foreclosure (Tex. Prop. Code § 51.003)"
+    },
+    "OH": {
+      "state": "OH",
+      "name": "Public Notices Ohio",
+      "operator": "Ohio News Media Association",
+      "portalUrl": "https://www.publicnoticesohio.com",
+      "senderDomains": ["publicnoticesohio.com", "ohionews.org"],
+      "statute": "Ohio Rev. Code § 2329.26",
+      "standardKeywords": ["sheriff's sale", "order of sale", "in foreclosure"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Terminates upon confirmation of sale (R.C. 2329.33)"
+    },
+    "PA": {
+      "state": "PA",
+      "name": "Public Notice PA",
+      "operator": "Pennsylvania NewsMedia Association",
+      "portalUrl": "https://www.publicnoticepa.com",
+      "senderDomains": ["publicnoticepa.com", "panewsmedia.org"],
+      "statute": "Pa. R. Civ. P. 3129.2",
+      "standardKeywords": ["sheriff's sale of real estate", "writ of execution", "civil division"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Terminates upon delivery and recording of sheriff deed"
+    },
+    "GA": {
+      "state": "GA",
+      "name": "Georgia Public Notice",
+      "operator": "Georgia Press Association",
+      "portalUrl": "https://www.georgiapublicnotice.com",
+      "senderDomains": ["georgiapublicnotice.com", "gapress.org"],
+      "statute": "O.C.G.A. § 44-14-162",
+      "standardKeywords": ["notice of sale under power", "non-judicial foreclosure", "security deed"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "No statutory redemption following non-judicial sale under power"
+    }
+  }
+}
