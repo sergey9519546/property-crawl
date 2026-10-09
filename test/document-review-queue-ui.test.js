@@ -131,6 +131,13 @@ test('workspace shell nav exposes the Reviews entry pointing at the queue', () =
   assert.match(source, /\/workspace\/documents-review/);
   assert.match(source, /label: "Reviews"/);
   assert.match(source, /FileWarning/);
-  // Grid template now accommodates six entries (5 originals + Reviews).
-  assert.match(source, /grid-cols-6/);
+  // The nav is a horizontally scrollable row, not a fixed six-column grid.
+  // It used to be `grid-cols-6`, which got cramped at narrow widths once
+  // Reviews joined the five originals. Pin the property that matters -- every
+  // entry stays reachable and the links refuse to compress -- rather than the
+  // Tailwind class that happens to achieve it, so the next layout change does
+  // not read as a regression.
+  assert.match(source, /aria-label="Research workspace"/);
+  assert.match(source, /overflow-x-auto/, 'the nav must remain scrollable rather than clipped');
+  assert.match(source, /shrink-0/, 'nav links must not compress below their content width');
 });

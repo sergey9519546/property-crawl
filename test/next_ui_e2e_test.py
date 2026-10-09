@@ -1,6 +1,7 @@
 import os
 import base64
 import re
+import time
 import unittest
 from collections import Counter
 from copy import deepcopy
@@ -159,6 +160,66 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
     def has_county(self, record):
         return bool(str(record.get("county") or "").strip())
+
+    # --- polling helpers -----------------------------------------------------
+    #
+    # page.wait_for_function("...") takes a JavaScript STRING, which Chrome
+    # evaluates with eval. The CSP built by src/proxy.ts deliberately omits
+    # 'unsafe-eval' (the app itself never evaluates a string -- that is the
+    # point of the policy), so every such wait dies with:
+    #
+    #   EvalError: Evaluating a string as JavaScript violates the following
+    #   Content Security Policy directive because 'unsafe-eval' is not an
+    #   allowed source of script
+    #
+    # The right fix is not to put 'unsafe-eval' back. These assertions do not
+    # need the page to evaluate anything: the map publishes its state as
+    # data-* attributes, so the test can read them and poll from Python.
+
+    def wait_until(self, check, message, timeout_ms=10_000, page=None):
+        """Poll `check(target_page)` until it returns something truthy."""
+        target = page or self.page
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while time.monotonic() < deadline:
+            value = check(target)
+            if value:
+                return value
+            target.wait_for_timeout(100)
+        self.fail(f"{message} (waited {timeout_ms}ms)")
+
+    def wait_for_map_attr(self, attr, predicate, message, timeout_ms=10_000, page=None):
+        """Wait until the market map's data-<attr> satisfies `predicate`."""
+
+        def check(target):
+            raw = target.get_by_test_id("market-map").get_attribute(f"data-{attr}")
+            if raw is None:
+                return None
+            return raw if predicate(raw) else None
+
+        return self.wait_until(check, message, timeout_ms, page)
+
+    def wait_for_map_settled(self, page=None, timeout_ms=10_000):
+        """The map reports ready OR unavailable -- either means it has finished."""
+
+        def settled(raw):
+            return raw in ("true", "false")
+
+        def check(target):
+            el = target.get_by_test_id("market-map")
+            ready = el.get_attribute("data-map-ready")
+            unavailable = el.get_attribute("data-map-unavailable")
+            if ready == "true" or unavailable == "true":
+                return True
+            return None
+
+        return self.wait_until(check, "map never reported ready or unavailable", timeout_ms, page)
+
+    def wait_for_marker_count(self, expected, page=None, timeout_ms=10_000):
+        # expect().to_have_count() polls natively through Playwright's injected
+        # script, so it needs no eval at all.
+        target = page or self.page
+        expect(target.get_by_test_id("map-marker")).to_have_count(expected, timeout=timeout_ms)
+        return expected
 
     def rendered_listing(self, require_county=False):
         """A listing the feed actually rendered, not merely one the API returned.
@@ -417,15 +478,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         map_canvas.wait_for(state="visible")
         self.assertEqual(map_canvas.count(), 1)
 
-        self.page.wait_for_function(
-            "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
-            arg=len(geocoded),
-            timeout=10_000,
-        )
-        self.page.wait_for_function(
-            "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
-            timeout=10_000,
-        )
+        self.wait_for_marker_count(len(geocoded))
+        self.wait_for_map_settled()
         markers = self.page.get_by_test_id("map-marker")
         self.assertEqual(markers.count(), len(geocoded))
         marker_labels = markers.evaluate_all(
@@ -460,11 +514,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         state = Counter(listing["state"] for listing in geocoded).most_common(1)[0][0]
         self.page.get_by_role("combobox", name="State filter").select_option(state)
         expected = sum(listing["state"] == state for listing in geocoded)
-        self.page.wait_for_function(
-            "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
-            arg=expected,
-            timeout=10_000,
-        )
+        self.wait_for_marker_count(expected)
         self.assertEqual(self.page.get_by_test_id("map-marker").count(), expected)
         self.assertIn(
             f"{expected} records with verified locations",
@@ -477,10 +527,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.wait_for_live_feed()
         market_map = self.open_live_market_map()
         self.page.get_by_test_id("live-market-maplibre").wait_for(state="visible")
-        self.page.wait_for_function(
-            "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
-            timeout=10_000,
-        )
+        self.wait_for_map_settled()
         self.page.wait_for_timeout(800)
 
         initial_center = market_map.get_attribute("data-map-center")
@@ -495,11 +542,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(reset.is_enabled())
 
         zoom_in.click()
-        self.page.wait_for_function(
-            "initial => Number(document.querySelector('[data-testid=market-map]')?.dataset.mapZoom) > initial",
-            arg=initial_zoom,
-            timeout=5_000,
-        )
+        self.wait_for_map_attr("zoom", lambda v: float(v) > initial_zoom, "map zoom never increased past the baseline")
         zoomed = float(market_map.get_attribute("data-map-zoom"))
         self.assertGreater(zoomed, initial_zoom)
 
@@ -512,11 +555,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             before_pan = market_map.get_attribute("data-map-center")
             map_canvas.evaluate("element => element.focus()")
             map_canvas.press("ArrowRight")
-            self.page.wait_for_function(
-                "before => document.querySelector('[data-testid=market-map]')?.dataset.mapCenter !== before",
-                arg=before_pan,
-                timeout=5_000,
-            )
+            self.wait_for_map_attr("center", lambda v: v != before_pan, "map centre never moved from the baseline")
             self.assertNotEqual(market_map.get_attribute("data-map-center"), before_pan)
         else:
             self.assertEqual(market_map.get_attribute("data-map-unavailable"), "true")
@@ -526,17 +565,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         center_before_reset = market_map.get_attribute("data-map-center")
         reset.click()
-        self.page.wait_for_function(
-            "zoomed => Number(document.querySelector('[data-testid=market-map]')?.dataset.mapZoom) < zoomed",
-            arg=zoomed,
-            timeout=5_000,
-        )
+        self.wait_for_map_attr("zoom", lambda v: float(v) < zoomed, "map zoom never dropped below the baseline")
         if did_pan:
-            self.page.wait_for_function(
-                "panned => document.querySelector('[data-testid=market-map]')?.dataset.mapCenter !== panned",
-                arg=center_before_reset,
-                timeout=5_000,
-            )
+            self.wait_for_map_attr("center", lambda v: v != center_before_reset, "map centre never moved from the baseline")
         self.assertLess(
             float(market_map.get_attribute("data-map-zoom")), zoomed
         )
@@ -552,13 +583,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 "button", name=f"Deal Grid ({self.live_count} records)"
             ).wait_for(state="visible")
             market_map = self.open_live_market_map(reduced_page)
-            reduced_page.wait_for_function(
-                "document.querySelector('[data-testid=market-map]')?.dataset.mapMotion === 'reduced'"
-            )
-            reduced_page.wait_for_function(
-                "() => { const map = document.querySelector('[data-testid=market-map]'); return map?.dataset.mapReady === 'true' || map?.dataset.mapUnavailable === 'true'; }",
-                timeout=10_000,
-            )
+            expect(reduced_page.get_by_test_id("market-map")).to_have_attribute("data-map-motion", "reduced")
+            self.wait_for_map_settled(page=reduced_page)
             self.assertEqual(market_map.get_attribute("data-map-motion"), "reduced")
 
             map_box = market_map.bounding_box()
@@ -574,11 +600,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             )
 
             markers = reduced_page.get_by_test_id("map-marker")
-            reduced_page.wait_for_function(
-                "expected => document.querySelectorAll('[data-testid=map-marker]').length === expected",
-                arg=len(self.geocoded_listings()),
-                timeout=10_000,
-            )
+            self.wait_for_marker_count(len(self.geocoded_listings()), page=reduced_page)
             self.assertEqual(
                 markers.first.evaluate(
                     "element => getComputedStyle(element).animationName"
@@ -681,10 +703,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # passing in isolation -- a test that cannot fail reliably teaches
         # people to re-run until green. The condition is unchanged; only the
         # patience matches the file's own convention.
-        self.page.wait_for_function(
-            "document.querySelectorAll('[data-testid=map-marker]').length === 3",
-            timeout=10_000,
-        )
+        self.wait_for_marker_count(3)
         self.assertIn("4 records with verified locations · 3 map locations", market_map.inner_text())
         first = self.listings[0]
         marker = self.page.get_by_role("button", name=f"Show 2 source records at {first['address']}", exact=True)
@@ -1209,9 +1228,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.emulate_media(reduced_motion="reduce")
         self.page.reload(wait_until="domcontentloaded")
         deal_map = self.reveal_deferred_atlas()
-        self.page.wait_for_function(
-            "document.querySelector('[data-testid=storyteller-deal-map]')?.dataset.scanState === 'complete'"
-        )
+        expect(deal_map).to_have_attribute("data-scan-state", "complete")
         self.assertEqual(deal_map.get_attribute("data-scan-state"), "complete")
         self.assertTrue(self.page.get_by_text("Motion reduced", exact=True).is_visible())
         active_deal = deal_map.get_attribute("data-active-deal")
