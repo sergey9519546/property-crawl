@@ -808,6 +808,8 @@ export function DiscoveryWorkbench() {
           )}
           <div className="mt-7 flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
             <button
+              type="button"
+              aria-label="Previous page"
               disabled={!cursorStack.length || loading}
               onClick={previous}
               className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold disabled:opacity-40"
@@ -819,6 +821,8 @@ export function DiscoveryWorkbench() {
               Page {cursorStack.length + 1}
             </span>
             <button
+              type="button"
+              aria-label="Next page"
               disabled={!payload?.page?.hasMore || loading}
               onClick={next}
               className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"

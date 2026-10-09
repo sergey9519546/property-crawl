@@ -13,6 +13,8 @@
 //      after patching.
 //   4. Invoke the handler with stub req/res and assert the response.
 
+process.env.PROPERTY_INVENTORY_BACKEND = 'memory';
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

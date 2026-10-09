@@ -40,7 +40,9 @@ def isolated_workspace():
     global BASE_URL
     if not (ROOT / ".next" / "BUILD_ID").exists():
         raise RuntimeError("Run npm run build before the isolated walkthrough")
-    artifact_dir = Path(tempfile.mkdtemp(prefix="perfectproperty-walkthrough-"))
+    cache_dir = ROOT / ".cache"
+    cache_dir.mkdir(exist_ok=True)
+    artifact_dir = Path(tempfile.mkdtemp(prefix="perfectproperty-walkthrough-", dir=str(cache_dir)))
     env = os.environ.copy()
     env.update({
         "DATABASE_URL": "", "DISCOVERY_MODE": "", "NODE_ENV": "production",
@@ -50,9 +52,11 @@ def isolated_workspace():
         "WORKSPACE_BOOT_ID": secrets.token_hex(16),
         "NEXT_DISCOVERY_PREVIEW": "", "NEXT_VERIFY_BUILD": "",
         "PROPERTY_API_RATE_LIMIT": "10000",
+        "PROPERTY_INVENTORY_BACKEND": "memory",
     })
     for name in ("RESEARCH_WORKSPACE", "SOURCE_INTAKE", "HUNTS", "OBSERVATIONS", "COLLECTION_JOBS", "LIVE_CACHE"):
         env[f"PROPERTY_{name}_PATH"] = str(artifact_dir / f"{name.lower()}.json")
+    env["PROPERTY_DOCUMENT_REVIEW_STORE_PATH"] = str(artifact_dir / "document-review-store.json")
     inventory = ROOT / ".cache" / "live-listings.json"
     if inventory.exists():
         shutil.copyfile(inventory, env["PROPERTY_LIVE_CACHE_PATH"])
@@ -124,6 +128,20 @@ def expect_ok(response, purpose: str) -> dict:
     return response.json()
 
 
+def api_post(context, path: str, body: dict) -> dict:
+    headers = {
+        "Origin": BASE_URL,
+        "Content-Type": "application/json",
+        "x-workspace-request": "1",
+    }
+    response = context.request.post(
+        f"{BASE_URL}{path}",
+        headers=headers,
+        data=json.dumps(body),
+    )
+    return expect_ok(response, path)
+
+
 def catalog_source_aliases(network: dict) -> tuple[set[str], dict[str, str]]:
     known = set()
     aliases = {}
@@ -147,7 +165,10 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
     metrics = {
         "startedAt": utc_iso(),
         "baseUrl": BASE_URL,
-        "journey": ["discovery", "evidence", "decision", "second_look", "export"],
+        "journey": [
+            "discovery", "evidence", "decision", "second_look", "export",
+            "document_review", "saved_hunts", "watchlist", "keyboard_a11y", "mobile_responsive"
+        ],
         "syntheticReconsiderationEvents": 0,
         "isolated": True,
         "customerUsefulnessMeasured": False,
@@ -185,7 +206,7 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
             page.get_by_role("heading", name="Find properties", exact=True).wait_for()
             page.get_by_role("button", name=re.compile(r"Unlock|Checking")).click()
-            page.get_by_label("Workspace access key").fill(credential)
+            page.get_by_label(re.compile(r"Operator key|Workspace access key")).fill(credential)
             page.get_by_role("button", name="Unlock workspace").click()
             page.get_by_role("button", name="Lock", exact=True).wait_for()
 
@@ -217,7 +238,7 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
 
             page.get_by_label("Search properties").fill(listing["id"])
             page.get_by_role("button", name="Search", exact=True).click()
-            page.get_by_text("1 property", exact=True).wait_for()
+            page.locator("[data-testid='inventory-page-count']").wait_for()
             page.screenshot(path=str(artifact_dir / "01-discovery.png"), full_page=True)
             page.get_by_role("button", name="Research", exact=True).first.click()
             page.wait_for_url(re.compile(r"/research/rcase_[a-f0-9]{24}"))
@@ -245,16 +266,11 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
                 "kind": "text",
                 "body": f"Walkthrough-reviewed title research reference for exact listing {listing['id']}; source claims remain subject to document-level verification. Captured {captured_at}.",
             }
-            intake = expect_ok(
-                context.request.post(f"{BASE_URL}/api/source-network/intake", json=evidence_payload),
-                "evidence intake",
-            )
-            review = expect_ok(
-                context.request.post(
-                    f"{BASE_URL}/api/source-network/review",
-                    json={"id": intake["record"]["id"], "decision": "approve", "note": "Reviewed during recorded workspace acceptance journey."},
-                ),
-                "evidence review",
+            intake = api_post(context, "/api/source-network/intake", evidence_payload)
+            review = api_post(
+                context,
+                "/api/source-network/review",
+                {"id": intake["record"]["id"], "decision": "approve", "note": "Reviewed during recorded workspace acceptance journey."},
             )
             metrics["evidenceIntakeId"] = review["record"]["id"]
 
@@ -285,10 +301,11 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             retained = expect_ok(context.request.get(f"{BASE_URL}/api/workspace/cases/{case_id}"), "retained case")
             if retained["case"]["state"] != "pass" or not retained["case"]["reconsiderationRequired"]:
                 raise RuntimeError("Second Look did not preserve the pass decision across restart")
-            duplicate = expect_ok(context.request.post(
-                f"{BASE_URL}/api/workspace/cases",
-                json={"listingId": listing["id"], "origin": {"type": "manual"}},
-            ), "duplicate case request")
+            duplicate = api_post(
+                context,
+                "/api/workspace/cases",
+                {"listingId": listing["id"], "origin": {"type": "manual"}},
+            )
             if duplicate["case"]["id"] != case_id:
                 raise RuntimeError("A repeated case request created a duplicate")
             anonymous = browser.new_context()
@@ -305,14 +322,115 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             visible_text = page.locator("body").inner_text().lower()
             if "servicelink" in visible_text:
                 raise RuntimeError("Prohibited publisher branding appeared in customer-visible text")
+            # Document review queue journey
+            api_post(
+                context,
+                "/api/document-review",
+                {
+                    "listingId": listing["id"],
+                    "documentIndex": 0,
+                    "documentUrl": "https://example.test/evidence-docket.pdf",
+                    "status": "pending",
+                    "notes": "Pending operator verification against county docket.",
+                },
+            )
+            page.goto(f"{BASE_URL}/workspace/documents-review", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Document review queue", exact=True).wait_for()
+            page.get_by_label("Reviewer identifier").fill("operator-beta")
+            review_row = page.locator('[data-testid="document-review-row"]').first
+            review_row.wait_for()
+            review_row.locator("textarea").fill("Verified title docket matches county clerk index.")
+            review_row.locator('[data-action="approve"]').click()
+            page.get_by_text(re.compile(r"Recorded Approved", re.I)).wait_for()
+            page.screenshot(path=str(artifact_dir / "06-document-review.png"), full_page=True)
+            metrics["documentReviewJourney"] = True
+
+            # Saved hunts journey
+            page.goto(f"{BASE_URL}/hunts", wait_until="domcontentloaded")
+            page.get_by_role("heading", name=re.compile(r"Your criteria", re.I)).wait_for()
+            page.locator('section[aria-label="Hunt change inbox"]').wait_for()
+            page.get_by_label("Describe a hunt").fill("Vacant land in Alachua County under $150k within 30 days")
+            page.get_by_role("button", name="Draft criteria", exact=True).click()
+            page.get_by_text(re.compile(r"compiled into visible criteria", re.I)).wait_for()
+            page.screenshot(path=str(artifact_dir / "07-saved-hunts.png"), full_page=True)
+            metrics["savedHuntsJourney"] = True
+
+            # Watchlist exploration journey
+            page.goto(f"{BASE_URL}/listings", wait_until="domcontentloaded")
+            page.get_by_role("heading", name="Find properties", exact=True).wait_for()
+            watchlist_btn = page.locator('button[aria-label*="watchlist:"]').first
+            watchlist_btn.wait_for()
+            initial_saved = watchlist_btn.get_attribute("aria-pressed") == "true"
+            watchlist_btn.click()
+            page.wait_for_timeout(300)
+            toggled_saved = watchlist_btn.get_attribute("aria-pressed") == "true"
+            if initial_saved == toggled_saved:
+                raise RuntimeError("Watchlist toggle failed to update state")
+            page.screenshot(path=str(artifact_dir / "08-watchlist.png"), full_page=True)
+            metrics["watchlistJourney"] = True
+
+            # Keyboard focus and Escape modal trap
+            page.get_by_role("button", name="Lock", exact=True).click()
+            page.wait_for_timeout(300)
+            unlock_btn = page.get_by_role("button", name=re.compile(r"Unlock|Checking")).first
+            unlock_btn.wait_for()
+            unlock_btn.click()
+            dialog = page.get_by_role("dialog", name="Unlock operator tools")
+            dialog.wait_for()
+            cred_input = page.locator("#workspace-credential")
+            if not cred_input.evaluate("el => document.activeElement === el"):
+                raise RuntimeError("Unlock dialog did not autofocus credential input")
+            page.keyboard.press("Escape")
+            dialog.wait_for(state="hidden")
+            if not unlock_btn.evaluate("el => document.activeElement === el"):
+                raise RuntimeError("Closing dialog via Escape did not restore focus to opener")
+            metrics["keyboardA11y"] = True
+
+            # Re-authenticate for mobile checks
+            unlock_btn.click()
+            dialog.wait_for()
+            cred_input.fill(credential)
+            page.get_by_role("button", name="Unlock workspace").click()
+            page.get_by_role("button", name="Lock", exact=True).wait_for()
+
+            # Mobile viewport, responsive overflow, and CLS checks
             page.set_viewport_size({"width": 390, "height": 844})
-            for route, heading in [("activity", "Collection activity"),
-                                   ("research/alachua", "Second chance review")]:
+            metrics["mobileRoutesChecked"] = []
+            metrics["clsScores"] = {}
+            for route, heading in [
+                ("activity", "Collection activity"),
+                ("research/alachua", "Second chance review"),
+                ("listings", "Find properties"),
+                ("hunts", re.compile(r"Your criteria", re.I)),
+                ("workspace/documents-review", "Document review queue"),
+            ]:
                 page.goto(f"{BASE_URL}/{route}", wait_until="domcontentloaded")
-                page.get_by_role("heading", name=heading, exact=True).wait_for()
+                if isinstance(heading, str):
+                    page.get_by_role("heading", name=heading, exact=True).wait_for()
+                else:
+                    page.get_by_role("heading", name=heading).wait_for()
                 if page.evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth"):
                     raise RuntimeError(f"Horizontal overflow on mobile {route}")
-                page.screenshot(path=str(artifact_dir / (route.replace("/", "-") + "-mobile.png")), full_page=True)
+                cls = page.evaluate("""() => {
+                    return new Promise((resolve) => {
+                        let shift = 0;
+                        try {
+                            const observer = new PerformanceObserver((list) => {
+                                for (const entry of list.getEntries()) {
+                                    if (!entry.hadRecentInput) shift += entry.value;
+                                }
+                            });
+                            observer.observe({ type: 'layout-shift', buffered: true });
+                            setTimeout(() => { observer.disconnect(); resolve(shift); }, 400);
+                        } catch { resolve(0); }
+                    });
+                }""")
+                metrics["clsScores"][route] = round(cls, 4)
+                if cls > 0.25:
+                    raise RuntimeError(f"CLS on {route} exceeded budget: {cls}")
+                clean_name = route.replace("/", "-")
+                page.screenshot(path=str(artifact_dir / f"{clean_name}-mobile.png"), full_page=True)
+                metrics["mobileRoutesChecked"].append(route)
             metrics["mobileViewport"] = {"width": 390, "height": 844}
             if metrics["pageErrors"] or metrics["serverErrors"]:
                 raise RuntimeError(f"Browser journey reported runtime errors: {metrics['pageErrors'] or metrics['serverErrors']}")

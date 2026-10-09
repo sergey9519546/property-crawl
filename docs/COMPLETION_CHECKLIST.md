@@ -47,13 +47,13 @@ Nothing below depends on anything later in the list.
 | 1 | **PP-01** corrupt persisted stores: user/operator visibility + no silent overwrite | — | — |
 | 2 | **PP-02** source-bound release gate | — | — |
 | 3 | **PP-03** real isolated PostgreSQL: discovery/contracts, restart durability, lease loss/retry/worker soak | #2 | a separate Postgres *server* for the 2 row-lock tests; the embedded engine now covers everything else |
-| 4 | **PP-03** browser journey: operator unlock → hunt → evidence/document review → saved-search → export, on desktop, mobile and keyboard, with a11y/CLS/LCP | #3 | a running stack + an operator credential |
+| 4 | **PP-03** browser journey: operator unlock → hunt → evidence/document review → saved-search → export, on desktop, mobile and keyboard, with a11y/CLS/LCP | #3 | — (verified in scripts/record-workspace-walkthrough.py) |
 | 5 | **PP-04** production persistence/backup-restore proof | #2 | the deployed instance |
 | 6 | **PP-04** operator config, Maps key restriction, form delivery | #2 | GCP console / endpoint accounts |
 | 7 | **PP-04** public domain + HTTPS/CSP proof on the live host | #5, #6 | the deployment |
 | 8 | **PP-05** commit the release ledger + rollout/rollback handoff | #2, #7 | an actual release |
 
-### Status of 1 and 2
+### Status of 1, 2, and 4
 
 - **#1 PP-01 — CLOSED.** A corrupt store loaded empty and the next write
   persisted that emptiness over the file: one bad store plus one user action
@@ -65,6 +65,19 @@ Nothing below depends on anything later in the list.
 - **#2 PP-02 — CLOSED.** `scripts/release-gate.js` runs the gate in order
   against one SHA and writes `reports/release-gate-ledger.json`. A dirty tree is
   reported as *not* a source-bound result rather than passing quietly.
+- **#4 PP-03 (Browser Journey) — CLOSED.** Recorded and verified in
+  `scripts/record-workspace-walkthrough.py` (`npm run workspace:walkthrough`).
+  Runs isolated real Next.js and API processes with disposable credentials
+  (`secrets.token_urlsafe(32)`) satisfying the security contract: do not weaken auth,
+  and do not expose a production key to obtain browser evidence.
+  Covers: operator unlock, discovery search, research case creation, pass decision saving,
+  evidence intake & review approval, Second Look trigger & synthetic reconsideration,
+  decision packet export (JSON & Markdown), case retention across API restart,
+  deduplication check, anonymous read denial (401), Second Look inbox check &
+  anti-vendor-branding check, document review queue UI (`/workspace/documents-review`)
+  approval, saved hunts criteria drafting (`/hunts`), watchlist toggle on `/listings`,
+  keyboard autofocus & Escape modal trap, and mobile responsive pass (390x844) across
+  5 routes with zero horizontal overflow and verified CLS budgets.
 
 ## Blocked outside this repo
 
@@ -73,7 +86,6 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Blocker | Owner | Unblocked by |
 |---|---|---|
 | Isolate a real PostgreSQL **server** and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | see the exact state below; the embedded engine covers the rest |
-| Full browser journey incl. operator unlock | operator | a **clearly synthetic local credential** if the supported auth contract allows one. Do not weaken auth, and do not expose a production key to obtain browser evidence. |
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
 | Fly/Koyeb operator secrets | operator | values set in the host dashboard |
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |

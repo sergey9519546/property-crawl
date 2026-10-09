@@ -47,6 +47,60 @@ test('cash-to-close never guesses fees from source or state and keeps funding st
   assert.ok(scenario.assumptions.every((item) => /explicit scenario assumption/i.test(item)));
 });
 
+test('federal tax lien triggers 26 U.S.C. § 7425(d) 120-day redemption overlay and senior lien detection', () => {
+  const signal = serverRules.detectSeniorLienSurvival('Internal Revenue Service', 'Notice of foreclosure sale subject to federal tax lien.');
+  assert.equal(signal.isJuniorLien, true);
+  assert.equal(signal.riskLevel, 'high');
+  assert.equal(signal.hasFederalTaxLien, true);
+  assert.match(signal.warning, /7425\(d\)/);
+
+  // In CA (baseline 0 days), federal tax lien forces 120 days minimum
+  const caRedemption = serverRules.getRedemptionRule('CA', { hasFederalTaxLien: true });
+  assert.equal(caRedemption.days, 120);
+  assert.match(caRedemption.warning, /120-Day Federal Statutory Right of Redemption/);
+  assert.equal(caRedemption.basis, 'federal-statute-overlay');
+
+  // In AL (baseline 180 days), longer state period wins over federal 120 days
+  const alRedemption = serverRules.getRedemptionRule('AL', { hasFederalTaxLien: true });
+  assert.equal(alRedemption.days, 180);
+});
+
+test('municipal code violation and nuisance abatement liens are flagged as senior risks', () => {
+  const signal = serverRules.detectSeniorLienSurvival('', 'City of Newark code enforcement and demolition lien on record.');
+  assert.equal(signal.isJuniorLien, true);
+  assert.equal(signal.hasMunicipalLien, true);
+  assert.match(signal.warning, /super-priority under local ordinance/);
+});
+
+test('HOA and condominium assessment liens in super-priority states are flagged with statutory notice', () => {
+  const nvSignal = serverRules.detectSeniorLienSurvival('Summerlin Homeowners Association', 'Foreclosure under assessment lien.', 'NV');
+  assert.equal(nvSignal.isJuniorLien, true);
+  assert.equal(nvSignal.hasHoaLien, true);
+  assert.match(nvSignal.warning, /statutory super-priority/i);
+  assert.match(nvSignal.warning, /NV/);
+
+  const genericHoaSignal = serverRules.detectSeniorLienSurvival('', 'Subject to recorded HOA lien.');
+  assert.equal(genericHoaSignal.isJuniorLien, true);
+  assert.equal(genericHoaSignal.hasHoaLien, true);
+  assert.match(genericHoaSignal.warning, /super-priority/i);
+});
+
+test('cash-to-close flags excess credited deposits exceeding total acquisition cost', () => {
+  const scenario = serverRules.computeCashToClose({
+    openingBid: 50_000,
+    registrationFunds: 2_000,
+    creditedDeposit: 60_000,
+    buyersPremium: 1_000,
+    sheriffPoundage: 200,
+    transferTax: 100,
+    delinquentTaxes: 0,
+    settlementCosts: 300,
+  });
+  assert.equal(scenario.totalAcquisitionCost, 51_600);
+  assert.equal(scenario.cashDueAtSettlement, 0);
+  assert.ok(scenario.assumptions.some((a) => /creditedDeposit exceeds totalAcquisitionCost/.test(a)));
+});
+
 test('rent-roll parsing does not invent occupancy, expenses, or NOI', () => {
   const result = serverRules.parseRentRollSchedule('Unit 2A: tenant not stated');
   assert.equal(result.unitCount, 1);

@@ -39,7 +39,7 @@ function runGate(args, env) {
 const NO_GIT_PATH = { PATH: 'C:\\Windows\\System32' };
 
 function hasGitOnPath() {
-  return spawnSync('git', ['--version'], { cwd: ROOT, shell: true }).status === 0;
+  return spawnSync('git', ['--version'], { cwd: ROOT, shell: false }).status === 0;
 }
 
 test('with git available, a broken server module fails the gate', (t) => {

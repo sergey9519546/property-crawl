@@ -219,6 +219,7 @@ function matches(row, f) {
     f.q &&
     !text(
       [
+        row.id,
         row.address,
         row.city,
         row.county,
@@ -422,7 +423,7 @@ function pgWhere(f, start = 1) {
     // which the parity matrix caught (q=hud reo returned [] against memory's
     // ["b"]).
     add(
-      `(coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,
+      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,
       `%${f.q}%`,
     );
   }

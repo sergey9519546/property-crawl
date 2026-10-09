@@ -35,7 +35,7 @@ function runGate(args, env) {
 }
 
 function gitWorks() {
-  return spawnSync('git', ['--version'], { cwd: ROOT, shell: true }).status === 0;
+  return spawnSync('git', ['--version'], { cwd: ROOT, shell: false }).status === 0;
 }
 
 test('with git working, the gate reports a real file count', (t) => {

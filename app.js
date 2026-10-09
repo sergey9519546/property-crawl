@@ -101,16 +101,18 @@ function daysLabel(du){
 
 /* ---------------- score bands (single source of truth) ---------------- */
 // One definition for score color, label, alpha, and band range. The Deal
-// Score help modal's three band rows are generated from this array at
+// Score help modal's band rows are generated from this array at
 // init time, so the bar color, alert-badge color, and help-modal labels
 // can never drift apart.
 const SCORE_BANDS = [
-  { min: 55, max: 99, color: '#0d9488', alpha: '18', label: 'Strong',
-    desc: 'bid is well under half of value; big equity spread.' },
-  { min: 35, max: 54, color: '#d97706', alpha: '18', label: 'Moderate',
-    desc: 'real discount, but margins get eaten by fees & repairs.' },
-  { min:  1, max: 34, color: '#dc2626', alpha: '18', label: 'Thin',
-    desc: 'bid is close to full value; little room for error.' },
+  { min: 70, max: 99, color: '#059669', alpha: '18', label: 'Elite',
+    desc: 'Modeled bid is well under the valuation midpoint; deep modeled spread.' },
+  { min: 55, max: 69, color: '#16a34a', alpha: '15', label: 'Strong',
+    desc: 'Modeled bid is well under half of value; large modeled spread.' },
+  { min: 35, max: 54, color: '#d97706', alpha: '14', label: 'Fair',
+    desc: 'Real modeled discount, but fees and repairs can compress margin.' },
+  { min:  1, max: 34, color: '#dc2626', alpha: '12', label: 'Thin',
+    desc: 'Modeled bid is close to full value; little room for error.' },
 ];
 function bandFor(s){ return SCORE_BANDS.find(b => s >= b.min) || SCORE_BANDS[SCORE_BANDS.length-1]; }
 function scoreColor(s){ return bandFor(s).color; }
@@ -127,7 +129,7 @@ function scoreColorAlpha(s){ return bandFor(s).color + bandFor(s).alpha; }
 let mergeLocalOnNextLoad = false;
 async function loadSaved(){
   try{
-    if(user){
+    if(user && typeof puter !== 'undefined' && puter.kv){
       const v = await puter.kv.get('pc_saved');
       const cloudItems = v ? JSON.parse(v) : [];
       if(mergeLocalOnNextLoad){
@@ -153,7 +155,7 @@ async function loadSaved(){
 async function persistSaved(){
   const arr = [...saved];
   try{
-    if(user) await puter.kv.set('pc_saved', JSON.stringify(arr));
+    if(user && typeof puter !== 'undefined' && puter.kv) await puter.kv.set('pc_saved', JSON.stringify(arr));
     else localStorage.setItem('pc_saved', JSON.stringify(arr));
   }catch(e){
     console.error('Failed to persist saved deals', e);
@@ -170,7 +172,7 @@ function updateAlertCount(){
 /* ---------------- auth ---------------- */
 async function initAuth(){
   try{
-    if(puter.auth.isSignedIn()){
+    if(typeof puter !== 'undefined' && puter.auth && puter.auth.isSignedIn()){
       user = await puter.auth.getUser();
     }
   }catch(e){ user = null; }
@@ -188,14 +190,20 @@ function renderAuth(){
       <button id="signOut" class="text-sm font-semibold px-3 py-2 rounded-lg text-slate-500 hover:bg-slate-100">Sign out</button>`;
     a.appendChild(wrap);
     $('#signOut').onclick = async ()=>{
-      try { await puter.auth.signOut(); }
-      catch(e) { console.error('Sign-out failed', e); toast('Sign-out failed — please try again'); return; }
+      if (typeof puter !== 'undefined' && puter.auth) {
+        try { await puter.auth.signOut(); }
+        catch(e) { console.error('Sign-out failed', e); toast('Sign-out failed — please try again'); return; }
+      }
       user=null; await loadSaved(); renderAuth(); render(); toast('Signed out');
     };
   } else {
     const b = el('button','inline-flex items-center gap-2 bg-brand-700 hover:bg-brand-800 text-white text-sm font-semibold px-4 py-2 rounded-lg');
     b.innerHTML = `<i data-lucide="log-in" class="w-4 h-4"></i> Sign in`;
     b.onclick = async ()=>{
+      if (typeof puter === 'undefined' || !puter.auth) {
+        toast('Cloud sync unavailable — deals saved to local storage');
+        return;
+      }
       try {
         await puter.auth.signIn();
         user = await puter.auth.getUser();
@@ -596,6 +604,11 @@ LISTING:
 - Judgment: ${l.judgment?fmt(l.judgment):'n/a'}
 - State: ${l.state}
 - Original notice excerpt: "${l.raw.slice(0,600)}"`;
+  if (typeof puter === 'undefined' || !puter.ai) {
+    box.innerHTML = `<p class="text-slate-500">AI analysis requires cloud connectivity.</p>`;
+    icon();
+    return;
+  }
   try{
     const resp=await puter.ai.chat(prompt,{model:'gpt-4o-mini'});
     const text=extractAiText(resp) || 'Analysis unavailable.';
@@ -616,6 +629,11 @@ async function runParse(){
   const raw=$('#rawNotice').value.trim();
   const out=$('#parseOut');
   if(!raw){ toast('Paste a notice first'); return; }
+  if (typeof puter === 'undefined' || !puter.ai) {
+    out.className = 'min-h-[320px] rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 flex items-center justify-center text-center flex-col gap-3';
+    out.innerHTML = `<p>AI notice parsing requires cloud connectivity.</p>`;
+    return;
+  }
   out.className='min-h-[320px] rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm flex items-center justify-center';
   out.innerHTML=`<div class="flex items-center gap-2 text-slate-400"><span class="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full spin inline-block"></span>Parsing legal prose into JSON…</div>`;
   const prompt=`Extract structured data from this public foreclosure/sheriff/trustee's sale legal notice. Return ONLY valid minified JSON (no markdown fence) matching exactly this schema; use null for anything not present:

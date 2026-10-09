@@ -109,11 +109,12 @@ function sourceDisplayText(value) {
 }
 
 /**
- * Retrieve the statutory redemption rule for a given state.
+ * Retrieve the statutory redemption rule for a given state, with federal overlays when applicable.
  * @param {string} state - 2-letter state code
- * @returns {object} State-level baseline, or an explicit unknown result
+ * @param {object} [options] - Optional context (e.g. { hasFederalTaxLien: boolean })
+ * @returns {object} State-level baseline (or federal 120-day § 7425 overlay), or explicit unknown
  */
-function getRedemptionRule(state) {
+function getRedemptionRule(state, options = {}) {
   const st = (state || '').toUpperCase().trim();
   const rule = STATE_REDEMPTION_RULES[st];
 
@@ -128,24 +129,38 @@ function getRedemptionRule(state) {
     };
   }
 
+  const hasFederalTaxLien = Boolean(options?.hasFederalTaxLien);
+  const days = hasFederalTaxLien ? Math.max(rule.days, 120) : rule.days;
+  let warning = rule.days > 0 ? `${st}: ${rule.days}-Day Statutory Right of Redemption Applies as a State-Level Baseline; Sale Type and Current Official Terms Require Verification` : null;
+  if (hasFederalTaxLien) {
+    warning = `26 U.S.C. § 7425(d): 120-Day Federal Statutory Right of Redemption Applies Due to Junior Federal Tax Lien (or State Baseline ${rule.days} Days, Whichever Is Longer); Sale Type and Current Official Terms Require Verification`;
+  }
+
   return {
     state: st,
-    days: rule.days,
+    days,
     label: rule.label,
-    warning: rule.days > 0 ? `${st}: ${rule.days}-Day Statutory Right of Redemption Applies as a State-Level Baseline; Sale Type and Current Official Terms Require Verification` : null,
-    basis: 'state-level-baseline',
+    warning,
+    basis: hasFederalTaxLien ? 'federal-statute-overlay' : 'state-level-baseline',
+    hasFederalTaxLien,
     requiresSaleTypeVerification: true
   };
 }
 
+const SUPER_PRIORITY_HOA_STATES = new Set([
+  'NV', 'CO', 'WA', 'MA', 'CT', 'MD', 'DC', 'FL', 'NJ', 'PA', 'RI',
+  'AL', 'AK', 'HI', 'IL', 'MN', 'MO', 'NH', 'NY', 'OR', 'TN', 'VT'
+]);
+
 /**
- * Detects if the foreclosing plaintiff is a junior lienholder (2nd mortgage, HELOC, HOA)
- * where senior mortgages and superior tax encumbrances survive the auction.
+ * Detects if the foreclosing plaintiff is a junior lienholder (2nd mortgage, HELOC, HOA, IRS, municipal)
+ * where senior mortgages and superior encumbrances survive the auction, or statutory redemption applies.
  * @param {string} plaintiff
  * @param {string} legalText
+ * @param {string|null} state
  * @returns {object} Pattern-match signal that never implies clear title
  */
-function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
+function detectSeniorLienSurvival(plaintiff = '', legalText = '', state = null) {
   const combined = `${String(plaintiff || '')} ${String(legalText || '')}`.toLowerCase();
 
   const juniorRegexes = [
@@ -165,7 +180,19 @@ function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
     /\bmechanic(?:'s)?\s+lien\b/,
     /\bjudgment\s+creditor\b/,
     /\bsubject\s+to\s+(?:senior|prior|superior)\b/,
-    /\bsenior\s+encumbrance\b/
+    /\bsenior\s+encumbrance\b/,
+    /\bfederal\s+tax\s+lien\b/,
+    /\birs\s+tax\s+lien\b/,
+    /\birs\s+lien\b/,
+    /\binternal\s+revenue\s+service\b/,
+    /\b26\s*u\.?s\.?c\.?\s*§?\s*7425\b/,
+    /\bcode\s+enforcement\b/,
+    /\bcode\s+violation\b/,
+    /\bdemolition\s+lien\b/,
+    /\bnuisance\s+abatement\b/,
+    /\bmunicipal\s+lien\b/,
+    /\bwater\s+(?:and|&)\s+sewer\s+lien\b/,
+    /\bspecial\s+assessment\b/
   ];
 
   const matched = [];
@@ -177,12 +204,40 @@ function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
   }
 
   if (matched.length > 0) {
+    const hasFederalTaxLien = matched.some((m) =>
+      /federal\s+tax|irs|internal\s+revenue|7425/.test(m)
+    );
+    const hasMunicipalLien = matched.some((m) =>
+      /code\s+enforcement|code\s+violation|demolition|nuisance|municipal|sewer|special\s+assessment/.test(m)
+    );
+    const hasHoaLien = matched.some((m) =>
+      /homeowners|condo|hoa|assessment/.test(m)
+    );
+    let warning = 'SENIOR_LIEN_RISK: High pattern-match signal. The text may describe a junior lien or prior encumbrance; obtain a current title search and legal review before concluding that any lien survives.';
+    if (hasFederalTaxLien) {
+      warning += ' Note: 26 U.S.C. § 7425(d) grants the United States a 120-day right of redemption on extinguished junior tax liens.';
+    }
+    if (hasMunicipalLien) {
+      warning += ' Note: Municipal and code enforcement assessments may hold statutory super-priority under local ordinance.';
+    }
+    if (hasHoaLien) {
+      const normalizedState = typeof state === 'string' ? state.trim().toUpperCase() : null;
+      const isSuperPriorityState = normalizedState && SUPER_PRIORITY_HOA_STATES.has(normalizedState);
+      if (isSuperPriorityState) {
+        warning += ` Note: In ${normalizedState}, HOA/condominium assessment liens hold statutory super-priority (typically 6–9 months of common assessments) ahead of first mortgages.`;
+      } else {
+        warning += ' Note: In super-priority jurisdictions (e.g. NV N.R.S. § 116.3116, CO C.R.S. § 38-33.3-316, WA, MA, CT, FL, NJ, PA), HOA/condominium assessment liens may hold statutory super-priority over first mortgages.';
+      }
+    }
     return {
       isJuniorLien: true,
       riskLevel: 'high',
       survivingSeniorLiens: true,
       matchedTerms: [...new Set(matched)],
-      warning: 'SENIOR_LIEN_RISK: High pattern-match signal. The text may describe a junior lien or prior encumbrance; obtain a current title search and legal review before concluding that any lien survives.'
+      hasFederalTaxLien,
+      hasMunicipalLien,
+      hasHoaLien,
+      warning
     };
   }
 
@@ -191,6 +246,9 @@ function detectSeniorLienSurvival(plaintiff = '', legalText = '') {
     riskLevel: 'unknown',
     survivingSeniorLiens: null,
     matchedTerms: [],
+    hasFederalTaxLien: false,
+    hasMunicipalLien: false,
+    hasHoaLien: false,
     warning: 'NO_TITLE_CONCLUSION: No junior-lien phrase was detected in the supplied text. Absence of a phrase is not evidence of lien priority or clear title.'
   };
 }
@@ -262,6 +320,9 @@ function computeCashToClose(params = {}) {
   const assumptions = Object.entries(basis)
     .filter(([, value]) => value === 'assumption')
     .map(([field]) => `${field} is an explicit scenario assumption.`);
+  if (creditedDeposit !== null && totalAcquisitionCost !== null && creditedDeposit > totalAcquisitionCost) {
+    assumptions.push('creditedDeposit exceeds totalAcquisitionCost; excess deposit does not reduce settlement obligation below zero.');
+  }
 
   return {
     openingBid,
@@ -608,6 +669,7 @@ NO BID RECOMMENDATION. Do not place a deposit or authorize a bid from this draft
 
 module.exports = {
   STATE_REDEMPTION_RULES,
+  SUPER_PRIORITY_HOA_STATES,
   parseCurrency,
   getRedemptionRule,
   detectSeniorLienSurvival,

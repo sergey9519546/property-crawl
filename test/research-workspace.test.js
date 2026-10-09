@@ -264,14 +264,26 @@ test('main Node server dispatches the protected workspace route against live inv
   process.env.NODE_ENV = 'test';
   const database = require('../server/db/client');
   const { validateListingForIngestion } = require('../server/scrapers/validation');
-  const inventory = await database.getListings({ limit: 1000, offset: 0 });
-  const observed = inventory.listings.find((item) => item.provenance?.origin === 'live' && validateListingForIngestion(item).isValid);
+  let inventory = await database.getListings({ limit: 1000, offset: 0 });
+  let createdSample = false;
+  let observed = inventory.listings.find((item) => item.provenance?.origin === 'live' && validateListingForIngestion(item).isValid);
+  if (!observed) {
+    const sample = listing();
+    await database.createListing(sample);
+    createdSample = true;
+    inventory = await database.getListings({ limit: 1000, offset: 0 });
+    observed = inventory.listings.find((item) => item.provenance?.origin === 'live' && validateListingForIngestion(item).isValid);
+  }
   assert.ok(observed, 'test inventory needs one validated source-observed record');
   const server = require('../server/server');
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+    if (createdSample) {
+      const idx = database.inMemoryData.listings.findIndex((item) => item.id === observed.id);
+      if (idx >= 0) database.inMemoryData.listings.splice(idx, 1);
+    }
     if (previous.token === undefined) delete process.env.SCRAPER_ADMIN_TOKEN; else process.env.SCRAPER_ADMIN_TOKEN = previous.token;
     if (previous.store === undefined) delete process.env.PROPERTY_RESEARCH_WORKSPACE_PATH; else process.env.PROPERTY_RESEARCH_WORKSPACE_PATH = previous.store;
     if (previous.nodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.nodeEnv;

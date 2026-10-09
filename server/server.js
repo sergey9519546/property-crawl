@@ -182,6 +182,9 @@ async function handleRequest(req, res) {
     }
 
     // API Routes Routing
+    if (url.pathname === '/api/listings/compare') {
+      return handlePropertyComparison(req, res, url);
+    }
     if (url.pathname.startsWith('/api/listings')) return handleListings(req, res);
     if (url.pathname === '/api/parse') return handleParse(req, res);
     if (url.pathname === '/api/enrich') return handleEnrich(req, res);
@@ -225,9 +228,6 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/portfolio/dashboard' || url.pathname.startsWith('/api/portfolio/')) {
       return handlePortfolioDashboard(req, res, url);
-    }
-    if (url.pathname === '/api/listings/compare') {
-      return handlePropertyComparison(req, res, url);
     }
     if (url.pathname === '/api/price-drops') {
       return handlePriceDrop(req, res, url);

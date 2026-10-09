@@ -102,7 +102,8 @@ describe('PropertyTitle Intelligence & Underwriting', () => {
     });
   });
 
-  describe('Live PropertyTitle API Integration', () => {
+  const hasLiveApiKey = Boolean(process.env.RUN_LIVE_PROPERTY_TITLE_TESTS || (process.env.PROPERTY_TITLE_API_KEY && process.env.PROPERTY_TITLE_API_KEY !== 'test-property-title-key'));
+  describe('Live PropertyTitle API Integration', { skip: !hasLiveApiKey }, () => {
     test('health check returns status ok', async () => {
       const health = await client.healthCheck();
       assert.equal(health.status, 'ok');

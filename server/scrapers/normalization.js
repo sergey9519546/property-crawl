@@ -220,29 +220,36 @@ function standardizeListingRecord(raw = {}, options = {}) {
     };
   }
 
+  let seniorLienRisk = cleanText(input.seniorLienRisk);
+  let seniorLienWarning = cleanText(input.seniorLienWarning);
+  let seniorLien = null;
+  if (cleanText(input.plaintiff) || rawNotice) {
+    seniorLien = detectSeniorLienSurvival(input.plaintiff || '', rawNotice || '', state);
+    if (!seniorLienRisk) {
+      seniorLienRisk = seniorLien.riskLevel;
+      seniorLienWarning = seniorLien.warning;
+      derivedFields.seniorLienRisk = {
+        model: 'legal-text-pattern-v1',
+        inputs: ['plaintiff', 'raw'],
+        note: 'Pattern flag only; not a title opinion.'
+      };
+    }
+  }
+
   let redemptionDays = numberOrNull(input.redemptionDays, { min: 0, integer: true });
   let redemptionWarning = cleanText(input.redemptionWarning);
   if (state && /^[A-Z]{2}$/.test(state) && redemptionDays === null) {
-    const redemption = getRedemptionRule(state);
+    const redemption = getRedemptionRule(state, {
+      hasFederalTaxLien: seniorLien?.hasFederalTaxLien
+    });
     redemptionDays = redemption.days;
     redemptionWarning = redemption.warning;
     derivedFields.redemption = {
-      model: 'state-statutory-rule-lookup-v1',
-      inputs: ['state'],
-      note: 'State-level baseline only; sale type and docket must be verified.'
-    };
-  }
-
-  let seniorLienRisk = cleanText(input.seniorLienRisk);
-  let seniorLienWarning = cleanText(input.seniorLienWarning);
-  if (!seniorLienRisk && (cleanText(input.plaintiff) || rawNotice)) {
-    const seniorLien = detectSeniorLienSurvival(input.plaintiff || '', rawNotice || '');
-    seniorLienRisk = seniorLien.riskLevel;
-    seniorLienWarning = seniorLien.warning;
-    derivedFields.seniorLienRisk = {
-      model: 'legal-text-pattern-v1',
-      inputs: ['plaintiff', 'raw'],
-      note: 'Pattern flag only; not a title opinion.'
+      model: seniorLien?.hasFederalTaxLien ? 'federal-statute-overlay-v1' : 'state-statutory-rule-lookup-v1',
+      inputs: ['state', ...(seniorLien?.hasFederalTaxLien ? ['federalTaxLien'] : [])],
+      note: seniorLien?.hasFederalTaxLien
+        ? 'Overlay of 26 U.S.C. § 7425(d) 120-day federal redemption over state baseline; docket must be verified.'
+        : 'State-level baseline only; sale type and docket must be verified.'
     };
   }
 
