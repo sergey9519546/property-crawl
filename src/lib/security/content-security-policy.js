@@ -42,6 +42,8 @@ function buildContentSecurityPolicy({
     "img-src 'self' data: https:",
     "font-src 'self' https://fonts.gstatic.com https: data:",
     "connect-src 'self' https:",
+    "worker-src 'self' blob:",
+    "child-src 'self' blob:",
     "frame-src https:",
     "object-src 'none'",
     "base-uri 'self'",

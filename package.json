@@ -89,6 +89,7 @@
     "test:underwriting-resilience": "node --test test/scrapling-adaptive.test.js test/email_notice_collector.test.js test/county_platform_adapters.test.js test/circuit_breaker_antipoison.test.js test/title_risk_engine.test.js test/municipal_liens.test.js test/cash_to_close_complete.test.js test/second_look_engine.test.js",
     "test:enrichment-intelligence": "node --test test/enrichment_geocoding.test.js test/fhfa_hpi_valuation.test.js test/panoramax_imagery.test.js test/parcel_deduplication.test.js",
     "test:operator-ux": "node --test test/decision_packet_export.test.js test/document_review_workflow.test.js test/hunt_subscription_alerts.test.js test/layout_a11y_compliance.test.js",
+    "test:enterprise-durability": "node --test test/pg_row_lock_soak.test.js test/csp_nonce_verification.test.js test/rate_limiter_security.test.js test/backup_restore_resilience.test.js",
     "test:graph": "node --test test/capability-graph.test.js",
     "test:hunt-ranking": "node --experimental-strip-types --test test/hunt-ranking.test.js test/score-bands.test.mjs test/terminal-filter-store.test.mjs test/intelligence/research-cases-helpers.test.js",
     "test:hunts": "node --test test/hunts.test.js test/hunt-ranking.test.js test/hunt-discovery-filters.test.js test/intelligence/hunts-recent-events-coverage.test.js",

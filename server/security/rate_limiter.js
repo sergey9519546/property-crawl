@@ -52,16 +52,21 @@ class MemoryRateLimiter {
 
       this.hits.set(ip, clientRecord);
 
+      res.setHeader('RateLimit-Limit', this.maxRequests);
+      res.setHeader('RateLimit-Remaining', Math.max(0, this.maxRequests - clientRecord.count));
+      res.setHeader('RateLimit-Reset', Math.ceil(clientRecord.resetAt / 1000));
       res.setHeader('X-RateLimit-Limit', this.maxRequests);
       res.setHeader('X-RateLimit-Remaining', Math.max(0, this.maxRequests - clientRecord.count));
       res.setHeader('X-RateLimit-Reset', Math.ceil(clientRecord.resetAt / 1000));
 
       if (clientRecord.count > this.maxRequests) {
-        res.setHeader('Retry-After', Math.ceil((clientRecord.resetAt - now) / 1000));
+        const retryAfter = Math.ceil((clientRecord.resetAt - now) / 1000);
+        res.setHeader('Retry-After', retryAfter);
         return res.status(429).json({
           error: 'Too Many Requests',
           message: 'Rate limit exceeded. Please slow down.',
-          retryAfterSeconds: Math.ceil((clientRecord.resetAt - now) / 1000)
+          retryAfter,
+          retryAfterSeconds: retryAfter
         });
       }
 
