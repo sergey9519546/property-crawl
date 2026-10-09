@@ -228,6 +228,10 @@ export function DiscoveryWorkbench() {
       });
       const result = (await response.json()) as Payload;
       if (request.controller.signal.aborted || requestRef.current?.id !== request.id) return;
+      if (response.status === 401) {
+        session.requestUnlock();
+        throw new Error("Operator unlock required to view inventory.");
+      }
       if (response.status === 409) {
         setCursor(undefined);
         setCursorStack([]);

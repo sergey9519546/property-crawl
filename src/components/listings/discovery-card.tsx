@@ -180,7 +180,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         })() : null}
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}</span> : null}
       </div>
-      <div className="mt-auto grid grid-cols-[1.2fr_1fr] gap-2 pt-4">
+      <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-[1.2fr_1fr]">
         <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
         <CaseAction listingId={listing.id} label="Research" className="h-11 border-slate-200 bg-white font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50" />
       </div>

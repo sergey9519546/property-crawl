@@ -4,6 +4,7 @@ import * as React from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { DiscoveryFilters } from "@/lib/discovery-query";
 import { discoverySearchParams } from "@/lib/discovery-query";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 type Feature = { geometry?: { type?: string; coordinates?: number[] }; properties?: { id?: string; count?: number; source?: string; status?: string } };
 type MapResponse = { type?: string; features?: Feature[]; revision?: string; truncated?: boolean };

@@ -201,11 +201,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
           <Link href="/" className="mr-2 flex items-center" aria-label="PerfectProperty home"><Logo className="text-[16px]" /></Link>
-          <nav aria-label="Research workspace" className="order-3 grid w-full grid-cols-6 gap-1 sm:order-none sm:flex sm:w-auto sm:flex-1">
+          <nav aria-label="Research workspace" className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("inline-flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-[#0F172A] text-white" : "text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827]")}><Icon size={14} />{item.label}</Link>;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-[#0F172A] text-white" : "text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827]")}><Icon size={14} />{item.label}</Link>;
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">
@@ -220,7 +220,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       {children}
     </div>
     <Dialog open={unlockOpen} onOpenChange={(value) => { if (!submitting) { setUnlockOpen(value); if (!value) setCredential(""); } }}>
-      <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); unlockOpener.current?.focus(); }} className="z-[100] gap-0 rounded-2xl bg-white p-6 text-slate-950 sm:max-w-md">
+      <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); (unlockOpener.current || document.body).focus(); }} className="z-[100] gap-0 rounded-2xl bg-white p-6 text-slate-950 sm:max-w-md">
         <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-900">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-slate-100"><X size={18} /></button></div>
         <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">This beta uses a single shared operator key. Anyone with the key can access research, hunts, and activity.</DialogDescription>
         <form onSubmit={unlock} className="mt-5">
