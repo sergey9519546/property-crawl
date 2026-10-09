@@ -164,7 +164,7 @@ test('Next security headers are declared for the canonical UI', () => {
 
   // The CSP itself is asserted by the policy builder (dedicated unit test covers
   // nonce/strict-dynamic/font rules); here we only prove the proxy is the carrier.
-  const proxy = fs.readFileSync(path.join(__dirname, '..', 'src/middleware.ts'), 'utf8');
+  const proxy = fs.readFileSync(path.join(__dirname, '..', 'src/proxy.ts'), 'utf8');
   assert.match(proxy, /Content-Security-Policy/);
   assert.match(proxy, /buildContentSecurityPolicy/);
   assert.match(proxy, /x-nonce/);

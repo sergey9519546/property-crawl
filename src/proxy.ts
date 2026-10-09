@@ -12,7 +12,7 @@ import {
  * upgrade-insecure-requests is set only when the request is already HTTPS.
  * Local `next start` is HTTP and must keep working.
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const isDev = process.env.NODE_ENV === 'development';
   const policy = buildContentSecurityPolicy({
@@ -32,6 +32,8 @@ export function middleware(request: NextRequest) {
   return response;
 }
 
+export const middleware = proxy;
+
 export const config = {
   matcher: [
     {
@@ -43,3 +45,5 @@ export const config = {
     },
   ],
 };
+
+export default proxy;
