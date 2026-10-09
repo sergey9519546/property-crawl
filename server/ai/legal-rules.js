@@ -297,12 +297,8 @@ function computeCashToClose(params = {}) {
     ? purchasePrice + buyersPremium + sheriffPoundage + transferTax + delinquentTaxes + settlementCosts
     : null;
   
-  if (totalAcquisitionCost !== null && creditedDeposit !== null && creditedDeposit > totalAcquisitionCost) {
-    throw new Error('Invalid funding model: creditedDeposit cannot exceed totalAcquisitionCost');
-  }
-
   const cashDueAtSettlement = totalAcquisitionCost !== null && creditedDeposit !== null
-    ? totalAcquisitionCost - creditedDeposit
+    ? Math.max(0, totalAcquisitionCost - creditedDeposit)
     : null;
   const basis = {
     openingBid: openingBid === null ? null : amountBasis(params, 'openingBid', 'published'),
