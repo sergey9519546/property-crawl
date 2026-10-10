@@ -111,7 +111,9 @@ videos/
 .agents/skills/agent-verification/SKILL.md  # auto-edited by skills indexer
 .dsh-project-memory/                 # runtime shard store for the dsh tool
 .kilo/mcp.json                       # auto-edited by the kilo MCP registry
-.kilo/plans/                         # per-session plan files (conversation-scoped)
+# per-session plan files (conversation-scoped); comment on its own line because
+# a trailing "# ..." would become part of the pattern and never match
+.kilo/plans/
 
 # --- Swarm runtime artifacts (never commit episodes) ---
 memory/episodes/
