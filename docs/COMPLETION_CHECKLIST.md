@@ -30,7 +30,7 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `d2c8c89` | `reports/release-gate-ledger.json` → `tree` |
+| Tree | `d470b20` | `reports/release-gate-ledger.json` → `tree` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
 | Seed listings (`data.js`) | **2091** | `scripts/gen-context.js` |
