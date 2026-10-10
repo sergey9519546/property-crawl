@@ -51,7 +51,7 @@ Nothing below depends on anything later in the list.
 | 7 | **PP-04** public domain + HTTPS/CSP proof on the live host | #5, #6 | the deployment |
 | 8 | **PP-05** commit the release ledger + rollout/rollback handoff | #2, #7 | an actual release |
 
-### Status of 1, 2, 3, 4, and 5
+### Status of 1, 2, 3, 4, 5, and 8
 
 - **#1 PP-01 — CLOSED.** A corrupt store loaded empty and the next write
   persisted that emptiness over the file: one bad store plus one user action
@@ -123,7 +123,7 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Blocker | Owner | Unblocked by |
 |---|---|---|
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
-| Fly/Koyeb operator secrets | operator | values set in the host dashboard |
+| Host operator secrets (`SCRAPER_ADMIN_TOKEN`, optional `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT`, `DATABASE_URL` when durable) | operator | set in the host dashboard — the wired deploy target is Render (free web service), so the two repo secrets that activate the pipeline are `RENDER_DEPLOY_HOOK_URL` and `DEPLOY_SMOKE_URL` |
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
 | Google Maps key restriction | ops | GCP console — and not from this machine: its two authenticated gcloud accounts administer 6 projects, none with Maps APIs enabled, so the key's project lives elsewhere (re-checked 2026-10-10) |
 | Public live URL + custom domain | operator | DNS |

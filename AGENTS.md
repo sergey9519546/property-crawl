@@ -165,7 +165,7 @@ Reports (`reports/`): canary promotions (`canary-promotion-*.md`), gap analysis 
 
 ## 8. Residuals / open work (`docs/ULTRAPLAN.md`, `docs/GAP_CLOSEOUT_2026-09-20.md`, `docs/OPEN_RESIDUALS.md`)
 - Session fixes (workbench restore, page-scoped result copy, CSP boot-test drift, postgres verify-before-listen wiring) were committed on 2026-09-27. Live Postgres listing round-trip is closed with evidence (`docs/OPEN_RESIDUALS.md`, `docs/PRODUCT_GAPS.md`): `dataMode=postgres`, `total=2093` (the count observed on that date — for the
-current total read `CONTEXT.md`), UI proxy matches API. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
+current total read `CONTEXT.md`), UI proxy matches API. The full verify gate has since been run green WITH a real server (2026-10-10: 50/50 suites, 17 of the 18 DB-gated tests executing; the 18th is optional-live-endpoint) — reproduce with `npm run discovery:local -- up` plus `DISCOVERY_TEST_DATABASE_URL` on `127.0.0.1:55432`. Do not claim the full verify gate is green without `DISCOVERY_TEST_DATABASE_URL`.
 - Nationwide HUD unpromoted; treasury, usda, hud@OH,NJ promoted.
 - Quality gate: 14/14; e2e demo: 25/25; e2e `--with-db`: 24/24; `tsc` clean (`docs/ULTRAPLAN.md` §0).
 - Budget target: $0 at MVP, under $150/month in production (`docs/STRATEGY.md` §0).
