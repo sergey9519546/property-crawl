@@ -221,7 +221,18 @@ function validateHuntInput(input, options = {}) {
     const criteria = validateCriteria(input.criteria, errors);
     if (criteria) value.criteria = criteria;
   } else if (!partial) errors.push('criteria are required');
-  if (partial && !Object.keys(value).length && !errors.length) errors.push('provide name, enabled, or criteria to update');
+  if (Object.hasOwn(input, 'webhookUrl')) {
+    if (input.webhookUrl !== null && input.webhookUrl !== undefined && input.webhookUrl !== '') {
+      if (typeof input.webhookUrl !== 'string' || !/^https?:\/\/.+/i.test(input.webhookUrl.trim()) || input.webhookUrl.trim().length > 512) {
+        errors.push('webhookUrl must be a valid HTTP or HTTPS URL');
+      } else {
+        value.webhookUrl = input.webhookUrl.trim();
+      }
+    } else {
+      value.webhookUrl = null;
+    }
+  }
+  if (partial && !Object.keys(value).length && !errors.length) errors.push('provide name, enabled, webhookUrl, or criteria to update');
   return { isValid: errors.length === 0, errors, value: errors.length ? undefined : value };
 }
 
@@ -234,6 +245,7 @@ function currentIso(now) {
 function summary(hunt) {
   return {
     id: hunt.id, name: hunt.name, enabled: hunt.enabled, version: hunt.version,
+    webhookUrl: hunt.webhookUrl || null,
     criteria: hunt.criteria, criteriaHash: hunt.criteriaHash, createdAt: hunt.createdAt,
     updatedAt: hunt.updatedAt, versionCount: hunt.versions.length,
   };
@@ -248,6 +260,7 @@ function createHunt(input, options = {}) {
     id: `hunt_${crypto.randomBytes(12).toString('hex')}`,
     name: validation.value.name,
     enabled: validation.value.enabled,
+    webhookUrl: validation.value.webhookUrl || null,
     version: 1,
     criteria: validation.value.criteria,
     criteriaHash,

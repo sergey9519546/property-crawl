@@ -48,7 +48,12 @@ function loadTs(relative) {
     if (name === '@/components/workspace/workspace-shell' || name === '@/components/workspace/workspace-shell.tsx') {
       return workspaceShellStub;
     }
-    if (name.startsWith('@/')) return loadTs('src/' + name.slice(2) + '.ts');
+    if (name.startsWith('@/')) {
+      const base = 'src/' + name.slice(2);
+      const root = path.resolve(__dirname, '..');
+      if (fs.existsSync(path.join(root, base + '.tsx'))) return loadTs(base + '.tsx');
+      return loadTs(base + '.ts');
+    }
     return originalRequire(name);
   };
   loaded.set(filename, instance);

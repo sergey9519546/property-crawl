@@ -1,5 +1,5 @@
 'use client';
-// acknowledged-orphan: Task 14 real-time dual-pane speed review interface for ambiguous legal notices.
+// Mounted in src/components/documents/document-review-queue.tsx for dual-pane speed review of ambiguous legal notices.
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {

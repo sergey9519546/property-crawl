@@ -21,6 +21,7 @@ type Hunt = {
   name: string;
   version: number;
   enabled: boolean;
+  webhookUrl?: string | null;
   criteria:
     | { mode: "all" | "any"; rules: Rule[]; discoveryFilters?: never }
     | { discoveryFilters: Record<string, string>; mode?: never; rules?: never };
@@ -192,6 +193,7 @@ export function SavedHunts() {
   const [events, setEvents] = useState<Event[]>([]);
   const [inbox, setInbox] = useState<(Event & { huntName: string })[]>([]);
   const [name, setName] = useState("My overlooked-property hunt");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [mode, setMode] = useState<"all" | "any">("all");
   const [rules, setRules] = useState<Rule[]>([
     { field: "state", operator: "eq", value: "FL" },
@@ -288,6 +290,7 @@ export function SavedHunts() {
   async function openHunt(hunt: Hunt) {
     const detail = await api(`/${hunt.id}`);
     setSelected(detail.hunt);
+    setWebhookUrl(detail.hunt?.webhookUrl || "");
     setEvaluation(null);
     setEvents(detail.recentEvents || []);
   }
@@ -494,6 +497,7 @@ export function SavedHunts() {
                   void run(async () => {
                     const data = await api("", "POST", {
                       name,
+                      webhookUrl: webhookUrl.trim() || undefined,
                       criteria: {
                         mode,
                         rules: rules.map((rule) =>
@@ -521,6 +525,17 @@ export function SavedHunts() {
                     maxLength={80}
                     value={name}
                     onChange={(event) => setName(event.target.value)}
+                    className={`${inputClass} mt-2`}
+                  />
+                </label>
+                <label className="mt-4 block text-xs font-semibold">
+                  Webhook URL <span className="text-[10px] font-normal text-slate-500">(Optional notification endpoint)</span>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/api/webhooks/property-alerts"
+                    maxLength={256}
+                    value={webhookUrl}
+                    onChange={(event) => setWebhookUrl(event.target.value)}
                     className={`${inputClass} mt-2`}
                   />
                 </label>
@@ -697,6 +712,12 @@ export function SavedHunts() {
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
                       </h2>
+                      {selected.webhookUrl && (
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-indigo-700">
+                          <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-900">Webhook</span>
+                          <span className="truncate max-w-sm">{selected.webhookUrl}</span>
+                        </p>
+                      )}
                       <p className="mt-2 text-xs text-[#5B6472]">
                         {"discoveryFilters" in selected.criteria
                           ? "Matches the filters saved from Discover."

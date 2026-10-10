@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Scale, Clock, DollarSign } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Scale, Clock, DollarSign, FileText } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
@@ -337,6 +337,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
             {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B]">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
+            <div className="mt-2">
+              <Link
+                href={`/research/${encodeURIComponent(listing.id)}/export`}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+              >
+                <FileText className="h-4 w-4 text-slate-600" />
+                Export Decision Packet
+              </Link>
+            </div>
           </div>
 
           <nav aria-label="Property record sections" className="mt-7 flex max-w-full gap-7 overflow-x-auto border-b border-slate-200 text-sm font-semibold text-slate-600">
@@ -541,6 +550,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
             )}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
+            <div className="mt-2">
+              <Link
+                href={`/research/${encodeURIComponent(listing.id)}/export`}
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+              >
+                <FileText className="h-4 w-4 text-slate-600" />
+                Export Decision Packet
+              </Link>
+            </div>
           </div>
         </aside>
       </div>

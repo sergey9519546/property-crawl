@@ -71,6 +71,13 @@ function validateFilters(filters) {
       return { ok: false, reason: `${enumKey}_must_be_string` };
     }
   }
+  if ('webhookUrl' in filters) {
+    if (filters.webhookUrl !== null && filters.webhookUrl !== undefined && filters.webhookUrl !== '') {
+      if (typeof filters.webhookUrl !== 'string' || !/^https?:\/\/.+/i.test(filters.webhookUrl.trim()) || filters.webhookUrl.trim().length > 512) {
+        return { ok: false, reason: 'webhookUrl_must_be_valid_http_url' };
+      }
+    }
+  }
   return { ok: true };
 }
 
@@ -80,6 +87,7 @@ function serializeSearch(record) {
     id: record.id,
     label: record.label,
     filters: record.filters,
+    webhookUrl: record.filters?.webhookUrl || null,
     isActive: record.isActive,
     lastRunAt: record.lastRunAt,
     lastMatchCount: record.lastMatchCount,

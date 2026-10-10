@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Check, FileWarning, Inbox, Loader2, MessageSquareWarning, RefreshCw, ShieldQuestion, ThumbsDown } from "lucide-react";
+import { Check, Columns2, FileWarning, Inbox, LayoutList, Loader2, MessageSquareWarning, RefreshCw, ShieldQuestion, ThumbsDown } from "lucide-react";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
+import { ReviewSplitPane, type DocumentReviewItem } from "@/components/workspace/review-split-pane";
 
 type Review = {
   status: "pending" | "approved" | "rejected" | "needs_more";
@@ -68,6 +69,7 @@ export function DocumentReviewQueue() {
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [notesDraft, setNotesDraft] = React.useState<Record<string, string>>({});
   const [reviewerDraft, setReviewerDraft] = React.useState("");
+  const [viewMode, setViewMode] = React.useState<"cards" | "split">("cards");
 
   const refresh = React.useCallback(async (quiet = false) => {
     if (!session.authenticated) {
@@ -222,36 +224,80 @@ export function DocumentReviewQueue() {
         {error && <p role="alert" className="mt-4 rounded-xl bg-amber-100 p-4 text-sm text-amber-950">{error}</p>}
         {statusMessage && <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-950">{statusMessage}</p>}
 
-        <div className="mt-8 flex flex-wrap items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
-          <ShieldQuestion size={16} className="text-slate-500" />
-          <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-[#5B6472]">Reviewer identifier</label>
-          <input
-            id="document-review-reviewer"
-            type="text"
-            value={reviewerDraft}
-            onChange={(event) => setReviewerDraft(event.target.value)}
-            placeholder="operator-7"
-            className="min-w-[12rem] flex-1 rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm"
-          />
-          <p className="text-xs leading-5 text-[#5B6472]">Required for every terminal action. Notes are required when rejecting or requesting follow-up.</p>
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <ShieldQuestion size={16} className="text-slate-500" />
+            <label htmlFor="document-review-reviewer" className="text-xs font-semibold text-[#5B6472]">Reviewer identifier</label>
+            <input
+              id="document-review-reviewer"
+              type="text"
+              value={reviewerDraft}
+              onChange={(event) => setReviewerDraft(event.target.value)}
+              placeholder="operator-7"
+              className="min-w-[12rem] flex-1 rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setViewMode("cards")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "cards" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              <LayoutList size={14} />
+              Card view
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("split")}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${viewMode === "split" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              <Columns2 size={14} />
+              Split-pane speed review
+            </button>
+          </div>
         </div>
 
-        <div className="mt-6 space-y-4">
-          {loading && !data && (
-            <p className="flex items-center gap-2 rounded-2xl bg-white p-6 text-sm">
-              <Loader2 size={17} className="animate-spin" />
-              Loading pending reviews…
-            </p>
-          )}
-          {!loading && data && data.reviews.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white p-8">
-              <Inbox className="text-slate-900" />
-              <h2 className="mt-4 text-xl font-semibold">No pending documents.</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5B6472]">
-                The build-data extraction pipeline has nothing waiting for review. Refresh the page after the next cycle to inspect new captures.
+        {viewMode === "split" && data && data.reviews.length > 0 ? (
+          <div className="mt-6">
+            <ReviewSplitPane
+              items={data.reviews.map((entry) => ({
+                id: entry.id,
+                listingId: entry.listingId,
+                sourceUrl: entry.documentUrl || undefined,
+                rawText: `Source Document: ${entry.listingId} (Doc #${entry.documentIndex ?? 0})\nDocument URL: ${entry.documentUrl || "None attached"}\nExtraction timestamp: ${entry.review.extractedAt || "Observed via crawler"}\nCurrent review status: ${entry.review.status}\nPrior status: ${entry.review.priorStatus || "None"}`,
+                extractedFields: {
+                  caseNumber: entry.listingId,
+                  confidenceScore: entry.review.status === "approved" ? 1.0 : 0.85,
+                },
+                reviewStatus: entry.review.status === "needs_more" ? "pending" : (entry.review.status as any),
+              }))}
+              onApprove={async (id) => {
+                const entry = data.reviews.find((r) => r.id === id);
+                if (entry) await applyDecision(entry, "approved");
+              }}
+              onReject={async (id) => {
+                const entry = data.reviews.find((r) => r.id === id);
+                if (entry) await applyDecision(entry, "rejected");
+              }}
+            />
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {loading && !data && (
+              <p className="flex items-center gap-2 rounded-2xl bg-white p-6 text-sm">
+                <Loader2 size={17} className="animate-spin" />
+                Loading pending reviews…
               </p>
-            </div>
-          )}
+            )}
+            {!loading && data && data.reviews.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white p-8">
+                <Inbox className="text-slate-900" />
+                <h2 className="mt-4 text-xl font-semibold">No pending documents.</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5B6472]">
+                  The build-data extraction pipeline has nothing waiting for review. Refresh the page after the next cycle to inspect new captures.
+                </p>
+              </div>
+            )}
           {data?.reviews.map((entry) => {
             const href = safeHref(entry.documentUrl ?? null);
             const note = notesDraft[entry.id] ?? "";
@@ -340,6 +386,7 @@ export function DocumentReviewQueue() {
             );
           })}
         </div>
+      )}
 
         {data && data.reviews.length > 0 && data.byStatus.pending === 0 && (
           <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-950">

@@ -27,10 +27,9 @@
 //   KNOWN_PROXYABLE_NO_UI_CALLER    served + proxyable + rendered by nothing
 //   KNOWN_BROWSER_UNREACHABLE       served, but the proxy will not admit it
 //
-// The three-unreachable routes are:
+// The two-unreachable routes are:
 //
 //   /api/coverage              server.js:185
-//   /api/price-drops           server.js:212 + routes/price-drop.js
 //   /api/portfolio/dashboard   server.js:206 + routes/portfolio-dashboard.js
 //
 // They are not removed - a CLI or external consumer may use them, and
@@ -60,7 +59,6 @@ function apiPathRegex() {
 // Served by the Node API but not reachable from any browser caller.
 const KNOWN_BROWSER_UNREACHABLE = [
   '/api/coverage',
-  '/api/price-drops',
   '/api/portfolio/dashboard',
 ];
 
@@ -79,6 +77,7 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/saved-searches/s1', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/saved-searches/s1/run', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/alerts/matches', callers: ['src/lib/saved-searches.ts'] },
+  { route: '/api/price-drops', callers: ['src/components/site/second-look-showcase.tsx'] },
 ];
 
 // Served, admitted by the proxy, and rendered by nothing.
@@ -198,7 +197,7 @@ test('the unreachable set is not silently growing', () => {
   // pinned so a new orphan route is a deliberate decision.
   assert.equal(
     KNOWN_BROWSER_UNREACHABLE.length,
-    3,
+    2,
     'the set of server routes the browser cannot reach changed. If a route was '
       + 'added or removed on purpose, update this list in the same commit',
   );

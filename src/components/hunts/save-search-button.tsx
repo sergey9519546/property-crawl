@@ -16,6 +16,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
   const session = useWorkspaceSession();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("My property search");
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
     }
     setError("");
     setSavedId(null);
+    setWebhookUrl("");
     setOpen(true);
   }
 
@@ -37,6 +39,11 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
     const cleanName = name.trim();
     if (!cleanName) {
       setError("Enter a name for this search.");
+      return;
+    }
+    const cleanWebhook = webhookUrl.trim();
+    if (cleanWebhook && !/^https?:\/\/.+/i.test(cleanWebhook)) {
+      setError("Webhook URL must be a valid HTTP or HTTPS address.");
       return;
     }
     const discoveryFilters: Record<string, string> = {};
@@ -51,7 +58,12 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: cleanName, enabled: true, criteria: { discoveryFilters } }),
+        body: JSON.stringify({
+          name: cleanName,
+          enabled: true,
+          webhookUrl: cleanWebhook || undefined,
+          criteria: { discoveryFilters },
+        }),
       });
       const result = await response.json();
       if (response.status === 401) {
@@ -84,6 +96,10 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
         </div> : <form onSubmit={save} className="mt-5">
           <label htmlFor="saved-search-name" className="text-sm font-semibold text-slate-800">Name</label>
           <input ref={inputRef} id="saved-search-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
+          <label htmlFor="saved-search-webhook" className="mt-4 block text-sm font-semibold text-slate-800">
+            Webhook URL <span className="text-xs font-normal text-slate-500">(Optional notification endpoint)</span>
+          </label>
+          <input id="saved-search-webhook" type="url" placeholder="https://example.com/api/webhooks/property-alerts" value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} maxLength={256} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
           {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" disabled={busy} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Cancel</button>
