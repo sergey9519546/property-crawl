@@ -29,7 +29,14 @@ import {
 } from "@/components/terminal/property-data";
 import {
   displayDate,
+  displayMoney,
 } from "@/lib/listing-display";
+import {
+  getAuctionCalendar,
+  listNeighborhoods,
+  type AuctionCalendarResponse,
+  type NeighborhoodsResponse,
+} from "@/lib/intelligence-client";
 import {
   discoverySearchParams,
   discoveryUrl,
@@ -866,6 +873,27 @@ function DiscoveryCalendar({
   filters: DiscoveryFilters;
   truncated: boolean;
 }) {
+  const [calendarRollup, setCalendarRollup] = React.useState<AuctionCalendarResponse | null>(null);
+  const [neighborhoodRollup, setNeighborhoodRollup] = React.useState<NeighborhoodsResponse | null>(null);
+  const [rollupLoading, setRollupLoading] = React.useState<boolean>(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setRollupLoading(true);
+    Promise.all([
+      getAuctionCalendar({ windowDays: 60, states: filters.state || undefined }).catch(() => null),
+      listNeighborhoods({ state: filters.state || undefined, limit: 6 }).catch(() => null),
+    ]).then(([cal, hoods]) => {
+      if (cancelled) return;
+      setCalendarRollup(cal);
+      setNeighborhoodRollup(hoods);
+      setRollupLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.state]);
+
   const groups = new Map<string, PropertyListing[]>();
   for (const listing of listings) {
     const day = listing.saleDate || UNKNOWN_SALE_DATE;
@@ -889,6 +917,103 @@ function DiscoveryCalendar({
           Only dates published by a source are placed on the calendar.
         </span>
       </div>
+
+      {/* Store-wide 60-day auction calendar & neighborhood market rollups */}
+      <div className="mt-5 grid gap-4 lg:grid-cols-2" data-testid="calendar-market-rollups">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              60-Day Store-Wide Auction Rollup
+            </h3>
+            <span className="text-xs font-semibold text-slate-600">
+              {rollupLoading
+                ? "Loading…"
+                : calendarRollup
+                  ? `${calendarRollup.total.toLocaleString()} dated auctions`
+                  : "Unavailable"}
+            </span>
+          </div>
+          {calendarRollup && calendarRollup.weeks.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {calendarRollup.weeks.slice(0, 5).map((week) => (
+                <div
+                  key={week.weekStart}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                >
+                  <div>
+                    <span className="font-semibold text-slate-900">
+                      {displayDate(week.weekStart)} – {displayDate(week.weekEnd)}
+                    </span>
+                    <span className="ml-2 text-slate-500">
+                      ({week.count.toLocaleString()} {week.count === 1 ? "sale" : "sales"})
+                    </span>
+                  </div>
+                  <span className="font-bold text-slate-800">
+                    Median:{" "}
+                    {week.medianOpeningBid !== null
+                      ? displayMoney(week.medianOpeningBid)
+                      : "Unpublished"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : !rollupLoading ? (
+            <p className="mt-2 text-xs text-slate-500">
+              No dated auctions found within the next 60 days for the current state scope.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+              Neighborhood &amp; Market Medians
+            </h3>
+            <span className="text-xs font-semibold text-slate-600">
+              {rollupLoading
+                ? "Loading…"
+                : neighborhoodRollup
+                  ? `${neighborhoodRollup.count.toLocaleString()} markets`
+                  : "Unavailable"}
+            </span>
+          </div>
+          {neighborhoodRollup && neighborhoodRollup.neighborhoods.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {neighborhoodRollup.neighborhoods.slice(0, 5).map((bucket) => (
+                <div
+                  key={bucket.key}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-900">{bucket.label}</span>
+                    <span className="ml-2 text-slate-500">
+                      {bucket.count.toLocaleString()} active
+                      {bucket.medianSqft !== null ? ` · ${bucket.medianSqft.toLocaleString()} sqft` : ""}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className="font-bold text-slate-800">
+                      {bucket.medianOpeningBid !== null
+                        ? displayMoney(bucket.medianOpeningBid)
+                        : "Bid unpublished"}
+                    </span>
+                    {bucket.medianDealScore !== null && (
+                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                        Score {bucket.medianDealScore}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : !rollupLoading ? (
+            <p className="mt-2 text-xs text-slate-500">
+              No market clusters computed for the current filter scope.
+            </p>
+          ) : null}
+        </div>
+      </div>
+
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {truncated && (
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 md:col-span-2 xl:col-span-3">

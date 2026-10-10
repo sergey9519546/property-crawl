@@ -62,6 +62,39 @@ function publicWatchlistListing(listing: PropertyListing) {
 }
 
 export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSelectListing }: WatchlistProps) {
+  const [portfolioRollup, setPortfolioRollup] = React.useState<{
+    count: number;
+    totalEstimatedValue: number | null;
+    totalEstimatedEquity: number | null;
+    medianDiscount: number | null;
+    perState: Record<string, number>;
+    perSource: Record<string, number>;
+    upcomingSales: Array<{ id: string; address?: string; state?: string; saleDate?: string; openingBid?: number | null }>;
+  } | null>(null);
+  const [portfolioStatus, setPortfolioStatus] = React.useState<string | null>(null);
+  const [portfolioLoading, setPortfolioLoading] = React.useState<boolean>(false);
+
+  const loadPortfolioDashboard = async () => {
+    setPortfolioLoading(true);
+    setPortfolioStatus(null);
+    try {
+      const response = await fetch("/api/portfolio/dashboard?upcomingWindowDays=60&upcomingLimit=5", {
+        cache: "no-store",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPortfolioRollup(null);
+        setPortfolioStatus(body.error || "Unlock the private workspace to load server portfolio rollups.");
+        return;
+      }
+      setPortfolioRollup(body);
+    } catch {
+      setPortfolioStatus("Portfolio rollup service could not be reached.");
+    } finally {
+      setPortfolioLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -204,9 +237,17 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
               </span>
             </div>
 
-            <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex items-center justify-between">
+            <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs text-[#5B6472] font-medium">Saved source records</span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void loadPortfolioDashboard()}
+                  disabled={portfolioLoading}
+                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm disabled:opacity-50"
+                >
+                  <span>{portfolioLoading ? "Loading Rollup…" : "Portfolio Rollup"}</span>
+                </button>
                 <button
                   onClick={exportCsv}
                   className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
@@ -223,6 +264,38 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 </button>
               </div>
             </div>
+            {portfolioStatus && (
+              <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-950 flex items-center justify-between gap-2">
+                <span>{portfolioStatus}</span>
+                <a href="/sign-in" className="font-bold underline shrink-0">Unlock workspace</a>
+              </div>
+            )}
+            {portfolioRollup && (
+              <div className="px-6 py-3 bg-slate-50 border-b border-[#E5E7EB] text-xs space-y-2" data-testid="portfolio-dashboard-rollup">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
+                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Server Est. Value</span>
+                    <strong className="text-sm text-[#111827]">{displayMoney(portfolioRollup.totalEstimatedValue)}</strong>
+                  </div>
+                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
+                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Server Est. Spread</span>
+                    <strong className="text-sm text-[#15803D]">{displayMoney(portfolioRollup.totalEstimatedEquity)}</strong>
+                  </div>
+                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
+                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Median Discount</span>
+                    <strong className="text-sm text-[#111827]">
+                      {portfolioRollup.medianDiscount !== null ? `${Math.round(portfolioRollup.medianDiscount * 100)}%` : "Not modeled"}
+                    </strong>
+                  </div>
+                </div>
+                {Object.keys(portfolioRollup.perState || {}).length > 0 && (
+                  <p className="text-[11px] text-[#5B6472]">
+                    <strong className="text-[#111827]">States:</strong>{" "}
+                    {Object.entries(portfolioRollup.perState).map(([st, c]) => `${st} (${c})`).join(", ")}
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
 

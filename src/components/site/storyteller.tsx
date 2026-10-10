@@ -475,11 +475,58 @@ function EvidenceFact({ label, value }: { label: string; value: string }) {
 }
 
 function UnderwritePanel() {
+  const arvK = 95;
+  const openingK = 42;
+  const reserveK = 4;
+  const [repairsK, setRepairsK] = React.useState(18);
+  const [carryK, setCarryK] = React.useState(7);
+  const [profitK, setProfitK] = React.useState(22);
+
+  const bidCeilingK = Math.max(openingK, arvK - repairsK - carryK - profitK);
+  const offerRoomK = Math.max(0, bidCeilingK - openingK);
+  const targetMaxBidK = Math.max(openingK, bidCeilingK - Math.min(2, offerRoomK));
+
   const deductions = [
-    { label: "Modeled ARV", value: "$95k", width: "100%", color: "bg-emerald-600" },
-    { label: "Repairs", value: "−$18k", width: "78%", color: "bg-sky-500" },
-    { label: "Carry + close", value: "−$7k", width: "60%", color: "bg-indigo-400" },
-    { label: "Required profit", value: "−$22k", width: "46%", color: "bg-violet-400" },
+    {
+      label: "Modeled ARV",
+      value: `$${arvK}k`,
+      width: "100%",
+      color: "bg-emerald-600",
+      min: arvK,
+      max: arvK,
+      current: arvK,
+      onChange: undefined as ((v: number) => void) | undefined,
+    },
+    {
+      label: "Repairs",
+      value: `−$${repairsK}k`,
+      width: `${Math.max(15, Math.min(100, Math.round(((arvK - repairsK) / arvK) * 100)))}%`,
+      color: "bg-sky-500",
+      min: 5,
+      max: 35,
+      current: repairsK,
+      onChange: setRepairsK,
+    },
+    {
+      label: "Carry + close",
+      value: `−$${carryK}k`,
+      width: `${Math.max(15, Math.min(100, Math.round(((arvK - repairsK - carryK) / arvK) * 100)))}%`,
+      color: "bg-indigo-400",
+      min: 2,
+      max: 18,
+      current: carryK,
+      onChange: setCarryK,
+    },
+    {
+      label: "Required profit",
+      value: `−$${profitK}k`,
+      width: `${Math.max(15, Math.min(100, Math.round((bidCeilingK / arvK) * 100)))}%`,
+      color: "bg-violet-400",
+      min: 10,
+      max: 35,
+      current: profitK,
+      onChange: setProfitK,
+    },
   ];
 
   return (
@@ -503,28 +550,40 @@ function UnderwritePanel() {
                 <span className="text-[#475569]">{item.label}</span>
                 <span className="tabular-nums text-[#111827]">{item.value}</span>
               </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#EEF2F7]">
-                <div className={`h-full rounded-full ${item.color}`} style={{ width: item.width }} />
-              </div>
+              {item.onChange ? (
+                <input
+                  type="range"
+                  aria-label={`Adjust ${item.label} in thousands`}
+                  min={item.min}
+                  max={item.max}
+                  value={item.current}
+                  onChange={(e) => item.onChange?.(Number(e.target.value))}
+                  className="mt-2 h-2.5 w-full cursor-pointer accent-slate-900"
+                />
+              ) : (
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#EEF2F7]">
+                  <div className={`h-full rounded-full ${item.color}`} style={{ width: item.width }} />
+                </div>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-[#F8FAFC] p-2">
-          <ModelStat label="Opening bid" value="$42k" />
-          <ModelStat label="Bid ceiling" value="$48k" emphasis />
-          <ModelStat label="Offer room" value="$6k" />
+          <ModelStat label="Opening bid" value={`$${openingK}k`} />
+          <ModelStat label="Bid ceiling" value={`$${bidCeilingK}k`} emphasis />
+          <ModelStat label="Offer room" value={`$${offerRoomK}k`} />
         </div>
       </article>
 
       <article className="flex flex-col rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
         <p className="mt-3 text-[13px] font-semibold text-slate-300">Modeled bid range</p>
-        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">$42k–$46k</p>
+        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">${openingK}k–${targetMaxBidK}k</p>
         <div className="mt-5 h-px bg-white/10" />
         <div className="mt-5 space-y-4">
-          <DecisionLine icon={DollarSign} label="Walk away above" value="$48k" />
-          <DecisionLine icon={AlertTriangle} label="Risk reserve" value="$4k" />
+          <DecisionLine icon={DollarSign} label="Walk away above" value={`$${bidCeilingK}k`} />
+          <DecisionLine icon={AlertTriangle} label="Risk reserve" value={`$${reserveK}k`} />
           <DecisionLine icon={Calendar} label="Decision window" value="8 days" />
         </div>
         <div className="mt-auto rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
@@ -560,11 +619,18 @@ function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; l
 }
 
 function ActionPanel() {
-  const actions = [
+  const [actions, setActions] = React.useState([
     { label: "Order title review", detail: "Confirm lien priority and exceptions", owner: "Legal", done: false },
     { label: "Complete drive-by", detail: "Validate occupancy and exterior condition", owner: "Acquisitions", done: true },
     { label: "Stage deposit funds", detail: "$4,200 due at winning bid", owner: "Capital", done: false },
-  ];
+  ]);
+
+  const completedCount = actions.filter((a) => a.done).length;
+  const toggleAction = (label: string) => {
+    setActions((prev) =>
+      prev.map((item) => (item.label === label ? { ...item, done: !item.done } : item))
+    );
+  };
 
   return (
     <div data-testid="storyteller-act" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.05fr_0.95fr]">
@@ -575,7 +641,9 @@ function ActionPanel() {
             <h4 className="mt-1 text-[21px] font-bold">{DEMO_DEAL.address}</h4>
             <p className="mt-0.5 text-[11px] font-medium text-slate-400">Prepared for acquisition review</p>
           </div>
-          <span className="rounded-xl bg-emerald-400/15 px-3 py-2 text-[11px] font-extrabold text-emerald-200">Advance with conditions</span>
+          <span className="rounded-xl bg-emerald-400/15 px-3 py-2 text-[11px] font-extrabold text-emerald-200">
+            {completedCount === actions.length ? "Ready for bidding" : "Advance with conditions"}
+          </span>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-3 gap-2">
@@ -614,11 +682,20 @@ function ActionPanel() {
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Next-action board</p>
             <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Move before the deadline</h4>
           </div>
-          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">1 of 3 done</span>
+          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">
+            {completedCount} of {actions.length} done
+          </span>
         </div>
         <div className="mt-5 space-y-2.5">
           {actions.map((action) => (
-            <div key={action.label} className="flex items-start gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4">
+            <button
+              key={action.label}
+              type="button"
+              role="checkbox"
+              aria-checked={action.done}
+              onClick={() => toggleAction(action.label)}
+              className="flex w-full items-start gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 text-left transition hover:border-slate-300"
+            >
               <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${action.done ? "bg-emerald-100 text-emerald-700" : "border border-[#CBD5E1] text-transparent"}`}>
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
               </span>
@@ -627,7 +704,7 @@ function ActionPanel() {
                 <span className="mt-0.5 block text-[11px] font-medium text-[#5B6472]">{action.detail}</span>
               </span>
               <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#5B6472]">{action.owner}</span>
-            </div>
+            </button>
           ))}
         </div>
         <a href="/listings" className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">

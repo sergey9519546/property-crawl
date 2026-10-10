@@ -487,6 +487,17 @@ export function SourceNetwork() {
   const [customOrganization, setCustomOrganization] = useState("");
   const [customMode, setCustomMode] = useState(false);
   const [showCoverageMatrix, setShowCoverageMatrix] = useState(false);
+  const [liveCoverage, setLiveCoverage] = useState<{
+    catalog?: { total?: number; statesCovered?: number };
+    states?: Array<{ state: string; catalogCount?: number; liveCount?: number }>;
+  } | null>(null);
+  const [onboardingItems, setOnboardingItems] = useState<Array<{ key?: string; id?: string; status?: string }> | null>(null);
+  const [unbrowseStatus, setUnbrowseStatus] = useState<{
+    installed?: boolean;
+    consentAccepted?: boolean;
+    status?: string;
+  } | null>(null);
+  const [runningOnboarding, setRunningOnboarding] = useState(false);
   const [reviewItems, setReviewItems] = useState<
     | {
         id: string;
@@ -499,6 +510,58 @@ export function SourceNetwork() {
       }[]
     | null
   >(null);
+
+  useEffect(() => {
+    if (!showCoverageMatrix) return;
+    let cancelled = false;
+    fetch("/api/coverage", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setLiveCoverage(body);
+      })
+      .catch(() => {});
+    if (session.authenticated) {
+      fetch("/api/source-network/onboarding", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          if (!cancelled && body && Array.isArray(body.items)) setOnboardingItems(body.items);
+        })
+        .catch(() => {});
+      fetch("/api/source-network/unbrowse/status", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((body) => {
+          if (!cancelled && body) setUnbrowseStatus(body);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [showCoverageMatrix, session.authenticated]);
+
+  async function runOnboardingPass() {
+    setRunningOnboarding(true);
+    try {
+      const response = await fetch("/api/source-network/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const refreshed = await fetch("/api/source-network/onboarding", { cache: "no-store" });
+        const refBody = await refreshed.json().catch(() => ({}));
+        if (Array.isArray(refBody.items)) setOnboardingItems(refBody.items);
+        setMessage(`Onboarding spider pass finished (${result.probed ?? 0} probed).`);
+      } else {
+        setMessage(result.error || "Onboarding spider pass could not run.");
+      }
+    } catch {
+      setMessage("Onboarding spider pass failed.");
+    } finally {
+      setRunningOnboarding(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -821,6 +884,38 @@ export function SourceNetwork() {
               id="coverage-matrix-table"
               className="overflow-x-auto rounded-2xl border border-[#E5E7EB] bg-white"
             >
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E7EB] bg-slate-50/70 px-4 py-3 text-xs text-slate-700">
+                <div>
+                  <span className="font-semibold text-slate-900">Live state coverage matrix:</span>{" "}
+                  {liveCoverage?.states
+                    ? `${liveCoverage.states.length} states tracked in live/catalog matrix`
+                    : "Loading state coverage summary…"}
+                </div>
+                {session.authenticated && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span>
+                      <strong>Onboarding cache:</strong>{" "}
+                      {onboardingItems ? `${onboardingItems.length} probed` : "—"}
+                    </span>
+                    <span>
+                      <strong>Unbrowse probe:</strong>{" "}
+                      {unbrowseStatus
+                        ? unbrowseStatus.installed
+                          ? "Installed"
+                          : "Not installed"
+                        : "—"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void runOnboardingPass()}
+                      disabled={runningOnboarding}
+                      className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      {runningOnboarding ? "Probing…" : "Run onboarding pass"}
+                    </button>
+                  </div>
+                )}
+              </div>
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#E5E7EB] bg-slate-50">

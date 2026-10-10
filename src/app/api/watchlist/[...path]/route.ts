@@ -1,3 +1,3 @@
-import { proxyPrivatePropertyApi } from "@/lib/workspace-proxy";
+import { proxyPropertyApi } from "@/lib/property-api";
 
-export const GET = (request: Request) => proxyPrivatePropertyApi(request);
+export const GET = (request: Request) => proxyPropertyApi(request);

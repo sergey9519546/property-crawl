@@ -35,6 +35,7 @@ import { displayDate, displayMoney, displayText, knownNumber, positiveNumber, sa
 import { sourceDisplayText } from "@/lib/source-display";
 import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo } from "@/lib/underwriting";
 import type { CashAmountField, CashInputBasis } from "@/lib/underwriting";
+import { getWatchlistComps, type WatchlistCompsResponse } from "@/lib/intelligence-client";
 
 interface PropertyDrawerProps {
   listing: Listing | null;
@@ -118,6 +119,31 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [aiSource, setAiSource] = useState<string | null>(null);
   const [generatingAiLoi, setGeneratingAiLoi] = useState<boolean>(false);
   const [generatingAiMemo, setGeneratingAiMemo] = useState<boolean>(false);
+  const [compsData, setCompsData] = useState<WatchlistCompsResponse | null>(null);
+  const [compsLoading, setCompsLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!listing?.id) {
+      setCompsData(null);
+      setCompsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCompsLoading(true);
+    getWatchlistComps(listing.id, { radiusKm: 16, limit: 4 })
+      .then((res) => {
+        if (!cancelled) setCompsData(res);
+      })
+      .catch(() => {
+        if (!cancelled) setCompsData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCompsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing?.id]);
 
   useEffect(() => {
     if (!listing) return;
@@ -617,7 +643,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               </button>
 
               {/* Comparable-sale evidence */}
-              <div className="space-y-3">
+              <div className="space-y-3" data-testid="drawer-comparable-evidence">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-[#111827] uppercase tracking-wide flex items-center gap-1.5">
                     <Home className="w-4 h-4 text-[#0F172A]" />
@@ -625,9 +651,73 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </h3>
                   <span className="text-xs text-[#5B6472]">{displayText(listing.city)}, {listing.state}</span>
                 </div>
-                <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-4 text-xs leading-relaxed text-[#475569]">
-                  No verified comparable-sale records were captured with this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
-                </div>
+                {compsLoading ? (
+                  <div className="rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC] p-4 text-xs text-[#5B6472]">
+                    Scanning active proximity &amp; square-footage comparables within 16 km...
+                  </div>
+                ) : compsData && compsData.comps.length > 0 ? (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-3 gap-2 rounded-2xl border border-[#E5E7EB] bg-[#F8FAFC] p-3 text-center text-xs">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-[#5B6472]">Active Comps</p>
+                        <p className="mt-0.5 font-extrabold text-[#111827]">{compsData.stats.count}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-[#5B6472]">Median Opening</p>
+                        <p className="mt-0.5 font-extrabold text-[#111827]">
+                          {compsData.stats.medianOpeningBid !== null
+                            ? displayMoney(compsData.stats.medianOpeningBid)
+                            : "Unpublished"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-[#5B6472]">Median Score</p>
+                        <p className="mt-0.5 font-extrabold text-[#0F172A]">
+                          {compsData.stats.medianDealScore !== null ? compsData.stats.medianDealScore : "—"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="divide-y divide-[#E5E7EB] rounded-2xl border border-[#E5E7EB] bg-white text-xs">
+                      {compsData.comps.map((item, idx) => {
+                        const row = item.listing || item;
+                        const compId = row.id || `comp-${idx}`;
+                        const compBid = positiveNumber(row.openingBid);
+                        const compSqft = positiveNumber(row.sqft);
+                        return (
+                          <div key={compId} className="flex items-center justify-between gap-3 p-3">
+                            <div className="min-w-0">
+                              <a
+                                href={`/listings/${encodeURIComponent(compId)}`}
+                                className="block truncate font-semibold text-[#111827] hover:underline"
+                              >
+                                {displayText(row.address, compId)}
+                              </a>
+                              <p className="mt-0.5 text-[11px] text-[#5B6472]">
+                                {displayText(row.city, listing.city || undefined)}, {row.state || listing.state}
+                                {compSqft !== null ? ` · ${compSqft.toLocaleString()} sqft` : ""}
+                                {typeof item.distanceKm === "number" ? ` · ${item.distanceKm.toFixed(1)} km` : ""}
+                              </p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="font-bold text-[#111827]">
+                                {compBid !== null ? displayMoney(compBid) : "Bid unpublished"}
+                              </p>
+                              {typeof item.score === "number" && (
+                                <p className="text-[10px] font-semibold text-[#5B6472]">
+                                  Match {Math.round(item.score * 100)}%
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[#CBD5E1] bg-white p-4 text-xs leading-relaxed text-[#475569]">
+                    No verified comparable-sale records were captured within {compsData?.radiusKm ?? 16} km of this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
+                  </div>
+                )}
               </div>
 
               {/* Court & Legal Specifics */}

@@ -235,6 +235,6 @@ test('the lib detector can actually find an unimported module', () => {
     '.d.ts files are ambient declarations and are never imported; they are excluded, not acknowledged');
   const unreferenced = libModules.filter((f) => !libIsReferenced(f));
   assert.ok(unreferenced.length >= 1,
-    'expected at least intelligence-client.ts to be unreferenced; if none are, the reference '
+    'expected at least csp.ts to be unreferenced in nonUiCorpus; if none are, the reference '
     + 'check is matching too loosely to be useful');
 });

@@ -57,10 +57,7 @@ function apiPathRegex() {
 }
 
 // Served by the Node API but not reachable from any browser caller.
-const KNOWN_BROWSER_UNREACHABLE = [
-  '/api/coverage',
-  '/api/portfolio/dashboard',
-];
+const KNOWN_BROWSER_UNREACHABLE = [];
 
 // Implemented and genuinely wired end to end: served, admitted by the proxy,
 // and reached by a UI file. Each entry names the file that owns the call.
@@ -78,33 +75,17 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/saved-searches/s1/run', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/alerts/matches', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/price-drops', callers: ['src/components/site/second-look-showcase.tsx'] },
+  { route: '/api/watchlist/w1/comps', callers: ['src/lib/intelligence-client.ts', 'src/components/terminal/property-drawer.tsx'] },
+  { route: '/api/auction-calendar', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
+  { route: '/api/neighborhoods', callers: ['src/lib/intelligence-client.ts', 'src/components/listings/discovery-workbench.tsx'] },
+  { route: '/api/portfolio/dashboard', callers: ['src/components/terminal/watchlist-modal.tsx'] },
+  { route: '/api/coverage', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/source-network/onboarding', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/source-network/unbrowse/status', callers: ['src/components/sources/source-network.tsx'] },
 ];
 
 // Served, admitted by the proxy, and rendered by nothing.
-//
-// This state used to be invisible. KNOWN_BROWSER_REACHABLE claimed "have UI
-// callers" while only ever testing the proxy regex, so these four sat in a
-// list that read as "shipped" while no user could reach them:
-//
-//   /api/source-network/onboarding      no reference anywhere in src
-//   /api/source-network/unbrowse/status no reference anywhere in src
-//   /api/watchlist/w1/comps             only an uncalled intelligence-client wrapper
-//   /api/auction-calendar               only an uncalled intelligence-client wrapper
-//
-// /api/neighborhoods was worse still: served, proxyable, and listed in neither
-// set, so nothing at all described it.
-//
-// They are not removed -- a CLI or external consumer may use them, and
-// deleting working code is not this test's call. They are pinned so the state
-// is deliberate, and so that "analytics exist" is never mistaken for "a user
-// can see analytics".
-const KNOWN_PROXYABLE_NO_UI_CALLER = [
-  '/api/source-network/onboarding',
-  '/api/source-network/unbrowse/status',
-  '/api/watchlist/w1/comps',
-  '/api/auction-calendar',
-  '/api/neighborhoods',
-];
+const KNOWN_PROXYABLE_NO_UI_CALLER = [];
 
 const apiPath = apiPathRegex();
 
@@ -159,7 +140,7 @@ test('the proxyable-but-unrendered set really has no UI caller', () => {
 
   assert.equal(
     KNOWN_PROXYABLE_NO_UI_CALLER.length,
-    5,
+    0,
     'the set of served, proxyable routes that no UI renders changed. These are real '
       + 'analytics endpoints behind a working proxy that no user can reach. If one gained '
       + 'a UI, or was dropped, update this list in the same commit',
@@ -197,7 +178,7 @@ test('the unreachable set is not silently growing', () => {
   // pinned so a new orphan route is a deliberate decision.
   assert.equal(
     KNOWN_BROWSER_UNREACHABLE.length,
-    2,
+    0,
     'the set of server routes the browser cannot reach changed. If a route was '
       + 'added or removed on purpose, update this list in the same commit',
   );
