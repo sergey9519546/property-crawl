@@ -268,13 +268,13 @@ type CoveragePreset = {
 
 const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
   hud: {
-    countyCount: 2,
-    countyLabel: "OH, NJ promoted run scope — not nationwide",
+    countyCount: 52,
+    countyLabel: "52 HUD jurisdictions unless HUD_STATES is set — page budget stays bounded",
     dimensions: { foreclosure: true, documentImages: true },
   },
   "hud-homestore": {
-    countyCount: 2,
-    countyLabel: "OH, NJ promoted run scope — not nationwide",
+    countyCount: 52,
+    countyLabel: "52 HUD jurisdictions unless HUD_STATES is set — page budget stays bounded",
     dimensions: { foreclosure: true, documentImages: true },
   },
   servicelink: {
@@ -309,23 +309,23 @@ const COVERAGE_PRESETS: Record<string, CoveragePreset> = {
   },
   irs: {
     countyCount: 0,
-    countyLabel: "Nationwide",
-    dimensions: { foreclosure: true },
+    countyLabel: "Public IRS real-estate auction index",
+    dimensions: {},
   },
   "irs-auctions": {
     countyCount: 0,
-    countyLabel: "Nationwide",
-    dimensions: { foreclosure: true },
+    countyLabel: "Public IRS real-estate auction index",
+    dimensions: {},
   },
   gsa: {
     countyCount: 0,
-    countyLabel: "Nationwide",
-    dimensions: { foreclosure: true },
+    countyLabel: "Accelerated-disposition list on gsa.gov",
+    dimensions: {},
   },
   "gsa-real-estate-sales": {
     countyCount: 0,
-    countyLabel: "Nationwide",
-    dimensions: { foreclosure: true },
+    countyLabel: "Accelerated-disposition list on gsa.gov",
+    dimensions: {},
   },
   usda: {
     countyCount: 0,

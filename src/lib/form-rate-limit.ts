@@ -11,7 +11,7 @@ function prune(now: number) {
 
 /** Shared in-memory ceiling for unauthenticated marketing form posts. */
 export function checkFormRateLimit(
-  kind: "contact" | "newsletter",
+  kind: "contact" | "newsletter" | "checkout",
   options: { maxPerWindow?: number; windowMs?: number; now?: number } = {},
 ): FormRateDecision {
   const now = options.now ?? Date.now();

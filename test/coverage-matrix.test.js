@@ -276,6 +276,44 @@ test('an absent live store is an honest zero, distinct from a failed read', (t) 
   assert.deepEqual(result.byStateSource, {});
 });
 
+test('buildLiveStateSourceCoverage rolls up observed county names without dropping the state count', (t) => {
+  const { write } = useStore(t);
+  write([
+    liveRecord({ id: 'CIV-NJ-1', county: 'Bergen', provenance: prov('1') }),
+    liveRecord({ id: 'CIV-NJ-2', county: 'bergen', provenance: prov('2') }),
+    liveRecord({ id: 'CIV-NJ-3', county: 'Bergen County', source: 'hud', sourceUrl: 'https://egis.hud.gov/arcgis/rest/services/cpdmaps/HudSfReo/MapServer/1/query?where=CASE_NUM%20%3D%20%27045-000003%27&outFields=*&f=pjson', provenance: prov('3') }),
+    liveRecord({ id: 'CIV-NJ-4', county: '  ', provenance: prov('4') }),
+    liveRecord({ id: 'CIV-NJ-5', county: 'unknown', provenance: prov('5') }),
+    liveRecord({ id: 'CIV-NJ-6', county: 'n/a', provenance: prov('6') }),
+    liveRecord({ id: 'CIV-NJ-7', county: 'none', provenance: prov('7') }),
+    liveRecord({ id: 'CIV-NJ-8', county: 'null', provenance: prov('8') }),
+    liveRecord({ id: 'CIV-NJ-9', county: 'notice', provenance: prov('9') }),
+    liveRecord({ id: 'CIV-NJ-10', county: '12345', provenance: prov('10') }),
+    liveRecord({ id: 'CIV-NJ-11', county: '??', provenance: prov('11') }),
+    liveRecord({ id: 'CIV-PR-1', state: 'PR', county: 'San Juan', provenance: prov('12') }),
+    liveRecord({ id: 'CIV-TX-1', state: 'TX', county: ' Harris ', provenance: prov('13') }),
+  ]);
+  const result = buildLiveStateSourceCoverage();
+  assert.equal('storePath' in result, false);
+  assert.equal('storePath' in result.byCounty, false);
+  assert.deepEqual(result.byCounty.NJ, [
+    { county: 'Bergen', count: 2, sources: ['civilview'] },
+    { county: 'Bergen County', count: 1, sources: ['hud'] },
+  ]);
+  assert.deepEqual(result.byCounty.TX, [
+    { county: 'Harris', count: 1, sources: ['civilview'] },
+  ]);
+  assert.equal(result.byCounty.PR, undefined);
+  assert.equal(result.byStateTotal.NJ, 11);
+  assert.equal(result.excludedByState.PR, 1);
+});
+
+test('an absent live store publishes an empty county rollup', (t) => {
+  useStore(t);
+  const result = buildLiveStateSourceCoverage();
+  assert.deepEqual(result.byCounty, {});
+});
+
 test('the coverage matrix does not publish the server store path', (t) => {
   // storePath was useful while diagnosing the corrupt-store work and nothing
   // consumes it: no component in src/ reads storePath, storeStatus or

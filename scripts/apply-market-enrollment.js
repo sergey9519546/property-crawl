@@ -71,7 +71,7 @@ async function main() {
   console.log('');
   for (const [key, value] of Object.entries(hud)) console.log(`${key}=${value}`);
   console.log('');
-  console.log('SCRAPER_BACKGROUND_ENABLED=0  # careful: enable scheduled runs only after canaries');
+  console.log('# In-process scheduler: leave SCRAPER_BACKGROUND_ENABLED unset or set it to 1 on a real server. Set SCRAPER_BACKGROUND_ENABLED=0 to keep it off.');
   console.log('');
   console.log('CAPTCHA policy: bid4assets / landbank / ca-controller remain fail-closed.');
 }

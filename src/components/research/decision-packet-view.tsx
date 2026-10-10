@@ -172,7 +172,7 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
       {m && (
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs space-y-1">
           <div className="flex justify-between items-center font-semibold text-slate-800">
-            <span>FHFA Macro Trend Range: ${m.estLow.toLocaleString()} – ${m.estHigh.toLocaleString()}</span>
+            <span>Valuation band: ${m.estLow.toLocaleString()} – ${m.estHigh.toLocaleString()}</span>
             <span className="text-[10px] uppercase font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">Macro Benchmark</span>
           </div>
           <p className="text-[11px] text-slate-500 leading-snug">{m.disclaimer}</p>

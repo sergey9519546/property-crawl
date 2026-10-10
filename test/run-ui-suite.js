@@ -106,8 +106,30 @@ function startCmd(command, args, extraEnv = {}) {
   return child;
 }
 
+function snapshotNextEnv() {
+  try {
+    return fs.readFileSync(path.join(ROOT, 'next-env.d.ts'));
+  } catch {
+    return null;
+  }
+}
+
+function restoreNextEnv(snapshot) {
+  if (!snapshot) return;
+  const file = path.join(ROOT, 'next-env.d.ts');
+  let current = null;
+  try {
+    current = fs.readFileSync(file);
+  } catch {
+    current = null;
+  }
+  if (current && current.equals(snapshot)) return;
+  fs.writeFileSync(file, snapshot);
+}
+
 async function main() {
   const owned = [];
+  const nextEnvSnapshot = snapshotNextEnv();
 
   try {
     if (await probe(API_PORT, '/api/health')) {
@@ -146,6 +168,7 @@ if (bundleIsStale()) {
           shell: process.platform === 'win32',
         });
         if (build.status !== 0) throw new Error('[ui-suite] next build failed');
+        restoreNextEnv(nextEnvSnapshot);
       }
 
     const nextBin = path.join(ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');
@@ -189,6 +212,7 @@ if (bundleIsStale()) {
         child.kill('SIGTERM');
       }
     }
+    restoreNextEnv(nextEnvSnapshot);
   }
 }
 

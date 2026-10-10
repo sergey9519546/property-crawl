@@ -69,14 +69,28 @@ test('a complete source run retires records that disappeared from that source on
   });
   assert.equal(mergeLiveRecords(target, [civilviewA, civilviewB, otherSource]).accepted, 3);
 
-  // Complete civilview run sees only A (B disappeared). A stays, B is retired.
-  // Other-source record is untouched because its source key is different.
+  // Complete civilview run sees only A. B stays, flagged absent. It is not deleted
+  // and it is not marked sold or closed. Treasury is a different source.
   const result = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-1001', sourceObservedAt: '2026-09-08T00:00:00Z' })],
     { sourceKey: 'civilview', runCompleted: true });
   assert.equal(result.accepted, 1);
   assert.equal(result.retired, 1);
   const retained = loadLiveRecords(target);
-  assert.deepEqual(retained.map((r) => r.id).sort(), ['CIV-NJ-7-1001', 'TREAS-NY-QUE-9001']);
+  assert.deepEqual(retained.map((r) => r.id).sort(), ['CIV-NJ-7-1001', 'CIV-NJ-7-1002', 'TREAS-NY-QUE-9001']);
+  const absent = retained.find((r) => r.id === 'CIV-NJ-7-1002');
+  assert.equal(absent.provenance.publisherAbsence.outcome, 'absent_from_complete_index');
+  assert.equal(absent.provenance.publisherAbsence.sourceKey, 'civilview');
+  assert.equal(absent.transactionOutcome, undefined);
+  assert.equal(absent.status, undefined);
+  assert.equal(retained.find((r) => r.id === 'CIV-NJ-7-1001').provenance.publisherAbsence, undefined);
+  assert.equal(retained.find((r) => r.id === 'TREAS-NY-QUE-9001').provenance.publisherAbsence, undefined);
+
+  const again = mergeLiveRecords(target, [record({ id: 'CIV-NJ-7-1002', sourceObservedAt: '2026-09-09T00:00:00Z' })],
+    { sourceKey: 'civilview', runCompleted: true });
+  assert.equal(again.accepted, 1);
+  const restored = loadLiveRecords(target).find((r) => r.id === 'CIV-NJ-7-1002');
+  assert.equal(restored.provenance.publisherAbsence, undefined);
+  assert.equal(restored.transactionOutcome, undefined);
 });
 
 test('a partial or failed run never retires records, even for the same source', (t) => {
@@ -104,4 +118,5 @@ test('a partial or failed run never retires records, even for the same source', 
     { runCompleted: true });
   assert.equal(noScope.retired, 0);
   assert.equal(loadLiveRecords(target).length, 2);
+  assert.equal(loadLiveRecords(target).some((r) => r.provenance?.publisherAbsence), false);
 });

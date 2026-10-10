@@ -1,12 +1,16 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 
 const defaultScraper = require('../server/scrapers/servicelink');
 const {
   ServiceLinkScraper,
   MAX_PAGES,
+  readCheckpointFile,
   sourceUrlFromRecord,
   validContinuationToken,
 } = require('../server/scrapers/servicelink');
@@ -186,3 +190,69 @@ test('explicit sweep budgets can exceed five pages but remain hard bounded', () 
   assert.equal(new ServiceLinkScraper({maxPages:1000}).maxPages,MAX_PAGES);
   assert.equal(MAX_PAGES,100);
 });
+
+test('ServiceLink file checkpoint is opt-in and resumes only a validated token', async () => {
+  const saved = process.env.SERVICELINK_CHECKPOINT_PATH;
+  const decoy = path.join(os.tmpdir(), `pc-sl-decoy-${process.pid}.json`);
+  process.env.SERVICELINK_CHECKPOINT_PATH = decoy;
+  try {
+    const untouched = new ServiceLinkScraper();
+    assert.equal(untouched.checkpointPath, null);
+    assert.equal(fs.existsSync(decoy), false);
+  } finally {
+    if (saved === undefined) delete process.env.SERVICELINK_CHECKPOINT_PATH;
+    else process.env.SERVICELINK_CHECKPOINT_PATH = saved;
+  }
+
+  const file = path.join(os.tmpdir(), `pc-sl-checkpoint-${process.pid}.json`);
+  const first = sourceRecord();
+  const second = sourceRecord({
+    listingId: 'a1cVO000004XjDoYAK',
+    propertyInfo: { ...first.propertyInfo, websiteUrl: 'https://www.servicelinkauction.com/property-details/946-western-ave-pittsburgh-15233-pa-united-states-tps', address: '946 Western Ave', city: 'Pittsburgh', state: 'PA', postalCode: '15233' },
+  });
+  const requested = [];
+  const opening = scraper({
+    maxPages: 1,
+    checkpointPath: file,
+    fetchImpl: async () => response({ continuationToken: 'opaque+/cursor=', data: [first] }),
+  });
+  await opening.scrapeFeed();
+  const savedCheckpoint = readCheckpointFile(file);
+  assert.equal(savedCheckpoint.continuationToken, 'opaque+/cursor=');
+  assert.equal(savedCheckpoint.pagesCommitted, 1);
+
+  const resumed = scraper({
+    maxPages: 1,
+    checkpointPath: file,
+    fetchImpl: async (url) => {
+      requested.push(new URL(url).searchParams.get('continuationToken'));
+      return response({ data: [second] });
+    },
+  });
+  resumed.setCheckpoint(readCheckpointFile(file));
+  await resumed.scrapeFeed();
+  assert.deepEqual(requested, ['opaque+/cursor=']);
+  assert.equal(fs.existsSync(file), false);
+
+  writeCheckpointProbe(file);
+  const unsafe = scraper({
+    maxPages: 1,
+    checkpointPath: file,
+    fetchImpl: async () => response({ continuationToken: 'bad\ntoken', data: [first] }),
+  });
+  await unsafe.scrapeFeed();
+  assert.equal(fs.existsSync(file), false);
+
+  fs.writeFileSync(file, JSON.stringify({ continuationToken: 'keep-me', pagesCommitted: 1 }));
+  const failed = scraper({
+    checkpointPath: file,
+    fetchImpl: async () => { throw Object.assign(new Error('upstream down'), { code: 'UPSTREAM_DOWN' }); },
+  });
+  await assert.rejects(failed.scrapeFeed());
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).continuationToken, 'keep-me');
+  fs.unlinkSync(file);
+});
+
+function writeCheckpointProbe(file) {
+  fs.writeFileSync(file, JSON.stringify({ continuationToken: 'stale-token', pagesCommitted: 4 }));
+}

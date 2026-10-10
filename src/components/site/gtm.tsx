@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { GsapReveal } from "./gsap-reveal";
 import {
@@ -29,7 +30,7 @@ type Team = {
   label: string;
   icon: LucideIcon;
   desc: string;
-  chips: { label: string; icon: LucideIcon }[];
+  chips: { label: string; icon: LucideIcon; href?: string }[];
   tint: string;
 };
 
@@ -40,10 +41,10 @@ const TEAMS: Team[] = [
     icon: Megaphone,
     desc: "Turn source-observed listing facts into clear deal notes and shareable evidence packets. What ships today is structured research, not automated brand campaigns.",
     chips: [
-      { label: "Deal notes", icon: FileText },
-      { label: "Source photos", icon: ImageIcon },
-      { label: "Evidence packet", icon: Sparkles },
-      { label: "Share-ready export", icon: Layers },
+      { label: "Deal notes", icon: FileText, href: "/listings" },
+      { label: "Source photos", icon: ImageIcon, href: "/listings" },
+      { label: "Evidence packet", icon: Sparkles, href: "/research" },
+      { label: "Share-ready export", icon: Layers, href: "/listings" },
     ],
     tint: "#e7faef",
   },
@@ -53,10 +54,10 @@ const TEAMS: Team[] = [
     icon: Target,
     desc: "Triage from posted notice to research case. Filters, maps, hunts, and source evidence are live in this beta. Advanced deal-stack products remain roadmap.",
     chips: [
-      { label: "Listing grid", icon: LayoutDashboard },
-      { label: "Saved hunts", icon: Radar },
-      { label: "Second Look", icon: Eye },
-      { label: "Watchlist", icon: Gauge },
+      { label: "Listing grid", icon: LayoutDashboard, href: "/listings" },
+      { label: "Saved hunts", icon: Radar, href: "/hunts" },
+      { label: "Second Look", icon: Eye, href: "/research" },
+      { label: "Watchlist", icon: Gauge, href: "/listings" },
     ],
     tint: "#E2E8F0",
   },
@@ -66,9 +67,9 @@ const TEAMS: Team[] = [
     icon: Send,
     desc: "Export structured listing facts and research notes for partners. Shared public links and polished lender PDFs are still roadmap — exports are CSV/JSON today.",
     chips: [
-      { label: "CSV export", icon: FileDown },
-      { label: "JSON export", icon: FileDown },
-      { label: "Research case", icon: FileText },
+      { label: "CSV export", icon: FileDown, href: "/listings" },
+      { label: "JSON export", icon: FileDown, href: "/listings" },
+      { label: "Research case", icon: FileText, href: "/research" },
       { label: "Partner portal (roadmap)", icon: ShieldCheck },
     ],
     tint: "#FFD6C8",
@@ -79,10 +80,10 @@ const TEAMS: Team[] = [
     icon: Calculator,
     desc: "Cash inputs, opening bids, and modeled value bands stay separated from published source facts. AI notice parsing runs only when an API key is configured — never as a silent substitute for evidence.",
     chips: [
-      { label: "Opening bid facts", icon: Layers },
-      { label: "Deal score band", icon: Gauge },
-      { label: "Risk notes (AI optional)", icon: FileText },
-      { label: "Coverage honesty", icon: BarChart3 },
+      { label: "Opening bid facts", icon: Layers, href: "/listings" },
+      { label: "Deal score band", icon: Gauge, href: "/listings" },
+      { label: "Risk notes (AI optional)", icon: FileText, href: "/listings" },
+      { label: "Coverage honesty", icon: BarChart3, href: "/sources" },
     ],
     tint: "#E9D5FF",
   },
@@ -152,15 +153,15 @@ export function Gtm() {
                     {team.desc}
                   </p>
                   <div className="mt-6 flex flex-wrap gap-2">
-                    {team.chips.map((c) => (
-                      <span
-                        key={c.label}
-                        className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#111827]"
-                      >
-                        <c.icon className="h-4 w-4 text-[#5B6472]" />
-                        {c.label}
-                      </span>
-                    ))}
+                    {team.chips.map((c) => {
+                      const className = "inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#111827]";
+                      const body = (<><c.icon className="h-4 w-4 text-[#5B6472]" />{c.label}</>);
+                      return c.href ? (
+                        <Link key={c.label} href={c.href} className={`${className} hover:bg-[#F5F6F7]`}>{body}</Link>
+                      ) : (
+                        <span key={c.label} className={className}>{body}</span>
+                      );
+                    })}
                   </div>
                 </motion.div>
               </AnimatePresence>
@@ -200,8 +201,8 @@ function GtmVisual({ team }: { team: string }) {
             className="h-full w-full object-cover"
           />
         </div>
-        <p className="mt-3 text-[13px] font-bold text-[#111827]">123 Main St</p>
-        <p className="text-[11px] text-[#5B6472]">ARV $340k &middot; Profit $52k</p>
+        <p className="mt-3 text-[13px] font-bold text-[#111827]">Listing record</p>
+        <p className="text-[11px] text-[#5B6472]">County figure on the listing</p>
       </div>
     );
   }
@@ -209,9 +210,7 @@ function GtmVisual({ team }: { team: string }) {
     return (
       <div className="w-full max-w-[300px] space-y-2">
         {[
-          { r: "Listed", a: "123 Main St", s: 88, c: "#e7faef" },
-          { r: "Off-market", a: "88 Oak Ave", s: 81, c: "#E2E8F0" },
-          { r: "Predicted", a: "404 Pine Rd", s: 74, c: "#E9D5FF" },
+          { r: "Record", a: "Open the feed", s: "—", c: "#e7faef" },
         ].map((row) => (
           <div
             key={row.a}
@@ -235,22 +234,12 @@ function GtmVisual({ team }: { team: string }) {
   if (team === "disposition") {
     return (
       <div className="w-full max-w-[300px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_28px_rgba(0,0,0,0.08)]">
-        <p className="text-[13px] font-bold text-[#111827]">Share deal memo</p>
-        <p className="mt-1 text-[11px] text-[#5B6472]">perfectproperty.app/d/123-main</p>
-        <div className="mt-3 flex gap-2">
-          {["Link", "Embed", "PDF", "Video"].map((b) => (
-            <span
-              key={b}
-              className="rounded-lg border border-[#E5E7EB] bg-[#F5F6F7] px-2.5 py-1 text-[11px] font-semibold text-[#111827]"
-            >
-              {b}
-            </span>
-          ))}
-        </div>
-        <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[#F3F4F6]">
-          <div className="h-full w-[64%] rounded-full bg-[#0F172A]" />
-        </div>
-        <p className="mt-1 text-[11px] text-[#5B6472]">64% opened by partners</p>
+        <p className="text-[13px] font-bold text-[#111827]">Decision packet</p>
+        <p className="mt-1 text-[11px] text-[#5B6472]">CSV or JSON from the feed</p>
+        <Link href="/listings" className="mt-3 inline-flex rounded-lg border border-[#E5E7EB] bg-[#F5F6F7] px-2.5 py-1 text-[11px] font-semibold text-[#111827] hover:bg-white">
+          Open the feed export
+        </Link>
+
       </div>
     );
   }
@@ -258,19 +247,16 @@ function GtmVisual({ team }: { team: string }) {
   return (
     <div className="w-full max-w-[300px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_28px_rgba(0,0,0,0.08)]">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-[#111827]">Engine v3.2</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Listing score</span>
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e7faef] text-[14px] font-bold text-[#3F6B00]">
-          88
+          —
         </span>
       </div>
       <div className="mt-3 space-y-1.5">
-        <Row label="ARV" value="$340k" />
-        <Row label="Offer" value="$248k" />
-        <Row label="Profit" value="$52k" green />
+        <Row label="Opening" value="—" />
+        <Row label="Figure" value="—" />
+        <Row label="Score" value="—" />
       </div>
-      <p className="mt-3 rounded-lg bg-[#F5F6F7] p-2 text-[11px] leading-snug text-[#5B6472]">
-        &ldquo;Occupied; Ohio allows confirmation delays; 10% deposit due day-of.&rdquo;
-      </p>
     </div>
   );
 }

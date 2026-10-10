@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { IngestionScheduler } = require('../server/scrapers/scheduler');
+const { IngestionScheduler, backgroundCollectionEnabled } = require('../server/scrapers/scheduler');
 const { hash } = require('../server/discovery/store');
 
 const SERVICE_LINK_SCOPE = { endpoint: '/search-service/search/listings', filters: {} };
@@ -84,6 +84,19 @@ test('legacy checkpoint without scope identity fails before publisher collection
   assert.match(result.sourceResults[0].error, /Checkpoint scope does not match/);
 });
 
+test('a checkpoint from a different scope starts the new scope without resuming the old cursor', async () => {
+  let scrapeCalls = 0;
+  const source = collector({ token: null, emittedId: 'fresh-scope' });
+  const original = source.scrapeFeed;
+  source.scrapeFeed = async () => { scrapeCalls += 1; return original.call(source); };
+  const store = sharedStore([]);
+  store.getCheckpoint = async () => ({ cursor: { continuationToken: 'old-scope-page' }, scopeHash: hash({ endpoint: '/old-scope', filters: {} }) });
+  const result = await scheduler(source, store).runAll({ sourceIds: ['servicelink'] });
+  assert.equal(scrapeCalls, 1);
+  assert.equal(result.totalIngested, 1);
+  assert.deepEqual(source.checkpointSeen, {});
+});
+
 test('an empty legacy checkpoint permits an explicit fresh canary requalification', async () => {
   const source = collector({ token: null, emittedId: 'fresh-canary' });
   const store = sharedStore([]);
@@ -104,4 +117,16 @@ test('failed durable ingestion does not advance the loaded checkpoint', async ()
   assert.deepEqual(source.checkpointSeen, { continuationToken: 'existing', pagesCommitted: 4 });
   assert.equal(events.some(event => event[0] === 'save'), false);
   assert.ok(events.some(event => event[0] === 'finish' && event[1] === 'failed'));
+});
+
+test('background collection is on for a real server when the flag is unset or 1, and off for the explicit stops', () => {
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'test' }), false);
+  assert.equal(backgroundCollectionEnabled({ RUN_REAL_SCRAPERS: '0', NODE_ENV: 'production' }), false);
+  assert.equal(backgroundCollectionEnabled({ npm_lifecycle_event: 'test:ui', NODE_ENV: 'production' }), false);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', DISCOVERY_MODE: 'advanced', SCRAPER_BACKGROUND_ENABLED: '1' }), false);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '0' }), false);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: 'yes' }), false);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production' }), true);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '' }), true);
+  assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '1' }), true);
 });

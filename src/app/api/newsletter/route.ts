@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       ok: true,
       queued: true,
       delivery: result.delivery,
-      message: result.delivery === "forwarded"
+      message: result.delivery === "sent" || result.delivery === "forwarded"
         ? "Subscription accepted."
         : "Subscription saved. Operator email delivery is not configured yet.",
     },

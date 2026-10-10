@@ -22,7 +22,7 @@ const SOURCE_HOSTS = Object.freeze({
   'fhfa-hpi': ['www.fhfa.gov'],
   'fl-dor-cadastral': ['services9.arcgis.com'],
   freddie: ['homesteps.com'],
-  gsa: ['realestatesales.gov'],
+  gsa: ['realestatesales.gov', 'www.gsa.gov'],
   hud: ['hudhomestore.gov', 'egis.hud.gov'],
   'hud-usps-vacancy': ['hudgis-hud.opendata.arcgis.com', 'services.arcgis.com', 'www.huduser.gov'],
   irs: ['irsauctions.gov'],
@@ -117,8 +117,16 @@ function hasSourceRecordShape(source, url) {
     case 'freddie':
     case 'va':
       return /^\/property\/[^/]+$/.test(path) && hasStablePathToken(url);
-    case 'gsa':
-      return path === '/asset-details' && url.searchParams.has('property_id');
+    case 'gsa': {
+      const host = url.hostname.toLowerCase();
+      if (host === 'www.gsa.gov') {
+        return path === '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition'
+          && !url.search;
+      }
+      return (host === 'realestatesales.gov' || host === 'www.realestatesales.gov')
+        && path === '/asset-details'
+        && url.searchParams.has('property_id');
+    }
     case 'hud':
       if (url.hostname.toLowerCase() === 'egis.hud.gov') {
         const allowed = new Set(['where', 'outFields', 'f', 'returnGeometry', 'outSR']);
@@ -206,7 +214,13 @@ function inspectSourceRecordUrl(sourceValue, sourceUrl) {
   if (source === 'servicelink' && url.hostname.toLowerCase() !== 'www.servicelinkauction.com') {
     return { isValid: false, error: 'source_host_mismatch' };
   }
-  if (!allowedHosts.some((host) => hostnameMatches(url.hostname, host))) {
+  // Suffix matching would treat disposal.gsa.gov as www.gsa.gov after the
+  // www. strip. GSA records are only the sales host or the one disposition list.
+  if (source === 'gsa') {
+    const host = url.hostname.toLowerCase();
+    const allowed = host === 'realestatesales.gov' || host === 'www.realestatesales.gov' || host === 'www.gsa.gov';
+    if (!allowed) return { isValid: false, error: 'source_host_mismatch' };
+  } else if (!allowedHosts.some((host) => hostnameMatches(url.hostname, host))) {
     return { isValid: false, error: 'source_host_mismatch' };
   }
   if (!hasSourceRecordShape(source, url)) {

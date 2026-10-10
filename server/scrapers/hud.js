@@ -68,6 +68,7 @@ function positiveInt(value, fallback, max) {
 
 function configuredStates(value) {
   if (Array.isArray(value)) return [...new Set(value.map((state) => String(state).trim().toUpperCase()).filter((state) => ALL_HUD_JURISDICTIONS.includes(state)))];
+  // Blank means every jurisdiction the collector knows. An explicit list still filters.
   if (typeof value !== 'string' || !value.trim()) return [...ALL_HUD_JURISDICTIONS];
   return [...new Set(value.split(',').map((state) => state.trim().toUpperCase()).filter((state) => ALL_HUD_JURISDICTIONS.includes(state)))];
 }

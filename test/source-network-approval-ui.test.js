@@ -44,10 +44,16 @@ test('source-network component distinguishes approved collection gate', () => {
   assert.match(compiled, /Collection approved/);
   assert.match(compiled, /Recurring collection approved/);
   assert.match(compiled, /releaseGate/);
-  assert.match(compiled, /OH, NJ promoted run scope/);
+  assert.match(compiled, /52 HUD jurisdictions unless HUD_STATES is set/);
+  assert.match(compiled, /Public IRS real-estate auction index/);
+  assert.match(compiled, /Accelerated-disposition list on gsa.gov/);
   const catalog = fs.readFileSync(path.join(__dirname, '..', 'server/sources/catalog.js'), 'utf8');
   assert.match(catalog, /'hud-homestore': 'SCOPE_LIMITED'/);
-  assert.match(catalog, /HUD_STATES=OH,NJ/);
+  assert.match(catalog, /When HUD_STATES is unset/);
+  assert.match(catalog, /'irs-auctions': 'VERIFIED_OFFICIAL'/);
+  assert.match(catalog, /'gsa-real-estate-sales': 'VERIFIED_OFFICIAL'/);
+  assert.match(catalog, /does not fetch those hosts/);
+  assert.doesNotMatch(catalog, /index-adjusted equity estimation/);
 });
 
 test('Docker production image ships database schema for document_reviews', () => {

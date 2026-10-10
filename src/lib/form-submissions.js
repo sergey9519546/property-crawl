@@ -1,12 +1,14 @@
 'use strict';
 
 /**
- * Local durable storage + optional webhook forwarding for beta forms.
- * Delivery is never claimed unless a webhook endpoint is configured.
+ * Local durable storage for beta forms.
+ * Resend is used when configured. Otherwise a webhook may forward the record.
+ * Delivery is sent only after Resend returns 2xx, and forwarded only after a webhook returns 2xx.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { isEmail, mailIsConfigured, sendOutboundMail } = require('../../server/delivery/outbound-mail');
 
 const DEFAULT_DIR = path.resolve(process.cwd(), '.cache/form-submissions');
 
@@ -62,25 +64,69 @@ async function persistFormSubmission(kind, fields, options = {}) {
     // Containers without a writable cache must not 500 marketing forms.
     storeError = String(error?.message || error || 'store-failed');
   }
-  const webhookUrl = options.webhookUrl
-    || (kind === 'newsletter'
-      ? process.env.NEWSLETTER_ENDPOINT || process.env.NEWSLETTER_WEBHOOK_URL || ''
-      : process.env.CONTACT_ENDPOINT || process.env.CONTACT_WEBHOOK_URL || '');
-  const forward = await forwardWebhook(webhookUrl, record);
-  const delivery = forward.forwarded
-    ? 'forwarded'
-    : storedPath
-      ? 'local'
-      : 'unavailable';
+  const env = options.env || process.env;
+  let forward = { forwarded: false, reason: 'no-endpoint' };
+  let mail = null;
+  if (mailIsConfigured(env)) {
+    const operatorInbox = isEmail(env.CONTACT_TO || env.RESEND_TO);
+    const recipient = kind === 'newsletter' ? isEmail(fields.email) : (operatorInbox || isEmail(fields.email));
+    const subject = kind === 'newsletter' ? 'PerfectProperty list' : 'Contact form stored';
+    const text = kind === 'newsletter'
+      ? 'This address was saved for the operator list. This note is the delivery receipt.'
+      : `A contact message was stored for the operator.\nFrom: ${fields.name || ''}\nEmail: ${fields.email || ''}\n\n${fields.message || ''}`;
+    if (recipient) {
+      mail = await sendOutboundMail({ to: recipient, subject, text, kind }, { env, fetchImpl: options.fetchImpl, outboxDir: options.outboxDir });
+    }
+  } else {
+    const webhookUrl = options.webhookUrl
+      || (kind === 'newsletter'
+        ? env.NEWSLETTER_ENDPOINT || env.NEWSLETTER_WEBHOOK_URL || ''
+        : env.CONTACT_ENDPOINT || env.CONTACT_WEBHOOK_URL || '');
+    forward = await forwardWebhook(webhookUrl, record);
+  }
+  const delivery = mail?.delivery === 'sent'
+    ? 'sent'
+    : forward.forwarded
+      ? 'forwarded'
+      : storedPath || mail?.delivery === 'local'
+        ? 'local'
+        : 'unavailable';
   return {
-    ok: Boolean(storedPath) || forward.forwarded,
+    ok: Boolean(storedPath) || forward.forwarded || mail?.sent === true,
     kind,
     receivedAt,
     storedPath,
     storeError,
     delivery,
     forward,
+    mail,
   };
+}
+
+function removeNewsletterEmail(email) {
+  const normalized = isEmail(email);
+  if (!normalized) return { removed: 0 };
+  const file = path.join(submissionDir(), 'newsletter.jsonl');
+  if (!fs.existsSync(file)) return { removed: 0 };
+  const lines = fs.readFileSync(file, 'utf8').split(/\n/).filter((line) => line.length > 0);
+  const kept = [];
+  let removed = 0;
+  for (const line of lines) {
+    try {
+      const row = JSON.parse(line);
+      if (isEmail(row.email) === normalized) {
+        removed += 1;
+        continue;
+      }
+    } catch {
+      // Keep a line that is not a newsletter record.
+    }
+    kept.push(line);
+  }
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, kept.length ? `${kept.join('\n')}\n` : '', 'utf8');
+  fs.renameSync(temporary, file);
+  return { removed };
 }
 
 function resetFormSubmissionsForTests(kind) {
@@ -93,6 +139,7 @@ module.exports = {
   DEFAULT_DIR,
   appendJsonl,
   persistFormSubmission,
+  removeNewsletterEmail,
   resetFormSubmissionsForTests,
   sanitize,
   submissionDir,

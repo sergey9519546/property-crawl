@@ -49,20 +49,38 @@ test('catalog entries can be iterated without errors', () => {
   }
 });
 
-test('GsaSurplusScraper.scrapeFeed refuses the catalog-declared robots exclusion by default', async () => {
-  // Reach into the export without going through the singleton's shared
-  // state so the test is hermetic. We restore process.env at the end.
+test('GsaSurplusScraper.scrapeFeed refuses /our-listing and reads the allowed disposition list', async () => {
   const previousEnv = process.env.SCRAPER_RESPECT_ROBOTS;
   delete process.env.SCRAPER_RESPECT_ROBOTS;
   try {
-    const { GsaSurplusScraper } = require('../server/scrapers/gsa');
+    const { GsaSurplusScraper, DISPOSITION_URL } = require('../server/scrapers/gsa');
+    const { validateListingForIngestion } = require('../server/scrapers/validation');
     const scraper = new GsaSurplusScraper();
+    const requested = [];
+    scraper.fetchText = async (url) => {
+      requested.push(url);
+      return `<h1>Assets for accelerated disposition</h1>
+        <li class="usa-card" data-state='"TX"' data-type='"Office"'><h3>Fritz G. Lanham Federal Building</h3><a href="https://maps.example/x">819 Taylor St, Fort Worth, TX 76102</a><p>Rentable Area: <strong>669,264</strong></p><li class="usa-tag">Date listed: 9/10/2026</li></li>
+        <li class="usa-card" data-state='"TX"' data-type='"Office"'><h3>San Antonio Federal Building West</h3><a href="https://maps.example/y">727 E Cesar E Chavez Blvd, San Antonio, TX 78205</a><li class="usa-tag">Date listed: 3/21/2025</li><li class="usa-tag">SOLD</li></li>
+        <!-- <a href="https://realestatesales.gov/asset-details/?property_id=54">Available via sealed bid auction</a> -->
+        <li class="usa-card" data-state='"NJ"' data-type='"Warehouse"'><h3>The Depot at Somerville</h3><a href="https://maps.example/z">Roycefield Road, Hillsborough Township, NJ 08844</a><li class="usa-tag">UNDER CONTRACT</li></li>`;
+    };
     const listings = await scraper.scrapeFeed();
-    assert.deepEqual(listings, []);
-    assert.ok(scraper.lastRunReport);
-    assert.equal(scraper.lastRunReport.outcome, 'skipped_robots_exclusion');
-    assert.equal(scraper.lastRunReport.robotsExclusion.path, '/our-listing');
-    assert.equal(scraper.lastRunReport.recordsDiscovered, 0);
+    assert.deepEqual(requested, [DISPOSITION_URL]);
+    assert.equal(listings.length, 1);
+    assert.equal(listings[0].state, 'TX');
+    assert.equal(listings[0].city, 'Fort Worth');
+    assert.equal(listings[0].address, '819 Taylor St, Fort Worth, TX 76102');
+    assert.equal(listings[0].openingBid, null);
+    assert.equal(listings[0].saleDate, null);
+    assert.equal(validateListingForIngestion(listings[0], { expectedSource: 'gsa' }).isValid, true);
+    assert.equal(scraper.lastRunReport.outcome, 'success');
+    assert.equal(scraper.lastRunReport.recordsSkipped, 2);
+    assert.equal(scraper.lastRunReport.recordsEmitted, 1);
+    assert.equal(scraper.lastRunReport.fullSweepComplete, true);
+    assert.equal(scraper.lastRunReport.scope.endpoint, '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition');
+    assert.equal(JSON.stringify(listings).includes('realestatesales.gov'), false);
+    assert.equal(JSON.stringify(listings).includes('SOLD'), false);
   } finally {
     if (previousEnv === undefined) delete process.env.SCRAPER_RESPECT_ROBOTS;
     else process.env.SCRAPER_RESPECT_ROBOTS = previousEnv;

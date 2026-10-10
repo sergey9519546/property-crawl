@@ -9,16 +9,10 @@
       "branchOwned": true
     }
   },
-  "sessions": {
-    "ses_edb12b5b5ffe0RCkO8T43PjaMQ": {
-      "worktreeId": null,
-      "createdAt": "2026-10-10T08:28:13.302Z"
-    }
-  },
+  "sessions": {},
   "tabOrder": {
     "local": [
-      "pending:b278a485-b723-4a5f-8790-63069aa7dbf6",
-      "ses_edb12b5b5ffe0RCkO8T43PjaMQ"
+      "pending:b278a485-b723-4a5f-8790-63069aa7dbf6"
     ]
   },
   "worktreeOrder": [
@@ -27,7 +21,6 @@
   "sessionsCollapsed": true,
   "activeTarget": {
     "projectId": "prj-7308412530d0",
-    "kind": "session",
-    "sessionId": "ses_edb12b5b5ffe0RCkO8T43PjaMQ"
+    "kind": "local"
   }
 }

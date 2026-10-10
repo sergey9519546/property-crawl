@@ -156,14 +156,60 @@ const STAGES: StageDefinition[] = [
   },
 ];
 
-const DEMO_DEAL = {
-  address: "4120 Clark Ave",
-  market: "Detroit–Shoreway · Cleveland, OH",
-  opening: "$42k",
-  score: "92",
+type PublishedListing = {
+  id: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  county?: string | null;
+  source?: string | null;
+  openingBid?: number | string | null;
+  saleDate?: string | null;
+  deposit?: number | string | null;
+  dealScore?: number | string | null;
+  occupancy?: string | null;
+  parcelKey?: string | null;
 };
 
+type PublishedState = {
+  listing: PublishedListing | null;
+  status: "loading" | "ready" | "empty" | "error";
+};
+
+const PublishedListingContext = React.createContext<PublishedState>({
+  listing: null,
+  status: "loading",
+});
+
+function moneyText(value: unknown): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "Not published";
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function useLoadPublishedListing(): PublishedState {
+  const [state, setState] = React.useState<PublishedState>({ listing: null, status: "loading" });
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/listings?limit=1&sort=date", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: { listings?: PublishedListing[] }) => {
+        if (cancelled) return;
+        const listing = data.listings?.[0] ?? null;
+        setState({ listing, status: listing ? "ready" : "empty" });
+      })
+      .catch(() => {
+        if (!cancelled) setState({ listing: null, status: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return state;
+}
+
 export function Storyteller() {
+  const published = useLoadPublishedListing();
   const [stage, setStage] = React.useState<StageKey>("find");
   const tabRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndex = STAGES.findIndex((item) => item.key === stage);
@@ -193,7 +239,12 @@ export function Storyteller() {
     tabRefs.current[nextIndex]?.focus();
   };
 
+  const headline = published.listing?.address
+    || (published.status === "loading" ? "Reading the listing feed" : published.status === "error" ? "Listing feed unavailable" : "No listing returned");
+  const place = [published.listing?.city, published.listing?.state].filter(Boolean).join(", ");
+
   return (
+    <PublishedListingContext.Provider value={published}>
     <section id="product" className="relative isolate overflow-hidden py-24 sm:py-28">
       <div
         aria-hidden
@@ -221,13 +272,13 @@ export function Storyteller() {
                   Property decision workflow
                 </p>
                 <p className="mt-1 text-[16px] font-semibold text-[#111827]">
-                  {DEMO_DEAL.address}
-                  <span className="ml-2 font-medium text-[#5B6472]">{DEMO_DEAL.market}</span>
+                  {headline}
+                  {place ? <span className="ml-2 font-medium text-[#5B6472]">{place}</span> : null}
                 </p>
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
-                Real map · demo decision data
+                {published.status === "ready" ? "Published listing" : headline}
               </span>
             </div>
 
@@ -362,6 +413,7 @@ export function Storyteller() {
           </div>
       </div>
     </section>
+    </PublishedListingContext.Provider>
   );
 }
 
@@ -373,35 +425,12 @@ function ProductContent({ stage }: { stage: StageKey }) {
 }
 
 function VerificationPanel() {
+  const { listing, status } = React.useContext(PublishedListingContext);
   const checks = [
-    {
-      icon: Landmark,
-      label: "County sale notice",
-      detail: "Sale date and opening bid extracted from the demo filing.",
-      status: "Matched",
-      tone: "emerald",
-    },
-    {
-      icon: Building2,
-      label: "Parcel and owner record",
-      detail: "Parcel identity, owner name, and mailing record resolve together.",
-      status: "Matched",
-      tone: "emerald",
-    },
-    {
-      icon: Database,
-      label: "Tax and property record",
-      detail: "Tax status, use code, lot, and improvement record cross-checked.",
-      status: "Matched",
-      tone: "emerald",
-    },
-    {
-      icon: Scale,
-      label: "Debt position",
-      detail: "Senior lien amount is not supplied in this demo source packet.",
-      status: "Review",
-      tone: "amber",
-    },
+    { icon: Landmark, label: "Opening amount", detail: moneyText(listing?.openingBid) },
+    { icon: Building2, label: "Parcel key", detail: listing?.parcelKey || "Not published" },
+    { icon: Database, label: "Sale date", detail: listing?.saleDate || "Not published" },
+    { icon: Scale, label: "Occupancy", detail: listing?.occupancy || "Not published" },
   ];
 
   return (
@@ -409,25 +438,24 @@ function VerificationPanel() {
       <article className="relative overflow-hidden rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-slate-500/20 blur-3xl" />
         <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-300">
-          Demo evidence packet
+          Published listing
         </p>
-        <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{DEMO_DEAL.address}</h4>
-        <p className="relative mt-1 text-[13px] font-medium text-slate-300">{DEMO_DEAL.market}</p>
+        <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{listing?.address || (status === "loading" ? "Reading the listing feed" : "No listing returned")}</h4>
+        <p className="relative mt-1 text-[13px] font-medium text-slate-300">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Fields below are the record"}</p>
 
         <dl className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
-          <EvidenceFact label="Source" value="County notice" />
-          <EvidenceFact label="Case" value="CV-26-01482" />
-          <EvidenceFact label="Sale date" value="Sep 08, 2026" />
-          <EvidenceFact label="Deposit" value="$4,200" />
+          <EvidenceFact label="Source" value={listing?.source || "Not published"} />
+          <EvidenceFact label="Opening" value={moneyText(listing?.openingBid)} />
+          <EvidenceFact label="Sale date" value={listing?.saleDate || "Not published"} />
+          <EvidenceFact label="Deposit" value={moneyText(listing?.deposit)} />
         </dl>
 
         <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="flex items-center gap-2 text-[11px] font-bold text-white">
-            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> Filing translated into plain English
+            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> Record fields
           </div>
           <p className="mt-2 text-[12px] leading-[1.55] text-slate-300">
-            Demo notice indicates a county sale in eight days with a {DEMO_DEAL.opening} opening bid.
-            Title priority and occupancy remain diligence items before bidding.
+            {listing?.id ? "These values are the fields on the loaded listing." : "The feed did not return a listing to read."}
           </p>
         </div>
       </article>
@@ -451,11 +479,11 @@ function VerificationPanel() {
                 <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#5B6472]">{check.detail}</span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
-                check.tone === "emerald"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-amber-50 text-amber-700"
+                check.detail === "Not published"
+                  ? "bg-amber-50 text-amber-700"
+                  : "bg-emerald-50 text-emerald-700"
               }`}>
-                {check.status}
+                {check.detail === "Not published" ? "Not published" : "Published"}
               </span>
             </div>
           ))}
@@ -475,57 +503,58 @@ function EvidenceFact({ label, value }: { label: string; value: string }) {
 }
 
 function UnderwritePanel() {
-  const arvK = 95;
-  const openingK = 42;
-  const reserveK = 4;
-  const [repairsK, setRepairsK] = React.useState(18);
-  const [carryK, setCarryK] = React.useState(7);
-  const [profitK, setProfitK] = React.useState(22);
-
-  const bidCeilingK = Math.max(openingK, arvK - repairsK - carryK - profitK);
-  const offerRoomK = Math.max(0, bidCeilingK - openingK);
-  const targetMaxBidK = Math.max(openingK, bidCeilingK - Math.min(2, offerRoomK));
+  const { listing } = React.useContext(PublishedListingContext);
+  const openingN = Number(listing?.openingBid);
+  const opening = Number.isFinite(openingN) && openingN > 0 ? openingN : null;
+  const [assumed, setAssumed] = React.useState(0);
+  const [repairs, setRepairs] = React.useState(0);
+  const [carry, setCarry] = React.useState(0);
+  const [profit, setProfit] = React.useState(0);
+  const ceiling = assumed > 0 ? Math.max(0, assumed - repairs - carry - profit) : null;
+  const offerRoom = ceiling !== null && opening !== null ? Math.max(0, ceiling - opening) : null;
+  const dollars = (n: number) => `$${Math.round(n).toLocaleString()}`;
+  const bar = (amount: number) => (assumed > 0 ? `${Math.max(0, Math.min(100, Math.round((amount / assumed) * 100)))}%` : "0%");
 
   const deductions = [
     {
-      label: "Modeled ARV",
-      value: `$${arvK}k`,
+      label: "Assumed value",
+      value: assumed > 0 ? dollars(assumed) : "Not entered",
       width: "100%",
       color: "bg-emerald-600",
-      min: arvK,
-      max: arvK,
-      current: arvK,
-      onChange: undefined as ((v: number) => void) | undefined,
+      min: 0,
+      max: 500000,
+      current: assumed,
+      onChange: setAssumed as ((v: number) => void) | undefined,
     },
     {
       label: "Repairs",
-      value: `−$${repairsK}k`,
-      width: `${Math.max(15, Math.min(100, Math.round(((arvK - repairsK) / arvK) * 100)))}%`,
+      value: dollars(repairs),
+      width: bar(Math.max(0, assumed - repairs)),
       color: "bg-sky-500",
-      min: 5,
-      max: 35,
-      current: repairsK,
-      onChange: setRepairsK,
+      min: 0,
+      max: 200000,
+      current: repairs,
+      onChange: setRepairs,
     },
     {
       label: "Carry + close",
-      value: `−$${carryK}k`,
-      width: `${Math.max(15, Math.min(100, Math.round(((arvK - repairsK - carryK) / arvK) * 100)))}%`,
+      value: dollars(carry),
+      width: bar(Math.max(0, assumed - repairs - carry)),
       color: "bg-indigo-400",
-      min: 2,
-      max: 18,
-      current: carryK,
-      onChange: setCarryK,
+      min: 0,
+      max: 100000,
+      current: carry,
+      onChange: setCarry,
     },
     {
       label: "Required profit",
-      value: `−$${profitK}k`,
-      width: `${Math.max(15, Math.min(100, Math.round((bidCeilingK / arvK) * 100)))}%`,
+      value: dollars(profit),
+      width: bar(ceiling ?? 0),
       color: "bg-violet-400",
-      min: 10,
-      max: 35,
-      current: profitK,
-      onChange: setProfitK,
+      min: 0,
+      max: 200000,
+      current: profit,
+      onChange: setProfit,
     },
   ];
 
@@ -534,7 +563,7 @@ function UnderwritePanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Demo assumptions</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Operator assumptions</p>
             <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Build the walk-away number</h4>
             <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Every estimate stays visible, editable, and attributable.</p>
           </div>
@@ -553,7 +582,8 @@ function UnderwritePanel() {
               {item.onChange ? (
                 <input
                   type="range"
-                  aria-label={`Adjust ${item.label} in thousands`}
+                  aria-label={`Adjust ${item.label} in dollars`}
+                  step={1000}
                   min={item.min}
                   max={item.max}
                   value={item.current}
@@ -570,26 +600,26 @@ function UnderwritePanel() {
         </div>
 
         <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-[#F8FAFC] p-2">
-          <ModelStat label="Opening bid" value={`$${openingK}k`} />
-          <ModelStat label="Bid ceiling" value={`$${bidCeilingK}k`} emphasis />
-          <ModelStat label="Offer room" value={`$${offerRoomK}k`} />
+          <ModelStat label="Opening bid" value={opening === null ? "Not published" : dollars(opening)} />
+          <ModelStat label="Bid ceiling" value={ceiling === null ? "—" : dollars(ceiling)} emphasis />
+          <ModelStat label="Offer room" value={offerRoom === null ? "—" : dollars(offerRoom)} />
         </div>
       </article>
 
       <article className="flex flex-col rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
         <p className="mt-3 text-[13px] font-semibold text-slate-300">Modeled bid range</p>
-        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">${openingK}k–${targetMaxBidK}k</p>
+        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "—" : dollars(ceiling)}</p>
         <div className="mt-5 h-px bg-white/10" />
         <div className="mt-5 space-y-4">
-          <DecisionLine icon={DollarSign} label="Walk away above" value={`$${bidCeilingK}k`} />
-          <DecisionLine icon={AlertTriangle} label="Risk reserve" value={`$${reserveK}k`} />
-          <DecisionLine icon={Calendar} label="Decision window" value="8 days" />
+          <DecisionLine icon={DollarSign} label="Walk away above" value={ceiling === null ? "—" : dollars(ceiling)} />
+          <DecisionLine icon={AlertTriangle} label="Published deposit" value={moneyText(listing?.deposit)} />
+          <DecisionLine icon={Calendar} label="Sale date" value={listing?.saleDate || "Not published"} />
         </div>
         <div className="mt-auto rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
-          <p className="text-[11px] font-bold text-amber-200">The catch</p>
+          <p className="text-[11px] font-bold text-amber-200">Occupancy</p>
           <p className="mt-1 text-[11px] leading-[1.5] text-slate-300">
-            Occupancy and senior lien priority are unresolved in this demo packet. Resolve both before funding the deposit.
+            {listing?.occupancy ? `Published occupancy: ${listing.occupancy}.` : "Occupancy is not published on this listing."}
           </p>
         </div>
       </article>
@@ -619,10 +649,13 @@ function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; l
 }
 
 function ActionPanel() {
+  const { listing } = React.useContext(PublishedListingContext);
+  const scoreN = Number(listing?.dealScore);
+  const score = Number.isFinite(scoreN) && scoreN > 0 ? String(scoreN) : "—";
   const [actions, setActions] = React.useState([
     { label: "Order title review", detail: "Confirm lien priority and exceptions", owner: "Legal", done: false },
-    { label: "Complete drive-by", detail: "Validate occupancy and exterior condition", owner: "Acquisitions", done: true },
-    { label: "Stage deposit funds", detail: "$4,200 due at winning bid", owner: "Capital", done: false },
+    { label: "Check occupancy", detail: "Use the published occupancy field, or record that it is missing", owner: "Acquisitions", done: false },
+    { label: "Stage deposit funds", detail: "Use the published deposit on the listing", owner: "Capital", done: false },
   ]);
 
   const completedCount = actions.filter((a) => a.done).length;
@@ -637,25 +670,29 @@ function ActionPanel() {
       <article className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-[#0F172A] px-6 py-5 text-white">
           <div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision memo · demo</p>
-            <h4 className="mt-1 text-[21px] font-bold">{DEMO_DEAL.address}</h4>
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Listing record</p>
+            <h4 className="mt-1 text-[21px] font-bold">{listing?.address || "No listing loaded"}</h4>
             <p className="mt-0.5 text-[11px] font-medium text-slate-400">Prepared for acquisition review</p>
           </div>
           <span className="rounded-xl bg-emerald-400/15 px-3 py-2 text-[11px] font-extrabold text-emerald-200">
-            {completedCount === actions.length ? "Ready for bidding" : "Advance with conditions"}
+            {completedCount === actions.length ? "Checklist complete" : "Checklist open"}
           </span>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-3 gap-2">
-            <MemoMetric label="Deal score" value={DEMO_DEAL.score} />
-            <MemoMetric label="Opening" value={DEMO_DEAL.opening} />
-            <MemoMetric label="Bid ceiling" value="$48k" />
+            <MemoMetric label="Deal score" value={score} />
+            <MemoMetric label="Opening" value={moneyText(listing?.openingBid)} />
+            <MemoMetric label="Bid ceiling" value="—" />
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
               <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Why it advances</p>
               <ul className="mt-3 space-y-2">
-                {["$53k gross value spread", "Three source matches", "Eight-day decision window"].map((item) => (
+                {[
+                  listing?.saleDate ? `Sale date ${listing.saleDate}` : "Sale date is not published",
+                  listing?.source ? `Source ${listing.source}` : "Source is not published",
+                  listing?.parcelKey ? `Parcel ${listing.parcelKey}` : "Parcel key is not published",
+                ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden /> {item}
                   </li>
@@ -665,7 +702,11 @@ function ActionPanel() {
             <div>
               <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Conditions</p>
               <ul className="mt-3 space-y-2">
-                {["Clear senior lien position", "Confirm occupancy", "Hold $4k risk reserve"].map((item) => (
+                {[
+                  listing?.occupancy ? `Occupancy: ${listing.occupancy}` : "Occupancy is not published",
+                  moneyText(listing?.deposit) === "Not published" ? "Deposit is not published" : `Deposit ${moneyText(listing?.deposit)}`,
+                  "Title priority is not decided on this page",
+                ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
                     <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden /> {item}
                   </li>
@@ -707,7 +748,7 @@ function ActionPanel() {
             </button>
           ))}
         </div>
-        <a href="/listings" className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
+        <a href={listing?.id ? `/listings/${encodeURIComponent(listing.id)}` : "/listings"} className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
           Open opportunity workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
       </article>

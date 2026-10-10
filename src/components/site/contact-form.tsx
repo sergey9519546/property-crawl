@@ -29,7 +29,7 @@ export function ContactForm() {
       if (!response.ok) throw new Error(payload?.error || "Submission failed");
       setSubmitted(true);
       setSubmitNote(
-        payload?.delivery === "forwarded"
+        payload?.delivery === "forwarded" || payload?.delivery === "sent"
           ? "Thanks — your message was accepted for delivery."
           : "Thanks — your message was saved for the operator. Outbound delivery is not configured yet."
       );
@@ -106,7 +106,7 @@ export function ContactForm() {
           type="text"
           value={company}
           onChange={(e) => setCompany(e.target.value)}
-          placeholder="BlueLine Capital"
+          placeholder="Company name"
           className="h-12 w-full rounded-xl border border-[#D1D5DB] bg-white px-4 text-sm text-[#111827] placeholder:text-[#5B6472] focus:border-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#0F172A]/10"
         />
       </div>

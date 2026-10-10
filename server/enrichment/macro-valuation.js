@@ -56,43 +56,45 @@ function calculateMacroValuation({
   };
 }
 
+function explicitDollarBasis(listing) {
+  const assessed = Number(listing.assessedValue ?? listing.assessed);
+  const lastSale = Number(listing.lastSalePrice);
+  const assessmentYear = listing.assessmentYear ?? listing.taxYear;
+  const saleYear = listing.lastSaleYear;
+  if (Number.isFinite(assessed) && assessed > 0 && assessmentYear) {
+    return {
+      historicalValue: assessed,
+      historicalYear: assessmentYear,
+      state: listing.state,
+      basisType: 'TAX_ASSESSMENT',
+    };
+  }
+  if (Number.isFinite(lastSale) && lastSale > 0 && saleYear) {
+    return {
+      historicalValue: lastSale,
+      historicalYear: saleYear,
+      state: listing.state,
+      basisType: 'PRIOR_SALE',
+    };
+  }
+  return null;
+}
+
 /**
- * Enriches a raw listing object with FHFA macro valuation if historical basis exists
- * and listing lacks certified valuation.
+ * Does not invent a valuation. Opening bid, year built, and a guessed year
+ * are not a basis. The index behind calculateMacroValuation is not an official
+ * FHFA release, so this function never copies a band onto estLow/estHigh.
  *
  * @param {Object} listing
- * @returns {Object} listing with macroValuation attached
+ * @returns {Object} the same listing
  */
 function enrichListingWithMacroValuation(listing) {
   if (!listing) return listing;
-
-  // Use assessed value or last sale price as historical basis if available
-  const basisVal = Number(listing.assessedValue || listing.lastSalePrice || listing.openingBid);
-  const basisYear = listing.yearBuilt ? Math.max(2015, Math.min(2023, listing.yearBuilt)) : 2018;
-
-  if (Number.isFinite(basisVal) && basisVal > 0 && listing.state) {
-    const macro = calculateMacroValuation({
-      historicalValue: basisVal,
-      historicalYear: basisYear,
-      state: listing.state,
-      basisType: listing.assessedValue ? 'TAX_ASSESSMENT' : 'AUCTION_OPENING_BID'
-    });
-
-    if (macro) {
-      return {
-        ...listing,
-        macroValuation: macro,
-        // Populate estLow/estHigh only if previously missing
-        estLow: listing.estLow ?? macro.estLow,
-        estHigh: listing.estHigh ?? macro.estHigh
-      };
-    }
-  }
-
   return listing;
 }
 
 module.exports = {
   calculateMacroValuation,
+  explicitDollarBasis,
   enrichListingWithMacroValuation
 };

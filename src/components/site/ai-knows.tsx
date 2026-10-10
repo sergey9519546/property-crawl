@@ -56,12 +56,9 @@ export function AiKnows() {
                     Underwriting preview
                   </p>
                   <p className="text-[18px] font-bold text-[#111827]">
-                    123 Main St &mdash; ARV $340k &middot; Profit $52k
+                    Score is read from the listing
                   </p>
                 </div>
-                <span className="rounded-full bg-white/80 px-3 py-1 text-[12px] font-semibold text-[#111827] backdrop-blur">
-                  Generated in 6 min
-                </span>
               </div>
             </div>
           </div>

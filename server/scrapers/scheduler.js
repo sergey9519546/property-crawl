@@ -80,6 +80,14 @@ function shouldAllowRealScrapers(env = process.env) {
   return true;
 }
 
+function backgroundCollectionEnabled(env = process.env) {
+  if (!shouldAllowRealScrapers(env)) return false;
+  if (env.DISCOVERY_MODE === 'advanced') return false;
+  const flag = env.SCRAPER_BACKGROUND_ENABLED;
+  if (flag == null || flag === '' || flag === '1') return true;
+  return false;
+}
+
 class IngestionScheduler {
   constructor(options = {}) {
     this.mockScrapers = [];
@@ -214,9 +222,28 @@ class IngestionScheduler {
             if(!scope)throw new Error(`Collector ${scraper.sourceKey} does not expose a bounded collection scope`);
             const checkpoint=await this.discoveryStore.getCheckpoint(scraper.sourceKey);
             const freshCanary=options.trigger==='discovery_canary'&&checkpoint?.cursor&&typeof checkpoint.cursor==='object'&&!Array.isArray(checkpoint.cursor)&&Object.keys(checkpoint.cursor).length===0;
-            if(checkpoint&&checkpoint.scopeHash!==scopeHash(scope)&&!freshCanary)throw new Error(`Checkpoint scope does not match ${scraper.sourceKey} collector configuration`);
-            if(typeof scraper.setCheckpoint==='function')scraper.setCheckpoint(checkpoint?.cursor||{});
+            // A checkpoint with no scope hash cannot be resumed or discarded safely.
+            // A checkpoint whose hash belongs to a previous geography starts this
+            // scope from the beginning. The old cursor is not applied, stored
+            // listings stay, and this run does not promote the new scope.
+            const scopeIdentityMissing=checkpoint&&(checkpoint.scopeHash==null||checkpoint.scopeHash==='');
+            if(scopeIdentityMissing&&!freshCanary)throw new Error(`Checkpoint scope does not match ${scraper.sourceKey} collector configuration`);
+            const scopeMoved=Boolean(checkpoint?.scopeHash&&checkpoint.scopeHash!==scopeHash(scope));
+            if(scopeMoved)console.warn(`[Scheduler] ${scraper.sourceKey} checkpoint belongs to a previous scope. Starting this scope from the beginning. Stored listings stay.`);
+            if(typeof scraper.setCheckpoint==='function')scraper.setCheckpoint(scopeMoved?{}:(checkpoint?.cursor||{}));
             discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope,idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null},ownership);
+          }
+          if (scraper.sourceKey === 'servicelink') {
+            if (this.discoveryStore) {
+              scraper.checkpointPath = null;
+            } else if (typeof scraper.setCheckpoint === 'function') {
+              const checkpointPath = servicelink.explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH);
+              scraper.checkpointPath = checkpointPath;
+              if (checkpointPath) {
+                const saved = servicelink.readCheckpointFile(checkpointPath);
+                if (saved) scraper.setCheckpoint(saved);
+              }
+            }
           }
           const items = await scraper.scrapeFeed();
           await assertLease('Collection job lease was lost after source execution');
@@ -354,11 +381,10 @@ const scheduler = new IngestionScheduler({
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
     if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {
-      // A run may reconcile (retire records that disappeared from this source)
-      // ONLY when the run completed without error AND was not truncated by
-      // pagination, timeouts, or operator abort. The scheduler surfaces this
-      // through run.report.complete / run.report.truncated. Any other state
-      // — error, partial, truncated, or no report — must NOT retire records.
+      // A complete, non-truncated run may annotate same-source records that
+      // were absent from that index. The store keeps the record and does not
+      // write sold or closed. Error, partial, truncated, or no report must
+      // not annotate. run.report.complete / run.report.truncated is the gate.
       const report = run.report && typeof run.report === 'object' ? run.report : null;
       const runCompleted = Boolean(report && report.complete === true && report.truncated !== true);
       try {
@@ -451,4 +477,5 @@ module.exports.mapWithConcurrency = mapWithConcurrency;
 module.exports.normalizeConcurrency = normalizeConcurrency;
 module.exports.parseScrapeIntervalHours = parseScrapeIntervalHours;
 module.exports.shouldAllowRealScrapers = shouldAllowRealScrapers;
+module.exports.backgroundCollectionEnabled = backgroundCollectionEnabled;
 module.exports.sourcesForWave = sourcesForWave;

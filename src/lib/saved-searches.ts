@@ -52,11 +52,15 @@ export function parseSavedSearches(raw: string | null): SavedSearch[] {
 }
 
 // Build server filters payload from the current simple UI controls.
-export function buildServerFilters(state: string, minScore: number, maxBid: number) {
+const NOTIFY_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function buildServerFilters(state: string, minScore: number, maxBid: number, notifyEmail?: string) {
   const filters: Record<string, unknown> = {};
   if (state && state !== "All") filters.states = [state];
   if (minScore > 0) filters.minScore = minScore;
   if (maxBid > 0) filters.maxBid = maxBid;
+  const email = String(notifyEmail || "").trim().toLowerCase();
+  if (email && email.length <= 320 && NOTIFY_EMAIL.test(email)) filters.notifyEmail = email;
   return filters;
 }
 

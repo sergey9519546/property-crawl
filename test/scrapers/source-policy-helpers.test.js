@@ -81,10 +81,17 @@ test('hasSourceRecordShape: courtlistener requires /docket/<numeric>/...', () =>
 
 // --- hasSourceRecordShape: gsa ---------------------------------------
 
-test('hasSourceRecordShape: gsa requires /asset-details with property_id query', () => {
-  assert.equal(hasSourceRecordShape('gsa', url('/asset-details?property_id=P-1')), true);
-  assert.equal(hasSourceRecordShape('gsa', url('/asset-details')), false, 'missing property_id');
-  assert.equal(hasSourceRecordShape('gsa', url('/property?property_id=P-1')), false, 'wrong path');
+test('hasSourceRecordShape: gsa accepts the sales record and the disposition list only', () => {
+  const sales = 'https://realestatesales.gov/asset-details?property_id=P-1';
+  const list = 'https://www.gsa.gov/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition';
+  assert.equal(hasSourceRecordShape('gsa', url(sales)), true);
+  assert.equal(hasSourceRecordShape('gsa', url('https://www.realestatesales.gov/asset-details?property_id=P-1')), true);
+  assert.equal(hasSourceRecordShape('gsa', url('https://realestatesales.gov/asset-details')), false, 'missing property_id');
+  assert.equal(hasSourceRecordShape('gsa', url('https://realestatesales.gov/property?property_id=P-1')), false, 'wrong path');
+  assert.equal(hasSourceRecordShape('gsa', url('https://example.com/asset-details?property_id=P-1')), false, 'unrelated host');
+  assert.equal(hasSourceRecordShape('gsa', url('https://disposal.gsa.gov/asset-details?property_id=P-1')), false, 'disposal host');
+  assert.equal(hasSourceRecordShape('gsa', url(list)), true);
+  assert.equal(hasSourceRecordShape('gsa', url(`${list}?q=1`)), false, 'disposition list rejects a query');
 });
 
 // --- hasSourceRecordShape: fannie / freddie / va ---------------------

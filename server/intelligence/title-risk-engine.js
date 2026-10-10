@@ -150,7 +150,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     warnings.push('NORTH CAROLINA 10-DAY UPSET BID: Sale remains open for upset bids (5% or $750 minimum increase) under N.C.G.S. § 45-21.27.');
   }
 
-  let titleActionAdvice = 'Title risk verified acceptable for standard bidding.';
+  let titleActionAdvice = 'No senior-lien flag from the published plaintiff. This is not a title opinion or a bid instruction.';
   if (riskLevel === 'CRITICAL') {
     titleActionAdvice = 'DO NOT BID. Senior mortgage survives sale; winning bidder takes property encumbered by underlying debt.';
   } else if (riskLevel === 'HIGH') {

@@ -153,6 +153,7 @@ test('the skip counter reads the reporter line and ignores clean output', () => 
   const { skippedIn } = require('../scripts/verify-summary');
   const { spawnSync } = require('node:child_process');
   assert.equal(skippedIn('ℹ skipped 3\nℹ pass 10\n'), 3);
+  assert.equal(skippedIn('\u001b[34mℹ skipped 1\u001b[39m\n'), 1);
   assert.equal(skippedIn('# skipped 1\n# pass 4\n'), 1);
   assert.equal(skippedIn('ℹ pass 10\nℹ fail 0\n'), 0);
   assert.equal(skippedIn(undefined), 0);

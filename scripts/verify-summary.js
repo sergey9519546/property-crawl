@@ -10,10 +10,13 @@
  * a `skipped N` summary line per run, which is enough to tell the two apart.
  */
 
-/** Total tests a run reported as skipped. Tolerant of the `ℹ` and `#` forms. */
+/** Total tests a run reported as skipped. Tolerant of the `ℹ` and `#` forms.
+ * The spec reporter wraps that line in ANSI color when FORCE_COLOR or a TTY
+ * is set, which is how a real skip was counted as zero. */
 function skippedIn(output) {
+  const plain = String(output || '').replace(/\u001b\[[0-9;]*m/g, '');
   let total = 0;
-  for (const match of String(output || '').matchAll(/^\s*[ℹ#]\s*skipped\s+(\d+)\s*$/gim)) {
+  for (const match of plain.matchAll(/^\s*[ℹ#]\s*skipped\s+(\d+)\s*$/gim)) {
     total += Number(match[1]);
   }
   return total;

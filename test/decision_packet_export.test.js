@@ -56,6 +56,7 @@ test('Decision Packet: constructs complete forensic due diligence packet', () =>
   assert.equal(d.decision, 'BID');
   assert.equal(d.maxAllowableOffer, 75000);
   assert.equal(d.operatorId, 'operator-101');
+  assert.equal(packet.underwriting.macroValuation, null);
 });
 
 test('Decision Packet: flags junior lien foreclosure title defects', () => {

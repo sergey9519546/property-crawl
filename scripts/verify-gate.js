@@ -253,6 +253,26 @@ function runGate(changeType, opts) {
 function main() {
   const args = process.argv.slice(2);
   const asJson = args.includes('--json');
+  // agent-system Scenario 10 runs this script. The agent gate runs that same
+  // file, so a dirty .kilo tree would spawn verify-gate forever. The outer
+  // process still runs the classified suites. This process only refuses to
+  // start them a second time.
+  if (process.env.PROPERTY_VERIFY_GATE_ACTIVE === '1') {
+    const block = {
+      changeType: 'reentry',
+      gateLabel: 'already inside verify-gate',
+      suitesRun: 0,
+      allPassed: true,
+      results: [],
+      evidence: 're-entry skipped so the suite that invokes verify-gate is not run again',
+      gitFailed: false,
+      filesChanged: null,
+    };
+    if (asJson) console.log(JSON.stringify(block, null, 2));
+    else console.log('[verify-gate] already running; not re-entering');
+    return;
+  }
+  process.env.PROPERTY_VERIFY_GATE_ACTIVE = '1';
   const typeArg = args.find((a) => a.startsWith('--change-type'));
   const changeType = typeArg ? typeArg.split('=')[1] || args[args.indexOf(typeArg) + 1] : null;
 

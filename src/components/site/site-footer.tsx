@@ -22,6 +22,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Second Look", href: "/research" },
       { label: "Saved Hunts", href: "/hunts" },
       { label: "Collection activity", href: "/activity" },
+      { label: "States with a live count", href: "/states" },
       { label: "What's in beta", href: "/#pricing" },
     ],
   },
@@ -37,7 +38,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Resources",
     links: [
       { label: "Knowledge base", href: "/resources#knowledge-base" },
-      { label: "County guides", href: "/resources#guides" },
+      { label: "States with a live count", href: "/states" },
       { label: "Changelog", href: "/resources#changelog" },
       { label: "About the beta", href: "/about" },
     ],
@@ -49,6 +50,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Contact", href: "/contact" },
       { label: "Legal", href: "/terms" },
       { label: "Privacy", href: "/privacy" },
+      { label: "Unsubscribe", href: "/newsletter/unsubscribe" },
     ],
   },
 ];
@@ -70,7 +72,7 @@ export function SiteFooter() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Subscription failed");
       setNewsletterStatus(
-        payload?.delivery === "forwarded"
+        payload?.delivery === "forwarded" || payload?.delivery === "sent"
           ? "Thanks — you're on the list."
           : "Saved. Email delivery is not configured yet."
       );

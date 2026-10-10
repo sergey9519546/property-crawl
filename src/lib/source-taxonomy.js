@@ -89,7 +89,7 @@ const SOURCE_STATUSES = {
   },
   INCONCLUSIVE_BLOCKED: {
     label: 'Blocked',
-    description: 'Access denied by robots, CAPTCHA/Turnstile, or equivalent publisher control.',
+    description: 'Not a promoted collector. Access is denied by robots, CAPTCHA, or an empty canary, or the publisher control is otherwise unresolved.',
     color: 'bg-red-100 text-red-800',
   },
   RETIRED: {

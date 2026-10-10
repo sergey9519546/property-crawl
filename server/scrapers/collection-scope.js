@@ -5,7 +5,7 @@ const { acquisitionScope } = require('../discovery/run-report');
 const FIXED_SCOPES = Object.freeze({
   treasury: { endpoint: '/auctions/treasury/rp/realprop.shtml', filters: { assetClass: 'real_property' } },
   irs: { endpoint: '/auction/items', filters: { assetClass: 'real_estate' } },
-  gsa: { endpoint: '/our-listing', filters: { assetClass: 'real_estate' } },
+  gsa: { endpoint: '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition', filters: { assetClass: 'real_estate', program: 'accelerated_disposition' } },
   usda: { endpoint: '/resales/public/searchSFH', filters: { propertyType: 'Single Family' }, jurisdictionSelection: 'publisher_inventory_options' },
 });
 

@@ -2,6 +2,15 @@
 
 const crypto = require('crypto');
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
+const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
+
+const PLACEHOLDER_RECIPIENT = 'operator@propertycrawl.com';
+
+function huntRecipient(hunt) {
+  const email = isEmail(hunt?.subscriberEmail);
+  if (!email || email === PLACEHOLDER_RECIPIENT) return null;
+  return email;
+}
 
 /**
  * High-performance Hunt Evaluator & Multi-Channel Alert Engine
@@ -146,7 +155,7 @@ function generateHuntWebhookPayload(hunt, listing, matchedCriteria = []) {
 function generateHuntEmailDigest(hunt, matchedListings = []) {
   const count = matchedListings.length;
   const huntTitle = hunt.label || hunt.title || 'Saved Hunt';
-  const to = hunt.subscriberEmail || 'operator@propertycrawl.com';
+  const to = huntRecipient(hunt);
 
   const subject = `🎯 [${huntTitle}] Found ${count} New Distressed Property ${count === 1 ? 'Opportunity' : 'Opportunities'}`;
 
@@ -168,9 +177,23 @@ function generateHuntEmailDigest(hunt, matchedListings = []) {
   };
 }
 
+async function deliverHuntDigest(digest, options = {}) {
+  const to = isEmail(digest?.to);
+  if (!to || to === PLACEHOLDER_RECIPIENT) {
+    return { delivery: 'unavailable', sent: false, reason: 'no-recipient' };
+  }
+  return sendOutboundMail({
+    to,
+    subject: digest.subject,
+    text: digest.text,
+    kind: 'hunt-digest',
+  }, options);
+}
+
 module.exports = {
   evaluateListingAgainstHunt,
   evaluateListingAcrossHunts,
   generateHuntWebhookPayload,
-  generateHuntEmailDigest
+  generateHuntEmailDigest,
+  deliverHuntDigest,
 };

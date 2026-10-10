@@ -515,7 +515,7 @@ test('AlertsModal provides state, minScore, and maxBid criteria filters', () => 
   assert.ok(modalContent.includes('Saved searches'), 'Saved-search title missing');
   assert.ok(modalContent.includes('matchesSavedSearch'), 'Matching results missing');
   assert.ok(modalContent.includes('onApply(search)'), 'Search application missing');
-  assert.ok(modalContent.includes('Background email delivery is not yet wired'), 'Delivery limits must be explicit');
+  assert.ok(modalContent.includes('Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace.'), 'Delivery limits must be explicit');
 });
 
 test('Scrapers API route supports POST /api/scrapers/run for on-demand triggers', () => {

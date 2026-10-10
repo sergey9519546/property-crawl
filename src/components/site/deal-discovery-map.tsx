@@ -19,7 +19,7 @@ type Opportunity = {
   address: string;
   area: string;
   source: string;
-  sourceKey: "county" | "tax" | "sheriff" | "code" | "estate";
+  sourceKey: "listing";
   signal: string;
   insight: string;
   score: number;
@@ -31,92 +31,69 @@ type Opportunity = {
   lat: number;
 };
 
+type ListingRow = {
+  id?: string;
+  address?: string | null;
+  city?: string | null;
+  county?: string | null;
+  source?: string | null;
+  lat?: number | string | null;
+  lng?: number | string | null;
+  openingBid?: number | string | null;
+  estLow?: number | string | null;
+  estHigh?: number | string | null;
+  dealScore?: number | string | null;
+};
+
 type ScanState = "idle" | "playing" | "complete";
 
 const CLEVELAND_CENTER: [number, number] = [-81.6944, 41.4993];
+const PIN_COLORS = ["#0F172A", "#1D4ED8", "#0F766E", "#7C3AED", "#B45309"];
 
-const OPPORTUNITIES: Opportunity[] = [
-  {
-    id: "clark",
-    address: "4120 Clark Ave",
-    area: "Detroit–Shoreway",
-    source: "County notice",
-    sourceKey: "county",
-    signal: "Sale window opens in 8 days",
-    insight: "Strongest bid-to-value spread in the current west-side scan.",
-    score: 92,
-    opening: "$42k",
-    arv: "$95k",
-    spread: "$53k",
-    color: "#0F172A",
-    lng: -81.7136629,
-    lat: 41.469781,
-  },
-  {
-    id: "detroit",
-    address: "7604 Detroit Ave",
-    area: "Detroit–Shoreway",
-    source: "Tax delinquency",
-    sourceKey: "tax",
-    signal: "New delinquency signal",
-    insight: "New public-record signal with a wide modeled renovation margin.",
-    score: 86,
-    opening: "$68k",
-    arv: "$142k",
-    spread: "$74k",
-    color: "#7C3AED",
-    lng: -81.7372636,
-    lat: 41.4823093,
-  },
-  {
-    id: "woodland",
-    address: "8010 Woodland Ave",
-    area: "Kinsman",
-    source: "Sheriff sale",
-    sourceKey: "sheriff",
-    signal: "Bid date moved forward",
-    insight: "Auction timing changed; diligence should be prioritized this week.",
-    score: 83,
-    opening: "$51k",
-    arv: "$118k",
-    spread: "$67k",
-    color: "#EA580C",
-    lng: -81.6329114,
-    lat: 41.4880902,
-  },
-  {
-    id: "superior",
-    address: "11818 Superior Ave",
-    area: "Glenville",
-    source: "Code enforcement",
-    sourceKey: "code",
-    signal: "Violation filed 4 days ago",
-    insight: "Fresh municipal distress signal near active east-side acquisition zones.",
-    score: 78,
-    opening: "$59k",
-    arv: "$126k",
-    spread: "$67k",
-    color: "#0891B2",
-    lng: -81.6027726,
-    lat: 41.5229457,
-  },
-  {
-    id: "broadview",
-    address: "4532 Broadview Rd",
-    area: "Old Brooklyn",
-    source: "Estate filing",
-    sourceKey: "estate",
-    signal: "Probate record matched",
-    insight: "Estate filing and parcel identity resolve to the same owner record.",
-    score: 74,
-    opening: "$81k",
-    arv: "$157k",
-    spread: "$76k",
-    color: "#16A34A",
-    lng: -81.6973692,
-    lat: 41.4324144,
-  },
-];
+function finite(value: unknown): number | null {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function moneyOrDash(value: unknown): string {
+  const n = finite(value);
+  if (n === null || n <= 0) return "—";
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function listingToOpportunity(row: ListingRow, index: number): Opportunity | null {
+  const lat = finite(row.lat);
+  const lng = finite(row.lng);
+  if (lat === null || lng === null || !row.id) return null;
+  if (lat < 41.3 || lat > 41.6 || lng < -81.9 || lng > -81.5) return null;
+  const low = finite(row.estLow);
+  const high = finite(row.estHigh);
+  const hasBand = low !== null && low > 0 && high !== null && high >= low;
+  const mid = hasBand && low !== null && high !== null ? (low + high) / 2 : null;
+  const opening = finite(row.openingBid);
+  const spread = mid !== null && opening !== null && opening > 0 ? mid - opening : null;
+  const score = finite(row.dealScore);
+  return {
+    id: String(row.id),
+    address: row.address?.trim() || "Address not published",
+    area: row.city?.trim() || row.county?.trim() || "Ohio",
+    source: row.source?.trim() || "Listing",
+    sourceKey: "listing",
+    signal: "Published listing",
+    insight: "Coordinates and amounts are the fields on the listing record.",
+    score: score !== null && score > 0 ? score : 0,
+    opening: moneyOrDash(opening),
+    arv: mid !== null ? moneyOrDash(mid) : "—",
+    spread: spread !== null ? moneyOrDash(spread) : "—",
+    color: PIN_COLORS[index % PIN_COLORS.length],
+    lng,
+    lat,
+  };
+}
+
+function pinText(score: number): string {
+  return score > 0 ? String(score) : "—";
+}
 
 const FALLBACK_MAP_TILES = [
   [557, 763], [558, 763], [559, 763], [560, 763], [561, 763],
@@ -124,24 +101,21 @@ const FALLBACK_MAP_TILES = [
   [557, 765], [558, 765], [559, 765], [560, 765], [561, 765],
 ] as const;
 
-// Padded bounding box of the opportunity set — used to project fallback
-// marker positions when the map engine itself fails to boot (offline chunk).
-const OPPORTUNITY_BOUNDS = OPPORTUNITIES.reduce(
-  (acc, deal) => ({
-    minLng: Math.min(acc.minLng, deal.lng),
-    maxLng: Math.max(acc.maxLng, deal.lng),
-    minLat: Math.min(acc.minLat, deal.lat),
-    maxLat: Math.max(acc.maxLat, deal.lat),
-  }),
-  { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity },
-);
-
 const FALLBACK_PAD = 0.12;
-function fallbackPosition(lng: number, lat: number) {
-  const spanLng = OPPORTUNITY_BOUNDS.maxLng - OPPORTUNITY_BOUNDS.minLng;
-  const spanLat = OPPORTUNITY_BOUNDS.maxLat - OPPORTUNITY_BOUNDS.minLat;
-  const x = spanLng === 0 ? 0.5 : (lng - OPPORTUNITY_BOUNDS.minLng) / spanLng;
-  const y = spanLat === 0 ? 0.5 : (OPPORTUNITY_BOUNDS.maxLat - lat) / spanLat;
+function fallbackPosition(lng: number, lat: number, deals: Opportunity[]) {
+  const bounds = deals.reduce(
+    (acc, deal) => ({
+      minLng: Math.min(acc.minLng, deal.lng),
+      maxLng: Math.max(acc.maxLng, deal.lng),
+      minLat: Math.min(acc.minLat, deal.lat),
+      maxLat: Math.max(acc.maxLat, deal.lat),
+    }),
+    { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity },
+  );
+  const spanLng = bounds.maxLng - bounds.minLng;
+  const spanLat = bounds.maxLat - bounds.minLat;
+  const x = spanLng === 0 ? 0.5 : (lng - bounds.minLng) / spanLng;
+  const y = spanLat === 0 ? 0.5 : (bounds.maxLat - lat) / spanLat;
   const inset = FALLBACK_PAD * 100;
   return {
     left: `${(inset + x * (100 - inset * 2)).toFixed(2)}%`,
@@ -166,6 +140,8 @@ export function DealDiscoveryMap() {
   const hasPlayedRef = React.useRef(false);
 
   const [activeIndex, setActiveIndex] = React.useState(0);
+  const [deals, setDeals] = React.useState<Opportunity[]>([]);
+  const [inventoryNote, setInventoryNote] = React.useState("Reading published listings.");
   const [announcement, setAnnouncement] = React.useState("");
   const [mapReady, setMapReady] = React.useState(false);
   const [mapUnavailable, setMapUnavailable] = React.useState(false);
@@ -175,7 +151,39 @@ export function DealDiscoveryMap() {
   const [scanRun, setScanRun] = React.useState(0);
   const shouldReduceMotion = usePrefersReducedMotion();
   const reduceMotionRef = React.useRef(shouldReduceMotion);
-  const activeDeal = OPPORTUNITIES[activeIndex];
+  const activeDeal = deals[activeIndex] ?? null;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams({
+      state: "OH",
+      lat: "41.4993",
+      lng: "-81.6944",
+      radiusKm: "12",
+      limit: "40",
+      sort: "date",
+    });
+    void fetch(`/api/listings?${params.toString()}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: { listings?: ListingRow[] }) => {
+        if (cancelled) return;
+        const next = (data.listings ?? [])
+          .map((row, index) => listingToOpportunity(row, index))
+          .filter((row): row is Opportunity => row !== null)
+          .slice(0, 8);
+        setDeals(next);
+        setActiveIndex(0);
+        setInventoryNote(next.length ? "" : "No published listing with coordinates in this window.");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDeals([]);
+        setInventoryNote("The listing feed did not return this window.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     reduceMotionRef.current = shouldReduceMotion;
@@ -231,7 +239,8 @@ export function DealDiscoveryMap() {
 
   const selectDeal = React.useCallback(
     (index: number, announce = true) => {
-      const deal = OPPORTUNITIES[index];
+      const deal = deals[index];
+      if (!deal) return;
       setActiveIndex(index);
       setScanState("complete");
       if (scanTimerRef.current !== null) {
@@ -262,7 +271,7 @@ export function DealDiscoveryMap() {
         map.easeTo({ ...camera, duration: 500 });
       }
     },
-    [],
+    [deals],
   );
 
   // Ref updates belong in effects — writing during render breaks under
@@ -290,7 +299,8 @@ export function DealDiscoveryMap() {
       const target = event.target as HTMLElement | null;
       if (!target?.dataset?.opportunityMarker) return;
       event.preventDefault();
-      const count = OPPORTUNITIES.length;
+      const count = deals.length;
+      if (count === 0) return;
       let next = activeIndex + direction;
       if (direction === -Infinity) next = 0;
       else if (direction === Infinity) next = count - 1;
@@ -304,7 +314,7 @@ export function DealDiscoveryMap() {
       )?.[next];
       (markerElement ?? fallback)?.focus();
     },
-    [activeIndex],
+    [activeIndex, deals],
   );
 
   React.useEffect(() => {
@@ -356,7 +366,7 @@ export function DealDiscoveryMap() {
           "bottom-left",
         );
 
-        markerEntriesRef.current = OPPORTUNITIES.map((deal, index) => {
+        markerEntriesRef.current = deals.map((deal, index) => {
           const element = document.createElement("button");
           element.type = "button";
           element.className = "opportunity-map-marker";
@@ -379,7 +389,7 @@ export function DealDiscoveryMap() {
           `;
           const pin = element.querySelector(".opportunity-map-marker__pin");
           const areaLabel = element.querySelector(".opportunity-map-marker__label");
-          if (pin) pin.textContent = String(deal.score ?? "");
+          if (pin) pin.textContent = pinText(deal.score);
           if (areaLabel) areaLabel.textContent = String(deal.area ?? "");
           element.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -418,7 +428,7 @@ export function DealDiscoveryMap() {
           }
           const geojson = {
             type: "FeatureCollection" as const,
-            features: OPPORTUNITIES.map((deal) => ({
+            features: deals.map((deal) => ({
               type: "Feature" as const,
               geometry: {
                 type: "Point" as const,
@@ -509,11 +519,25 @@ export function DealDiscoveryMap() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [deals]);
 
-  const rankedDeals = OPPORTUNITIES.filter((_, index) => index !== activeIndex)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+  const shown = activeDeal ?? {
+    id: "",
+    address: inventoryNote,
+    area: "Cleveland window",
+    source: "Listings",
+    sourceKey: "listing" as const,
+    signal: "No pin",
+    insight: inventoryNote,
+    score: 0,
+    opening: "—",
+    arv: "—",
+    spread: "—",
+    color: "#0F172A",
+    lng: CLEVELAND_CENTER[0],
+    lat: CLEVELAND_CENTER[1],
+  };
+  const rankedDeals = deals.filter((_, index) => index !== activeIndex).slice(0, 3);
 
   return (
     <div
@@ -523,7 +547,7 @@ export function DealDiscoveryMap() {
       data-map-engine="maplibre"
       data-map-ready={mapReady ? "true" : "false"}
       data-map-unavailable={mapUnavailable ? "true" : "false"}
-      data-active-deal={activeDeal.id}
+      data-active-deal={shown.id}
       data-scanning={scanState === "playing" ? "true" : "false"}
       data-scan-state={scanState}
       role="region"
@@ -569,8 +593,8 @@ export function DealDiscoveryMap() {
             keyboard/SR reachable even with the map engine fully offline. */}
         {engineFailed ? (
           <div className="absolute inset-0 z-10">
-            {OPPORTUNITIES.map((deal, index) => {
-              const position = fallbackPosition(deal.lng, deal.lat);
+            {deals.map((deal, index) => {
+              const position = fallbackPosition(deal.lng, deal.lat, deals);
               const active = index === activeIndex;
               return (
                 <button
@@ -592,7 +616,7 @@ export function DealDiscoveryMap() {
                 >
                   <span aria-hidden="true" className="opportunity-map-marker__halo" />
                   <span aria-hidden="true" className="opportunity-map-marker__pin">
-                    {deal.score}
+                    {pinText(deal.score)}
                   </span>
                   <span aria-hidden="true" className="opportunity-map-marker__label">
                     {deal.area}
@@ -619,10 +643,10 @@ export function DealDiscoveryMap() {
             </span>
             <div className="min-w-0">
               <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-900">
-                Real map · demo opportunities
+                Map preview
               </p>
               <p className="truncate text-[12px] font-semibold text-[#111827]">
-                Cleveland, OH · {OPPORTUNITIES.length} signals
+                {deals.length ? `${deals.length} published in this window` : "Cleveland window"}
               </p>
             </div>
           </div>
@@ -649,11 +673,7 @@ export function DealDiscoveryMap() {
         </div>
 
         <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-[10px] font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
-          <span className="h-2 w-2 rounded-full bg-[#0F172A]" /> County
-          <span className="ml-1 h-2 w-2 rounded-full bg-[#7C3AED]" /> Tax
-          <span className="ml-1 h-2 w-2 rounded-full bg-[#EA580C]" /> Auction
-          <span className="ml-1 h-2 w-2 rounded-full bg-[#0891B2]" /> Code
-          <span className="ml-1 h-2 w-2 rounded-full bg-[#16A34A]" /> Estate
+          Pin = published listing
         </div>
       </div>
 
@@ -661,41 +681,41 @@ export function DealDiscoveryMap() {
         id="storyteller-map-preview"
         data-testid="storyteller-map-preview"
         data-opportunity-detail="true"
-        aria-label={`Selected opportunity: ${activeDeal.address}`}
+        aria-label={`Selected opportunity: ${shown.address}`}
         className="opportunity-inspector relative z-40 border-t border-[#E2E8F0] bg-white p-4 sm:p-5 lg:absolute lg:bottom-4 lg:right-4 lg:top-4 lg:w-[352px] lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-white/90 lg:bg-white/94 lg:shadow-[0_22px_70px_rgba(15,23,42,0.18)] lg:backdrop-blur-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-900">
-              {sourceDisplayText(activeDeal.source)}
+              {sourceDisplayText(shown.source)}
             </p>
             <h3 className="mt-1 truncate text-[20px] font-bold tracking-[-0.02em] text-[#111827]">
-              {activeDeal.address}
+              {shown.address}
             </h3>
             <p className="mt-1 text-[12px] font-medium text-[#5B6472]">
-              {activeDeal.area} · Cleveland, OH
+              {shown.area}
             </p>
           </div>
           <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-50 px-3 py-2 text-[16px] font-extrabold tabular-nums text-emerald-700">
-            <TrendingUp className="h-4 w-4" aria-hidden /> {activeDeal.score}
+            <TrendingUp className="h-4 w-4" aria-hidden /> {pinText(shown.score)}
           </span>
         </div>
 
         <p className="mt-4 rounded-xl bg-[#F8FAFC] px-3.5 py-3 text-[12px] font-medium leading-[1.45] text-[#475569]">
-          {activeDeal.signal}. {activeDeal.insight}
+          {shown.signal}. {shown.insight}
         </p>
 
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <OpportunityStat label="Opening" value={activeDeal.opening} />
-          <OpportunityStat label="ARV" value={activeDeal.arv} />
-          <OpportunityStat label="Spread" value={activeDeal.spread} green />
+          <OpportunityStat label="Opening" value={shown.opening} />
+          <OpportunityStat label="Value band" value={shown.arv} />
+          <OpportunityStat label="Spread" value={shown.spread} green />
         </div>
 
         <a
-          href="/listings"
+          href={shown.id ? `/listings/${encodeURIComponent(shown.id)}` : "/listings"}
           className="opportunity-primary-action mt-3 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white"
         >
-          Explore live deals <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          {shown.id ? "Open listing" : "Open the feed"} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
 
         <div className="mt-5 border-t border-[#E8EDF3] pt-4">
@@ -704,12 +724,12 @@ export function DealDiscoveryMap() {
               Next opportunities
             </p>
             <span className="text-[10px] font-semibold text-[#5B6472]">
-              Ranked by score
+              Feed order
             </span>
           </div>
           <div data-testid="opportunity-list" className="mt-2 space-y-1.5">
             {rankedDeals.map((deal) => {
-              const index = OPPORTUNITIES.findIndex((item) => item.id === deal.id);
+              const index = deals.findIndex((item) => item.id === deal.id);
               return (
                 <button
                   key={deal.id}
@@ -732,7 +752,7 @@ export function DealDiscoveryMap() {
                     </span>
                   </span>
                   <span className="text-[12px] font-extrabold tabular-nums text-[#334155]">
-                    {deal.score}
+                    {pinText(deal.score)}
                   </span>
                 </button>
               );

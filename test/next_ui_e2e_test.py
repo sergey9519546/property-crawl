@@ -23,15 +23,6 @@ STATE_NAMES = {
     "TX": "Texas",
 }
 
-STORYTELLER_OPPORTUNITIES = [
-    "4120 Clark Ave",
-    "7604 Detroit Ave",
-    "8010 Woodland Ave",
-    "11818 Superior Ave",
-    "4532 Broadview Rd",
-]
-
-
 class PerfectPropertyNextUiE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -104,6 +95,52 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             target.wait_for_timeout(400)
             last = atlas.count()
         self.fail(f"deferred atlas never mounted after scrolling (testid count={last})")
+
+    def click_reachable_storyteller_marker(self, prefer_unselected=False):
+        """Pointer-click a pin that is not under the inspector or the site header.
+
+        The inspector is absolutely positioned over the east side of the atlas,
+        and the site header is fixed to the top of the viewport. A pin under
+        either one is still a real control, but a pointer click lands on the
+        card. Western pins in this window are the ones a pointer can hit.
+        """
+        atlas = self.page.get_by_test_id("storyteller-deal-map")
+        atlas.evaluate("element => element.scrollIntoView({block: 'center'})")
+        markers = self.page.get_by_test_id("storyteller-map-marker")
+        markers.first.wait_for(state="visible")
+        chosen = None
+        for _ in range(20):
+            chosen = self.page.evaluate(
+                """(preferUnselected) => {
+                  const pins = [...document.querySelectorAll('[data-testid="storyteller-map-marker"]')];
+                  const reachable = [];
+                  for (let index = 0; index < pins.length; index += 1) {
+                    const pin = pins[index];
+                    const box = pin.getBoundingClientRect();
+                    if (box.width < 1 || box.height < 1) continue;
+                    const x = box.left + box.width / 2;
+                    const y = box.top + box.height / 2;
+                    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+                    const hit = document.elementFromPoint(x, y);
+                    if (!hit || (hit !== pin && !pin.contains(hit))) continue;
+                    reachable.push({ index, pressed: pin.getAttribute("aria-pressed") === "true" });
+                  }
+                  if (!reachable.length) return null;
+                  const open = preferUnselected ? reachable.find((item) => !item.pressed) : null;
+                  return (open || reachable[0]).index;
+                }""",
+                prefer_unselected,
+            )
+            if chosen is not None:
+                break
+            self.page.wait_for_timeout(200)
+        self.assertIsNotNone(chosen, "no storyteller pin is reachable by a pointer")
+        marker = markers.nth(chosen)
+        label = marker.get_attribute("aria-label") or ""
+        address = re.fullmatch(r"Show (.+) opportunity", label)
+        self.assertIsNotNone(address, label)
+        marker.click()
+        return address.group(1), chosen
 
     def wait_for_live_feed(self):
         self.page.get_by_role(
@@ -308,7 +345,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         candidates = self.listings if listings is None else listings
         return [listing for listing in candidates if listing["id"] in self.verified_map_ids]
 
-    def install_map_fixture(self, page=None, snapshots_only=False, coincident=False, tiles_available=True):
+    def install_map_fixture(self, page=None, snapshots_only=False, coincident=False, tiles_available=True, preserve_listings=False):
         target = page or self.page
         if tiles_available:
             # A local valid style exercises MapLibre's real camera and markers
@@ -317,6 +354,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             target.route("https://tiles.openfreemap.org/styles/positron", lambda route: route.fulfill(json={
                 "version": 8, "sources": {}, "layers": [{"id": "test-background", "type": "background",
                     "paint": {"background-color": "#eef2f6"}}]}))
+        # The storyteller atlas plots the live Cleveland window. Replacing the
+        # feed with the market-map fixture (Akron and out of state) removes
+        # every in-window pin. Those tests stub the style and keep the feed.
+        if preserve_listings:
+            return
         observed_at = datetime.now(timezone.utc).isoformat()
         records = []
         for index, (city, state, zip_code, lat, lng) in enumerate([
@@ -1107,7 +1149,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # depends on live third-party tiles being reachable, which is not a
         # property of the code under test - every other map test here stubs the
         # style for exactly that reason.
-        self.install_map_fixture()
+        self.install_map_fixture(preserve_listings=True)
         self.page.reload(wait_until="domcontentloaded")
         deal_map = self.page.get_by_test_id("storyteller-deal-map")
         self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
@@ -1130,16 +1172,17 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         markers = self.page.get_by_test_id("storyteller-map-marker")
         markers.first.wait_for(state="visible")
-        self.assertEqual(markers.count(), len(STORYTELLER_OPPORTUNITIES))
+        marker_count = markers.count()
+        self.assertGreater(marker_count, 0)
         opportunity_list = self.page.get_by_test_id("opportunity-list")
         self.assertTrue(opportunity_list.is_visible())
-        self.assertEqual(opportunity_list.get_by_role("button").count(), 3)
+        self.assertEqual(opportunity_list.get_by_role("button").count(), min(3, marker_count - 1))
         marker_labels = markers.evaluate_all(
             "elements => elements.map(element => element.getAttribute('aria-label'))"
         )
-        for address in STORYTELLER_OPPORTUNITIES:
-            with self.subTest(address=address):
-                self.assertIn(f"Show {address} opportunity", marker_labels)
+        self.assertEqual(len(marker_labels), marker_count)
+        for label in marker_labels:
+            self.assertRegex(label or "", r"^Show .+ opportunity$")
         ranked_labels = opportunity_list.get_by_role("button").evaluate_all(
             "elements => elements.map(element => element.getAttribute('aria-label'))"
         )
@@ -1162,7 +1205,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # Same as its sibling: the markers only exist once MapLibre has actually
         # initialised, and that needs the local style fixture rather than live
         # third-party tiles.
-        self.install_map_fixture()
+        self.install_map_fixture(preserve_listings=True)
         self.page.reload(wait_until="domcontentloaded")
         deal_map = self.reveal_deferred_atlas()
         preview = self.page.get_by_test_id("storyteller-map-preview")
@@ -1186,16 +1229,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.wait_for_timeout(1_200)
         self.assertEqual(deal_map.get_attribute("data-active-deal"), replayed_deal)
 
-        marker_buttons = self.page.get_by_test_id("storyteller-map-marker")
-        marker_buttons.evaluate_all(
-            "elements => { elements[1].click(); elements[3].click(); elements[2].click(); }"
-        )
-        preview.get_by_text("8010 Woodland Ave", exact=True).wait_for(state="visible")
-        self.assertIn("8010 Woodland Ave", preview.inner_text())
+        address, selected = self.click_reachable_storyteller_marker(prefer_unselected=True)
+        expect(preview).to_have_attribute("aria-label", f"Selected opportunity: {address}")
+        self.assertEqual(preview.locator("h3").text_content(), address)
         self.assertEqual(
-            self.page.get_by_role(
-                "button", name="Show 8010 Woodland Ave opportunity"
-            ).get_attribute("aria-pressed"),
+            self.page.get_by_test_id("storyteller-map-marker").nth(selected).get_attribute("aria-pressed"),
             "true",
         )
         selected_deal = deal_map.get_attribute("data-active-deal")
@@ -1217,37 +1255,35 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             )
             fallback.wait_for(state="visible", timeout=10_000)
             self.assertIn("ranked list remain active", fallback.inner_text())
+            marker_count = offline_page.get_by_test_id("storyteller-map-marker").count()
+            self.assertGreater(marker_count, 0)
             self.assertEqual(
                 offline_page.get_by_test_id("opportunity-list").get_by_role("button").count(),
-                3,
-            )
-            self.assertEqual(
-                offline_page.get_by_test_id("storyteller-map-marker").count(),
-                len(STORYTELLER_OPPORTUNITIES),
+                min(3, marker_count - 1),
             )
         finally:
             offline_page.close()
 
     def test_storyteller_map_respects_reduced_motion(self):
+        self.install_map_fixture(preserve_listings=True)
         self.page.emulate_media(reduced_motion="reduce")
         self.page.reload(wait_until="domcontentloaded")
         deal_map = self.reveal_deferred_atlas()
         expect(deal_map).to_have_attribute("data-scan-state", "complete")
         self.assertEqual(deal_map.get_attribute("data-scan-state"), "complete")
         self.assertTrue(self.page.get_by_text("Motion reduced", exact=True).is_visible())
+        # The atlas publishes an empty id until the listing feed returns.
+        # Sampling before that makes a settled inventory look like an auto-cycle.
+        self.page.get_by_test_id("storyteller-map-marker").first.wait_for(state="visible")
         active_deal = deal_map.get_attribute("data-active-deal")
+        self.assertTrue(active_deal)
         self.page.wait_for_timeout(1_200)
         self.assertEqual(deal_map.get_attribute("data-active-deal"), active_deal)
 
-        reduced_motion_marker = self.page.get_by_role(
-            "button", name="Show 4532 Broadview Rd opportunity"
-        )
-        reduced_motion_marker.wait_for(state="visible")
-        reduced_motion_marker.click()
-        self.assertIn(
-            "4532 Broadview Rd",
-            self.page.get_by_test_id("storyteller-map-preview").inner_text(),
-        )
+        address, _selected = self.click_reachable_storyteller_marker()
+        preview = self.page.get_by_test_id("storyteller-map-preview")
+        expect(preview).to_have_attribute("aria-label", f"Selected opportunity: {address}")
+        self.assertEqual(preview.locator("h3").text_content(), address)
 
     def test_storyteller_workflow_renders_each_decision_state(self):
         self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
@@ -1666,7 +1702,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         play.scroll_into_view_if_needed()
         play.click()
 
-        dialog = self.page.get_by_role("dialog", name="Live Underwriting Walkthrough Demo")
+        dialog = self.page.get_by_role("dialog", name="Listing record")
         dialog.wait_for(state="visible")
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)

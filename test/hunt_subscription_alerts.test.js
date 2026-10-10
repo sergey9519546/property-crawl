@@ -7,7 +7,8 @@ const {
   evaluateListingAgainstHunt,
   evaluateListingAcrossHunts,
   generateHuntWebhookPayload,
-  generateHuntEmailDigest
+  generateHuntEmailDigest,
+  deliverHuntDigest,
 } = require('../server/intelligence/hunt-evaluator');
 
 test('Hunt Evaluator: matches listings satisfying criteria and extracts reasons', () => {
@@ -110,4 +111,16 @@ test('Hunt Evaluator: formats transactional email digest notification', () => {
   assert.match(digest.text, /123 Elm St/);
   assert.match(digest.text, /456 Oak Rd/);
   assert.equal(digest.matchCount, 2);
+});
+
+test('Hunt digest refuses a missing or placeholder recipient', async () => {
+  const missing = generateHuntEmailDigest({ id: 'HUNT-NONE', label: 'No address' }, []);
+  assert.equal(missing.to, null);
+  const placeholder = generateHuntEmailDigest({ id: 'HUNT-PH', subscriberEmail: 'operator@propertycrawl.com' }, []);
+  assert.equal(placeholder.to, null);
+  const delivered = await deliverHuntDigest(missing, {
+    fetchImpl: async () => { throw new Error('network'); },
+  });
+  assert.equal(delivered.sent, false);
+  assert.equal(delivered.delivery, 'unavailable');
 });

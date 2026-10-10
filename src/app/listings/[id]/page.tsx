@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Scale, Clock, DollarSign, FileText } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, DollarSign, FileText } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
@@ -12,6 +12,8 @@ import { PropertyIntelligence } from "@/components/listings/property-intelligenc
 import { ListingMedia } from "@/components/listings/listing-media";
 import { ListingWatchlistToggle } from "@/components/listings/listing-watchlist-toggle";
 import { inspectSecondaryMedia } from "@server/scrapers/secondary-property-media";
+import { arbitrateTitleRisk } from "@server/intelligence/title-risk-engine";
+import { AssessorReading } from "@/components/listings/assessor-reading";
 import { inspectMapLocation } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
 import { scoreBandLabel } from "@/lib/score-bands";
@@ -182,8 +184,6 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const estLow = positiveNumber(listing.estLow);
   const estHigh = positiveNumber(listing.estHigh);
   const redemptionDays = finiteNumber(listing.redemptionDays);
-  const seniorLienRisk = (listing.seniorLienRisk || "").toLowerCase();
-  const isHighRisk = seniorLienRisk === "high";
   const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
   const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
   const isDemo = !isObservedSourceRecord(listing);
@@ -245,6 +245,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
   ];
   const missingOptionalPropertyFacts = optionalPropertyFacts.filter(([, value]) => value === null).map(([label]) => label.toLowerCase());
   propertyFacts.push(...optionalPropertyFacts.filter((fact): fact is [string, string] => fact[1] !== null));
+  const titleRules = /^[A-Za-z]{2}$/.test(listing.state || "")
+    ? arbitrateTitleRisk({
+        plaintiff: listing.plaintiff || "",
+        state: listing.state,
+        raw: typeof listing.raw === "string" ? listing.raw : "",
+      })
+    : null;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -386,16 +393,30 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </div>
           </details>
 
-          {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
-            <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
-              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-sky-700">Decision evidence</p>
-              <h2 className="mt-1 text-xl font-bold">Market evidence</h2>
+          <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-6 sm:p-8">
+            <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-sky-700">Decision evidence</p>
+            <h2 className="mt-1 text-xl font-bold">Market evidence</h2>
+            {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
               <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Reported assessed value</dt><dd className="mt-1 text-lg font-bold text-slate-950">{formatMoney(positiveNumber(listing.assessed))}</dd><p className="mt-1 text-xs text-slate-600">Shown only when present in the normalized source record.</p></div>
-                <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Valuation range</dt><dd className="mt-1 text-lg font-bold text-slate-950">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "Not modeled"}</dd><p className="mt-1 text-xs text-slate-600">No comparable-sale claims are shown until exact comp evidence is captured.</p></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Stored assessed value</dt><dd className="mt-1 text-lg font-bold text-slate-950">{formatMoney(positiveNumber(listing.assessed))}</dd></div>
+                <div className="rounded-2xl bg-slate-50 p-4"><dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Stored valuation range</dt><dd className="mt-1 text-lg font-bold text-slate-950">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "—"}</dd></div>
               </dl>
+            ) : null}
+            <AssessorReading listingId={listing.id} />
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-800" data-testid="title-rules-check">
+              <p className="font-bold text-slate-950">Rules check from the published plaintiff and the state table. Not a title opinion.</p>
+              <p className="mt-2">Plaintiff: {publishedText(listing.plaintiff)}</p>
+              {occupancy ? <p className="mt-2">Occupancy published as {occupancy}.</p> : null}
+              {optionalPublishedText(listing.deposit) ? <p className="mt-2">Deposit terms published as {optionalPublishedText(listing.deposit)}.</p> : null}
+              {titleRules ? (
+                <ul className="mt-3 space-y-2">
+                  <li>Classifier: {titleRules.plaintiffType}. Risk label: {titleRules.riskLevel}.</li>
+                  {titleRules.titleWarnings.filter((warning): warning is string => typeof warning === "string" && warning.length > 0).map((warning) => <li key={warning}>{warning}</li>)}
+                  <li>{titleRules.titleActionAdvice}</li>
+                </ul>
+              ) : <p className="mt-2">State was not published, so the statute table was not applied.</p>}
             </div>
-          ) : <details id="market-evidence" className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 bg-white px-5 shadow-sm"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-slate-950"><span>Market evidence</span><span className="text-xs font-medium text-slate-500">Not captured</span></summary><p className="border-t border-slate-200 py-4 text-sm leading-relaxed text-slate-600">No source-backed assessment, valuation range, or comparable sales have been captured for this record.</p></details>}
+          </div>
 
           <div id="evidence-dossier" className="mt-8 scroll-mt-6">
             <PropertyIntelligence key={listing.id} listingId={listing.id} documentsShown />
@@ -452,41 +473,6 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <details id="modeled-research" className="mt-8 rounded-2xl border border-slate-200 bg-white px-5 py-1 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold text-slate-950">Modeled research scenarios <span className="text-sm font-normal text-slate-500">Assumptions, not verified property facts</span></summary>
             <div className="border-t border-slate-200 pb-5 pt-5">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Scale className="h-5 w-5 text-slate-900" />
-                <span>Modeled title-risk signal</span>
-              </h2>
-              <span className={`text-xs font-extrabold uppercase px-3 py-1 rounded-full ${
-                isHighRisk ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-800"
-              }`}>
-                {isHighRisk ? "Possible senior-lien risk" : "Source review required"}
-              </span>
-            </div>
-            <div className={`p-4 rounded-2xl border text-xs flex items-start gap-3 ${
-              isHighRisk
-                ? "border-red-200 bg-red-50 text-red-900"
-                : "border-amber-200 bg-amber-50 text-amber-950"
-            }`}>
-              <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${isHighRisk ? "text-red-600" : "text-amber-600"}`} />
-              <div>
-                <strong className="block font-bold">
-                  {isHighRisk ? "Possible junior-creditor signal" : "No senior-lien warning in normalized fields"}
-                </strong>
-                <p className="mt-1">
-                  {isHighRisk
-                    ? "The normalized notice may indicate a junior claimant. Confirm lien priority and every surviving encumbrance from official court and recorder documents before bidding."
-                    : "The normalized source fields do not include a senior-lien warning. This is not a title search and does not establish that liens will be extinguished."}
-                </p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-xs leading-relaxed text-slate-600">
-              <strong className="block text-slate-900">Title review requires supporting records</strong>
-              Review the captured documents above, then obtain any missing court filings, deeds, and lien records. Document availability alone does not establish clear title.
-            </div>
-          </div>
-
           {/* Modeled redemption review; confirm against official sale terms. */}
           {(listing.redemptionWarning || (redemptionDays !== null && redemptionDays > 0)) && (
             <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-xs text-amber-950 space-y-3">

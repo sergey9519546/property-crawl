@@ -13,6 +13,7 @@
 'use strict';
 
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
+const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
 
 // Run every active saved search for a user against a batch of
 // listings. Returns:
@@ -29,7 +30,7 @@ const { matchListingAgainstSearch } = require('./saved-search-alerts');
 //
 // The scheduler calls this once per ingestion cycle and logs the
 // totalNewMatches count.
-async function runAlertsForUser({ userId, listings, database }) {
+async function runAlertsForUser({ userId, listings, database, mailOptions } = {}) {
   if (!userId || typeof userId !== 'string') {
     return { userId: userId || null, searches: 0, totalNewMatches: 0, results: [], skipped: 'userId_missing' };
   }
@@ -57,7 +58,23 @@ async function runAlertsForUser({ userId, listings, database }) {
     const records = await database.recordAlertMatches(userId, search.id, matchingIds);
     const newCount = Array.isArray(records) ? records.length : 0;
     total += newCount;
-    results.push({ searchId: search.id, label: search.label, newMatches: newCount });
+    const row = { searchId: search.id, label: search.label, newMatches: newCount };
+    const notify = isEmail(search?.filters?.notifyEmail);
+    if (newCount > 0 && notify) {
+      try {
+        const mail = await sendOutboundMail({
+          to: notify,
+          subject: `Saved search matches: ${newCount}`,
+          text: `${newCount} new match(es) were recorded for "${search.label || search.id}". Open the workspace to review them. This note is not a sale or a valuation.`,
+          kind: 'saved-search',
+        }, mailOptions || {});
+        row.mailDelivery = mail.delivery;
+      } catch (error) {
+        row.mailDelivery = 'unavailable';
+        row.mailError = String(error?.message || error || 'mail-failed');
+      }
+    }
+    results.push(row);
   }
   return { userId, searches: searches.length, totalNewMatches: total, results, skipped: null };
 }

@@ -18,6 +18,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: `${baseUrl}/`, lastModified: now, changeFrequency: 'daily', priority: 1.0 },
     { url: `${baseUrl}/listings`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
+    { url: `${baseUrl}/states`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${baseUrl}/sources`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
     { url: `${baseUrl}/hunts`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
     { url: `${baseUrl}/research`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
@@ -56,5 +57,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Inventory unreachable at build time; static pages still describe the site.
   }
 
-  return [...staticPages, ...listingPages];
+  let statePages: MetadataRoute.Sitemap = [];
+  try {
+    const response = await fetch(`${API_BASE}/api/coverage`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      const totals = payload?.liveByState?.byStateTotal;
+      if (!payload?.liveByState?.readError && totals && typeof totals === 'object') {
+        statePages = Object.entries(totals as Record<string, unknown>).flatMap(([state, count]) => {
+          if (!/^[A-Z]{2}$/.test(state) || typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return [];
+          return [{
+            url: `${baseUrl}/states/${state}`,
+            lastModified: now,
+            changeFrequency: 'daily' as const,
+            priority: 0.5,
+          }];
+        });
+      }
+    }
+  } catch {
+    // Coverage unreachable: omit state URLs. Do not invent them.
+  }
+
+  return [...staticPages, ...statePages, ...listingPages];
 }

@@ -23,6 +23,37 @@ async function claimNextEligibleJob(store,owner,sourceIds){
   return candidate.rows[0] ? store.claimJob(candidate.rows[0].id,owner,300) : null;
 }
 
+function stableScopeValue(value) {
+  if (Array.isArray(value)) return value.map(stableScopeValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.keys(value).sort().reduce((acc, key) => { acc[key] = stableScopeValue(value[key]); return acc; }, {});
+}
+function sameScopeValue(left, right) {
+  return JSON.stringify(stableScopeValue(left ?? null)) === JSON.stringify(stableScopeValue(right ?? null));
+}
+// A collector may search every jurisdiction it knows while the promoted
+// evidence still names a smaller list. That is not approval for the wider
+// list. It is safe to collect, because every promoted state is still inside
+// the collector and the endpoint, filters, and page size are unchanged.
+function geographySuperset(current, promoted) {
+  if (!current || !promoted || current.endpoint !== promoted.endpoint) return false;
+  if (!sameScopeValue(current.filters, promoted.filters) || current.pageSize !== promoted.pageSize) return false;
+  if (!Array.isArray(current.states) || !Array.isArray(promoted.states) || !promoted.states.length) return false;
+  if (current.states.length <= promoted.states.length) return false;
+  const known = new Set(current.states);
+  return promoted.states.every((state) => known.has(state));
+}
+async function widerThanPromoted(store, collector, rejected) {
+  const mismatched = new Set((rejected || []).filter((row) => row?.code === 'COLLECTOR_SCOPE_MISMATCH').map((row) => row.sourceKey));
+  if (!mismatched.size || typeof store.promotedSourceScopes !== 'function') return [];
+  const scrapers = new Map((collector.realScrapers || []).map((scraper) => [scraper.sourceKey, scraper]));
+  const wider = [];
+  for (const rollout of await store.promotedSourceScopes()) {
+    if (!mismatched.has(rollout?.sourceKey)) continue;
+    if (geographySuperset(collectionScope(scrapers.get(rollout.sourceKey)), rollout.scope)) wider.push(rollout.sourceKey);
+  }
+  return wider;
+}
 async function promotedSourcesWithinScope(store,collector,wave){
   if(typeof store.promotedSourceScopes!=='function')throw new Error('Discovery worker requires authoritative promoted source scopes');
   const allowedWave=new Set(sourcesForWave(wave)),scrapers=new Map((collector.realScrapers||[]).map(scraper=>[scraper.sourceKey,scraper])),eligible=[],rejected=[];
@@ -60,6 +91,7 @@ async function run({ wave = process.env.DISCOVERY_WAVE || 'wave1', canarySource 
   }
   requireCollectionStorage(storageProbe);
   const store=discoveryStore||createDiscoveryStore(database), scopePolicy=canarySource?{eligible:[canarySource],rejected:[]}:await promotedSourcesWithinScope(store,collector,wave),sourceIds=scopePolicy.eligible;
+  const wider=canarySource?[]:await widerThanPromoted(store,collector,scopePolicy.rejected);
   // Wire the discovery store into the collector so source runs are recorded
   // in discovery_source_runs (Migration 014 evidence). Without this the canary
   // reports a null runId and promotion cannot verify clean durable runs.
@@ -77,13 +109,16 @@ async function run({ wave = process.env.DISCOVERY_WAVE || 'wave1', canarySource 
   // guard in the test suite asserts the real store is the one being swept.
   await store.failAbandonedJobs?.();
   let job;
+  const claimWider=async()=>{const key=`wider:${wave}:${wider.join(',')}:${new Date().toISOString().slice(0,13)}`;const queued=await store.createOrReuseJob({sourceIds:wider,trigger:'discovery_worker_wider_scope',idempotencyKey:key});return store.claimJob(queued.id,owner,300);};
   if(canarySource){const queued=await store.createOrReuseJob({sourceIds:[canarySource],trigger:'discovery_canary',idempotencyKey:`canary:${canarySource}:${crypto.randomUUID()}`});job=await store.claimJob(queued.id,owner,300);}
-  else{if(!sourceIds.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_promoted_sources',details:scopeDetails});return {skipped:true,reason:'no_promoted_sources',scopeRejections:scopePolicy.rejected};}job=await claimNextEligibleJob(store,owner,sourceIds);if(!job){const due=await dueSources(store,sourceIds);if(!due.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_sources_due',details:scopeDetails});return {skipped:true,reason:'no_sources_due',scopeRejections:scopePolicy.rejected};}const key=`recurring:${wave}:${due.join(',')}:${new Date().toISOString().slice(0,13)}`;const queued=await store.createOrReuseJob({sourceIds:due,trigger:'discovery_worker',idempotencyKey:key});job=await store.claimJob(queued.id,owner,300);}}
+  else if(!sourceIds.length&&!wider.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_promoted_sources',details:scopeDetails});return {skipped:true,reason:'no_promoted_sources',scopeRejections:scopePolicy.rejected};}
+  else if(!sourceIds.length){job=await claimWider();}
+  else{job=await claimNextEligibleJob(store,owner,sourceIds);if(!job){const due=await dueSources(store,sourceIds);if(!due.length&&!wider.length){await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'no_sources_due',details:scopeDetails});return {skipped:true,reason:'no_sources_due',scopeRejections:scopePolicy.rejected};}if(due.length){const key=`recurring:${wave}:${due.join(',')}:${new Date().toISOString().slice(0,13)}`;const queued=await store.createOrReuseJob({sourceIds:due,trigger:'discovery_worker',idempotencyKey:key});job=await store.claimJob(queued.id,owner,300);}else job=await claimWider();}}
   if(!job)return {skipped:true,reason:'collection_jobs_claimed'};
   await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'running',currentJobId:job.id,details:scopeDetails});
   let leaseHealthy=true,heartbeatBusy=false;
   const heartbeat=setInterval(async()=>{if(heartbeatBusy)return;heartbeatBusy=true;try{if(!await store.renewJobClaim(job.id,owner,300))leaseHealthy=false;else await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:'running',currentJobId:job.id,details:scopeDetails});}catch{leaseHealthy=false;}finally{heartbeatBusy=false;}},120000);heartbeat.unref();
-  try {if(!leaseHealthy)throw leaseLostError();const result=await coordinator.execute(job.id,{sourceIds:job.sourceIds,trigger:job.trigger},{owner});if(!leaseHealthy)throw leaseLostError('Discovery job lease lost during collection');if(canarySource){const sr=result?.result?.sourceResults?.find(x=>x.sourceId===canarySource)||result?.sourceResults?.find(x=>x.sourceId===canarySource);const scope=sr?.report?.scope;const clean=Boolean(scope&&sr&&!sr.error&&!sr.observationError&&sr.accepted>0&&sr.report?.complete===true&&sr.report?.fullSweepComplete===true&&sr.report?.truncated!==true);await store.recordCanary(canarySource,{clean,scope:scope||{source:canarySource,incomplete:true},runId:sr?.runId||null});}return scopePolicy.rejected.length?{...result,scopeRejections:scopePolicy.rejected}:result;}
+  try {if(!leaseHealthy)throw leaseLostError();const result=await coordinator.execute(job.id,{sourceIds:job.sourceIds,trigger:job.trigger},{owner});if(!leaseHealthy)throw leaseLostError('Discovery job lease lost during collection');if(wider.length&&!(job.sourceIds||[]).every?.(id=>wider.includes(id))&&!wider.every(id=>(job.sourceIds||[]).includes(id))){const widerJob=await claimWider();if(widerJob)await coordinator.execute(widerJob.id,{sourceIds:widerJob.sourceIds,trigger:widerJob.trigger},{owner});}if(canarySource){const sr=result?.result?.sourceResults?.find(x=>x.sourceId===canarySource)||result?.sourceResults?.find(x=>x.sourceId===canarySource);const scope=sr?.report?.scope;const clean=Boolean(scope&&sr&&!sr.error&&!sr.observationError&&sr.accepted>0&&sr.report?.complete===true&&sr.report?.fullSweepComplete===true&&sr.report?.truncated!==true);await store.recordCanary(canarySource,{clean,scope:scope||{source:canarySource,incomplete:true},runId:sr?.runId||null});}return scopePolicy.rejected.length?{...result,scopeRejections:scopePolicy.rejected,widerThanPromoted:wider}:result;}
   finally {clearInterval(heartbeat);try{await store.recordWorkerHealth?.(workerKey,{workerId:owner,lastLoopStatus:leaseHealthy?'idle':'lease_lost',details:scopeDetails});}catch{}}
 }
 function waitForInterval(ms,signalTarget=process){return new Promise(resolve=>{let settled=false;const finish=()=>{if(settled)return;settled=true;clearTimeout(timer);signalTarget.removeListener('SIGTERM',finish);signalTarget.removeListener('SIGINT',finish);resolve();};const timer=setTimeout(finish,ms);signalTarget.once('SIGTERM',finish);signalTarget.once('SIGINT',finish);});}
@@ -102,4 +137,4 @@ async function main(args=process.argv.slice(2),dependencies={}){
   }while(!stopping);
 }
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;}).finally(()=>db.pool?.end());
-module.exports={claimNextEligibleJob,dueSources,leaseLostError,main,promotedSourcesWithinScope,run,waitForInterval};
+module.exports={claimNextEligibleJob,dueSources,geographySuperset,leaseLostError,main,promotedSourcesWithinScope,run,waitForInterval,widerThanPromoted};

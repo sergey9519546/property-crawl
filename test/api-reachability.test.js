@@ -70,6 +70,7 @@ const KNOWN_BROWSER_UNREACHABLE = [];
 // file-existence and reachability checks below still hold it to the truth.
 const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/listings', callers: ['src/components/listings/discovery-map.tsx', 'src/lib/listing-inventory.ts'] },
+  { route: '/api/listings/abc/assessor', callers: ['src/components/listings/assessor-reading.tsx'] },
   { route: '/api/hunts/h1/evaluate', callers: ['src/components/hunts/saved-hunts.tsx'] },
   { route: '/api/saved-searches/s1', callers: ['src/lib/saved-searches.ts'] },
   { route: '/api/saved-searches/s1/run', callers: ['src/lib/saved-searches.ts'] },

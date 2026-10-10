@@ -12,7 +12,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: SCRAPER_BACKGROUND_ENABLED
-        value: "0"
+        value: "1"
       - key: PORT
         value: "3000"
       # Optional for $0 demo (in-memory seed inventory). Required later for

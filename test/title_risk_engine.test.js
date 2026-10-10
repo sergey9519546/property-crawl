@@ -49,6 +49,7 @@ test('first mortgage foreclosure confirms senior position and wipes junior liens
   assert.equal(risk.firstMortgageSurvives, false);
   assert.equal(risk.canProceedWithBid, true);
   assert.ok(risk.titleWarnings.some((w) => w.includes('SENIOR FORECLOSURE')));
+  assert.doesNotMatch(risk.titleActionAdvice, /verified acceptable/i);
 });
 
 test('HOA foreclosure in super-priority state (NV) evaluates statutory assessment priority', () => {

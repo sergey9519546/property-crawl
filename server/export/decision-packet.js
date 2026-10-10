@@ -4,7 +4,15 @@ const crypto = require('crypto');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
 const { calculateCompleteCashToClose } = require('../intelligence/cash-to-close');
 const { analyzeMunicipalViolations } = require('../intelligence/municipal-liens');
-const { calculateMacroValuation } = require('../enrichment/macro-valuation');
+
+function attachedValuation(macro) {
+  if (!macro || typeof macro !== 'object') return null;
+  if (macro.valuationMethod === 'FHFA_HPI_TREND') return null;
+  const basisType = macro.basis && macro.basis.type;
+  if (basisType === 'OPENING_BID' || basisType === 'AUCTION_OPENING_BID') return null;
+  if (!Number.isFinite(Number(macro.estLow)) || !Number.isFinite(Number(macro.estHigh))) return null;
+  return macro;
+}
 
 /**
  * Builds an auditable, evidentiary Decision Packet for an auction listing.
@@ -38,13 +46,9 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
   // 3. Municipal Liens & Code Violations
   const municipalRisk = analyzeMunicipalViolations(listing.municipalViolations || [], state);
 
-  // 4. Macroeconomic Valuation Benchmark
-  const macroValuation = listing.macroValuation || calculateMacroValuation({
-    historicalValue: listing.assessedValue || listing.lastSalePrice || openingBid,
-    historicalYear: listing.yearBuilt ? Math.max(2015, Math.min(2023, listing.yearBuilt)) : 2018,
-    state,
-    basisType: listing.assessedValue ? 'TAX_ASSESSMENT' : 'OPENING_BID'
-  });
+  // 4. Valuation stays empty unless a caller attached a non-index, non-bid basis.
+  // The in-repo HPI table is not an official FHFA release and must not fill this slot.
+  const macroValuation = attachedValuation(listing.macroValuation);
 
   // 5. Source Provenance & Integrity Hash
   const rawProvenance = listing.provenance || {};
@@ -189,7 +193,7 @@ ${(t.titleWarnings && t.titleWarnings.length > 0) ? t.titleWarnings.map((w) => `
 
 ---
 
-## 4. Valuation Context (FHFA Macro Trend)
+## 4. Valuation band
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}

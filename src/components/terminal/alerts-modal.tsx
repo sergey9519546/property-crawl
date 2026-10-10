@@ -36,6 +36,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
   const [state, setState] = useState("All");
   const [minScore, setMinScore] = useState(0);
   const [maxBid, setMaxBid] = useState(0);
+  const [notifyEmail, setNotifyEmail] = useState("");
   const [feedback, setFeedback] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -92,8 +93,8 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setFeedback(""); setError("");
-    const filters = buildServerFilters(state, minScore, maxBid);
-    if (Object.keys(filters).length === 0) {
+    const filters = buildServerFilters(state, minScore, maxBid, notifyEmail);
+    if (!filters.states && !filters.minScore && !filters.maxBid) {
       setFeedback("Add at least one filter (state, min score, or max bid).");
       return;
     }
@@ -169,7 +170,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
         <div className="space-y-6 overflow-y-auto p-6">
           <div className="flex items-center justify-between">
             <p className="rounded-xl bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-950">
-              Workspace-backed. Runs against the live pool on demand and records matches for later review. Background email delivery is not yet wired.
+              Workspace-backed. Runs against the live pool on demand and records matches for later review. Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace.
             </p>
             {unreadCount > 0 && (
               <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100">
@@ -205,6 +206,10 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                   {[100000, 150000, 250000, 500000, 1000000].map((value) => <option key={value} value={value}>$ {value.toLocaleString()}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label htmlFor="saved-search-email" className="text-xs font-semibold text-slate-600">Notify email (optional)</label>
+              <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600" aria-live="polite">{draftMatches} matching records in loaded inventory</p>

@@ -43,6 +43,9 @@ test('sheriff extra enrollment string and HUD careful defaults', () => {
   assert.match(extra, /Portage:portage\.sheriffsaleauction\.ohio\.gov:OH/);
   assert.match(extra, /Greene:green/);
   const hud = hudEnv();
+  const { ALL_HUD_JURISDICTIONS } = require('../server/scrapers/hud');
+  assert.equal(hud.HUD_STATES, ALL_HUD_JURISDICTIONS.join(','));
+  assert.equal(hud.HUD_STATES.split(',').length, 52);
   assert.equal(hud.HUD_MAX_PAGES_PER_STATE, String(MARKET_ENROLLMENT.hud.maxPagesPerState));
   assert.ok(Number(hud.HUD_STATE_CONCURRENCY) <= 3);
 });

@@ -6,6 +6,8 @@
 // was observed live in the reference audit. It does not reuse client headers,
 // credentials, bid endpoints, account endpoints, or media/document URLs.
 
+const fs = require('node:fs');
+const path = require('node:path');
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
 const { inspectImageUrl } = require('./media-policy');
@@ -73,6 +75,51 @@ function validContinuationToken(value) {
   if (typeof value !== 'string') return null;
   const token = value.trim();
   return token && token.length <= 2_048 && !/[\u0000-\u001F\u007F]/.test(token) ? token : null;
+}
+
+function explicitCheckpointPath(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  return path.resolve(value);
+}
+
+function readCheckpointFile(filePath) {
+  const file = explicitCheckpointPath(filePath);
+  if (!file || !fs.existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const token = validContinuationToken(parsed?.continuationToken);
+    if (!token) return null;
+    return {
+      continuationToken: token,
+      sweepStartedAt: typeof parsed.sweepStartedAt === 'string' ? parsed.sweepStartedAt : null,
+      pagesCommitted: Math.max(0, Math.floor(Number(parsed.pagesCommitted) || 0)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeCheckpointFile(filePath, checkpoint) {
+  const file = explicitCheckpointPath(filePath);
+  const token = validContinuationToken(checkpoint?.continuationToken);
+  if (!file || !token) return false;
+  const body = {
+    continuationToken: token,
+    sweepStartedAt: typeof checkpoint.sweepStartedAt === 'string' ? checkpoint.sweepStartedAt : null,
+    pagesCommitted: Math.max(0, Math.floor(Number(checkpoint.pagesCommitted) || 0)),
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(body), 'utf8');
+  fs.renameSync(temporary, file);
+  return true;
+}
+
+function clearCheckpointFile(filePath) {
+  const file = explicitCheckpointPath(filePath);
+  if (!file || !fs.existsSync(file)) return false;
+  fs.unlinkSync(file);
+  return true;
 }
 
 function sourceUrlFromRecord(record) {
@@ -209,6 +256,7 @@ class ServiceLinkScraper extends BaseScraper {
     this.sweepStartedAt = null;
     this.pagesCommitted = 0;
     this.lastRunReport = null;
+    this.checkpointPath = explicitCheckpointPath(options.checkpointPath);
   }
 
   buildListingsUrl(continuationToken = null) {
@@ -418,12 +466,30 @@ class ServiceLinkScraper extends BaseScraper {
       report.truncated = report.continuationStopped === true;
       report.complete = report.truncated !== true && report.failures.length === 0;
       report.fullSweepComplete = report.complete && Boolean(this.sweepStartedAt);
+      this.persistFileCheckpoint(report);
       return listings;
     } catch (error) {
       report.outcome = 'failed';
       report.failures.push({ scope: 'upstream', error: error.message, code: error.code || null });
       throw error;
     }
+  }
+
+  persistFileCheckpoint(report) {
+    if (!this.checkpointPath) return;
+    const unsafe = Array.isArray(report?.failures) && report.failures.some((failure) => failure?.scope === 'continuation');
+    if (report?.complete === true || unsafe) {
+      clearCheckpointFile(this.checkpointPath);
+      return;
+    }
+    if (report?.truncated !== true) return;
+    const token = validContinuationToken(report.nextContinuationToken);
+    if (!token) return;
+    writeCheckpointFile(this.checkpointPath, {
+      continuationToken: token,
+      sweepStartedAt: typeof this.sweepStartedAt === 'string' ? this.sweepStartedAt : null,
+      pagesCommitted: Math.max(0, Math.floor(Number(report.pagesPreviouslyCommitted) || 0) + Math.floor(Number(report.pagesFetched) || 0)),
+    });
   }
 
   setCheckpoint(checkpoint) {
@@ -459,4 +525,8 @@ module.exports.observedOpeningBid = observedOpeningBid;
 module.exports.observedBoolean = observedBoolean;
 module.exports.sourceUrlFromRecord = sourceUrlFromRecord;
 module.exports.validContinuationToken = validContinuationToken;
+module.exports.explicitCheckpointPath = explicitCheckpointPath;
+module.exports.readCheckpointFile = readCheckpointFile;
+module.exports.writeCheckpointFile = writeCheckpointFile;
+module.exports.clearCheckpointFile = clearCheckpointFile;
 module.exports.getRawPublisherRecord = (listing) => rawPublisherRecords.get(listing) || null;

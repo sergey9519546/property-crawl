@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { GsapReveal } from "./gsap-reveal";
 import {
   Palette,
@@ -12,7 +13,6 @@ import {
   TrendingUp,
   FileText,
   Download,
-  Link2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +20,7 @@ type Step = {
   label: string;
   title: string;
   desc: string;
+  href: string;
   icon: LucideIcon;
   visual: React.ReactNode;
 };
@@ -29,42 +30,39 @@ const STEPS: Step[] = [
     label: "Ingest",
     title: "Ingest the notice",
     desc: "When AI parse is configured, legal prose maps to structured fields. Without it, you still get the source notice and listing facts — nothing is invented.",
+    href: "/listings",
     icon: Palette,
     visual: <DealKitVisual />,
   },
   {
     label: "Score",
-    title: "Score against comps",
-    // Kept honest against what the pipeline actually produces. A score needs a
-    // supported valuation band, and no record in the inventory carries one yet:
-    // est_low/est_high are null throughout, so deal_score is null too and
-    // minScore matches nothing. The detail page already says "Not modeled" and
-    // "No comparable-sale claims are shown until exact comp evidence is
-    // captured", and the workbench now says its default sort is not ranking by
-    // score. A marketing page that asserted the capability without that
-    // qualifier would be describing a number no record can produce.
-    desc: "Opening bid ÷ estimated value band, when a comp-supported band exists. The Deal Score is a heuristic, not an appraisal — title and valuation still require verification, and a record with no captured comp evidence is shown without one rather than given a modelled number.",
+    title: "Score the county figure",
+    desc: "Deal Score is the published opening amount divided by a county assessor figure, and only where the market conversion is confirmed. Every other county shows the raw figure or nothing, and the score stays blank.",
+    href: "/listings",
     icon: FileStack,
     visual: <ParcelContextVisual />,
   },
   {
     label: "Explain",
     title: "Read the catch",
-    desc: "Optional AI risk notes (occupied vs. vacant, redemption period, certified funds) appear only when the server has a key. Models stay labeled as models.",
+    desc: "Each listing runs the published plaintiff through the state statute table and prints the warnings next to occupancy and deposit terms when those were published. That check is not a title opinion.",
+    href: "/listings",
     icon: Sparkles,
     visual: <PromptVisual />,
   },
   {
     label: "Watch",
-    title: "Tour and wire",
-    desc: "Lock in comps, schedule the drive-by, set the deposit. Save the parcel to your watchlist for the next sale cycle.",
+    title: "Save the listing",
+    desc: "The watchlist toggle is on the listing. The home underwrite sliders start at zero and use only amounts you enter.",
+    href: "/listings",
     icon: SlidersHorizontal,
     visual: <FineTuneVisual />,
   },
   {
     label: "Export",
-    title: "Export to lender",
-    desc: "CSV or JSON watchlist exports ship today. Polished partner PDFs and share links remain roadmap.",
+    title: "Export the record",
+    desc: "The feed exports CSV or JSON after operator sign-in. A decision packet is on each listing. Partner PDFs are not built.",
+    href: "/listings",
     icon: Share2,
     visual: <DownloadVisual />,
   },
@@ -87,9 +85,8 @@ export function FastestWay() {
                 </h2>
                 <p className="mt-4 max-w-[420px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
                   Federal auctions update by the hour. County sheriffs post on
-                  Tuesdays. Here&rsquo;s the loop from notice to bid &mdash; how
-                  PerfectProperty turns a legal-prose filing into a deal you can
-                  underwrite, tour, and wire to.
+                  Tuesdays. The loop that ships is the notice, the county figure,
+                  the statute check, the watchlist, and the export.
                 </p>
               </div>
             </GsapReveal>
@@ -131,7 +128,7 @@ function BentoCard({ step, delay }: { step: Step; delay: number }) {
             </p>
           </div>
           <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-[#111827]">
-            {step.title}
+            <Link href={step.href} className="hover:underline">{step.title}</Link>
           </h3>
           <p className="mt-1 text-[14px] leading-[1.6] text-[#5B6472]">
             {step.desc}
@@ -154,16 +151,16 @@ function DealKitVisual() {
       </div>
       <div className="mt-3 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">ARV formula</span>
-          <span className="font-mono text-[#111827]">comps × 0.92</span>
+          <span className="text-[#5B6472]">County figure</span>
+          <span className="font-mono text-[#111827]">assessor field</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">Offer rule</span>
-          <span className="font-mono text-[#111827]">ARV × 0.70</span>
+          <span className="text-[#5B6472]">Ratio</span>
+          <span className="font-mono text-[#111827]">bid ÷ figure</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">Market</span>
-          <span className="font-medium text-[#111827]">Cleveland, OH</span>
+          <span className="text-[#5B6472]">Record</span>
+          <span className="font-medium text-[#111827]">listing page</span>
         </div>
       </div>
     </div>
@@ -175,16 +172,16 @@ function ParcelContextVisual() {
     <div className="grid w-full max-w-[300px] grid-cols-2 gap-2">
       <div className="col-span-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <MapPin className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">123 Main St</span>
-        <span className="ml-auto text-[11px] text-[#5B6472]">Cleveland, OH</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Listing address</span>
+        <span className="ml-auto text-[11px] text-[#5B6472]">from the record</span>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Assessor</p>
-        <p className="mt-1 text-[11px] text-[#111827]">$182k assessed</p>
+        <p className="mt-1 text-[11px] text-[#111827]">county figure</p>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Distress</p>
-        <p className="mt-1 text-[11px] text-[#B91C1C]">Code violation</p>
+        <p className="mt-1 text-[11px] text-[#111827]">only if published</p>
       </div>
       <div className="col-span-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Photos</p>
@@ -201,21 +198,14 @@ function PromptVisual() {
     <div className="w-full max-w-[300px] space-y-2">
       <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <Sparkles className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] text-[#5B6472]">Generate deal memo for 123 Main St</span>
+        <span className="text-[12px] text-[#5B6472]">Rules check on the listing</span>
       </div>
-      <div className="rounded-lg border border-[#0F172A] bg-[#0F172A]/5 p-3">
-        <div className="flex items-center gap-1.5">
-          <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#0F172A]" />
-          <span className="text-[11px] font-semibold text-[#0F172A]">Underwriting...</span>
-        </div>
-        <div className="mt-2 space-y-1">
-          <div className="h-1.5 w-3/4 rounded-full bg-[#0F172A]/20" />
-          <div className="h-1.5 w-1/2 rounded-full bg-[#0F172A]/20" />
-        </div>
-      </div>
+      <Link href="/listings" className="block rounded-lg border border-[#0F172A] bg-[#0F172A]/5 p-3 text-[11px] font-semibold text-[#0F172A] hover:bg-[#0F172A]/10">
+        Open the rules check on a listing
+      </Link>
       <div className="flex items-center gap-2 rounded-lg border border-[#e7faef] bg-[#e7faef]/50 p-2.5">
         <TrendingUp className="h-4 w-4 text-[#15803D]" />
-        <span className="text-[11px] font-semibold text-[#15803D]">ARV $340k · Profit $52k</span>
+        <span className="text-[11px] font-semibold text-[#15803D]">Score withheld without a county figure</span>
       </div>
     </div>
   );
@@ -229,9 +219,9 @@ function FineTuneVisual() {
         <span className="text-[12px] font-semibold text-[#111827]">Underwrite Editor</span>
       </div>
       <div className="mt-3 space-y-3">
-        <SliderRow label="ARV" value="$340k" pct={85} />
-        <SliderRow label="Offer" value="$248k" pct={62} />
-        <SliderRow label="Profit" value="$52k" pct={45} accent />
+        <SliderRow label="Opening" value="—" pct={0} />
+        <SliderRow label="Figure" value="—" pct={0} />
+        <SliderRow label="Score" value="—" pct={0} />
       </div>
     </div>
   );
@@ -256,19 +246,16 @@ function DownloadVisual() {
     <div className="grid w-full max-w-[280px] grid-cols-2 gap-2">
       <div className="col-span-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <FileText className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">123 Main St — Deal Memo</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Decision packet</span>
       </div>
-      {[
-        { icon: Download, label: "PDF" },
-        { icon: Download, label: "Video" },
-        { icon: Link2, label: "Share link" },
-        { icon: FileText, label: "Embed" },
-      ].map(({ icon: Icon, label }) => (
-        <div key={label} className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-          <Icon className="h-3.5 w-3.5 text-[#5B6472]" />
-          <span className="text-[11px] font-medium text-[#111827]">{label}</span>
-        </div>
-      ))}
+      <Link href="/listings" className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 hover:bg-[#F5F6F7]">
+        <Download className="h-3.5 w-3.5 text-[#5B6472]" />
+        <span className="text-[11px] font-medium text-[#111827]">CSV from the feed</span>
+      </Link>
+      <Link href="/listings" className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 hover:bg-[#F5F6F7]">
+        <FileText className="h-3.5 w-3.5 text-[#5B6472]" />
+        <span className="text-[11px] font-medium text-[#111827]">JSON from the feed</span>
+      </Link>
     </div>
   );
 }

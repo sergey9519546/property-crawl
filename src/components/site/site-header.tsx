@@ -92,7 +92,7 @@ const GROUPS: MenuGroup[] = [
     columns: [
       [
         { label: "Knowledge base", desc: "How to use the beta workflow", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
-        { label: "County guides", desc: "Jurisdiction differences before you bid", icon: Map, href: "/resources#guides", tint: "#FFD6C8" },
+        { label: "County guides", desc: "States and counties named on live records", icon: Map, href: "/states", tint: "#FFD6C8" },
         { label: "Changelog", desc: "What shipped in this build", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
       ],
       [

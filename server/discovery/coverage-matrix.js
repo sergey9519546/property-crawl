@@ -14,10 +14,14 @@
 //     from summarizeCatalog()
 //
 // What this module does NOT do:
-//   - it does not parse county-level detail from free text (too brittle)
+//   - it does not parse county names out of catalog prose
 //   - it does not hit the network; the live listing count is read from the
 //     local live record store on disk
 //   - it does not invent coverage where the catalog says nothing
+//
+// `byCounty` counts record.county only. The stored spelling is the label and
+// the listings query value. "County" is not stripped, because the listings
+// filter compares the lowercased field exactly.
 //
 // Honesty contract for the live half: `buildLiveStateSourceCoverage` reports
 // `storeStatus` and `readError` so a store that could not be read is never
@@ -138,15 +142,27 @@ function readLiveStore() {
   return result;
 }
 
+const REJECTED_COUNTY_NAMES = new Set(['unknown', 'n/a', 'na', 'none', 'null', 'notice']);
+
+function acceptedCountyName(value) {
+  if (typeof value !== 'string') return null;
+  const label = value.trim();
+  if (label.length < 2 || label.length > 60) return null;
+  if (REJECTED_COUNTY_NAMES.has(label.toLowerCase())) return null;
+  if (!/[A-Za-z]/.test(label)) return null;
+  return label;
+}
+
 function buildLiveStateSourceCoverage() {
   // Read the live record store - the canonical record of what we have actually
   // published. Running this module never touches the network.
   const { records, storeStatus, readError } = readLiveStore();
   const byStateSource = {};
   const byStateTotal = {};
+  const countyBuckets = new Map();
   // Records whose state is not one of the 51 codes are real published records.
   // Dropping them without accounting would understate the store, so they are
-  // counted here and surfaced to the caller.
+  // counted here and surfaced to the caller. They are not given county rows.
   const excludedByState = {};
   let missingSource = 0;
   for (const record of records) {
@@ -158,6 +174,17 @@ function buildLiveStateSourceCoverage() {
     if (!byStateSource[state]) byStateSource[state] = {};
     if (!byStateSource[state][source]) byStateSource[state][source] = { live: 0, observed: null };
     byStateSource[state][source].live += 1;
+    const county = acceptedCountyName(record.county);
+    if (county) {
+      const key = `${state}\n${county.toLowerCase()}`;
+      const bucket = countyBuckets.get(key);
+      if (bucket) {
+        bucket.count += 1;
+        bucket.sources.add(source);
+      } else {
+        countyBuckets.set(key, { state, county, count: 1, sources: new Set([source]) });
+      }
+    }
     const observedAt = record.sourceObservedAt || record.provenance?.observedAt || null;
     if (observedAt) {
       const t = Date.parse(observedAt);
@@ -168,10 +195,23 @@ function buildLiveStateSourceCoverage() {
     }
     byStateTotal[state] = (byStateTotal[state] || 0) + 1;
   }
+  const byCounty = {};
+  for (const bucket of countyBuckets.values()) {
+    if (!byCounty[bucket.state]) byCounty[bucket.state] = [];
+    byCounty[bucket.state].push({
+      county: bucket.county,
+      count: bucket.count,
+      sources: [...bucket.sources].sort(),
+    });
+  }
+  for (const rows of Object.values(byCounty)) {
+    rows.sort((left, right) => right.count - left.count || left.county.localeCompare(right.county));
+  }
   const excludedRecords = Object.values(excludedByState).reduce((a, n) => a + n, 0) + missingSource;
   return {
     byStateSource,
     byStateTotal,
+    byCounty,
     totalRecords: records.length,
     countedRecords: records.length - excludedRecords,
     // storePath is deliberately absent. It is useful while diagnosing the store on

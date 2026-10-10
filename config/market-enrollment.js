@@ -7,10 +7,11 @@
  */
 
 const { CIVILVIEW_NATIONWIDE, countiesByState, allStateCodes, idsForState } = require('./nationwide-civilview');
+const { ALL_HUD_JURISDICTIONS } = require('../server/scrapers/hud');
 
 const MARKET_ENROLLMENT = {
   version: 2,
-  note: 'Nationwide participating CivilView set + OH Sheriff extras + careful HUD. CAPTCHA never enrolled.',
+  note: 'Nationwide participating CivilView set + OH Sheriff extras. HUD scope is every known jurisdiction unless HUD_STATES is set. Page budget stays bounded. CAPTCHA never enrolled.',
   civilview: {
     nationwide: true,
     targetStates: allStateCodes(),
@@ -33,7 +34,7 @@ const MARKET_ENROLLMENT = {
     countyConcurrency: 3,
   },
   hud: {
-    states: 'OH,NJ,PA,FL,TX,GA,AZ,NC,IL,MI',
+    states: ALL_HUD_JURISDICTIONS.join(','),
     maxPagesPerState: 4,
     pageSize: 50,
     stateConcurrency: 2,

@@ -1,4 +1,31 @@
 const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+// `next build` rewrites next-env.d.ts to the active distDir. With
+// NEXT_VERIFY_BUILD=1 that is `.next-verify/types`, which must not stay in
+// the working tree after the suite that built it.
+const NEXT_ENV_PATH = path.join(__dirname, '..', 'next-env.d.ts');
+
+function snapshotNextEnv() {
+  try {
+    return fs.readFileSync(NEXT_ENV_PATH);
+  } catch {
+    return null;
+  }
+}
+
+function restoreNextEnv(snapshot) {
+  if (!snapshot) return;
+  let current = null;
+  try {
+    current = fs.readFileSync(NEXT_ENV_PATH);
+  } catch {
+    current = null;
+  }
+  if (current && current.equals(snapshot)) return;
+  fs.writeFileSync(NEXT_ENV_PATH, snapshot);
+}
 
 // An immutable test build must not overwrite the developer's running .next.
 process.env.NEXT_VERIFY_BUILD = '1';
@@ -84,6 +111,7 @@ const { skippedIn, skippedNote } = require('../scripts/verify-summary');
 
 for (const suite of suites) {
   console.log(`Running ${suite.name}...`);
+  const nextEnvSnapshot = snapshotNextEnv();
   try {
     const output = execSync(suite.cmd, { stdio: 'pipe' }).toString();
     console.log(output);
@@ -101,6 +129,8 @@ for (const suite of suites) {
     const skipped = skippedIn(`${err.stdout || ''}${err.stderr || ''}`);
     if (skipped > 0) skippedSuites.push({ name: suite.name, skipped });
     totalFailed++;
+  } finally {
+    restoreNextEnv(nextEnvSnapshot);
   }
 }
 

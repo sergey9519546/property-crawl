@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { HudHomeScraper, HUD_REO_LAYER } = require('../server/scrapers/hud');
+const { HudHomeScraper, HUD_REO_LAYER, ALL_HUD_JURISDICTIONS } = require('../server/scrapers/hud');
 const { standardizeListingRecord } = require('../server/scrapers/normalization');
 
 function response(body) {
@@ -74,4 +74,19 @@ test('shared normalization preserves explicit discovery fields and document tri-
   assert.equal(explicit.transactionOutcome, null);
   assert.equal(explicit.hasDocuments, false);
   assert.equal(standardizeListingRecord(base).hasDocuments, null);
+});
+
+test('HUD default scope is every known jurisdiction when HUD_STATES is unset', () => {
+  const saved = process.env.HUD_STATES;
+  delete process.env.HUD_STATES;
+  try {
+    assert.equal(ALL_HUD_JURISDICTIONS.length, 52);
+    assert.deepEqual(new HudHomeScraper().states, [...ALL_HUD_JURISDICTIONS]);
+    assert.deepEqual(new HudHomeScraper({ states: '' }).states, [...ALL_HUD_JURISDICTIONS]);
+    assert.deepEqual(new HudHomeScraper({ states: 'oh, nj' }).states, ['OH', 'NJ']);
+    assert.deepEqual(new HudHomeScraper({ states: [] }).states, []);
+  } finally {
+    if (saved === undefined) delete process.env.HUD_STATES;
+    else process.env.HUD_STATES = saved;
+  }
 });

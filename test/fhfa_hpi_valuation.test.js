@@ -12,8 +12,10 @@ const {
 
 const {
   calculateMacroValuation,
+  explicitDollarBasis,
   enrichListingWithMacroValuation
 } = require('../server/enrichment/macro-valuation');
+const { buildDecisionPacket } = require('../server/export/decision-packet');
 
 test('FHFA HPI Engine: retrieves state and national indices correctly', () => {
   const nat2018 = getHpiIndex('US', '2018Q2');
@@ -59,7 +61,7 @@ test('Macro Valuation: calculates indexed value and calibrated variance bands', 
   assert.match(result.disclaimer, /Federal Housing Finance Agency/);
 });
 
-test('Macro Valuation: enriches raw listing lacking valuation', () => {
+test('Macro Valuation: does not invent a band from year built, opening bid, or the index table', () => {
   const rawListing = {
     id: 'SHERIFF-OH-CUY-9988',
     state: 'OH',
@@ -69,11 +71,29 @@ test('Macro Valuation: enriches raw listing lacking valuation', () => {
     openingBid: 80000
   };
 
+  assert.equal(explicitDollarBasis(rawListing), null);
   const enriched = enrichListingWithMacroValuation(rawListing);
-  assert.ok(enriched.macroValuation);
-  assert.ok(enriched.estLow > 0);
-  assert.ok(enriched.estHigh > enriched.estLow);
-  assert.equal(enriched.macroValuation.isAvmAppraisal, false);
+  assert.equal(enriched.macroValuation, undefined);
+  assert.equal(enriched.estLow, undefined);
+  assert.equal(enriched.estHigh, undefined);
+
+  const withYear = {
+    assessedValue: 120000,
+    assessmentYear: 2020,
+    state: 'OH',
+    openingBid: 80000,
+    yearBuilt: 2016
+  };
+  const basis = explicitDollarBasis(withYear);
+  assert.equal(basis.basisType, 'TAX_ASSESSMENT');
+  assert.equal(basis.historicalYear, 2020);
+  assert.equal(basis.historicalValue, 120000);
+  const stillBare = enrichListingWithMacroValuation(withYear);
+  assert.equal(stillBare.estLow, undefined);
+  assert.equal(stillBare.macroValuation, undefined);
+
+  const packet = buildDecisionPacket(rawListing);
+  assert.equal(packet.underwriting.macroValuation, null);
 });
 
 test('Macro Valuation: fails closed on invalid parameters', () => {

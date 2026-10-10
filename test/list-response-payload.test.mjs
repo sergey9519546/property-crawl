@@ -108,6 +108,15 @@ test('no client code reads the fields the grid strips, which is why it is safe',
       }
     }
   }
-  assert.deepEqual(readers, [],
+  // The grid strips raw. The listing detail page is not a grid client: it
+  // loads /api/listings/:id, and that route still returns raw so title
+  // arbitration can read the published record. Any other reader means the
+  // strip is hiding data.
+  const detailRaw = 'src/app/listings/[id]/page.tsx';
+  const unexpected = readers.filter((line) => {
+    const file = line.split('  ')[0];
+    return !(file === detailRaw && line.includes('listing\\.raw'));
+  });
+  assert.deepEqual(unexpected, [],
     'client code now reads a field the grid strips; the strip is hiding data and must be revisited');
 });

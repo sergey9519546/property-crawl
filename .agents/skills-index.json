@@ -53,6 +53,25 @@
       "file": ".agents/skills/foreclosure-title-intelligence/SKILL.md"
     },
     {
+      "name": "gcp-spark-troubleshooting",
+      "description": "Provides expert guidance for troubleshooting Google Cloud Spark and Dataproc",
+      "domain": "general",
+      "version": "v2",
+      "trigger": [
+        "cloud",
+        "dataproc",
+        "expert",
+        "gcp-spark-troubleshooting",
+        "google",
+        "guidance",
+        "provides",
+        "spark",
+        "troubleshooting"
+      ],
+      "dir": ".agents/skills/gcp-spark-troubleshooting",
+      "file": ".agents/skills/gcp-spark-troubleshooting/SKILL.md"
+    },
+    {
       "name": "google-cloud-auth-verification",
       "description": "Mandatory Step 0 pre-flight execution order and authentication verification",
       "domain": "general",
@@ -154,5 +173,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "86ab091b79d29589e9bea2c8ef83d7501964196cd476c39fee07793e276bb0ca"
+  "digest": "04019e48b9381e5fde9d56d67757f4cbebfd5070a289d66e73a7c564c925a29b"
 }

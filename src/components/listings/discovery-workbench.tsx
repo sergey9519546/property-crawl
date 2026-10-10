@@ -47,7 +47,7 @@ import { sourceDisplayText } from "@/lib/source-display";
 import { summarizeInventoryHonesty } from "@/lib/inventory-honesty";
 
 type Facet = { value: string; count: number };
-type Payload = {
+export type DiscoveryPayload = {
   listings: PropertyListing[];
   total: number;
   revision?: string;
@@ -63,6 +63,7 @@ type Payload = {
   };
   error?: string;
 };
+type Payload = DiscoveryPayload;
 const defaults: Record<string, string> = {
   state: "All states",
   county: "All counties",
@@ -170,7 +171,7 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
     </form>
   );
 });
-export function DiscoveryWorkbench() {
+export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?: DiscoveryPayload | null }) {
   const router = useRouter();
   const session = useWorkspaceSession();
   const pathname = usePathname();
@@ -181,14 +182,16 @@ export function DiscoveryWorkbench() {
   );
   const queryKey = discoverySearchParams(filters).toString();
   const [loadedResult, setLoadedResult] = React.useState<{ key: string; payload: Payload } | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(initialPayload == null);
   const [error, setError] = React.useState("");
   const [cursorStack, setCursorStack] = React.useState<string[]>([]);
   const [paging, setPaging] = React.useState<{ key: string; cursor?: string }>({ key: queryKey });
   const cursor = paging.key === queryKey ? paging.cursor : undefined;
   const setCursor = React.useCallback((value?: string) => setPaging({ key: queryKey, cursor: value }), [queryKey]);
   const requestKey = `${queryKey}\n${cursor || ""}`;
-  const payload = loadedResult?.key === requestKey ? loadedResult.payload : null;
+  // The server already loaded this URL. Keep those rows in the first HTML
+  // response, including a county filter, before the browser refetch lands.
+  const payload = loadedResult?.key === requestKey ? loadedResult.payload : loadedResult ? null : initialPayload;
   const [saved, setSaved] = React.useState<Set<string>>(new Set());
   // `saved` is read inside toggleSaved, which must keep a stable identity so
   // that memoized cards are not re-rendered by an unrelated state change.

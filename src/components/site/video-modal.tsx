@@ -7,7 +7,51 @@ interface VideoModalProps {
   onClose: () => void;
 }
 
+type WalkthroughListing = {
+  id?: string;
+  address?: string | null;
+  county?: string | null;
+  state?: string | null;
+  source?: string | null;
+  openingBid?: number | string | null;
+  saleDate?: string | null;
+  dealScore?: number | string | null;
+  occupancy?: string | null;
+};
+
+function money(value: unknown): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "Not published";
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
 export function VideoModal({ isOpen, onClose }: VideoModalProps) {
+  const [listing, setListing] = React.useState<WalkthroughListing | null>(null);
+  const [note, setNote] = React.useState("Reading the listing feed.");
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setNote("Reading the listing feed.");
+    void fetch("/api/listings?limit=1&sort=date", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: { listings?: WalkthroughListing[] }) => {
+        if (cancelled) return;
+        const row = data.listings?.[0] ?? null;
+        setListing(row);
+        setNote(row ? "" : "The feed returned no listing.");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setListing(null);
+          setNote("The listing feed did not return a record.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
   React.useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -40,7 +84,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
         <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-[#15803D]" />
-            <h3 id="video-preview-title" className="text-lg font-bold text-[#111827]">Live Underwriting Walkthrough Demo</h3>
+            <h3 id="video-preview-title" className="text-lg font-bold text-[#111827]">Listing record</h3>
           </div>
           <button onClick={onClose} aria-label="Close preview" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
             <X className="w-5 h-5" />
@@ -49,29 +93,31 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
 
         <div className="p-8 space-y-6 bg-[#F5F6F7]">
           <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] shadow-sm space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-mono font-bold px-2.5 py-1 bg-[#16A34A]/10 text-[#15803D] rounded-md">
-                Cuyahoga County Judicial Sale CV-24-991204
+                {listing?.source || note || "Listing"}
               </span>
-              <span className="text-xs font-bold text-[#5B6472]">Appraisal: $110,000</span>
+              <span className="text-xs font-bold text-[#5B6472]">Score: {Number(listing?.dealScore) > 0 ? String(listing?.dealScore) : "—"}</span>
             </div>
 
-            <h4 className="text-xl font-bold text-[#111827]">3841 E 55th St, Cleveland, OH 44105</h4>
+            <h4 className="text-xl font-bold text-[#111827]">{listing?.address || note || "No listing returned"}</h4>
 
             <div className="grid grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Opening Bid:</span><strong className="text-sm font-bold text-[#111827]">$38,000</strong></div>
-              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Median Comp:</span><strong className="text-sm font-bold text-[#111827]">$118,500</strong></div>
-              <div className="p-3 bg-[#E7FAEF] rounded-xl border border-[#3AAF57]/30"><span className="text-[#15803D] font-bold block">Gross Spread:</span><strong className="text-sm font-bold text-[#15803D]">+$80,500</strong></div>
+              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Opening</span><strong className="text-sm font-bold text-[#111827]">{money(listing?.openingBid)}</strong></div>
+              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Sale date</span><strong className="text-sm font-bold text-[#111827]">{listing?.saleDate || "Not published"}</strong></div>
+              <div className="p-3 bg-[#F5F6F7] rounded-xl"><span className="text-[#5B6472] block">Occupancy</span><strong className="text-sm font-bold text-[#111827]">{listing?.occupancy || "Not published"}</strong></div>
             </div>
 
             <div className="p-4 bg-[#F8FAFC] rounded-xl border border-[#E5E7EB] text-xs leading-relaxed space-y-2">
-              <p className="font-bold text-[#111827]">⚡ AI "Here's the Catch" Findings:</p>
+              <p className="font-bold text-[#111827]">Published fields</p>
               <div className="space-y-1.5 text-[#374151]">
-                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" /> First mortgage foreclosure with complete defendant service.</p>
-                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" /> Statutory 2/3 minimum bid requirement satisfied.</p>
-                <p className="flex items-center gap-1.5 text-[#B91C1C]"><ShieldAlert className="w-3.5 h-3.5 text-[#B91C1C]" /> $1,240 municipal utility lien must be settled at closing.</p>
+                <p className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-[#15803D]" /> {[listing?.county, listing?.state].filter(Boolean).join(", ") || "County and state are not published."}</p>
+                <p className="flex items-center gap-1.5"><ShieldAlert className="w-3.5 h-3.5 text-[#B91C1C]" /> No appraisal, comp, or lien amount is attached to this preview.</p>
               </div>
             </div>
+            {listing?.id ? (
+              <a href={`/listings/${encodeURIComponent(listing.id)}`} className="inline-flex text-xs font-bold text-[#0F172A] underline">Open this listing</a>
+            ) : null}
           </div>
 
           <div className="flex justify-end">

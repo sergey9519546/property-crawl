@@ -6,7 +6,22 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { persistFormSubmission, resetFormSubmissionsForTests, sanitize } = require('../src/lib/form-submissions');
+const { persistFormSubmission, removeNewsletterEmail, resetFormSubmissionsForTests, sanitize } = require('../src/lib/form-submissions');
+
+function withoutResend(fn) {
+  const savedKey = process.env.RESEND_API_KEY;
+  const savedFrom = process.env.RESEND_FROM;
+  delete process.env.RESEND_API_KEY;
+  delete process.env.RESEND_FROM;
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      if (savedKey === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = savedKey;
+      if (savedFrom === undefined) delete process.env.RESEND_FROM;
+      else process.env.RESEND_FROM = savedFrom;
+    });
+}
 
 function tempFormDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pc-forms-'));
@@ -19,6 +34,7 @@ test('sanitize trims, strips CR, and caps length', () => {
 });
 
 test('persistFormSubmission stores newsletter payloads locally', async () => {
+  await withoutResend(async () => {
   const dir = tempFormDir();
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = dir;
   process.env.NEWSLETTER_ENDPOINT = '';
@@ -40,9 +56,11 @@ test('persistFormSubmission stores newsletter payloads locally', async () => {
   assert.ok(record.receivedAt);
 
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
+  });
 });
 
 test('persistFormSubmission stores contact payloads locally without claiming delivery', async () => {
+  await withoutResend(async () => {
   const dir = tempFormDir();
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = dir;
   process.env.CONTACT_ENDPOINT = '';
@@ -63,6 +81,26 @@ test('persistFormSubmission stores contact payloads locally without claiming del
   assert.equal(record.name, 'Ada');
   assert.equal(record.message.includes('FL tax deeds'), true);
 
+  process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
+  });
+});
+
+test('removeNewsletterEmail deletes only the exact newsletter address', async () => {
+  const dir = tempFormDir();
+  process.env.PROPERTY_FORM_SUBMISSIONS_DIR = dir;
+  fs.writeFileSync(path.join(dir, 'newsletter.jsonl'), [
+    JSON.stringify({ email: 'keep@example.com' }),
+    JSON.stringify({ email: 'drop@example.com' }),
+    'not-json',
+  ].join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'contact.jsonl'), JSON.stringify({ email: 'drop@example.com', message: 'leave me' }) + '\n');
+  const result = removeNewsletterEmail(' Drop@Example.com ');
+  assert.equal(result.removed, 1);
+  const newsletter = fs.readFileSync(path.join(dir, 'newsletter.jsonl'), 'utf8');
+  assert.match(newsletter, /keep@example.com/);
+  assert.doesNotMatch(newsletter, /drop@example.com/);
+  assert.match(newsletter, /not-json/);
+  assert.match(fs.readFileSync(path.join(dir, 'contact.jsonl'), 'utf8'), /drop@example.com/);
   process.env.PROPERTY_FORM_SUBMISSIONS_DIR = '';
 });
 

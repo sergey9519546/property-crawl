@@ -39,6 +39,107 @@ const STATE_NAME_TO_CODE = {
   Wisconsin: 'WI', Wyoming: 'WY', 'District of Columbia': 'DC', 'Puerto Rico': 'PR'
 };
 
+// realestatesales.gov robots.txt disallows the whole host, and
+// disposal.gsa.gov disallows /s/property/*. www.gsa.gov allows this one list.
+// Cards marked SOLD, DISPOSED, or UNDER CONTRACT are counted and dropped.
+// They are not recorded as sales.
+const DISPOSITION_PATH = '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition';
+const DISPOSITION_URL = `https://www.gsa.gov${DISPOSITION_PATH}`;
+const DISPOSITION_SCOPE = Object.freeze({
+  endpoint: DISPOSITION_PATH,
+  filters: Object.freeze({ assetClass: 'real_estate', program: 'accelerated_disposition' })
+});
+const CLOSED_PUBLISHER_TAGS = new Set(['SOLD', 'DISPOSED', 'UNDER CONTRACT']);
+
+function cardText(value) {
+  return String(value || '')
+    .replace(/<sup>[\s\S]*?<\/sup>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function dispositionSlug(title) {
+  return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 72);
+}
+
+function parseAcceleratedDisposition(html) {
+  const visiblePage = String(html || '').replace(/<!--[\s\S]*?-->/g, ' ');
+  if (!/assets for accelerated disposition/i.test(visiblePage)) {
+    const error = new Error('GSA accelerated-disposition page did not match the publisher card list');
+    error.code = 'GSA_DISPOSITION_SCHEMA_UNRECOGNIZED';
+    throw error;
+  }
+  const open = [];
+  const closed = [];
+  const rejected = [];
+  const chunks = visiblePage.split(/<li class="usa-card/i).slice(1);
+  for (const chunk of chunks) {
+    const stateMatch = chunk.match(/data-state='"([A-Z]{2})"'/);
+    const title = cardText((chunk.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i) || [])[1]);
+    const tags = [...chunk.matchAll(/usa-tag[^>]*>([\s\S]*?)</gi)].map((match) => cardText(match[1]).toUpperCase());
+    const address = [...chunk.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((match) => cardText(match[1]))
+      .find((value) => /,\s*[A-Z]{2}\s+\d{5}$/.test(value));
+    const addressMatch = address ? address.match(/^(.*?),\s*([^,]+?),\s*([A-Z]{2})\s+(\d{5})$/) : null;
+    const identity = title || address || 'unparsed card';
+    if (tags.some((tag) => CLOSED_PUBLISHER_TAGS.has(tag))) {
+      closed.push({ identity, tags });
+      continue;
+    }
+    if (!stateMatch || !title || !addressMatch || addressMatch[3] !== stateMatch[1] || address.length < 8) {
+      rejected.push({ identity, reason: 'missing_address_or_state' });
+      continue;
+    }
+    const state = stateMatch[1];
+    const slug = dispositionSlug(title);
+    if (!slug) {
+      rejected.push({ identity, reason: 'missing_title' });
+      continue;
+    }
+    const typeMatch = chunk.match(/data-type='"([^"']+)"'/);
+    const listed = tags.find((tag) => tag.startsWith('DATE LISTED:')) || '';
+    const areaMatch = chunk.match(/Rentable Area:\s*(?:<strong>)?\s*([\d,]+)/i);
+    const gross = /Gross Square Footage/i.test(chunk);
+    const area = !gross && areaMatch ? parseInt(areaMatch[1].replace(/,/g, ''), 10) : null;
+    open.push({
+      id: `GSA-${state}-${slug}-${addressMatch[4]}`,
+      state,
+      county: null,
+      city: addressMatch[2],
+      zip: addressMatch[4],
+      address,
+      propType: typeMatch ? cardText(typeMatch[1]) : null,
+      sqft: Number.isFinite(area) && area > 0 ? area : null,
+      openingBid: null,
+      price: null,
+      estLow: null,
+      estHigh: null,
+      saleDate: null,
+      sourceUrl: DISPOSITION_URL,
+      raw: `${title}. ${address}. Identified for accelerated disposition on the GSA public list. ${listed}`.trim(),
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'U.S. General Services Administration',
+        recordId: `${state}-${slug}-${addressMatch[4]}`,
+        observedAt: new Date().toISOString(),
+        sourceFacts: {
+          program: 'accelerated_disposition',
+          dateListed: listed.replace(/^DATE LISTED:\s*/, '') || null,
+          propertyType: typeMatch ? cardText(typeMatch[1]) : null,
+          auctionLinkFollowed: false
+        }
+      }
+    });
+  }
+  return { open, closed, rejected };
+}
+
 class GsaSurplusScraper extends BaseScraper {
   constructor(options = {}) {
     super({ ...options, name: 'GsaSurplusCollector', sourceKey: 'gsa' });
@@ -141,17 +242,8 @@ class GsaSurplusScraper extends BaseScraper {
           console.warn(`[${this.name}] ${this.baseUrl}${excludedPath} is catalog-forbidden; refreshing ${this.propertyIds.length} known property id(s) via the permitted /asset-details path instead.`);
           return this.scrapeByIds(this.propertyIds);
         }
-        const message = `Refusing to crawl ${this.baseUrl}${excludedPath}: catalog-declared robots exclusion. Set SCRAPER_RESPECT_ROBOTS=0 to override (operator-only), or supply known property ids to refresh them via /asset-details.`;
-        console.warn(`[${this.name}] ${message}`);
-        this.lastRunReport = {
-          outcome: 'skipped_robots_exclusion',
-          scope: { endpoint: excludedPath, filters: { assetClass: 'real_estate' } },
-          recordsDiscovered: 0, recordsEmitted: 0, recordsRejected: 0,
-          failures: [], complete: false, fullSweepComplete: false,
-          truncated: false, fixtureFallbackUsed: false,
-          robotsExclusion: { path: excludedPath, source: 'catalog', overrideRequired: true }
-        };
-        return [];
+        console.warn(`[${this.name}] Refusing to crawl ${this.baseUrl}${excludedPath}. Reading the robots-allowed GSA accelerated-disposition list instead.`);
+        return this.collectDispositionList();
       }
       console.warn(`[${this.name}] SCRAPER_RESPECT_ROBOTS=0 set; operator override active for catalog-declared robots exclusion (${excludedPath}).`);
     }
@@ -197,6 +289,45 @@ class GsaSurplusScraper extends BaseScraper {
       if (indexEvidence) this.lastRunReport.extraction = this.extractionEvidence(indexEvidence);
       console.log(`[${this.name}] Scraped ${listings.length} GSA properties`);
       return listings.map(item => this.standardizeListing(item));
+    });
+  }
+
+  async collectDispositionList() {
+    return this.executeWithRetry(async () => {
+      const html = await this.fetchText(DISPOSITION_URL, 60000);
+      const parsed = parseAcceleratedDisposition(html);
+      const listings = [];
+      const failures = [];
+      for (const item of parsed.open) {
+        try {
+          listings.push(this.standardizeListing(item));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            failures.push({ recordId: item.provenance.recordId, error: err.message });
+          } else {
+            throw err;
+          }
+        }
+      }
+      const rejected = parsed.rejected.length + failures.length;
+      const complete = rejected === 0;
+      this.lastRunReport = {
+        outcome: rejected ? 'partial_failure' : listings.length ? 'success' : 'empty',
+        scope: DISPOSITION_SCOPE,
+        recordsDiscovered: parsed.open.length + parsed.closed.length + parsed.rejected.length,
+        recordsEmitted: listings.length,
+        recordsRejected: rejected,
+        recordsSkipped: parsed.closed.length,
+        failures,
+        complete,
+        fullSweepComplete: complete,
+        truncated: false,
+        fixtureFallbackUsed: false,
+        sweepType: 'accelerated_disposition_list',
+        robotsExclusion: { path: '/our-listing', source: 'catalog', honored: true }
+      };
+      console.log(`[${this.name}] Disposition list emitted ${listings.length} open properties (${parsed.closed.length} publisher-closed, ${rejected} rejected)`);
+      return listings;
     });
   }
 
@@ -380,3 +511,5 @@ class GsaSurplusScraper extends BaseScraper {
 
 module.exports = new GsaSurplusScraper();
 module.exports.GsaSurplusScraper = GsaSurplusScraper;
+module.exports.parseAcceleratedDisposition = parseAcceleratedDisposition;
+module.exports.DISPOSITION_URL = DISPOSITION_URL;

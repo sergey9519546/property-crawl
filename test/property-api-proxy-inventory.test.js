@@ -20,7 +20,7 @@ const regexMatch = API_PATH_SRC.match(/const API_PATH = (\/\^[\s\S]+\$\/);/);
 assert.ok(regexMatch, 'API_PATH regex not found in property-api.ts');
 const API_PATH = eval(regexMatch[1]);
 
-const NEXT_NATIVE_PREFIXES = ['/api/contact', '/api/newsletter'];
+const NEXT_NATIVE_PREFIXES = ['/api/contact', '/api/newsletter', '/api/checkout'];
 
 function walk(dir, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

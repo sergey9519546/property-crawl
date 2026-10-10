@@ -62,36 +62,53 @@ function mergeLiveRecords(filePath, candidates, options = {}) {
 function mergeLocked(filePath, candidates, options = {}) {
   // Never replace a corrupted existing store with a silently empty fallback.
   const records = new Map(loadLiveRecords(filePath).map((record) => [record.id, record]));
-  let accepted = 0, rejected = 0;
-  const acceptedIds = new Set();
+  let accepted = 0, rejected = 0, mutated = false;
+  const seenIds = new Set();
   for (const record of candidates) {
     const result = validateListingForIngestion(record);
     if (!result.isValid || result.listing.provenance?.origin !== 'live' || result.listing.provenance?.recordKind !== 'source_record') { rejected++; continue; }
+    seenIds.add(result.listing.id);
+    if (result.listing.provenance?.publisherAbsence) {
+      const provenance = { ...result.listing.provenance };
+      delete provenance.publisherAbsence;
+      result.listing.provenance = provenance;
+    }
     const previous = records.get(result.listing.id);
     const observedAt = (item) => Date.parse(item.sourceObservedAt || item.provenance?.observedAt || '');
     if (previous && observedAt(previous) > observedAt(result.listing)) continue;
     records.set(result.listing.id, result.listing);
-    acceptedIds.add(result.listing.id);
     accepted++;
   }
-  // Source-scoped reconciliation. A *complete* run for a given source is
-  // permitted to retire records belonging to that source that were not
-  // re-observed in this run. A failed, partial, or truncated run MUST NOT
-  // retire records — absence of evidence is not evidence of absence, and
-  // retiring on a partial read can permanently drop real inventory.
+  // A complete run may note that a same-source id was absent from that index.
+  // The record stays. Status and transactionOutcome stay. Absence is not a sale,
+  // and a failed, partial, truncated, or unscoped run must not annotate.
   const retireFromSource = (options.runCompleted === true && typeof options.sourceKey === 'string' && options.sourceKey)
     ? options.sourceKey
     : null;
   let retired = 0;
   if (retireFromSource) {
+    const at = new Date().toISOString();
     for (const [id, record] of records) {
-      if (record.source === retireFromSource && !acceptedIds.has(id)) {
-        records.delete(id);
-        retired++;
+      if (record.source !== retireFromSource) continue;
+      if (seenIds.has(id)) {
+        if (record.provenance?.publisherAbsence) {
+          const provenance = { ...record.provenance };
+          delete provenance.publisherAbsence;
+          records.set(id, { ...record, provenance });
+          mutated = true;
+        }
+        continue;
       }
+      const provenance = {
+        ...(record.provenance || {}),
+        publisherAbsence: { at, sourceKey: retireFromSource, outcome: 'absent_from_complete_index' },
+      };
+      records.set(id, { ...record, provenance });
+      retired++;
+      mutated = true;
     }
   }
-  if (!accepted && !retired) return { accepted, rejected, retained: records.size, retired };
+  if (!accepted && !retired && !mutated) return { accepted, rejected, retained: records.size, retired };
   const body = JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), listings: [...records.values()] });
   if (Buffer.byteLength(body) > MAX_BYTES) throw new Error('Live record store exceeds size limit');
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

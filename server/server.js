@@ -419,7 +419,7 @@ async function startServer() {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
       return;
     }
-    if (process.env.SCRAPER_BACKGROUND_ENABLED !== '1' || process.env.DISCOVERY_MODE === 'advanced') {
+    if (!scheduler.backgroundCollectionEnabled(process.env)) {
       console.log('[Server] Manual source collection enabled; background collection is disabled.');
       return;
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { GsapReveal, GsapStaggerGroup } from "./gsap-reveal";
 import { ArrowRight } from "lucide-react";
 
@@ -10,23 +11,23 @@ type Metric = {
   tint: string;
 };
 
-const METRICS: Metric[] = [
+const INITIAL_METRICS: Metric[] = [
   {
-    value: "Beta",
-    label: "Seed property feed",
-    desc: "In-memory/demo inventory for exercising market search, filters, underwriting inputs, and exports. Not a guaranteed live national feed.",
+    value: "…",
+    label: "Inventory mode",
+    desc: "Reading the health check.",
     tint: "#E2E8F0",
   },
   {
-    value: "11",
-    label: "Source categories modeled",
-    desc: "Federal, GSE, and county-source schemas normalized into one consistent property format.",
+    value: "…",
+    label: "Catalog entries",
+    desc: "Reading the coverage matrix.",
     tint: "#e7faef",
   },
   {
-    value: "3",
-    label: "Core beta workflows",
-    desc: "Market discovery, supported notice parsing, and persistent watchlist exports are available today.",
+    value: "…",
+    label: "Catalog categories",
+    desc: "Reading the coverage matrix.",
     tint: "#E9D5FF",
   },
 ];
@@ -53,6 +54,73 @@ const CASES = [
 ];
 
 export function CaseStudies() {
+  const [metrics, setMetrics] = React.useState<Metric[]>(INITIAL_METRICS);
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/health", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: { dataMode?: string; inventoryFreshness?: { listings?: number | null } }) => {
+        if (cancelled) return;
+        const mode = typeof data.dataMode === "string" ? data.dataMode : "unknown";
+        const count = data.inventoryFreshness?.listings;
+        setMetrics((current) => [
+          {
+            value: mode,
+            label: "Inventory mode",
+            desc: typeof count === "number" ? `${count.toLocaleString()} listings reported by the health check.` : "The health check did not report a listing count.",
+            tint: "#E2E8F0",
+          },
+          current[1],
+          current[2],
+        ]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMetrics((current) => [
+          {
+            value: "Unavailable",
+            label: "Inventory mode",
+            desc: "The health check did not return an inventory mode.",
+            tint: "#E2E8F0",
+          },
+          current[1],
+          current[2],
+        ]);
+      });
+    void fetch("/api/coverage", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: { catalog?: { total?: number; byCategory?: Record<string, number> } }) => {
+        if (cancelled) return;
+        const total = data.catalog?.total;
+        const categories = data.catalog?.byCategory ? Object.keys(data.catalog.byCategory).length : null;
+        setMetrics((current) => [
+          current[0],
+          {
+            value: typeof total === "number" ? total.toLocaleString() : "Unavailable",
+            label: "Catalog entries",
+            desc: typeof total === "number" ? "Entries in the source catalog returned by the coverage matrix." : "The coverage matrix did not return a catalog total.",
+            tint: "#e7faef",
+          },
+          {
+            value: typeof categories === "number" ? String(categories) : "Unavailable",
+            label: "Catalog categories",
+            desc: typeof categories === "number" ? "Distinct category keys on the source catalog." : "The coverage matrix did not return categories.",
+            tint: "#E9D5FF",
+          },
+        ]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMetrics((current) => [
+          current[0],
+          { value: "Unavailable", label: "Catalog entries", desc: "The coverage matrix did not return a catalog total.", tint: "#e7faef" },
+          { value: "Unavailable", label: "Catalog categories", desc: "The coverage matrix did not return categories.", tint: "#E9D5FF" },
+        ]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <section id="customers" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
@@ -67,7 +135,7 @@ export function CaseStudies() {
           className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3"
           stagger={0.12}
         >
-          {METRICS.map((m) => (
+          {metrics.map((m) => (
             <div
               key={m.label}
               data-stagger-item

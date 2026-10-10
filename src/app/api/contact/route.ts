@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       ok: true,
       queued: true,
       delivery: result.delivery,
-      message: result.delivery === "forwarded"
+      message: result.delivery === "sent" || result.delivery === "forwarded"
         ? "Message accepted."
         : result.delivery === "local"
           ? "Message saved for the operator. Outbound delivery is not configured yet."

@@ -24,11 +24,27 @@ test('GSA catalog entry declares accessPolicy with allowedPaths, disallowedPaths
   const policy = entry.accessPolicy;
   assert.ok(policy);
   assert.deepEqual(policy.disallowedPaths, ['/our-listing', '/login', '/register', '/about', '/news', '/contact', '/search', '/faqs']);
-  assert.equal(policy.allowedPaths.length, 1);
+  assert.equal(policy.allowedPaths.length, 2);
   assert.equal(policy.allowedPaths[0].path, '/asset-details');
   assert.equal(policy.allowedPaths[0].queryPattern, 'property_id=\\d+');
+  assert.equal(policy.allowedPaths[1].path, '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition');
   // inventoryPaths is normalized to { path } objects by the catalog.
-  assert.deepEqual(policy.inventoryPaths, [{ path: '/asset-details' }]);
+  assert.deepEqual(policy.inventoryPaths, [
+    { path: '/asset-details' },
+    { path: '/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition' }
+  ]);
+});
+
+test('validateAccessForAdapter allows the GSA disposition list and still refuses disposal.gsa.gov', () => {
+  const allowed = validateAccessForAdapter('gsa', 'https://www.gsa.gov/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition');
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.reason, 'allowed_by_policy');
+  const disposal = validateAccessForAdapter('gsa', 'https://disposal.gsa.gov/s/property/a0XSJ000004NfOL2A0/2106-california-street-federal-garage');
+  assert.equal(disposal.allowed, false);
+  assert.equal(disposal.reason, 'host_not_allowed');
+  const salesIndex = validateAccessForAdapter('gsa', 'https://realestatesales.gov/our-listing');
+  assert.equal(salesIndex.allowed, false);
+  assert.equal(salesIndex.reason, 'path_disallowed');
 });
 
 test('validateAccessForAdapter: GSA /asset-details with numeric property_id is allowed', () => {

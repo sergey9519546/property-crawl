@@ -6,6 +6,8 @@ const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
+const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
 
 function mediaEntries() {
   try { return readMediaStore(); }
@@ -161,11 +163,74 @@ function listingTimestampMs(listing) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function publishedApn(listing) {
+  const facts = listing?.provenance?.sourceFacts || {};
+  const candidates = [
+    listing?.apn,
+    listing?.parcelNumber,
+    listing?.parcelId,
+    facts.apn,
+    facts.parcelNumber,
+    facts.parcelId,
+    listing?.provenance?.parcelNumber,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+async function handleAssessorLookup(encodedId, res) {
+  let id;
+  try { id = decodeURIComponent(encodedId); }
+  catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
+  if (!id || id.length > 256 || /[\u0000-\u001f\u007f]/.test(id)) {
+    return res.status(400).json({ error: 'Invalid listing identifier' });
+  }
+  let listing;
+  try { listing = await db.getListingById(id); }
+  catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
+  if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+  const countyKey = resolveCountyKey(listing.state, listing.county);
+  if (!countyKey) {
+    return res.json({
+      listingId: listing.id,
+      lookedUpAt: new Date().toISOString(),
+      ...interpretAssessorParcel({ countyKey: null, parcel: null, openingBid: listing.openingBid }),
+    });
+  }
+
+  const lat = Number(listing.lat);
+  const lng = Number(listing.lng);
+  let parcel = null;
+  try {
+    parcel = await queryArcgisParcel({
+      lat: Number.isFinite(lat) ? lat : undefined,
+      lng: Number.isFinite(lng) ? lng : undefined,
+      apn: publishedApn(listing) || undefined,
+      state: listing.state,
+      county: listing.county,
+      fetchFn: (url, init = {}) => fetch(url, { ...init, signal: AbortSignal.timeout(8000) }),
+    });
+  } catch (_) {
+    parcel = null;
+  }
+
+  return res.json({
+    listingId: listing.id,
+    lookedUpAt: new Date().toISOString(),
+    ...interpretAssessorParcel({ countyKey, parcel, openingBid: listing.openingBid }),
+  });
+}
+
 async function handleListings(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const method = req.method;
 
   if (method === 'GET') {
+    const assessorMatch = url.pathname.match(/^\/api\/listings\/([^/]+)\/assessor$/);
+    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], res);
     if (url.pathname === '/api/listings/map') {
       try {
         // The map view is fed by the same filter state as the grid, so it can

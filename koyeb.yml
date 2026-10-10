@@ -30,7 +30,7 @@ env:
   - key: PORT
     value: "3000"
   - key: SCRAPER_BACKGROUND_ENABLED
-    value: "0"
+    value: "1"
   - key: PROPERTY_LIVE_CACHE_PATH
     value: /app/.cache/live-listings.json
   - key: PROPERTY_DOCUMENT_REVIEW_STORE_PATH

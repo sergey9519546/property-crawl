@@ -143,7 +143,48 @@ test('production HUD adapter exposes the same normalized step-6 scope used by pr
   const scope = collectionScope(scraper);
   assert.deepEqual(acquisitionScope(scraper.getCollectionScope()), scope);
   assert.deepEqual(scope.filters, { caseStepNumber: 6 });
-  assert.equal(scope.states.length, 52);
+  const expectedStates = process.env.HUD_STATES && process.env.HUD_STATES.trim()
+    ? [...new Set(process.env.HUD_STATES.split(',').map((state) => state.trim().toUpperCase()).filter((state) => scraper.ALL_HUD_JURISDICTIONS.includes(state)))]
+    : [...scraper.ALL_HUD_JURISDICTIONS];
+  assert.equal(scraper.ALL_HUD_JURISDICTIONS.length, 52);
+  assert.deepEqual(scope.states, expectedStates);
+});
+
+test('a wider HUD geography stays unpromoted and is still queued for collection', async () => {
+  const { geographySuperset } = require('../scripts/discovery-worker');
+  const hud = { sourceKey: 'hud', inventoryUrl: 'https://example.gov/MapServer/1', states: ['OH', 'TX'], pageSize: 100, maxPagesPerState: 4 };
+  const promoted = collectionScope({ ...hud, states: ['OH'] });
+  const current = collectionScope(hud);
+  assert.equal(geographySuperset(current, promoted), true);
+  assert.equal(geographySuperset(promoted, current), false);
+  assert.equal(geographySuperset(collectionScope({ ...hud, states: ['OH'] }), collectionScope({ ...hud, states: ['TX'] })), false);
+  const created = [];
+  const executed = [];
+  const store = {
+    pool: { async query() { return { rows: [] }; } },
+    async promotedSourceScopes() { return [{ sourceKey: 'hud', scope: promoted, scopeHash: hash(promoted) }]; },
+    async getCheckpoint() { return null; },
+    async recordWorkerHealth() {},
+    async failAbandonedRuns() {},
+    async createOrReuseJob(input) { created.push(input); return { id: 'job_wider', sourceIds: input.sourceIds, trigger: input.trigger }; },
+    async claimJob() { return { id: 'job_wider', sourceIds: created.at(-1).sourceIds, trigger: created.at(-1).trigger }; },
+    async renewJobClaim() { return true; },
+  };
+  const priorMode = process.env.DISCOVERY_MODE;
+  process.env.DISCOVERY_MODE = 'advanced';
+  try {
+    const result = await run({
+      wave: 'wave1', database: { isPg: true }, discoveryStore: store,
+      collector: { realScrapers: [hud], collectionCoordinator: { async execute(_id, request) { executed.push(request); return { id: 'job_wider', status: 'completed' }; } } },
+      storageProbe: () => ({ ready: true }),
+    });
+    assert.deepEqual(result.scopeRejections, [{ sourceKey: 'hud', code: 'COLLECTOR_SCOPE_MISMATCH' }]);
+    assert.deepEqual(created.map((job) => job.trigger), ['discovery_worker_wider_scope']);
+    assert.deepEqual(executed[0].sourceIds, ['hud']);
+    assert.equal(executed[0].trigger, 'discovery_worker_wider_scope');
+  } finally {
+    if (priorMode === undefined) delete process.env.DISCOVERY_MODE; else process.env.DISCOVERY_MODE = priorMode;
+  }
 });
 
 test('HUD run page budget remains visible without changing acquisition identity', () => {

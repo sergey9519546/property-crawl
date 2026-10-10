@@ -112,10 +112,9 @@ async function collect(source, options = {}) {
     }
     throw error;
   }
-  // A collect-source run is treated as a partial observation unless
-  // --reconcile is passed: the absence of a record in this call is not
-  // evidence the record was withdrawn. Operators explicitly opt into
-  // reconciliation when they have confirmed a complete source sweep.
+  // A collect-source run is a partial observation unless --reconcile is
+  // passed. Reconcile annotates ids missing from that complete index. It
+  // does not delete them and it does not write sold or closed.
   const reconcile = process.argv.includes('--reconcile');
   const result = mergeLiveRecords(storePath, records, { sourceKey: source, runCompleted: reconcile });
 

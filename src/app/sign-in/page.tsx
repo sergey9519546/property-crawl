@@ -20,6 +20,10 @@ export default function SignInPage() {
           (<code className="rounded bg-slate-100 px-1">SCRAPER_ADMIN_TOKEN</code> /
           <code className="rounded bg-slate-100 px-1">PROPERTY_OPERATOR_SECRET</code>).
         </p>
+        <p>
+          <Link href="/checkout" className="font-semibold text-slate-900 underline">Checkout</Link> does not unlock operator APIs.
+          A return from the payment page is not a paid account.
+        </p>
         <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
