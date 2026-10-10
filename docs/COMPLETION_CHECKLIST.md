@@ -30,8 +30,8 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `bcc9b6b` | `git rev-parse HEAD` |
-| Release gate | **9/9**, E2E 25/25, clean tree | `npm run release:gate` |
+| Tree | `cadcb83` | `git rev-parse HEAD` |
+| Release gate | **9/9**, E2E 25/25 at `cadcb83`; ledger `dirty: true` (uncommitted skills-sync artifacts) — not source-bound | `npm run release:gate` |
 | Test runners green | **26/26** | every `test:*` script |
 | Seed listings (`data.js`) | **2091** | `scripts/gen-context.js` |
 | Source catalog entries | **163** | `server/sources/catalog.js` |
