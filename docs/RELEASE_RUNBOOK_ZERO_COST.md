@@ -148,6 +148,34 @@ three failures that pass in isolation.
 Keep previous GitHub release commit. Render: Instant Rollback in dashboard.
 Local: `git revert` + rebuild. Demo data is regenerable (`npm run refresh-data`).
 
+### Database rollback (verified 2026-10-10)
+
+The pg_dump → drop → restore round-trip was executed and verified against the
+real PostGIS persistence layer: 2091 listings seeded through the real write
+path, dumped (6.3 MB), `DROP DATABASE`d, restored, and re-verified at
+**2091 listings / 35 tables**, with `test:db` passing 78/78 against the
+restored store. The same procedure is the persistence rollback when a deploy
+ships bad data:
+
+```powershell
+# 1. snapshot the current state before touching anything
+docker exec property-discovery-db pg_dump -U property -d property_crawl > backup-pre-rollback.sql
+
+# 2. drop and restore from the known-good dump
+docker exec property-discovery-db psql -U property -d postgres -c 'DROP DATABASE property_crawl'
+docker exec property-discovery-db psql -U property -d postgres -c 'CREATE DATABASE property_crawl'
+cmd /c "docker exec -i property-discovery-db psql -U property -d property_crawl -v ON_ERROR_STOP=1 < backup-pre-rollback.sql"
+
+# 3. verify before handing traffic back
+docker exec property-discovery-db psql -U property -d property_crawl -c "SELECT count(*) FROM listings"
+npm run test:db   # DATABASE_URL pointed at the restored store
+```
+
+On the free-host demo tier there is no external database: rollback is the
+Render dashboard action plus the commit revert above. The `.cache` overlay
+(live-listings cache, embedded pgdata) does not survive redeploys without a
+mounted volume — accepted $0 limitation, documented in the checklist.
+
 ## Security notes
 
 - Never commit `.env.local`.

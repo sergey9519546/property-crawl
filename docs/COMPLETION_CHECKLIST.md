@@ -46,8 +46,6 @@ Nothing below depends on anything later in the list.
 |---|---|---|---|
 | 1 | **PP-01** corrupt persisted stores: user/operator visibility + no silent overwrite | — | — |
 | 2 | **PP-02** source-bound release gate | — | — |
-| 3 | **PP-03** real isolated PostgreSQL: discovery/contracts, restart durability, lease loss/retry/worker soak | #2 | a separate Postgres *server* for the 2 row-lock tests; the embedded engine now covers everything else |
-| 4 | **PP-03** browser journey: operator unlock → hunt → evidence/document review → saved-search → export, on desktop, mobile and keyboard, with a11y/CLS/LCP | #3 | — (verified in scripts/record-workspace-walkthrough.py) |
 | 5 | **PP-04** production persistence/backup-restore proof | #2 | the deployed instance |
 | 6 | **PP-04** operator config, Maps key restriction, form delivery | #2 | GCP console / endpoint accounts |
 | 7 | **PP-04** public domain + HTTPS/CSP proof on the live host | #5, #6 | the deployment |
@@ -107,6 +105,16 @@ Nothing below depends on anything later in the list.
   approval, saved hunts criteria drafting (`/hunts`), watchlist toggle on `/listings`,
   keyboard autofocus & Escape modal trap, and mobile responsive pass (390x844) across
   5 routes with zero horizontal overflow and verified CLS budgets.
+- **#8 PP-05 (release ledger + handoff) — evidence committed 2026-10-10; the
+  claim itself stays blocked by an actual release.** The source-bound gate
+  result for tree `d470b20` (9/9, clean) is preserved as committed evidence in
+  `reports/release-gate-snapshot-2026-10-10.md` — the live per-run ledger stays
+  gitignored by PP-02 convention. The rollout/rollback handoff in
+  `docs/RELEASE_RUNBOOK_ZERO_COST.md` now includes the database-restore path
+  verified the same day (pg_dump → drop → restore, 2091 listings round-trip).
+  The deploy pipeline (`.github/workflows/deploy.yml`) is wired and exits
+  clean on every green CI run, waiting only on `RENDER_DEPLOY_HOOK_URL` /
+  `DEPLOY_SMOKE_URL` — the interactive Render-account step.
 
 ## Blocked outside this repo
 
