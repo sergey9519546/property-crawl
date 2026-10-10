@@ -7,20 +7,9 @@
       "createdAt": "2026-09-07T00:56:43.802Z",
       "remote": "origin",
       "branchOwned": true
-    },
-    "wt-1790456419162-1": {
-      "branch": "feature/search-ranking-hunts",
-      "path": "c:\\users\\serge\\.minimax\\sessions\\mvs_33469e4a8e48472faf25c6f55a29c489\\workspace\\property-crawl\\.kilo\\worktrees\\search-ranking",
-      "parentBranch": "main",
-      "createdAt": "2026-09-19T10:52:35.035Z",
-      "remote": "origin"
     }
   },
   "sessions": {
-    "ses_f850e6452ffel69sKYKelcFrpC": {
-      "worktreeId": "wt-1788742603802-1",
-      "createdAt": "2026-09-07T08:17:31.537Z"
-    },
     "ses_edb12b5b5ffe0RCkO8T43PjaMQ": {
       "worktreeId": null,
       "createdAt": "2026-10-10T08:28:13.302Z"
@@ -30,14 +19,10 @@
     "local": [
       "pending:b278a485-b723-4a5f-8790-63069aa7dbf6",
       "ses_edb12b5b5ffe0RCkO8T43PjaMQ"
-    ],
-    "wt-1788742603802-1": [
-      "ses_f850e6452ffel69sKYKelcFrpC"
     ]
   },
   "worktreeOrder": [
-    "wt-1788742603802-1",
-    "wt-1790456419162-1"
+    "wt-1788742603802-1"
   ],
   "sessionsCollapsed": true,
   "activeTarget": {

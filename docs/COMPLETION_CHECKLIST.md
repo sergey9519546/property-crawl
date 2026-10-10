@@ -53,7 +53,7 @@ Nothing below depends on anything later in the list.
 | 7 | **PP-04** public domain + HTTPS/CSP proof on the live host | #5, #6 | the deployment |
 | 8 | **PP-05** commit the release ledger + rollout/rollback handoff | #2, #7 | an actual release |
 
-### Status of 1, 2, 3, and 4
+### Status of 1, 2, 3, 4, and 5
 
 - **#1 PP-01 — CLOSED.** A corrupt store loaded empty and the next write
   persisted that emptiness over the file: one bad store plus one user action
@@ -77,6 +77,23 @@ Nothing below depends on anything later in the list.
   18 gated tests executing (the 18th is the optional-live-endpoint test, gated
   on a live endpoint, not a database). The first real-server run caught and
   fixed two genuine bugs the skip had hidden — see the section below.
+- **#5 PP-04 (backup/restore) — procedure proven locally 2026-10-10; the
+  deployed-instance claim still needs the deployment.** Against the loopback
+  PostGIS: `db:seed` wrote **2091** listings through the real write path, then
+  `pg_dump` (6.3 MB) → `DROP DATABASE` → restore → **2091 listings / 35
+  tables** verified, then `test:db` passed **78/78** against the restored
+  store. Getting there exposed and fixed a seeder split-brain regression: the
+  master-plan rewrite had restored the original audit bug — listing writes
+  went through the singleton client (whose `.env.local` `PROPERTY_DB=embedded`
+  selection routed them to the embedded engine) while sources committed to
+  `DATABASE_URL`, sealing a half-seed neither backend can serve. The seeder
+  now drives an external-pool `DatabaseClient` bound to the open transaction
+  client. Separately, the production HTTPS CSP boot was verified locally: a
+  TLS terminator (self-signed, `x-forwarded-proto: https`, the same header a
+  Render/Koyeb edge sends) produced `script-src 'self' 'nonce-…'
+  'strict-dynamic'` with **no `unsafe-inline`**, and `upgrade-insecure-requests`
+  present over HTTPS and absent over plain HTTP — the one CSP residual that
+  had never been checked on an HTTPS scheme.
 - **#4 PP-03 (Browser Journey) — CLOSED.** Recorded and verified in
   `scripts/record-workspace-walkthrough.py` (`npm run workspace:walkthrough`).
   Runs isolated real Next.js and API processes with disposable credentials
@@ -102,7 +119,7 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
 | Google Maps key restriction | ops | GCP console — and not from this machine: its two authenticated gcloud accounts administer 6 projects, none with Maps APIs enabled, so the key's project lives elsewhere (re-checked 2026-10-10) |
 | Public live URL + custom domain | operator | DNS |
-| Production HTTPS CSP verification | operator | a live HTTPS boot; `upgrade-insecure-requests` is HTTPS-only |
+| Production HTTPS CSP verification | operator | header set verified on a local TLS boot 2026-10-10 (nonce + strict-dynamic, no unsafe-inline, HTTPS-only `upgrade-insecure-requests`); the public HTTPS host still pending |
 | Lawyer review of `/privacy` `/terms` | legal | counsel |
 
 ### PostgreSQL: closed 2026-10-10 — what actually unblocked it

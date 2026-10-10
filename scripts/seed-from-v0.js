@@ -96,12 +96,23 @@ async function seedFromV0(options = {}) {
         sourcesSeeded++;
       }
 
-      // Seed listings via DatabaseClient projection
-      const dbClient = require('../server/db/client');
+      // Seed listings through the SAME transaction: an external-pool
+      // DatabaseClient whose pool is the open transaction client. Writing
+      // through the singleton was the original split-brain bug - its own
+      // provider selection (PROPERTY_DB from .env.local) sent listings to
+      // the embedded engine while sources committed to DATABASE_URL, and
+      // the COMMIT below then sealed a half-seed neither backend can
+      // serve. createListing's Postgres path is one pool.query, so the
+      // transaction client satisfies it directly.
+      const { DatabaseClient, prepareListingForPersistence } = require('../server/db/client');
+      const database = new DatabaseClient({
+        pool: { query: (sql, params) => client.query(sql, params) },
+        liveCachePath: null,
+        workspaceStorePath: null,
+      });
       let listingsSeeded = 0;
       for (const listing of listings) {
-        const prepared = dbClient.prepareListingForPersistence(listing);
-        await dbClient.createListing(prepared);
+        await database.createListing(prepareListingForPersistence(listing));
         listingsSeeded++;
       }
 
