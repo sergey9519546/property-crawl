@@ -97,14 +97,20 @@ test('the two known gated files are the ones that need one', () => {
 test('the gated tests still refuse to run on demo memory data', () => {
   // A skip must come from the guard, not from the database helper quietly
   // accepting in-memory data. If this stops throwing, the skip would be a lie.
+  // The helper's env chain has THREE names - scrub all of them, or a real
+  // DATABASE_URL configured for the acceptance battery makes this guard
+  // itself the thing that quietly accepts a database.
   const { testDatabaseUrl } = require('../test/discovery-acceptance-db');
-  const previous = { a: process.env.DISCOVERY_TEST_DATABASE_URL, b: process.env.TEST_DATABASE_URL };
+  const previous = {
+    a: process.env.DISCOVERY_TEST_DATABASE_URL, b: process.env.TEST_DATABASE_URL, c: process.env.DATABASE_URL,
+  };
   delete process.env.DISCOVERY_TEST_DATABASE_URL;
   delete process.env.TEST_DATABASE_URL;
+  delete process.env.DATABASE_URL;
   try {
     assert.throws(() => testDatabaseUrl(), /DISCOVERY_TEST_DATABASE_URL|cannot use demo memory data/);
   } finally {
-    for (const [key, value] of [['DISCOVERY_TEST_DATABASE_URL', previous.a], ['TEST_DATABASE_URL', previous.b]]) {
+    for (const [key, value] of [['DISCOVERY_TEST_DATABASE_URL', previous.a], ['TEST_DATABASE_URL', previous.b], ['DATABASE_URL', previous.c]]) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

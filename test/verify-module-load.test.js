@@ -159,8 +159,15 @@ test('the skip counter reads the reporter line and ignores clean output', () => 
   // Against a real gated run. NODE_TEST_CONTEXT is stripped because this file
   // is itself running under the runner, and a grandchild that inherits it
   // reports differently - the assertion would then be testing the harness.
+  // The database env chain is stripped for the opposite reason: with a real
+  // server configured the gated suite RUNS instead of skipping, and this
+  // contract is about the default no-database configuration - the one CI and
+  // every fresh checkout see.
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
+  delete env.DISCOVERY_TEST_DATABASE_URL;
+  delete env.TEST_DATABASE_URL;
+  delete env.DATABASE_URL;
   const run = spawnSync('node', ['--test', 'test/discovery-acceptance-restart.test.js'], { encoding: 'utf8', env });
   assert.ok(
     skippedIn(`${run.stdout || ''}\n${run.stderr || ''}`) > 0,

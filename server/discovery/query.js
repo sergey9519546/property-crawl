@@ -392,7 +392,10 @@ function pgWhere(f, start = 1) {
     // a row whose value only exists in the fallback matched in memory and not
     // in SQL. lifecycle_status also needs nullif, because '' is falsy for the
     // memory accessor and coalesce would happily return it instead of status.
-    ["coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram')", f.program],
+    // nullif on both sides - facet and filter must name the same literal, and
+    // the blank-string fold is what makes the 'unknown' sentinel on either
+    // backend agree with the in-memory falsy-to-unknown rule.
+    ["nullif(coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram'),'')", f.program],
     ["coalesce(nullif(lifecycle_status,''), status)", f.lifecycle],
     ["occupancy", f.occupancy],
   ]) {
@@ -588,7 +591,12 @@ async function pgSearch(database, f) {
       state: "state",
       county: "county",
       source: "source_key",
-      type: "prop_type",
+      // type and program get the same nullif blank-fold occupancy has: the
+      // filter's "unknown" sentinel is coalesce(col,'')='' (NULL or blank), so
+      // a facet that leaves '' as its own bucket advertises a chip the sentinel
+      // can never select. Real Postgres exposed this - the embedded engine
+      // never ran these {skip: !databaseUrl} parity tests.
+      type: "nullif(prop_type,'')",
       // Program is derived too - auction_program falling back to
       // provenance.sourceFacts.auctionProgram, exactly as matches() reads it and
       // exactly as pgWhere filters it. Grouping by the bare column put any
@@ -596,7 +604,7 @@ async function pgSearch(database, f) {
       // so the facet would count it as undetermined while the filter could still
       // find it by its real program: the same lie the lifecycle facet was
       // telling, on the other field with the same fallback.
-      program: "coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram')",
+      program: "nullif(coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram'),'')",
       // Lifecycle is derived - lifecycle_status falling back to status, exactly as
       // matches() reads it and exactly as pgWhere filters it. Grouping the facet
       // by the bare column put records whose derived value is present into the

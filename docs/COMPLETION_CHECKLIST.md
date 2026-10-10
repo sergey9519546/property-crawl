@@ -32,7 +32,7 @@ if the seed count drifts.
 |---|---|---|
 | Tree | `1739db1` | `reports/release-gate-ledger.json` → `tree` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
-| Test runners green | **26/26** | every `test:*` script |
+| Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
 | Seed listings (`data.js`) | **2091** | `scripts/gen-context.js` |
 | Source catalog entries | **163** | `server/sources/catalog.js` |
 | Dispatched API paths | **41** | `server/server.js` |
@@ -53,7 +53,7 @@ Nothing below depends on anything later in the list.
 | 7 | **PP-04** public domain + HTTPS/CSP proof on the live host | #5, #6 | the deployment |
 | 8 | **PP-05** commit the release ledger + rollout/rollback handoff | #2, #7 | an actual release |
 
-### Status of 1, 2, and 4
+### Status of 1, 2, 3, and 4
 
 - **#1 PP-01 — CLOSED.** A corrupt store loaded empty and the next write
   persisted that emptiness over the file: one bad store plus one user action
@@ -65,6 +65,18 @@ Nothing below depends on anything later in the list.
 - **#2 PP-02 — CLOSED.** `scripts/release-gate.js` runs the gate in order
   against one SHA and writes `reports/release-gate-ledger.json`. A dirty tree is
   reported as *not* a source-bound result rather than passing quietly.
+- **#3 PP-03 (isolated PostgreSQL) — CLOSED 2026-10-10.** Docker Desktop
+  starts unprivileged from the app (the "needs an elevated token" note below was
+  wrong for the Desktop path), `npm run discovery:local -- up` provisions
+  loopback PostGIS 16, and the full server battery ran green:
+  `test:db` **78/78** (live round-trip), `test:discovery` **86/86** (incl. the
+  row-lock fencing tests), `test:discovery:operations` **102/102**,
+  `discovery:soak` complete with zero failures on its own ephemeral schema,
+  `test:production-e2e:db` **24/24** with `dataMode=postgres
+  documentReviewStore=postgres`, and the full verifier **50/50** with 17 of the
+  18 gated tests executing (the 18th is the optional-live-endpoint test, gated
+  on a live endpoint, not a database). The first real-server run caught and
+  fixed two genuine bugs the skip had hidden — see the section below.
 - **#4 PP-03 (Browser Journey) — CLOSED.** Recorded and verified in
   `scripts/record-workspace-walkthrough.py` (`npm run workspace:walkthrough`).
   Runs isolated real Next.js and API processes with disposable credentials
@@ -85,41 +97,62 @@ These cannot be closed by writing code here. Each names what would unblock it.
 
 | Blocker | Owner | Unblocked by |
 |---|---|---|
-| Isolate a real PostgreSQL **server** and run discovery/contracts, restart durability, lease-loss/retry/worker soak | infra | see the exact state below; the embedded engine covers the rest |
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
 | Fly/Koyeb operator secrets | operator | values set in the host dashboard |
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Google Maps key restriction | ops | GCP console |
+| Google Maps key restriction | ops | GCP console — and not from this machine: its two authenticated gcloud accounts administer 6 projects, none with Maps APIs enabled, so the key's project lives elsewhere (re-checked 2026-10-10) |
 | Public live URL + custom domain | operator | DNS |
 | Production HTTPS CSP verification | operator | a live HTTPS boot; `upgrade-insecure-requests` is HTTPS-only |
 | Lawyer review of `/privacy` `/terms` | legal | counsel |
 
-### Exact state of the PostgreSQL blocker
+### PostgreSQL: closed 2026-10-10 — what actually unblocked it
 
 Verified on this machine, not assumed:
 
-- `.env.local` already names `DATABASE_URL=postgres://***@localhost:5432/property_crawl`.
-- **Nothing is listening on 5432**, and there is no PostgreSQL install on disk
-  (`postgres`/`pg_ctl`/`initdb` are not on PATH).
-- `@electric-sql/pglite` **is** now a devDependency and is what serves the
-  database here — see the section below. What is still missing is a separate
-  PostgreSQL **server**, which only the two row-lock tests need.
-- **Docker Desktop is installed and its WSL2 distro is provisioned** — but
-  `com.docker.service` is **Stopped**, and starting it requires an elevated
-  token. The agent session is not elevated, so this cannot be self-served here.
-  Re-checked 2026-10-06: `Start-Service com.docker.service` fails with
-  *"Cannot open 'com.docker.service' service on computer '.'"*, not merely
-  "access denied" — the SCM handle itself cannot be opened.
+- The old note here claimed Docker needed an elevated token because
+  `Start-Service com.docker.service` fails from a non-elevated shell. That was
+  true of the service handle and wrong as a blocker: launching the **Docker
+  Desktop app** brings the Linux engine up unprivileged in under a minute.
+  Re-verified 2026-10-10; `docker info` answered 29.2.1.
+- `npm run discovery:local -- up` then provisions the isolated server exactly
+  as designed: `postgis/postgis:16-3.4-alpine`, published **loopback-only**
+  on `127.0.0.1:55432`, dev-only credentials, health-gated; `-- migrate`
+  applies the schema and all migrations including 014's promotion evidence.
 
-**Unblock:** start the service once from an elevated shell
-(`Start-Service com.docker.service`) or launch Docker Desktop as
-Administrator, then:
+**The first real-server run caught two genuine bugs the skip had hidden:**
+
+1. `type` and `program` facets did not fold blank strings into the `unknown`
+   sentinel, while the filter (`coalesce(col,'')=''`) and the in-memory matcher
+   both treat blank as unknown. A facet offered an `''` chip the sentinel could
+   never select. Fixed in `server/discovery/query.js` — both expressions now
+   carry the same `nullif(...,'')` literal, so the facet/filter
+   same-expression guards hold. Found by `discovery-acceptance.test.js`, which
+   had been `{skip: !databaseUrl}` since it was written.
+2. `discovery-documents-pg-parity.test.js` built its fixture with
+   `DROP TABLE IF EXISTS listings` + `CREATE TABLE` — fine against in-process
+   PGlite, but against a shared server it aimed at `public`: FK dependents
+   blocked the drop, the lax seeds then violated the real NOT NULL
+   constraints, and against an unprotected database it would have destroyed
+   live data. The external-server path now builds the same fixture inside an
+   ephemeral scratch schema, dropped on close — the same hermeticity PGlite
+   has in-process. Two guard tests that hardcoded the no-database expectation
+   without scrubbing the env chain (`discovery-operations-pg-gating` scrubbed
+   2 of 3 names; the skip-counter spawned with ambient env) were fixed to
+   pass in both configurations.
+
+**Full battery, 2026-10-10, against `127.0.0.1:55432`:** `test:db` 78/78,
+`test:discovery` 86/86, `test:discovery:operations` 102/102, `discovery:soak`
+complete with zero failures, `test:production-e2e:db` 24/24
+(`dataMode=postgres documentReviewStore=postgres`), full verifier **50/50**
+with 17 of the 18 gated tests executing. The default no-database run still
+passes 50/50 and honestly reports the 18 skips.
 
 ### PostgreSQL: how the database is now served
 
-`DATABASE_URL` still names `postgres://***@localhost:5432` and **nothing listens
-there**: no PostgreSQL install on disk, and `com.docker.service` is **Stopped**
-and needs an elevated token this session does not have. That part is unchanged.
+`DATABASE_URL` still names `postgres://***@localhost:5432` and nothing listens
+there by default: no PostgreSQL install on disk. But this stopped being a
+blocker on 2026-10-10 — one `npm run discovery:local -- up` provisions the
+loopback PostGIS server the battery above ran against.
 
 What changed is the consequence. Previously an unreachable database fell back to
 a seeded in-memory catalog, so a broken database was indistinguishable from a

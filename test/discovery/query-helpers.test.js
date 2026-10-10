@@ -263,8 +263,10 @@ test('every text facet filter compares case-insensitively, like the in-memory ma
   }
   // Program and lifecycle are derived, so the SQL has to carry the same
   // fallback matches() reads - a row whose value lives only in provenance must
-  // not be invisible to the database path.
-  assert.match(where.sql, /lower\(coalesce\(auction_program, provenance->'sourceFacts'->>'auctionProgram'\)\)=\$\d+/);
+  // not be invisible to the database path. Program's nullif wrapper is the
+  // blank-fold that keeps the 'unknown' sentinel on the same literal the
+  // facet allowlist groups by.
+  assert.match(where.sql, /lower\(nullif\(coalesce\(auction_program, provenance->'sourceFacts'->>'auctionProgram'\),''\)\)=\$\d+/);
   assert.match(where.sql, /lower\(coalesce\(nullif\(lifecycle_status,''\), status\)\)=\$\d+/);
   // The memory matcher already agreed with the normalised value; this pins that
   // the two backends are answering the same question.

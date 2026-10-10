@@ -2,10 +2,12 @@
 
 const assert = require('node:assert/strict');
 const { after, before, test } = require('node:test');
+const crypto = require('node:crypto');
 const query = require('../server/discovery/query');
 
 const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 let pool;
+let scratchSchema;
 
 // Prefer an external server when one is configured, but do not require one.
 // PGlite is Postgres compiled to WASM, so this suite can check the real SQL
@@ -13,10 +15,25 @@ let pool;
 // is exactly what let pgWhere compare 'maricopa' to 'Maricopa' while the
 // in-memory matcher lowercased both sides. A guard that only proves itself when
 // an operator exports a variable is not a guard.
+//
+// The four real-table tests below build their own minimal `listings` fixture
+// with DROP TABLE IF EXISTS + CREATE TABLE. On the external server that must
+// land in a throwaway schema: pointed at public it would try to drop the real
+// listings table (FK dependents block it, so the fixture never gets built and
+// the lax seeds then violate the real NOT NULL constraints), and against an
+// unprotected database it would destroy live data. The scratch schema gives
+// the server run the same hermetic semantics PGlite has in-process.
 before(async () => {
   if (databaseUrl) {
     const { Pool } = require('pg');
-    pool = new Pool({ connectionString: databaseUrl, max: 1 });
+    scratchSchema = `parity_scratch_${process.pid}_${crypto.randomBytes(5).toString('hex')}`;
+    const bootstrap = new Pool({ connectionString: databaseUrl, max: 1 });
+    try {
+      await bootstrap.query(`CREATE SCHEMA "${scratchSchema}"`);
+    } finally {
+      await bootstrap.end();
+    }
+    pool = new Pool({ connectionString: databaseUrl, max: 1, options: `-c search_path=${scratchSchema}` });
     return;
   }
   const { PGlite } = require('@electric-sql/pglite');
@@ -27,7 +44,12 @@ before(async () => {
     end: async () => { await pglite.close(); },
   };
 });
-after(async () => { if (pool) await pool.end(); });
+after(async () => {
+  if (scratchSchema) {
+    await pool.query(`DROP SCHEMA IF EXISTS "${scratchSchema}" CASCADE`);
+  }
+  if (pool) await pool.end();
+});
 
 const documentStates = {
   missing: undefined,
