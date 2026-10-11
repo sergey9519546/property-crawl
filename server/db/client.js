@@ -475,10 +475,14 @@ class DatabaseClient {
 
   init() {
     if (this.externalPool) return;
-    if (this.env.DISCOVERY_MODE === 'advanced' && !this.env.DATABASE_URL) {
+    // Embedded Postgres starts asynchronously and attachPostgres() replaces
+    // this pool. Dialing DATABASE_URL as well would open the dead TCP server
+    // this process is required to ignore.
+    const embeddedRequested = this.env.PROPERTY_DB === 'embedded' || Boolean(this.env.PROPERTY_PG_DATA_DIR);
+    if (this.env.DISCOVERY_MODE === 'advanced' && !this.env.DATABASE_URL && !embeddedRequested) {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
-    if (this.env.DATABASE_URL) {
+    if (this.env.DATABASE_URL && !embeddedRequested) {
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({

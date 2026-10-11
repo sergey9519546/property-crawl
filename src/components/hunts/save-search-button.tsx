@@ -42,8 +42,8 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
       return;
     }
     const cleanWebhook = webhookUrl.trim();
-    if (cleanWebhook && !/^https?:\/\/.+/i.test(cleanWebhook)) {
-      setError("Webhook URL must be a valid HTTP or HTTPS address.");
+    if (cleanWebhook && !/^https:\/\/.+/i.test(cleanWebhook)) {
+      setError("Webhook URL must be a public https address.");
       return;
     }
     const discoveryFilters: Record<string, string> = {};
@@ -97,7 +97,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
           <label htmlFor="saved-search-name" className="text-sm font-semibold text-slate-800">Name</label>
           <input ref={inputRef} id="saved-search-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
           <label htmlFor="saved-search-webhook" className="mt-4 block text-sm font-semibold text-slate-800">
-            Webhook URL <span className="text-xs font-normal text-slate-500">(Optional notification endpoint)</span>
+            Webhook URL <span className="text-xs font-normal text-slate-500">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
           </label>
           <input id="saved-search-webhook" type="url" placeholder="https://example.com/api/webhooks/property-alerts" value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} maxLength={256} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
           {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}

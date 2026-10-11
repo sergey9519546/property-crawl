@@ -9,7 +9,9 @@
  *   - accepted records, rejected=0, no errors, complete + fullSweep
  *
  * Requires PostgreSQL + DISCOVERY_MODE=advanced for live runs.
- * Without DATABASE_URL the CLI prints a dry-run plan and exits 0.
+ * Live Postgres is DATABASE_URL, or the embedded engine when
+ * PROPERTY_DB=embedded or PROPERTY_PG_DATA_DIR is set. Without either,
+ * the CLI prints a dry-run plan and exits 0.
  */
 
 const fs = require('node:fs');
@@ -167,8 +169,29 @@ function writeReport(payload) {
   return file;
 }
 
+function embeddedDatabaseRequested(env = process.env) {
+  return env.PROPERTY_DB === 'embedded' || Boolean(env.PROPERTY_PG_DATA_DIR);
+}
+
 function hasLiveDatabase(env = process.env) {
-  return Boolean(env.DATABASE_URL) && env.DISCOVERY_MODE === 'advanced';
+  return env.DISCOVERY_MODE === 'advanced' && (Boolean(env.DATABASE_URL) || embeddedDatabaseRequested(env));
+}
+
+async function ensureLivePool(db) {
+  const { migrate, openConfiguredPool } = require('./discovery-migrate');
+  if (embeddedDatabaseRequested()) {
+    const pool = await openConfiguredPool();
+    try {
+      await migrate(pool);
+      db.attachPostgres(pool, 'pglite-embedded');
+    } catch (error) {
+      await pool.end().catch(() => {});
+      throw error;
+    }
+    return;
+  }
+  if (!db.pool) throw new Error('PostgreSQL pool is not configured');
+  await migrate(db.pool);
 }
 
 function formatRolloutRow(row) {
@@ -184,6 +207,9 @@ function formatRolloutRow(row) {
 
 async function loadDiscoveryStack() {
   const db = require('../server/db/client');
+  await ensureLivePool(db);
+  const verified = await db.verifyConnection();
+  if (!verified) throw new Error('PostgreSQL did not answer');
   const { createDiscoveryStore } = require('../server/discovery/store');
   const worker = require('./discovery-worker');
   const scheduler = require('../server/scrapers/scheduler');
@@ -251,7 +277,7 @@ async function cmdRun(flags) {
     }
     console.log(dryRunPlan(targets, { repeat }).join('\n'));
     console.log('');
-    console.log('Live canary not executed. Set DATABASE_URL and DISCOVERY_MODE=advanced, then re-run.');
+    console.log('Live canary not executed. Set DISCOVERY_MODE=advanced and either DATABASE_URL or PROPERTY_DB=embedded, then re-run.');
     return 0;
   }
 
@@ -405,7 +431,8 @@ Commands:
   promote --source KEY         Promote after two clean runs
 
 Environment:
-  DATABASE_URL                 PostgreSQL+PostGIS (required for live)
+  DATABASE_URL                 PostgreSQL+PostGIS (live, unless embedded)
+  PROPERTY_DB=embedded         Embedded PostgreSQL the operator inventory uses
   DISCOVERY_MODE=advanced      Required for live canaries
   SCRAPLING_SOURCES            Optional structural parser allowlist
 
@@ -458,6 +485,7 @@ module.exports = {
   parseSourceList,
   resolveTargets,
   dryRunPlan,
+  embeddedDatabaseRequested,
   hasLiveDatabase,
   writeReport,
   main,

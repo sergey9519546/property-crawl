@@ -14,6 +14,7 @@
 
 const { matchListingAgainstSearch } = require('./saved-search-alerts');
 const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
+const { notifySavedSearchWebhook } = require('../delivery/webhook-notify');
 
 // Run every active saved search for a user against a batch of
 // listings. Returns:
@@ -30,7 +31,7 @@ const { isEmail, sendOutboundMail } = require('../delivery/outbound-mail');
 //
 // The scheduler calls this once per ingestion cycle and logs the
 // totalNewMatches count.
-async function runAlertsForUser({ userId, listings, database, mailOptions } = {}) {
+async function runAlertsForUser({ userId, listings, database, mailOptions, webhookOptions } = {}) {
   if (!userId || typeof userId !== 'string') {
     return { userId: userId || null, searches: 0, totalNewMatches: 0, results: [], skipped: 'userId_missing' };
   }
@@ -59,6 +60,16 @@ async function runAlertsForUser({ userId, listings, database, mailOptions } = {}
     const newCount = Array.isArray(records) ? records.length : 0;
     total += newCount;
     const row = { searchId: search.id, label: search.label, newMatches: newCount };
+    const newIds = new Set((Array.isArray(records) ? records : []).map((record) => record.listingId));
+    const fresh = listings.filter((listing) => newIds.has(listing?.id));
+    if (newCount > 0 && (search?.filters?.webhookUrl || search?.webhookUrl)) {
+      try {
+        row.webhook = await notifySavedSearchWebhook(search, fresh, webhookOptions || {});
+      } catch (error) {
+        row.webhook = { delivery: 'unavailable', sent: false, reason: 'network' };
+        row.webhookError = String(error?.message || error || 'webhook-failed');
+      }
+    }
     const notify = isEmail(search?.filters?.notifyEmail);
     if (newCount > 0 && notify) {
       try {

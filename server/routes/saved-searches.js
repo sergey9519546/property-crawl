@@ -73,8 +73,8 @@ function validateFilters(filters) {
   }
   if ('webhookUrl' in filters) {
     if (filters.webhookUrl !== null && filters.webhookUrl !== undefined && filters.webhookUrl !== '') {
-      if (typeof filters.webhookUrl !== 'string' || !/^https?:\/\/.+/i.test(filters.webhookUrl.trim()) || filters.webhookUrl.trim().length > 512) {
-        return { ok: false, reason: 'webhookUrl_must_be_valid_http_url' };
+      if (typeof filters.webhookUrl !== 'string' || !/^https:\/\/.+/i.test(filters.webhookUrl.trim()) || filters.webhookUrl.trim().length > 512) {
+        return { ok: false, reason: 'webhookUrl_must_be_valid_https_url' };
       }
     }
   }

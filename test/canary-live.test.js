@@ -106,11 +106,14 @@ test('dryRunPlan emits discovery-worker canary and promote commands', () => {
   assert.match(plan, /SCRAPLING_SOURCES=gsa/);
 });
 
-test('hasLiveDatabase requires both DATABASE_URL and DISCOVERY_MODE=advanced', () => {
+test('hasLiveDatabase requires advanced mode and either DATABASE_URL or the embedded engine', () => {
   assert.equal(hasLiveDatabase({}), false);
   assert.equal(hasLiveDatabase({ DATABASE_URL: 'postgres://x', DISCOVERY_MODE: 'demo' }), false);
   assert.equal(hasLiveDatabase({ DISCOVERY_MODE: 'advanced' }), false);
+  assert.equal(hasLiveDatabase({ PROPERTY_DB: 'embedded' }), false);
   assert.equal(hasLiveDatabase({ DATABASE_URL: 'postgres://x', DISCOVERY_MODE: 'advanced' }), true);
+  assert.equal(hasLiveDatabase({ PROPERTY_DB: 'embedded', DISCOVERY_MODE: 'advanced' }), true);
+  assert.equal(hasLiveDatabase({ PROPERTY_PG_DATA_DIR: '.cache/pgdata', DISCOVERY_MODE: 'advanced' }), true);
 });
 
 test('parseSourceList normalizes CSV tokens', () => {
@@ -127,17 +130,23 @@ test('parseArgs reads command, flags, and --key=value forms', () => {
 
 test('canary-live CLI dry-run exits 0 without DATABASE_URL', async () => {
   const { main } = require('../scripts/canary-live');
-  const previousDb = process.env.DATABASE_URL;
-  const previousMode = process.env.DISCOVERY_MODE;
+  const previous = {
+    DATABASE_URL: process.env.DATABASE_URL,
+    DISCOVERY_MODE: process.env.DISCOVERY_MODE,
+    PROPERTY_DB: process.env.PROPERTY_DB,
+    PROPERTY_PG_DATA_DIR: process.env.PROPERTY_PG_DATA_DIR,
+  };
   delete process.env.DATABASE_URL;
   delete process.env.DISCOVERY_MODE;
+  delete process.env.PROPERTY_DB;
+  delete process.env.PROPERTY_PG_DATA_DIR;
   try {
     const code = await main(['run', '--sources', 'treasury', '--repeat', '2']);
     assert.equal(code, 0);
   } finally {
-    if (previousDb === undefined) delete process.env.DATABASE_URL;
-    else process.env.DATABASE_URL = previousDb;
-    if (previousMode === undefined) delete process.env.DISCOVERY_MODE;
-    else process.env.DISCOVERY_MODE = previousMode;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });

@@ -27,12 +27,21 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
   const panorama = React.useRef<PanoramaHandle | null>(null);
   const iframeTimer = React.useRef<number | null>(null);
   const embedUrl = streetViewEmbedUrl(metadata);
-  const [state, setState] = React.useState<"loading" | "ready" | "error">(
-    () => (embedUrl || browserMapsKey() ? "loading" : "error"),
+  const configured = Boolean(embedUrl || browserMapsKey());
+  // A known panorama can open in Google Maps without a browser key. With no
+  // panorama target, this viewer has nothing to show, so the parent falls
+  // back to other street imagery.
+  const hasPanoramaTarget = Boolean(metadata.panoramaId || metadata.panoramaLocation);
+  const [state, setState] = React.useState<"loading" | "ready" | "error" | "unconfigured">(
+    () => (configured ? "loading" : hasPanoramaTarget ? "unconfigured" : "error"),
   );
   const [attempt, setAttempt] = React.useState(0);
 
   React.useEffect(() => {
+    if (!configured) {
+      setState(hasPanoramaTarget ? "unconfigured" : "error");
+      return;
+    }
     if (embedUrl) {
       setState("loading");
       iframeTimer.current = window.setTimeout(() => {
@@ -85,7 +94,7 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
       panorama.current?.unbindAll?.();
       panorama.current = null;
     };
-  }, [attempt, embedUrl, metadata]);
+  }, [attempt, configured, embedUrl, hasPanoramaTarget, metadata]);
 
   React.useEffect(() => { if (state === "error") onUnavailable?.(); }, [state, onUnavailable]);
 
@@ -126,6 +135,18 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
       {state === "loading" ? (
         <div role="status" className="pointer-events-none absolute inset-0 grid place-items-center bg-slate-100 text-sm font-semibold text-slate-600">
           Loading interactive Street View…
+        </div>
+      ) : null}
+
+      {state === "unconfigured" ? (
+        <div className="absolute inset-0 grid place-items-center bg-slate-100 px-5 text-center">
+          <div>
+            <p className="text-sm font-bold text-slate-900">Interactive Street View stays on Google Maps</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">This page does not load a Maps key. The capture date and distance are below.</p>
+            <a href={launch} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white">
+              Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            </a>
+          </div>
         </div>
       ) : null}
 

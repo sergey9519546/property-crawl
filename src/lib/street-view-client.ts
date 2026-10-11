@@ -78,7 +78,10 @@ export function browserMapsKey() {
   return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim() || null;
 }
 export function browserMapsEmbedKey() {
-  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY?.trim() || null;
+  // An embed URL would compile the Maps key into the browser bundle. This
+  // machine cannot apply a referrer restriction, so the embed stays unused.
+  // Server imagery uses the server key. A JavaScript browser key is separate.
+  return null;
 }
 export function loadGoogleMapsStreetView(): Promise<GoogleMapsRuntime> {
   if (typeof window === "undefined") return Promise.reject(new Error("Street View is available in the browser only"));
@@ -131,16 +134,8 @@ export function streetViewLaunchUrl(address: string, metadata?: StreetViewMetada
   }
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
-export function streetViewEmbedUrl(metadata: StreetViewMetadata) {
-  const key = browserMapsEmbedKey();
-  if (!key) return null;
-  const target = metadata.panoramaId
-    ? `pano=${encodeURIComponent(metadata.panoramaId)}`
-    : metadata.panoramaLocation
-      ? `location=${encodeURIComponent(`${metadata.panoramaLocation.lat},${metadata.panoramaLocation.lng}`)}`
-      : null;
-  if (!target) return null;
-  return `https://www.google.com/maps/embed/v1/streetview?key=${encodeURIComponent(key)}&${target}&heading=${encodeURIComponent(String(metadata.heading ?? 0))}&pitch=0&fov=80`;
+export function streetViewEmbedUrl(_metadata: StreetViewMetadata) {
+  return null;
 }
 
 export function requestStreetViewMetadata(listingId: string, options: { walkthrough?: boolean } = {}) {

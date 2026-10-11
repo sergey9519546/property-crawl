@@ -579,20 +579,22 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
 
             Layout must not be a function of how long a sentence is. */}
         <div className="min-w-0 flex-1">
+          {/* A loaded payload keeps its count during a refetch. "Updating
+              results…" is only the empty state, so the server-rendered total
+              cannot disappear while the browser request is in flight. The
+              page-scoped qualifier stops a capped count from reading as the
+              whole search. */}
           <p className="text-xs font-semibold text-slate-600" data-testid="inventory-page-count">
-            {loading || (!payload && !error)
-              ? "Updating results…"
-              : payload
-                ? `${pageLength.toLocaleString()} on this page${
-                    typeof payload.total === "number"
-                      ? ` · ${payload.total.toLocaleString()} match this search${
-                          // Without this qualifier the capped intelligence count
-                          // reads as a whole-search total: "12 match" on a
-                          // search the user knows returns thousands.
-                          totalIsPageScoped ? ", counted on this page only" : ""
-                        }`
-                      : ""
-                  }`
+            {payload
+              ? `${pageLength.toLocaleString()} on this page${
+                  typeof payload.total === "number"
+                    ? ` · ${payload.total.toLocaleString()} match this search${
+                        totalIsPageScoped ? ", counted on this page only" : ""
+                      }`
+                    : ""
+                }`
+              : loading || !error
+                ? "Updating results…"
                 : "Results unavailable"}
           </p>
           {/* Always rendered, never popped in. This line used to be

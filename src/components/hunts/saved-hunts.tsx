@@ -73,6 +73,7 @@ type Evaluation = {
   rankingNote?: string;
   unsatisfiableCriteria?: { field: string; operator: string; value?: unknown; reason: string }[];
   unsatisfiableCriteriaNote?: string | null;
+  webhook?: { delivery: string; sent: boolean; reason?: string };
 };
 const fields = [
   ["state", "State", "text"],
@@ -221,7 +222,7 @@ export function SavedHunts() {
     });
     const data = await response.json();
     if (!response.ok)
-      throw new Error(data.error || "The hunt could not be completed");
+      throw new Error(data.details?.[0] || data.error || "The hunt could not be completed");
     return data;
   }
   useEffect(() => {
@@ -529,7 +530,7 @@ export function SavedHunts() {
                   />
                 </label>
                 <label className="mt-4 block text-xs font-semibold">
-                  Webhook URL <span className="text-[10px] font-normal text-slate-500">(Optional notification endpoint)</span>
+                  Webhook URL <span className="text-[10px] font-normal text-slate-500">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
                   <input
                     type="url"
                     placeholder="https://example.com/api/webhooks/property-alerts"
@@ -736,11 +737,18 @@ export function SavedHunts() {
                           setEvaluation(data.evaluation);
                           const history = await api(`/${selected.id}/events`);
                           setEvents(history.items);
-                          setMessage(
-                            data.evaluation.baselineCreated
-                              ? "First comparison saved. Future runs can identify new matches and changes."
-                              : "Hunt evaluated against collected source evidence.",
-                          );
+                          const base = data.evaluation.baselineCreated
+                            ? "First comparison saved. Future runs can identify new matches and changes."
+                            : "Hunt evaluated against collected source evidence.";
+                          const hook = data.evaluation.webhook;
+                          const delivery = !hook || hook.delivery === "skipped"
+                            ? ""
+                            : hook.sent
+                              ? " The webhook accepted this notice."
+                              : hook.delivery === "refused"
+                                ? " The webhook address is not a public https endpoint, so nothing was sent."
+                                : " The webhook did not accept the notice.";
+                          setMessage(`${base}${delivery}`);
                         })
                       }
                       className="flex items-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"

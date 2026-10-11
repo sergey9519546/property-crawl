@@ -1104,14 +1104,13 @@ function createPropertyImageService(options = {}) {
             }
           }
           const { _panoId, ...publicMetadata } = panorama;
-          const embedReady = Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_EMBED_API_KEY, 1024));
-          const interactiveReady=embedReady || Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,1024));
+          const interactiveReady = Boolean(safeText(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, 1024));
           const coverage = panorama.distanceMeters <= config.maximumDistanceMeters ? 'near_property' : 'nearby_street';
           return {
             status: 200,
             headers: { ...baseHeaders(), 'Content-Type': 'application/json; charset=utf-8' },
             body: {...publicMetadata, coverage, targetLabel: coverage === 'nearby_street' ? 'Nearby street walkthrough' : 'Exterior walkthrough',
-              interactiveReady, interactive:{ready:interactiveReady,provider:embedReady?'google_maps_embed':'google_maps_javascript',reason:interactiveReady?null:'public_browser_key_not_configured'}},
+              interactiveReady, interactive:{ready:interactiveReady,provider:'google_maps_javascript',reason:interactiveReady?null:'public_browser_key_not_configured'}},
           };
         }
 

@@ -28,12 +28,49 @@ async function migrate(pool) {
     }
   } finally { await client.query('SELECT pg_advisory_unlock(72463198)'); client.release(); }
 }
+function migrationTarget(env = process.env) {
+  if (env.PROPERTY_DB === 'embedded' || Boolean(env.PROPERTY_PG_DATA_DIR)) return 'embedded';
+  if (env.DATABASE_URL) return 'tcp';
+  return 'missing';
+}
+
+async function openConfiguredPool(env = process.env) {
+  const target = migrationTarget(env);
+  if (target === 'embedded') {
+    if (env.DATABASE_URL) {
+      console.log('PROPERTY_DB/PROPERTY_PG_DATA_DIR is set, so the embedded engine is used and DATABASE_URL is not opened.');
+    }
+    const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
+    const started = await startEmbeddedPostgres({ log: console.log });
+    return started.pool;
+  }
+  if (target !== 'tcp') {
+    const error = new Error('DATABASE_URL is required for discovery migrations');
+    error.code = 'DISCOVERY_DATABASE_MISSING';
+    throw error;
+  }
+  const { Pool } = require('pg');
+  return new Pool({ connectionString: env.DATABASE_URL });
+}
+
 if (require.main === module) {
-  if (!process.env.DATABASE_URL) { console.error('DATABASE_URL is required for discovery migrations'); process.exitCode = 1; }
-  else {
-    const { Pool } = require('pg');
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    migrate(pool).then(() => console.log('Discovery migrations applied')).catch(e => { console.error(e.message); process.exitCode = 1; }).finally(() => pool.end());
+  const target = migrationTarget();
+  if (target === 'missing') {
+    console.error('DATABASE_URL is required for discovery migrations');
+    process.exitCode = 1;
+  } else {
+    openConfiguredPool()
+      .then(async (pool) => {
+        try {
+          await migrate(pool);
+          console.log(target === 'embedded'
+            ? 'Discovery migrations applied to the embedded database'
+            : 'Discovery migrations applied');
+        } finally {
+          await pool.end();
+        }
+      })
+      .catch((error) => { console.error(error.message); process.exitCode = 1; });
   }
 }
-module.exports = { migrate };
+module.exports = { migrate, migrationTarget, openConfiguredPool };

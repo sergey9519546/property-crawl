@@ -1255,6 +1255,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             )
             fallback.wait_for(state="visible", timeout=10_000)
             self.assertIn("ranked list remain active", fallback.inner_text())
+            # Markers are added when the map engine boots, which can land after
+            # the tile-failure banner. Wait for one, then count.
+            offline_page.get_by_test_id("storyteller-map-marker").first.wait_for(
+                state="visible", timeout=20_000
+            )
             marker_count = offline_page.get_by_test_id("storyteller-map-marker").count()
             self.assertGreater(marker_count, 0)
             self.assertEqual(
@@ -1801,7 +1806,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # The Deal Grid button belongs to the home terminal, not this workbench.
         # What /listings guarantees is that it loaded inventory and says so;
         # inventory-page-count carries the number.
-        # It starts as "Updating results..." - poll rather than assert now.
+        # An empty workbench says "Updating results…". A loaded payload keeps
+        # its count during the browser refetch, so poll for that settled line.
         page_count = self.page.locator("main").get_by_test_id("inventory-page-count")
         expect(page_count).to_contain_text("on this page", timeout=30_000)
         # It reads "48 on this page - 2,095 match this search": grouped digits,
@@ -1931,10 +1937,11 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # with a PNG. response.json() then failed and the card fell to its
         # unavailable state, so the disclosure this test waits for never rendered.
         #
-        # The available state of THIS card is an InteractiveStreetView embed - a
-        # third-party iframe - not a same-origin <img>. The same-origin proxy
-        # guarantee belongs to the feed card (listing-thumbnail.tsx) and is
-        # asserted there, in
+        # The available state of THIS card discloses the panorama and links out
+        # to Google Maps. It does not embed maps.googleapis.com or
+        # google.com/maps/embed, because that request would put a Maps key in
+        # the browser. The same-origin proxy guarantee belongs to the feed card
+        # (listing-thumbnail.tsx) and is asserted there, in
         # test_feed_street_view_is_on_demand_preserves_attribution_and_recovers_from_failure.
         # What this test owns is what this card actually promises: it fetches
         # nothing until asked, and the disclosure names the provider, the
@@ -1986,10 +1993,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         disclosure = self.page.get_by_test_id("street-view-disclosure")
         expect(disclosure).to_be_visible(timeout=15_000)
         self.assertTrue(metadata_requests, "clicking must actually request metadata")
-        # If this stub ever stops matching, the iframe reaches real Google, burns
-        # quota, and fails - which flips the card to unavailable and makes this
-        # whole test flaky rather than honest. Assert the interception happened.
-        self.assertTrue(embed_requests, "the Google embed must be stubbed, never requested live")
+        # A Google embed would carry a browser Maps key. The stub stays so a
+        # regression that adds the iframe fails here instead of calling Google.
+        self.assertEqual(embed_requests, [], "the detail card must not request a Google embed")
 
         caption = disclosure.inner_text()
         self.assertIn("Google Maps", caption)

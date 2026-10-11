@@ -90,6 +90,64 @@ function makeStubDb(searches = []) {
   };
 }
 
+test('runAlertsForUser posts a public webhook for a new match and not for a repeat', async () => {
+  const searches = [search({
+    id: 'S1',
+    filters: { states: ['TX'], webhookUrl: 'https://alerts.example.com/hook' },
+  })];
+  const db = makeStubDb(searches);
+  const calls = [];
+  const listings = [listing({ id: 'A', source: 'treasury', state: 'TX', address: '9 Oak' })];
+  const options = {
+    lookup: async () => [{ address: '1.1.1.1', family: 4 }],
+    fetchImpl: async (_url, init) => {
+      calls.push(JSON.parse(init.body));
+      return { status: 200 };
+    },
+  };
+  const result = await runAlertsForUser({
+    userId: 'workspace:operator',
+    listings,
+    database: db,
+    webhookOptions: options,
+  });
+  assert.equal(result.totalNewMatches, 1);
+  assert.equal(result.results[0].webhook.sent, true);
+  assert.equal(calls[0].event, 'saved_search.matches');
+  assert.equal(calls[0].matches[0].id, 'A');
+  assert.equal(calls[0].matches[0].address, '9 Oak');
+  assert.equal(Object.hasOwn(calls[0].matches[0], 'dealScore'), false);
+
+  const again = await runAlertsForUser({
+    userId: 'workspace:operator',
+    listings,
+    database: db,
+    webhookOptions: {
+      lookup: options.lookup,
+      fetchImpl: async () => { throw new Error('repeat must not post'); },
+    },
+  });
+  assert.equal(again.totalNewMatches, 0);
+  assert.equal(again.results[0].newMatches, 0);
+  assert.equal(again.results[0].webhook, undefined);
+
+  const blocked = makeStubDb([search({
+    id: 'S2',
+    filters: { states: ['TX'], webhookUrl: 'https://127.0.0.1/hook' },
+  })]);
+  const refused = await runAlertsForUser({
+    userId: 'workspace:operator',
+    listings: [listing({ id: 'B', state: 'TX' })],
+    database: blocked,
+    webhookOptions: {
+      lookup: options.lookup,
+      fetchImpl: async () => { throw new Error('loopback must not post'); },
+    },
+  });
+  assert.equal(refused.results[0].webhook.sent, false);
+  assert.equal(refused.results[0].webhook.reason, 'private_host');
+});
+
 test('runAlertsForUser: matches listings that satisfy every active search', async () => {
   const searches = [
     search({ id: 'S1', filters: { states: ['TX'] } }),

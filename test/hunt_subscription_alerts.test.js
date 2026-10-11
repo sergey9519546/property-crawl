@@ -113,6 +113,79 @@ test('Hunt Evaluator: formats transactional email digest notification', () => {
   assert.equal(digest.matchCount, 2);
 });
 
+test('webhook posts hunt changes only to a resolved public https address', async () => {
+  const { notifyHuntWebhook, postWebhook } = require('../server/delivery/webhook-notify');
+  const publicLookup = async () => [{ address: '1.1.1.1', family: 4 }];
+  const privateLookup = async () => [{ address: '127.0.0.1', family: 4 }];
+  const calls = [];
+  const hunt = { id: 'hunt_1', name: 'Ohio', webhookUrl: 'https://alerts.example.com/hook' };
+  const evaluation = {
+    evaluatedAt: '2026-10-10T00:00:00.000Z',
+    baselineCreated: false,
+    counts: { newMatch: 1, materialChange: 0 },
+    newEvents: [{
+      id: 'hevt_1',
+      type: 'new_match',
+      listingId: 'L1',
+      address: '1 Main',
+      sourceId: 'hud',
+      sourceUrl: 'https://www.hudhomestore.gov/listing',
+      observedAt: '2026-10-10T00:00:00.000Z',
+      message: 'A validated source record now matches this hunt.',
+    }],
+  };
+  const sent = await notifyHuntWebhook(hunt, evaluation, {
+    lookup: publicLookup,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return { status: 204 };
+    },
+  });
+  assert.equal(sent.sent, true);
+  assert.equal(sent.delivery, 'sent');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.method, 'POST');
+  assert.equal(calls[0].init.redirect, 'manual');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.event, 'hunt.changes');
+  assert.equal(body.changes[0].listingId, 'L1');
+  assert.equal(body.changes[0].address, '1 Main');
+  assert.equal(Object.hasOwn(body.changes[0], 'openingBid'), false);
+
+  const baseline = await notifyHuntWebhook(hunt, { ...evaluation, baselineCreated: true }, {
+    lookup: publicLookup,
+    fetchImpl: async () => { throw new Error('baseline must not post'); },
+  });
+  assert.equal(baseline.delivery, 'skipped');
+  assert.equal(baseline.reason, 'baseline');
+
+  const local = await postWebhook('https://127.0.0.1/hook', { event: 'x' }, {
+    lookup: publicLookup,
+    fetchImpl: async () => { throw new Error('loopback must not post'); },
+  });
+  assert.equal(local.delivery, 'refused');
+  assert.equal(local.reason, 'private_host');
+
+  const httpUrl = await postWebhook('http://alerts.example.com/hook', { event: 'x' }, {
+    lookup: publicLookup,
+    fetchImpl: async () => { throw new Error('http must not post'); },
+  });
+  assert.equal(httpUrl.reason, 'https_required');
+
+  const resolved = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, {
+    lookup: privateLookup,
+    fetchImpl: async () => { throw new Error('private dns must not post'); },
+  });
+  assert.equal(resolved.reason, 'private_resolution');
+
+  const redirect = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, {
+    lookup: publicLookup,
+    fetchImpl: async () => ({ status: 302 }),
+  });
+  assert.equal(redirect.sent, false);
+  assert.equal(redirect.reason, 'redirect_refused');
+});
+
 test('Hunt digest refuses a missing or placeholder recipient', async () => {
   const missing = generateHuntEmailDigest({ id: 'HUNT-NONE', label: 'No address' }, []);
   assert.equal(missing.to, null);

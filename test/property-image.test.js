@@ -196,8 +196,9 @@ test('walkthrough finds a nearby street without weakening the static image dista
   assert.equal(result.body.targetLabel, 'Nearby street walkthrough');
   assert.ok(result.body.distanceMeters > 200 && result.body.distanceMeters < 250);
   assert.equal(result.body.provenance.exactPropertyVerified, false);
-  assert.equal(result.body.interactive.provider, 'google_maps_embed');
-  assert.equal(result.body.interactiveReady, true);
+  assert.equal(result.body.interactive.provider, 'google_maps_javascript');
+  assert.equal(result.body.interactiveReady, false);
+  assert.equal(result.body.interactive.reason, 'public_browser_key_not_configured');
   assert.deepEqual(radii, ['50', '500']);
   assert.ok(!serializedResponse(result).includes('public-embed-test'));
   const image = await service.resolve(request('listingId=CIV-NJ-7-53&mode=image'));
