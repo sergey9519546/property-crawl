@@ -87,6 +87,11 @@ test('a canonical sold/cancelled written by the canonicaliser is still conclusiv
   assert.equal(classifyListing({ status: 'cancelled' }, NOW).concluded, true);
   assert.equal(classifyListing({ status: 'active' }, NOW).concluded, false);
   assert.equal(classifyListing({ status: 'postponed' }, NOW).concluded, false);
+  const closed = classifyListing({ status: 'closed' }, NOW);
+  assert.equal(closed.concluded, true);
+  assert.equal(closed.verdict, 'canonical_closed');
+  assert.equal(closed.label, 'status: closed');
+  assert.doesNotMatch(closed.label, /\bsold\b/i);
 });
 
 test('an unrecognised status is kept rather than guessed at', () => {

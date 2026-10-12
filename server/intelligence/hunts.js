@@ -380,14 +380,6 @@ function supportedDerivedValue(listing, field, evidence) {
   }
   // Legacy normalization calls mid minus opening bid "equity". That is a bid spread,
   // not debt-adjusted owner equity, so no current equity model is authorized here.
-  if (field === 'equity') return false;
-  if (field === 'redemptionDays') {
-    return evidence.model === 'state-statutory-rule-lookup-v1' && inputs.has('state') && known(listing.state);
-  }
-  if (field === 'seniorLienRisk') {
-    return evidence.model === 'legal-text-pattern-v1'
-      && evidence.inputs.some((input) => inputs.has(input) && known(listing[input]));
-  }
   return false;
 }
 
@@ -396,7 +388,15 @@ function actualEvidence(listing, field, definition) {
     return { actual: null, evidenceClass: 'derived_unverified' };
   }
   const provenanceKey = DERIVED_PROVENANCE[field];
-  if (provenanceKey) {
+  // A state-table or text-pattern marker is not the publisher's term. The
+  // column beside that marker stays out of the hunt. A column with no marker
+  // is the published value and keeps the field's own evidence class.
+  if (field === 'redemptionDays' || field === 'seniorLienRisk') {
+    const derivedFields = listing.provenance?.derivedFields;
+    if (derivedFields && typeof derivedFields === 'object' && derivedFields[provenanceKey] != null) {
+      return { actual: null, evidenceClass: 'derived_unverified' };
+    }
+  } else if (provenanceKey) {
     const evidence = listing.provenance?.derivedFields?.[provenanceKey];
     if (!supportedDerivedValue(listing, field, evidence)) {
       return { actual: null, evidenceClass: definition.evidenceClass };

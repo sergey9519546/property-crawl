@@ -37,7 +37,16 @@ function addressLines(listing: PropertyListing) {
   };
 }
 
-type Props = { listing: PropertyListing; href: string; saved: boolean; saving: boolean; onSave: (id: string) => void };
+type Props = {
+  listing: PropertyListing;
+  href: string;
+  saved: boolean;
+  saving: boolean;
+  onSave: (id: string) => void;
+  compared: boolean;
+  compareFull: boolean;
+  onCompare: (id: string) => void;
+};
 
 // Memoized on purpose: the workbench re-renders whenever any of its own state
 // moves (a triage chip, the watchlist, the loading flag), and each card
@@ -56,7 +65,7 @@ type Props = { listing: PropertyListing; href: string; saved: boolean; saving: b
 // recompute. That stops mattering at 48 cards and would not at 500. See
 // discovery-workbench.tsx for the full numbers, the two claims that were
 // withdrawn, and the harness bug that produced them.
-export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave }: Props) {
+export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, saved, saving, onSave, compared, compareFull, onCompare }: Props) {
   const { street, locality } = addressLines(listing);
   const observed = listing.provenance?.origin === "live" && listing.provenance?.observed === true;
   const archived = listing.provenance?.origin === "archive";
@@ -180,9 +189,14 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         })() : null}
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}</span> : null}
       </div>
-      <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-[1.2fr_1fr]">
-        <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
-        <CaseAction listingId={listing.id} label="Research" className="h-11 border-slate-200 bg-white font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50" />
+      <div className="mt-auto grid gap-2 pt-4">
+        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-50">
+          {compared ? "In compare" : compareFull ? "Compare is full" : "Compare"}
+        </button>
+        <div className="grid gap-2 sm:grid-cols-[1.2fr_1fr]">
+          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
+          <CaseAction listingId={listing.id} label="Research" className="h-11 border-slate-200 bg-white font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50" />
+        </div>
       </div>
     </div>
   </article>;

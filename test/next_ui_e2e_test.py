@@ -1599,17 +1599,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
 
     def test_account_entry_does_not_collect_credentials_for_a_nonexistent_service(self):
-        # This test used to visit /sign-in and /register, assert no password
-        # field, and then wait to be redirected to the feed - on the premise
-        # that neither service existed. Both exist now and say what they are:
-        # sign-in is a shared operator key, registration is closed. The original
-        # concern still holds and is now checked directly - neither page takes a
-        # password, so neither can collect credentials for something that is not
-        # a self-serve account.
+        # Sign-in accepts the shared operator key. Registration stays closed and
+        # must not collect a password for an account system that does not exist.
         sign_in = self.page.goto(f"{BASE_URL}/sign-in", wait_until="domcontentloaded")
         self.assertEqual(sign_in.status, 200)
         expect(self.page.get_by_role("heading", name="Operator sign-in")).to_be_visible(timeout=20_000)
-        self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
+        expect(self.page.get_by_label("Workspace access key")).to_be_visible(timeout=20_000)
+        self.assertEqual(self.page.locator('input[type="password"]').count(), 1)
 
         register = self.page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded")
         self.assertEqual(register.status, 200)

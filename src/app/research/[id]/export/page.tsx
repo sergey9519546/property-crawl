@@ -97,13 +97,19 @@ export default async function DecisionPacketExportPage({
     );
   }
 
-  // Construct real decision packet using underwriting and cash-to-close engines
-  const operatorInput = {
-    disposition: caseDecision?.state === 'pursue' ? 'BID' : caseDecision?.state === 'pass' ? 'PASS' : 'UNDERWRITE',
-    operatorNotes: caseDecision?.decision?.note || 'Evidentiary export generated for courthouse due diligence.',
-    operatorId: caseDecision?.decision?.reviewer || 'operator-current',
-    maxAllowableOffer: caseDecision?.decision?.maxOffer || undefined
-  };
+  const operatorInput: {
+    disposition?: string;
+    operatorNotes?: string;
+    operatorId?: string;
+    maxAllowableOffer?: number;
+  } = {};
+  if (caseDecision?.state === 'pursue') operatorInput.disposition = 'BID';
+  else if (caseDecision?.state === 'pass') operatorInput.disposition = 'PASS';
+  if (typeof caseDecision?.decision?.note === 'string' && caseDecision.decision.note.trim()) {
+    operatorInput.operatorNotes = caseDecision.decision.note;
+  }
+  if (caseDecision?.decision?.reviewer) operatorInput.operatorId = caseDecision.decision.reviewer;
+  if (caseDecision?.decision?.maxOffer) operatorInput.maxAllowableOffer = caseDecision.decision.maxOffer;
 
   const decisionPacket = buildDecisionPacket(listing, operatorInput);
 

@@ -106,13 +106,13 @@ function daysLabel(du){
 // can never drift apart.
 const SCORE_BANDS = [
   { min: 70, max: 99, color: '#059669', alpha: '18', label: 'Elite',
-    desc: 'Modeled bid is well under the valuation midpoint; deep modeled spread.' },
+    desc: 'Opening amount is about 24–46% of the valuation midpoint.' },
   { min: 55, max: 69, color: '#16a34a', alpha: '15', label: 'Strong',
-    desc: 'Modeled bid is well under half of value; large modeled spread.' },
+    desc: 'Opening amount is about 47–58% of the valuation midpoint.' },
   { min: 35, max: 54, color: '#d97706', alpha: '14', label: 'Fair',
-    desc: 'Real modeled discount, but fees and repairs can compress margin.' },
+    desc: 'Opening amount is about 58–73% of the valuation midpoint.' },
   { min:  1, max: 34, color: '#dc2626', alpha: '12', label: 'Thin',
-    desc: 'Modeled bid is close to full value; little room for error.' },
+    desc: 'Opening amount is about 74–99% of the valuation midpoint.' },
 ];
 function bandFor(s){ return SCORE_BANDS.find(b => s >= b.min) || SCORE_BANDS[SCORE_BANDS.length-1]; }
 function scoreColor(s){ return bandFor(s).color; }

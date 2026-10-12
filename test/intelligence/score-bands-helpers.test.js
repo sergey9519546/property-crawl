@@ -17,6 +17,8 @@
 //     CSS-ready rgba string
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
@@ -61,6 +63,23 @@ test('SCORE_BANDS: arrays and objects are frozen', () => {
 test('DEAL_SCORE_MEANING: pinned disclaimer string', () => {
   assert.ok(typeof DEAL_SCORE_MEANING === 'string' && DEAL_SCORE_MEANING.length > 0);
   assert.match(DEAL_SCORE_MEANING, /valuation-range midpoint/i);
+});
+
+test('SCORE_BANDS descriptions state the opening-to-midpoint ratio', () => {
+  // score = round((1 - opening/mid) * 130). The displayed percents are that
+  // ratio at each band edge. A score of 55 is about 58% of the midpoint.
+  const byKey = Object.fromEntries(SCORE_BANDS.map((band) => [band.key, band.desc]));
+  assert.equal(byKey.elite, 'Opening amount is about 24–46% of the valuation midpoint.');
+  assert.equal(byKey.strong, 'Opening amount is about 47–58% of the valuation midpoint.');
+  assert.equal(byKey.fair, 'Opening amount is about 58–73% of the valuation midpoint.');
+  assert.equal(byKey.thin, 'Opening amount is about 74–99% of the valuation midpoint.');
+  for (const desc of Object.values(byKey)) {
+    assert.doesNotMatch(desc, /half of value|fee|repair|equity|discount|clear title/i);
+  }
+  const app = fs.readFileSync(path.join(__dirname, '../../app.js'), 'utf8');
+  for (const desc of Object.values(byKey)) {
+    assert.ok(app.includes(desc), 'app.js score copy drifted from the server bands');
+  }
 });
 
 // --- finiteScore (via bandForScore) -------------------------------------

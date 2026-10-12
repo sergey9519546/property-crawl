@@ -4,6 +4,7 @@ import { PropertyListing, SOURCES } from "./property-data";
 import { displayDate, displayMoney, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { X, Bookmark, FileText, Copy, Trash2, ImageOff } from "lucide-react";
+import { ListingCompareToggle } from "@/components/listings/listing-compare";
 
 interface WatchlistProps {
   isOpen: boolean;
@@ -337,6 +338,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 </button>
 
                 <div className="flex items-center gap-3">
+                  <ListingCompareToggle listingId={l.id} className="h-10 shrink-0" />
                   <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#15803D]">
                     {score === null ? "Not modeled" : `${Math.round(score)}/99`}
                   </span>

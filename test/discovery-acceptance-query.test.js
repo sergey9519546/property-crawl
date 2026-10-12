@@ -40,6 +40,21 @@ test('query refuses an inventory larger than the bounded non-Postgres adapter sc
   await assert.rejects(() => discovery.search(bounded, { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: [] }), (error) => error.status === 503);
 });
 
+test('a state-table redemption stamp is not a published redemption term', () => {
+  const immediate = discovery.queryFromUrl(new URL('http://localhost/api/listings?redemption=immediate'));
+  const active = discovery.queryFromUrl(new URL('http://localhost/api/listings?redemption=redemption_active'));
+  const stampedZero = { id: 'stamped-zero', redemptionDays: 0, provenance: { derivedFields: { redemption: { model: 'state-statutory-rule-lookup-v1', days: 0 } } } };
+  const publishedZero = { id: 'published-zero', redemptionDays: 0, provenance: {} };
+  const stampedWindow = { id: 'stamped-window', redemptionDays: 10, provenance: { derivedFields: { redemption: { days: 10 } } } };
+  const publishedWindow = { id: 'published-window', redemptionDays: 10, provenance: {} };
+  assert.equal(discovery.matches(stampedZero, immediate), false);
+  assert.equal(discovery.matches(publishedZero, immediate), true);
+  assert.equal(discovery.matches(stampedWindow, active), false);
+  assert.equal(discovery.matches(publishedWindow, active), true);
+  assert.match(discovery.pgWhere(immediate).sql, /redemption_days=0 AND provenance #> '\{derivedFields,redemption\}' IS NULL/);
+  assert.match(discovery.pgWhere(active).sql, /redemption_days>0 AND provenance #> '\{derivedFields,redemption\}' IS NULL/);
+});
+
 test('search filters and facet counts use the same filtered inventory', async () => {
   const result = await discovery.search(database([row('ca-1', 'CA'), row('ca-2', 'CA'), row('tx-1', 'TX')]), { q: 'ca-1', state: 'ca', county: '', source: 'servicelink', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', cursor: null, limit: 10, facets: ['state'] });
   assert.equal(result.total, 1);

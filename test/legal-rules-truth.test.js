@@ -122,6 +122,16 @@ test('legacy LOI and committee memo are evidence-review drafts, never fabricated
   assert.match(memo, /not bid authority/i);
   assert.match(memo, /no bid recommendation/i);
   assert.doesNotMatch(memo, /free and clear|deal score.*85/i);
+
+  const patternFlag = serverRules.generateInvestmentCommitteeMemo({
+    ...listing,
+    seniorLienRisk: 'high',
+    seniorLienWarning: 'Junior lien phrase detected in the notice text.',
+    provenance: { derivedFields: { seniorLienRisk: { model: 'legal-text-pattern-v1', inputs: ['raw'] } } },
+  });
+  assert.match(patternFlag, /HIGH is a text-pattern flag, not a title opinion/);
+  assert.match(patternFlag, /current title and lien-priority evidence/);
+  assert.doesNotMatch(patternFlag, /record note:/);
 });
 
 // The truth contract these rules must never violate is asserted above, against

@@ -2,8 +2,101 @@
 
 const crypto = require('crypto');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
-const { calculateCompleteCashToClose } = require('../intelligence/cash-to-close');
+const { computeCashToClose } = require('../ai/legal-rules');
 const { analyzeMunicipalViolations } = require('../intelligence/municipal-liens');
+
+const CASH_FIELDS = [
+  'registrationFunds',
+  'creditedDeposit',
+  'buyersPremium',
+  'sheriffPoundage',
+  'transferTax',
+  'delinquentTaxes',
+  'settlementCosts'
+];
+
+function explicitPositive(value) {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function publishedIdentifier(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const text = value.trim();
+    if (!text || /^(unassigned|unknown|n\/a|none|—|-)$/i.test(text)) continue;
+    return text;
+  }
+  return null;
+}
+
+function explicitNonNegative(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function packetCash(listing, operatorInput) {
+  const openingBid = explicitPositive(listing.openingBid);
+  const input = { openingBid, purchasePrice: openingBid };
+  for (const field of CASH_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(operatorInput, field)) continue;
+    const amount = explicitNonNegative(operatorInput[field]);
+    if (amount !== null) input[field] = amount;
+  }
+  const cash = computeCashToClose(input);
+  const cashDueReady = cash.registrationFunds !== null
+    && cash.creditedDeposit !== null
+    && cash.cashDueAtSettlement !== null;
+  return {
+    model: cash.model,
+    acquisitionCostStatus: cash.acquisitionCostStatus,
+    fundingTimingStatus: cash.fundingTimingStatus,
+    totalAcquisitionCost: cash.totalAcquisitionCost,
+    buyersPremium: cash.buyersPremium,
+    sheriffPoundage: cash.sheriffPoundage,
+    transferTax: cash.transferTax,
+    delinquentTaxes: cash.delinquentTaxes,
+    settlementCosts: cash.settlementCosts,
+    registrationFunds: cash.registrationFunds,
+    creditedDeposit: cash.creditedDeposit,
+    cashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
+    netCashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
+    missingInputs: cash.missingInputs,
+    assumptions: cash.assumptions
+  };
+}
+
+function moneyCell(value) {
+  return Number.isFinite(value) ? `$${Number(value).toLocaleString()}` : 'Not entered';
+}
+
+function publishedRedemptionDays(listing) {
+  const derived = listing?.provenance?.derivedFields?.redemption;
+  if (derived != null) return null;
+  const raw = listing?.redemptionDays;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const parsed = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function municipalSurvivability(listing) {
+  if (!Array.isArray(listing.municipalViolations)) {
+    return {
+      hasCondemnationOrder: null,
+      estimatedSurvivingLiability: null,
+      activeViolationsCount: null,
+      criticalAlerts: []
+    };
+  }
+  const municipalRisk = analyzeMunicipalViolations(listing, listing.municipalViolations);
+  return {
+    hasCondemnationOrder: municipalRisk.isCondemnedOrDemolitionRisk,
+    estimatedSurvivingLiability: municipalRisk.estimatedSurvivingLienLiability,
+    activeViolationsCount: municipalRisk.activeViolationCount,
+    criticalAlerts: municipalRisk.municipalWarnings
+  };
+}
 
 function attachedValuation(macro) {
   if (!macro || typeof macro !== 'object') return null;
@@ -19,32 +112,26 @@ function attachedValuation(macro) {
  *
  * @param {Object} listing - The target property listing
  * @param {Object} [operatorInput] - Operator decisions and notes
- * @param {string} [operatorInput.disposition='UNDERWRITE'] - 'BID' | 'PASS' | 'UNDERWRITE'
+ * @param {string} [operatorInput.disposition] - Recorded 'BID' | 'PASS' | 'UNDERWRITE'. Omitted means no decision.
  * @param {number} [operatorInput.maxAllowableOffer] - Target ceiling bid
  * @param {string} [operatorInput.operatorNotes] - Due diligence comments
- * @param {string} [operatorInput.operatorId='operator-current'] - Operator ID
+ * @param {string} [operatorInput.operatorId] - Operator ID. Omitted means no sign-off.
  * @returns {Object} Structured decision packet
  */
 function buildDecisionPacket(listing = {}, operatorInput = {}) {
   const address = listing.address || 'Address Unrecorded';
   const state = String(listing.state || 'US').toUpperCase();
   const county = listing.county || 'Unspecified County';
-  const openingBid = Number(listing.openingBid) || 0;
+  const openingBid = explicitPositive(listing.openingBid);
 
   // 1. Title Risk Arbitration
   const titleRisk = arbitrateTitleRisk(listing);
 
-  // 2. Cash-to-Close Schedule
-  const cashToClose = calculateCompleteCashToClose({
-    winningBid: openingBid,
-    state,
-    county,
-    source: listing.source,
-    deposit: listing.deposit
-  });
+  // 2. Cash requirement. State, source, and a published deposit never become fees.
+  const cashToClose = packetCash(listing, operatorInput);
 
-  // 3. Municipal Liens & Code Violations
-  const municipalRisk = analyzeMunicipalViolations(listing.municipalViolations || [], state);
+  // 3. Municipal liens only when the caller supplied violation records.
+  // A missing list is not an empty docket, and the state code is not a violation.
 
   // 4. Valuation stays empty unless a caller attached a non-index, non-bid basis.
   // The in-repo HPI table is not an official FHFA release and must not fill this slot.
@@ -65,7 +152,10 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
     .update(JSON.stringify({ listingId: listing.id, provenance: provenancePayload, openingBid }))
     .digest('hex');
 
-  const disposition = (operatorInput.disposition || 'UNDERWRITE').toUpperCase();
+  const disposition = typeof operatorInput.disposition === 'string' && operatorInput.disposition.trim()
+    ? operatorInput.disposition.trim().toUpperCase()
+    : null;
+  const maxAllowableOffer = explicitPositive(operatorInput.maxAllowableOffer);
   const packetTimestamp = new Date().toISOString();
 
   const packet = {
@@ -81,7 +171,13 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       county,
       zip: listing.zip || '',
       propType: listing.propType || 'Unknown',
-      caseNumber: listing.caseNumber || listing.docketNumber || 'Unassigned',
+      caseNumber: publishedIdentifier(
+        listing.caseNumber,
+        listing.docketNumber,
+        listing.provenance?.courtCaseNumber,
+        listing.provenance?.sourceFacts?.caseNumber,
+        listing.provenance?.sourceFacts?.docketNumber
+      ),
       saleDate: listing.saleDate || null,
       openingBid
     },
@@ -94,26 +190,13 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
         firstMortgageSurvives: titleRisk.firstMortgageSurvives,
         hasIrsTaxLien: titleRisk.irsTaxLienRedemption?.hasLien || false,
         irsRedemptionDays: titleRisk.irsTaxLienRedemption?.redemptionDays || 0,
-        statutoryRedemptionDays: titleRisk.statutoryRedemption?.days || 0,
+        statutoryRedemptionDays: publishedRedemptionDays(listing),
         hoaSuperPriorityApplies: titleRisk.hoaSuperPriority?.isSuperPriorityState || false,
         titleWarnings: titleRisk.titleWarnings || [],
         titleActionAdvice: titleRisk.titleActionAdvice || ''
       },
-      cashToClose: {
-        totalAcquisitionCost: cashToClose.totalAcquisitionCost,
-        buyersPremium: cashToClose.buyersPremium,
-        sheriffPoundage: cashToClose.sheriffPoundage,
-        transferTax: cashToClose.transferTax,
-        recordingFees: cashToClose.recordingFees,
-        creditedDeposit: cashToClose.creditedDeposit,
-        netCashDueAtSettlement: cashToClose.netCashDueAtSettlement
-      },
-      municipalSurvivability: {
-        hasCondemnationOrder: municipalRisk.isCondemnedOrDemolitionRisk,
-        estimatedSurvivingLiability: municipalRisk.estimatedSurvivingLienLiability,
-        activeViolationsCount: municipalRisk.activeViolationCount,
-        criticalAlerts: municipalRisk.municipalWarnings
-      },
+      cashToClose,
+      municipalSurvivability: municipalSurvivability(listing),
       macroValuation: macroValuation ? {
         estimatedMacroValue: macroValuation.estimatedMacroValue,
         estLow: macroValuation.estLow,
@@ -125,10 +208,10 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
     },
     dispositionSignOff: {
       decision: disposition,
-      maxAllowableOffer: Number(operatorInput.maxAllowableOffer) || null,
-      operatorNotes: operatorInput.operatorNotes || '',
-      operatorId: operatorInput.operatorId || 'operator-session',
-      signedAt: packetTimestamp
+      maxAllowableOffer,
+      operatorNotes: typeof operatorInput.operatorNotes === 'string' ? operatorInput.operatorNotes : '',
+      operatorId: operatorInput.operatorId || null,
+      signedAt: disposition ? packetTimestamp : null
     }
   };
 
@@ -144,6 +227,27 @@ function formatDecisionPacketMarkdown(packet) {
   const c = u.cashToClose;
   const t = u.titleRisk;
   const d = packet.dispositionSignOff;
+  const priorityKnown = t.plaintiffType && t.plaintiffType !== 'UNKNOWN';
+  const mortgageLine = !priorityKnown
+    ? 'Not established from the published plaintiff text'
+    : t.firstMortgageSurvives
+      ? 'Published plaintiff text matches a junior lien. A senior mortgage is flagged as surviving. This is not a title opinion.'
+      : 'No senior-lien survival flag from the published plaintiff text. This is not a title opinion.';
+  const proceedLine = !priorityKnown
+    ? 'No bid clearance. The plaintiff position was not established.'
+    : t.canProceedWithBid
+      ? 'No senior-lien block from the published plaintiff text'
+      : 'Senior-lien block from the published plaintiff text';
+  const irsLine = t.hasIrsTaxLien
+    ? `IRS phrase in the supplied record (${t.irsRedemptionDays}-day redemption period)`
+    : 'No IRS phrase in the supplied record. That is not a lien search.';
+  const redemptionLine = Number.isFinite(t.statutoryRedemptionDays)
+    ? `${t.statutoryRedemptionDays} days recorded in this dataset`
+    : 'Not published';
+  const warningBlock = Array.isArray(t.titleWarnings) && t.titleWarnings.length > 0
+    ? `\n### Pattern flags from the published text\n${t.titleWarnings.map((w) => `- ${w}`).join('\n')}\n`
+    : '';
+  const openingLine = Number.isFinite(p.openingBid) ? `$${p.openingBid.toLocaleString()} (published opening amount)` : 'Not published';
 
   return `# FORECLOSURE DUE DILIGENCE DECISION PACKET
 **Packet ID**: \`${packet.packetId}\`  
@@ -158,38 +262,39 @@ function formatDecisionPacketMarkdown(packet) {
 | **Property ID** | ${p.id} |
 | **Address** | ${p.address}, ${p.city}, ${p.state} ${p.zip} |
 | **County / Court** | ${p.county} |
-| **Case / Docket #** | ${p.caseNumber} |
+| **Case / Docket #** | ${p.caseNumber || 'Not published'} |
 | **Property Type** | ${p.propType} |
-| **Auction Date** | ${p.saleDate || 'Unscheduled'} |
-| **Opening Bid** | $${p.openingBid.toLocaleString()} |
+| **Auction Date** | ${p.saleDate || 'Not published'} |
+| **Opening Bid** | ${openingLine} |
 
 ---
 
 ## 2. Statutory Title Risk & Lien Survival Matrix
 - **Foreclosing Party**: \`${t.plaintiffType}\`
-- **Underwriting Risk Level**: **${t.riskLevel}** (${t.canProceedWithBid ? 'BID CLEARABLE' : 'BID PROHIBITED / DEFECTIVE TITLE'})
-- **1st Mortgage Status**: ${t.firstMortgageSurvives ? '⚠️ **SURVIVES FORECLOSURE (SENIOR LIEN INTACT)**' : '✅ Foreclosed & Wiped'}
-- **IRS Federal Tax Lien (26 U.S.C. § 7425)**: ${t.hasIrsTaxLien ? `⚠️ Active (${t.irsRedemptionDays}-day redemption period)` : 'None detected'}
-- **State Statutory Redemption Period**: ${t.statutoryRedemptionDays} days
-- **HOA Assessment Priority**: ${t.hoaSuperPriorityApplies ? 'Super-priority statutory assessment applies' : 'Subordinate to senior mortgage'}
-
-### Critical Title Warnings & Notices:
-${(t.titleWarnings && t.titleWarnings.length > 0) ? t.titleWarnings.map((w) => `- ⚠️ ${w}`).join('\n') : '- No active title defect flags detected.'}
-- **Underwriting Recommendation**: ${t.titleActionAdvice}
+- **Underwriting Risk Level**: **${t.riskLevel}** (${proceedLine})
+- **1st Mortgage Status**: ${mortgageLine}
+- **IRS Federal Tax Lien (26 U.S.C. § 7425)**: ${irsLine}
+- **Recorded redemption period**: ${redemptionLine}
+- **HOA Assessment Priority**: ${t.hoaSuperPriorityApplies ? 'A super-priority assessment statute is on file for this state. It is not a finding that an assessment exists on this property.' : 'No super-priority assessment statute is applied from this state code.'}
+${warningBlock}
 
 ---
 
-## 3. Comprehensive Cash-to-Close Schedule
-| Settlement Cost Line Item | Statutory Basis | Amount Due |
-|---|---|---|
-| **Winning Bid (Hammer Price)** | Base auction bid | $${p.openingBid.toLocaleString()} |
-| **Buyer's Premium** | Online Marketplace Fee | $${c.buyersPremium.toLocaleString()} |
-| **Sheriff Poundage** | County Sheriff Fee | $${c.sheriffPoundage.toLocaleString()} |
-| **Documentary Transfer Taxes** | State / County Transfer Tax | $${c.transferTax.toLocaleString()} |
-| **Deed Prep & Recording** | County Recorder Fee | $${c.recordingFees.toLocaleString()} |
-| **Total Acquisition Cost** | Gross certified funds | **$${c.totalAcquisitionCost.toLocaleString()}** |
-| **Credited Deposit** | Bidding registration deposit | -$${c.creditedDeposit.toLocaleString()} |
-| **NET CASH DUE AT SETTLEMENT** | **Due in certified funds within 24-48 hrs** | **$${c.netCashDueAtSettlement.toLocaleString()}** |
+## 3. Cash requirement
+No fee is inferred from the source or the state. A blank line was not entered. Registration funds are not added to cash to close.
+
+| Line | Amount |
+|---|---|
+| **Published opening amount** | ${openingLine} |
+| **Buyer's premium** | ${moneyCell(c.buyersPremium)} |
+| **Sheriff / trustee fee** | ${moneyCell(c.sheriffPoundage)} |
+| **Transfer tax** | ${moneyCell(c.transferTax)} |
+| **Taxes or debt the buyer must satisfy** | ${moneyCell(c.delinquentTaxes)} |
+| **Other settlement / recording costs** | ${moneyCell(c.settlementCosts)} |
+| **Acquisition cost** | ${moneyCell(c.totalAcquisitionCost)} |
+| **Registration funds** | ${moneyCell(c.registrationFunds)} |
+| **Deposit credited to the price** | ${moneyCell(c.creditedDeposit)} |
+| **Cash to close** | ${c.cashDueAtSettlement === null ? 'Blank until registration funds and the credited deposit are both entered' : moneyCell(c.cashDueAtSettlement)} |
 
 ---
 
@@ -201,10 +306,10 @@ ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.to
 ---
 
 ## 5. Operator Due Diligence Sign-Off
-- **Disposition Decision**: **\`${d.decision}\`**
-- **Max Allowable Offer (MAO)**: ${d.maxAllowableOffer ? `$${d.maxAllowableOffer.toLocaleString()}` : 'Not Specified'}
-- **Operator ID**: \`${d.operatorId}\`
-- **Timestamp**: ${d.signedAt}
+- **Disposition Decision**: ${d.decision ? `**\`${d.decision}\`**` : 'Not recorded'}
+- **Max Allowable Offer (MAO)**: ${Number.isFinite(d.maxAllowableOffer) ? `$${d.maxAllowableOffer.toLocaleString()}` : 'Not recorded'}
+- **Operator ID**: ${d.operatorId ? `\`${d.operatorId}\`` : 'Not recorded'}
+- **Timestamp**: ${d.signedAt || 'Not recorded'}
 - **Operator Notes**:
 > ${d.operatorNotes || 'No operator commentary recorded.'}
 `;

@@ -170,6 +170,9 @@ function classifyListing(record = {}, now = Date.now()) {
   if (canonical === 'sold') {
     return { concluded: true, verdict: 'canonical_sold', label: 'status: sold', conflicting: false, note: null };
   }
+  if (canonical === 'closed') {
+    return { concluded: true, verdict: 'canonical_closed', label: 'status: closed', conflicting: false, note: null };
+  }
   if (canonical === 'cancelled') {
     return { concluded: true, verdict: 'canonical_cancelled', label: 'status: cancelled', conflicting: false, note: null };
   }

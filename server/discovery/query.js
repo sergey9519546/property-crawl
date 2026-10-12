@@ -213,6 +213,14 @@ function derived(row) {
     freshness: row.provenance?.origin === "live" ? "observed" : "unverified",
   };
 }
+function publishedRedemptionDays(row) {
+  // derivedFields.redemption means the day count came from the state table
+  // because the publisher omitted one. That number is not a sale term.
+  if (row?.provenance?.derivedFields?.redemption) return null;
+  if (row?.redemptionDays == null || row.redemptionDays === "") return null;
+  const days = Number(row.redemptionDays);
+  return Number.isFinite(days) ? days : null;
+}
 function matches(row, f) {
   const d = derived(row);
   if (
@@ -271,8 +279,9 @@ function matches(row, f) {
   if (f.minEquity != null && (row.equity == null || Number(row.equity) < f.minEquity)) return false;
   if (f.seniorLien === "clean" && (!row.seniorLienRisk || ["high", "unknown"].includes(row.seniorLienRisk))) return false;
   if (f.seniorLien === "risk" && row.seniorLienRisk !== "high") return false;
-  if (f.redemption === "immediate" && row.redemptionDays !== 0) return false;
-  if (f.redemption === "redemption_active" && !(row.redemptionDays > 0)) return false;
+  const publishedRedemption = publishedRedemptionDays(row);
+  if (f.redemption === "immediate" && publishedRedemption !== 0) return false;
+  if (f.redemption === "redemption_active" && !(publishedRedemption > 0)) return false;
   if (f.hasDocuments === "unknown") {
     if (d.hasDocuments !== null && d.hasDocuments !== undefined) return false;
   } else if (f.hasDocuments != null && d.hasDocuments !== f.hasDocuments)
@@ -437,8 +446,11 @@ function pgWhere(f, start = 1) {
   if (f.minEquity != null) add("equity_spread>=?", f.minEquity);
   if (f.seniorLien === "clean") w.push("senior_lien_risk IS NOT NULL AND senior_lien_risk NOT IN ('high','unknown')");
   else if (f.seniorLien === "risk") w.push("senior_lien_risk='high'");
-  if (f.redemption === "immediate") w.push("redemption_days=0");
-  else if (f.redemption === "redemption_active") w.push("redemption_days>0");
+  // `#>` avoids the jsonb `?` operator, which this builder treats as a placeholder.
+  // A state-table stamp lives at derivedFields.redemption and must not satisfy
+  // a published-term filter. A missing provenance path stays eligible.
+  if (f.redemption === "immediate") w.push("redemption_days=0 AND provenance #> '{derivedFields,redemption}' IS NULL");
+  else if (f.redemption === "redemption_active") w.push("redemption_days>0 AND provenance #> '{derivedFields,redemption}' IS NULL");
   // Document evidence is tri-state and can arrive in three places, exactly as
   // derived() reads them: the has_documents column, and the sourceFacts.documents
   // and media.documents arrays. The SQL used to test `has_documents IS NULL`

@@ -16,4 +16,8 @@ test("Next score bands mirror the deal-scoring taxonomy", () => {
   assert.equal(scoreBandLabel(60), "Strong");
   assert.equal(bandForScore(0), null);
   assert.match(DEAL_SCORE_MEANING, /triage only/i);
+  const byKey = Object.fromEntries(SCORE_BANDS.map((band) => [band.key, band.desc]));
+  assert.equal(byKey.strong, "Opening amount is about 47–58% of the valuation midpoint.");
+  assert.doesNotMatch(byKey.fair, /fee|repair/i);
+  assert.doesNotMatch(byKey.strong, /half of value/i);
 });

@@ -19,6 +19,7 @@ const COLS: Col[] = [
       { label: "Source-observed record labels", ok: true },
       { label: "Exact listing detail pages", ok: true },
       { label: "Local watchlists and saved searches", ok: true },
+      { label: "Saved-search matches, with email when mail is configured", ok: true },
       { label: "CSV and JSON watchlist exports", ok: true },
     ],
   },
@@ -39,7 +40,6 @@ const COLS: Col[] = [
     highlight: false,
     features: [
       { label: "Cloud accounts and device sync", ok: false },
-      { label: "Email and background search alerts", ok: false },
       { label: "Guaranteed complete national coverage", ok: false },
       { label: "Verified title reports and live comps", ok: false },
     ],

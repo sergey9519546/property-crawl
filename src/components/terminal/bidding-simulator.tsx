@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Sparkles } from "lucide-react";
 import { computeCashToClose, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
+import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -36,6 +37,26 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   });
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
+
+  useEffect(() => {
+    const stored = readUnderwriteScenario(listing.id);
+    if (!stored) return;
+    setScenario({
+      registrationFunds: stored.registrationFunds,
+      creditedDeposit: stored.creditedDeposit,
+      buyersPremium: stored.buyersPremium,
+      sheriffPoundage: stored.sheriffPoundage,
+      transferTax: stored.transferTax,
+      delinquentTaxes: stored.delinquentTaxes,
+      settlementCosts: stored.settlementCosts,
+    });
+    setRehabBudget(stored.rehabBudget);
+    setTargetMargin(stored.targetMargin);
+  }, [listing.id]);
+
+  const persistScenario = (next: Record<ScenarioField, string>, rehab = rehabBudget, margin = targetMargin) => {
+    writeUnderwriteScenario(listing.id, { ...next, rehabBudget: rehab, targetMargin: margin });
+  };
 
   const openingBid = positiveNumber(listing.openingBid);
   const estimatedValue = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
@@ -74,12 +95,16 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
   const updateScenario = (field: ScenarioField, value: string) => {
     if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
-    setScenario((current) => ({ ...current, [field]: value }));
+    const next = { ...scenario, [field]: value };
+    setScenario(next);
+    persistScenario(next);
     setAiStrategy(null);
   };
 
   const affirmZeroCosts = () => {
-    setScenario((current) => ({ ...current, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" }));
+    const next = { ...scenario, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" };
+    setScenario(next);
+    persistScenario(next);
     setAiStrategy(null);
   };
 
@@ -137,11 +162,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         <div className="space-y-4 border-t border-[#E5E7EB] pt-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm font-semibold text-[#374151]"><label htmlFor="rehab-budget">Rehab assumption</label><span>{displayMoney(rehabBudget)}</span></div>
-            <input id="rehab-budget" type="range" min="0" max="150000" step="5000" value={rehabBudget} onChange={(event) => setRehabBudget(Number(event.target.value))} className="w-full accent-[#0F172A]" />
+            <input id="rehab-budget" type="range" min="0" max="150000" step="5000" value={rehabBudget} onChange={(event) => { const next = Number(event.target.value); setRehabBudget(next); persistScenario(scenario, next, targetMargin); }} className="w-full accent-[#0F172A]" />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm font-semibold text-[#374151]"><label htmlFor="target-margin">Target profit margin</label><span>{targetMargin}%</span></div>
-            <input id="target-margin" type="range" min="10" max="40" step="5" value={targetMargin} onChange={(event) => setTargetMargin(Number(event.target.value))} className="w-full accent-[#0F172A]" />
+            <input id="target-margin" type="range" min="10" max="40" step="5" value={targetMargin} onChange={(event) => { const next = Number(event.target.value); setTargetMargin(next); persistScenario(scenario, rehabBudget, next); }} className="w-full accent-[#0F172A]" />
           </div>
         </div>
 
@@ -152,13 +177,15 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalAcquisitionCost)}</p>
               <p className="mt-1 text-[10px] text-[#5B6472]">The published opening amount plus the acquisition costs you entered.</p>
             </div>
-            {cash.totalCashToClose !== null ? (
+            {amounts.registrationFunds !== null && amounts.creditedDeposit !== null && cash.cashDueAtSettlement !== null ? (
               <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3">
                 <p className="text-[11px] font-bold uppercase text-[#5B6472]">Cash to close</p>
-                <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.totalCashToClose)}</p>
-                <p className="mt-1 text-[10px] text-[#5B6472]">Adds the registration funds and credited deposit you entered.</p>
+                <p className="text-xl font-extrabold text-[#111827]">{displayMoney(cash.cashDueAtSettlement)}</p>
+                <p className="mt-1 text-[10px] text-[#5B6472]">Acquisition cost minus the deposit credited to the price. Registration funds are not added again.</p>
               </div>
-            ) : null}
+            ) : (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">Cash to close stays blank until registration funds and the credited deposit are both entered.</div>
+            )}
           </div>
         ) : (
           <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900"><AlertTriangle className="h-4 w-4 shrink-0" /><p>Unknown taxes, debt, and fees are not treated as $0. Every acquisition-cost field needs a value before any total can be shown.</p></div>

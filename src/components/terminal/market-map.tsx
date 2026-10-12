@@ -8,6 +8,7 @@ import type { Feature as GeoJsonFeature } from "geojson";
 import { displayMoney, displayText, knownNumber } from "@/lib/listing-display";
 import { inspectMapLocation, groupMapLocations } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
+import { ListingCompareToggle } from "@/components/listings/listing-compare";
 import { PropertyListing, SOURCES } from "./property-data";
 
 type MarketMapProps = {
@@ -447,7 +448,10 @@ function MapPreview({
         </div>
       ) : null}
       <div className="mt-3 grid grid-cols-3 gap-2 text-center"><MapStat label="Reported" value={displayMoney(listing.openingBid)} /><MapStat label="Modeled value" value={displayMoney(listing.mid, "Not modeled")} /><MapStat label="Bid spread" value={displayMoney(listing.equity, "Not modeled")} green /></div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3">
+        <ListingCompareToggle listingId={listing.id} className="h-11 w-full" />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
         <button type="button" onClick={() => onUnderwrite(listing)} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl bg-slate-950 px-3 text-xs font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2">Underwrite <ArrowRight className="h-3.5 w-3.5" aria-hidden /></button>
         <Link href={`/listings/${listing.id}`} className="inline-flex h-11 items-center justify-center gap-1 rounded-xl border border-slate-300 px-3 text-xs font-bold text-slate-950 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900">Listing page <ArrowRight className="h-3.5 w-3.5" aria-hidden /></Link>
       </div>

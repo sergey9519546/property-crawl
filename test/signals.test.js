@@ -67,7 +67,10 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(rawNoticeReturn.signals.find(s => s.key === 'returned_to_market').status, 'supported');
 
     const standard = evaluateOpportunitySignals(sampleListing({ status: 'scheduled' }));
-    assert.equal(standard.signals.find(s => s.key === 'returned_to_market').status, 'unknown');
+    const standardSignal = standard.signals.find(s => s.key === 'returned_to_market');
+    assert.equal(standardSignal.status, 'unknown');
+    assert.doesNotMatch(standardSignal.reason, /initial or standard active|standard offering/i);
+    assert.match(standardSignal.reason, /does not say this property returned to market/);
   });
 
   test('evaluates bid_to_value_ratio accurately and reports spread', () => {
@@ -150,6 +153,20 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
       redemptionDays: null
     }));
     assert.equal(incomplete.signals.find(s => s.key === 'title_equity_unresolved').status, 'unknown');
+
+    const stamped = evaluateOpportunitySignals(sampleListing({
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'CivilView',
+        recordId: '99999',
+        derivedFields: {
+          redemption: { model: 'state-statutory-rule-lookup-v1', days: 180 },
+          seniorLienRisk: { model: 'legal-text-pattern-v1' },
+        },
+      },
+    }));
+    assert.equal(stamped.signals.find(s => s.key === 'title_equity_unresolved').status, 'unknown');
   });
 
   test('computes deterministic triagePriority with published component weights', () => {

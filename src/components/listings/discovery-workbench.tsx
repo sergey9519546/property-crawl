@@ -20,6 +20,8 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { DiscoveryCard } from "@/components/listings/discovery-card";
+import { CompareTray, useCompareSelection } from "@/components/listings/listing-compare";
+import { COMPARE_LIMIT } from "@/lib/compare-selection.js";
 import { DiscoveryMap } from "@/components/listings/discovery-map";
 import { TriageChips } from "@/components/listings/triage-chips";
 import { SaveSearchButton } from "@/components/hunts/save-search-button";
@@ -192,6 +194,14 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   // The server already loaded this URL. Keep those rows in the first HTML
   // response, including a county filter, before the browser refetch lands.
   const payload = loadedResult?.key === requestKey ? loadedResult.payload : loadedResult ? null : initialPayload;
+  const compare = useCompareSelection();
+  const compareLabels = React.useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const listing of payload?.listings ?? []) {
+      if (typeof listing?.id === "string" && listing.address) labels[listing.id] = listing.address;
+    }
+    return labels;
+  }, [payload]);
   const [saved, setSaved] = React.useState<Set<string>>(new Set());
   // `saved` is read inside toggleSaved, which must keep a stable identity so
   // that memoized cards are not re-rendered by an unrelated state change.
@@ -729,15 +739,18 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       )}
       {error && payload ? <p role="status" className="mt-3 text-sm text-slate-600">Showing previously loaded results. Refresh to check for updates.</p> : null}
       {watchlistError ? <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{watchlistError}</p> : null}
+      <CompareTray ids={compare.ids} labels={compareLabels} onRemove={compare.remove} onMakeTarget={compare.makeTarget} onClear={compare.clear} />
       {filters.view === "map" ? (
         <div className="mt-5">
-          <DiscoveryMap filters={filters} onOpenListing={openMapListing} />
+          <DiscoveryMap filters={filters} onOpenListing={openMapListing} onCompare={compare.toggle} compareIds={compare.ids} compareFull={compare.full} />
         </div>
       ) : !payload && error ? null : filters.view === "calendar" && payload ? (
         <DiscoveryCalendar
           listings={filteredListings}
           filters={filters}
           truncated={Boolean(payload?.page?.hasMore)}
+          compareIds={compare.ids}
+          onCompare={compare.toggle}
         />
       ) : (
         <>
@@ -818,6 +831,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   saved={saved.has(listing.id)}
                   saving={savingIds.has(listing.id)}
                   onSave={toggleSaved}
+                  compared={compare.ids.includes(listing.id)}
+                  compareFull={compare.full}
+                  onCompare={compare.toggle}
                 />
               ))}
             </div>
@@ -873,10 +889,14 @@ function DiscoveryCalendar({
   listings,
   filters,
   truncated,
+  compareIds,
+  onCompare,
 }: {
   listings: PropertyListing[];
   filters: DiscoveryFilters;
   truncated: boolean;
+  compareIds: string[];
+  onCompare: (id: string) => void;
 }) {
   const [calendarRollup, setCalendarRollup] = React.useState<AuctionCalendarResponse | null>(null);
   const [neighborhoodRollup, setNeighborhoodRollup] = React.useState<NeighborhoodsResponse | null>(null);
@@ -1037,23 +1057,31 @@ function DiscoveryCalendar({
                 {date === UNKNOWN_SALE_DATE ? date : displayDate(date)}
               </h3>
               <div className="mt-3 space-y-2">
-                {items.map((listing) => (
-                  <Link
-                    key={listing.id}
-                    href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
-                    prefetch={false}
-                    className="block rounded-lg bg-slate-50 p-3 text-sm hover:bg-slate-100"
-                  >
-                    <strong className="block">{listing.address}</strong>
-                    <TriageChips listing={listing} className="mt-1.5" />
-                    <span className="mt-1 block text-xs text-slate-500">
-                      {sourceDisplayText(
-                        SOURCES[listing.source]?.label || listing.source,
-                      )}{" "}
-                      · {listing.discoveryStatus || "status not established"}
-                    </span>
-                  </Link>
-                ))}
+                {items.map((listing) => {
+                  const selected = compareIds.includes(listing.id);
+                  const compareFull = compareIds.length >= COMPARE_LIMIT && !selected;
+                  return (
+                  <div key={listing.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                    <Link
+                      href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
+                      prefetch={false}
+                      className="block hover:underline"
+                    >
+                      <strong className="block">{listing.address}</strong>
+                      <TriageChips listing={listing} className="mt-1.5" />
+                      <span className="mt-1 block text-xs text-slate-500">
+                        {sourceDisplayText(
+                          SOURCES[listing.source]?.label || listing.source,
+                        )}{" "}
+                        · {listing.discoveryStatus || "status not established"}
+                      </span>
+                    </Link>
+                    <button type="button" aria-pressed={selected} aria-label={`${selected ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull} onClick={() => onCompare(listing.id)} className="mt-2 inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+                      {selected ? "In compare" : compareFull ? "Compare is full" : "Compare"}
+                    </button>
+                  </div>
+                  );
+                })}
               </div>
             </article>
           ))}

@@ -612,8 +612,21 @@ function generateInvestmentCommitteeMemo(listing = {}, creMetrics = {}) {
   const dealScore = dealScoreValue !== null && dealScoreValue >= 1 && dealScoreValue <= 99
     ? Math.round(dealScoreValue)
     : null;
-  const redemptionDays = nonNegativeNumber(listing.redemptionDays);
-  const seniorLienRisk = cleanLabel(listing.seniorLienRisk);
+  const derivedRedemption = listing?.provenance?.derivedFields?.redemption;
+  const redemptionDays = derivedRedemption ? null : nonNegativeNumber(listing.redemptionDays);
+  const baselineRedemptionDays = derivedRedemption
+    ? nonNegativeNumber(derivedRedemption.days ?? listing.redemptionDays)
+    : null;
+  const derivedSeniorLien = listing?.provenance?.derivedFields?.seniorLienRisk;
+  const seniorLienRisk = derivedSeniorLien ? null : cleanLabel(listing.seniorLienRisk);
+  const patternSeniorLien = derivedSeniorLien ? cleanLabel(listing.seniorLienRisk) : null;
+  const seniorLienSentence = derivedSeniorLien
+    ? (patternSeniorLien && patternSeniorLien.toLowerCase() !== 'unknown'
+      ? `${patternSeniorLien.toUpperCase()} is a text-pattern flag, not a title opinion`
+      : 'No junior-lien phrase was stored, not a title opinion')
+    : (seniorLienRisk === null
+      ? 'Unknown — current title and docket evidence required'
+      : `${seniorLienRisk.toUpperCase()} (unverified risk signal; not a title conclusion)`);
   const occupancy = cleanLabel(listing.occupancy);
   const netOperatingIncome = nonNegativeNumber(creMetrics?.netOperatingIncome);
   const capitalizationRate = nonNegativeNumber(creMetrics?.capitalizationRate);
@@ -651,8 +664,8 @@ function generateInvestmentCommitteeMemo(listing = {}, creMetrics = {}) {
 - **Bid Spread (valuation midpoint minus opening amount)**: ${spread === null || discountPct === null ? 'Unavailable — opening amount and both valuation bounds are required' : `${formatMoney(spread)} (${discountPct}% modeled spread; not equity and not an appraisal)`}
 
 ## TITLE / SALE-TERMS EVIDENCE
-- **Redemption / Objection Period**: ${redemptionDays === null ? 'Unknown — official sale terms and current law review required' : `${Math.round(redemptionDays)} days recorded in this dataset; verify the triggering event, exceptions, and current official terms`}${cleanLabel(listing.redemptionWarning) ? ` (unverified record note: ${cleanLabel(listing.redemptionWarning)})` : ''}
-- **Senior Lien Signal**: ${seniorLienRisk === null ? 'Unknown — current title and docket evidence required' : `${seniorLienRisk.toUpperCase()} (unverified risk signal; not a title conclusion)`}${cleanLabel(listing.seniorLienWarning) ? ` (record note: ${cleanLabel(listing.seniorLienWarning)})` : ''}
+- **Redemption / Objection Period**: ${derivedRedemption ? `${baselineRedemptionDays === null ? 'No day count was selected from the state table' : `${Math.round(baselineRedemptionDays)} days is a state-table baseline`}, not a term recorded on this sale` : redemptionDays === null ? 'Unknown — official sale terms and current law review required' : `${Math.round(redemptionDays)} days recorded in this dataset; verify the triggering event, exceptions, and current official terms`}${!derivedRedemption && cleanLabel(listing.redemptionWarning) ? ` (unverified record note: ${cleanLabel(listing.redemptionWarning)})` : ''}
+- **Senior Lien Signal**: ${seniorLienSentence}${!derivedSeniorLien && cleanLabel(listing.seniorLienWarning) ? ` (record note: ${cleanLabel(listing.seniorLienWarning)})` : ''}
 - **Occupancy Status**: ${occupancy ?? 'Unknown — inspection or other authorized evidence required'}
 
 ## FINANCIAL & RETURN METRICS

@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS listings (
     -- a NOT NULL here made any such upsert fail on a schema.sql-only bootstrap
     -- (docker-compose.yml mounts this file into docker-entrypoint-initdb.d).
     has_documents BOOLEAN,
-    status VARCHAR(32) NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown', 'active', 'pending', 'sold', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
+    status VARCHAR(32) NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown', 'active', 'pending', 'sold', 'closed', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

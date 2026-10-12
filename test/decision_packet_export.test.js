@@ -45,11 +45,28 @@ test('Decision Packet: constructs complete forensic due diligence packet', () =>
   assert.equal(t.canProceedWithBid, true);
   assert.equal(t.firstMortgageSurvives, false);
 
-  // Underwriting: Cash to Close
-  const c = packet.underwriting.cashToClose;
-  assert.ok(c.totalAcquisitionCost > 55000);
-  assert.equal(c.creditedDeposit, 5000);
-  assert.equal(c.netCashDueAtSettlement, c.totalAcquisitionCost - 5000);
+  // A published deposit and the state code are not fees.
+  const untouched = packet.underwriting.cashToClose;
+  assert.equal(untouched.buyersPremium, null);
+  assert.equal(untouched.totalAcquisitionCost, null);
+  assert.equal(untouched.creditedDeposit, null);
+  assert.equal(untouched.netCashDueAtSettlement, null);
+
+  const entered = buildDecisionPacket(listing, {
+    ...operatorInput,
+    registrationFunds: 500,
+    creditedDeposit: 1000,
+    buyersPremium: 0,
+    sheriffPoundage: 0,
+    transferTax: 0,
+    delinquentTaxes: 0,
+    settlementCosts: 0
+  });
+  const c = entered.underwriting.cashToClose;
+  assert.equal(c.totalAcquisitionCost, 55000);
+  assert.equal(c.creditedDeposit, 1000);
+  assert.equal(c.netCashDueAtSettlement, 54000);
+  assert.equal(c.cashDueAtSettlement, 54000);
 
   // Operator Sign-Off
   const d = packet.dispositionSignOff;
@@ -96,7 +113,75 @@ test('Decision Packet: renders print-ready Markdown dossier with checksum', () =
   assert.match(md, /\*\*Packet ID\*\*: `DP-TRSY-27-66-804/);
   assert.match(md, /\*\*Checksum \(SHA-256\)\*\*: `[0-9a-f]{64}`/);
   assert.match(md, /## 2\. Statutory Title Risk & Lien Survival Matrix/);
-  assert.match(md, /## 3\. Comprehensive Cash-to-Close Schedule/);
+  assert.match(md, /Recorded redemption period\*\*: Not published/);
+  assert.equal(packet.underwriting.titleRisk.statutoryRedemptionDays, null);
+  assert.equal(packet.underwriting.municipalSurvivability.activeViolationsCount, null);
+  assert.doesNotMatch(md, /No active title defect flags detected|Underwriting Recommendation|DO NOT BID/);
+  assert.match(md, /## 3\. Cash requirement/);
+  assert.match(md, /Not entered/);
+  assert.doesNotMatch(md, /Online Marketplace Fee|24-48|Statutory Basis|BID CLEARABLE|Foreclosed & Wiped/);
   assert.match(md, /## 5\. Operator Due Diligence Sign-Off/);
   assert.match(md, /\*\*Disposition Decision\*\*: \*\*`UNDERWRITE`\*\*/);
+});
+
+test('Decision Packet: a marketplace source does not invent a buyer premium or a sign-off', () => {
+  const packet = buildDecisionPacket({
+    id: 'servicelink:nc-1',
+    address: '84 Raven Rock Rd',
+    city: 'Lillington',
+    state: 'NC',
+    openingBid: 126000,
+    deposit: 5000,
+    source: 'servicelink'
+  });
+
+  assert.equal(packet.property.openingBid, 126000);
+  assert.equal(packet.underwriting.cashToClose.buyersPremium, null);
+  assert.equal(packet.underwriting.cashToClose.sheriffPoundage, null);
+  assert.equal(packet.underwriting.cashToClose.transferTax, null);
+  assert.equal(packet.underwriting.cashToClose.settlementCosts, null);
+  assert.equal(packet.underwriting.cashToClose.totalAcquisitionCost, null);
+  assert.equal(packet.underwriting.cashToClose.netCashDueAtSettlement, null);
+  assert.equal(packet.dispositionSignOff.decision, null);
+  assert.equal(packet.dispositionSignOff.operatorNotes, '');
+  assert.equal(packet.dispositionSignOff.operatorId, null);
+  assert.equal(packet.dispositionSignOff.signedAt, null);
+
+  const missingPrice = buildDecisionPacket({ id: 'no-price', state: 'NC' });
+  assert.equal(missingPrice.property.openingBid, null);
+  assert.equal(missingPrice.underwriting.cashToClose.totalAcquisitionCost, null);
+  assert.doesNotThrow(() => formatDecisionPacketMarkdown(missingPrice));
+
+  const published = buildDecisionPacket({
+    id: 'published-redemption',
+    state: 'NC',
+    redemptionDays: 0
+  });
+  assert.equal(published.underwriting.titleRisk.statutoryRedemptionDays, 0);
+  assert.match(formatDecisionPacketMarkdown(published), /0 days recorded in this dataset/);
+
+  const stamped = buildDecisionPacket({
+    id: 'stamped-redemption',
+    state: 'NC',
+    redemptionDays: 10,
+    provenance: { derivedFields: { redemption: { model: 'state-statutory-rule-lookup-v1' } } }
+  });
+  assert.equal(stamped.underwriting.titleRisk.statutoryRedemptionDays, null);
+
+  const withViolations = buildDecisionPacket({
+    id: 'muni-1',
+    state: 'FL',
+    municipalViolations: [
+      { violationType: 'Unsafe Electrical Wiring', status: 'OPEN', fineAmount: 1250 },
+      { violationType: 'Resolved Trash Citation', status: 'CLOSED', fineAmount: 250 }
+    ]
+  });
+  assert.equal(withViolations.underwriting.municipalSurvivability.activeViolationsCount, 1);
+  assert.equal(withViolations.underwriting.municipalSurvivability.estimatedSurvivingLiability, 1250);
+
+  assert.equal(packet.property.caseNumber, null);
+  const md = formatDecisionPacketMarkdown(packet);
+  assert.match(md, /\*\*Case \/ Docket #\*\* \| Not published/);
+  assert.doesNotMatch(md, /Unassigned/);
+  assert.match(md, /\*\*Auction Date\*\* \| Not published/);
 });

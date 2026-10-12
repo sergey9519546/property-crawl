@@ -45,7 +45,14 @@ export type FilterableListing = {
   redemptionDays?: number | null;
   seniorLienRisk?: string;
   images?: string[] | null;
+  provenance?: { derivedFields?: { redemption?: unknown } | null } | null;
 };
+
+function publishedRedemptionDays(listing: FilterableListing): number | null {
+  if (listing.provenance?.derivedFields?.redemption) return null;
+  const days = knownNumber(listing.redemptionDays);
+  return days !== null && days >= 0 ? days : null;
+}
 
 function knownNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -244,8 +251,9 @@ export function listingMatchesFilters<T extends FilterableListing>(
   }
   if (filters.seniorLienFilter === "clean" && listing.seniorLienRisk !== "low") return false;
   if (filters.seniorLienFilter === "risk" && listing.seniorLienRisk !== "high") return false;
-  if (filters.redemptionFilter === "immediate" && listing.redemptionDays !== 0) return false;
-  if (filters.redemptionFilter === "redemption_active" && (!listing.redemptionDays || listing.redemptionDays === 0)) {
+  const publishedRedemption = publishedRedemptionDays(listing);
+  if (filters.redemptionFilter === "immediate" && publishedRedemption !== 0) return false;
+  if (filters.redemptionFilter === "redemption_active" && !(publishedRedemption !== null && publishedRedemption > 0)) {
     return false;
   }
 

@@ -148,6 +148,69 @@ test('derived score fields require explicit derivation provenance and are never 
   assert.equal(equity.clauseResults[0].actual, null);
 });
 
+test('a state-table redemption stamp is not a published redemption term', () => {
+  const liveProvenance = {
+    origin: 'live', observed: true, recordKind: 'source_record', publisher: 'CivilView',
+    recordId: '2128964683', observedAt: '2026-09-05T17:00:00.000Z',
+  };
+  const stamped = listing({
+    redemptionDays: 10,
+    provenance: {
+      ...liveProvenance,
+      derivedFields: {
+        redemption: { model: 'state-statutory-rule-lookup-v1', inputs: ['state'], note: 'State table only' },
+      },
+    },
+  });
+  const stampedResult = hunts.evaluateListing(stamped, {
+    criteria: { mode: 'all', rules: [{ field: 'redemptionDays', operator: 'gte', value: 1 }] },
+  }, { now: NOW });
+  assert.equal(stampedResult.status, 'unknown');
+  assert.equal(stampedResult.clauseResults[0].actual, null);
+  assert.equal(stampedResult.clauseResults[0].evidenceClass, 'derived_unverified');
+
+  const published = listing({ redemptionDays: 10 });
+  const publishedResult = hunts.evaluateListing(published, {
+    criteria: { mode: 'all', rules: [{ field: 'redemptionDays', operator: 'eq', value: 10 }] },
+  }, { now: NOW });
+  assert.equal(publishedResult.status, 'match');
+  assert.equal(publishedResult.clauseResults[0].actual, 10);
+  assert.equal(publishedResult.clauseResults[0].evidenceClass, 'derived_unverified');
+
+  const zero = listing({ redemptionDays: 0 });
+  const zeroResult = hunts.evaluateListing(zero, {
+    criteria: { mode: 'all', rules: [{ field: 'redemptionDays', operator: 'eq', value: 0 }] },
+  }, { now: NOW });
+  assert.equal(zeroResult.status, 'match');
+  assert.equal(zeroResult.clauseResults[0].actual, 0);
+});
+
+test('a text-pattern senior-lien flag is not a recorded lien fact', () => {
+  const flagged = listing({
+    seniorLienRisk: 'high',
+    provenance: {
+      origin: 'live', observed: true, recordKind: 'source_record', publisher: 'CivilView',
+      recordId: '2128964683', observedAt: '2026-09-05T17:00:00.000Z',
+      derivedFields: {
+        seniorLienRisk: { model: 'legal-text-pattern-v1', inputs: ['plaintiff', 'raw'], note: 'Pattern flag only; not a title opinion.' },
+      },
+    },
+  });
+  const flaggedResult = hunts.evaluateListing(flagged, {
+    criteria: { mode: 'all', rules: [{ field: 'seniorLienRisk', operator: 'eq', value: 'high' }] },
+  }, { now: NOW });
+  assert.equal(flaggedResult.status, 'unknown');
+  assert.equal(flaggedResult.clauseResults[0].actual, null);
+  assert.equal(flaggedResult.clauseResults[0].evidenceClass, 'derived_unverified');
+
+  const published = listing({ seniorLienRisk: 'HIGH' });
+  const publishedResult = hunts.evaluateListing(published, {
+    criteria: { mode: 'all', rules: [{ field: 'seniorLienRisk', operator: 'eq', value: 'high' }] },
+  }, { now: NOW });
+  assert.equal(publishedResult.status, 'match');
+  assert.equal(publishedResult.clauseResults[0].actual, 'high');
+});
+
 test('a derived building-area marker cannot pass as publisher-reported square footage', () => {
   const derivedArea = listing();
   derivedArea.provenance = {

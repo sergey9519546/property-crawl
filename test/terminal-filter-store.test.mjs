@@ -7,6 +7,7 @@ import {
   DEFAULT_TERMINAL_FILTERS,
   countActiveFilters,
   parseTerminalQuery,
+  listingMatchesFilters,
   selectFilteredListings,
   terminalFilterReducer,
   terminalQuery,
@@ -153,4 +154,19 @@ test("interactive terminal uses the shared filter store", () => {
   assert.ok(content.includes("handleDeepCheckAddress"), "handleDeepCheckAddress missing from interactive-terminal.tsx");
   assert.ok(content.includes("Address research workspace"), "Address research banner missing from interactive-terminal.tsx");
   assert.ok(content.includes("Legal and title status remains unverified"), "Fail-closed legal disclaimer missing from interactive-terminal.tsx");
+  assert.ok(content.includes("Low lien flag"), "lien filter must name the stored flag");
+  assert.equal(content.includes("Clean 1st"), false);
+  assert.equal(content.includes("Junior Foreclosure Risk"), false);
+});
+
+test("redemption filters ignore a state-table stamp", () => {
+  const base = { id: "r", source: "servicelink", state: "OH", address: "1 Main" };
+  const immediate = { ...DEFAULT_TERMINAL_FILTERS, redemptionFilter: "immediate" };
+  const active = { ...DEFAULT_TERMINAL_FILTERS, redemptionFilter: "redemption_active" };
+  const stamped = { ...base, redemptionDays: 0, provenance: { derivedFields: { redemption: { days: 0 } } } };
+  const published = { ...base, redemptionDays: 0, provenance: {} };
+  assert.equal(listingMatchesFilters(stamped, immediate), false);
+  assert.equal(listingMatchesFilters(published, immediate), true);
+  assert.equal(listingMatchesFilters({ ...base, redemptionDays: 10, provenance: { derivedFields: { redemption: { days: 10 } } } }, active), false);
+  assert.equal(listingMatchesFilters({ ...base, redemptionDays: 10 }, active), true);
 });

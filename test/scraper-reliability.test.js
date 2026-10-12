@@ -204,6 +204,9 @@ test('shared normalization never fabricates unknown property or valuation facts'
   assert.match(result.raw, /Judgment: \$45,000/);
   assert.equal(result.provenance.publisher, 'County sheriff');
   assert.equal(result.provenance.derivedFields.redemption.model, 'state-statutory-rule-lookup-v1');
+  assert.equal(result.provenance.derivedFields.redemption.days, 10);
+  assert.equal(result.redemptionDays, null);
+  assert.equal(result.redemptionWarning, null);
 });
 
 test('shared normalization derives deal metrics only from a complete observed range', () => {

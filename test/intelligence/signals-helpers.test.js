@@ -26,7 +26,7 @@
 //   - square-footage corroboration requires a parcel with
 //     status === 'matched', not merely a parcel object
 //   - seniorLienRisk of exactly 'unknown' never counts as resolved risk
-//   - SIGNAL_WEIGHTS sum to 1.0; triage is clamped to [1, 99]
+//   - SIGNAL_WEIGHTS sum to 1.0; triage is clamped to [0, 99]
 //   - an unreadable observation store never yields a negative finding
 
 const assert = require('node:assert/strict');
@@ -93,13 +93,14 @@ test('evaluateOpportunitySignals: empty listing still returns 6 signals and vali
     [...new Set(keys)].sort(),
     ['bid_reduction', 'bid_to_value_ratio', 'building_area_discrepancy', 'returned_to_market', 'sale_date_known', 'title_equity_unresolved']
   );
-  assert.ok(result.triagePriority >= 1);
+  assert.equal(result.triagePriority, 0);
   assert.ok(result.triagePriority <= 99);
 });
 
-test('evaluateOpportunitySignals: priority is clamped to [1, 99]', () => {
+test('evaluateOpportunitySignals: priority is clamped to [0, 99]', () => {
   const low = evaluateOpportunitySignals({}, { now: NOW });
-  assert.ok(low.triagePriority >= 1 && low.triagePriority <= 99);
+  assert.equal(low.triagePriority, 0);
+  assert.ok(low.triagePriority <= 99);
 });
 
 test('evaluateOpportunitySignals: triage includes disclaimer', () => {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { KeyRound } from "lucide-react";
+import { OperatorUnlockForm } from "@/components/workspace/operator-unlock-form";
 
 /**
  * Honest operator-access page. There is no multi-user account system in this
@@ -32,6 +33,7 @@ export default function SignInPage() {
           </span>
         </p>
       </div>
+      <OperatorUnlockForm />
       <div className="mt-6 flex flex-wrap gap-3">
         <Link href="/listings" className="inline-flex h-12 items-center rounded-xl bg-[#0F172A] px-5 text-sm font-semibold text-white hover:bg-[#1E293B]">
           Continue to listings

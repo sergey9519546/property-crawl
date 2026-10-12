@@ -31,6 +31,7 @@ const MarketMap = dynamic(
   },
 );
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
+import { CompareTray, useCompareSelection } from "@/components/listings/listing-compare";
 import {
   Search,
   Bookmark,
@@ -383,6 +384,12 @@ export function InteractiveTerminal() {
     () => selectFilteredListings(inventory, filters, { isObserved: isObservedSourceRecord }),
     [inventory, filters],
   );
+  const compare = useCompareSelection();
+  const compareLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const listing of inventory) labels[listing.id] = listing.address;
+    return labels;
+  }, [inventory]);
 
   // The grid below used to render the entire `filtered` array at once.
   // Measured on the landing page that produced 6,605 result cards in the DOM:
@@ -774,9 +781,9 @@ export function InteractiveTerminal() {
                       onChange={(e) => dispatchFilters({ type: "set", key: "seniorLienFilter", value: e.target.value })}
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
-                      <option value="all">All Title Profiles</option>
-                      <option value="clean">Clean 1st Lien Only</option>
-                      <option value="risk">Junior Foreclosure Risk</option>
+                      <option value="all">All lien flags</option>
+                      <option value="clean">Low lien flag</option>
+                      <option value="risk">High junior-lien flag</option>
                     </select>
                   </div>
 
@@ -791,8 +798,8 @@ export function InteractiveTerminal() {
                       className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
                     >
                       <option value="all">All Jurisdictions</option>
-                      <option value="immediate">Immediate Possession</option>
-                      <option value="redemption_active">Active Redemption Period</option>
+                      <option value="immediate">Published 0-day term</option>
+                      <option value="redemption_active">Published redemption window</option>
                     </select>
                   </div>
                 </div>
@@ -853,7 +860,7 @@ export function InteractiveTerminal() {
                   )}
                   {seniorLienFilter !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
-                      Title: {seniorLienFilter === "clean" ? "Clean 1st" : "Junior Risk"}
+                      Title: {seniorLienFilter === "clean" ? "Low lien flag" : "High junior-lien flag"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "seniorLienFilter", value: "all" })} aria-label="Remove title risk filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
@@ -861,7 +868,7 @@ export function InteractiveTerminal() {
                   )}
                   {redemptionFilter !== "all" && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
-                      Redemption: {redemptionFilter === "immediate" ? "Immediate" : "Active Window"}
+                      Redemption: {redemptionFilter === "immediate" ? "Published 0-day term" : "Published window"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "redemptionFilter", value: "all" })} aria-label="Remove redemption filter">
                         <CloseIcon className="w-3 h-3 hover:text-red-300" />
                       </button>
@@ -942,6 +949,8 @@ export function InteractiveTerminal() {
                 </p>
               </div>
             </div>
+
+            <CompareTray ids={compare.ids} labels={compareLabels} onRemove={compare.remove} onMakeTarget={compare.makeTarget} onClear={compare.clear} />
 
             {activeView === "map" ? (
               <MarketMap listings={filtered} onUnderwrite={setSelectedListing} returnTo={returnContext} />
@@ -1095,6 +1104,18 @@ export function InteractiveTerminal() {
                       </div>
                     </div>
 
+                    <div className="px-5 pb-2">
+                      <button
+                        type="button"
+                        aria-pressed={compare.ids.includes(listing.id)}
+                        aria-label={`${compare.ids.includes(listing.id) ? "Remove from" : "Add to"} compare: ${listing.address}`}
+                        disabled={compare.full && !compare.ids.includes(listing.id)}
+                        onClick={() => compare.toggle(listing.id)}
+                        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#D1D5DB] bg-white px-3 text-xs font-bold text-[#111827] hover:bg-[#F3F4F6] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {compare.ids.includes(listing.id) ? "In compare" : compare.full ? "Compare is full" : "Compare"}
+                      </button>
+                    </div>
                     {/* Card Action */}
                     <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-1">
                       <button

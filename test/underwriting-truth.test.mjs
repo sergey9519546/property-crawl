@@ -188,6 +188,30 @@ test('IC memo holds unknowns open instead of inventing favorable metrics or conc
   assert.match(supplied, /92\/99 \(triage indicator only/);
   assert.match(supplied, /0 days recorded in this dataset/);
   assert.match(supplied, /LOW \(unverified risk signal; not a title conclusion\)/);
+
+  const patternFlag = generateInvestmentCommitteeMemo({
+    address: '84 Raven Rock Rd',
+    state: 'NC',
+    seniorLienRisk: 'high',
+    seniorLienWarning: 'Junior lien phrase detected in the notice text.',
+    provenance: {
+      derivedFields: {
+        seniorLienRisk: { model: 'legal-text-pattern-v1', inputs: ['plaintiff', 'raw'], note: 'Pattern flag only; not a title opinion.' },
+      },
+    },
+  });
+  assert.match(patternFlag, /HIGH is a text-pattern flag, not a title opinion/);
+  assert.match(patternFlag, /current title and lien-priority evidence/);
+  assert.doesNotMatch(patternFlag, /record note:/);
+  assert.doesNotMatch(patternFlag, /unverified risk signal/);
+
+  const noPhrase = generateInvestmentCommitteeMemo({
+    address: '84 Raven Rock Rd',
+    seniorLienRisk: 'unknown',
+    provenance: { derivedFields: { seniorLienRisk: { model: 'legal-text-pattern-v1', inputs: ['raw'] } } },
+  });
+  assert.match(noPhrase, /No junior-lien phrase was stored, not a title opinion/);
+  assert.match(noPhrase, /current title and lien-priority evidence/);
   assert.match(supplied, /13\.6% \(modeled\)/);
   assert.match(supplied, /1\.85x \(modeled\)/);
   assert.match(supplied, /\$360,000 USD \(buyer-supplied model output/);

@@ -155,16 +155,27 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       reason: 'Publisher record indicates property was re-listed or returned following a prior postponement.',
       nextAction: 'Review docket for bankruptcy relief, bankruptcy dismissals, or creditor motions.',
     });
+  } else if (isReturned) {
+    signals.push({
+      key: 'returned_to_market',
+      label: 'Return to market not verified',
+      status: 'unknown',
+      evidenceClass: 'unresolved',
+      sourceUrl,
+      observedAt,
+      reason: 'A return-to-market phrase is present, but this record is not a live publisher observation.',
+      nextAction: 'Open the publisher record before treating a relist as a fact.',
+    });
   } else {
     signals.push({
       key: 'returned_to_market',
-      label: 'Standard offering status',
+      label: 'Return to market not stated',
       status: 'unknown',
-      evidenceClass: 'publisher_reported',
+      evidenceClass: 'unresolved',
       sourceUrl,
       observedAt,
-      reason: 'Property is in initial or standard active scheduling.',
-      nextAction: 'Monitor for status changes.',
+      reason: 'The published status does not say this property returned to market.',
+      nextAction: 'Read the publisher status and the docket before treating a relist as a fact.',
     });
   }
 
@@ -259,8 +270,15 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   }
 
   // 6. Title and Equity Unresolved
-  const hasSeniorRisk = isKnown(listing.seniorLienRisk);
-  const hasRedemption = isKnown(listing.redemptionDays);
+  // A state-table redemption lookup and a plaintiff-text lien pattern are
+  // stored beside the listing. They are not sale terms, so they cannot make
+  // this check "supported".
+  const redemptionIsStateTable = Boolean(listing?.provenance?.derivedFields?.redemption);
+  const lienIsPattern = Boolean(listing?.provenance?.derivedFields?.seniorLienRisk);
+  const hasSeniorRisk = !lienIsPattern && isKnown(listing.seniorLienRisk);
+  const hasRedemption = !redemptionIsStateTable
+    && isKnown(listing.redemptionDays)
+    && Number.isFinite(Number(listing.redemptionDays));
   const hasCashToClose = isKnown(listing.cashToClose);
   if (publisherObserved && hasSeniorRisk && listing.seniorLienRisk !== 'unknown' && hasRedemption && hasCashToClose) {
     signals.push({
@@ -327,7 +345,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   const supportedCount = signals.filter((s) => s.status === 'supported').length;
   priorityScore += (supportedCount / signals.length) * 100 * SIGNAL_WEIGHTS.dataCompleteness;
 
-  const roundedPriority = Math.max(1, Math.min(99, Math.round(priorityScore)));
+  const roundedPriority = Math.min(99, Math.max(0, Math.round(priorityScore)));
 
   return {
     listingId: listing.id,

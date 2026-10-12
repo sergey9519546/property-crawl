@@ -242,11 +242,14 @@ function standardizeListingRecord(raw = {}, options = {}) {
     const redemption = getRedemptionRule(state, {
       hasFederalTaxLien: seniorLien?.hasFederalTaxLien
     });
-    redemptionDays = redemption.days;
-    redemptionWarning = redemption.warning;
+    // The lookup stays on the record as a labeled baseline. It is not copied
+    // onto redemptionDays, which readers treat as a term from this sale.
     derivedFields.redemption = {
       model: seniorLien?.hasFederalTaxLien ? 'federal-statute-overlay-v1' : 'state-statutory-rule-lookup-v1',
       inputs: ['state', ...(seniorLien?.hasFederalTaxLien ? ['federalTaxLien'] : [])],
+      days: redemption.days,
+      label: redemption.label,
+      warning: redemption.warning,
       note: seniorLien?.hasFederalTaxLien
         ? 'Overlay of 26 U.S.C. § 7425(d) 120-day federal redemption over state baseline; docket must be verified.'
         : 'State-level baseline only; sale type and docket must be verified.'
@@ -288,6 +291,7 @@ function standardizeListingRecord(raw = {}, options = {}) {
   const baseProvenance = asPlainObject(input.provenance);
   const existingDerived = asPlainObject(baseProvenance.derivedFields);
   const combinedDerived = { ...existingDerived, ...derivedFields };
+  if (redemptionDays !== null) delete combinedDerived.redemption;
   const sourceObservedAt = observationTimestamp(
     input.sourceObservedAt ?? input.observedAt ?? baseProvenance.observedAt ?? options.observedAt
   );

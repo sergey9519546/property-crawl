@@ -54,20 +54,14 @@ test('canonicalStatus is the one the write path uses, and it is in scope', () =>
     'canonicalStatus must be defined before seedInMemory calls it');
 });
 
-test('canonicalStatus recognises the same vocabulary on both paths', () => {
-  // The write path maps publisher words to buckets. If the seed now shares the
-  // function, it inherits all of them, which is the point -- but it means the
-  // function itself is load-bearing for two callers, so pin the mapping.
+test('canonicalStatus keeps a finished auction distinct from a recorded sale', () => {
   const fn = /function canonicalStatus\(value\) \{[\s\S]*?\n\}/.exec(code)[0];
-  for (const [input, expected] of [
-    ['sold', 'sold'], ['closed', 'sold'], ['cancelled', 'cancelled'],
-    ['cancelled'.replace('l', 'l'), 'cancelled'], ['pending', 'pending'],
-    ['scheduled', 'scheduled'], ['active', 'active'],
-  ]) {
-    const re = new RegExp(`return\\s*['"]${expected}['"]`);
-    assert.ok(
-      new RegExp(input, 'i').test(fn) || re.test(fn),
-      `canonicalStatus should still map "${input}" to "${expected}"`);
+  assert.match(fn, /\\bsold\\b/, 'only the word sold may canonicalise to sold');
+  assert.match(fn, /return\s+['"]closed['"]/, "a finished auction that was not sold must return 'closed'");
+  assert.doesNotMatch(fn, /sold\|closed|closed\|sold|sold\|closed\|auctioned/,
+    'closed and auctioned must not share the sold alternation');
+  for (const bucket of ['sold', 'closed', 'cancelled', 'postponed', 'adjourned', 'stayed', 'pending', 'scheduled', 'active', 'unknown']) {
+    assert.match(fn, new RegExp(`return\\s+['"]${bucket}['"]`), `canonicalStatus must still return '${bucket}'`);
   }
   assert.match(fn, /return\s*['"]unknown['"];\s*\}\s*$/,
     "an unrecognised publisher word must still fall through to 'unknown'");

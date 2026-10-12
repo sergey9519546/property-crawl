@@ -168,7 +168,8 @@ function canonicalStatus(value) {
   if (/postpon/.test(normalized)) return 'postponed';
   if (/adjourn/.test(normalized)) return 'adjourned';
   if (/stay/.test(normalized)) return 'stayed';
-  if (/sold|closed|auctioned|post.?auction/.test(normalized)) return 'sold';
+  if (/\bsold\b/.test(normalized)) return 'sold';
+  if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b/.test(normalized)) return 'closed';
   if (/scheduled|coming soon|pre.?auction/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
   if (normalized === 'active') return 'active';
@@ -1124,9 +1125,9 @@ class DatabaseClient {
         sql += ` AND senior_lien_risk = 'high'`;
       }
       if (redemption === 'immediate') {
-        sql += ` AND redemption_days = 0`;
+        sql += ` AND redemption_days = 0 AND provenance #> '{derivedFields,redemption}' IS NULL`;
       } else if (redemption === 'redemption_active') {
-        sql += ` AND redemption_days > 0`;
+        sql += ` AND redemption_days > 0 AND provenance #> '{derivedFields,redemption}' IS NULL`;
       }
       if (q) {
         sql += ` AND (address ILIKE $${paramIdx} OR city ILIKE $${paramIdx} OR county ILIKE $${paramIdx} OR plaintiff ILIKE $${paramIdx} OR defendant ILIKE $${paramIdx} OR attorney ILIKE $${paramIdx})`;
@@ -1166,8 +1167,14 @@ class DatabaseClient {
       if (occupancy !== 'all' && l.occupancy !== occupancy) return false;
       if (seniorLien === 'clean' && (!l.seniorLienRisk || ['high', 'unknown'].includes(l.seniorLienRisk))) return false;
       if (seniorLien === 'risk' && l.seniorLienRisk !== 'high') return false;
-      if (redemption === 'immediate' && l.redemptionDays !== 0) return false;
-      if (redemption === 'redemption_active' && (!l.redemptionDays || l.redemptionDays <= 0)) return false;
+      const redemptionStamp = l?.provenance?.derivedFields?.redemption;
+      const rawRedemption = l.redemptionDays;
+      const publishedRedemption = redemptionStamp || rawRedemption == null || rawRedemption === ''
+        ? null
+        : Number(rawRedemption);
+      const publishedRedemptionKnown = Number.isFinite(publishedRedemption) ? publishedRedemption : null;
+      if (redemption === 'immediate' && publishedRedemptionKnown !== 0) return false;
+      if (redemption === 'redemption_active' && !(publishedRedemptionKnown > 0)) return false;
       if (lat != null && lng != null) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);
         if (dist === null || dist > Number(radiusKm)) return false;

@@ -113,6 +113,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
   }
 
   const priority = data.triagePriority ?? 0;
+  const unscored = priority <= 0;
   const isHigh = priority >= 70;
   const isMed = priority >= 50 && priority < 70;
 
@@ -157,7 +158,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
               !isHigh && !isMed && "bg-slate-700 text-slate-300 border border-slate-600"
             )}
           >
-            {isHigh ? 'High Priority' : isMed ? 'Moderate' : 'Routine'}
+            {unscored ? "No score" : isHigh ? "High Priority" : isMed ? "Moderate" : "Routine"}
           </div>
         </div>
       </div>

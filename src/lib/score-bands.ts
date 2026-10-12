@@ -24,7 +24,7 @@ export const SCORE_BANDS: readonly ScoreBand[] = Object.freeze([
     label: "Elite",
     color: "#059669",
     alpha: "18",
-    desc: "Modeled bid is well under the valuation midpoint; deep modeled spread.",
+    desc: "Opening amount is about 24–46% of the valuation midpoint.",
   }),
   Object.freeze({
     min: 55,
@@ -33,7 +33,7 @@ export const SCORE_BANDS: readonly ScoreBand[] = Object.freeze([
     label: "Strong",
     color: "#16a34a",
     alpha: "15",
-    desc: "Modeled bid is well under half of value; large modeled spread.",
+    desc: "Opening amount is about 47–58% of the valuation midpoint.",
   }),
   Object.freeze({
     min: 35,
@@ -42,7 +42,7 @@ export const SCORE_BANDS: readonly ScoreBand[] = Object.freeze([
     label: "Fair",
     color: "#d97706",
     alpha: "14",
-    desc: "Real modeled discount, but fees and repairs can compress margin.",
+    desc: "Opening amount is about 58–73% of the valuation midpoint.",
   }),
   Object.freeze({
     min: 1,
@@ -51,7 +51,7 @@ export const SCORE_BANDS: readonly ScoreBand[] = Object.freeze([
     label: "Thin",
     color: "#dc2626",
     alpha: "12",
-    desc: "Modeled bid is close to full value; little room for error.",
+    desc: "Opening amount is about 74–99% of the valuation midpoint.",
   }),
 ]);
 

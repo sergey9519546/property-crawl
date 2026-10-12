@@ -283,6 +283,16 @@ test('BiddingSimulator explains an explicit reverse-price scenario without a cli
   assert.ok(bidsimContent.includes('computeTargetPriceScenario'), 'reverse target-price calculation missing from bidding-simulator.tsx');
   assert.ok(bidsimContent.includes('Unknown taxes, debt, and fees are not treated as $0'), 'unresolved-cost warning missing from bidding-simulator.tsx');
   assert.ok(!bidsimContent.includes('winProbability'), 'simulator must not present a fabricated auction-win probability');
+  assert.ok(bidsimContent.includes('cashDueAtSettlement'), 'cash to close must use settlement math');
+  assert.ok(!bidsimContent.includes('Adds the registration funds'), 'cash to close must not claim registration funds were added');
+});
+
+test('the listing page mounts the bid cost model instead of a read-only cash table', () => {
+  const page = fs.readFileSync(path.join(root, 'src/app/listings/[id]/page.tsx'), 'utf8');
+  assert.ok(page.includes('<BiddingSimulator'), 'the listing page must mount the assumption editor');
+  assert.ok(!page.includes('enter explicit assumptions in a research case'), 'the listing page must not point at a research case that has no cost inputs');
+  const compare = fs.readFileSync(path.join(root, 'src/components/listings/listing-compare.tsx'), 'utf8');
+  assert.ok(compare.includes('"/api/listings/compare"'), 'compare must call the comparison route');
 });
 
 test('BiddingSimulator keeps the bid cost model reachable without a valuation', () => {

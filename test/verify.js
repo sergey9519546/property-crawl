@@ -50,7 +50,7 @@ const suites = [
   { name: '2. Backend REST API & Server Suite', cmd: 'node test/server.test.js' },
   { name: '3. Data Scrapers & Ingestion Pipeline', cmd: 'node test/scrapers.test.js' },
   { name: '3a. Scraper Reliability, CivilView, Durable Live Records & Build-Data Publication Gate', cmd: 'node --test test/scraper-reliability.test.js test/civilview.test.js test/national-core-reports.test.js test/irs-scraper.test.js' },
-  { name: '3b. Exact Source Links & Structured Data Safety', cmd: 'node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs' },
+  { name: '3b. Exact Source Links & Structured Data Safety', cmd: 'node --experimental-strip-types --test test/source-integrity.test.mjs test/discovery-workbench-chips.test.mjs test/listing-status.test.mjs' },
   { name: '3c. Evidence-Only Enrichment, Exports, Underwriting, Legal Rules & CORS', cmd: 'node --test test/cors-policy.test.js test/api-rate-policy.test.js test/api-rate-http.test.js test/enrich-evidence.test.js test/export-truth.test.js test/underwriting-truth.test.mjs test/legal-rules-truth.test.js' },
   { name: '3d. Verified Property Media & Street View Fallback', cmd: 'node --test test/property-image.test.js test/publisher-media.test.js test/secondary-property-media.test.js test/gsa-usda-publisher-gallery.test.js' },
   { name: '3e. Canonical Listing API Transport', cmd: 'node --test test/property-api.test.mjs test/workspace-session.test.mjs' },

@@ -1,13 +1,17 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, DollarSign, FileText } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
+import { combineStatusTones, listingOfferAvailability, listingStatusClass, listingStatusTone } from "@/lib/listing-status";
 import { serializeJsonLd } from "@/lib/json-ld";
-import { redemptionLabel, computeCashToClose } from "@/lib/underwriting";
+import { redemptionLabel } from "@/lib/underwriting";
 import { DocketAgent } from "@/components/terminal/docket-agent";
+import { BiddingSimulator } from "@/components/terminal/bidding-simulator";
+import { Parcel3DVisualizer } from "@/components/terminal/parcel-3d-visualizer";
+import { ListingCompare, ListingCompareToggle } from "@/components/listings/listing-compare";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
 import { ListingMedia } from "@/components/listings/listing-media";
 import { ListingWatchlistToggle } from "@/components/listings/listing-watchlist-toggle";
@@ -185,6 +189,18 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const estHigh = positiveNumber(listing.estHigh);
   const redemptionDays = finiteNumber(listing.redemptionDays);
   const provenance = listing.provenance && typeof listing.provenance === "object" ? listing.provenance : {};
+  const derivedRedemption = provenance.derivedFields
+    && typeof provenance.derivedFields === "object"
+    && (provenance.derivedFields as { redemption?: unknown }).redemption
+    && typeof (provenance.derivedFields as { redemption?: unknown }).redemption === "object"
+    ? (provenance.derivedFields as { redemption: { days?: unknown } }).redemption
+    : null;
+  const modeledRedemptionDays = derivedRedemption
+    ? finiteNumber(derivedRedemption.days) ?? redemptionDays
+    : null;
+  const showRedemptionReview = Boolean(derivedRedemption)
+    || Boolean(listing.redemptionWarning)
+    || (redemptionDays !== null && redemptionDays > 0);
   const sourceFacts = provenance.sourceFacts && typeof provenance.sourceFacts === "object" ? provenance.sourceFacts as Record<string, unknown> : {};
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
@@ -211,11 +227,6 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const detailPhoto = publisherPhoto ?? (secondaryMedia.accepted ? secondaryMedia.url : undefined);
   const detailGallery = publisherPhoto ? gallery : (secondaryMedia.accepted ? secondaryMedia.gallery : []);
   const mapLocation = inspectMapLocation(listing);
-  // Surface what the underwriting engine can compute from published fields.
-  const cashScenario = computeCashToClose({ openingBid });
-  const equitySpread = openingBid !== null && positiveNumber(listing.mid) !== null
-    ? positiveNumber(listing.mid)! - openingBid
-    : null;
   const observedAt = isDemo ? null : formatObservedAt(listing.sourceObservedAt ?? provenance.observedAt);
   const saleTime = optionalPublishedText(sourceFacts.tpsSaleTime ?? sourceFacts.saleTime);
   const saleTimezone = optionalPublishedText(sourceFacts.publisherTimeZone ?? sourceFacts.saleTimezone);
@@ -227,7 +238,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const accessNeedsAttention = interiorAccessAvailable === false || Boolean(occupancy && /occupied/i.test(occupancy) && !/unoccupied/i.test(occupancy));
   const accessHeadline = [occupancy, interiorAccessAvailable === null ? null : interiorAccessAvailable ? "Interior access available" : "No interior access"].filter(Boolean).join(" · ");
   const statusLabel = isDemo ? "Verify at source" : publishedText(listing.lifecycleStatus || listing.status, "Verify at source").replace(/^Status:\s*/i, "").replace(/_/g, " ");
-  const statusClass = /postponed/i.test(statusLabel) ? "bg-amber-100 text-amber-900" : "bg-emerald-50 text-emerald-800";
+  const statusTone = isDemo ? "neutral" : combineStatusTones([listingStatusTone(statusLabel), listingStatusTone(String(listing.status || ""))]);
+  const statusClass = listingStatusClass(statusTone);
   const citySuffix = optionalPublishedText(listing.city);
   const addressParts = listing.address.split(",").map((part) => part.trim());
   const headlineAddress = citySuffix && addressParts.length >= 3 && addressParts[1]?.toLowerCase() === citySuffix.toLowerCase() ? addressParts[0] : listing.address;
@@ -263,7 +275,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
       "@type": "AggregateOffer",
       price: openingBid,
       priceCurrency: "USD",
-      availability: "https://schema.org/InStock",
+      availability: listingOfferAvailability(statusTone),
       validFrom: publishedText(listing.saleDate, "") || undefined,
     } : undefined,
     address: {
@@ -309,7 +321,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-3 text-sm lg:hidden">
               {openingBid !== null ? <p><span className="text-slate-600">Opening amount </span><strong className="text-slate-950">{formatMoney(openingBid)}</strong></p> : null}
               {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-slate-600">Reported sale </span><strong className="text-slate-950">{reportedSaleSchedule}</strong></p> : null}
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
+              <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
             </div>
           )}
         </div>
@@ -338,11 +350,12 @@ export default async function ListingPage({ params, searchParams }: Props) {
           )}
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm lg:hidden">
-            <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
+            <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
             <p className="mt-4 text-3xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Reported sale</dt><dd className="text-right font-semibold">{reportedSaleSchedule}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Opening amount</dt><dd className="font-semibold text-slate-700">Not published</dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-slate-600">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
             {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B]">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
+            <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
             <div className="mt-2">
               <Link
@@ -404,7 +417,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             ) : null}
             <AssessorReading listingId={listing.id} />
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-800" data-testid="title-rules-check">
-              <p className="font-bold text-slate-950">Rules check from the published plaintiff and the state table. Not a title opinion.</p>
+              <p className="font-bold text-slate-950">Rules check from the published plaintiff and the state table. Not a title opinion, not a bid instruction, and not a statement that this auction is open.</p>
               <p className="mt-2">Plaintiff: {publishedText(listing.plaintiff)}</p>
               {occupancy ? <p className="mt-2">Occupancy published as {occupancy}.</p> : null}
               {optionalPublishedText(listing.deposit) ? <p className="mt-2">Deposit terms published as {optionalPublishedText(listing.deposit)}.</p> : null}
@@ -412,7 +425,6 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 <ul className="mt-3 space-y-2">
                   <li>Classifier: {titleRules.plaintiffType}. Risk label: {titleRules.riskLevel}.</li>
                   {titleRules.titleWarnings.filter((warning): warning is string => typeof warning === "string" && warning.length > 0).map((warning) => <li key={warning}>{warning}</li>)}
-                  <li>{titleRules.titleActionAdvice}</li>
                 </ul>
               ) : <p className="mt-2">State was not published, so the statute table was not applied.</p>}
             </div>
@@ -474,7 +486,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold text-slate-950">Modeled research scenarios <span className="text-sm font-normal text-slate-500">Assumptions, not verified property facts</span></summary>
             <div className="border-t border-slate-200 pb-5 pt-5">
           {/* Modeled redemption review; confirm against official sale terms. */}
-          {(listing.redemptionWarning || (redemptionDays !== null && redemptionDays > 0)) && (
+          {showRedemptionReview && (
             <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-xs text-amber-950 space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold flex items-center gap-2 text-amber-950">
@@ -482,11 +494,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   <span>Modeled redemption review</span>
                 </h2>
                 <span className="font-extrabold text-[11px] uppercase px-2.5 py-0.5 rounded bg-amber-200 text-amber-950">
-                  {redemptionDays !== null ? redemptionLabel(redemptionDays) : "Official terms required"}
+                  {derivedRedemption
+                    ? (modeledRedemptionDays !== null ? `${Math.round(modeledRedemptionDays)}-day state table` : "State table unset")
+                    : (redemptionDays !== null ? redemptionLabel(redemptionDays) : "Official terms required")}
                 </span>
               </div>
               <p className="leading-relaxed">
-                {listing.redemptionWarning || (redemptionDays !== null ? `The state-level model suggests a possible ${redemptionLabel(redemptionDays).toLowerCase()} review window for this ${listing.state} sale.` : "The source indicates a redemption review may apply, but no duration was captured.")}
+                {derivedRedemption
+                  ? `State-table baseline only${modeledRedemptionDays !== null ? `: ${Math.round(modeledRedemptionDays)} days for ${listing.state || "this state"}` : ""}. Not a term recorded on this sale.`
+                  : (listing.redemptionWarning || (redemptionDays !== null ? `The state-level model suggests a possible ${redemptionLabel(redemptionDays).toLowerCase()} review window for this ${listing.state} sale.` : "The source indicates a redemption review may apply, but no duration was captured."))}
               </p>
               <p className="leading-relaxed font-semibold">Confirm the applicable period and exceptions in the official court, deed, and auction documents.</p>
             </div>
@@ -497,28 +513,20 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <DocketAgent listing={listing as any} />
           </div>
 
-          <div className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-xl font-bold"><DollarSign className="h-5 w-5 text-slate-900" /><span>Cash requirement inputs</span></h2><span className={`rounded px-2 py-1 text-[10px] font-bold uppercase ${cashScenario.acquisitionCostStatus === "complete" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"}`}>{cashScenario.acquisitionCostStatus === "complete" ? "Modeled" : "Partially unresolved"}</span></div>
-            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 text-xs">
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Published opening amount</span><span className="font-bold text-slate-950">{formatMoney(openingBid)}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Purchase-price scenario</span><span className="font-semibold text-slate-950">{formatMoney(cashScenario.purchasePrice)}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Published registration / deposit text</span><span className="max-w-[60%] text-right font-semibold text-slate-700">{publishedText(listing.deposit)}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Deposit credited toward purchase</span><span className={cashScenario.creditedDeposit !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.creditedDeposit !== null ? formatMoney(cashScenario.creditedDeposit) : "—"}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Buyer premium or statutory fee</span><span className={cashScenario.buyersPremium !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.buyersPremium !== null ? formatMoney(cashScenario.buyersPremium) : "—"}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Settlement, transfer, and recording costs</span><span className={cashScenario.settlementCosts !== null ? "font-semibold text-slate-950" : "font-semibold text-amber-800"}>{cashScenario.settlementCosts !== null ? formatMoney(cashScenario.settlementCosts) : "—"}</span></div>
-              <div className="flex justify-between gap-4 p-3.5"><span className="text-slate-600">Equity spread (midpoint − opening)</span><span className={equitySpread !== null ? "font-bold text-emerald-700" : "font-semibold text-amber-800"}>{equitySpread !== null ? formatMoney(equitySpread) : "—"}</span></div>
-              <div className="flex justify-between gap-4 bg-slate-50 p-3.5"><span className="font-bold text-slate-900">Total acquisition cash</span><span className={cashScenario.totalAcquisitionCost !== null ? "font-extrabold text-emerald-700" : "font-semibold text-amber-800"}>{cashScenario.totalAcquisitionCost !== null ? formatMoney(cashScenario.totalAcquisitionCost) : "—"}</span></div>
-            </div>
-            <p className="text-xs leading-relaxed text-slate-500">Source and state names are not fee evidence. Link published terms or enter explicit assumptions in a research case before calculating a total.</p>
-          </div></div>
+          </div>
           </details>
+          <div className="mt-8 space-y-8">
+            <BiddingSimulator listing={listing} />
+            <ListingCompare listingId={listing.id} label={listing.address} />
+            <Parcel3DVisualizer listing={listing} />
+          </div>
         </section>
 
         <aside className="hidden min-w-0 space-y-5 lg:sticky lg:top-8 lg:block lg:self-start">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-950 shadow-sm sm:p-7">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">Auction details</h2>
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
+              <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
             </div>
             <p className="mt-5 text-4xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200 py-1 space-y-0">
@@ -535,6 +543,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
               <p data-testid="exact-source-listing-unavailable" className="mt-5 border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>
             )}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
+            <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
             <div className="mt-2">
               <Link

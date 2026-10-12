@@ -26,6 +26,7 @@ import {
 import { Listing, SOURCES } from "@/data/listings";
 import { cn } from "@/lib/utils";
 import { Parcel3DVisualizer } from "./parcel-3d-visualizer";
+import { ListingCompare } from "@/components/listings/listing-compare";
 import { BiddingSimulator } from "./bidding-simulator";
 import { DocketAgent } from "./docket-agent";
 import { PropertyIntelligence } from "@/components/listings/property-intelligence";
@@ -33,7 +34,7 @@ import { OpportunitySignalsCard } from "@/components/listings/opportunity-signal
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, displayMoney, displayText, knownNumber, positiveNumber, safeImageUrl } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
-import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo } from "@/lib/underwriting";
+import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generateInvestmentCommitteeMemo, redemptionLabel } from "@/lib/underwriting";
 import type { CashAmountField, CashInputBasis } from "@/lib/underwriting";
 import { getWatchlistComps, type WatchlistCompsResponse } from "@/lib/intelligence-client";
 
@@ -176,6 +177,19 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const sqft = positiveNumber(listing.sqft);
   const dealScore = knownNumber(listing.dealScore);
   const bidSpread = knownNumber(listing.equity);
+  const redemptionDays = knownNumber(listing.redemptionDays);
+  const derivedFields = listing.provenance && typeof listing.provenance === "object" && listing.provenance.derivedFields && typeof listing.provenance.derivedFields === "object"
+    ? listing.provenance.derivedFields as { redemption?: unknown }
+    : null;
+  const derivedRedemption = derivedFields?.redemption && typeof derivedFields.redemption === "object"
+    ? derivedFields.redemption as { days?: unknown }
+    : null;
+  const modeledRedemptionDays = derivedRedemption
+    ? knownNumber(derivedRedemption.days) ?? redemptionDays
+    : null;
+  const showRedemptionReview = Boolean(derivedRedemption)
+    || Boolean(listing.redemptionWarning)
+    || (redemptionDays !== null && redemptionDays > 0);
   const photoUrl = safeImageUrl(listing.photo);
 
   const cashToClose = explicitCashScenario(listing, openingBid);
@@ -451,6 +465,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 </div>
               </div>
 
+              <ListingCompare listingId={listing.id} label={listing.address} />
+
               {/* AI Deal Intelligence */}
               <div className="p-5 rounded-2xl border border-[#0F172A]/10 bg-[#F8FAFC] space-y-3">
                 <div className="flex items-center justify-between">
@@ -543,27 +559,31 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     <p>
                       {listing.seniorLienRisk === "high"
                         ? "The normalized notice contains a possible junior-claimant signal. Confirm lien priority and surviving encumbrances from official recorder and court documents."
-                        : "No senior-lien warning was detected in the normalized source fields. This does not establish lien priority or extinguishment."}
+                        : "No junior-lien phrase is stored on this record. That is not lien priority or a clear title."}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Statutory Redemption & Title Caveat */}
-              {(listing.redemptionWarning || (listing.state === 'AL' || listing.state === 'MI' || listing.state === 'NJ' || listing.source === 'irs')) && (
+              {showRedemptionReview && (
                 <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-xs text-amber-900 space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-bold flex items-center gap-1.5 text-amber-950">
                       <Clock className="w-4 h-4 text-amber-600" />
                       Modeled redemption review
                     </span>
                     <span className="font-extrabold text-[10px] uppercase px-2 py-0.5 rounded bg-amber-200/80 text-amber-950">
-                      Official terms required
+                      {derivedRedemption
+                        ? (modeledRedemptionDays !== null ? `${Math.round(modeledRedemptionDays)}-day state table` : "State table unset")
+                        : (redemptionDays !== null ? redemptionLabel(redemptionDays) : "Official terms required")}
                     </span>
                   </div>
                   <p className="leading-relaxed">
-                    This listing may be subject to a redemption or objection period. Confirm the exact duration, triggering event, exceptions, and possession timeline in current official documents before bidding.
+                    {derivedRedemption
+                      ? `State-table baseline only${modeledRedemptionDays !== null ? `: ${Math.round(modeledRedemptionDays)} days for ${listing.state || "this state"}` : ""}. Not a term recorded on this sale.`
+                      : (listing.redemptionWarning || (redemptionDays !== null ? `The state-level model suggests a possible ${redemptionLabel(redemptionDays).toLowerCase()} review window for this ${listing.state} sale.` : "The source indicates a redemption review may apply, but no duration was captured."))}
                   </p>
+                  <p className="leading-relaxed font-semibold">Confirm the applicable period and exceptions in the official court, deed, and auction documents.</p>
                   <div className="grid grid-cols-2 gap-1 pt-1 text-[10px] text-amber-900 border-t border-amber-200/60">
                     <div><strong>Feed auction date:</strong> {displayDate(listing.saleDate)}</div>
                     <div><strong>Jurisdiction:</strong> {listing.state} · {source.label}</div>
