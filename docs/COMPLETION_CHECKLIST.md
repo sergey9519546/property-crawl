@@ -30,7 +30,7 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `708c9be` | `reports/release-gate-ledger.json` → `tree` |
+| Tree | `dc2e545` (9/9, clean, 2026-10-14) | `reports/release-gate-snapshot-2026-10-14.md` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
@@ -106,9 +106,10 @@ Nothing below depends on anything later in the list.
   keyboard autofocus & Escape modal trap, and mobile responsive pass (390x844) across
   5 routes with zero horizontal overflow and verified CLS budgets.
 - **#8 PP-05 (release ledger + handoff) — evidence committed 2026-10-10; the
-  claim itself stays blocked by an actual release.** The source-bound gate
-  result for tree `d470b20` (9/9, clean) is preserved as committed evidence in
-  `reports/release-gate-snapshot-2026-10-10.md` — the live per-run ledger stays
+  claim itself stays blocked by an actual release.** The latest source-bound
+  gate result, tree `dc2e545` (9/9, clean, 2026-10-14), is preserved in
+  `reports/release-gate-snapshot-2026-10-14.md`; the earlier `d470b20` result
+  is in `reports/release-gate-snapshot-2026-10-10.md` — the live per-run ledger stays
   gitignored by PP-02 convention. The rollout/rollback handoff in
   `docs/RELEASE_RUNBOOK_ZERO_COST.md` now includes the database-restore path
   verified the same day (pg_dump → drop → restore, 2091 listings round-trip).
