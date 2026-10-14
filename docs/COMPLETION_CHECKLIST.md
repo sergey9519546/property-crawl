@@ -33,7 +33,7 @@ if the seed count drifts.
 | Tree | `708c9be` | `reports/release-gate-ledger.json` → `tree` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
-| Seed listings (`data.js`) | **2091** | `scripts/gen-context.js` |
+| Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
 | Source catalog entries | **163** | `server/sources/catalog.js` |
 | Dispatched API paths | **41** | `server/server.js` |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
