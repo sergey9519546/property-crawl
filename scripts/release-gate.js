@@ -45,10 +45,19 @@ const gates = [
 
 const selected = quick ? gates.filter((g) => !g.slow) : gates;
 
+// `next build` rewrites next-env.d.ts to point at its own distDir. Left alone,
+// one full gate run dirties the tree and the next run is reported as not
+// source-bound. test/verify.js restores it the same way.
+const NEXT_ENV = path.join(ROOT, 'next-env.d.ts');
+const readNextEnv = () => { try { return fs.readFileSync(NEXT_ENV); } catch { return null; } };
+
 const results = [];
 for (const g of selected) {
   const started = Date.now();
+  const nextEnvBefore = readNextEnv();
   const res = r(g.cmd, g.args, g.env ? { env: g.env } : {});
+  const nextEnvAfter = readNextEnv();
+  if (nextEnvBefore && !(nextEnvAfter && nextEnvAfter.equals(nextEnvBefore))) fs.writeFileSync(NEXT_ENV, nextEnvBefore);
   const ms = Date.now() - started;
   const out = `${res.stdout || ''}${res.stderr || ''}`;
   const ok = res.status === 0;
