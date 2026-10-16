@@ -1,40 +1,40 @@
-# Release gate snapshot — 2026-10-16 (tree `20cf0cf`)
+# Release gate snapshot — 2026-10-16 (tree `edc580b`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is
 > regenerated on every gate run; this snapshot preserves the source-bound
 > result. No release has happened yet — this is a pre-deploy verification
-> record, superseding the earlier snapshot for tree `a58b544`.
+> record, superseding the earlier snapshot for tree `20cf0cf`.
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `20cf0cf43530417d4fd4375d1bcd5764d8bab82c` — dirty: false — 2026-10-16
+Tree: `edc580bb8ca97c5f5f6950bd0a14accd68a9d2c9` — dirty: false — 2026-10-16
 
 | Gate | Result | ms |
 |---|---|---|
-| typecheck (`tsc --noEmit`) | PASS | 3750 |
-| generated-context (CONTEXT.md current) | PASS | 176 |
-| schema-mirrors (byte-identical) | PASS | 76 |
-| test-wiring (every test file reachable) | PASS | 154 |
-| ops-suites (meta/wiring/contract) | PASS | 5754 |
-| scraper-parser (pinned runtime) | PASS | 3665 |
-| production-smoke | PASS | 129 |
-| next-build (production bundle) | PASS | 12065 |
-| production-e2e (25 checks, isolated embedded DB) | PASS | 20442 |
+| typecheck (`tsc --noEmit`) | PASS | 2124 |
+| generated-context (CONTEXT.md current) | PASS | 118 |
+| schema-mirrors (byte-identical) | PASS | 47 |
+| test-wiring (every test file reachable) | PASS | 97 |
+| ops-suites (meta/wiring/contract) | PASS | 4193 |
+| scraper-parser (pinned runtime) | PASS | 2427 |
+| production-smoke | PASS | 91 |
+| next-build (production bundle) | PASS | 7342 |
+| production-e2e (25 checks, isolated embedded DB) | PASS | 17383 |
 
 ## Why this tree was created & what it resolved
 
-Following an exhaustive audit of all pages, components, and marketing promises to eliminate copy pretending to be functionality and replace it with real working features:
+Following an exhaustive end-to-end audit of all pages, components, and user workflows:
 
-1. **Working Dual-Mode Watchlist Storage**:
-   - `src/components/listings/listing-watchlist-toggle.tsx`: Previously, unauthenticated public visitors on listing detail pages were blocked by `session.requestUnlock()`, prompting for an operator key when clicking "Save to watchlist". Now uses dual-mode storage: persists to `localStorage` (`perfectproperty:saved-listings`) when unauthenticated, and syncs with `/api/alerts` when authenticated as operator.
-   - `src/components/listings/discovery-workbench.tsx`: Added dual-mode `localStorage` reading and updating so bookmarked properties persist across pages. Added an interactive `Watchlist (${saved.size})` view filter toggle to the toolbar with helpful empty state guidance and clear buttons.
-2. **Verified Record Bindings in Second Look Showcase**:
-   - `src/components/site/second-look-showcase.tsx`: The three demonstration items previously had `listingId: null`, leading to dead ends. Bound each scenario to verified records in `data.js`: Cuyahoga OH sheriff sale (`HUD-412-652610`), Florida cadastral update (`TRSY-27-66-110`), and Texas trustee adjustment (`TRSY-26-66-189`). Now "Inspect property record" and "Reproducible packet" route directly to real listing and research export pages.
-3. **Mega-Menu Deep Routing**:
-   - `src/components/site/site-header.tsx`: Replaced generic `/listings` and dead anchor links in the Solutions navigation with deep-linked views (`/listings?view=grid&sort=score` for Acquisitions, `/research` for Disposition, `/listings?hasDocuments=true&minQuality=50` for Underwriting, and `/research#dossier` for Capital).
-4. **Interactive Underwriting Walkthrough Simulator**:
-   - `src/components/site/video-modal.tsx`: Transformed the hero walkthrough modal from a static single-card text container into an interactive 4-stage Underwriting Walkthrough Simulator (Stage 1: Statutory Notice Capture & OCR -> Stage 2: Fine-Print Legal & Docket Extraction -> Stage 3: Title Priority & Redemption Risk -> Stage 4: Cash-to-Close Basis & Triage Verdict). Includes scenario switching across verified properties, interactive stage navigation, and direct inspection links.
+1. **Dynamic Data Binding in Storyteller (`src/components/site/storyteller.tsx`)**:
+   - *Stage 3 (Underwrite)*: Previously, `assumed`, `repairs`, `carry`, and `profit` defaulted to `0`, causing the panel to display "Not entered", empty progress bars, and `—` for Bid Ceiling on initial inspection. Now automatically initializes conservative baseline underwriting assumptions whenever an active `openingBid` is present (`assumed = round(1.5 * opening)`, `repairs = round(0.15 * opening)`, `carry = round(0.05 * opening)`, `profit = round(0.15 * opening)`), with dynamic slider ranges that scale to property value.
+   - *Stage 4 (Act)*: Previously had `<MemoMetric label="Bid ceiling" value="—" />` hardcoded. Now synchronizes `modeledCeiling` across `PublishedListingContext` so that user adjustments in the Underwrite stage or the computed walk-away number dynamically flow directly into the Act stage's Acquisition Review memo.
+
+2. **Previous Improvements Retained**:
+   - Working Dual-Mode Watchlist Storage (`src/components/listings/listing-watchlist-toggle.tsx`, `src/components/listings/discovery-workbench.tsx`).
+   - Verified Record Bindings in Second Look Showcase (`src/components/site/second-look-showcase.tsx`).
+   - Mega-Menu Deep Routing (`src/components/site/site-header.tsx`).
+   - Interactive Underwriting Walkthrough Simulator (`src/components/site/video-modal.tsx`).
 
 ## What this snapshot does not claim
 
