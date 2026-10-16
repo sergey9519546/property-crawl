@@ -455,12 +455,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     router.push(
       `/listings/${encodeURIComponent(id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`,
     ), [router, filters]);
-  const exportCurrent = () => {
+  const exportCurrent = (format: "csv" | "json" = "csv") => {
     if (!session.authenticated) {
       session.requestUnlock();
       return;
     }
-    const params = discoverySearchParams(filters, { format: "csv" });
+    const params = discoverySearchParams(filters, { format });
     window.location.assign(`/api/export?${params}`);
   };
 
@@ -685,7 +685,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold">More</summary>
             <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
               <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-slate-50">Saved searches &amp; changes</Link>
-              <button onClick={exportCurrent} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export results</button>
+              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export CSV results</button>
+              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export JSON results</button>
             </div>
           </details>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">

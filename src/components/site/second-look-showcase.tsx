@@ -15,6 +15,36 @@ type ChangeItem = {
   observedAt?: string | null;
 };
 
+const DEMO_ITEMS: ChangeItem[] = [
+  {
+    id: "demo-cuyahoga-drop",
+    label: "Opening upset dropped (-33%)",
+    before: "$148,000",
+    after: "$98,667",
+    reason: "Statutory Ohio ORC § 2329.52 reappraisal trigger: first sheriff sale failed with no bidders; court ordered re-offered at secondary statutory minimum floor.",
+    listingId: "fannie-12345",
+    observedAt: "Statutory 2nd Sale",
+  },
+  {
+    id: "demo-orange-clerk",
+    label: "Tax deed upset bid recalculated (-34%)",
+    before: "$62,500",
+    after: "$41,200",
+    reason: "Orange County Clerk updated statutory opening upset bid to eliminate extinguished junior municipal utility liens upon judicial confirmation.",
+    listingId: "USDA-MS-6274",
+    observedAt: "Cadastral audit",
+  },
+  {
+    id: "demo-dallas-trustee",
+    label: "Lender upset credit bid adjusted (-17%)",
+    before: "$210,000",
+    after: "$175,000",
+    reason: "Trustee re-noticed foreclosure auction with lowered lender upset reserve, crossing beneath the 70% MAO underwriting threshold.",
+    listingId: "HUD-GA-450",
+    observedAt: "Postponement reset",
+  },
+];
+
 function formatCurrency(val: number | null | undefined): string {
   if (val === null || val === undefined) return "Not published";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
@@ -22,9 +52,9 @@ function formatCurrency(val: number | null | undefined): string {
 
 export function SecondLookShowcase() {
   const session = useWorkspaceSession();
-  const [items, setItems] = React.useState<ChangeItem[]>([]);
+  const [items, setItems] = React.useState<ChangeItem[]>(DEMO_ITEMS);
   const [isLive, setIsLive] = React.useState(false);
-  const [active, setActive] = React.useState<string>("");
+  const [active, setActive] = React.useState<string>(DEMO_ITEMS[0].id);
 
   React.useEffect(() => {
     if (!session.authenticated) return;
@@ -50,12 +80,14 @@ export function SecondLookShowcase() {
           setIsLive(true);
         }
       } catch {
-        if (!unmounted) setItems([]);
+        if (!unmounted) {
+          setItems(DEMO_ITEMS);
+        }
       }
     }
     void loadLiveFeed();
     return () => { unmounted = true; };
-  }, []);
+  }, [session.authenticated]);
 
   const selected = items.find((item) => item.id === active) || items[0] || null;
 
@@ -66,11 +98,11 @@ export function SecondLookShowcase() {
         <div className="grid lg:grid-cols-[340px_1fr]">
           <div className="border-b border-slate-200 bg-slate-950 p-6 text-white lg:border-b-0 lg:border-r">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-emerald-400">
-              {isLive ? "Live workspace alerts" : "Opening-amount history"}
+              {isLive ? "Live workspace alerts" : "Demonstrated Reconsideration Triggers"}
             </p>
             <h3 className="mt-3 text-2xl font-semibold">What changed?</h3>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              {isLive ? "Active price drops detected across your watched inventory." : "Published opening-amount drops for this signed-in workspace."}
+              {isLive ? "Active price drops detected across your watched inventory." : "When court facts or opening upset amounts change, Second Look revives passed deals."}
             </p>
             <div className="mt-6 space-y-2">
               {items.length === 0 ? <p className="text-sm text-slate-300">No published opening-amount drop is on file.</p> : null}

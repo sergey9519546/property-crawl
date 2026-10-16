@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { ArrowUp, Building2, Flag, Globe2, House, Map as MapIcon, MapPin, Undo2 } from "lucide-react";
+import { ArrowRight, ArrowUp, Building2, Database, Flag, Globe2, House, Map as MapIcon, MapPin, Undo2 } from "lucide-react";
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
@@ -424,33 +425,63 @@ export function Hero() {
                   </span>
                 </li>
               ))}
+              {deferredUrl.length >= 2 ? (
+                <li
+                  key="search-database-all"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`);
+                  }}
+                  onClick={() => window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`)}
+                  className="flex cursor-pointer items-center justify-between border-t border-slate-100 bg-emerald-50/60 px-3.5 py-3 text-[13px] font-semibold text-emerald-950 transition-colors hover:bg-emerald-100/70"
+                >
+                  <span className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-emerald-700" />
+                    Search full database for &ldquo;{deferredUrl}&rdquo;
+                  </span>
+                  <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                    10,000+ public records <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </li>
+              ) : null}
             </ul>
           ) : null}
         </motion.form>
 
-        {/* Try with your parcel */}
-        <motion.button
-          type="button"
-          onClick={() => {
-            const sampleMarket: MarketSuggestion = {
-              id: "city:Cleveland:OH",
-              label: "Cleveland, OH",
-              query: "Cleveland",
-              kind: "city",
-              description: "City market",
-            };
-            setUrl(sampleMarket.label);
-            setSelectedMarket(sampleMarket);
-            setStatus("Cleveland, OH selected. Select Search market to open the live feed.");
-          }}
-          initial={{ opacity: 1, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-          className="relative mt-[30px] flex items-center gap-1.5 self-center text-[15px] font-medium text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:mt-5 xl:text-[#0F172A] xl:focus-visible:outline-[#0F172A]"
-        >
-          <Undo2 className="h-4 w-4 text-[#0F172A]" />
-          Try the Cleveland market
-        </motion.button>
+        {/* Quick actions: sample market and nationwide database */}
+        <div className="relative mt-[30px] flex flex-wrap items-center justify-center gap-4 self-center text-[14px] font-medium xl:mt-5">
+          <motion.button
+            type="button"
+            onClick={() => {
+              const sampleMarket: MarketSuggestion = {
+                id: "city:Cleveland:OH",
+                label: "Cleveland, OH",
+                query: "Cleveland",
+                kind: "city",
+                description: "City market",
+              };
+              setUrl(sampleMarket.label);
+              setSelectedMarket(sampleMarket);
+              setStatus("Cleveland, OH selected. Select Search market to open the live feed.");
+            }}
+            initial={{ opacity: 1, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
+            className="flex items-center gap-1.5 text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:text-[#0F172A] xl:focus-visible:outline-[#0F172A]"
+          >
+            <Undo2 className="h-4 w-4 text-[#0F172A]" />
+            Try the Cleveland market
+          </motion.button>
+          <span className="hidden text-slate-400 sm:inline" aria-hidden>•</span>
+          <Link
+            href={url.trim() ? `/listings?q=${encodeURIComponent(url.trim())}` : "/listings"}
+            className="flex items-center gap-1.5 font-semibold text-slate-900 underline underline-offset-4 hover:text-emerald-700"
+          >
+            <Database className="h-4 w-4 text-emerald-600" />
+            Explore all 10,011 records in nationwide database
+            <ArrowRight className="h-3.5 w-3.5 text-slate-700" />
+          </Link>
+        </div>
         <p className="sr-only" aria-live="polite">{status}</p>
         </div>
       </motion.div>

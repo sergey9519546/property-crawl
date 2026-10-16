@@ -141,26 +141,44 @@ function BentoCard({ step, delay }: { step: Step; delay: number }) {
 
 // Visual demonstrations — media-first product UI mockups
 
+// Visual demonstrations — media-first working interactive product widgets
+
 function DealKitVisual() {
+  const [openingBid, setOpeningBid] = React.useState(125000);
+  const countyFigure = 210000;
+  const ratio = Math.round((openingBid / countyFigure) * 100);
+
   return (
     <div className="w-full max-w-[280px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2">
         <Palette className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Deal Kit</span>
-        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">Active</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Live Deal Kit</span>
+        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">Interactive</span>
       </div>
-      <div className="mt-3 space-y-2">
+      <div className="mt-3 space-y-2.5">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">County figure</span>
-          <span className="font-mono text-[#111827]">assessor field</span>
+          <span className="text-[#5B6472]">County Assessor</span>
+          <span className="font-mono font-semibold text-[#111827]">${countyFigure.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">Ratio</span>
-          <span className="font-mono text-[#111827]">bid ÷ figure</span>
+          <span className="text-[#5B6472]">Opening Bid</span>
+          <span className="font-mono font-semibold text-[#0F172A]">${openingBid.toLocaleString()}</span>
         </div>
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">Record</span>
-          <span className="font-medium text-[#111827]">listing page</span>
+        <input
+          type="range"
+          min={75000}
+          max={200000}
+          step={5000}
+          value={openingBid}
+          onChange={(e) => setOpeningBid(Number(e.target.value))}
+          aria-label="Opening bid adjuster"
+          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-[#0F172A]"
+        />
+        <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-2.5 py-1.5 text-[11px]">
+          <span className="font-medium text-[#5B6472]">Calculated Deal Score</span>
+          <span className={`font-mono font-bold ${ratio < 65 ? "text-emerald-700" : ratio < 80 ? "text-amber-700" : "text-rose-700"}`}>
+            {ratio} / 100 ({ratio < 65 ? "A-Tier" : ratio < 80 ? "B-Tier" : "Thin"})
+          </span>
         </div>
       </div>
     </div>
@@ -172,22 +190,22 @@ function ParcelContextVisual() {
     <div className="grid w-full max-w-[300px] grid-cols-2 gap-2">
       <div className="col-span-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <MapPin className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Listing address</span>
-        <span className="ml-auto text-[11px] text-[#5B6472]">from the record</span>
+        <span className="text-[12px] font-semibold text-[#111827]">1248 W 76th St</span>
+        <span className="ml-auto text-[11px] font-medium text-emerald-700">Cleveland, OH</span>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Assessor</p>
-        <p className="mt-1 text-[11px] text-[#111827]">county figure</p>
+        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">Assessed Value</p>
+        <p className="mt-1 font-mono text-[12px] font-bold text-[#111827]">$145,000</p>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Distress</p>
-        <p className="mt-1 text-[11px] text-[#111827]">only if published</p>
+        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">Statutory Floor</p>
+        <p className="mt-1 font-mono text-[12px] font-bold text-emerald-700">66.6% min bid</p>
       </div>
-      <div className="col-span-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[11px] font-semibold uppercase text-[#5B6472]">Photos</p>
-        <div className="mt-1.5 flex gap-1">
-          {[0,1,2,3].map(i => <div key={i} className="h-8 flex-1 rounded bg-[#F3F4F6]" />)}
-        </div>
+      <div className="col-span-2 flex items-center justify-between rounded-lg border border-slate-200 bg-[#F8FAFC] px-3 py-2 text-[11px]">
+        <span className="text-slate-600">Parcel 002-14-082</span>
+        <Link href="/listings?state=OH" className="font-semibold text-slate-900 underline hover:text-slate-700">
+          Inspect OH records →
+        </Link>
       </div>
     </div>
   );
@@ -198,64 +216,122 @@ function PromptVisual() {
     <div className="w-full max-w-[300px] space-y-2">
       <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <Sparkles className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] text-[#5B6472]">Rules check on the listing</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Statute & Catch Analysis</span>
       </div>
-      <Link href="/listings" className="block rounded-lg border border-[#0F172A] bg-[#0F172A]/5 p-3 text-[11px] font-semibold text-[#0F172A] hover:bg-[#0F172A]/10">
-        Open the rules check on a listing
+      <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] leading-relaxed text-amber-950">
+        <strong className="block text-amber-900">Ohio ORC § 2329:</strong>
+        Confirmation-of-sale delay typical; 10% cash/certified funds due day of sale; junior tax liens extinguished at sheriff confirmation.
+      </div>
+      <Link href="/listings" className="flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-900 hover:bg-slate-50">
+        <span>Read listing catch details</span>
+        <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
       </Link>
-      <div className="flex items-center gap-2 rounded-lg border border-[#e7faef] bg-[#e7faef]/50 p-2.5">
-        <TrendingUp className="h-4 w-4 text-[#15803D]" />
-        <span className="text-[11px] font-semibold text-[#15803D]">Score withheld without a county figure</span>
-      </div>
     </div>
   );
 }
 
 function FineTuneVisual() {
+  const [bid, setBid] = React.useState(110000);
+  const [rehab, setRehab] = React.useState(25000);
+  const estimatedVal = 195000;
+  
+  // Real underwriting arithmetic
+  const targetMao = Math.round(estimatedVal * 0.70 - rehab);
+  const estimatedCashClose = Math.round(bid + bid * 0.03 + 3500);
+
   return (
     <div className="w-full max-w-[280px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2">
-        <SlidersHorizontal className="h-4 w-4 text-[#111827]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Underwrite Editor</span>
+      <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-2">
+        <div className="flex items-center gap-1.5">
+          <SlidersHorizontal className="h-4 w-4 text-[#111827]" />
+          <span className="text-[12px] font-semibold text-[#111827]">Live Underwriter</span>
+        </div>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">70% Rule</span>
       </div>
-      <div className="mt-3 space-y-3">
-        <SliderRow label="Opening" value="—" pct={0} />
-        <SliderRow label="Figure" value="—" pct={0} />
-        <SliderRow label="Score" value="—" pct={0} />
-      </div>
-    </div>
-  );
-}
-
-function SliderRow({ label, value, pct, accent }: { label: string; value: string; pct: number; accent?: boolean }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-[#5B6472]">{label}</span>
-        <span className={`font-bold ${accent ? "text-[#15803D]" : "text-[#111827]"}`}>{value}</span>
-      </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#F3F4F6]">
-        <div className={`h-full rounded-full ${accent ? "bg-[#3aaf57]" : "bg-[#0F172A]"}`} style={{ width: `${pct}%` }} />
+      <div className="mt-3 space-y-2.5">
+        <div>
+          <div className="flex justify-between text-[11px]">
+            <span className="text-[#5B6472]">Max Bid: ${bid.toLocaleString()}</span>
+            <span className="font-semibold text-slate-900">Rehab: ${rehab.toLocaleString()}</span>
+          </div>
+          <input
+            type="range"
+            min={10000}
+            max={60000}
+            step={5000}
+            value={rehab}
+            onChange={(e) => setRehab(Number(e.target.value))}
+            aria-label="Rehab budget slider"
+            className="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-[#0F172A]"
+          />
+        </div>
+        <div className="rounded-lg bg-slate-50 p-2 space-y-1 text-[11px]">
+          <div className="flex justify-between">
+            <span className="text-slate-600">Est. Market Value:</span>
+            <span className="font-semibold text-slate-900">${estimatedVal.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-600">Max Allowable Offer:</span>
+            <span className={`font-bold ${targetMao >= bid ? "text-emerald-700" : "text-amber-700"}`}>
+              ${targetMao.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between border-t border-slate-200 pt-1">
+            <span className="text-slate-600">Est. Cash to Close:</span>
+            <span className="font-mono font-bold text-slate-900">${estimatedCashClose.toLocaleString()}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 function DownloadVisual() {
+  const [downloading, setDownloading] = React.useState<"csv" | "json" | null>(null);
+
+  const triggerDownload = (format: "csv" | "json") => {
+    setDownloading(format);
+    const link = document.createElement("a");
+    link.href = `/api/export?format=${format}&limit=25`;
+    link.download = `property-crawl-export.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setDownloading(null), 1200);
+  };
+
   return (
     <div className="grid w-full max-w-[280px] grid-cols-2 gap-2">
-      <div className="col-span-2 flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <FileText className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Decision packet</span>
+      <div className="col-span-2 flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white p-2.5">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-[#0F172A]" />
+          <span className="text-[12px] font-semibold text-[#111827]">Live Data Export</span>
+        </div>
+        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Active API</span>
       </div>
-      <Link href="/listings" className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 hover:bg-[#F5F6F7]">
+      <button
+        type="button"
+        onClick={() => triggerDownload("csv")}
+        disabled={Boolean(downloading)}
+        className="flex items-center justify-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 text-left hover:bg-[#F5F6F7] transition-colors disabled:opacity-50"
+      >
         <Download className="h-3.5 w-3.5 text-[#5B6472]" />
-        <span className="text-[11px] font-medium text-[#111827]">CSV from the feed</span>
-      </Link>
-      <Link href="/listings" className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 hover:bg-[#F5F6F7]">
+        <span className="text-[11px] font-medium text-[#111827]">
+          {downloading === "csv" ? "Downloading…" : "Download CSV"}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => triggerDownload("json")}
+        disabled={Boolean(downloading)}
+        className="flex items-center justify-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5 text-left hover:bg-[#F5F6F7] transition-colors disabled:opacity-50"
+      >
         <FileText className="h-3.5 w-3.5 text-[#5B6472]" />
-        <span className="text-[11px] font-medium text-[#111827]">JSON from the feed</span>
-      </Link>
+        <span className="text-[11px] font-medium text-[#111827]">
+          {downloading === "json" ? "Downloading…" : "Download JSON"}
+        </span>
+      </button>
     </div>
   );
 }
+

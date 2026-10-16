@@ -109,27 +109,40 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   };
 
   const handleRunAiStrategy = async () => {
-    if (!reverseScenario || cash.totalAcquisitionCost === null) return;
+    if (openingBid === null) return;
     setLoadingStrategy(true);
-    // The explanation is arithmetic over figures the client already holds, so it is
-    // derived deterministically. This component must not call a client-side AI SDK:
-    // model output is not evidence, cannot be traced to a source, and would put a
-    // third-party model in the path of a bid decision. Model-backed prose belongs on
-    // the backend behind the evidence gates, never in the browser.
-    const costLine = otherAcquisitionCosts === null
-      ? "Other acquisition costs are incomplete, so they are excluded from the target."
-      : `Other acquisition costs you entered total ${displayMoney(otherAcquisitionCosts)}.`;
-    const reductionLine = reverseScenario.priceReductionNeeded > 0
-      ? `The published opening amount is ${displayMoney(reverseScenario.priceReductionNeeded)} above that target.`
-      : `The published opening amount is ${displayMoney(openingBid - reverseScenario.maxPurchasePrice)} below that target.`;
-    const feasibilityLine = reverseScenario.targetAchievableAtCurrentPrice
-      ? `Reaching the target at the opening amount requires ${displayMoney(reverseScenario.costReductionNeeded)} of cost reduction.`
-      : "The target is not achievable at the opening amount, even with zero other acquisition costs.";
-    setAiStrategy([
-      `1. Maximum price = supported valuation midpoint ${displayMoney(estimatedValue)} minus your ${targetMargin}% target profit, the ${displayMoney(rehabBudget)} rehab assumption, and every entered acquisition cost.`,
-      `2. That gives a maximum price of ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
-      `3. ${feasibilityLine} Title, debt, property condition, and final sale price remain unknown and are not estimated here.`,
-    ].join(" "));
+
+    if (reverseScenario && cash.totalAcquisitionCost !== null) {
+      const costLine = otherAcquisitionCosts === null
+        ? "Other acquisition costs are incomplete, so they are excluded from the target."
+        : `Other acquisition costs you entered total ${displayMoney(otherAcquisitionCosts)}.`;
+      const reductionLine = reverseScenario.priceReductionNeeded > 0
+        ? `The published opening amount is ${displayMoney(reverseScenario.priceReductionNeeded)} above that target.`
+        : `The published opening amount is ${displayMoney(openingBid - reverseScenario.maxPurchasePrice)} below that target.`;
+      const feasibilityLine = reverseScenario.targetAchievableAtCurrentPrice
+        ? `Reaching the target at the opening amount requires ${displayMoney(reverseScenario.costReductionNeeded)} of cost reduction.`
+        : "The target is not achievable at the opening amount, even with zero other acquisition costs.";
+      setAiStrategy([
+        `1. Maximum Allowable Offer = valuation midpoint ${displayMoney(estimatedValue)} minus ${targetMargin}% target margin, ${displayMoney(rehabBudget)} rehab budget, and entered settlement costs.`,
+        `2. Target purchase ceiling: ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
+        `3. Feasibility: ${feasibilityLine}`,
+        `4. Statutory Due Diligence: ${listing.redemptionWarning || (listing.redemptionDays ? `${listing.redemptionDays}-day statutory redemption window applies.` : "Check local statutory redemption.")} ${listing.seniorLienWarning || "Verify senior judicial and municipal liens before bidding."}`,
+      ].join("\n\n"));
+    } else {
+      const totalCost = cash.totalAcquisitionCost !== null
+        ? displayMoney(cash.totalAcquisitionCost)
+        : `At least ${displayMoney(openingBid)} + unresolved buyer fees`;
+      const cashToClose = cash.cashDueAtSettlement !== null
+        ? displayMoney(cash.cashDueAtSettlement)
+        : "Unresolved until deposit and registration funds are entered";
+      
+      setAiStrategy([
+        `1. Acquisition Cost Model: Published opening amount is ${displayMoney(openingBid)}. Modeled total acquisition cost: ${totalCost} (with ${displayMoney(rehabBudget)} estimated rehab). Estimated cash to close: ${cashToClose}.`,
+        `2. Statutory Redemption: ${listing.redemptionWarning || (listing.redemptionDays ? `${listing.redemptionDays}-day statutory redemption period under ${listing.state || "state"} law.` : "No statutory redemption period detected; verify clerk docket.")}`,
+        `3. Title & Lien Risk: ${listing.seniorLienWarning || "No senior lien phrase detected. Certified title search must be performed before tender of cashier's check."}`,
+        `4. Bidding Discipline: In distressed judicial auctions, opening amounts reflect petitioner debt or upset statutory minimums, not property value. Ensure rehab plus holding costs remain under 70% of verified local tax assessor or CMA value.`,
+      ].join("\n\n"));
+    }
     setLoadingStrategy(false);
   };
 
@@ -224,7 +237,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       <div className="space-y-2.5 rounded-xl border border-slate-200 bg-[#F8FAFC] p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[#0F172A]"><Sparkles className="h-3.5 w-3.5 fill-amber-500 text-amber-500" /><span>Explain this scenario</span></div>
-          <button disabled={!reverseScenario || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-[#0F172A] px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Explain again" : "Explain math"}</button>
+          <button disabled={openingBid === null || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-[#0F172A] px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Re-run explanation" : "Explain scenario & risks"}</button>
         </div>
         {loadingStrategy && <p className="animate-pulse text-xs text-slate-500">Checking the entered scenario...</p>}
         {aiStrategy && <div className="whitespace-pre-line border-t border-slate-200 pt-2 text-xs leading-relaxed text-slate-700">{aiStrategy}</div>}

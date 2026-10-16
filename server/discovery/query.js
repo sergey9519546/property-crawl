@@ -1,6 +1,6 @@
 "use strict";
 const { hash } = require("./store");
-const MAX_SCAN = 10000,
+const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
   constructor(status, message) {
