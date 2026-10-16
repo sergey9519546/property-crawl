@@ -174,11 +174,15 @@ type PublishedListing = {
 type PublishedState = {
   listing: PublishedListing | null;
   status: "loading" | "ready" | "empty" | "error";
+  modeledCeiling: number | null;
+  setModeledCeiling: (ceiling: number | null) => void;
 };
 
 const PublishedListingContext = React.createContext<PublishedState>({
   listing: null,
   status: "loading",
+  modeledCeiling: null,
+  setModeledCeiling: () => {},
 });
 
 function moneyText(value: unknown): string {
@@ -187,8 +191,14 @@ function moneyText(value: unknown): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
-function useLoadPublishedListing(): PublishedState {
-  const [state, setState] = React.useState<PublishedState>({ listing: null, status: "loading" });
+function formatDollars(value: unknown, fallback = "—"): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+function useLoadPublishedListing(): { listing: PublishedListing | null; status: "loading" | "ready" | "empty" | "error" } {
+  const [state, setState] = React.useState<{ listing: PublishedListing | null; status: "loading" | "ready" | "empty" | "error" }>({ listing: null, status: "loading" });
   React.useEffect(() => {
     let cancelled = false;
     void fetch("/api/listings?limit=1&sort=date", { cache: "no-store" })
@@ -211,6 +221,7 @@ function useLoadPublishedListing(): PublishedState {
 export function Storyteller() {
   const published = useLoadPublishedListing();
   const [stage, setStage] = React.useState<StageKey>("find");
+  const [modeledCeiling, setModeledCeiling] = React.useState<number | null>(null);
   const tabRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const activeIndex = STAGES.findIndex((item) => item.key === stage);
   const activeStage = STAGES[activeIndex];
@@ -243,8 +254,17 @@ export function Storyteller() {
     || (published.status === "loading" ? "Reading the listing feed" : published.status === "error" ? "Listing feed unavailable" : "No listing returned");
   const place = [published.listing?.city, published.listing?.state].filter(Boolean).join(", ");
 
+  const contextValue = React.useMemo<PublishedState>(
+    () => ({
+      ...published,
+      modeledCeiling,
+      setModeledCeiling,
+    }),
+    [published, modeledCeiling]
+  );
+
   return (
-    <PublishedListingContext.Provider value={published}>
+    <PublishedListingContext.Provider value={contextValue}>
     <section id="product" className="relative isolate overflow-hidden py-24 sm:py-28">
       <div
         aria-hidden
@@ -503,17 +523,36 @@ function EvidenceFact({ label, value }: { label: string; value: string }) {
 }
 
 function UnderwritePanel() {
-  const { listing } = React.useContext(PublishedListingContext);
+  const { listing, setModeledCeiling } = React.useContext(PublishedListingContext);
   const openingN = Number(listing?.openingBid);
   const opening = Number.isFinite(openingN) && openingN > 0 ? openingN : null;
   const [assumed, setAssumed] = React.useState(0);
   const [repairs, setRepairs] = React.useState(0);
   const [carry, setCarry] = React.useState(0);
   const [profit, setProfit] = React.useState(0);
+
+  // Initialize with conservative baseline when opening bid is present
+  React.useEffect(() => {
+    if (opening && assumed === 0) {
+      const initAssumed = Math.round((opening * 1.5) / 5000) * 5000;
+      const initRepairs = Math.round((opening * 0.15) / 1000) * 1000;
+      const initCarry = Math.round((opening * 0.05) / 1000) * 1000;
+      const initProfit = Math.round((opening * 0.15) / 1000) * 1000;
+      setAssumed(initAssumed);
+      setRepairs(initRepairs);
+      setCarry(initCarry);
+      setProfit(initProfit);
+    }
+  }, [opening, assumed]);
+
   const ceiling = assumed > 0 ? Math.max(0, assumed - repairs - carry - profit) : null;
   const offerRoom = ceiling !== null && opening !== null ? Math.max(0, ceiling - opening) : null;
   const dollars = (n: number) => `$${Math.round(n).toLocaleString()}`;
   const bar = (amount: number) => (assumed > 0 ? `${Math.max(0, Math.min(100, Math.round((amount / assumed) * 100)))}%` : "0%");
+
+  React.useEffect(() => {
+    setModeledCeiling(ceiling);
+  }, [ceiling, setModeledCeiling]);
 
   const deductions = [
     {
@@ -522,7 +561,7 @@ function UnderwritePanel() {
       width: "100%",
       color: "bg-emerald-600",
       min: 0,
-      max: 500000,
+      max: Math.max(500000, Math.round((assumed || 300000) * 1.5)),
       current: assumed,
       onChange: setAssumed as ((v: number) => void) | undefined,
     },
@@ -532,7 +571,7 @@ function UnderwritePanel() {
       width: bar(Math.max(0, assumed - repairs)),
       color: "bg-sky-500",
       min: 0,
-      max: 200000,
+      max: Math.max(200000, Math.round((assumed || 300000) * 0.5)),
       current: repairs,
       onChange: setRepairs,
     },
@@ -542,7 +581,7 @@ function UnderwritePanel() {
       width: bar(Math.max(0, assumed - repairs - carry)),
       color: "bg-indigo-400",
       min: 0,
-      max: 100000,
+      max: Math.max(100000, Math.round((assumed || 300000) * 0.25)),
       current: carry,
       onChange: setCarry,
     },
@@ -552,7 +591,7 @@ function UnderwritePanel() {
       width: bar(ceiling ?? 0),
       color: "bg-violet-400",
       min: 0,
-      max: 200000,
+      max: Math.max(200000, Math.round((assumed || 300000) * 0.4)),
       current: profit,
       onChange: setProfit,
     },
@@ -649,7 +688,7 @@ function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; l
 }
 
 function ActionPanel() {
-  const { listing } = React.useContext(PublishedListingContext);
+  const { listing, modeledCeiling } = React.useContext(PublishedListingContext);
   const scoreN = Number(listing?.dealScore);
   const score = Number.isFinite(scoreN) && scoreN > 0 ? String(scoreN) : "—";
   const [actions, setActions] = React.useState([
@@ -682,7 +721,7 @@ function ActionPanel() {
           <div className="grid grid-cols-3 gap-2">
             <MemoMetric label="Deal score" value={score} />
             <MemoMetric label="Opening" value={moneyText(listing?.openingBid)} />
-            <MemoMetric label="Bid ceiling" value="—" />
+            <MemoMetric label="Bid ceiling" value={modeledCeiling !== null ? formatDollars(modeledCeiling) : "—"} />
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
