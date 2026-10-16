@@ -178,9 +178,15 @@ function apiRoutesWithoutClientCaller() {
   const orphans = [];
   for (const f of handlers) {
     const url = '/' + rel(f).replace(/^src\/app\//, '').replace(/\/route\.ts$/, '');
-    const staticPrefix = url.split('/').filter((seg) => !seg.startsWith('[')).join('/');
-    const re = new RegExp(staticPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
-    if (!re.test(clientCorpus)) orphans.push({ url, staticPrefix });
+    const pattern = url.split('/').map((seg) => (
+      seg.startsWith('[') ? '[^/`]+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    )).join('/');
+    const re = new RegExp(pattern + '(?![\\w-])');
+    if (!re.test(clientCorpus)) {
+      const firstParam = url.indexOf('/[');
+      const staticPrefix = firstParam !== -1 ? url.slice(0, firstParam) : url;
+      orphans.push({ url, staticPrefix });
+    }
   }
   return { total: handlers.length, orphans };
 }

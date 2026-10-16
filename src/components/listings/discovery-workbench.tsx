@@ -36,6 +36,7 @@ import {
 import {
   getAuctionCalendar,
   listNeighborhoods,
+  calendarDatedTotal,
   type AuctionCalendarResponse,
   type NeighborhoodsResponse,
 } from "@/lib/intelligence-client";
@@ -954,7 +955,7 @@ function DiscoveryCalendar({
               {rollupLoading
                 ? "Loading…"
                 : calendarRollup
-                  ? `${calendarRollup.total.toLocaleString()} dated auctions`
+                  ? `${calendarDatedTotal(calendarRollup).toLocaleString()} dated auctions`
                   : "Unavailable"}
             </span>
           </div>

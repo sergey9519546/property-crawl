@@ -1151,8 +1151,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # style for exactly that reason.
         self.install_map_fixture(preserve_listings=True)
         self.page.reload(wait_until="domcontentloaded")
-        deal_map = self.page.get_by_test_id("storyteller-deal-map")
-        self.page.locator("#product").evaluate("element => element.scrollIntoView({block: 'center'})")
+        deal_map = self.reveal_deferred_atlas()
         desktop_box = deal_map.bounding_box()
         self.assertIsNotNone(desktop_box)
         self.assertGreaterEqual(desktop_box["width"], 900)

@@ -21,6 +21,15 @@ export type NeighborhoodsResponse = {
   count: number;
   maxAgeDays: number;
   state: string | null;
+  // Store read and result coverage, as published by server/routes/neighborhoods.js.
+  scanned?: number;
+  availableTotal?: number | null;
+  truncated?: boolean;
+  bucketsTotal?: number;
+  bucketsReturned?: number;
+  bucketsTruncated?: boolean;
+  listingsBucketed?: number;
+  listingsCovered?: number;
   neighborhoods: NeighborhoodBucket[];
 };
 
@@ -41,10 +50,21 @@ export type AuctionCalendarResponse = {
   states: string[] | null;
   startMs: number;
   endMs: number;
-  dropped: { noDate: number; outsideWindow: number };
+  // Store read and cache age, as published by server/routes/auction-calendar.js.
+  // The server sends no `total`; derive it with calendarDatedTotal().
+  scanned?: number;
+  availableTotal?: number | null;
+  truncated?: boolean;
+  cachedAt?: string;
+  ageMs?: number;
+  dropped: { noDate: number; outsideWindow: number; stateFilter?: number };
   weeks: AuctionWeek[];
-  total: number;
 };
+
+export function calendarDatedTotal(calendar: Pick<AuctionCalendarResponse, "weeks"> | null | undefined): number {
+  if (!calendar || !Array.isArray(calendar.weeks)) return 0;
+  return calendar.weeks.reduce((sum, week) => sum + (Number.isFinite(week?.count) ? week.count : 0), 0);
+}
 
 export type WatchlistCompItem = {
   listing?: {

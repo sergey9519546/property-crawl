@@ -922,12 +922,11 @@ the behaviour. Measuring the actual request count is what caught it.
 Every route was rendered and checked: all fifteen return 200 with content and no
 page errors. Two observations worth recording rather than changing at this hour:
 
-- The home page fires `/api/alerts/matches` twice on load and receives 401,
-  because `interactive-terminal.tsx` refreshes the unread badge on mount without
-  an auth gate — every other gated feature checks `session.authenticated` first.
-  It is handled rather than hidden (the badge simply stays 0), so this is two
-  wasted requests and console noise, not a wrong answer. It was left rather than
-  adding a session dependency to a large component late in a long session.
+- **Fixed since:** the home page used to fire `/api/alerts/matches` twice on
+  load and receive 401. `interactive-terminal.tsx` now refreshes the unread
+  badge only when `useResolvedWorkspaceSession()` reports
+  `authenticated === true` (null = not known yet, treated as neither answer),
+  and the modal-closed refresh skips the initial render.
 - Viewing `/sitemap.xml` directly in a browser logs a CSP inline-style warning;
   the endpoint itself is a plain XML document and the warning comes from Chrome
   rendering it. Not a product defect.
