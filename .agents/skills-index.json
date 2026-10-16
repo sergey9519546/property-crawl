@@ -2,22 +2,50 @@
   "skills": [
     {
       "name": "agent-verification",
-      "description": "",
-      "domain": "general",
+      "description": "Proportional verification gate, evidence-cited completion, and drift detection\nfor the property-crawl agent system. Use this when the agent must verify its\nown output before claiming completion.",
+      "domain": "agent-system",
       "version": "v1",
       "trigger": [
-        "undefined"
+        "agent",
+        "agent-verification",
+        "before",
+        "claiming",
+        "completion",
+        "detection",
+        "drift",
+        "evidence-cited",
+        "gate",
+        "output",
+        "property-crawl",
+        "proportional",
+        "system",
+        "verification",
+        "verify"
       ],
       "dir": ".agents/skills/agent-verification",
       "file": ".agents/skills/agent-verification/SKILL.md"
     },
     {
       "name": "deal-scoring",
-      "description": "",
-      "domain": "general",
+      "description": "Deal Score formula, SCORE_BANDS taxonomy, and worked examples for the\nproperty-crawl triage indicator. Use this when explaining, verifying,\nor debugging the Deal Score calculation.",
+      "domain": "property-data",
       "version": "v1",
       "trigger": [
-        "undefined"
+        "bands",
+        "calculation",
+        "deal",
+        "deal-scoring",
+        "debugging",
+        "examples",
+        "explaining",
+        "formula",
+        "indicator",
+        "property-crawl",
+        "score",
+        "taxonomy",
+        "triage",
+        "verifying",
+        "worked"
       ],
       "dir": ".agents/skills/deal-scoring",
       "file": ".agents/skills/deal-scoring/SKILL.md"
@@ -91,11 +119,30 @@
     },
     {
       "name": "listing-normalization",
-      "description": "",
-      "domain": "general",
+      "description": "Canonical listing contract for property-crawl: every scraper output must conform\nto the camelCase schema with required fields, type constraints, and validation.\nUse this when normalizing raw scraper data into the standard listing shape.",
+      "domain": "property-data",
       "version": "v1",
       "trigger": [
-        "undefined"
+        "camelcase",
+        "canonical",
+        "conform",
+        "constraints",
+        "contract",
+        "data",
+        "every",
+        "fields",
+        "listing",
+        "listing-normalization",
+        "normalizing",
+        "output",
+        "property-crawl",
+        "required",
+        "schema",
+        "scraper",
+        "shape",
+        "standard",
+        "type",
+        "validation"
       ],
       "dir": ".agents/skills/listing-normalization",
       "file": ".agents/skills/listing-normalization/SKILL.md"
@@ -173,5 +220,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "04019e48b9381e5fde9d56d67757f4cbebfd5070a289d66e73a7c564c925a29b"
+  "digest": "9bf0c7c7ea1c128bd3d501267bd54a3de82899ad92017d9a9a67a2985e0ac922"
 }

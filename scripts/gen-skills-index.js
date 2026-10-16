@@ -21,11 +21,11 @@ const SKILLS_DIR = path.join(ROOT, '.agents', 'skills');
 const INDEX_PATH = path.join(ROOT, '.agents', 'skills-index.json');
 
 function parseFrontmatter(content) {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return {};
   const yaml = m[1];
   const fields = {};
-  const lines = yaml.split('\n');
+  const lines = yaml.split(/\r?\n/);
   let currentKey = null;
   let blockLines = null; // non-null when accumulating a YAML block scalar
 
