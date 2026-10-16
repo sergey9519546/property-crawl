@@ -1,23 +1,11 @@
 {
-  "worktrees": {
-    "wt-1788742603802-1": {
-      "branch": "gaudy-asterisk",
-      "path": "c:\\users\\serge\\.minimax\\sessions\\mvs_33469e4a8e48472faf25c6f55a29c489\\workspace\\property-crawl\\.kilo\\worktrees\\gaudy-asterisk",
-      "parentBranch": "main",
-      "createdAt": "2026-09-07T00:56:43.802Z",
-      "remote": "origin",
-      "branchOwned": true
-    }
-  },
+  "worktrees": {},
   "sessions": {},
   "tabOrder": {
     "local": [
       "pending:b278a485-b723-4a5f-8790-63069aa7dbf6"
     ]
   },
-  "worktreeOrder": [
-    "wt-1788742603802-1"
-  ],
   "sessionsCollapsed": true,
   "activeTarget": {
     "projectId": "prj-7308412530d0",
