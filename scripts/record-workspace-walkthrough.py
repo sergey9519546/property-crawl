@@ -285,10 +285,10 @@ def record_journey(artifact_dir, credential, restart_api) -> None:
             page.screenshot(path=str(artifact_dir / "04-second-look.png"), full_page=True)
 
             with page.expect_download() as download_info:
-                page.get_by_role("button", name="JSON", exact=True).click()
+                page.get_by_role("button", name=re.compile(r"JSON", re.I)).click()
             download_info.value.save_as(str(artifact_dir / "decision-packet.json"))
             with page.expect_download() as download_info:
-                page.get_by_role("button", name="Print-ready report", exact=True).click()
+                page.get_by_role("button", name=re.compile(r"Print-ready", re.I)).click()
             download_info.value.save_as(str(artifact_dir / "decision-packet.md"))
 
             packet_url = f"{BASE_URL}/api/workspace/cases/{case_id}/packet?format=json"

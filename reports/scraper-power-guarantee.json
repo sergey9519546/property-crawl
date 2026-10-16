@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-01T11:15:09.712Z",
+  "generatedAt": "2026-10-16T02:38:02.783Z",
   "guarantee": {
     "catalogSources": 163,
     "scheduledAdapters": 21,
     "scraplingEnabledAdapters": 8,
-    "seedListingsIndexed": 2094,
+    "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
     "endCoverageGaps": [],
@@ -737,7 +737,7 @@
         ]
       },
       "weakness": null,
-      "seedListings": 8
+      "seedListings": 1
     },
     {
       "id": "treasury-forfeiture",
@@ -762,7 +762,7 @@
         ]
       },
       "weakness": null,
-      "seedListings": 12
+      "seedListings": 16
     },
     {
       "id": "gsa-real-estate-sales",
@@ -772,7 +772,7 @@
       "status": "VERIFIED_OFFICIAL",
       "adapterKey": "gsa",
       "access": "public",
-      "discoveryUrl": "https://realestatesales.gov/",
+      "discoveryUrl": "https://www.gsa.gov/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition",
       "power": {
         "tier": "P4_LIVE_STRONG",
         "score": 5,
@@ -789,7 +789,7 @@
         ]
       },
       "weakness": "robots exclusion on /our-listing; sparse inventory; Scrapling optional",
-      "seedListings": 2
+      "seedListings": 41
     },
     {
       "id": "us-marshals",

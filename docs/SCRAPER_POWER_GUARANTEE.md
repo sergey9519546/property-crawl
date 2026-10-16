@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-01T11:15:09.712Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-16T02:38:02.783Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -10,7 +10,7 @@
 | Catalog sources (all ends) | **163** |
 | Scheduled production adapters | **21** |
 | Adapters with Scrapling profiles | **8** |
-| Seed listings in data.js | **2094** |
+| Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
 ## End coverage (all channels)
@@ -51,10 +51,10 @@
 |---|---|---|---:|---|
 | `civilview` (CivilView Sheriff/Tax Sale Platform) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
 | `civilview` (CivilView Participating Jurisdictions (Nationwide set)) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
-| `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 2 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
+| `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 41 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
-| `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 8 | — |
-| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 12 | — |
+| `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 1 | — |
+| `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 16 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
 | `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
 | `sheriff` (Ohio Sheriff Sale Auction) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
