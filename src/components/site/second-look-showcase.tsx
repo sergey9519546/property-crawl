@@ -22,7 +22,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$148,000",
     after: "$98,667",
     reason: "Statutory Ohio ORC § 2329.52 reappraisal trigger: first sheriff sale failed with no bidders; court ordered re-offered at secondary statutory minimum floor.",
-    listingId: "fannie-12345",
+    listingId: null,
     observedAt: "Statutory 2nd Sale",
   },
   {
@@ -31,7 +31,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$62,500",
     after: "$41,200",
     reason: "Orange County Clerk updated statutory opening upset bid to eliminate extinguished junior municipal utility liens upon judicial confirmation.",
-    listingId: "USDA-MS-6274",
+    listingId: null,
     observedAt: "Cadastral audit",
   },
   {
@@ -40,7 +40,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$210,000",
     after: "$175,000",
     reason: "Trustee re-noticed foreclosure auction with lowered lender upset reserve, crossing beneath the 70% MAO underwriting threshold.",
-    listingId: "HUD-GA-450",
+    listingId: null,
     observedAt: "Postponement reset",
   },
 ];
@@ -174,12 +174,19 @@ export function SecondLookShowcase() {
                   </span>
                 )}
               </div>
-              {selected?.listingId && (
+              {selected?.listingId ? (
                 <Link
                   href={`/listings/${encodeURIComponent(selected.listingId)}`}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 >
                   Inspect property record <ExternalLink size={13} />
+                </Link>
+              ) : (
+                <Link
+                  href="/listings"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                >
+                  Explore verified listings <ArrowRight size={13} />
                 </Link>
               )}
             </div>

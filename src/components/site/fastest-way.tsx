@@ -15,6 +15,7 @@ import {
   Download,
   type LucideIcon,
 } from "lucide-react";
+import { bandForScore } from "@/lib/score-bands";
 
 type Step = {
   label: string;
@@ -146,7 +147,9 @@ function BentoCard({ step, delay }: { step: Step; delay: number }) {
 function DealKitVisual() {
   const [openingBid, setOpeningBid] = React.useState(125000);
   const countyFigure = 210000;
-  const ratio = Math.round((openingBid / countyFigure) * 100);
+  const ratio = openingBid / countyFigure;
+  const dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)));
+  const band = bandForScore(dealScore);
 
   return (
     <div className="w-full max-w-[280px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
@@ -176,8 +179,11 @@ function DealKitVisual() {
         />
         <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-2.5 py-1.5 text-[11px]">
           <span className="font-medium text-[#5B6472]">Calculated Deal Score</span>
-          <span className={`font-mono font-bold ${ratio < 65 ? "text-emerald-700" : ratio < 80 ? "text-amber-700" : "text-rose-700"}`}>
-            {ratio} / 100 ({ratio < 65 ? "A-Tier" : ratio < 80 ? "B-Tier" : "Thin"})
+          <span
+            className="font-mono font-bold"
+            style={{ color: band?.color || "#5B6472" }}
+          >
+            {dealScore} / 99 ({band?.label || "Unrated"})
           </span>
         </div>
       </div>

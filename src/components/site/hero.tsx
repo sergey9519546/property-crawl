@@ -440,7 +440,7 @@ export function Hero() {
                     Search full database for &ldquo;{deferredUrl}&rdquo;
                   </span>
                   <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                    10,000+ public records <ArrowRight className="h-3.5 w-3.5" />
+                    Nationwide public records <ArrowRight className="h-3.5 w-3.5" />
                   </span>
                 </li>
               ) : null}
@@ -478,7 +478,7 @@ export function Hero() {
             className="flex items-center gap-1.5 font-semibold text-slate-900 underline underline-offset-4 hover:text-emerald-700"
           >
             <Database className="h-4 w-4 text-emerald-600" />
-            Explore all 10,011 records in nationwide database
+            Explore nationwide public records database
             <ArrowRight className="h-3.5 w-3.5 text-slate-700" />
           </Link>
         </div>
