@@ -77,12 +77,12 @@ const GROUPS: MenuGroup[] = [
     label: "Solutions",
     columns: [
       [
-        { label: "Acquisitions", desc: "Triage from source record to research case", icon: Target, href: "/listings", tint: "#e7faef" },
-        { label: "Disposition", desc: "Evidence-backed deal notes (beta)", icon: Send, href: "/listings", tint: "#FFD6C8" },
+        { label: "Acquisitions", desc: "Triage from source record to research case", icon: Target, href: "/listings?view=grid&sort=score", tint: "#e7faef" },
+        { label: "Disposition", desc: "Evidence-backed deal notes (beta)", icon: Send, href: "/research", tint: "#FFD6C8" },
       ],
       [
-        { label: "Underwriting", desc: "Cash inputs, assumptions, and gaps", icon: Calculator, href: "/listings", tint: "#E2E8F0" },
-        { label: "Capital", desc: "Lender-ready evidence packages (roadmap)", icon: Landmark, href: "/#pricing", tint: "#E9D5FF" },
+        { label: "Underwriting", desc: "Cash inputs, assumptions, and gaps", icon: Calculator, href: "/listings?hasDocuments=true&minQuality=50", tint: "#E2E8F0" },
+        { label: "Capital", desc: "Lender-ready evidence packages (roadmap)", icon: Landmark, href: "/research#dossier", tint: "#E9D5FF" },
       ],
     ],
   },

@@ -22,7 +22,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$148,000",
     after: "$98,667",
     reason: "Statutory Ohio ORC § 2329.52 reappraisal trigger: first sheriff sale failed with no bidders; court ordered re-offered at secondary statutory minimum floor.",
-    listingId: null,
+    listingId: "HUD-412-652610",
     observedAt: "Statutory 2nd Sale",
   },
   {
@@ -31,7 +31,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$62,500",
     after: "$41,200",
     reason: "Orange County Clerk updated statutory opening upset bid to eliminate extinguished junior municipal utility liens upon judicial confirmation.",
-    listingId: null,
+    listingId: "TRSY-27-66-110",
     observedAt: "Cadastral audit",
   },
   {
@@ -40,7 +40,7 @@ const DEMO_ITEMS: ChangeItem[] = [
     before: "$210,000",
     after: "$175,000",
     reason: "Trustee re-noticed foreclosure auction with lowered lender upset reserve, crossing beneath the 70% MAO underwriting threshold.",
-    listingId: null,
+    listingId: "TRSY-26-66-189",
     observedAt: "Postponement reset",
   },
 ];
@@ -129,8 +129,13 @@ export function SecondLookShowcase() {
                   <RotateCcw size={12} /> Second Look
                 </div>
                 <h3 className="mt-4 text-2xl font-semibold text-slate-950">
-                  {selected.listingId ? `Observed record: ${selected.listingId}` : selected.label}
+                  {selected.label}
                 </h3>
+                {selected.listingId ? (
+                  <p className="mt-1 font-mono text-xs font-semibold text-slate-600">
+                    Verified record: {selected.listingId}
+                  </p>
+                ) : null}
               </div>
             </div> : <p className="text-sm text-slate-600">No published opening-amount drop is on file.</p>}
             {selected ? <div className="mt-7 grid gap-3 sm:grid-cols-3">

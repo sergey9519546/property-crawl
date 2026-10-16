@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 import {
+  Bookmark,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -210,6 +211,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const savedRef = React.useRef(saved);
   savedRef.current = saved;
   const [moreFiltersOpen, setMoreFiltersOpen] = React.useState(false);
+  const [showSavedOnly, setShowSavedOnly] = React.useState(false);
   const requestRef = React.useRef<{ controller: AbortController; id: number } | null>(null);
   const pendingSaves = React.useRef(new Set<string>());
   const [savingIds, setSavingIds] = React.useState<Set<string>>(new Set());
@@ -286,7 +288,17 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   }, [refresh, filters.q]);
   React.useEffect(() => {
     if (!session.authenticated) {
-      setSaved(new Set());
+      try {
+        const stored = window.localStorage.getItem("perfectproperty:saved-listings");
+        const ids = stored ? JSON.parse(stored) : [];
+        if (Array.isArray(ids)) {
+          setSaved(new Set(ids.filter((id): id is string => typeof id === "string")));
+        } else {
+          setSaved(new Set());
+        }
+      } catch {
+        setSaved(new Set());
+      }
       setWatchlistError("");
       return;
     }
@@ -323,15 +335,28 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     [setFilters],
   );
   const toggleSaved = React.useCallback(async (id: string) => {
+    const wasSaved = savedRef.current.has(id);
     if (!session.authenticated) {
-      session.requestUnlock();
+      try {
+        const stored = window.localStorage.getItem("perfectproperty:saved-listings");
+        const ids: string[] = stored ? JSON.parse(stored) : [];
+        const nextIds = wasSaved ? ids.filter((item) => item !== id) : Array.from(new Set([...ids, id]));
+        window.localStorage.setItem("perfectproperty:saved-listings", JSON.stringify(nextIds));
+        setSaved((items) => {
+          const next = new Set(items);
+          wasSaved ? next.delete(id) : next.add(id);
+          return next;
+        });
+        setWatchlistError("");
+      } catch {
+        setWatchlistError("Browser storage is unavailable. Watchlist could not be updated.");
+      }
       return;
     }
     if (pendingSaves.current.has(id)) return;
     pendingSaves.current.add(id);
     setSavingIds(new Set(pendingSaves.current));
     setWatchlistError("");
-    const wasSaved = savedRef.current.has(id);
     try {
       const response = await fetch("/api/alerts", {
         method: wasSaved ? "DELETE" : "POST",
@@ -368,6 +393,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   const filteredListings = React.useMemo(() => {
     if (!payload?.listings) return [];
     return payload.listings.filter((listing) => {
+      if (showSavedOnly && !saved.has(listing.id)) return false;
       if (distressStageFilter && distressStageFilter !== "all") {
         if ((listing.triage?.distressStage || "unknown") !== distressStageFilter) return false;
       }
@@ -381,7 +407,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
       return true;
     });
-  }, [payload?.listings, triageFilters, anyTriageActive, distressStageFilter]);
+  }, [payload?.listings, triageFilters, anyTriageActive, distressStageFilter, showSavedOnly, saved]);
   const facetOptions = (field: keyof DiscoveryFilters) => {
     const options = facets[field] || [];
     const selected = filters[field];
@@ -396,7 +422,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   // the search: the server does not parse either (see discovery-query.ts), so
   // they run against the records already in payload.listings.
   const localFilterActive = anyTriageActive
-    || Boolean(distressStageFilter && distressStageFilter !== "all");
+    || Boolean(distressStageFilter && distressStageFilter !== "all")
+    || showSavedOnly;
   // A minimum on a DERIVED field (deal score, bid spread) excludes every record
   // that lacks one. When the inventory carries none, the filter can only ever
   // return nothing, and the empty state has to say so.
@@ -691,6 +718,15 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           </details>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">
           <button
+            type="button"
+            onClick={() => setShowSavedOnly((prev) => !prev)}
+            aria-pressed={showSavedOnly}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:border-emerald-600 aria-pressed:bg-emerald-50 aria-pressed:text-emerald-950"
+          >
+            <Bookmark size={14} className={showSavedOnly ? "fill-emerald-700 text-emerald-700" : ""} />
+            <span>Watchlist ({saved.size})</span>
+          </button>
+          <button
             onClick={() => setFilters({ view: "grid" })}
             aria-pressed={(filters.view || "grid") === "grid"}
             className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
@@ -796,6 +832,26 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                     className="mt-4 text-sm font-semibold text-slate-900 underline"
                   >
                     Clear this filter
+                  </button>
+                </>
+              ) : showSavedOnly ? (
+                <>
+                  <h2 className="mt-4 text-lg font-bold">
+                    {saved.size === 0
+                      ? "Your watchlist is empty."
+                      : "No saved properties match your current search criteria."}
+                  </h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    {saved.size === 0
+                      ? "Click the bookmark icon on any property card or detail page to add it to your watchlist."
+                      : "Clear other search filters or switch off the watchlist filter to see all properties."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowSavedOnly(false)}
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    Show all listings
                   </button>
                 </>
               ) : (
