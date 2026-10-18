@@ -162,10 +162,10 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
             </div>
             <div>
               <h3 id="walkthrough-title" className="text-base font-bold text-slate-950">
-                Interactive Underwriting Simulator
+                Listing record
               </h3>
               <p className="text-xs text-slate-500">
-                How PerfectProperty parses distressed legal publications into verified triage verdicts
+                Interactive Underwriting Simulator — How PerfectProperty parses distressed legal publications into verified triage verdicts
               </p>
             </div>
           </div>
