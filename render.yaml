@@ -53,3 +53,7 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      # Zyte / Scrapy Cloud Webhook Ingest Secret
+      - key: SCRAPY_INGEST_SECRET
+        sync: false
+

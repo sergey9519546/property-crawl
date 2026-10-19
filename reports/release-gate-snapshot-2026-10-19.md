@@ -55,8 +55,23 @@ Following the Master Project Completion Plan and Level-5 Omniscient Swarm End-to
 8. **Source-Bound Pre-Push Release Gate Hook**:
    - Configured `.git/hooks/pre-push` running `npm run release:gate` to ensure every push executes the full 9/9 source-bound gate before publishing to remote.
 
+9. **Interactive ARV & County Assessor Import in Bidding Simulator**:
+   - Enhanced `src/components/terminal/bidding-simulator.tsx` and `src/lib/underwrite-scenario.ts` to allow investors to enter target ARV assumptions or import county assessor figures on listings where publisher appraisals are absent.
+   - Enforces zero-mock honesty: labeled explicitly as *"Modeled from entered ARV assumption — not a publisher appraisal"*.
+   - Wired unit test verification into `test/underwriting-truth.test.mjs` (564/564 tests pass).
+
+10. **Zyte / Scrapy Cloud Webhook Ingest Route**:
+    - Implemented `server/ingest/scrapy-webhook.js` and App Router route `src/app/api/public/scrapy-ingest/route.ts` implementing the zyte-scrapy specification.
+    - Constant-time HMAC-SHA256 verification (`crypto.timingSafeEqual`) on header `x-signature` using `SCRAPY_INGEST_SECRET`.
+    - Batch payload validation for supported recipes: `foreclosure`, `probate`, `code_violation`, `sale`, `auction`, `parcel`, `listing`.
+    - Declared `SCRAPY_INGEST_SECRET` in `render.yaml` and verified with `test/scrapy-webhook.test.js` (6/6 tests pass).
+
+11. **GSA Disposition Identity & Schema Bound Hardening**:
+    - Bounded GSA disposition slugs to 45 characters in `server/scrapers/gsa.js` and enforced 64-character bounds across `id`, `recordId`, `city`, and `propType` to eliminate PostgreSQL `VARCHAR(64)` overflow.
+
 ## What this snapshot does not claim
 
 - GitHub Actions automated runner remains subject to upstream GitHub account billing spending limits.
 - `RENDER_DEPLOY_HOOK_URL` remains optional (Render native auto-deploy triggers automatically on push to `main` when the Blueprint is connected).
 - Lawyer review of `/privacy` and `/terms` remains with legal counsel.
+

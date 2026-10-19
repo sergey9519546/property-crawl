@@ -216,3 +216,55 @@ test('IC memo holds unknowns open instead of inventing favorable metrics or conc
   assert.match(supplied, /1\.85x \(modeled\)/);
   assert.match(supplied, /\$360,000 USD \(buyer-supplied model output/);
 });
+
+test('custom valuation assumption unlocks MAO calculation when publisher estimate is absent', () => {
+  const unmodeled = computeTargetPriceScenario({
+    estimatedValue: null,
+    targetMarginPct: 30,
+    rehabBudget: 25_000,
+    currentPrice: 100_000,
+    otherAcquisitionCosts: 5_000,
+  });
+  assert.equal(unmodeled, null, 'missing valuation must fail closed');
+
+  const modeledFromAssumption = computeTargetPriceScenario({
+    estimatedValue: 185_000,
+    targetMarginPct: 30,
+    rehabBudget: 25_000,
+    currentPrice: 100_000,
+    otherAcquisitionCosts: 5_000,
+  });
+  assert.ok(modeledFromAssumption !== null);
+  assert.equal(modeledFromAssumption.maxPurchasePrice, 99_500);
+  assert.equal(modeledFromAssumption.priceReductionNeeded, 500);
+  assert.equal(modeledFromAssumption.targetProfit, 55_500);
+});
+
+test('UnderwriteScenario persists custom valuation assumption across sessions', async () => {
+  const { readUnderwriteScenario, writeUnderwriteScenario } = await import('../src/lib/underwrite-scenario.ts');
+  const mockStorage = {};
+  globalThis.sessionStorage = {
+    getItem: (key) => mockStorage[key] || null,
+    setItem: (key, val) => { mockStorage[key] = String(val); },
+  };
+
+  writeUnderwriteScenario('TEST-LISTING-001', {
+    registrationFunds: '5000',
+    creditedDeposit: '5000',
+    buyersPremium: '0',
+    sheriffPoundage: '0',
+    transferTax: '0',
+    delinquentTaxes: '0',
+    settlementCosts: '0',
+    rehabBudget: 25000,
+    targetMargin: 30,
+    customValuation: '185000',
+  });
+
+  const restored = readUnderwriteScenario('TEST-LISTING-001');
+  assert.ok(restored !== null);
+  assert.equal(restored.customValuation, '185000');
+  assert.equal(restored.rehabBudget, 25000);
+  delete globalThis.sessionStorage;
+});
+

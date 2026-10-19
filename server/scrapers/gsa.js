@@ -64,7 +64,7 @@ function cardText(value) {
 }
 
 function dispositionSlug(title) {
-  return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 72);
+  return String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 45);
 }
 
 function parseAcceleratedDisposition(html) {
@@ -106,14 +106,16 @@ function parseAcceleratedDisposition(html) {
     const areaMatch = chunk.match(/Rentable Area:\s*(?:<strong>)?\s*([\d,]+)/i);
     const gross = /Gross Square Footage/i.test(chunk);
     const area = !gross && areaMatch ? parseInt(areaMatch[1].replace(/,/g, ''), 10) : null;
+    const listingId = `GSA-${state}-${slug}-${addressMatch[4]}`.slice(0, 64);
+    const recordId = `${state}-${slug}-${addressMatch[4]}`.slice(0, 64);
     open.push({
-      id: `GSA-${state}-${slug}-${addressMatch[4]}`,
+      id: listingId,
       state,
       county: null,
-      city: addressMatch[2],
+      city: addressMatch[2] ? addressMatch[2].slice(0, 64) : null,
       zip: addressMatch[4],
       address,
-      propType: typeMatch ? cardText(typeMatch[1]) : null,
+      propType: typeMatch ? cardText(typeMatch[1]).slice(0, 64) : null,
       sqft: Number.isFinite(area) && area > 0 ? area : null,
       openingBid: null,
       price: null,
@@ -126,7 +128,7 @@ function parseAcceleratedDisposition(html) {
         origin: 'live',
         observed: true,
         publisher: 'U.S. General Services Administration',
-        recordId: `${state}-${slug}-${addressMatch[4]}`,
+        recordId,
         observedAt: new Date().toISOString(),
         sourceFacts: {
           program: 'accelerated_disposition',

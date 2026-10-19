@@ -35,6 +35,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [scenario, setScenario] = useState<Record<ScenarioField, string>>({
     registrationFunds: "", creditedDeposit: "", buyersPremium: "", sheriffPoundage: "", transferTax: "", delinquentTaxes: "", settlementCosts: "",
   });
+  const [customValuation, setCustomValuation] = useState<string>("");
+  const [isImportingAssessor, setIsImportingAssessor] = useState(false);
+  const [assessorError, setAssessorError] = useState<string | null>(null);
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
 
@@ -52,14 +55,30 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     });
     setRehabBudget(stored.rehabBudget);
     setTargetMargin(stored.targetMargin);
+    if (stored.customValuation) {
+      setCustomValuation(stored.customValuation);
+    }
   }, [listing.id]);
 
-  const persistScenario = (next: Record<ScenarioField, string>, rehab = rehabBudget, margin = targetMargin) => {
-    writeUnderwriteScenario(listing.id, { ...next, rehabBudget: rehab, targetMargin: margin });
+  const persistScenario = (
+    next: Record<ScenarioField, string>,
+    rehab = rehabBudget,
+    margin = targetMargin,
+    customVal = customValuation,
+  ) => {
+    writeUnderwriteScenario(listing.id, {
+      ...next,
+      rehabBudget: rehab,
+      targetMargin: margin,
+      customValuation: customVal,
+    });
   };
 
   const openingBid = positiveNumber(listing.openingBid);
-  const estimatedValue = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
+  const publisherValuation = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
+  const customValuationNum = enteredAmount(customValuation);
+  const estimatedValue = customValuationNum ?? publisherValuation;
+  const isCustomValuation = customValuationNum !== null;
 
   // The bid-cost model and the max-allowable-offer calculation do not need the
   // same inputs. Cost to close is arithmetic over the PUBLISHED opening amount
@@ -97,14 +116,42 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
     const next = { ...scenario, [field]: value };
     setScenario(next);
-    persistScenario(next);
+    persistScenario(next, rehabBudget, targetMargin, customValuation);
     setAiStrategy(null);
+  };
+
+  const updateCustomValuation = (val: string) => {
+    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
+    setCustomValuation(val);
+    persistScenario(scenario, rehabBudget, targetMargin, val);
+    setAiStrategy(null);
+  };
+
+  const handleImportAssessor = async () => {
+    setIsImportingAssessor(true);
+    setAssessorError(null);
+    try {
+      const res = await fetch(`/api/listings/${encodeURIComponent(listing.id)}/assessor`, { cache: "no-store" });
+      if (!res.ok) throw new Error("Assessor lookup returned " + res.status);
+      const data = await res.json();
+      const figure = data?.marketComparison ?? data?.rawFigure;
+      if (figure && Number.isFinite(figure) && figure > 0) {
+        const rounded = Math.round(figure).toString();
+        updateCustomValuation(rounded);
+      } else {
+        setAssessorError(data?.withheldReason || "No figure available from county assessor.");
+      }
+    } catch {
+      setAssessorError("Could not reach county assessor layer.");
+    } finally {
+      setIsImportingAssessor(false);
+    }
   };
 
   const affirmZeroCosts = () => {
     const next = { ...scenario, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" };
     setScenario(next);
-    persistScenario(next);
+    persistScenario(next, rehabBudget, targetMargin, customValuation);
     setAiStrategy(null);
   };
 
@@ -122,8 +169,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       const feasibilityLine = reverseScenario.targetAchievableAtCurrentPrice
         ? `Reaching the target at the opening amount requires ${displayMoney(reverseScenario.costReductionNeeded)} of cost reduction.`
         : "The target is not achievable at the opening amount, even with zero other acquisition costs.";
+      const valuationLabel = isCustomValuation
+        ? `entered ARV assumption ${displayMoney(estimatedValue)} (investor assumption, not a publisher appraisal)`
+        : `valuation midpoint ${displayMoney(estimatedValue)}`;
       setAiStrategy([
-        `1. Maximum Allowable Offer = valuation midpoint ${displayMoney(estimatedValue)} minus ${targetMargin}% target margin, ${displayMoney(rehabBudget)} rehab budget, and entered settlement costs.`,
+        `1. Maximum Allowable Offer = ${valuationLabel} minus ${targetMargin}% target margin, ${displayMoney(rehabBudget)} rehab budget, and entered settlement costs.`,
         `2. Target purchase ceiling: ${displayMoney(reverseScenario.maxPurchasePrice)}. ${costLine} ${reductionLine}`,
         `3. Feasibility: ${feasibilityLine}`,
         `4. Statutory Due Diligence: ${listing.redemptionWarning || (listing.redemptionDays ? `${listing.redemptionDays}-day statutory redemption window applies.` : "Check local statutory redemption.")} ${listing.seniorLienWarning || "Verify senior judicial and municipal liens before bidding."}`,
@@ -205,21 +255,73 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         )}
 
         {estimatedValue === null ? (
-          <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <div>
-              <h4 className="text-xs font-bold">Price scenario unavailable</h4>
-              <p className="mt-1 text-[11px] leading-relaxed text-amber-900/80">A maximum allowable offer is a statement about what this property is worth, and this record carries no supported comparable-sale valuation, so none is shown. The published opening amount is {displayMoney(openingBid)}; the cost model above uses only that amount and the assumptions you entered.</p>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+            <div className="flex gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <div>
+                <h4 className="text-xs font-bold">Price scenario unavailable</h4>
+                <p className="mt-1 text-[11px] leading-relaxed text-amber-900/80">A maximum allowable offer is a statement about what this property is worth, and this record carries no supported comparable-sale valuation, so none is shown. The published opening amount is {displayMoney(openingBid)}; the cost model above uses only that amount and the assumptions you entered.</p>
+              </div>
+            </div>
+            <div className="mt-3 border-t border-amber-200/70 pt-3">
+              <label htmlFor="custom-valuation-input" className="block text-xs font-semibold text-amber-950">
+                Model MAO with your target ARV or county assessor figure:
+              </label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <div className="flex items-center rounded-lg border border-amber-300 bg-white px-3 focus-within:border-slate-800">
+                  <span className="text-xs font-bold text-slate-500">$</span>
+                  <input
+                    id="custom-valuation-input"
+                    inputMode="decimal"
+                    value={customValuation}
+                    onChange={(event) => updateCustomValuation(event.target.value)}
+                    placeholder="e.g. 185000"
+                    aria-label="Target ARV or valuation assumption"
+                    className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={isImportingAssessor}
+                  onClick={handleImportAssessor}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {isImportingAssessor ? "Reading assessor…" : "Import Assessor Figure"}
+                </button>
+                {assessorError && (
+                  <span className="text-[11px] text-red-600">{assessorError}</span>
+                )}
+              </div>
+              <p className="mt-1.5 text-[10px] text-amber-900/70">
+                Entering an assumption enables MAO modeling for this session. It will be labeled as an investor assumption, not a publisher appraisal.
+              </p>
             </div>
           </div>
         ) : reverseScenario ? (
-          <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Maximum price meeting target</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-[#5B6472]">After explicit costs, rehab, and target profit.</p></div>
-            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Change needed at opening amount</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-[#5B6472]">Required price reduction if costs stay unchanged.</p></div>
-            <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3 sm:col-span-2">
-              <p className="text-[11px] font-bold uppercase text-[#5B6472]">Cost alternative</p>
-              <p className="mt-1 text-sm font-bold text-[#111827]">At the opening amount, other acquisition costs may total at most {displayMoney(reverseScenario.maxOtherAcquisitionCostsAtCurrentPrice)}.</p>
-              <p className="mt-1 text-xs text-[#5B6472]">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
+          <div className="space-y-3">
+            {isCustomValuation && (
+              <div className="flex items-center justify-between rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-950">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-blue-600" />
+                  <span>Modeled from entered ARV assumption: <strong>{displayMoney(estimatedValue)}</strong> (investor assumption — not a publisher appraisal)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateCustomValuation("")}
+                  className="text-[11px] font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                >
+                  Reset assumption
+                </button>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 border-t border-[#E5E7EB] pt-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Maximum price meeting target</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-[#5B6472]">After explicit costs, rehab, and target profit.</p></div>
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3"><p className="text-[11px] font-bold uppercase text-[#5B6472]">Change needed at opening amount</p><p className="text-xl font-extrabold text-[#111827]">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-[#5B6472]">Required price reduction if costs stay unchanged.</p></div>
+              <div className="rounded-xl border border-[#E5E7EB] bg-[#F8FAFC] p-3 sm:col-span-2">
+                <p className="text-[11px] font-bold uppercase text-[#5B6472]">Cost alternative</p>
+                <p className="mt-1 text-sm font-bold text-[#111827]">At the opening amount, other acquisition costs may total at most {displayMoney(reverseScenario.maxOtherAcquisitionCostsAtCurrentPrice)}.</p>
+                <p className="mt-1 text-xs text-[#5B6472]">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
+              </div>
             </div>
           </div>
         ) : (
