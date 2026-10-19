@@ -1,26 +1,26 @@
-# Release gate snapshot — 2026-10-18 (tree `ea00285`)
+# Release gate snapshot — 2026-10-18 (tree `f476405`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is
 > regenerated on every gate run; this snapshot preserves the source-bound
 > result. No release has happened yet — this is a pre-deploy verification
-> record, superseding the earlier snapshot for tree `927e8ca`.
+> record, superseding the earlier snapshot for tree `ea00285`.
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `ea002857d6a1c2eb2f0b50bb2c44d05e1ff2f1a2` — dirty: false — 2026-10-18
+Tree: `f4764058fac8803c1bceb79576f29e5120833d81` — dirty: false — 2026-10-18
 
 | Gate | Result | ms |
 |---|---|---|
-| typecheck (`tsc --noEmit`) | PASS | 4203 |
-| generated-context (CONTEXT.md current) | PASS | 134 |
-| schema-mirrors (byte-identical) | PASS | 97 |
-| test-wiring (every test file reachable) | PASS | 134 |
-| ops-suites (meta/wiring/contract) | PASS | 20908 |
-| scraper-parser (pinned runtime) | PASS | 3372 |
-| production-smoke | PASS | 105 |
-| next-build (production bundle) | PASS | 18887 |
-| production-e2e (25 checks, isolated embedded DB) | PASS | 19246 |
+| typecheck (`tsc --noEmit`) | PASS | 4458 |
+| generated-context (CONTEXT.md current) | PASS | 153 |
+| schema-mirrors (byte-identical) | PASS | 75 |
+| test-wiring (every test file reachable) | PASS | 124 |
+| ops-suites (meta/wiring/contract) | PASS | 19678 |
+| scraper-parser (pinned runtime) | PASS | 3178 |
+| production-smoke | PASS | 102 |
+| next-build (production bundle) | PASS | 18957 |
+| production-e2e (25 checks, isolated embedded DB) | PASS | 17606 |
 
 ## Why this tree was created & what it resolved
 
