@@ -164,8 +164,17 @@ async function boot() {
     console.log(`[Production] Property-Crawl Production Stack LIVE!`);
     console.log(`[Production] Listening on 0.0.0.0:${publicPort}`);
     console.log(`[Production] Healthcheck: http://0.0.0.0:${publicPort}/api/health`);
-    if (!hasDatabase) {
-      console.log(`[Production] Data mode: Demo/in-memory (seeded from data.js).`);
+    try {
+      const healthRes = await fetch(`http://127.0.0.1:${publicPort}/api/health`, { signal: AbortSignal.timeout(2000) });
+      if (healthRes.ok) {
+        const health = await healthRes.json();
+        console.log(`[Production] Active Data Mode: ${health.dataMode || (hasDatabase ? 'postgres' : 'memory')}`);
+        console.log(`[Production] Document Review Store: ${health.documentReviewStore || 'memory'}`);
+      }
+    } catch {
+      if (!hasDatabase) {
+        console.log(`[Production] Data mode: Demo/in-memory (seeded from data.js).`);
+      }
     }
     console.log(`========================================================`);
   } else {

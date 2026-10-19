@@ -47,6 +47,12 @@ const ALLOWLIST = Object.freeze({
   deal_score: [
     { cmd: process.execPath, args: ['--test', 'test/score-bands.test.mjs'], label: 'score bands taxonomy' },
   ],
+  source_intake: [
+    { cmd: process.execPath, args: ['scripts/source-intake.js', 'list'], label: 'source intake evidence queue' },
+  ],
+  unbrowse_doctor: [
+    { cmd: process.execPath, args: ['scripts/crawler-tools-unbrowse.cjs', 'doctor'], label: 'unbrowse doctor' },
+  ],
 });
 
 const DEFAULT_TIMEOUT_MS = 60_000;

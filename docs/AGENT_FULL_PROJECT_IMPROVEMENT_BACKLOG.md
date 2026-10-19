@@ -1,11 +1,15 @@
 # AGENT FULL PROJECT IMPROVEMENT BACKLOG
-**For another agent to own end-to-end assessment and implementation**
+> **This document is an archival handoff, not an active status source.**
+> Open work, verified closures, source limits and dependencies live in
+> [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md), which is the single
+> canonical source of truth and is guarded by `test/docs-checklist-honesty.test.js`.
+> What follows is kept for historical context from 2026-09. All P0/P1 items listed here
+> (CSP style-src-attr, isolated Postgres PostGIS proof, Unbrowse v11.4.1 setup doctor,
+> Swarm capability allowlist, and honest page-scoped inventory) were verified and closed in October 2026.
 
-**Date created:** 2026-09 (based on current state)  
-**Updated:** 2026-09-26 after a local improvement pass. This file is untracked. It is a handoff, not a verified closeout.  
-**Purpose:** This document captures a complete, evidence-based assessment of the property-crawl project. Another agent should use it to systematically improve the project without repeating investigation. Follow the priorities, verification methods, and rules strictly.
-
-**Core Rule for Executor:** Every claim of improvement must be backed by before/after evidence (tests passing, commands succeeding, health endpoints, git status, etc.). Never weaken checks. Preserve honesty and evidence-first principles.
+**Date created:** 2026-09  
+**Updated:** 2026-10-18 (Archived & absorbed by [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md))  
+**Purpose:** Historical reference. See [`docs/COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md) for live state.
 
 ---
 
