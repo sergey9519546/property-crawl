@@ -7,7 +7,7 @@ This guide details how to deploy **Property-Crawl** into production completely *
 ## 1. Architectural Overview & Why It Can Be Freely Deployed
 
 Property-Crawl is designed with zero-friction production requirements:
-1. **Zero Database Required to Boot**: When `DATABASE_URL` is omitted, the application automatically falls back to an in-memory data provider pre-seeded with **585 verified listings across 16 real estate sources** (Treasury, USDA, IRS, GSA, CivilView, ServiceLink, etc.).
+1. **Zero Database Required to Boot**: When `DATABASE_URL` is omitted, the application automatically falls back to an in-memory data provider pre-seeded with canonical listings across 16 real estate sources per `CONTEXT.md` (Treasury, USDA, IRS, GSA, CivilView, ServiceLink, etc.).
 2. **Zero External Secrets Required**: `OPENAI_API_KEY`, `GOOGLE_MAPS_API_KEY`, and `CENSUS_API_KEY` are strictly optional and fail closed gracefully without crashing the app.
 3. **Unified Single-Port Container Architecture**: The app features a production orchestrator (`scripts/start-production.js`) that boots both the **Node.js Listing API** (internal loopback) and the **Next.js 16 Canonical UI** in a single container, exposing only one public HTTP port (`$PORT`). Next.js server routes (`src/app/api/*`) seamlessly proxy requests to the internal API via `PROPERTY_API_URL`.
 
