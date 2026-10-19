@@ -590,7 +590,8 @@ async function pgSearch(database, f) {
   ).rows;
   const hasMore = rows.length > f.limit;
   if (hasMore) rows.pop();
-  const listings = rows.map(({ cursorValue, ...r }) => r);
+  const { mapPgListingRow } = require("../db/client");
+  const listings = rows.map(({ cursorValue, ...r }) => mapPgListingRow(r));
   const total = Number(
     (
       await database.pool.query(

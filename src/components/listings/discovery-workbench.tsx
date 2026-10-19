@@ -459,6 +459,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       stale: false,
       occupancyKnown: false,
     });
+    setShowSavedOnly(false);
     setFilters({ distressStage: undefined });
   }, [setFilters]);
   const next = () => {

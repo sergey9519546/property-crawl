@@ -266,7 +266,21 @@ class ZillowMcpClient {
   }
 }
 
-const defaultClient = new ZillowMcpClient();
+let _defaultClientInstance = null;
+function getDefaultClient() {
+  if (!_defaultClientInstance) {
+    _defaultClientInstance = new ZillowMcpClient();
+  }
+  return _defaultClientInstance;
+}
+
+const defaultClient = new Proxy({}, {
+  get(_target, prop) {
+    const client = getDefaultClient();
+    const value = client[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  }
+});
 
 module.exports = {
   ZillowMcpClient,

@@ -722,3 +722,46 @@ test('run: says so when the search could not cover the whole store', async () =>
     'an alert that only covered a slice must not read as a complete search');
 });
 
+test('saved-searches: POST and PATCH reject non-HTTPS or private/loopback webhookUrl with 400', async () => {
+  const db = stubDb();
+  const handlers = createSavedSearchesHandler({ database: db });
+
+  const badCreate = makeRes();
+  await handlers.handleSavedSearches(
+    makeReq('POST', '/api/saved-searches', {
+      label: 'Bad webhook',
+      filters: { states: ['OH'] },
+      webhookUrl: 'https://169.254.169.254/latest/meta-data/',
+    }),
+    badCreate,
+    new URL('http://localhost/api/saved-searches')
+  );
+  assert.equal(badCreate.statusCode, 400);
+  assert.match(badCreate.body.error, /webhookUrl/i);
+
+  const okCreate = makeRes();
+  await handlers.handleSavedSearches(
+    makeReq('POST', '/api/saved-searches', {
+      label: 'Good webhook',
+      filters: { states: ['OH'] },
+      webhookUrl: 'https://hooks.example.com/alerts',
+    }),
+    okCreate,
+    new URL('http://localhost/api/saved-searches')
+  );
+  assert.equal(okCreate.statusCode, 201);
+
+  const badPatch = makeRes();
+  await handlers.handleSavedSearches(
+    makeReq('PATCH', `/api/saved-searches/${okCreate.body.id}`, {
+      webhookUrl: 'http://hooks.example.com/insecure',
+    }),
+    badPatch,
+    new URL(`http://localhost/api/saved-searches/${okCreate.body.id}`)
+  );
+  assert.equal(badPatch.statusCode, 400);
+  assert.match(badPatch.body.error, /webhookUrl/i);
+});
+
+
+

@@ -223,10 +223,12 @@ function validateHuntInput(input, options = {}) {
   } else if (!partial) errors.push('criteria are required');
   if (Object.hasOwn(input, 'webhookUrl')) {
     if (input.webhookUrl !== null && input.webhookUrl !== undefined && input.webhookUrl !== '') {
-      if (typeof input.webhookUrl !== 'string' || !/^https:\/\/.+/i.test(input.webhookUrl.trim()) || input.webhookUrl.trim().length > 512) {
+      const { webhookTargetError } = require('../delivery/webhook-notify');
+      const trimmedUrl = typeof input.webhookUrl === 'string' ? input.webhookUrl.trim() : '';
+      if (!trimmedUrl || trimmedUrl.length > 512 || webhookTargetError(trimmedUrl)) {
         errors.push('webhookUrl must be a valid HTTPS URL');
       } else {
-        value.webhookUrl = input.webhookUrl.trim();
+        value.webhookUrl = trimmedUrl;
       }
     } else {
       value.webhookUrl = null;

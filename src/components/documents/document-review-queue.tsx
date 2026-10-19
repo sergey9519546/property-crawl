@@ -124,18 +124,33 @@ export function DocumentReviewQueue() {
     return () => window.clearInterval(timer);
   }, [refresh, session.authenticated]);
 
-  const applyDecision = React.useCallback(async (entry: ReviewEntry, status: Review["status"]) => {
-    const notes = (notesDraft[entry.id] ?? "").trim();
+  const applyDecision = React.useCallback(async (
+    entry: ReviewEntry,
+    status: Review["status"],
+    noteOverride?: string,
+    updatedFields?: Record<string, unknown>,
+  ): Promise<boolean> => {
+    const rawNote = noteOverride !== undefined ? noteOverride : (notesDraft[entry.id] ?? "");
+    const fieldSummary = updatedFields
+      ? Object.entries(updatedFields)
+          .filter(([k, v]) => k !== "confidenceScore" && v !== undefined && v !== null && v !== "")
+          .map(([k, v]) => `${k}=${String(v)}`)
+          .join(", ")
+      : "";
+    const notes = [rawNote.trim(), fieldSummary ? `[fields: ${fieldSummary}]` : ""]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
     const reviewer = reviewerDraft.trim();
     if (TERMINAL_STATUSES.includes(status) && !reviewer) {
       setStatusMessage("");
       setError("Reviewer identifier is required for terminal actions.");
-      return;
+      return false;
     }
-    if ((status === "rejected" || status === "needs_more") && !notes) {
+    if ((status === "rejected" || status === "needs_more") && !rawNote.trim()) {
       setStatusMessage("");
       setError("A note is required when rejecting a document or marking it for follow-up.");
-      return;
+      return false;
     }
     setPendingId(entry.id);
     setError("");
@@ -169,8 +184,10 @@ export function DocumentReviewQueue() {
         return next;
       });
       await refresh(true);
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Review could not be recorded");
+      return false;
     } finally {
       setPendingId(null);
     }
@@ -267,17 +284,19 @@ export function DocumentReviewQueue() {
                 rawText: `Source Document: ${entry.listingId} (Doc #${entry.documentIndex ?? 0})\nDocument URL: ${entry.documentUrl || "None attached"}\nExtraction timestamp: ${entry.review.extractedAt || "Observed via crawler"}\nCurrent review status: ${entry.review.status}\nPrior status: ${entry.review.priorStatus || "None"}`,
                 extractedFields: {
                   caseNumber: entry.listingId,
-                  confidenceScore: entry.review.status === "approved" ? 1.0 : 0.85,
+                  confidenceScore: entry.review.status === "approved" ? 1.0 : undefined,
                 },
                 reviewStatus: entry.review.status === "needs_more" ? "pending" : (entry.review.status as any),
               }))}
-              onApprove={async (id) => {
+              onApprove={async (id, updatedFields, note) => {
                 const entry = data.reviews.find((r) => r.id === id);
-                if (entry) await applyDecision(entry, "approved");
+                if (!entry) return false;
+                return applyDecision(entry, "approved", note, updatedFields);
               }}
-              onReject={async (id) => {
+              onReject={async (id, note, updatedFields) => {
                 const entry = data.reviews.find((r) => r.id === id);
-                if (entry) await applyDecision(entry, "rejected");
+                if (!entry) return false;
+                return applyDecision(entry, "rejected", note ?? notesDraft[entry.id] ?? "", updatedFields);
               }}
             />
           </div>

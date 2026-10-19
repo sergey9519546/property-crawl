@@ -34,8 +34,8 @@ export interface DocumentReviewItem {
 
 interface ReviewSplitPaneProps {
   items: DocumentReviewItem[];
-  onApprove: (id: string, updatedFields?: any) => Promise<void> | void;
-  onReject: (id: string) => Promise<void> | void;
+  onApprove: (id: string, updatedFields?: any, note?: string) => Promise<boolean | void> | boolean | void;
+  onReject: (id: string, note?: string, updatedFields?: any) => Promise<boolean | void> | boolean | void;
   onUpdateFields?: (id: string, fields: any) => void;
 }
 
@@ -48,6 +48,7 @@ export function ReviewSplitPane({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
   const [editedFields, setEditedFields] = useState<any>({});
+  const [reviewNote, setReviewNote] = useState('');
 
   const currentItem = items[currentIndex];
 
@@ -55,6 +56,7 @@ export function ReviewSplitPane({
     if (currentItem) {
       setEditedFields({ ...currentItem.extractedFields });
       setEditMode(false);
+      setReviewNote('');
     }
   }, [currentIndex, currentItem]);
 
@@ -72,15 +74,18 @@ export function ReviewSplitPane({
 
   const handleApproveCurrent = useCallback(async () => {
     if (!currentItem) return;
-    await onApprove(currentItem.id, editMode ? editedFields : currentItem.extractedFields);
-    handleNext();
-  }, [currentItem, editMode, editedFields, onApprove, handleNext]);
+    const fields = editMode ? editedFields : currentItem.extractedFields;
+    if (editMode && onUpdateFields) onUpdateFields(currentItem.id, editedFields);
+    const result = await onApprove(currentItem.id, fields, reviewNote.trim() || undefined);
+    if (result !== false) handleNext();
+  }, [currentItem, editMode, editedFields, onApprove, onUpdateFields, reviewNote, handleNext]);
 
   const handleRejectCurrent = useCallback(async () => {
     if (!currentItem) return;
-    await onReject(currentItem.id);
-    handleNext();
-  }, [currentItem, onReject, handleNext]);
+    const fields = editMode ? editedFields : currentItem.extractedFields;
+    const result = await onReject(currentItem.id, reviewNote.trim() || undefined, fields);
+    if (result !== false) handleNext();
+  }, [currentItem, editMode, editedFields, onReject, reviewNote, handleNext]);
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -93,11 +98,11 @@ export function ReviewSplitPane({
       switch (e.key.toLowerCase()) {
         case 'a':
           e.preventDefault();
-          handleApproveCurrent();
+          void handleApproveCurrent();
           break;
         case 'r':
           e.preventDefault();
-          handleRejectCurrent();
+          void handleRejectCurrent();
           break;
         case 'e':
           e.preventDefault();
@@ -130,8 +135,10 @@ export function ReviewSplitPane({
     );
   }
 
-  const confidence = currentItem?.extractedFields?.confidenceScore ?? 0.85;
-  const isHighConfidence = confidence >= 0.8;
+  const confidence = typeof currentItem?.extractedFields?.confidenceScore === 'number'
+    ? currentItem.extractedFields.confidenceScore
+    : null;
+  const isHighConfidence = confidence !== null && confidence >= 0.8;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[750px]">
@@ -203,8 +210,8 @@ export function ReviewSplitPane({
           <div className="p-3 bg-slate-100 border-b border-slate-200 text-xs font-bold text-slate-600 flex justify-between items-center">
             <span>STRUCTURED EXTRACTED FIELDS</span>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isHighConfidence ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                {Math.round(confidence * 100)}% Confidence
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${confidence === null ? 'bg-slate-200 text-slate-700' : isHighConfidence ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                {confidence === null ? 'Pending review' : `${Math.round(confidence * 100)}% Confidence`}
               </span>
               <button
                 onClick={() => setEditMode(!editMode)}
@@ -334,6 +341,21 @@ export function ReviewSplitPane({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Field: Reviewer Note */}
+            <div>
+              <label htmlFor="split-pane-review-note" className="font-semibold text-slate-600 block mb-1">
+                Reviewer Note (required when rejecting)
+              </label>
+              <textarea
+                id="split-pane-review-note"
+                rows={2}
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+                placeholder="State verification findings or rejection reason…"
+                className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
+              />
             </div>
           </div>
 

@@ -73,7 +73,9 @@ function validateFilters(filters) {
   }
   if ('webhookUrl' in filters) {
     if (filters.webhookUrl !== null && filters.webhookUrl !== undefined && filters.webhookUrl !== '') {
-      if (typeof filters.webhookUrl !== 'string' || !/^https:\/\/.+/i.test(filters.webhookUrl.trim()) || filters.webhookUrl.trim().length > 512) {
+      const { webhookTargetError } = require('../delivery/webhook-notify');
+      const trimmedUrl = typeof filters.webhookUrl === 'string' ? filters.webhookUrl.trim() : '';
+      if (!trimmedUrl || trimmedUrl.length > 512 || webhookTargetError(trimmedUrl)) {
         return { ok: false, reason: 'webhookUrl_must_be_valid_https_url' };
       }
     }
@@ -178,9 +180,12 @@ function createSavedSearchesHandler(dependencies = {}) {
       if (method === 'POST') {
         const body = req.body || {};
         const label = typeof body.label === 'string' ? body.label.trim().slice(0, 120) : null;
-        const verdict = validateFilters(body.filters);
+        const filters = (body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters) && body.webhookUrl !== undefined)
+          ? { ...body.filters, webhookUrl: body.webhookUrl }
+          : body.filters;
+        const verdict = validateFilters(filters);
         if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
-        const record = await database.createSavedSearch(userId, { label, filters: body.filters });
+        const record = await database.createSavedSearch(userId, { label, filters });
         return res.status(201).json(serializeSearch(record));
       }
       return res.status(405).json({ error: 'method_not_allowed' });
@@ -210,10 +215,20 @@ function createSavedSearchesHandler(dependencies = {}) {
         const updates = {};
         if (typeof body.label === 'string') updates.label = body.label.trim().slice(0, 120);
         if (typeof body.isActive === 'boolean') updates.isActive = body.isActive;
-        if (body.filters !== undefined) {
-          const verdict = validateFilters(body.filters);
+        if (body.webhookUrl !== undefined && body.filters === undefined) {
+          const verdict = validateFilters({ webhookUrl: body.webhookUrl });
           if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
-          updates.filters = body.filters;
+          const existing = await database.getSavedSearchById(userId, id);
+          if (!existing) return res.status(404).json({ error: 'saved_search_not_found' });
+          updates.filters = { ...(existing.filters || {}), webhookUrl: body.webhookUrl };
+        }
+        if (body.filters !== undefined) {
+          const filters = (body.filters && typeof body.filters === 'object' && !Array.isArray(body.filters) && body.webhookUrl !== undefined)
+            ? { ...body.filters, webhookUrl: body.webhookUrl }
+            : body.filters;
+          const verdict = validateFilters(filters);
+          if (!verdict.ok) return res.status(400).json({ error: verdict.reason });
+          updates.filters = filters;
         }
         const updated = await database.updateSavedSearch(userId, id, updates);
         if (!updated) return res.status(404).json({ error: 'saved_search_not_found' });

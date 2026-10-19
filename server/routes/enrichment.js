@@ -30,17 +30,23 @@ function createEnrichmentHandler(dependencies = {}) {
 
   return async function handleEnrichment(req, res) {
     const url = new URL(req.url, 'http://localhost');
+    const pathname = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname;
     res.setHeader('Cache-Control', 'no-store');
 
-    if (req.method === 'GET' && url.pathname === '/api/enrichment') {
+    if (pathname === '/api/enrichment') {
+      if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Method not allowed on this enrichment endpoint' });
+      }
       return res.json({
         adapters: ENRICHMENT_SCRAPERS.map((entry) => ({ source: entry.source })),
         schema: 'property-crawl.enrichment-gateway/v1'
       });
     }
 
-    const match = url.pathname.match(/^\/api\/enrichment\/([^/]+)(?:\/(refresh))?$/);
-    if (!match) return undefined; // not for us; let the next handler try.
+    const match = pathname.match(/^\/api\/enrichment\/([^/]+)(?:\/(refresh))?$/);
+    if (!match) {
+      return res.status(404).json({ error: 'Enrichment endpoint not found', provenance: 'enrichment-gateway' });
+    }
     const parcelKeyRaw = decodeURIComponent(match[1]);
     const isRefresh = match[2] === 'refresh' && req.method === 'POST';
 

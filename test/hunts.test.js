@@ -373,3 +373,32 @@ test('route refuses a truncated inventory instead of producing incomplete lifecy
   assert.equal(res.statusCode, 409);
   assert.equal(hunts.getHunt(hunt.id, { filePath }).baseline, null);
 });
+
+test('createHunt and updateHunt reject non-HTTPS or private/loopback webhookUrl at creation time', () => {
+  const filePath = temporaryStore();
+  assert.throws(
+    () => hunts.createHunt({
+      name: 'SSRF hunt',
+      criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NJ' }] },
+      webhookUrl: 'http://example.com/webhook',
+    }, { filePath, now: NOW }),
+    (err) => err.code === 'HUNT_INVALID' && Array.isArray(err.details) && err.details.some((d) => /webhookUrl/i.test(d))
+  );
+  assert.throws(
+    () => hunts.createHunt({
+      name: 'Loopback hunt',
+      criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NJ' }] },
+      webhookUrl: 'https://127.0.0.1/webhook',
+    }, { filePath, now: NOW }),
+    (err) => err.code === 'HUNT_INVALID' && Array.isArray(err.details) && err.details.some((d) => /webhookUrl/i.test(d))
+  );
+  const valid = hunts.createHunt({
+    name: 'Valid webhook hunt',
+    criteria: { mode: 'all', rules: [{ field: 'state', operator: 'eq', value: 'NJ' }] },
+    webhookUrl: 'https://hooks.example.com/notify',
+  }, { filePath, now: NOW });
+  assert.equal(valid.webhookUrl, 'https://hooks.example.com/notify');
+});
+
+
+

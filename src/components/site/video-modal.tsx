@@ -18,6 +18,7 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import { sourceDisplayText } from "@/lib/source-display";
+import { bandForScore } from "@/lib/score-bands";
 
 interface VideoModalProps {
   isOpen: boolean;
@@ -362,10 +363,22 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                     Step 4: Underwriting Cash Basis &amp; Triage Score
                   </span>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-950 font-bold text-xs">
-                    <BadgeCheck className="w-4 h-4 text-emerald-700" />
-                    Deal Score: {current.dealScore} / 99
-                  </div>
+                  {(() => {
+                    const scoreBand = bandForScore(current.dealScore);
+                    return (
+                      <div
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-bold text-xs"
+                        style={
+                          scoreBand
+                            ? { backgroundColor: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }
+                            : { backgroundColor: "#F1F5F9", color: "#475569" }
+                        }
+                      >
+                        <BadgeCheck className="w-4 h-4" />
+                        Deal Score: {current.dealScore} / 99{scoreBand ? ` (${scoreBand.label})` : ""}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid sm:grid-cols-3 gap-3">

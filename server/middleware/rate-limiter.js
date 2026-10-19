@@ -163,7 +163,7 @@ function createTieredRateLimiter(options = {}) {
   const windowMs = options.windowMs || 60000;
   const trustedProxyCount = options.trustedProxyCount !== undefined
     ? options.trustedProxyCount
-    : (process.env.TRUSTED_PROXY_COUNT ? Number(process.env.TRUSTED_PROXY_COUNT) : 1);
+    : (process.env.TRUSTED_PROXY_COUNT ? Number(process.env.TRUSTED_PROXY_COUNT) : 0);
 
   const limits = {
     sensitive: options.sensitiveLimit || 10,

@@ -133,7 +133,8 @@ const INSERT_SQL =
        ELSE ST_SetSRID(ST_MakePoint($9, $8), 4326)::geography END)
    ON CONFLICT (id) DO UPDATE SET
        ${UPDATE_SET_SQL},
-       geog = COALESCE(EXCLUDED.geog, listings.geog)`;
+       geog = COALESCE(EXCLUDED.geog, listings.geog),
+       updated_at = NOW()`;
 
 function paramsFor(record) {
   return INSERTABLE.map(([, pick]) => pick(record));

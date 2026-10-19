@@ -1,5 +1,6 @@
 import { verifyStripeWebhook, stripeWebhookConfigured } from "@server/billing/stripe-checkout";
 
+const MAX_STRIPE_WEBHOOK_BYTES = 512 * 1024;
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
 export async function GET() {
@@ -10,6 +11,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_STRIPE_WEBHOOK_BYTES) {
+    return Response.json(
+      { error: "Webhook payload exceeds maximum allowed size." },
+      { status: 413, headers: responseHeaders }
+    );
+  }
+
   const signatureHeader = request.headers.get("stripe-signature") || "";
   let rawBody: string;
   try {
@@ -18,6 +27,13 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "Could not read request body." },
       { status: 400, headers: responseHeaders }
+    );
+  }
+
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_STRIPE_WEBHOOK_BYTES) {
+    return Response.json(
+      { error: "Webhook payload exceeds maximum allowed size." },
+      { status: 413, headers: responseHeaders }
     );
   }
 

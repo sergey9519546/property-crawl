@@ -25,6 +25,9 @@ const nextConfig = {
   distDir: process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview'
     : process.env.NEXT_VERIFY_BUILD === 'sources' ? '.next-sources-verify'
     : process.env.NEXT_VERIFY_BUILD === '1' ? '.next-verify' : '.next',
+  ...(process.env.NEXT_ADAPTER_PATH
+    ? { adapterPath: path.resolve(__dirname, 'scripts', 'ensure-nft-manifests.js') }
+    : {}),
   experimental: {
     // Bound page-generation workers on high-core local machines with limited memory.
     cpus: 2,

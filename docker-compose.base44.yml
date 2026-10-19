@@ -29,6 +29,7 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=3000
+      - PROPERTY_DB=embedded
     command: node --env-file-if-exists=.env.local server/server.js
     restart: unless-stopped
 

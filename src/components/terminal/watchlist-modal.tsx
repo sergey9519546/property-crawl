@@ -5,6 +5,7 @@ import { displayDate, displayMoney, knownNumber, positiveNumber, safeImageUrl } 
 import { sourceDisplayText } from "@/lib/source-display";
 import { X, Bookmark, FileText, Copy, Trash2, ImageOff } from "lucide-react";
 import { ListingCompareToggle } from "@/components/listings/listing-compare";
+import { bandForScore } from "@/lib/score-bands";
 
 interface WatchlistProps {
   isOpen: boolean;
@@ -212,28 +213,28 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             <div className="px-6 py-2.5 bg-[#0F172A] text-white flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-4">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Known opening amounts</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-300 block">Known opening amounts</span>
                   <span className="font-extrabold text-sm text-white">
                     {displayMoney(totalOpeningBids)}
                   </span>
-                  <span className="block text-[9px] text-slate-500">{knownOpeningBids.length}/{savedListings.length} published</span>
+                  <span className="block text-[9px] text-slate-300">{knownOpeningBids.length}/{savedListings.length} published</span>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-emerald-400 block">Known bid spread</span>
                   <span className="font-extrabold text-sm text-[#22C55E]">
                     {displayMoney(totalBidSpread)}
                   </span>
-                  <span className="block text-[9px] text-slate-500">{knownBidSpreads.length}/{savedListings.length} modeled</span>
+                  <span className="block text-[9px] text-slate-300">{knownBidSpreads.length}/{savedListings.length} modeled</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Avg modeled score</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-300 block">Avg modeled score</span>
                   <span className="font-extrabold text-sm text-white">
                     {averageModeledScore === null ? "Not modeled" : `${averageModeledScore}/99`}
                   </span>
-                  <span className="block text-[9px] text-slate-500">{knownScores.length}/{savedListings.length} scored</span>
+                  <span className="block text-[9px] text-slate-300">{knownScores.length}/{savedListings.length} scored</span>
                 </div>
               </div>
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
                 {savedListings.length} tracked opportunities
               </span>
             </div>
@@ -312,6 +313,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             savedListings.map((l) => {
               const photoUrl = safeImageUrl(l.photo);
               const score = knownNumber(l.dealScore);
+              const scoreBand = bandForScore(score);
               return (
               <div
                 key={l.id}
@@ -339,7 +341,14 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
 
                 <div className="flex items-center gap-3">
                   <ListingCompareToggle listingId={l.id} className="h-10 shrink-0" />
-                  <span className="text-xs font-extrabold px-2.5 py-1 rounded-md bg-[#16A34A]/10 text-[#15803D]">
+                  <span
+                    className="text-xs font-extrabold px-2.5 py-1 rounded-md"
+                    style={
+                      scoreBand
+                        ? { backgroundColor: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }
+                        : { backgroundColor: "#F1F5F9", color: "#5B6472" }
+                    }
+                  >
                     {score === null ? "Not modeled" : `${Math.round(score)}/99`}
                   </span>
                   <button

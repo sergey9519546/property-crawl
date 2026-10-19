@@ -91,7 +91,7 @@ async function seedFromV0(options = {}) {
              note = EXCLUDED.note,
              website_url = EXCLUDED.website_url,
              updated_at = NOW()`,
-          [key, s.label || key, s.tier || 1, s.color || '#64748B', s.note || '', s.websiteUrl || null]
+          [key, s.label || key, s.tier || 'B', s.color || '#64748B', s.note || '', s.websiteUrl || null]
         );
         sourcesSeeded++;
       }

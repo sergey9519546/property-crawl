@@ -30,11 +30,11 @@ export default function GlobalError({
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
                 Something went wrong
               </h1>
-              <p className="text-sm text-slate-600 leading-relaxed">
+              <p className="text-sm text-slate-300 leading-relaxed">
                 The workspace hit an unexpected error. Try again. Your saved work remains on this machine.
               </p>
               {error.digest && (
-                <p className="text-[11px] font-mono text-slate-500 pt-1">
+                <p className="text-[11px] font-mono text-slate-400 pt-1">
                   Error reference: {error.digest}
                 </p>
               )}

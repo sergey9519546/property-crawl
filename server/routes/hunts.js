@@ -14,8 +14,17 @@ function createHuntsHandler(dependencies = {}) {
   const filePath = dependencies.filePath;
   const now = () => typeof dependencies.now === 'function' ? dependencies.now() : dependencies.now;
   const discovery = dependencies.discoveryQuery || discoveryQuery;
-  const durable = dependencies.durableStore || (database.isPg && env.DISCOVERY_MODE === 'advanced' ? require('../discovery/hunt-store').createPgHuntStore(database) : null);
-  async function evaluateDurableInventory(hunt) {
+  const explicitDurableStore = dependencies.durableStore || null;
+  let lazyDurableStore = null;
+  function getDurableStore() {
+    if (explicitDurableStore) return explicitDurableStore;
+    if (database.isPg && env.DISCOVERY_MODE === 'advanced') {
+      lazyDurableStore ||= require('../discovery/hunt-store').createPgHuntStore(database);
+      return lazyDurableStore;
+    }
+    return null;
+  }
+  async function evaluateDurableInventory(durable, hunt) {
     let baseline=await durable.baseline(hunt.id),evaluated=null,cursor=null;
     const previousBaseline=baseline,observedKeys=new Set();
     const initial=!baseline,events=[],results=[];
@@ -43,11 +52,12 @@ function createHuntsHandler(dependencies = {}) {
     }
 
     try {
+      const durable = getDurableStore();
       if (durable) {
         if (url.pathname === '/api/hunts' && req.method === 'GET') return res.json({items:await durable.list()});
         if (url.pathname === '/api/hunts' && req.method === 'POST') { const v=hunts.validateHuntInput(req.body||{});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);return res.status(201).json({hunt:await durable.create(v.value)}); }
         const durableMatch=url.pathname.match(/^\/api\/hunts\/(hunt_[a-f0-9]{24})(?:\/(events|evaluate))?$/);
-        if(durableMatch){const [,id,action]=durableMatch;if(action==='events'&&req.method==='GET')return res.json({items:await durable.events(id,url.searchParams.get('limit'))});if(action==='evaluate'&&req.method==='POST'){const hunt=await durable.get(id);if(!hunt)return res.status(404).json({error:'Hunt was not found'});const evaluation=await evaluateDurableInventory(hunt);const webhook=await notifyHuntWebhook(hunt,evaluation,dependencies.webhookOptions||{});return res.json({evaluation:{...evaluation,webhook}});}if(!action&&req.method==='GET'){const hunt=await durable.get(id);return hunt?res.json({hunt,baseline:await durable.baseline(id),recentEvents:await durable.events(id,20)}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='PATCH'){const v=hunts.validateHuntInput(req.body||{},{partial:true});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);const hunt=await durable.update(id,v.value);return hunt?res.json({hunt}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='DELETE'){const deleted=await durable.delete(id);return deleted?res.json({deleted:true,id}):res.status(404).json({error:'Hunt was not found'});}}
+        if(durableMatch){const [,id,action]=durableMatch;if(action==='events'&&req.method==='GET')return res.json({items:await durable.events(id,url.searchParams.get('limit'))});if(action==='evaluate'&&req.method==='POST'){const hunt=await durable.get(id);if(!hunt)return res.status(404).json({error:'Hunt was not found'});const evaluation=await evaluateDurableInventory(durable,hunt);const webhook=await notifyHuntWebhook(hunt,evaluation,dependencies.webhookOptions||{});return res.json({evaluation:{...evaluation,webhook}});}if(!action&&req.method==='GET'){const hunt=await durable.get(id);return hunt?res.json({hunt,baseline:await durable.baseline(id),recentEvents:await durable.events(id,20)}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='PATCH'){const v=hunts.validateHuntInput(req.body||{},{partial:true});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);const hunt=await durable.update(id,v.value);return hunt?res.json({hunt}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='DELETE'){const deleted=await durable.delete(id);return deleted?res.json({deleted:true,id}):res.status(404).json({error:'Hunt was not found'});}}
       }
       if (url.pathname === '/api/hunts') {
         if (req.method === 'GET') return res.json({ items: hunts.listHunts({ filePath }) });

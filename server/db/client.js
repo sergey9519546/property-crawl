@@ -1361,49 +1361,16 @@ class DatabaseClient {
     if (this.isPg) {
       const res = await this.pool.query(
         `SELECT
-           l.id,
-           l.source_key AS "source",
-           l.state, l.county, l.city, l.zip, l.address,
-           l.latitude::float8 AS "lat", l.longitude::float8 AS "lng",
-           l.beds, l.baths::float8 AS "baths", l.sqft, l.year_built AS "year",
-           l.prop_type AS "propType",
-           l.opening_bid::float8 AS "openingBid",
-           l.est_low::float8 AS "estLow", l.est_high::float8 AS "estHigh",
-           l.assessed_value::float8 AS "assessed",
-           CASE WHEN l.est_low > 0 AND l.est_high >= l.est_low
-                THEN ((l.est_low + l.est_high) / 2.0)::float8
-                ELSE NULL END AS "mid",
-           CASE WHEN l.opening_bid > 0 AND l.est_low > 0 AND l.est_high >= l.est_low
-                THEN (l.opening_bid / ((l.est_low + l.est_high) / 2.0))::float8
-                ELSE NULL END AS "ratio",
-           CASE WHEN l.opening_bid > 0 AND l.est_low > 0 AND l.est_high >= l.est_low
-                THEN GREATEST(0, ((l.est_low + l.est_high) / 2.0) - l.opening_bid)::float8
-                ELSE NULL END AS "equity",
-           CASE WHEN l.opening_bid > 0 AND l.est_low > 0 AND l.est_high >= l.est_low
-                THEN l.deal_score
-                ELSE NULL END AS "dealScore",
-           l.sale_date::text AS "saleDate",
-           l.plaintiff, l.defendant, l.judgment_amount::float8 AS "judgment",
-           l.attorney, l.occupancy, l.deposit_terms AS "deposit",
-           l.photo_url AS "photo", l.images AS "images", l.source_url AS "sourceUrl",
-           l.raw_notice AS "raw",
-           l.provenance,
-           l.source_observed_at::text AS "sourceObservedAt",
-           l.fetched_at::text AS "fetchedAt",
-           l.redemption_days AS "redemptionDays",
-           l.redemption_warning AS "redemptionWarning",
-           l.senior_lien_risk AS "seniorLienRisk",
-           l.senior_lien_warning AS "seniorLienWarning",
-           l.cash_to_close::float8 AS "cashToClose",
-           l.cash_to_close_details AS "cashToCloseDetails",
-           sd.notes, sd.created_at AS "savedAt"
+           l.*,
+           sd.notes,
+           sd.created_at AS "savedAt"
          FROM saved_deals sd
-         JOIN listings l ON sd.listing_id = l.id
+         JOIN (SELECT ${LISTING_SELECT} FROM listings) l ON sd.listing_id = l.id
          WHERE sd.user_id = $1
-         ORDER BY l.sale_date ASC NULLS LAST`,
+         ORDER BY l."saleDate" ASC NULLS LAST`,
         [userId]
       );
-      return res.rows;
+      return res.rows.map(mapPgListingRow);
     }
     this.refreshLiveCache();
     const ids = this.inMemoryData.savedDeals.get(userId) || new Set();
@@ -1579,7 +1546,7 @@ class DatabaseClient {
       const existing = [...this.inMemoryData.alertMatches.values()].find(
         (m) => m.searchId === searchId && m.listingId === listingId
       );
-      if (existing) { out.push(existing); continue; }
+      if (existing) continue;
       const match = {
         id: cryptoRandomUUID(),
         searchId,
@@ -1857,6 +1824,7 @@ module.exports = new DatabaseClient();
 module.exports.DatabaseClient = DatabaseClient;
 module.exports.DEFAULT_LIVE_CACHE_PATH = DEFAULT_LIVE_CACHE_PATH;
 module.exports.LISTING_SELECT = LISTING_SELECT;
+module.exports.mapPgListingRow = mapPgListingRow;
 module.exports.prepareListingForPersistence = prepareListingForPersistence;
 module.exports.applyCrossSourceBakeOff = applyCrossSourceBakeOff;
 module.exports.computeBakeOff = computeBakeOff;

@@ -140,7 +140,7 @@ export function workspaceMutationAllowed(request: Request) {
 function cookieIsSecure(request: Request) {
   const forwarded = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
   if (forwarded === "https") return true;
-  if (forwarded === "http") return false;
+  if (forwarded === "http" && trustedProxyEnabled(process.env)) return false;
   try {
     return new URL(request.url).protocol === "https:";
   } catch {

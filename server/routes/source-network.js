@@ -21,9 +21,18 @@ function createSourceNetworkHandler(dependencies = {}) {
   // The production scheduler owns this singleton. Tests and alternative
   // schedulers may inject a coordinator explicitly.
   const coordinator = dependencies.coordinator || collector.collectionCoordinator || null;
-  // The release gate lives on the discovery store. It was never read from
-  // dependencies, so scope=all had no way to ask which sources were promoted.
-  const discoveryStore = dependencies.discoveryStore || null;
+  // The release gate lives on the discovery store. Resolve an injected store first,
+  // or lazily instantiate DiscoveryStore when Postgres + advanced discovery mode is active.
+  const explicitDiscoveryStore = dependencies.discoveryStore || null;
+  let lazyDiscoveryStore = null;
+  function resolveDiscoveryStore(env) {
+    if (explicitDiscoveryStore) return explicitDiscoveryStore;
+    if (database.isPg && database.pool?.query && env.DISCOVERY_MODE === 'advanced') {
+      lazyDiscoveryStore ||= require('../discovery/store').createDiscoveryStore(database);
+      return lazyDiscoveryStore;
+    }
+    return null;
+  }
   const evidenceCollectors = dependencies.evidenceCollectors || { 'federal-register': (options) => require('../sources/federal-register').collectFederalNotices(options) };
   const evidenceJobs = new Set();
   return async function handleSourceNetwork(req, res) {
@@ -168,6 +177,7 @@ function createSourceNetworkHandler(dependencies = {}) {
           // no promotion record to gate on, and refusing to collect at all would
           // be a different failure rather than a safer one.
           let sourceIds;
+          const discoveryStore = resolveDiscoveryStore(env);
           if (discoveryStore && typeof discoveryStore.promotedSources === 'function') {
             const promoted = await discoveryStore.promotedSources();
             sourceIds = Array.isArray(promoted) ? promoted.filter(Boolean) : [];

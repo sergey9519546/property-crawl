@@ -79,3 +79,24 @@ test('Fannie SPA shell still throws when XHR lane disabled', async () => {
   scraper.requestText = async () => html;
   await assert.rejects(() => scraper.fetchStateHtml('OH'), /SPA_SHELL|client-rendered/i);
 });
+
+test('captureSpaXhr rejects non-HTTPS, credentials, and private/local targets before spawning Python', async () => {
+  const nonHttps = await captureSpaXhr('http://www.homepath.fanniemae.com/listing/search', { sourceKey: 'fannie' });
+  assert.equal(nonHttps.ok, false);
+  assert.equal(nonHttps.error, 'SPA_XHR_HTTPS_REQUIRED');
+
+  const creds = await captureSpaXhr('https://user:pass@www.homepath.fanniemae.com/listing/search', { sourceKey: 'fannie' });
+  assert.equal(creds.ok, false);
+  assert.equal(creds.error, 'SPA_XHR_CREDENTIALS_NOT_ALLOWED');
+
+  const loopback = await captureSpaXhr('https://127.0.0.1/listing/search', { sourceKey: 'fannie' });
+  assert.equal(loopback.ok, false);
+  assert.equal(loopback.error, 'SPA_XHR_PRIVATE_HOST_REFUSED');
+
+  const metadata = await captureSpaXhr('https://169.254.169.254/latest/meta-data/', { sourceKey: 'fannie' });
+  assert.equal(metadata.ok, false);
+  assert.equal(metadata.error, 'SPA_XHR_PRIVATE_HOST_REFUSED');
+});
+
+
+

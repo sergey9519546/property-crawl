@@ -30,15 +30,58 @@ type ListingMarket = {
 };
 
 const STATE_NAMES: Record<string, string> = {
+  AK: "Alaska",
+  AL: "Alabama",
+  AR: "Arkansas",
   AZ: "Arizona",
+  CA: "California",
+  CO: "Colorado",
+  CT: "Connecticut",
+  DC: "District of Columbia",
+  DE: "Delaware",
   FL: "Florida",
   GA: "Georgia",
+  HI: "Hawaii",
+  IA: "Iowa",
+  ID: "Idaho",
   IL: "Illinois",
+  IN: "Indiana",
+  KS: "Kansas",
+  KY: "Kentucky",
+  LA: "Louisiana",
+  MA: "Massachusetts",
+  MD: "Maryland",
+  ME: "Maine",
+  MI: "Michigan",
+  MN: "Minnesota",
+  MO: "Missouri",
+  MS: "Mississippi",
+  MT: "Montana",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  NE: "Nebraska",
+  NH: "New Hampshire",
   NJ: "New Jersey",
+  NM: "New Mexico",
   NV: "Nevada",
+  NY: "New York",
   OH: "Ohio",
+  OK: "Oklahoma",
+  OR: "Oregon",
   PA: "Pennsylvania",
+  PR: "Puerto Rico",
+  RI: "Rhode Island",
+  SC: "South Carolina",
+  SD: "South Dakota",
+  TN: "Tennessee",
   TX: "Texas",
+  UT: "Utah",
+  VA: "Virginia",
+  VT: "Vermont",
+  WA: "Washington",
+  WI: "Wisconsin",
+  WV: "West Virginia",
+  WY: "Wyoming",
 };
 
 const KIND_ORDER: MarketSuggestion["kind"][] = [
@@ -467,7 +510,7 @@ export function Hero() {
             initial={{ opacity: 1, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-            className="flex items-center gap-1.5 text-[#FFFFFF] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white xl:text-[#0F172A] xl:focus-visible:outline-[#0F172A]"
+            className="flex items-center gap-1.5 text-[#0F172A] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
           >
             <Undo2 className="h-4 w-4 text-[#0F172A]" />
             Try the Cleveland market

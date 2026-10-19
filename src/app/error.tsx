@@ -27,11 +27,11 @@ export default function ErrorPage({
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             This page couldn’t load
           </h1>
-          <p className="text-sm text-slate-600 leading-relaxed">
+          <p className="text-sm text-slate-300 leading-relaxed">
             Try loading the page again, or return to property search. Your saved work remains in the workspace.
           </p>
           {error.digest && (
-            <p className="text-[11px] font-mono text-slate-500 pt-1">
+            <p className="text-[11px] font-mono text-slate-400 pt-1">
               Error reference: {error.digest}
             </p>
           )}

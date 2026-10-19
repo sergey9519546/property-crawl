@@ -1,4 +1,7 @@
 import { verifyScrapySignature, validateScrapyPayload, SUPPORTED_RECIPES } from "@server/ingest/scrapy-webhook";
+import { resolveLiveStorePath, mergeLiveRecords } from "@server/db/live-record-store";
+
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 const responseHeaders = {
   "Cache-Control": "no-store",
@@ -18,6 +21,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const contentLength = Number(request.headers.get("content-length") || "0");
+  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+    return Response.json(
+      { error: "Payload exceeds maximum allowed size (2 MB)." },
+      { status: 413, headers: responseHeaders }
+    );
+  }
+
   const signature = request.headers.get("x-signature") || "";
 
   let rawBody: string;
@@ -27,6 +38,13 @@ export async function POST(request: Request) {
     return Response.json(
       { error: "Could not read request body." },
       { status: 400, headers: responseHeaders }
+    );
+  }
+
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+    return Response.json(
+      { error: "Payload exceeds maximum allowed size (2 MB)." },
+      { status: 413, headers: responseHeaders }
     );
   }
 
@@ -56,11 +74,21 @@ export async function POST(request: Request) {
     );
   }
 
+  let accepted = 0;
+  if (validated.items.length > 0) {
+    try {
+      const merged = mergeLiveRecords(resolveLiveStorePath(), validated.items);
+      accepted = merged.accepted || 0;
+    } catch (err) {
+      console.error("[Scrapy Ingest] Live record store merge failed:", (err as Error)?.message);
+    }
+  }
 
   return Response.json(
     {
       success: true,
       count: validated.items.length,
+      accepted,
       recipe: validated.recipe,
     },
     { status: 200, headers: responseHeaders }

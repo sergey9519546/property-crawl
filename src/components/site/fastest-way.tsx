@@ -78,7 +78,7 @@ export function FastestWay() {
         {/* Bento layout: 3 rows × 2-col grid, gap 16px */}
         <div className="flex flex-col gap-4">
           {/* Row 1: heading + first card */}
-          <div className="grid grid-cols-2 items-center gap-4">
+          <div className="grid grid-cols-1 items-center gap-4 md:grid-cols-2">
             <GsapReveal>
               <div className="flex flex-col justify-center">
                 <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
@@ -94,12 +94,12 @@ export function FastestWay() {
             <BentoCard step={first} delay={0.1} />
           </div>
           {/* Row 2 */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <BentoCard step={rest[0]} delay={0.2} />
             <BentoCard step={rest[1]} delay={0.3} />
           </div>
           {/* Row 3 */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <BentoCard step={rest[2]} delay={0.4} />
             <BentoCard step={rest[3]} delay={0.5} />
           </div>

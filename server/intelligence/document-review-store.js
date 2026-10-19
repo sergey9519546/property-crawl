@@ -39,12 +39,12 @@ function createDocumentReviewStore(options = {}) {
   let quarantinedPath = null;
   let pgReady = false;
 
-  function ensurePgTable() {
+  async function ensurePgTable() {
     if (!pool || pgReady) return;
     // schema.sql ships CREATE TABLE IF NOT EXISTS; re-assert for hosts that
     // boot without running the full schema (idempotent).
     try {
-      pool.query(`CREATE TABLE IF NOT EXISTS document_reviews (
+      await pool.query(`CREATE TABLE IF NOT EXISTS document_reviews (
         id TEXT PRIMARY KEY,
         listing_id TEXT NOT NULL,
         document_index INTEGER,
@@ -58,8 +58,11 @@ function createDocumentReviewStore(options = {}) {
         extracted_at TIMESTAMPTZ,
         payload JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )`).then(() => { pgReady = true; }).catch(() => { pgReady = false; });
-    } catch { pgReady = false; }
+      )`);
+      pgReady = true;
+    } catch {
+      pgReady = false;
+    }
   }
 
   function load() {
@@ -136,7 +139,7 @@ function createDocumentReviewStore(options = {}) {
 
   async function loadPg() {
     if (!pool) return reviews;
-    ensurePgTable();
+    await ensurePgTable();
     try {
       const result = await pool.query('SELECT id, payload FROM document_reviews');
       reviews.clear();
@@ -177,12 +180,13 @@ function createDocumentReviewStore(options = {}) {
         }
         throw error;
       }
+      const tempPath = `${storePath}.${randomUUID()}.tmp`;
       try {
-        const tempPath = `${storePath}.${randomUUID()}.tmp`;
         fs.writeFileSync(tempPath, body, { flag: 'wx', mode: 0o600 });
         fs.renameSync(tempPath, storePath);
         return true;
       } finally {
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* ignore */ }
         try { fs.closeSync(lock); } catch { /* ignore */ }
         try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
       }
@@ -194,7 +198,7 @@ function createDocumentReviewStore(options = {}) {
 
   async function persistPg() {
     if (!pool) return false;
-    ensurePgTable();
+    await ensurePgTable();
     try {
       for (const [id, record] of reviews.entries()) {
         await pool.query(

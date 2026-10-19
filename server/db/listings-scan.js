@@ -54,8 +54,11 @@ async function scanAllListings(database, filters = {}, options = {}) {
   let availableTotal = null;
 
   for (;;) {
-    const page = await database.getListings({ ...filters, limit: pageSize, offset, sort });
-    const batch = Array.isArray(page?.listings) ? page.listings : [];
+    const remaining = maxRows - rows.length;
+    if (remaining <= 0) break;
+    const requestLimit = Math.min(pageSize, remaining);
+    const page = await database.getListings({ ...filters, limit: requestLimit, offset, sort });
+    const batch = Array.isArray(page?.listings) ? page.listings.slice(0, remaining) : [];
     const reported = Number(page?.total);
     if (Number.isFinite(reported)) availableTotal = reported;
 
@@ -63,7 +66,7 @@ async function scanAllListings(database, filters = {}, options = {}) {
     offset += batch.length;
 
     if (batch.length === 0) break;                          // end of stream
-    if (batch.length < pageSize) break;                     // short page
+    if (batch.length < requestLimit) break;                 // short page
     if (availableTotal !== null && rows.length >= availableTotal) break;
     if (rows.length >= maxRows) break;                      // disclosed below
   }
@@ -73,7 +76,7 @@ async function scanAllListings(database, filters = {}, options = {}) {
     pool: rows,
     scanned,
     availableTotal,
-    truncated: availableTotal === null ? false : scanned < availableTotal
+    truncated: availableTotal === null ? scanned >= maxRows : scanned < availableTotal
   };
 }
 

@@ -23,16 +23,18 @@ window.addEventListener('error',function(e){var t=e&&e.target;if(t&&t!==window&&
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/lucide/lucide.js"></script>
 <script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          brand: { 50:'#f0fdfa',100:'#ccfbf1',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a' },
-          ink: { 900:'#0b1220', 800:'#131c2e', 700:'#1c2740' }
-        },
-        fontFamily: { sans:['Inter','system-ui','sans-serif'] }
+  if (typeof tailwind !== 'undefined') {
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#f0fdfa',100:'#ccfbf1',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59',900:'#134e4a' },
+            ink: { 900:'#0b1220', 800:'#131c2e', 700:'#1c2740' }
+          },
+          fontFamily: { sans:['Inter','system-ui','sans-serif'] }
+        }
       }
-    }
+    };
   }
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">

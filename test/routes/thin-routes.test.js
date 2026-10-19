@@ -241,3 +241,32 @@ test('verify-docket: returns the truthful UNVERIFIED audit payload', async () =>
   assert.match(res.payload.summaryMarkdown, /UNVERIFIED/);
   assert.match(res.payload.disclaimer, /not verified/i);
 });
+
+// --- Enrichment route -------------------------------------------------
+
+const { createEnrichmentHandler } = require('../../server/routes/enrichment');
+
+test('enrichment: rejects non-GET on /api/enrichment with 405', async () => {
+  const handler = createEnrichmentHandler({});
+  const res = captureRes();
+  await handler({ method: 'POST', url: 'http://localhost/api/enrichment', headers: { host: 'localhost' } }, res);
+  assert.equal(res.statusCode, 405);
+});
+
+test('enrichment: returns 404 on unknown nested subpath instead of hanging', async () => {
+  const handler = createEnrichmentHandler({});
+  const res = captureRes();
+  await handler({ method: 'GET', url: 'http://localhost/api/enrichment/parcel-1/unknown-subpath', headers: { host: 'localhost' } }, res);
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.payload.error, 'Enrichment endpoint not found');
+});
+
+test('enrichment: normalizes trailing slash on /api/enrichment/', async () => {
+  const handler = createEnrichmentHandler({});
+  const res = captureRes();
+  await handler({ method: 'GET', url: 'http://localhost/api/enrichment/', headers: { host: 'localhost' } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.schema, 'property-crawl.enrichment-gateway/v1');
+});
+
+

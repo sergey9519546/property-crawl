@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 const MATCH_FILTERS = [
   "q", "state", "county", "source", "type", "program", "lifecycle", "saleFrom", "saleTo",
   "maxBid", "minScore", "minEquity", "occupancy", "freshness", "hasDocuments", "seniorLien", "redemption",
+  "distressStage", "minQuality",
 ] as const;
 
 export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {

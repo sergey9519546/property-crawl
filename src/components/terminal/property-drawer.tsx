@@ -124,6 +124,12 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
   const [compsLoading, setCompsLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    setActiveTab("underwrite");
+    setAiLoading(false);
+    setAiAnalysis(null);
+    setAiSource(null);
+    setGeneratingAiLoi(false);
+    setGeneratingAiMemo(false);
     if (!listing?.id) {
       setCompsData(null);
       setCompsLoading(false);
@@ -151,11 +157,8 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [listing, onClose]);
@@ -333,7 +336,26 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
         </div>
 
         {/* Tab Navigation */}
-        <div role="tablist" aria-label="Property inspection tabs" className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2">
+        <div
+          role="tablist"
+          aria-label="Property inspection tabs"
+          className="bg-[#F8FAFC] px-6 py-2 border-b border-[#E5E7EB] flex items-center gap-2"
+          onKeyDown={(event) => {
+            const order: Array<"underwrite" | "3d" | "bidding" | "signals"> = ["underwrite", "3d", "bidding", "signals"];
+            const idx = order.indexOf(activeTab);
+            let nextIdx = -1;
+            if (event.key === "ArrowRight") nextIdx = (idx + 1) % order.length;
+            else if (event.key === "ArrowLeft") nextIdx = (idx - 1 + order.length) % order.length;
+            else if (event.key === "Home") nextIdx = 0;
+            else if (event.key === "End") nextIdx = order.length - 1;
+            if (nextIdx >= 0) {
+              event.preventDefault();
+              const nextTab = order[nextIdx];
+              setActiveTab(nextTab);
+              document.getElementById(`tab-${nextTab}`)?.focus();
+            }
+          }}
+        >
           <button
             id="tab-underwrite"
             role="tab"

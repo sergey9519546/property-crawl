@@ -109,8 +109,17 @@ async function boot() {
   console.log(`[Production] Bootstrapping Property-Crawl production runtime...`);
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
+  const defaultDbEnv =
+    !hasDatabase &&
+    !bootEnv.PROPERTY_DB &&
+    !bootEnv.PROPERTY_PG_DATA_DIR &&
+    !bootEnv.PROPERTY_INVENTORY_BACKEND
+      ? { PROPERTY_DB: 'embedded' }
+      : {};
+
   const apiEnv = {
     ...bootEnv,
+    ...defaultDbEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
   };
@@ -134,6 +143,7 @@ async function boot() {
 
   const nextEnv = {
     ...bootEnv,
+    ...defaultDbEnv,
     PORT: String(publicPort),
     PROPERTY_API_URL: `http://127.0.0.1:${internalApiPort}`,
     NODE_ENV: 'production',

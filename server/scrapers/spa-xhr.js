@@ -37,7 +37,42 @@ function pythonRuntime(env = process.env) {
   return fs.existsSync(candidate) ? candidate : null;
 }
 
+const { isPrivateOrLocalHost } = require('./scrapling-bridge');
+
+const MAX_SPA_XHR_STDOUT_BYTES = 4 * 1024 * 1024;
+const MAX_SPA_XHR_STDERR_BYTES = 64 * 1024;
+
+function validateSpaXhrUrl(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(String(rawUrl || '').trim());
+  } catch {
+    return 'SPA_XHR_INVALID_URL';
+  }
+  if (parsed.protocol !== 'https:') return 'SPA_XHR_HTTPS_REQUIRED';
+  if (parsed.username || parsed.password) return 'SPA_XHR_CREDENTIALS_NOT_ALLOWED';
+  const host = parsed.hostname.toLowerCase();
+  if (
+    host.endsWith('.local')
+    || host.endsWith('.internal')
+    || host.endsWith('.localhost')
+    || isPrivateOrLocalHost(host)
+  ) {
+    return 'SPA_XHR_PRIVATE_HOST_REFUSED';
+  }
+  return null;
+}
+
 function captureSpaXhr(url, { sourceKey, pattern, timeoutMs = 20000, env = process.env } = {}) {
+  const urlError = validateSpaXhrUrl(url);
+  if (urlError) {
+    return Promise.resolve({
+      ok: false,
+      error: urlError,
+      sourceKey,
+      url,
+    });
+  }
   const python = pythonRuntime(env);
   const script = path.resolve(__dirname, '..', '..', 'scripts', 'crawlers', 'scrapling_spa_xhr.py');
   if (!python || !fs.existsSync(script)) {
@@ -60,19 +95,36 @@ function captureSpaXhr(url, { sourceKey, pattern, timeoutMs = 20000, env = proce
         PYTHONIOENCODING: 'utf-8',
       },
     });
-    let out = '', err = '';
+    let out = '', err = '', outBytes = 0, overflow = false;
     const timer = setTimeout(() => {
       try { child.kill('SIGKILL'); } catch (_) {}
       resolve({ ok: false, error: 'SPA_XHR_TIMEOUT', sourceKey, url });
     }, timeoutMs);
-    child.stdout.on('data', (d) => { out += d; });
-    child.stderr.on('data', (d) => { err += d; });
+    child.stdout.on('data', (d) => {
+      const chunk = String(d);
+      outBytes += Buffer.byteLength(chunk, 'utf8');
+      if (outBytes > MAX_SPA_XHR_STDOUT_BYTES) {
+        overflow = true;
+        try { child.kill('SIGKILL'); } catch (_) {}
+        return;
+      }
+      out += chunk;
+    });
+    child.stderr.on('data', (d) => {
+      if (err.length < MAX_SPA_XHR_STDERR_BYTES) {
+        err += String(d).slice(0, MAX_SPA_XHR_STDERR_BYTES - err.length);
+      }
+    });
     child.on('error', (e) => {
       clearTimeout(timer);
       resolve({ ok: false, error: e.message, sourceKey, url });
     });
     child.on('close', () => {
       clearTimeout(timer);
+      if (overflow) {
+        resolve({ ok: false, error: 'SPA_XHR_OUTPUT_TOO_LARGE', sourceKey, url });
+        return;
+      }
       try {
         const parsed = JSON.parse(String(out).trim().split('\n').pop() || '{}');
         resolve({ ...parsed, sourceKey, url, pattern: xhrPattern });
