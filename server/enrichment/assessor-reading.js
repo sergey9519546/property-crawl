@@ -21,6 +21,14 @@ const MARKET_CONVERSION = Object.freeze({
     taxableFraction: 0.35,
     citation: 'Ohio Rev. Code § 5715.01 assesses real property at 35 percent of true value. Market comparison = TOTAL_ASSESSED_VAL / 0.35.',
   }),
+  'FL-ALACHUA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Alachua County Property Appraiser justvalue (F.S. § 193.011 Just Valuation), compared 1:1 with the published opening amount.',
+  }),
+  'TX-HARRIS': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Harris County Appraisal District (HCAD) appraised value, compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01.',
+  }),
 });
 
 const WITHHOLD = Object.freeze({

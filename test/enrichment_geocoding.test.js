@@ -127,8 +127,10 @@ test('ArcGIS Resolver: normalizes APNs and county registry keys', () => {
   assert.equal(normalizeApn('TX.BEX. 00412'), 'TXBEX00412');
 
   assert.equal(resolveCountyKey('TX', 'Bexar County'), 'TX-BEXAR');
+  assert.equal(resolveCountyKey('TX', 'Harris County'), 'TX-HARRIS');
   assert.equal(resolveCountyKey('OH', 'Cuyahoga'), 'OH-CUYAHOGA');
   assert.equal(resolveCountyKey('FL', 'Orange County'), 'FL-ORANGE');
+  assert.equal(resolveCountyKey('FL', 'Alachua County'), 'FL-ALACHUA');
   assert.equal(resolveCountyKey('ZZ', 'Unknown'), null);
 });
 

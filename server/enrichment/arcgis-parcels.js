@@ -70,6 +70,28 @@ const COUNTY_ARCGIS_REGISTRY = {
     assessedLandField: 'LAND_VAL',
     assessedImprvField: 'BLDG_VAL',
     legalDescField: 'LEGAL_DESC'
+  },
+  'FL-ALACHUA': {
+    name: 'Alachua County Property Appraiser (Gainesville)',
+    fips: '12001',
+    endpoint: 'https://maps.alachuacounty.us/server/rest/services/Hosted/ParcelsACGM/FeatureServer/0/query',
+    apnField: 'parcel',
+    landUseField: 'flucode',
+    assessedTotalField: 'justvalue',
+    assessedLandField: 'justvalue',
+    assessedImprvField: 'justvalue',
+    legalDescField: 'zonelink'
+  },
+  'TX-HARRIS': {
+    name: 'Harris County Appraisal District (HCAD)',
+    fips: '48201',
+    endpoint: 'https://gis.hcad.org/arcgis/rest/services/Public/Parcels/MapServer/0/query',
+    apnField: 'HCAD_NUM',
+    landUseField: 'State_Class',
+    assessedTotalField: 'Tot_Appr_Val',
+    assessedLandField: 'Land_Val',
+    assessedImprvField: 'Bld_Val',
+    legalDescField: 'Legal_Desc'
   }
 };
 
@@ -93,17 +115,33 @@ function normalizeApn(apn) {
 }
 
 /**
+ * Reads attribute property case-insensitively from ArcGIS feature attributes.
+ */
+function getAttributeCaseInsensitive(attributes, fieldName) {
+  if (!attributes || !fieldName) return undefined;
+  if (attributes[fieldName] !== undefined) return attributes[fieldName];
+  const upper = String(fieldName).toUpperCase();
+  const lower = String(fieldName).toLowerCase();
+  if (attributes[upper] !== undefined) return attributes[upper];
+  if (attributes[lower] !== undefined) return attributes[lower];
+  for (const [k, v] of Object.entries(attributes)) {
+    if (k.toUpperCase() === upper) return v;
+  }
+  return undefined;
+}
+
+/**
  * Normalizes raw ArcGIS parcel attributes into standard domain shape.
  */
 function normalizeArcgisAttributes(attributes, config) {
   if (!attributes) return null;
 
-  const rawApn = String(attributes[config.apnField] || '');
+  const rawApn = String(getAttributeCaseInsensitive(attributes, config.apnField) || '');
   const canonicalApn = normalizeApn(rawApn);
 
-  const total = Number(attributes[config.assessedTotalField]);
-  const land = Number(attributes[config.assessedLandField]);
-  const imprv = Number(attributes[config.assessedImprvField]);
+  const total = Number(getAttributeCaseInsensitive(attributes, config.assessedTotalField));
+  const land = Number(getAttributeCaseInsensitive(attributes, config.assessedLandField));
+  const imprv = Number(getAttributeCaseInsensitive(attributes, config.assessedImprvField));
 
   return {
     source: 'ARCGIS_REST_PARCEL',
@@ -111,8 +149,8 @@ function normalizeArcgisAttributes(attributes, config) {
     countyName: config.name,
     rawApn,
     canonicalApn,
-    landUse: String(attributes[config.landUseField] || 'UNKNOWN'),
-    legalDescription: String(attributes[config.legalDescField] || ''),
+    landUse: String(getAttributeCaseInsensitive(attributes, config.landUseField) || 'UNKNOWN'),
+    legalDescription: String(getAttributeCaseInsensitive(attributes, config.legalDescField) || ''),
     assessedValue: {
       total: Number.isFinite(total) ? total : null,
       land: Number.isFinite(land) ? land : null,

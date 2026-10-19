@@ -23,6 +23,20 @@ test('assessor reading converts Bexar and Orange 1:1 and scores the opening amou
   assert.equal(orange.dealScore, 65);
 });
 
+test('assessor reading converts Alachua and Harris 1:1 and scores the opening amount', () => {
+  const alachua = interpretAssessorParcel({ countyKey: 'FL-ALACHUA', parcel: parcel(150000), openingBid: 60000 });
+  assert.equal(alachua.marketComparison, 150000);
+  assert.equal(alachua.rawFigure, 150000);
+  assert.equal(alachua.ratio, 0.4);
+  assert.equal(alachua.dealScore, 78);
+  assert.match(alachua.citation, /193\.011/);
+
+  const harris = interpretAssessorParcel({ countyKey: 'TX-HARRIS', parcel: parcel(250000), openingBid: 125000 });
+  assert.equal(harris.marketComparison, 250000);
+  assert.equal(harris.dealScore, 65);
+  assert.match(harris.citation, /23\.01/);
+});
+
 test('assessor reading converts Cuyahoga taxable value at 35 percent', () => {
   const reading = interpretAssessorParcel({ countyKey: 'OH-CUYAHOGA', parcel: parcel(35000), openingBid: 50000 });
   assert.equal(reading.rawFigure, 35000);
