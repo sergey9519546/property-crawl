@@ -43,10 +43,11 @@ function inspectInstallation(packageRoot = defaultPackageRoot(), configDir = DEF
   let config = null;
   try { version = JSON.parse(fs.readFileSync(packageFile, 'utf8')).version || null; } catch (_) {}
   try { config = JSON.parse(fs.readFileSync(path.join(configDir, 'config.json'), 'utf8')); } catch (_) {}
+  const installed = Boolean(version && fs.existsSync(wrapper));
   const tosAccepted = Boolean(config && typeof config.tos_accepted_version === 'string' && config.tos_accepted_version.trim());
   return {
-    installed: Boolean(version && fs.existsSync(wrapper)), version, packageRoot, wrapper, configDir,
-    setupReady: tosAccepted, tosAccepted,
+    installed, version, packageRoot, wrapper, configDir,
+    setupReady: Boolean(installed && tosAccepted), tosAccepted,
   };
 }
 
