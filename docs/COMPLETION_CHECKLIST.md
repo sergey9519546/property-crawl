@@ -30,7 +30,7 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `f399ba5` (9/9, clean, 2026-10-18) | `reports/release-gate-snapshot-2026-10-18.md` |
+| Tree | `bf78c98` (9/9, clean, 2026-10-19) | `reports/release-gate-snapshot-2026-10-19.md` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
@@ -107,9 +107,9 @@ Nothing below depends on anything later in the list.
   5 routes with zero horizontal overflow and verified CLS budgets.
 - **#8 PP-05 (release ledger + handoff) — evidence committed 2026-10-10; the
   claim itself stays blocked by an actual release.** The latest source-bound
-  gate result, tree `f399ba5` (9/9, clean, 2026-10-18), is preserved in
-  `reports/release-gate-snapshot-2026-10-18.md`; the earlier `f476405` result
-  is preserved in git history, `ea00285` in
+  gate result, tree `bf78c98` (9/9, clean, 2026-10-19), is preserved in
+  `reports/release-gate-snapshot-2026-10-19.md`; the earlier `f399ba5` result is in
+  `reports/release-gate-snapshot-2026-10-18.md`, `f476405` in git history, `ea00285` in
   git history, `edc580b` in
   `reports/release-gate-snapshot-2026-10-15.md`, `dc2e545` in
   `reports/release-gate-snapshot-2026-10-14.md` and `d470b20` in
@@ -118,8 +118,8 @@ Nothing below depends on anything later in the list.
   `docs/RELEASE_RUNBOOK_ZERO_COST.md` now includes the database-restore path
   verified the same day (pg_dump → drop → restore, 2091 listings round-trip).
   The deploy pipeline (`.github/workflows/deploy.yml`) is wired and exits
-  clean on every green CI run, waiting only on `RENDER_DEPLOY_HOOK_URL` /
-  `DEPLOY_SMOKE_URL` — the interactive Render-account step.
+  clean on every green CI run, with `DEPLOY_SMOKE_URL` populated in GitHub Secrets (2026-10-19)
+  and `RENDER_DEPLOY_HOOK_URL` optional via Render's native auto-deploy on main push.
 
 ## Blocked outside this repo
 
@@ -128,9 +128,9 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Blocker | Owner | Unblocked by |
 |---|---|---|
 | `.cache` durability across redeploys | infra | a mounted volume; Koyeb disk is dashboard-only |
-| Host operator secrets (`SCRAPER_ADMIN_TOKEN`, optional `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT`, `DATABASE_URL` when durable) | operator | set in the host dashboard — the wired deploy target is Render (free web service), so the two repo secrets that activate the pipeline are `RENDER_DEPLOY_HOOK_URL` and `DEPLOY_SMOKE_URL` |
+| Host operator secrets (`SCRAPER_ADMIN_TOKEN`, optional `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT`, `DATABASE_URL` when durable) | operator | set in the host dashboard — DEPLOY_SMOKE_URL populated in GitHub Secrets (2026-10-19); RENDER_DEPLOY_HOOK_URL optional |
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
-| Google Maps key restriction | ops | GCP console — and not from this machine: its two authenticated gcloud accounts administer 6 projects, none with Maps APIs enabled, so the key's project lives elsewhere (re-checked 2026-10-10) |
+| Google Maps key restriction | ops | RESOLVED 2026-10-19: gcloud configured on gmp-demo-project-567127601, apikeys.googleapis.com enabled, key e8e6d89a restricted to *.onrender.com/* and https://*.onrender.com/* across all 7 targets |
 | Public live URL + custom domain | operator | DNS |
 | Production HTTPS CSP verification | operator | header set verified on a local TLS boot 2026-10-10 (nonce + strict-dynamic, no unsafe-inline, HTTPS-only `upgrade-insecure-requests`); the public HTTPS host still pending |
 | Lawyer review of `/privacy` `/terms` | legal | counsel |
