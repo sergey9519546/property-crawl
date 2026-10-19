@@ -1,37 +1,39 @@
-# Release gate snapshot — 2026-10-18 (tree `927e8ca`)
+# Release gate snapshot — 2026-10-18 (tree `ea00285`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is
 > regenerated on every gate run; this snapshot preserves the source-bound
 > result. No release has happened yet — this is a pre-deploy verification
-> record, superseding the earlier snapshot for tree `edc580b`.
+> record, superseding the earlier snapshot for tree `927e8ca`.
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `927e8caa134289bd9cd426abd7663b54a6d7549e` — dirty: false — 2026-10-18
+Tree: `ea002857d6a1c2eb2f0b50bb2c44d05e1ff2f1a2` — dirty: false — 2026-10-18
 
 | Gate | Result | ms |
 |---|---|---|
-| typecheck (`tsc --noEmit`) | PASS | 2408 |
-| generated-context (CONTEXT.md current) | PASS | 124 |
-| schema-mirrors (byte-identical) | PASS | 49 |
-| test-wiring (every test file reachable) | PASS | 104 |
-| ops-suites (meta/wiring/contract) | PASS | 5364 |
-| scraper-parser (pinned runtime) | PASS | 2988 |
-| production-smoke | PASS | 116 |
-| next-build (production bundle) | PASS | 7682 |
-| production-e2e (25 checks, isolated embedded DB) | PASS | 18167 |
+| typecheck (`tsc --noEmit`) | PASS | 4203 |
+| generated-context (CONTEXT.md current) | PASS | 134 |
+| schema-mirrors (byte-identical) | PASS | 97 |
+| test-wiring (every test file reachable) | PASS | 134 |
+| ops-suites (meta/wiring/contract) | PASS | 20908 |
+| scraper-parser (pinned runtime) | PASS | 3372 |
+| production-smoke | PASS | 105 |
+| next-build (production bundle) | PASS | 18887 |
+| production-e2e (25 checks, isolated embedded DB) | PASS | 19246 |
 
 ## Why this tree was created & what it resolved
 
-Following a rigorous end-to-end audit and execution of the Playwright UI suite (`test/run-ui-suite.js`):
+Following a rigorous end-to-end audit, multi-agent swarm verification, and crawler tooling audit:
 
-1. **Watchlist Honesty Contract Alignment (`src/components/listings/listing-watchlist-toggle.tsx`)**:
-   - Re-established the strict separation between local client storage (feed card) and the operator-gated server alert storage (`/api/alerts`).
-   - On the property detail page, a signed-out visitor clicking "Save to watchlist" requests operator unlock rather than falsely presenting as saved in browser storage, satisfying the honesty contract and passing `test_detail_mobile_content_and_media_controls_are_not_clipped`.
+1. **Unbrowse Crawler Tooling & Consent Hardening (`scripts/crawler-tools-unbrowse.cjs`)**:
+   - Fixed `inspectInstallation()` logic bug where `setupReady` returned `tosAccepted` without confirming `installed`. Updated to `Boolean(installed && tosAccepted)`.
+   - Verified globally installed Unbrowse v11.4.1 runtime and executable wrapper (`bin/unbrowse-wrapper.mjs`) alongside local workspace consent (`.cache/crawler-tools/unbrowse/config.json`).
+   - Verified `node scripts/crawler-tools-unbrowse.cjs doctor` returns `installed: true, setupReady: true, tosAccepted: true`, and all 35 tests pass in `test/crawler-tools-unbrowse.test.js` and `test/unbrowse-http.test.js`.
 
-2. **Accessible Dialog Name Alignment (`src/components/site/video-modal.tsx`)**:
-   - Updated the header element (`#walkthrough-title`) of the interactive underwriting walkthrough modal to provide the accessible name "Listing record" along with the descriptive subtitle, ensuring screen readers and Playwright locators (`get_by_role("dialog", name="Listing record")`) cleanly identify the modal in `test_preview_opens_as_an_accessible_escape_closeable_dialog`.
+2. **Swarm Multi-Agent Capability Graph Alignment (`scripts/swarm/executor.js`)**:
+   - Expanded the swarm executor allowlist to cover `compute_deal_score` (`test/score-bands.test.mjs`), `enrich_public_records` (`test/public-records.test.js`), and `evaluate_opportunity_signals` (`test/signals.test.js`).
+   - Ran all 6 swarm execution strategies (`testing`, `analysis`, `research`, `maintenance`, `canary`, `optimization`) in real execution mode across 9 agent personas (`coordinator`, `developer`, `researcher`, `analyzer`, `tester`, `reviewer`, `documenter`, `monitor`, `specialist`) — **46/46 tasks passed** with zero failures.
 
 3. **Playwright UI End-to-End Suite**:
    - `test/run-ui-suite.js` completed with exit code 0: 56/56 tests passing in `next_ui_e2e_test.py` and 1/1 passing in `detail_media_recovery_e2e_test.py`.
