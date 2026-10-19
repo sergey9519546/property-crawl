@@ -79,9 +79,32 @@ def main():
         if len(items) >= 200:
             break
 
+    final_url = getattr(page, "url", None) or url
+
+    import ipaddress
+    import urllib.parse
+
+    def is_private_url(raw_url):
+        try:
+            parsed = urllib.parse.urlparse(raw_url)
+            host = (parsed.hostname or "").lower().strip("[]")
+            if not host:
+                return False
+            if host in ("localhost", "127.0.0.1", "::1") or host.endswith((".local", ".internal", ".localhost")):
+                return True
+            ip = ipaddress.ip_address(host)
+            return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+        except Exception:
+            return False
+
+    if is_private_url(final_url) or any(is_private_url(u) for u in urls):
+        print(json.dumps({"ok": False, "error": "SPA_XHR_PRIVATE_HOST_REFUSED", "url": url}))
+        raise SystemExit(0)
+
     print(json.dumps({
         "ok": True,
         "url": url,
+        "finalUrl": str(final_url)[:500],
         "pattern": pattern,
         "capturedCount": len(captured),
         "itemCount": len(items),

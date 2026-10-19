@@ -97,17 +97,48 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
     }
   };
 
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    dialog?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key === "Tab" && dialog) {
+        const focusable = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus && document.contains(previousFocus)) {
+        previousFocus.focus();
+      }
     };
   }, [isOpen, onClose]);
 
@@ -191,6 +222,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-title"

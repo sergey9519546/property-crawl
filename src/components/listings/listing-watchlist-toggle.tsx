@@ -12,7 +12,13 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
 
   React.useEffect(() => {
     if (!session.authenticated) {
-      setSaved(false);
+      try {
+        const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfectproperty:saved-listings") : null;
+        const ids = stored ? JSON.parse(stored) : [];
+        setSaved(Array.isArray(ids) && ids.includes(listingId));
+      } catch {
+        setSaved(false);
+      }
       setError("");
       return;
     }
@@ -43,7 +49,18 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
 
   async function toggle() {
     if (!session.authenticated) {
-      session.requestUnlock();
+      try {
+        const stored = typeof window !== "undefined" ? window.localStorage.getItem("perfectproperty:saved-listings") : null;
+        const ids: string[] = stored ? JSON.parse(stored) : [];
+        const nextIds = saved ? ids.filter((id) => id !== listingId) : Array.from(new Set([...ids, listingId]));
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("perfectproperty:saved-listings", JSON.stringify(nextIds));
+        }
+        setSaved(!saved);
+        setError("");
+      } catch {
+        setError("Browser storage is unavailable. Watchlist could not be updated.");
+      }
       return;
     }
     if (busy) return;

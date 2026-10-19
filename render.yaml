@@ -15,8 +15,10 @@ services:
         value: "1"
       - key: PORT
         value: "3000"
-      # Optional for $0 demo (in-memory seed inventory). Required later for
-      # durable discovery / Migration 014 canaries.
+      # Default to embedded PGlite PostGIS 3.6 for $0 persistence without paid external DB.
+      - key: PROPERTY_DB
+        value: embedded
+      # Optional: set DATABASE_URL to override embedded DB with external PostgreSQL + PostGIS.
       - key: DATABASE_URL
         sync: false
       # Code reads SCRAPER_ADMIN_TOKEN; PROPERTY_OPERATOR_SECRET is accepted

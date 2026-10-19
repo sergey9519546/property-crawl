@@ -127,6 +127,18 @@ function captureSpaXhr(url, { sourceKey, pattern, timeoutMs = 20000, env = proce
       }
       try {
         const parsed = JSON.parse(String(out).trim().split('\n').pop() || '{}');
+        if (parsed.finalUrl && validateSpaXhrUrl(parsed.finalUrl)) {
+          resolve({ ok: false, error: 'SPA_XHR_PRIVATE_HOST_REFUSED', sourceKey, url });
+          return;
+        }
+        if (Array.isArray(parsed.capturedUrls)) {
+          for (const capturedUrl of parsed.capturedUrls) {
+            if (validateSpaXhrUrl(capturedUrl)) {
+              resolve({ ok: false, error: 'SPA_XHR_PRIVATE_HOST_REFUSED', sourceKey, url });
+              return;
+            }
+          }
+        }
         resolve({ ...parsed, sourceKey, url, pattern: xhrPattern });
       } catch {
         resolve({ ok: false, error: (err || 'protocol_error').slice(0, 300), sourceKey, url });

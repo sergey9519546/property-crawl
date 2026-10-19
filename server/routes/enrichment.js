@@ -48,7 +48,14 @@ function createEnrichmentHandler(dependencies = {}) {
       return res.status(404).json({ error: 'Enrichment endpoint not found', provenance: 'enrichment-gateway' });
     }
     const parcelKeyRaw = decodeURIComponent(match[1]);
-    const isRefresh = match[2] === 'refresh' && req.method === 'POST';
+    const isRefreshPath = match[2] === 'refresh';
+    if (isRefreshPath && req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed on this enrichment endpoint' });
+    }
+    if (!isRefreshPath && req.method !== 'GET') {
+      return res.status(405).json({ error: 'Method not allowed on this enrichment endpoint' });
+    }
+    const isRefresh = isRefreshPath && req.method === 'POST';
 
     let parcelKey;
     try { parcelKey = validateParcelKey(parcelKeyRaw); }
