@@ -54,4 +54,98 @@ async function createCheckoutSession({ successUrl, cancelUrl, env = process.env,
   return { configured: true, url: payload.url, status: 200 };
 }
 
-module.exports = { checkoutConfigured, createCheckoutSession };
+const crypto = require('node:crypto');
+
+function stripeWebhookConfigured(env = process.env) {
+  return Boolean(String(env.STRIPE_WEBHOOK_SECRET || '').trim());
+}
+
+/**
+ * Verify Stripe webhook signature (v1 scheme).
+ * Rejects forged signatures, malformed headers, and timestamps outside tolerance.
+ */
+function verifyStripeWebhook({
+  signatureHeader,
+  rawBody,
+  env = process.env,
+  toleranceSeconds = 300,
+  nowTimestamp = Math.floor(Date.now() / 1000),
+}) {
+  const secret = String(env.STRIPE_WEBHOOK_SECRET || '').trim();
+  if (!secret) {
+    return { configured: false, valid: false, status: 503, reason: 'webhook-not-configured' };
+  }
+  if (typeof signatureHeader !== 'string' || !signatureHeader.trim()) {
+    return { configured: true, valid: false, status: 400, reason: 'missing-signature' };
+  }
+  if (typeof rawBody !== 'string') {
+    return { configured: true, valid: false, status: 400, reason: 'invalid-body' };
+  }
+
+  const pairs = signatureHeader.split(',').map((p) => p.trim());
+  let timestamp = null;
+  const signatures = [];
+
+  for (const pair of pairs) {
+    const eqIdx = pair.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = pair.slice(0, eqIdx).trim();
+    const val = pair.slice(eqIdx + 1).trim();
+    if (key === 't') {
+      const parsed = Number.parseInt(val, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        timestamp = parsed;
+      }
+    } else if (key === 'v1') {
+      if (val) signatures.push(val);
+    }
+  }
+
+  if (timestamp === null || signatures.length === 0) {
+    return { configured: true, valid: false, status: 400, reason: 'malformed-signature-header' };
+  }
+
+  if (Math.abs(nowTimestamp - timestamp) > toleranceSeconds) {
+    return { configured: true, valid: false, status: 400, reason: 'timestamp-outside-tolerance' };
+  }
+
+  const signedPayload = `${timestamp}.${rawBody}`;
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload, 'utf8')
+    .digest('hex');
+
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+
+  let signatureValid = false;
+  for (const sig of signatures) {
+    const candidateBuffer = Buffer.from(sig, 'utf8');
+    if (
+      candidateBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(candidateBuffer, expectedBuffer)
+    ) {
+      signatureValid = true;
+      break;
+    }
+  }
+
+  if (!signatureValid) {
+    return { configured: true, valid: false, status: 400, reason: 'signature-mismatch' };
+  }
+
+  let event;
+  try {
+    event = JSON.parse(rawBody);
+  } catch {
+    return { configured: true, valid: false, status: 400, reason: 'invalid-json' };
+  }
+
+  return { configured: true, valid: true, status: 200, event };
+}
+
+module.exports = {
+  checkoutConfigured,
+  createCheckoutSession,
+  verifyStripeWebhook,
+  stripeWebhookConfigured,
+};
