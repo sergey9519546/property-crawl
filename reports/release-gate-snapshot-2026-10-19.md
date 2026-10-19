@@ -1,25 +1,25 @@
-# Release gate snapshot — 2026-10-19 (tree `bf78c98`)
+# Release gate snapshot — 2026-10-19 (tree `6793947`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is
 > regenerated on every gate run; this snapshot preserves the source-bound
-> result. Supersedes the earlier snapshot for tree `f399ba5`.
+> result. Supersedes the earlier snapshot for tree `bf78c98`.
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `bf78c985782188d80e2674f1c50721595e20edae` — dirty: false — 2026-10-19T05:18:03.445Z
+Tree: `6793947e7b7489f862a9f1f39c510c5b416497c9` — dirty: false — 2026-10-19T14:10:10.597Z
 
 | Gate | Result | ms |
 |---|---|---|
-| typecheck (`tsc --noEmit`) | PASS | 3604 |
-| generated-context (CONTEXT.md current) | PASS | 138 |
-| schema-mirrors (byte-identical) | PASS | 67 |
-| test-wiring (every test file reachable) | PASS | 126 |
-| ops-suites (meta/wiring/contract) | PASS | 7001 |
-| scraper-parser (pinned runtime) | PASS | 4518 |
-| production-smoke | PASS | 132 |
-| next-build (production bundle) | PASS | 7698 |
-| production-e2e (25 checks, isolated embedded DB) | PASS | 18323 |
+| typecheck (`tsc --noEmit`) | PASS | 2764 |
+| generated-context (CONTEXT.md current) | PASS | 152 |
+| schema-mirrors (byte-identical) | PASS | 60 |
+| test-wiring (every test file reachable) | PASS | 129 |
+| ops-suites (meta/wiring/contract) | PASS | 6626 |
+| scraper-parser (pinned runtime) | PASS | 3188 |
+| production-smoke | PASS | 103 |
+| next-build (production bundle) | PASS | 7726 |
+| production-e2e (25 checks, isolated embedded DB) | PASS | 18255 |
 
 ## Why this tree was created & what it resolved
 
@@ -47,6 +47,13 @@ Following the Master Project Completion Plan and Level-5 Omniscient Swarm End-to
 
 6. **Automated Isolated Visual & Video Walkthrough**:
    - `scripts/record-workspace-walkthrough.py` executed cleanly in 22.6s, producing 23 artifacts including WebM video (`workspace-walkthrough.webm`), 8 desktop viewports, 5 mobile viewports, decision packets, with 0 page errors and 0 server errors.
+
+7. **Keep-Alive Heartbeat Ping Daemon**:
+   - Implemented `scripts/keep-alive-ping.js` supporting `--once`, configurable interval, and `DEPLOY_SMOKE_URL` override to protect free-tier instances from idle spin-down.
+   - Comprehensive unit test suite `test/keep-alive-ping.test.js` verified with 3/3 passing tests, wired into `test:ops`.
+
+8. **Source-Bound Pre-Push Release Gate Hook**:
+   - Configured `.git/hooks/pre-push` running `npm run release:gate` to ensure every push executes the full 9/9 source-bound gate before publishing to remote.
 
 ## What this snapshot does not claim
 

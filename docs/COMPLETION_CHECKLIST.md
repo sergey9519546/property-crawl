@@ -30,7 +30,7 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `bf78c98` (9/9, clean, 2026-10-19) | `reports/release-gate-snapshot-2026-10-19.md` |
+| Tree | `6793947` (9/9, clean, 2026-10-19) | `reports/release-gate-snapshot-2026-10-19.md` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them | `npm test`, both configurations |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
@@ -107,9 +107,9 @@ Nothing below depends on anything later in the list.
   5 routes with zero horizontal overflow and verified CLS budgets.
 - **#8 PP-05 (release ledger + handoff) — evidence committed 2026-10-10; the
   claim itself stays blocked by an actual release.** The latest source-bound
-  gate result, tree `bf78c98` (9/9, clean, 2026-10-19), is preserved in
-  `reports/release-gate-snapshot-2026-10-19.md`; the earlier `f399ba5` result is in
-  `reports/release-gate-snapshot-2026-10-18.md`, `f476405` in git history, `ea00285` in
+  gate result, tree `6793947` (9/9, clean, 2026-10-19), is preserved in
+  `reports/release-gate-snapshot-2026-10-19.md`; the earlier `bf78c98` result is in
+  git history, `f399ba5` in git history, `f476405` in git history, `ea00285` in
   git history, `edc580b` in
   `reports/release-gate-snapshot-2026-10-15.md`, `dc2e545` in
   `reports/release-gate-snapshot-2026-10-14.md` and `d470b20` in
