@@ -1,14 +1,14 @@
-# Release gate snapshot — 2026-10-18 (tree `f476405`)
+# Release gate snapshot — 2026-10-18 (tree `f399ba5`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is
 > regenerated on every gate run; this snapshot preserves the source-bound
 > result. No release has happened yet — this is a pre-deploy verification
-> record, superseding the earlier snapshot for tree `ea00285`.
+> record, superseding the earlier snapshot for tree `f476405`.
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `f4764058fac8803c1bceb79576f29e5120833d81` — dirty: false — 2026-10-18
+Tree: `f399ba5d4f8d86a32850171e4f76117f8ff3c88f` — dirty: false — 2026-10-18
 
 | Gate | Result | ms |
 |---|---|---|
