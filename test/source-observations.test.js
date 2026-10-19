@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { afterEach, test } = require('node:test');
 const {
+  compactObservations,
   loadObservations,
   recordSourceRun,
   updateObservations,
@@ -136,4 +137,42 @@ test('recordSourceRun persists an atomic observation history', () => {
   assert.equal(Object.keys(stored.records).length, 1);
   assert.equal(fs.existsSync(`${filePath}.lock`), false);
   assert.equal(fs.readdirSync(directory).some((name) => name.endsWith('.tmp')), false);
+});
+
+test('compactObservations strips superseded noticeExcerpts from history while preserving latest', () => {
+  const data = emptyObservations();
+  data.records['test-key'] = {
+    firstObservedAt: '2026-09-01T00:00:00.000Z',
+    observations: 3,
+    latest: { noticeExcerpt: 'latest excerpt text', fields: { openingBid: 100 } },
+    history: [
+      { noticeExcerpt: 'old excerpt 1', fields: { openingBid: 120 } },
+      { noticeExcerpt: 'old excerpt 2', fields: { openingBid: 110 } },
+    ],
+  };
+
+  const pruned = compactObservations(data);
+  assert.equal(pruned, 2);
+  assert.equal(data.records['test-key'].latest.noticeExcerpt, 'latest excerpt text');
+  assert.equal(data.records['test-key'].history[0].noticeExcerpt, undefined);
+  assert.equal(data.records['test-key'].history[0].fields.openingBid, 120);
+  assert.equal(data.records['test-key'].history[1].noticeExcerpt, undefined);
+  assert.equal(data.records['test-key'].history[1].fields.openingBid, 110);
+});
+
+test('recordSourceRun recovers from a stale lock older than 30s', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-stale-lock-'));
+  temporaryDirectories.push(directory);
+  const filePath = path.join(directory, 'observations.json');
+  const lockPath = `${filePath}.lock`;
+
+  // Create an abandoned lock file with mtime in the distant past (1 hour ago)
+  fs.writeFileSync(lockPath, 'crashed_process_pid');
+  const past = (Date.now() - 3600_000) / 1000;
+  fs.utimesSync(lockPath, past, past);
+
+  recordSourceRun('civilview', { listings: [listing()], error: null, durationMs: 12 }, { filePath, now: NOW });
+  const stored = loadObservations({ filePath });
+  assert.equal(stored.runs.civilview.acceptedCount, 1);
+  assert.equal(fs.existsSync(lockPath), false);
 });

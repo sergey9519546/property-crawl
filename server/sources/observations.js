@@ -202,11 +202,16 @@ function updateObservations(data, sourceId, run, options = {}) {
         });
         newSignals++;
       }
+      const archivedPrevious = changes.length && previous ? (() => {
+        const item = { ...previous };
+        delete item.noticeExcerpt;
+        return item;
+      })() : null;
       data.records[key] = {
         firstObservedAt: existing?.firstObservedAt || current.observedAt,
         observations: (existing?.observations || 0) + 1,
         latest: current,
-        history: [...(existing?.history || []), ...(changes.length && previous ? [previous] : [])].slice(-20),
+        history: [...(existing?.history || []), ...(archivedPrevious ? [archivedPrevious] : [])].slice(-20),
       };
       applied++;
     }
@@ -228,33 +233,87 @@ function updateObservations(data, sourceId, run, options = {}) {
   return { accepted: applied, newSignals };
 }
 
+function compactObservations(data) {
+  if (!data || typeof data !== 'object' || !data.records) return 0;
+  let pruned = 0;
+  for (const record of Object.values(data.records)) {
+    if (Array.isArray(record.history)) {
+      for (const item of record.history) {
+        if (item && item.noticeExcerpt !== undefined) {
+          delete item.noticeExcerpt;
+          pruned++;
+        }
+      }
+      if (record.history.length > 10) {
+        record.history = record.history.slice(-10);
+      }
+    }
+  }
+  return pruned;
+}
+
 function recordSourceRun(sourceId, run, options = {}) {
   const filePath = resolvedPath(options);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const lockPath = filePath + '.lock';
+  const lockTimeoutMs = options.lockTimeoutMs !== undefined ? options.lockTimeoutMs : 10_000;
+  const start = Date.now();
   let lock;
-  try { lock = fs.openSync(lockPath, 'wx', 0o600); }
-  catch (error) {
-    if (error.code === 'EEXIST') throw new Error('Source observations are being written; retry after the writer finishes');
-    throw error;
+  while (true) {
+    try {
+      lock = fs.openSync(lockPath, 'wx', 0o600);
+      break;
+    } catch (error) {
+      if (error.code === 'EEXIST') {
+        try {
+          const stat = fs.statSync(lockPath);
+          if (Date.now() - stat.mtimeMs > 30_000) {
+            try { fs.unlinkSync(lockPath); } catch {}
+            continue;
+          }
+        } catch {
+          continue;
+        }
+        if (Date.now() - start >= lockTimeoutMs) {
+          throw new Error('Source observations are being written; retry after the writer finishes');
+        }
+        try {
+          const shared = new Int32Array(new SharedArrayBuffer(4));
+          Atomics.wait(shared, 0, 0, 100);
+        } catch {
+          const waitUntil = Date.now() + 100;
+          while (Date.now() < waitUntil) {}
+        }
+        continue;
+      }
+      throw error;
+    }
   }
   const temporary = filePath + '.' + crypto.randomUUID() + '.tmp';
   try {
     const data = loadObservations({ filePath });
     const result = updateObservations(data, sourceId, run, options);
-    const body = JSON.stringify(data);
+    let body = JSON.stringify(data);
+    if (Buffer.byteLength(body) > MAX_BYTES * 0.85) {
+      compactObservations(data);
+      body = JSON.stringify(data);
+    }
     if (Buffer.byteLength(body) > MAX_BYTES) throw new Error('Source observation store exceeds size limit');
     fs.writeFileSync(temporary, body, { flag: 'wx', mode: 0o600 });
     fs.renameSync(temporary, filePath);
     return result;
   } finally {
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
-    fs.closeSync(lock);
-    fs.unlinkSync(lockPath);
+    if (fs.existsSync(temporary)) {
+      try { fs.unlinkSync(temporary); } catch {}
+    }
+    if (lock !== undefined) {
+      try { fs.closeSync(lock); } catch {}
+    }
+    try { fs.unlinkSync(lockPath); } catch {}
   }
 }
 
 module.exports = {
-  DEFAULT_PATH, MAX_BYTES, compareSnapshots, loadObservations,
+  DEFAULT_PATH, MAX_BYTES, compactObservations, compareSnapshots, loadObservations,
   observationStoreCapacity, publicObservationStoreCapacity, recordSourceRun, updateObservations,
 };
