@@ -5,7 +5,155 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 export const WORKSPACE_SESSION_COOKIE = "pp_operator_session";
 export const WORKSPACE_SESSION_SECONDS = 8 * 60 * 60;
 
-type WorkspaceSession = { authenticated: boolean; expiresAt: string | null };
+/**
+ * Multi-Tenant Role-Based Access Control (RBAC) definitions.
+ * Canonical Roles:
+ * - operator: Highest privilege (full write/unlock/export/scrapers run/purge).
+ * - analyst:  Read listings, save hunts, view documents, run research export.
+ * - viewer:   Read-only (listings, public source radar; cannot trigger runs or mutate cases).
+ */
+export type Role = "operator" | "analyst" | "viewer";
+
+export type Permission =
+  | "canRunScrapers"
+  | "canReviewDocuments"
+  | "canExportDossier"
+  | "canManageHunts"
+  | "canViewWorkspace";
+
+export const ROLES: Record<string, Role> = Object.freeze({
+  OPERATOR: "operator",
+  ANALYST: "analyst",
+  VIEWER: "viewer",
+});
+
+export const CANONICAL_ROLES: readonly Role[] = Object.freeze(["operator", "analyst", "viewer"] as const);
+
+export const PERMISSIONS: readonly Permission[] = Object.freeze([
+  "canRunScrapers",
+  "canReviewDocuments",
+  "canExportDossier",
+  "canManageHunts",
+  "canViewWorkspace",
+] as const);
+
+export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = Object.freeze({
+  operator: Object.freeze<readonly Permission[]>([
+    "canRunScrapers",
+    "canReviewDocuments",
+    "canExportDossier",
+    "canManageHunts",
+    "canViewWorkspace",
+  ] as const),
+  analyst: Object.freeze<readonly Permission[]>([
+    "canReviewDocuments",
+    "canExportDossier",
+    "canManageHunts",
+    "canViewWorkspace",
+  ] as const),
+  viewer: Object.freeze<readonly Permission[]>([
+    "canViewWorkspace",
+  ] as const),
+});
+
+export const ROLE_HIERARCHY: Record<Role, number> = Object.freeze({
+  operator: 3,
+  analyst: 2,
+  viewer: 1,
+});
+
+/**
+ * Permission check enforcing role boundaries.
+ */
+export function hasPermission(
+  role: Role | string | null | undefined,
+  permission: Permission | string,
+  options: { authenticated?: boolean } = {}
+): boolean {
+  if (!role || typeof role !== "string") return false;
+  const normalizedRole = role.trim().toLowerCase() as Role;
+  if (!CANONICAL_ROLES.includes(normalizedRole)) return false;
+
+  // Viewer role has NO mutation permissions (canRunScrapers, canReviewDocuments, canExportDossier, canManageHunts).
+  // Viewer can only view workspace if explicitly authenticated.
+  if (normalizedRole === "viewer") {
+    if (permission === "canViewWorkspace") {
+      return options.authenticated !== false;
+    }
+    return false;
+  }
+
+  const perms = ROLE_PERMISSIONS[normalizedRole];
+  return Boolean(perms && perms.includes(permission as Permission));
+}
+
+/**
+ * Extracts or resolves the role from an incoming token or session representation.
+ * Backward compatible: tokens without an explicit role default to 'operator'.
+ */
+export function extractRoleFromToken(
+  token: unknown,
+  options: { defaultRole?: Role; allowNull?: boolean } = {}
+): Role | null {
+  const defaultRole: Role = options.defaultRole || "operator";
+  if (!token) {
+    return options.allowNull ? null : defaultRole;
+  }
+
+  if (typeof token === "object" && token !== null && "role" in token) {
+    const candidate = String((token as { role?: unknown }).role || "").trim().toLowerCase() as Role;
+    if (CANONICAL_ROLES.includes(candidate)) return candidate;
+    return defaultRole;
+  }
+
+  if (typeof token === "string") {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      return options.allowNull ? null : defaultRole;
+    }
+
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.role && typeof parsed.role === "string") {
+          const candidate = parsed.role.trim().toLowerCase() as Role;
+          if (CANONICAL_ROLES.includes(candidate)) return candidate;
+        }
+      } catch {}
+    }
+
+    const prefixMatch = trimmed.match(/^(operator|analyst|viewer)[:._/-]/i);
+    if (prefixMatch) {
+      return prefixMatch[1].toLowerCase() as Role;
+    }
+
+    const queryMatch = trimmed.match(/(?:^|[&?])role=(operator|analyst|viewer)(?:[&;]|$)/i);
+    if (queryMatch) {
+      return queryMatch[1].toLowerCase() as Role;
+    }
+
+    const v2Match = trimmed.match(/^v2\.\d+\.(operator|analyst|viewer)\./i);
+    if (v2Match) {
+      return v2Match[1].toLowerCase() as Role;
+    }
+
+    return defaultRole;
+  }
+
+  return defaultRole;
+}
+
+export function isAtLeastRole(userRole: string | null | undefined, requiredRole: Role): boolean {
+  const userLevel = ROLE_HIERARCHY[String(userRole || "").trim().toLowerCase() as Role] || 0;
+  const reqLevel = ROLE_HIERARCHY[requiredRole] || 0;
+  return userLevel >= reqLevel && reqLevel > 0;
+}
+
+export type WorkspaceSession = {
+  authenticated: boolean;
+  expiresAt: string | null;
+  role: Role | null;
+};
 
 function configuredOperatorCredential(env: NodeJS.ProcessEnv = process.env) {
   return String(env.SCRAPER_ADMIN_TOKEN || env.PROPERTY_OPERATOR_SECRET || "").trim();
@@ -59,26 +207,54 @@ export function verifyOperatorCredential(candidate: unknown, env: NodeJS.Process
   return configured.length > 0 && typeof candidate === "string" && candidate.length <= 512 && safeEqual(candidate.trim(), configured);
 }
 
-export function issueWorkspaceSession(now = Date.now(), env: NodeJS.ProcessEnv = process.env) {
+export function issueWorkspaceSession(
+  now = Date.now(),
+  env: NodeJS.ProcessEnv = process.env,
+  role: Role = "operator"
+) {
   if (!signingKey(env)) return null;
   const expiresAtMs = now + WORKSPACE_SESSION_SECONDS * 1000;
-  const payload = `v1.${Math.floor(expiresAtMs / 1000)}.${randomBytes(18).toString("base64url")}`;
+  const canonicalRole = CANONICAL_ROLES.includes(role) ? role : "operator";
+  // v2 payload embeds the role while remaining compact and signed
+  const payload = `v2.${Math.floor(expiresAtMs / 1000)}.${canonicalRole}.${randomBytes(18).toString("base64url")}`;
   const signature = sign(payload, env);
   if (!signature) return null;
-  return { value: `${payload}.${signature}`, expiresAt: new Date(expiresAtMs).toISOString() };
+  return { value: `${payload}.${signature}`, expiresAt: new Date(expiresAtMs).toISOString(), role: canonicalRole };
 }
 
-export function readWorkspaceSession(request: Request, now = Date.now(), env: NodeJS.ProcessEnv = process.env): WorkspaceSession {
+export function readWorkspaceSession(
+  request: Request,
+  now = Date.now(),
+  env: NodeJS.ProcessEnv = process.env
+): WorkspaceSession {
   const value = requestCookie(request, WORKSPACE_SESSION_COOKIE);
-  if (!value) return { authenticated: false, expiresAt: null };
+  if (!value) return { authenticated: false, expiresAt: null, role: null };
   const parts = value.split(".");
-  if (parts.length !== 4 || parts[0] !== "v1") return { authenticated: false, expiresAt: null };
-  const payload = parts.slice(0, 3).join(".");
-  const expected = sign(payload, env);
-  if (!expected || !safeEqual(parts[3], expected)) return { authenticated: false, expiresAt: null };
-  const expiresAtMs = Number(parts[1]) * 1000;
-  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) return { authenticated: false, expiresAt: null };
-  return { authenticated: true, expiresAt: new Date(expiresAtMs).toISOString() };
+
+  // Legacy v1 session: v1.<expiresAt>.<random>.<signature>
+  // Missing role defaults to operator for 100% backward compatibility
+  if (parts.length === 4 && parts[0] === "v1") {
+    const payload = parts.slice(0, 3).join(".");
+    const expected = sign(payload, env);
+    if (!expected || !safeEqual(parts[3], expected)) return { authenticated: false, expiresAt: null, role: null };
+    const expiresAtMs = Number(parts[1]) * 1000;
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) return { authenticated: false, expiresAt: null, role: null };
+    return { authenticated: true, expiresAt: new Date(expiresAtMs).toISOString(), role: "operator" };
+  }
+
+  // v2 session with explicit role: v2.<expiresAt>.<role>.<random>.<signature>
+  if (parts.length === 5 && parts[0] === "v2") {
+    const payload = parts.slice(0, 4).join(".");
+    const expected = sign(payload, env);
+    if (!expected || !safeEqual(parts[4], expected)) return { authenticated: false, expiresAt: null, role: null };
+    const expiresAtMs = Number(parts[1]) * 1000;
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now) return { authenticated: false, expiresAt: null, role: null };
+    const candidateRole = parts[2] as Role;
+    const role: Role = CANONICAL_ROLES.includes(candidateRole) ? candidateRole : "operator";
+    return { authenticated: true, expiresAt: new Date(expiresAtMs).toISOString(), role };
+  }
+
+  return { authenticated: false, expiresAt: null, role: null };
 }
 
 function normalizeLoopbackHost(hostname: string) {
@@ -157,4 +333,3 @@ export function clearWorkspaceSession(request: Request) {
   const secure = cookieIsSecure(request);
   return `${WORKSPACE_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
 }
-

@@ -16,6 +16,12 @@ const {
   isConfigured,
   DEFAULT_STORE_PATH,
 } = require('../server/scrapers/email-ingest');
+const {
+  EmailNoticesPipeline,
+  collectEmailNotices,
+  ImapCredentialsUnsetError,
+  PRESS_ASSOCIATION_DOMAINS,
+} = require('../server/sources/email-notices');
 
 function parseArgs(argv) {
   const flags = { corpus: '', imap: false, status: false, help: false };
@@ -37,10 +43,8 @@ function usage() {
   console.log(`Press-association email notice ingestion (docs/STRATEGY.md Hack #1)
 
   node scripts/collect-email-notices.js --corpus <dir>   Parse local .eml/.txt fixtures
-  node scripts/collect-email-notices.js --imap           Fetch operator mailbox (requires IMAP_*)
+  node scripts/collect-email-notices.js --imap           Fetch operator mailbox via EmailNoticesPipeline (requires IMAP_*)
   node scripts/collect-email-notices.js --status         Show configuration and store path
-
-Evidence packets are discovery-only. They never auto-publish as live listings.
 `);
 }
 
@@ -57,12 +61,13 @@ async function main() {
   if (flags.status) {
     console.log(JSON.stringify({
       imapConfigured: isConfigured(process.env),
-      host: cfg.host || null,
-      mailbox: cfg.mailbox,
+      host: cfg.host || process.env.IMAP_HOST || null,
+      mailbox: cfg.mailbox || process.env.IMAP_MAILBOX || 'INBOX',
       corpusDir: process.env.IMAP_CORPUS_DIR || null,
       storePath,
       storeExists: fs.existsSync(storePath),
       keywords: cfg.keywords,
+      pressDomains: PRESS_ASSOCIATION_DOMAINS,
     }, null, 2));
     process.exit(0);
   }
@@ -73,19 +78,37 @@ async function main() {
     process.exit(2);
   }
 
+  if (flags.imap && !flags.corpus) {
+    // Phase 2 canonical IMAP pipeline with statewide press association domain query and standard ingestion
+    const pipeline = new EmailNoticesPipeline({ env: process.env });
+    if (!pipeline.isConfigured()) {
+      const err = new ImapCredentialsUnsetError();
+      console.error(`[${err.code}] ${err.message}`);
+      process.exit(1);
+    }
+
+    try {
+      const result = await pipeline.ingest();
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok || result.errors.length > 0) {
+        process.exitCode = 1;
+      }
+      return;
+    } catch (err) {
+      if (err.code === 'IMAP_CREDENTIALS_UNSET' || err instanceof ImapCredentialsUnsetError) {
+        console.error(`[${err.code}] ${err.message}`);
+      } else {
+        console.error(`IMAP collection failed: ${err.message}`);
+      }
+      process.exit(1);
+    }
+  }
+
+  // Corpus path fallback
   const scraper = new PublicNoticesEmailScraper({
     env: process.env,
     corpusDir: flags.corpus || process.env.IMAP_CORPUS_DIR || '',
   });
-
-  if (flags.imap && !flags.corpus) {
-    // Force IMAP path only.
-    scraper.corpusDir = '';
-    if (!isConfigured(process.env)) {
-      console.error('IMAP is not configured. Set IMAP_HOST, IMAP_USER, IMAP_PASS (and optionally IMAP_PORT, IMAP_TLS, IMAP_MAILBOX).');
-      process.exit(1);
-    }
-  }
 
   const result = await scraper.scrapeFeed();
   console.log(JSON.stringify(result, null, 2));
@@ -101,4 +124,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { main };
+module.exports = { main, parseArgs, usage };

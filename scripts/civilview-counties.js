@@ -1,9 +1,25 @@
 'use strict';
 
 /**
- * Discover CivilView (Tyler Sales Web) countyId mappings from the public index.
- * Read-only, polite, single request. Used for market enrollment.
+ * scripts/civilview-counties.js — CLI and registry for CivilView (Tyler Sales Web) counties.
+ *
+ * Usage:
+ *   node scripts/civilview-counties.js         # list all verified NJ and PA counties
+ *   node scripts/civilview-counties.js --nj    # list all 21 NJ counties
+ *   node scripts/civilview-counties.js --pa    # list Pennsylvania counties
+ *   node scripts/civilview-counties.js --live  # fetch live index from salesweb.civilview.com
  */
+
+const {
+  NJ_COUNTIES,
+  PA_COUNTIES,
+  ALL_COUNTIES,
+  getCivilViewSearchUrl,
+  getCivilViewDetailUrl,
+  getCounty,
+  getNJCounties,
+  getPACounties,
+} = require('../server/sources/civilview');
 
 const UA = 'property-crawl-bot/2.0 (+https://github.com/property-crawl; contact: ops@property-crawl.example)';
 
@@ -34,15 +50,61 @@ async function fetchCivilViewIndex(fetchImpl = globalThis.fetch) {
   return parseCivilViewIndex(await response.text());
 }
 
-if (require.main === module) {
-  fetchCivilViewIndex()
-    .then((counties) => {
-      console.log(JSON.stringify({ counties, count: counties.length }, null, 2));
-    })
-    .catch((error) => {
-      console.error(error.message);
-      process.exitCode = 1;
-    });
+async function main(argv = process.argv.slice(2)) {
+  if (argv.includes('--nj')) {
+    const list = NJ_COUNTIES.map((c) => ({
+      ...c,
+      searchUrl: getCivilViewSearchUrl(c.id),
+    }));
+    console.log(JSON.stringify({ counties: list, count: list.length }, null, 2));
+    return;
+  }
+
+  if (argv.includes('--pa')) {
+    const list = PA_COUNTIES.map((c) => ({
+      ...c,
+      searchUrl: getCivilViewSearchUrl(c.id),
+    }));
+    console.log(JSON.stringify({ counties: list, count: list.length }, null, 2));
+    return;
+  }
+
+  if (argv.includes('--live')) {
+    const counties = await fetchCivilViewIndex();
+    console.log(JSON.stringify({ counties, count: counties.length }, null, 2));
+    return;
+  }
+
+  const list = ALL_COUNTIES.map((c) => ({
+    ...c,
+    searchUrl: getCivilViewSearchUrl(c.id),
+  }));
+  console.log(JSON.stringify({
+    counties: list,
+    njCount: NJ_COUNTIES.length,
+    paCount: PA_COUNTIES.length,
+    totalCount: list.length,
+  }, null, 2));
 }
 
-module.exports = { parseCivilViewIndex, fetchCivilViewIndex, UA };
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  parseCivilViewIndex,
+  fetchCivilViewIndex,
+  UA,
+  NJ_COUNTIES,
+  PA_COUNTIES,
+  ALL_COUNTIES,
+  getCivilViewSearchUrl,
+  getCivilViewDetailUrl,
+  getCounty,
+  getNJCounties,
+  getPACounties,
+  main,
+};

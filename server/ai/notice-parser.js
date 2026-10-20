@@ -74,7 +74,7 @@ function neutralizePromptInjection(text = '') {
 function splitMultiParcelNotice(rawNotice = '') {
   const normalized = normalizeOcrText(rawNotice);
   const parcelHeaderRegex = /(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.]/i;
-  const parcelSplitter = /(?:^|\n|\.\s+)(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.])/i;
+  const parcelSplitter = /(?:^|\n|\.\s+)\s*(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\\.])/i;
 
   const rawParts = normalized.split(parcelSplitter).map(p => p.trim()).filter(Boolean);
   const parcelParts = rawParts.filter(part => parcelHeaderRegex.test(part));

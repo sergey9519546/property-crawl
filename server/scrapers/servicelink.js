@@ -24,6 +24,7 @@ const DEFAULT_MAX_PAGES = 1;
 const MAX_PAGES = 100;
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
+const DEFAULT_CHECKPOINT_PATH = path.resolve(process.cwd(), '.cache', 'servicelink-checkpoint.json');
 const rawPublisherRecords = new WeakMap();
 
 function boundedPositiveInt(value, fallback, maximum) {
@@ -256,7 +257,28 @@ class ServiceLinkScraper extends BaseScraper {
     this.sweepStartedAt = null;
     this.pagesCommitted = 0;
     this.lastRunReport = null;
-    this.checkpointPath = explicitCheckpointPath(options.checkpointPath);
+    const hasRestartArg = Array.isArray(process.argv) && process.argv.includes('--restart');
+    const hasRestartEnv = process.env.SERVICELINK_RESTART === '1' || process.env.SERVICELINK_RESTART === 'true';
+    this.restart = Boolean(options.restart || hasRestartArg || hasRestartEnv);
+
+    if (options.checkpointPath !== undefined) {
+      this.checkpointPath = explicitCheckpointPath(options.checkpointPath);
+    } else if (options.resumable || options.autoResume) {
+      this.checkpointPath = explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH || DEFAULT_CHECKPOINT_PATH);
+    } else {
+      this.checkpointPath = null;
+    }
+
+    if (this.checkpointPath) {
+      if (this.restart) {
+        clearCheckpointFile(this.checkpointPath);
+      } else if (!options.continuationToken && !options.checkpoint) {
+        const saved = readCheckpointFile(this.checkpointPath);
+        if (saved) {
+          this.setCheckpoint(saved);
+        }
+      }
+    }
   }
 
   buildListingsUrl(continuationToken = null) {
@@ -273,6 +295,7 @@ class ServiceLinkScraper extends BaseScraper {
   async fetchPage(continuationToken = null) {
     const payload = await this.requestJson(this.buildListingsUrl(continuationToken), {
       headers: { Accept: 'application/json' },
+      autoThrottle: true,
     });
     if (!payload || typeof payload !== 'object' || !Array.isArray(payload.data)) {
       const error = new ScraperResponseError('ServiceLink listing response did not contain a data array', {
@@ -509,6 +532,7 @@ const defaultScraper = new ServiceLinkScraper();
 
 module.exports = defaultScraper;
 module.exports.API_ORIGIN = API_ORIGIN;
+module.exports.DEFAULT_CHECKPOINT_PATH = DEFAULT_CHECKPOINT_PATH;
 module.exports.DEFAULT_LIMIT = DEFAULT_LIMIT;
 module.exports.DEFAULT_MAX_PAGES = DEFAULT_MAX_PAGES;
 module.exports.LISTINGS_PATH = LISTINGS_PATH;

@@ -2,7 +2,7 @@ const {
   ScraperCircuitBreaker,
   ScraperResponseError
 } = require('./circuit-breaker');
-const { autoThrottle, noteRetryAfter } = require('./auto-throttle');
+const { autoThrottle, noteRetryAfter, recordHostLatency } = require('./auto-throttle');
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const RETRYABLE_TRANSPORT_CODES = new Set(['EAI_AGAIN','ECONNRESET','ECONNREFUSED','ENETDOWN','ENETUNREACH','EHOSTUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','UND_ERR_SOCKET']);
@@ -101,7 +101,9 @@ async function fetchTextWithPolicy(url, options = {}) {
     if (options.autoThrottle !== false) {
       await autoThrottle(url, { minIntervalMs: options.minIntervalMs });
     }
+    const requestStart = Date.now();
     const response = await fetchImpl(url, { ...requestOptions, signal: controller.signal });
+    recordHostLatency(url, Date.now() - requestStart);
     const retryAfter = response.headers?.get?.('retry-after') ?? null;
     if (retryAfter) noteRetryAfter(url, retryAfter);
     const body = await response.text();
@@ -169,5 +171,6 @@ module.exports = {
   normalizeRequestTimeout,
   randomJitterMs,
   autoThrottle,
-  noteRetryAfter
+  noteRetryAfter,
+  recordHostLatency
 };

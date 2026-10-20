@@ -1,0 +1,246 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CanonicalPropertyListing",
+  "description": "Full canonical schema matching the property-crawl camelCase listing contract",
+  "type": "object",
+  "required": [
+    "id",
+    "source",
+    "state",
+    "address",
+    "provenance"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{1,159}$",
+      "minLength": 2,
+      "maxLength": 160
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "county": {
+      "type": ["string", "null"]
+    },
+    "city": {
+      "type": ["string", "null"]
+    },
+    "zip": {
+      "type": ["string", "number", "null"]
+    },
+    "address": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 500
+    },
+    "saleDate": {
+      "type": ["string", "null"]
+    },
+    "openingBid": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "estLow": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "estHigh": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "dealScore": {
+      "type": ["integer", "number", "null"],
+      "minimum": 1,
+      "maximum": 99
+    },
+    "propertyType": {
+      "type": ["string", "null"]
+    },
+    "propType": {
+      "type": ["string", "null"]
+    },
+    "cashToClose": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "cashToCloseDetails": {
+      "type": ["object", "null"]
+    },
+    "lat": {
+      "type": ["number", "null"],
+      "minimum": -90,
+      "maximum": 90
+    },
+    "lng": {
+      "type": ["number", "null"],
+      "minimum": -180,
+      "maximum": 180
+    },
+    "beds": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "baths": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "sqft": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "year": {
+      "type": ["integer", "number", "null"]
+    },
+    "assessed": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "mid": {
+      "type": ["number", "null"]
+    },
+    "ratio": {
+      "type": ["number", "null"]
+    },
+    "bidSpread": {
+      "type": ["number", "null"]
+    },
+    "equity": {
+      "type": ["number", "null"]
+    },
+    "redemptionDays": {
+      "type": ["integer", "number", "null"]
+    },
+    "redemptionWarning": {
+      "type": ["string", "null"]
+    },
+    "seniorLienRisk": {
+      "type": ["string", "null"]
+    },
+    "seniorLienWarning": {
+      "type": ["string", "null"]
+    },
+    "plaintiff": {
+      "type": ["string", "null"]
+    },
+    "defendant": {
+      "type": ["string", "null"]
+    },
+    "judgment": {
+      "type": ["number", "string", "null"]
+    },
+    "attorney": {
+      "type": ["string", "null"]
+    },
+    "occupancy": {
+      "type": ["string", "null"]
+    },
+    "deposit": {
+      "type": ["string", "number", "null"]
+    },
+    "photo": {
+      "type": ["string", "null"]
+    },
+    "sourceUrl": {
+      "type": ["string", "null"]
+    },
+    "raw": {
+      "type": ["string", "null"]
+    },
+    "price": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "listingDate": {
+      "type": ["string", "null"]
+    },
+    "status": {
+      "type": ["string", "null"]
+    },
+    "auctionProgram": {
+      "type": ["string", "null"]
+    },
+    "lifecycleStatus": {
+      "type": ["string", "null"]
+    },
+    "transactionOutcome": {
+      "type": ["string", "null"]
+    },
+    "hasDocuments": {
+      "type": ["boolean", "null"]
+    },
+    "sourceObservedAt": {
+      "type": ["string", "null"]
+    },
+    "fetchedAt": {
+      "type": ["string", "null"]
+    },
+    "parcelKey": {
+      "type": ["string", "null"]
+    },
+    "sourceFacts": {
+      "type": ["object", "null"]
+    },
+    "triage": {
+      "type": ["object", "null"]
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "origin",
+        "observed",
+        "publisher",
+        "recordId"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed": {
+          "type": "boolean"
+        },
+        "publisher": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recordId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedAt": {
+          "type": ["string", "null"]
+        },
+        "fixture": {
+          "type": "boolean"
+        },
+        "recordKind": {
+          "type": "string"
+        },
+        "jurisdiction": {
+          "type": ["string", "null"]
+        },
+        "countyFips": {
+          "type": ["string", "null"]
+        },
+        "stateFips": {
+          "type": ["string", "null"]
+        },
+        "sourceFacts": {
+          "type": ["object", "null"]
+        },
+        "derivedFields": {
+          "type": ["object", "null"]
+        },
+        "media": {
+          "type": ["object", "null"]
+        }
+      }
+    }
+  }
+}

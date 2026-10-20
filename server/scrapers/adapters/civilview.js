@@ -28,6 +28,34 @@ const NJ_COUNTY_MAP = Object.freeze({
   15: { county: 'Sussex', state: 'NJ' },
   16: { county: 'Union', state: 'NJ' },
   17: { county: 'Warren', state: 'NJ' },
+  18: { county: 'Atlantic', state: 'NJ' },
+  19: { county: 'Cape May', state: 'NJ' },
+  20: { county: 'Hunterdon', state: 'NJ' },
+  21: { county: 'Middlesex', state: 'NJ' },
+  // Verified Tyler SalesWeb IDs
+  25: { county: 'Atlantic', state: 'NJ' },
+  52: { county: 'Cape May', state: 'NJ' },
+  32: { county: 'Hunterdon', state: 'NJ' },
+  73: { county: 'Middlesex', state: 'NJ' },
+  85: { county: 'Ocean', state: 'NJ' },
+  27: { county: 'Sussex', state: 'NJ' },
+  29: { county: 'Warren', state: 'NJ' },
+});
+
+const PA_COUNTY_MAP = Object.freeze({
+  51: { county: 'Lehigh', state: 'PA' },
+  23: { county: 'Montgomery', state: 'PA' },
+  60: { county: 'Philadelphia', state: 'PA' },
+  53: { county: 'Northampton', state: 'PA' },
+  46: { county: 'Berks', state: 'PA' },
+  50: { county: 'Bucks', state: 'PA' },
+  57: { county: 'Delaware', state: 'PA' },
+  22: { county: 'Chester', state: 'PA' },
+});
+
+const ALL_COUNTY_MAP = Object.freeze({
+  ...NJ_COUNTY_MAP,
+  ...PA_COUNTY_MAP,
 });
 
 function getCivilViewUrl(countyId = 1) {
@@ -37,7 +65,7 @@ function getCivilViewUrl(countyId = 1) {
 function parseCivilViewRow(cells = [], countyId = 1) {
   if (!Array.isArray(cells) || cells.length < 5) return null;
 
-  const countyInfo = NJ_COUNTY_MAP[countyId] || { county: 'Unknown', state: 'NJ' };
+  const countyInfo = ALL_COUNTY_MAP[countyId] || { county: 'Unknown', state: 'NJ' };
   const sheriffNumber = String(cells[0] || '').trim();
   const courtCase = String(cells[1] || '').trim();
   const saleDateRaw = String(cells[2] || '').trim();
@@ -54,7 +82,7 @@ function parseCivilViewRow(cells = [], countyId = 1) {
 
   // Split address into street and city/zip
   const cleanAddress = normalizeOcrText(addressRaw).replace(/\s+/g, ' ').trim();
-  const zipMatch = cleanAddress.match(/\b0[78]\d{3}\b/);
+  const zipMatch = cleanAddress.match(/\b\d{5}\b/);
   const zip = zipMatch ? zipMatch[0] : null;
 
   return {
@@ -99,14 +127,13 @@ function parseCivilViewHtml(html = '', countyId = 1) {
         .replace(/&nbsp;/gi, ' ')
         .replace(/&#39;/g, "'")
         .replace(/&amp;/g, '&')
-        .replace(/\s+/g, ' ')
         .trim();
       cells.push(cellContent);
     }
 
-    if (cells.length >= 4) {
-      const parsed = parseCivilViewRow(cells, countyId);
-      if (parsed) rows.push(parsed);
+    const parsed = parseCivilViewRow(cells, countyId);
+    if (parsed) {
+      rows.push(parsed);
     }
   }
 
@@ -115,6 +142,8 @@ function parseCivilViewHtml(html = '', countyId = 1) {
 
 module.exports = {
   NJ_COUNTY_MAP,
+  PA_COUNTY_MAP,
+  ALL_COUNTY_MAP,
   getCivilViewUrl,
   parseCivilViewRow,
   parseCivilViewHtml,

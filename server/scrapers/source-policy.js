@@ -18,6 +18,24 @@ const SOURCE_HOSTS = Object.freeze({
   'ca-controller-tax-sale': ['sco.ca.gov'],
   civilview: ['salesweb.civilview.com'],
   courtlistener: ['www.courtlistener.com'],
+  'email-notices': [
+    'floridapublicnotices.com',
+    'publicnoticeillinois.com',
+    'texaspublicnotices.com',
+    'publicnoticesohio.com',
+    'publicnoticepa.com',
+    'georgiapublicnotice.com',
+    'publicnotice.org',
+  ],
+  'public-notices-email': [
+    'floridapublicnotices.com',
+    'publicnoticeillinois.com',
+    'texaspublicnotices.com',
+    'publicnoticesohio.com',
+    'publicnoticepa.com',
+    'georgiapublicnotice.com',
+    'publicnotice.org',
+  ],
   fannie: ['homepath.fanniemae.com'],
   'fhfa-hpi': ['www.fhfa.gov'],
   'fl-dor-cadastral': ['services9.arcgis.com'],
@@ -188,6 +206,9 @@ function hasSourceRecordShape(source, url) {
     }
     case 'usda':
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');
+    case 'email-notices':
+    case 'public-notices-email':
+      return true;
     default:
       return false;
   }
