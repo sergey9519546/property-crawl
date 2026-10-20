@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const test = require('node:test');
 const { DiscoveryStore } = require('../server/discovery/store');
 
-const databaseUrl = process.env.DATABASE_URL || process.env.DISCOVERY_DATABASE_URL;
+const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || process.env.DISCOVERY_DATABASE_URL;
 
 async function withStore(fn) {
   if (!databaseUrl) return;

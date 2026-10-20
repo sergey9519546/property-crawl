@@ -558,6 +558,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         map_surface = self.page.get_by_test_id("live-market-maplibre")
         map_surface.wait_for(state="visible")
+        expect(map_surface).to_have_class(re.compile(r"maplibregl-map"), timeout=15_000)
         self.assertTrue(
             map_surface.evaluate(
                 "element => element.classList.contains('maplibregl-map') || Boolean(element.querySelector('.maplibregl-map'))"

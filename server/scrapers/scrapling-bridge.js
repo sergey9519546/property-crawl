@@ -214,7 +214,7 @@ async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DE
   return new Promise((resolve, reject) => {
     let settled = false, stdoutBytes = 0, stderrBytes = 0;
     const stdout = [], stderr = [];
-    const childEnv = Object.fromEntries(['PATH','Path','SystemRoot','SYSTEMROOT','TEMP','TMP'].filter(key => process.env[key] !== undefined).map(key => [key,process.env[key]]));
+    const childEnv = Object.fromEntries(['PATH','Path','SystemRoot','SYSTEMROOT','TEMP','TMP','APPDATA','LOCALAPPDATA','USERPROFILE','HOME','PYTHONPATH'].filter(key => process.env[key] !== undefined).map(key => [key,process.env[key]]));
     childEnv.PYTHONIOENCODING = 'utf-8'; childEnv.PYTHONUTF8 = '1';
     const child = spawn(python, [script], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv });
     const finish = (error, value) => {

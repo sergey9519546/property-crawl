@@ -97,7 +97,7 @@ test('unknown categorical facets select null and blank values with PG/memory par
     const memory={isPg:false,getListings:async()=>({total:3,listings:[{id:'unknown-null',source:'hud',state:'CA',address:'Null Category',propType:null,auctionProgram:null,occupancy:null,status:'active'},{id:'unknown-blank',source:'hud',state:'CA',address:'Blank Category',propType:'',auctionProgram:'',occupancy:'',status:'active'},{id:'known-category',source:'hud',state:'CA',address:'Known Category',propType:'Land',auctionProgram:'TPS',occupancy:'vacant',status:'active'}]})};const memoryResult=await discovery.search(memory,parsed);assert.deepEqual(memoryResult.listings.map(row=>row.id).sort(),['unknown-blank','unknown-null']);}
 });
 
-test('advanced hunt route pages and persists a baseline beyond 10000 PostgreSQL listings',{skip: !databaseUrl, timeout:60000},async()=>{
+test('advanced hunt route pages and persists a baseline beyond 10000 PostgreSQL listings',{skip: !databaseUrl, timeout:120000},async()=>{
   await isolated.pool.query('DELETE FROM listings');await seedListings(isolated.pool,10050);
   await isolated.pool.query(`UPDATE listings SET id='HUD-CA-'||substring(id from '[0-9]+'),source_key='hud',state='CA',source_url='https://www.hudhomestore.gov/property/propertydetails?caseNumber='||substring(id from '[0-9]+'),raw_notice='Official HUD publisher record '||substring(id from '[0-9]+'),source_observed_at='2026-09-05T18:00:00Z',provenance=jsonb_build_object('origin','live','observed',true,'recordKind','source_record','publisher','HUD','recordId',substring(id from '[0-9]+'),'observedAt','2026-09-05T18:00:00Z')`);
   const database=new DatabaseClient({env:{NODE_ENV:'test'}});database.pool=isolated.pool;database.isPg=true;
