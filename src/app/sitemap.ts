@@ -12,7 +12,7 @@ const API_BASE = process.env.PROPERTY_API_URL || 'http://localhost:3000';
 const MAX_LISTING_URLS = 5_000;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://property-crawl.com';
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || 'https://property-crawl.onrender.com';
   const now = new Date();
 
   const staticPages: MetadataRoute.Sitemap = [
@@ -35,6 +35,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // honest sitemap is the static pages alone - never a stand-in list of records
   // that do not exist.
   let listingPages: MetadataRoute.Sitemap = [];
+  let countyPages: MetadataRoute.Sitemap = [];
   try {
     const response = await fetch(`${API_BASE}/api/listings?limit=${MAX_LISTING_URLS}`, {
       cache: 'no-store',
@@ -53,6 +54,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           changeFrequency: 'daily',
           priority: 0.8,
         }));
+
+      const countyMap = new Set<string>();
+      for (const item of records as Array<{ state?: unknown; county?: unknown }>) {
+        if (typeof item?.state === 'string' && typeof item?.county === 'string' && /^[A-Z]{2}$/.test(item.state)) {
+          const slug = item.county.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          if (slug) countyMap.add(`${item.state}/${slug}`);
+        }
+      }
+      countyPages = Array.from(countyMap).map((combo) => ({
+        url: `${baseUrl}/states/${combo}`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.7,
+      }));
     }
   } catch {
     // Inventory unreachable at build time; static pages still describe the site.
@@ -83,5 +98,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Coverage unreachable: omit state URLs. Do not invent them.
   }
 
-  return [...staticPages, ...statePages, ...listingPages];
+  return [...staticPages, ...statePages, ...countyPages, ...listingPages];
 }
