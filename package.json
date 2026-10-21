@@ -37,6 +37,8 @@
     "nationwide:coverage": "node scripts/nationwide-coverage.js",
     "observations:compact": "node scripts/compact-observations.js --apply",
     "observations:compact:dry": "node scripts/compact-observations.js",
+    "operator:status": "node scripts/operator-status.js",
+    "operator:sync": "node scripts/sync-render-env.js",
     "pre-push": "npm run release:gate",
     "probe:retired": "node scripts/probe-retired-records.js",
     "promotion:gate": "node scripts/promotion-gate-check.js",
