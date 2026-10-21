@@ -150,7 +150,14 @@ async function boot() {
   };
 
   // next start serves .next — refuse to boot a stale/missing production build.
-  const nextDir = path.join(root, process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview' : '.next');
+  const distDirName = process.env.NEXT_DISCOVERY_PREVIEW === '1'
+    ? '.next-discovery-preview'
+    : process.env.NEXT_VERIFY_BUILD === 'sources'
+      ? '.next-sources-verify'
+      : process.env.NEXT_VERIFY_BUILD === '1'
+        ? '.next-verify'
+        : '.next';
+  const nextDir = path.join(root, distDirName);
   const buildId = path.join(nextDir, 'BUILD_ID');
   if (!fs.existsSync(buildId)) {
     console.error(`[Production] Missing Next production build at ${nextDir}. Run: npm run build`);
