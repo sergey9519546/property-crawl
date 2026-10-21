@@ -104,9 +104,15 @@ export async function proxyPropertyApi(request: Request, dependencies: {
     // Scraper collection runs can take minutes (HUD multi-state). The default
     // 20s proxy timeout made POST /api/scrapers fail through Next while the
     // direct API path succeeded — hide that class of failure.
-    const timeoutMs = url.pathname.startsWith("/api/scrapers") && request.method === "POST"
+    const isHeavyEndpoint =
+      (url.pathname.startsWith("/api/scrapers") && request.method === "POST") ||
+      url.pathname.startsWith("/api/neighborhoods") ||
+      url.pathname.startsWith("/api/auction-calendar") ||
+      url.pathname.startsWith("/api/source-network") ||
+      url.pathname.startsWith("/api/export");
+    const timeoutMs = isHeavyEndpoint
       ? 180_000
-      : 20_000;
+      : 30_000;
     const upstream = await (dependencies.fetchImpl || fetch)(`${base.replace(/\/$/, "")}${url.pathname}${url.search}`, {
       method: request.method, headers, body: body as BodyInit | undefined,
       cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),

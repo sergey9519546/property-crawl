@@ -82,6 +82,22 @@ export async function POST(request: Request) {
     } catch (err) {
       console.error("[Scrapy Ingest] Live record store merge failed:", (err as Error)?.message);
     }
+
+    try {
+      // In PostgreSQL mode, live record store is bypassed; persist directly to primary database
+      const db = require("@server/db/client");
+      if (db.isPg || (db.pool && db.dataMode === "postgres")) {
+        for (const item of validated.items) {
+          try {
+            await db.createListing(item);
+          } catch (createErr) {
+            console.error(`[Scrapy Ingest] PostgreSQL createListing failed for ${item.id}:`, (createErr as Error)?.message);
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.error("[Scrapy Ingest] Database persistence failed:", (dbErr as Error)?.message);
+    }
   }
 
   return Response.json(

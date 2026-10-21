@@ -41,9 +41,10 @@ const DEFAULT_PAGE_SIZE = 1000;
 const DEFAULT_MAX_ROWS = 200_000;
 
 async function scanAllListings(database, filters = {}, options = {}) {
+  const defaultSize = database && database.isPg ? 5000 : DEFAULT_PAGE_SIZE;
   const pageSize = Number.isFinite(options.pageSize) && options.pageSize > 0
     ? Math.floor(options.pageSize)
-    : DEFAULT_PAGE_SIZE;
+    : defaultSize;
   const maxRows = Number.isFinite(options.maxRows) && options.maxRows > 0
     ? Math.floor(options.maxRows)
     : DEFAULT_MAX_ROWS;

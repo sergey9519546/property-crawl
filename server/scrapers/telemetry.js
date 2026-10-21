@@ -187,9 +187,10 @@ class ScraperTelemetry {
    * @returns {Object}
    */
   getHealthReport() {
+    const total = Object.keys(this.history).length;
     const report = {
-      systemStatus: 'healthy',
-      totalScrapers: Object.keys(this.history).length,
+      systemStatus: total === 0 ? 'idle' : 'healthy',
+      totalScrapers: total,
       scrapersInFault: 0,
       scrapersWithDrift: 0,
       details: {}
