@@ -8,24 +8,24 @@
 
 ## Source-bound gate (PP-02): 9/9 PASS, clean tree
 
-Tree: `51e034cb844c8bb9566c0f8ac307452f8e6926a4` — dirty: false — 2026-10-21
+Tree: `2c99e6296fc7b3565290503c243ccb7e96d3a747` — dirty: false — 2026-10-21
 
 | Gate | Result | ms |
 |---|---|---|
-| typecheck (`tsc --noEmit`) | PASS | 6314 |
-| generated-context (CONTEXT.md current) | PASS | 135 |
-| schema-mirrors (byte-identical) | PASS | 51 |
-| test-wiring (every test file reachable) | PASS | 115 |
-| ops-suites (meta/wiring/contract) | PASS | 12285 |
-| scraper-parser (pinned runtime) | PASS | 3175 |
-| production-smoke | PASS | 96 |
+| typecheck (`tsc --noEmit`) | PASS | 1840 |
+| generated-context (CONTEXT.md current) | PASS | 134 |
+| schema-mirrors (byte-identical) | PASS | 49 |
+| test-wiring (every test file reachable) | PASS | 110 |
+| ops-suites (meta/wiring/contract) | PASS | 12722 |
+| scraper-parser (pinned runtime) | PASS | 4219 |
+| production-smoke | PASS | 123 |
 | next-build (production bundle) | PASS | 6667 |
 | production-e2e (25 checks, isolated embedded DB) | PASS | 19112 |
 
 ## Comprehensive Verification Suites Status
 
 - **Verification Gate (`node test/verify.js`)**: 50/50 suites passed (1,556 assertions passed, 0 failed).
-- **Evidence Truth Suite (`npm run test:evidence-truth`)**: 576/576 tests passed (0 failed).
+- **Evidence Truth Suite (`npm run test:evidence-truth`)**: 585/585 tests passed (0 failed).
 - **Crawler Toolchain Doctor (`npm run test:crawler-doctor`)**: 10/10 tests passed (Unbrowse, Scrapling, Camoufox).
 - **Crawler Tools Suite (`npm run test:crawler-tools`)**: 168/168 tests passed.
 - **AI & Underwriting Suites (`npm run test:ai` + `npm run test:underwriting-resilience`)**: 173/173 tests passed.
@@ -38,3 +38,4 @@ Tree: `51e034cb844c8bb9566c0f8ac307452f8e6926a4` — dirty: false — 2026-10-21
 3. **Crawler Toolchain Integration**: Certified global Unbrowse 11.4.1, Scrapling 0.4.15 with stealth fetchers, and Camoufox 0.5.8 with pinned Firefox binaries under `.cache/crawler-tools/venv`.
 4. **Production Startup DistDir Resolution**: Hardened `scripts/start-production.js` to dynamically resolve verify builds (`.next-sources-verify`, `.next-verify`) alongside `.next` and `.next-discovery-preview`, preventing missing `BUILD_ID` errors during multi-target verification gates.
 5. **Database Query Parameterization & Materialized View Grouping**: Fixed parameter syntax in comp queries (`'AND id != $' + params.length`), added `est_low`/`est_high` projection to weekly partition ranking, and hardened `mv_neighborhood_stats` zip grouping by using `MAX(state)` to prevent split rows across inconsistent state codes.
+6. **Zyte API Extraction & Scrapy Cloud Integration**: Implemented `server/scrapers/zyte-client.js` and TypeScript wrapper `src/lib/zyte.server.ts` conforming to the zyte-scrapy skill. Provides fallback extraction for geoblocked/anti-bot county portals (with both static `httpResponseBody` and dynamic `browserHtml` modes), Scrapy Cloud job scheduling, and project-default `870105` job listing with strict SSRF enforcement. Tested with 9/9 passing tests in `test/zyte-client.test.js` and wired into `test:evidence-truth`.
