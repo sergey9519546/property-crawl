@@ -92,12 +92,27 @@ async function collect(source, options = {}) {
     records = await scraper.scrapeFeed();
     if (!Array.isArray(records)) throw new TypeError(`${source} returned a non-array payload`);
     const { recordSourceRun } = require('../server/sources/observations');
-    recordSourceRun(source, {
+    const observationResult = recordSourceRun(source, {
       listings: records,
       error: null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
     }, { filePath: options.observationPath });
+    // Mirror the accepted snapshots into PostgreSQL (migration 025), the
+    // same as the scheduler's ingest path. Best-effort: the filesystem store
+    // remains the operational record.
+    try {
+      const db = require('../server/db/client');
+      if (db.isPg && observationResult.snapshots && observationResult.snapshots.length) {
+        const { persistSourceObservations } = require('../server/db/observations-persistence');
+        const persisted = await persistSourceObservations(db.pool, source, observationResult.snapshots);
+        if (persisted.persisted > 0) {
+          console.error(`[collect-source] persisted ${persisted.persisted} observation(s) for ${source} to PostgreSQL`);
+        }
+      }
+    } catch (persistError) {
+      console.error(`[collect-source] source observations were not persisted: ${persistError.message}`);
+    }
   } catch (error) {
     try {
       const { recordSourceRun } = require('../server/sources/observations');

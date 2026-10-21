@@ -153,7 +153,7 @@ function present(value) { return value !== null && value !== undefined && value 
 // whitespace, lowercase), then match on substrings. A postponement or
 // cancellation marker wins over an "active" prefix, because "Active - Postponed"
 // means the sale is currently postponed, not currently active.
-const INACTIVE_STATUS_MARKERS = /(postpon|adjourn|stayed|reschedul|withdraw|cancell|cancel|unsold|inactive|revert)/;
+const INACTIVE_STATUS_MARKERS = /(postpon|adjourn|stayed|reschedul|re-?schedul|withdraw|cancell|cancel|unsold|inactive|revert)/;
 const ACTIVE_STATUS_MARKERS = /(active|scheduled|available|relisted|accepting bids|open for bidding|auction ends|auction:)/;
 
 function classifyStatusActivity(value) {

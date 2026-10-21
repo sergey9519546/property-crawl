@@ -221,8 +221,10 @@ test('compareSnapshots classifies real-vocabulary returned-to-market transitions
   assert.equal(relist2.kind, 'returned_to_market');
 
   // Active -> cancelled is a status change, not a relist.
-  const cancel = compareSnapshots(activeAgain, { ...next, fields: { status: 'Status: Cancelled' } })
-    .find((c) => c.field === 'status');
+  const cancel = compareSnapshots(
+    { ...base, fields: { status: 'Status: Active' } },
+    { ...next, fields: { status: 'Status: Cancelled' } },
+  ).find((c) => c.field === 'status');
   assert.equal(cancel.kind, 'status_changed');
 
   // Staying postponed is not a relist either.

@@ -59,7 +59,8 @@ function calculateMacroValuation({
 function explicitDollarBasis(listing) {
   const assessed = Number(listing.assessedValue ?? listing.assessed);
   const lastSale = Number(listing.lastSalePrice);
-  const assessmentYear = listing.assessmentYear ?? listing.taxYear;
+  const assessmentYear = listing.assessmentYear ?? listing.taxYear
+    ?? listing.provenance?.derivedFields?.assessorRoll?.assessmentYear;
   const saleYear = listing.lastSaleYear;
   if (Number.isFinite(assessed) && assessed > 0 && assessmentYear) {
     return {

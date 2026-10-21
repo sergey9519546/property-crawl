@@ -11,6 +11,7 @@ import {
   Scale,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { priorityBand } from '@/lib/triage-bands';
 
 export type OpportunitySignal = {
   key: string;
@@ -122,9 +123,10 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
   }
 
   const priority = data.triagePriority ?? 0;
-  const unscored = priority <= 0;
-  const isHigh = priority >= 70;
-  const isMed = priority >= 50 && priority < 70;
+  const band = priorityBand(priority);
+  const unscored = band === 'unscored';
+  const isHigh = band === 'high';
+  const isMed = band === 'moderate';
 
 const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.status === 'supported').length;
   const contradictedCount = data.summary?.contradicted ?? data.signals.filter((s) => s.status === 'contradicted').length;

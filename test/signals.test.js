@@ -383,4 +383,83 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     const emptySig = withoutDocs.signals.find((s) => s.key === 'publisher_documents');
     assert.equal(emptySig.status, 'unknown');
   });
+
+  // --- PostgreSQL observation history + triage_priority write-through -----
+
+  test('a Postgres-backed route reads durable history and persists the computed score', async () => {
+    const crypto = require('node:crypto');
+    const recordKey = crypto.createHash('sha256').update('civilview\n99999').digest('hex');
+    const durableHistory = {
+      records: {
+        [recordKey]: { history: [{ fields: { status: 'Status: Active - Postponed' } }] },
+      },
+      signals: [],
+    };
+    const persisted = [];
+    const mockDb = {
+      isPg: true,
+      pool: {},
+      getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1', status: 'Auction Ends: Oct 21, 2026' }) : null),
+    };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservations: () => { throw new Error('filesystem store must not be consulted when Postgres history exists'); },
+      loadObservationsForRecord: async () => durableHistory,
+      persistTriagePriority: async (client, listingId, priority) => persisted.push({ client, listingId, priority }),
+    });
+
+    let body = null;
+    const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
+
+    assert.equal(body.historyUnavailable, false);
+    assert.equal(body.signals.find((s) => s.key === 'returned_to_market').status, 'supported');
+    assert.equal(persisted.length, 1);
+    assert.equal(persisted[0].client, mockDb);
+    assert.equal(persisted[0].listingId, 'MOCK-1');
+    assert.equal(persisted[0].priority, body.triagePriority);
+  });
+
+  test('an empty Postgres history falls back to the filesystem store', async () => {
+    let fsRead = false;
+    const mockDb = {
+      isPg: true,
+      pool: {},
+      getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null),
+    };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservations: () => { fsRead = true; return { records: {}, signals: [] }; },
+      loadObservationsForRecord: async () => ({ records: {}, signals: [] }),
+      persistTriagePriority: async () => { throw new Error('must still respond if persistence hiccups'); },
+    });
+
+    let body = null;
+    const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
+    assert.ok(body, 'the route must still respond if triage persistence hiccups');
+    assert.equal(fsRead, true, 'the filesystem store must backfill while the table fills');
+    assert.equal(body.historyUnavailable, false);
+  });
+
+  test('a degraded-view score (unreadable history) is never persisted', async () => {
+    const persisted = [];
+    const mockDb = {
+      isPg: true,
+      pool: {},
+      getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null),
+    };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservations: () => { throw new Error('store exceeds size limit'); },
+      loadObservationsForRecord: async () => { throw new Error('connection refused'); },
+      persistTriagePriority: async (client, listingId, priority) => persisted.push({ listingId, priority }),
+    });
+
+    let body = null;
+    const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
+    assert.equal(body.historyUnavailable, true);
+    assert.equal(persisted.length, 0, 'a score computed without history is not a fact about the listing');
+  });
 });

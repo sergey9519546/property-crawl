@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS listings (
     ) STORED,
     deal_score INT CHECK (deal_score BETWEEN 1 AND 99),
     triage_priority INT CHECK (triage_priority BETWEEN 0 AND 99),
+    triage_priority_refreshed_at TIMESTAMPTZ,
     equity_spread NUMERIC(14, 2) GENERATED ALWAYS AS (
       CASE
         WHEN est_low IS NULL OR est_high IS NULL OR opening_bid IS NULL

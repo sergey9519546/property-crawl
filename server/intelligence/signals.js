@@ -253,7 +253,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     const countyKey = resolveCountyKey(listing.state, listing.county);
     const assessorRes = countyKey ? interpretAssessorParcel({
       countyKey,
-      parcel: publicRecords?.parcel || listing.assessorParcel,
+      parcel: publicRecords?.parcel || listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel,
       openingBid: listing.openingBid,
     }) : null;
 

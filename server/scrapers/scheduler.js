@@ -378,6 +378,22 @@ const scheduler = new IngestionScheduler({
     const path = require('node:path');
     const { mergeLiveRecords } = require('../db/live-record-store');
     const { recordSourceRun } = require('../sources/observations');
+    // Harvest enrolled-county assessor rolls before the record is cached or
+    // snapshotted: the bid-to-value signal stays dark without a valuation
+    // band (0 of 10,285 live records carry one), and the county roll is the
+    // honest source where a statutory market conversion is enrolled.
+    // Bounded per run, disk-cached, fail-open.
+    if (!run.error && run.listings.length) {
+      try {
+        const { harvestAssessorRolls } = require('../enrichment/assessor-harvest');
+        const harvest = await harvestAssessorRolls(run.listings);
+        if (harvest.harvested > 0) {
+          console.log(`[Scheduler] Harvested ${harvest.harvested} assessor roll(s) for ${sourceId}`);
+        }
+      } catch (error) {
+        console.warn('[Scheduler] Assessor roll harvest failed (non-fatal):', error.message);
+      }
+    }
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
     if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {
@@ -401,7 +417,44 @@ const scheduler = new IngestionScheduler({
         console.warn('[Scheduler] Live compatibility cache was not updated:', error.message);
       }
     }
-    recordSourceRun(sourceId, run);
+    const observationResult = recordSourceRun(sourceId, run);
+
+    // Mirror the accepted snapshots into PostgreSQL (migration 025) so
+    // observation history survives filesystem-store compaction. Best-effort:
+    // the filesystem store remains the operational record, and a database
+    // hiccup must never fail an otherwise-successful collection run.
+    if (db.isPg && observationResult.snapshots && observationResult.snapshots.length) {
+      try {
+        const { persistSourceObservations } = require('../db/observations-persistence');
+        const persisted = await persistSourceObservations(db.pool, sourceId, observationResult.snapshots);
+        if (persisted.persisted > 0) {
+          console.log(`[Scheduler] Persisted ${persisted.persisted} source observation(s) for ${sourceId} to PostgreSQL`);
+        }
+      } catch (error) {
+        console.warn('[Scheduler] Source observations were not persisted to PostgreSQL:', error.message);
+      }
+    }
+
+    // Refresh the triage_priority cache for the listings this run advanced.
+    // The route's write-through covers listings people evaluate; this fills
+    // the rest the moment their evidence changes, so hunt sorting does not
+    // wait on views. Best-effort and bounded per run.
+    if (db.isPg && observationResult.snapshots && observationResult.snapshots.length) {
+      try {
+        const { recomputeTriageForListings } = require('../db/observations-persistence');
+        const { loadObservations } = require('../sources/observations');
+        const advancedIds = new Set(observationResult.snapshots.map((snapshot) => snapshot.listingId));
+        const advanced = run.listings.filter((listing) => listing && advancedIds.has(listing.id));
+        const refreshed = await recomputeTriageForListings(db.pool, advanced, {
+          readFileHistory: () => loadObservations(),
+        });
+        if (refreshed.updated > 0) {
+          console.log(`[Scheduler] Refreshed triage_priority for ${refreshed.updated} listing(s) from ${sourceId}`);
+        }
+      } catch (error) {
+        console.warn('[Scheduler] triage_priority was not refreshed:', error.message);
+      }
+    }
 
     // Fire saved-search alerts for newly accepted listings (the core of the
     // "saved-search alerts" feature). This runs for the configured workspace
