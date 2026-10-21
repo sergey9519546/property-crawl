@@ -11,8 +11,38 @@
  * certified appraisals or individual property condition assessments.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const { getHpiIndex, DEFAULT_CURRENT_PERIOD } = require('../intelligence/fhfa-hpi');
 const { isUsStateOrTerritoryCode } = require('../state-codes');
+
+let dynamicBenchmarksCache = null;
+let lastDynamicCheck = 0;
+
+function invalidateDynamicBenchmarksCache() {
+  dynamicBenchmarksCache = null;
+  lastDynamicCheck = 0;
+}
+
+function loadDynamicBenchmarks() {
+  const now = Date.now();
+  if (dynamicBenchmarksCache !== null && now - lastDynamicCheck < 60000) {
+    return dynamicBenchmarksCache;
+  }
+  lastDynamicCheck = now;
+  const jsonPath = path.resolve(__dirname, 'data/county-market-benchmarks.json');
+  try {
+    if (fs.existsSync(jsonPath)) {
+      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (data && typeof data === 'object') {
+        dynamicBenchmarksCache = data;
+        return dynamicBenchmarksCache;
+      }
+    }
+  } catch {}
+  dynamicBenchmarksCache = {};
+  return dynamicBenchmarksCache;
+}
 
 const DISCLAIMER = 'Macroeconomic market trends derived from public housing index benchmarks. Not an appraised value or individual property condition assessment.';
 
@@ -271,7 +301,8 @@ function getCountyMarketTrends(state, county) {
   const normCounty = county ? String(county).trim().replace(/\s+(COUNTY|PARISH)$/i, '') : 'Unknown';
 
   const key = normalizeCountyKey(state, county);
-  const benchmark = key ? COUNTY_MARKET_BENCHMARKS[key] : null;
+  const dynamicBenchmarks = loadDynamicBenchmarks();
+  const benchmark = key ? (dynamicBenchmarks[key] || COUNTY_MARKET_BENCHMARKS[key]) : null;
 
   if (benchmark) {
     return {
@@ -350,5 +381,7 @@ module.exports = {
   deriveStateHpiYoy,
   classifyMarketTemperature,
   getCountyMarketTrends,
-  enrichListingWithMacroTrends
+  enrichListingWithMacroTrends,
+  loadDynamicBenchmarks,
+  invalidateDynamicBenchmarksCache
 };

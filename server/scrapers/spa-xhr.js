@@ -29,7 +29,9 @@ function spaXhrEnabled(sourceKey, env = process.env) {
 }
 
 function pythonRuntime(env = process.env) {
-  if (env.SCRAPLING_PYTHON) return env.SCRAPLING_PYTHON;
+  if (env.SCRAPLING_PYTHON) {
+    return fs.existsSync(env.SCRAPLING_PYTHON) ? env.SCRAPLING_PYTHON : null;
+  }
   const root = path.resolve(__dirname, '..', '..');
   const win = path.join(root, '.cache', 'crawler-tools', 'venv', 'Scripts', 'python.exe');
   const nix = path.join(root, '.cache', 'crawler-tools', 'venv', 'bin', 'python');
@@ -84,16 +86,24 @@ function captureSpaXhr(url, { sourceKey, pattern, timeoutMs = 20000, env = proce
   }
   const xhrPattern = pattern || DEFAULT_PATTERNS[sourceKey] || '*api*';
   return new Promise((resolve) => {
+    const childEnv = {
+      PATH: process.env.PATH || '',
+      SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || '',
+      TEMP: process.env.TEMP || process.env.TMP || '',
+      TMP: process.env.TMP || '',
+      PYTHONIOENCODING: 'utf-8',
+    };
+    if (process.env.APPDATA) childEnv.APPDATA = process.env.APPDATA;
+    if (process.env.LOCALAPPDATA) childEnv.LOCALAPPDATA = process.env.LOCALAPPDATA;
+    if (process.env.USERPROFILE) childEnv.USERPROFILE = process.env.USERPROFILE;
+    if (process.env.HOME) childEnv.HOME = process.env.HOME;
+    if (process.env.PYTHONPATH) childEnv.PYTHONPATH = process.env.PYTHONPATH;
+
     const child = spawn(python, [script, url, xhrPattern], {
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        PATH: process.env.PATH || '',
-        SystemRoot: process.env.SystemRoot || process.env.SYSTEMROOT || '',
-        TEMP: process.env.TEMP || process.env.TMP || '',
-        PYTHONIOENCODING: 'utf-8',
-      },
+      env: childEnv,
     });
     let out = '', err = '', outBytes = 0, overflow = false;
     const timer = setTimeout(() => {
@@ -174,6 +184,7 @@ module.exports = {
   DEFAULT_PATTERNS,
   spaXhrEnabled,
   pythonRuntime,
+  validateSpaXhrUrl,
   captureSpaXhr,
   mapCapturedItems,
 };

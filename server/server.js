@@ -34,6 +34,7 @@ const savedSearchesHandlers = require('./routes/saved-searches').createSavedSear
 const handlePortfolioDashboard = require('./routes/portfolio-dashboard').createPortfolioDashboardHandler();
 const handlePropertyComparison = require('./routes/property-comparison').createPropertyComparisonHandler();
 const handlePriceDrop = require('./routes/price-drop').createPriceDropHandler();
+const { handleDecisionPacket } = require('./routes/decision-packet');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
@@ -184,6 +185,10 @@ async function handleRequest(req, res) {
     // API Routes Routing
     if (url.pathname === '/api/listings/compare') {
       return handlePropertyComparison(req, res, url);
+    }
+    const packetMatch = url.pathname.match(/^\/api\/listings\/(.+?)\/(?:packet|decision-packet)$/);
+    if (packetMatch) {
+      return handleDecisionPacket(req, res, url);
     }
     if (url.pathname.startsWith('/api/listings')) return handleListings(req, res);
     if (url.pathname === '/api/parse') return handleParse(req, res);

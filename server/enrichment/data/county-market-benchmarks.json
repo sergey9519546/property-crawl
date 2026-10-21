@@ -1,0 +1,20 @@
+{
+  "NJ-CAMDEN": {
+    "state": "NJ",
+    "county": "Camden",
+    "medianSalePrice": 310000,
+    "yoyPriceChangePct": 6.5,
+    "marketTemperature": "hot",
+    "medianDom": 29,
+    "trendLabel": "HOT Market (+6.5% YoY, 29 median DOM)"
+  },
+  "NJ-BERGEN": {
+    "state": "NJ",
+    "county": "Bergen",
+    "medianSalePrice": 640000,
+    "yoyPriceChangePct": 4.9,
+    "marketTemperature": "hot",
+    "medianDom": 27,
+    "trendLabel": "HOT Market (+4.9% YoY, 27 median DOM)"
+  }
+}

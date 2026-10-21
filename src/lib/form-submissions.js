@@ -22,6 +22,38 @@ function sanitize(value, max) {
   return String(value ?? '').replace(/\r/g, '').trim().slice(0, max);
 }
 
+function formatContactNotificationHtml(fields, receivedAt) {
+  const safeName = sanitize(fields.name || 'Anonymous User', 100);
+  const safeEmail = sanitize(fields.email || 'None Provided', 100);
+  const safeMessage = sanitize(fields.message || '', 5000).replace(/\n/g, '<br>');
+  return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
+      <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; border-bottom: 2px solid #0f172a; padding-bottom: 8px;">
+        📬 New Inbound Contact Inquiry
+      </h2>
+      <p style="font-size: 13px; color: #64748b; margin-bottom: 16px;">
+        Received at: <strong>${receivedAt}</strong>
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+        <tr>
+          <td style="padding: 8px 0; color: #475569; width: 100px;"><strong>Name:</strong></td>
+          <td style="padding: 8px 0; color: #0f172a;">${safeName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #475569;"><strong>Email:</strong></td>
+          <td style="padding: 8px 0; color: #0f172a;"><a href="mailto:${safeEmail}" style="color: #2563eb;">${safeEmail}</a></td>
+        </tr>
+      </table>
+      <div style="background-color: #f8fafc; border-left: 4px solid #0f172a; padding: 16px; border-radius: 4px; font-size: 14px; line-height: 1.6; color: #334155;">
+        ${safeMessage}
+      </div>
+      <p style="margin-top: 24px; font-size: 11px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 12px;">
+        PerfectProperty Inbound Alert System • Secure Zero-Cost Production Tier
+      </p>
+    </div>
+  `;
+}
+
 function appendJsonl(kind, payload) {
   const dir = submissionDir();
   fs.mkdirSync(dir, { recursive: true });
@@ -51,7 +83,7 @@ async function forwardWebhook(url, payload) {
 /**
  * @param {'contact'|'newsletter'} kind
  * @param {Record<string, unknown>} fields
- * @param {{ webhookUrl?: string }} [options]
+ * @param {{ webhookUrl?: string, env?: NodeJS.ProcessEnv, fetchImpl?: typeof fetch, outboxDir?: string }} [options]
  */
 async function persistFormSubmission(kind, fields, options = {}) {
   const receivedAt = new Date().toISOString();
@@ -68,14 +100,20 @@ async function persistFormSubmission(kind, fields, options = {}) {
   let forward = { forwarded: false, reason: 'no-endpoint' };
   let mail = null;
   if (mailIsConfigured(env)) {
-    const operatorInbox = isEmail(env.CONTACT_TO || env.RESEND_TO);
+    const operatorInbox = isEmail(env.OPERATOR_EMAIL || env.CONTACT_TO || env.RESEND_TO);
     const recipient = kind === 'newsletter' ? isEmail(fields.email) : (operatorInbox || isEmail(fields.email));
-    const subject = kind === 'newsletter' ? 'PerfectProperty list' : 'Contact form stored';
+    const subject = kind === 'newsletter'
+      ? 'PerfectProperty list subscription'
+      : `New Inbound Contact Inquiry: ${fields.name || 'Anonymous'}`;
     const text = kind === 'newsletter'
       ? 'This address was saved for the operator list. This note is the delivery receipt.'
       : `A contact message was stored for the operator.\nFrom: ${fields.name || ''}\nEmail: ${fields.email || ''}\n\n${fields.message || ''}`;
+    const html = kind === 'contact' ? formatContactNotificationHtml(fields, receivedAt) : null;
     if (recipient) {
-      mail = await sendOutboundMail({ to: recipient, subject, text, kind }, { env, fetchImpl: options.fetchImpl, outboxDir: options.outboxDir });
+      mail = await sendOutboundMail(
+        { to: recipient, subject, text, html, kind },
+        { env, fetchImpl: options.fetchImpl, outboxDir: options.outboxDir }
+      );
     }
   } else {
     const webhookUrl = options.webhookUrl
@@ -138,6 +176,7 @@ function resetFormSubmissionsForTests(kind) {
 module.exports = {
   DEFAULT_DIR,
   appendJsonl,
+  formatContactNotificationHtml,
   persistFormSubmission,
   removeNewsletterEmail,
   resetFormSubmissionsForTests,
