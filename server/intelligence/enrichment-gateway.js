@@ -147,6 +147,9 @@ function confidenceBand(confidence) {
 // to a single round trip today while still reading to the end if the store
 // ever exceeds it.
 async function loadListingsForParcelKey(parcelKey, database) {
+  if (database && typeof database.getListingsByParcelKeyNative === 'function') {
+    return database.getListingsByParcelKeyNative(parcelKey);
+  }
   const { pool } = await scanAllListings(database, {}, { pageSize: 100000 });
   return pool.filter((listing) => listing && listing.parcelKey === parcelKey);
 }

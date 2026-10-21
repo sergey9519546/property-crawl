@@ -80,11 +80,38 @@ function createNeighborhoodsHandler(dependencies = {}) {
       ? url.searchParams.get('state').toUpperCase()
       : null;
 
-    const filters = {};
-    if (stateFilter) filters.state = stateFilter;
-    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, filters);
-
     if (!remaining) {
+      if (database.isPg && typeof database.getNeighborhoodStatsNative === 'function') {
+        const nativeResult = await database.getNeighborhoodStatsNative({
+          maxAgeDays,
+          state: stateFilter,
+          limit,
+          nowMs: now()
+        });
+        res.setHeader('Cache-Control', 'no-store');
+        return res.json({
+          schema: 'property-crawl.neighborhoods/v1',
+          count: nativeResult.neighborhoods.length,
+          maxAgeDays,
+          state: stateFilter,
+          scanned: nativeResult.scanned,
+          availableTotal: nativeResult.availableTotal,
+          truncated: nativeResult.truncated,
+          bucketsTotal: nativeResult.bucketsTotal,
+          bucketsReturned: nativeResult.bucketsReturned,
+          bucketsTruncated: nativeResult.bucketsTruncated,
+          listingsBucketed: nativeResult.listingsBucketed,
+          listingsCovered: nativeResult.listingsCovered,
+          listingsNotCovered: nativeResult.listingsNotCovered,
+          rowsWithoutNeighborhoodKey: nativeResult.rowsWithoutNeighborhoodKey,
+          neighborhoods: nativeResult.neighborhoods
+        });
+      }
+
+      const filters = { summary: true };
+      if (stateFilter) filters.state = stateFilter;
+      const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, filters);
+
       const stats = computeNeighborhoodStats(pool, { maxAgeDays, nowMs: now() });
       const buckets = stats.slice(0, limit).map(serializeBucket);
 
@@ -125,6 +152,27 @@ function createNeighborhoodsHandler(dependencies = {}) {
     if (!parsed) {
       return res.status(400).json({ error: 'invalid_neighborhood_key', remaining });
     }
+
+    if (database.isPg && typeof database.getSingleNeighborhoodStatsNative === 'function') {
+      const nativeSingle = await database.getSingleNeighborhoodStatsNative(parsed.kind, parsed.key, { maxAgeDays, nowMs: now() });
+      if (!nativeSingle) {
+        return res.status(404).json({ error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        schema: 'property-crawl.neighborhoods/v1',
+        maxAgeDays,
+        scanned: nativeSingle.scanned,
+        availableTotal: nativeSingle.availableTotal,
+        truncated: nativeSingle.truncated,
+        neighborhood: serializeBucket(nativeSingle.neighborhood)
+      });
+    }
+
+    const filters = { summary: true };
+    if (stateFilter) filters.state = stateFilter;
+    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, filters);
+
     const bucket = getNeighborhoodStats(`${parsed.kind}:${parsed.key}`, pool, { maxAgeDays, nowMs: now() });
     if (!bucket) {
       return res.status(404).json({ error: 'neighborhood_not_found', key: `${parsed.kind}:${parsed.key}` });

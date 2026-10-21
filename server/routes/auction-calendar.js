@@ -62,7 +62,30 @@ function createAuctionCalendarHandler(dependencies = {}) {
       ? Number(url.searchParams.get('startMs'))
       : null;
 
-    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database);
+    if (database.isPg && typeof database.getAuctionCalendarNative === 'function') {
+      const nativeResult = await database.getAuctionCalendarNative({
+        windowDays,
+        sampleSize,
+        states,
+        startMs: Number.isFinite(startMs) ? startMs : undefined,
+        nowMs: now()
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        schema: 'property-crawl.auction-calendar/v1',
+        windowDays,
+        states: states || null,
+        startMs: nativeResult.startMs,
+        endMs: nativeResult.endMs,
+        scanned: nativeResult.scanned,
+        availableTotal: nativeResult.availableTotal,
+        truncated: nativeResult.truncated,
+        dropped: nativeResult.dropped,
+        weeks: nativeResult.weeks
+      });
+    }
+
+    const { pool, availableTotal, scanned, truncated } = await scanAllListings(database, { summary: true });
 
     const result = buildAuctionCalendar(pool, {
       windowDays,

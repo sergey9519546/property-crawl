@@ -89,6 +89,8 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification'
   assert.match(source, /verifyScrapySignature/);
   assert.match(source, /validateScrapyPayload/);
   assert.match(source, /x-signature/);
+  assert.match(source, /verifyConnection/);
+  assert.match(source, /dataMode\(\) === "postgres"/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN/);
 });
 

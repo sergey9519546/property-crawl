@@ -37,10 +37,14 @@ function boundedFloat(raw, fallback, min, max) {
 // slice does not merely under-report -- it changes which listings can be
 // returned. A comparable property that happens to sit on row 1,400 of the
 // store was previously invisible no matter how close it was.
-async function loadTargetAndPool(listingId, database = db) {
+async function loadTargetAndPool(listingId, database = db, options = {}) {
   const target = await database.getListingById(listingId);
   if (!target) return { error: { status: 404, body: { error: 'listing_not_found', listingId } } };
-  const { pool } = await scanAllListings(database);
+  if (database.isPg && typeof database.getCompsCandidatesNative === 'function') {
+    const candidates = await database.getCompsCandidatesNative(target, options);
+    return { target, pool: candidates.pool };
+  }
+  const { pool } = await scanAllListings(database, { summary: true });
   return { target, pool };
 }
 
@@ -71,7 +75,7 @@ function createWatchlistCompsHandler(dependencies = {}) {
     const maxAgeDays = boundedInt(url.searchParams.get('maxAgeDays'), 365, 1, 730);
     const limit = boundedInt(url.searchParams.get('limit'), 8, 1, 50);
 
-    const loaded = await loadTargetAndPool(listingId, database);
+    const loaded = await loadTargetAndPool(listingId, database, { radiusKm, maxAgeDays });
     if (loaded.error) return res.status(loaded.error.status).json(loaded.error.body);
 
     const result = findWatchlistComps(loaded.target, loaded.pool, {

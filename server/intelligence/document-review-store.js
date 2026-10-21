@@ -14,6 +14,21 @@ const { randomUUID } = require('node:crypto');
 const DEFAULT_STORE_PATH = path.resolve(__dirname, '../../.cache/document-review-store.json');
 const STORE_VERSION = 1;
 
+function replaceFileWithRetry(temporary, resolved, options = {}) {
+  const attempts = Math.max(1, Math.min(10, Number(options.attempts) || 9));
+  const wait = typeof options.wait === 'function' ? options.wait : (milliseconds) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      fs.renameSync(temporary, resolved);
+      return;
+    } catch (error) {
+      const retryable = (options.platform || process.platform) === 'win32' && ['EPERM', 'EACCES', 'EBUSY'].includes(error.code);
+      if (!retryable || attempt === attempts - 1) throw error;
+      wait(Math.min(250, 10 * (2 ** attempt)));
+    }
+  }
+}
+
 function defaultStorePath(env = process.env) {
   const explicit = env.PROPERTY_DOCUMENT_REVIEW_STORE_PATH;
   if (explicit === 'null' || explicit === '') return null;
@@ -183,7 +198,7 @@ function createDocumentReviewStore(options = {}) {
       const tempPath = `${storePath}.${randomUUID()}.tmp`;
       try {
         fs.writeFileSync(tempPath, body, { flag: 'wx', mode: 0o600 });
-        fs.renameSync(tempPath, storePath);
+        replaceFileWithRetry(tempPath, storePath);
         return true;
       } finally {
         try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch { /* ignore */ }

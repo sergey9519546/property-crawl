@@ -132,7 +132,15 @@ async function main() {
   const nextEnvSnapshot = snapshotNextEnv();
 
   try {
-    if (await probe(API_PORT, '/api/health')) {
+    let inUse = await probe(API_PORT, '/api/health');
+    if (inUse) {
+      for (let retries = 0; retries < 6; retries++) {
+        await new Promise((r) => setTimeout(r, 500));
+        inUse = await probe(API_PORT, '/api/health');
+        if (!inUse) break;
+      }
+    }
+    if (inUse) {
       throw new Error(`[ui-suite] API test port :${API_PORT} is already in use; choose UI_SUITE_API_PORT.`);
     } else {
       // This suite proves the UI, not the database - production-e2e does that

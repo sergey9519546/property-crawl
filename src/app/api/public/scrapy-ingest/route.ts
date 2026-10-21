@@ -86,7 +86,11 @@ export async function POST(request: Request) {
     try {
       // In PostgreSQL mode, live record store is bypassed; persist directly to primary database
       const db = require("@server/db/client");
-      if (db.isPg || (db.pool && db.dataMode === "postgres")) {
+      if (typeof db.verifyConnection === "function" && !db.postgresReachable && db.pool) {
+        await db.verifyConnection().catch(() => {});
+      }
+      const isPostgres = Boolean(db.isPg || (typeof db.dataMode === "function" ? db.dataMode() === "postgres" : false));
+      if (isPostgres) {
         for (const item of validated.items) {
           try {
             await db.createListing(item);

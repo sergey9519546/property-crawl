@@ -4,17 +4,19 @@ const { validateListingForIngestion } = require('../scrapers/validation');
 // the observation store; signalsTotal/signalsTruncated say so.
 const SIGNAL_LIMIT = 100;
 
-function buildSourceNetwork({ catalog, adapters, observations, listings = [], evidenceCollectors = [], evidenceSummary = {}, now = Date.now() }) {
+function buildSourceNetwork({ catalog, adapters, observations, listings = [], countsMap = null, evidenceCollectors = [], evidenceSummary = {}, now = Date.now() }) {
   const registered = new Set(adapters.map((adapter) => adapter.sourceKey));
-  const counts = new Map();
-  for (const listing of listings) {
-    if (listing.provenance?.origin !== 'live' || !validateListingForIngestion(listing).isValid) continue;
-    const entry = counts.get(listing.source) || { observedRecords: 0, latestObservation: null, states: new Set() };
-    entry.observedRecords++;
-    if (listing.state) entry.states.add(listing.state);
-    const time = listing.sourceObservedAt || listing.provenance.observedAt;
-    if (Date.parse(time) <= now + 300_000 && (!entry.latestObservation || Date.parse(time) > Date.parse(entry.latestObservation))) entry.latestObservation = time;
-    counts.set(listing.source, entry);
+  const counts = countsMap instanceof Map ? countsMap : new Map();
+  if (!countsMap) {
+    for (const listing of listings) {
+      if (listing.provenance?.origin !== 'live' || !validateListingForIngestion(listing).isValid) continue;
+      const entry = counts.get(listing.source) || { observedRecords: 0, latestObservation: null, states: new Set() };
+      entry.observedRecords++;
+      if (listing.state) entry.states.add(listing.state);
+      const time = listing.sourceObservedAt || listing.provenance?.observedAt;
+      if (Date.parse(time) <= now + 300_000 && (!entry.latestObservation || Date.parse(time) > Date.parse(entry.latestObservation))) entry.latestObservation = time;
+      counts.set(listing.source, entry);
+    }
   }
   const sources = catalog.map((source) => {
     const automatedEvidence = evidenceCollectors.includes(source.id);

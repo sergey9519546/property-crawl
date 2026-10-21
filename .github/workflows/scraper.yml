@@ -40,3 +40,15 @@ jobs:
             git commit -m "chore(data): refresh listings from live scrapers [skip ci]"
             git push
           fi
+
+      - name: Trigger Production Scraper Run
+        env:
+          PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.onrender.com' }}
+          SCRAPER_ADMIN_TOKEN: ${{ secrets.SCRAPER_ADMIN_TOKEN }}
+        run: |
+          if [ -n "${SCRAPER_ADMIN_TOKEN}" ]; then
+            curl -s -X POST "${PRODUCTION_APP_URL}/api/scrapers/run" \
+              -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" \
+              -H "x-async: true" || echo "Production trigger skipped or timed out"
+          fi
+

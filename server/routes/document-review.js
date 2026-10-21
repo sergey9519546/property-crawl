@@ -206,8 +206,13 @@ async function hydratePendingCandidates(database) {
   try {
     // sort:'date' walks newest first, so HYDRATION_TOTAL_LIMIT takes the most
     // recent listings rather than whichever ones happened to sort first.
-    const { pool } = await scanAllListings(database, {}, { pageSize: 1000, sort: 'date' });
-    listings = pool;
+    if (database.isPg) {
+      const page = await database.getListings({ hasDocuments: true, limit: 1000, sort: 'date' });
+      listings = page.listings || [];
+    } else {
+      const { pool } = await scanAllListings(database, {}, { pageSize: 1000, sort: 'date' });
+      listings = pool;
+    }
   } catch {
     return [];
   }
