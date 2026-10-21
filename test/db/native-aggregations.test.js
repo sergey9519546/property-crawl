@@ -167,6 +167,9 @@ test('getAuctionCalendarNative (PostgreSQL mode) executes window-ranked week agg
   assert.equal(queries.length, 2, 'Ran meta query and week aggregation');
   assert.ok(queries[1].sql.includes("DATE_TRUNC('week'"), 'Executed DATE_TRUNC');
   assert.ok(queries[1].sql.includes('PERCENTILE_CONT(0.5)'), 'Executed native percentile');
+  assert.ok(queries[1].sql.includes('est_low,'), 'Includes est_low in CTE');
+  assert.ok(queries[1].sql.includes('est_high,'), 'Includes est_high in CTE');
+  assert.ok(queries[1].sql.includes('ORDER BY sale_date ASC, deal_score DESC'), 'Orders sample rank by sale_date then deal_score');
   assert.equal(result.scanned, 500);
   assert.equal(result.dropped.noDate, 5);
   assert.equal(result.weeks.length, 1);
@@ -209,6 +212,8 @@ test('getCompsCandidatesNative executes bounded geospatial query', async () => {
   assert.ok(queries[0].sql.includes('ST_DWithin(geog'));
   assert.ok(queries[0].sql.includes('ST_Distance(geog'));
   assert.ok(queries[0].sql.includes('latitude BETWEEN $4 AND $5'));
+  assert.ok(queries[0].sql.includes('AND id != $8'), 'Properly parameterizes target ID exclusion with parameter index');
+  assert.equal(queries[0].params[7], 'target-1', 'Passes target ID as 8th parameter');
   assert.equal(result.pool.length, 1);
   assert.equal(result.pool[0].id, 'comp-1');
 });

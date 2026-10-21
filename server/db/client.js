@@ -1294,6 +1294,8 @@ class DatabaseClient {
           city,
           state,
           opening_bid,
+          est_low,
+          est_high,
           deal_score,
           prop_type,
           source_key,
@@ -1301,7 +1303,7 @@ class DatabaseClient {
           DATE_TRUNC('week', sale_date::timestamp AT TIME ZONE 'UTC') AS week_start,
           ROW_NUMBER() OVER(
             PARTITION BY DATE_TRUNC('week', sale_date::timestamp AT TIME ZONE 'UTC')
-            ORDER BY deal_score DESC NULLS LAST, id ASC
+            ORDER BY sale_date ASC, deal_score DESC NULLS LAST, id ASC
           ) AS rn
         FROM listings
         WHERE (status = 'active' OR status IS NULL)
@@ -1487,7 +1489,7 @@ class DatabaseClient {
       let idCondition = '';
       if (target.id) {
         params.push(String(target.id));
-        idCondition = `AND id != ${params.length}`;
+        idCondition = 'AND id != $' + params.length;
       }
 
       const sql = `
@@ -1529,7 +1531,7 @@ class DatabaseClient {
       let idCondition = '';
       if (target.id) {
         params.push(String(target.id));
-        idCondition = `AND id != ${params.length}`;
+        idCondition = 'AND id != $' + params.length;
       }
       const stateSql = `
         SELECT ${SUMMARY_LISTING_SELECT}

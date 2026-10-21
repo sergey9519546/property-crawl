@@ -325,7 +325,7 @@ zip_counts AS (
     'zip'::text AS kind,
     SUBSTRING(TRIM(zip) FROM 1 FOR 5)::text AS key,
     SUBSTRING(TRIM(zip) FROM 1 FOR 5)::text AS label,
-    state::text AS state,
+    MAX(state)::text AS state,
     COUNT(*)::int AS count,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
     AVG(opening_bid)::float8 AS "meanOpeningBid",
@@ -346,14 +346,14 @@ zip_counts AS (
     FROM base b
     WHERE zip IS NOT NULL AND TRIM(zip) != ''
   ) s
-  GROUP BY SUBSTRING(TRIM(zip) FROM 1 FOR 5), state
+  GROUP BY SUBSTRING(TRIM(zip) FROM 1 FOR 5)
 ),
 city_counts AS (
   SELECT
     'city'::text AS kind,
     (UPPER(TRIM(state)) || '::' || LOWER(TRIM(city)))::text AS key,
     (LOWER(TRIM(city)) || ', ' || UPPER(TRIM(state)))::text AS label,
-    state::text AS state,
+    UPPER(TRIM(state))::text AS state,
     COUNT(*)::int AS count,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
     AVG(opening_bid)::float8 AS "meanOpeningBid",
@@ -376,7 +376,7 @@ city_counts AS (
       AND city IS NOT NULL AND TRIM(city) != ''
       AND state IS NOT NULL AND TRIM(state) != ''
   ) c
-  GROUP BY UPPER(TRIM(state)), LOWER(TRIM(city)), state, city
+  GROUP BY UPPER(TRIM(state)), LOWER(TRIM(city))
 )
 SELECT * FROM zip_counts
 UNION ALL
