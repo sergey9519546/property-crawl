@@ -180,7 +180,7 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
   test('dossier integration incorporates opportunity signals and triagePriority', () => {
     const dossier = buildPropertyDossier(sampleListing());
     assert.ok(Array.isArray(dossier.opportunitySignals));
-    assert.equal(dossier.opportunitySignals.length, 6);
+    assert.equal(dossier.opportunitySignals.length, 8);
     assert.equal(typeof dossier.triagePriority, 'number');
     assert.ok(dossier.summary.opportunitySignals >= 0);
   });
@@ -203,7 +203,9 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
     assert.equal(status, 200);
     assert.equal(body.listingId, 'MOCK-1');
-    assert.equal(body.signals.length, 6);
+    assert.equal(body.signals.length, 8);
+    assert.ok(body.componentScores && typeof body.componentScores === 'object');
+    assert.equal(typeof body.componentScores.bidToValueRatio.earnedPoints, 'number');
     assert.equal(typeof body.triagePriority, 'number');
 
     // Missing listing
@@ -259,7 +261,7 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
   test('the dossier carries the unavailable flag into its opportunity signals', () => {
     const dossier = buildPropertyDossier(sampleListing(), { historyUnavailable: true });
     const bid = dossier.opportunitySignals.find((s) => s.key === 'bid_reduction');
-    assert.equal(dossier.opportunitySignals.length, 6);
+    assert.equal(dossier.opportunitySignals.length, 8);
     assert.equal(bid.label, 'Bid history unavailable');
     assert.ok(!/No downward price adjustment recorded/.test(bid.reason));
   });
@@ -326,5 +328,59 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
       publicRecords: { parcel: { status: 'matched', properties: { livingAreaSqft: 2223 }, source: { url: 'https://x.gov/2' } } }
     });
     assert.equal(beyond.signals.find((s) => s.key === 'building_area_discrepancy').status, 'contradicted');
+  });
+
+  // Real publisher statuses are prose ("Status: Active - Postponed",
+  // "Auction Ends: Oct 21, 2026"), not enums. The relist detector must
+  // normalize them; anchored enum matching never fires on production data.
+  test('detects returned_to_market from prose status history (real publisher vocabulary)', () => {
+    const crypto = require('node:crypto');
+    const recordKey = crypto.createHash('sha256').update('civilview\n99999').digest('hex');
+    const observations = {
+      records: {
+        [recordKey]: {
+          history: [{ fields: { status: 'Status: Active - Postponed' } }],
+        },
+      },
+      signals: [],
+    };
+    const relisted = evaluateOpportunitySignals(
+      sampleListing({ status: 'Auction Ends: Oct 21, 2026' }),
+      { observations },
+    );
+    const relistSig = relisted.signals.find((s) => s.key === 'returned_to_market');
+    assert.equal(relistSig.status, 'supported');
+    assert.equal(relistSig.evidenceClass, 'exact_source_observation');
+
+    // The transition that matters most: reverted-to-beneficiary -> active.
+    const revertedHistory = {
+      records: { [recordKey]: { history: [{ fields: { status: 'Status: Auctioned - Reverted to Beneficiary' } }] } },
+      signals: [],
+    };
+    const reverted = evaluateOpportunitySignals(
+      sampleListing({ status: 'Status: Active' }),
+      { observations: revertedHistory },
+    );
+    assert.equal(reverted.signals.find((s) => s.key === 'returned_to_market').status, 'supported');
+
+    // Still postponed is not a relist.
+    const stillPostponed = evaluateOpportunitySignals(
+      sampleListing({ status: 'Status: Active - Postponed until November' }),
+      { observations },
+    );
+    assert.equal(stillPostponed.signals.find((s) => s.key === 'returned_to_market').status, 'unknown');
+  });
+
+  test('publisher documents signal reports availability without claiming verification', () => {
+    const withDocs = evaluateOpportunitySignals(sampleListing({ hasDocuments: true }));
+    const docSig = withDocs.signals.find((s) => s.key === 'publisher_documents');
+    assert.equal(docSig.status, 'supported');
+    assert.equal(docSig.evidenceClass, 'publisher_document_links');
+    assert.match(docSig.reason, /publisher-hosted files/);
+    assert.doesNotMatch(docSig.reason, /verified legal\/title/);
+
+    const withoutDocs = evaluateOpportunitySignals(sampleListing({ hasDocuments: false }));
+    const emptySig = withoutDocs.signals.find((s) => s.key === 'publisher_documents');
+    assert.equal(emptySig.status, 'unknown');
   });
 });

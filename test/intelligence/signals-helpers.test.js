@@ -85,13 +85,22 @@ test('SIGNAL_WEIGHTS: object is frozen', () => {
 
 // --- shape invariants --------------------------------------------------
 
-test('evaluateOpportunitySignals: empty listing still returns 6 signals and valid triage', () => {
+test('evaluateOpportunitySignals: empty listing still returns 8 signals and valid triage', () => {
   const result = evaluateOpportunitySignals({}, { now: NOW });
-  assert.equal(result.signals.length, 6);
+  assert.equal(result.signals.length, 8);
   const keys = result.signals.map((s) => s.key);
   assert.deepEqual(
     [...new Set(keys)].sort(),
-    ['bid_reduction', 'bid_to_value_ratio', 'building_area_discrepancy', 'returned_to_market', 'sale_date_known', 'title_equity_unresolved']
+    [
+      'bid_reduction',
+      'bid_to_value_ratio',
+      'building_area_discrepancy',
+      'municipal_code_enforcement',
+      'publisher_documents',
+      'returned_to_market',
+      'sale_date_known',
+      'title_equity_unresolved'
+    ]
   );
   assert.equal(result.triagePriority, 0);
   assert.ok(result.triagePriority <= 99);
@@ -345,7 +354,7 @@ test('title_equity_unresolved: missing redemptionDays -> unresolved', () => {
 
 // --- triage priority ---------------------------------------------------
 
-test('triage: all six signals supported -> weighted score of 94', () => {
+test('triage: all eight signals supported -> weighted score of 94', () => {
   const observations = { signals: [{ listingId: 'L1', type: 'bid_reduced' }] };
   const publicRecords = { parcel: { status: 'matched', properties: { livingAreaSqft: 1500 } } };
   const result = evaluateOpportunitySignals(
@@ -353,10 +362,19 @@ test('triage: all six signals supported -> weighted score of 94', () => {
       openingBid: 50000, estLow: 200000, estHigh: 300000,
       sqft: 1500, saleDate: '2099-12-31', status: 'returned',
       seniorLienRisk: 'low', redemptionDays: 30, cashToClose: 5000,
+      codeEnforcement: { checked: true },
+      hasDocuments: true,
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: 'Test Publisher',
+        recordId: 'REC-123',
+        sourceFacts: { documents: [{ title: 'Foreclosure Notice', fileUrl: 'https://example.com/notice.pdf', access: 'public' }] },
+      },
     }),
     { observations, publicRecords, now: NOW },
   );
-  assert.equal(result.summary.supported, 6);
+  assert.equal(result.summary.supported, 8);
   assert.equal(result.summary.unknown, 0);
   assert.equal(result.summary.contradicted, 0);
   // ratio 0.8 -> 24, then 20 + 20 + 10 + 10 + 10 completeness
@@ -368,9 +386,10 @@ test('triage: a contradicted area record is a flag, never a score bonus', () => 
   const listing = liveListing({ sqft: 1000, saleDate: '2099-12-31' });
   const result = evaluateOpportunitySignals(listing, { publicRecords, now: NOW });
   assert.equal(signalFor(result, 'building_area_discrepancy').status, 'contradicted');
-  // Only sale_date is supported: 20 pts, plus completeness 1/6 * 10 = 1.67.
+  // Only sale_date is supported: 20 pts.
+  // With dataCompleteness double-counting fixed, sale_date is no longer counted into completeness.
   // The area contradiction contributes nothing.
-  assert.equal(result.triagePriority, 22);
+  assert.equal(result.triagePriority, 20);
 });
 
 // --- UNREADABLE OBSERVATION HISTORY ------------------------------------
@@ -415,5 +434,116 @@ test('an observed reduction is still reported when the store is partly unavailab
 test('historyUnavailable defaults to false, so existing callers are unchanged', () => {
   const result = evaluateOpportunitySignals(liveListing(), { now: NOW });
   assert.equal(result.historyUnavailable, false);
-  assert.equal(result.signals.length, 6);
+  assert.equal(result.signals.length, 8);
+});
+
+// --- EXPANSION & ACCURACY TESTS ---------------------------------------
+
+test('bid_to_value_ratio: resolves from enrolled assessor registry when publisher estimate is missing', () => {
+  const listing = liveListing({
+    state: 'OH',
+    county: 'Cuyahoga',
+    openingBid: 100000,
+    estLow: null,
+    estHigh: null,
+    assessorParcel: {
+      assessedValue: { total: 70000 },
+      canonicalApn: '101-01-001'
+    }
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  const ratioSig = signalFor(result, 'bid_to_value_ratio');
+  assert.equal(ratioSig.status, 'supported');
+  assert.equal(ratioSig.valuationProvenance, 'enrolled_assessor_registry');
+  assert.match(ratioSig.reason, /derived from Ohio Rev\. Code § 5715\.01/);
+});
+
+test('bid_to_value_ratio: resolves from explicit assessed basis + FHFA HPI when publisher estimate is missing', () => {
+  const listing = liveListing({
+    state: 'OH',
+    county: 'Franklin',
+    openingBid: 120000,
+    estLow: null,
+    estHigh: null,
+    assessedValue: 150000,
+    assessmentYear: 2020,
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  const ratioSig = signalFor(result, 'bid_to_value_ratio');
+  assert.equal(ratioSig.status, 'supported');
+  assert.equal(ratioSig.valuationProvenance, 'fhfa_hpi_macro_trend');
+  assert.match(ratioSig.reason, /FHFA.*Macro Trend/);
+});
+
+test('returned_to_market: detects relisting from observation store structured snapshot events', () => {
+  const listing = liveListing({
+    id: 'L1',
+    status: 'scheduled',
+    provenance: { origin: 'live', observed: true, publisher: 'Pub', recordId: 'REC-99' },
+  });
+
+  const observations = {
+    records: {},
+    signals: [
+      { listingId: 'L1', kind: 'returned_to_market', recordId: 'REC-99' }
+    ]
+  };
+
+  const result = evaluateOpportunitySignals(listing, { observations, now: NOW });
+  const relistSig = signalFor(result, 'returned_to_market');
+  assert.equal(relistSig.status, 'supported');
+  assert.equal(relistSig.evidenceClass, 'exact_source_observation');
+  assert.match(relistSig.reason, /Observation history confirms property returned to active schedule/);
+});
+
+test('componentScores: exposes earned points and weights for explainable UI breakdown', () => {
+  const listing = liveListing({
+    openingBid: 50000,
+    estLow: 200000,
+    estHigh: 300000,
+    saleDate: '2099-12-31',
+    seniorLienRisk: 'low',
+    redemptionDays: 30,
+    cashToClose: 5000,
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  assert.ok(result.componentScores);
+  assert.equal(result.componentScores.saleDateKnown.earnedPoints, 20);
+  assert.equal(result.componentScores.saleDateKnown.maxPoints, 20);
+  assert.equal(result.componentScores.bidToValueRatio.maxPoints, 30);
+  assert.ok(result.componentScores.bidToValueRatio.earnedPoints > 0);
+  assert.equal(result.componentScores.dataCompleteness.maxPoints, 10);
+});
+
+test('municipal_code_enforcement: flags active municipal violations and survives liability', () => {
+  const listing = liveListing({
+    state: 'OH',
+    municipalViolations: [
+      { violationType: 'WEED_ABATEMENT', status: 'OPEN', fineAmount: 450 }
+    ]
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  const muniSig = signalFor(result, 'municipal_code_enforcement');
+  assert.equal(muniSig.status, 'supported');
+  assert.match(muniSig.reason, /1 unresolved municipal citation/);
+});
+
+test('publisher_documents: reports observed documents honestly (publisher-hosted, not verified instruments)', () => {
+  const listing = liveListing({
+    hasDocuments: true,
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  const docSig = signalFor(result, 'publisher_documents');
+  assert.equal(docSig.status, 'supported');
+  // The evidence class must not claim verification: production vault
+  // documents are publisher-hosted auction files (consumer notices,
+  // agreement templates), never independently verified title instruments.
+  assert.equal(docSig.evidenceClass, 'publisher_document_links');
+  assert.match(docSig.reason, /publisher-hosted files/);
+  assert.match(docSig.reason, /not independently verified docket or title instruments/);
 });

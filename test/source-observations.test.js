@@ -176,3 +176,77 @@ test('recordSourceRun recovers from a stale lock older than 30s', () => {
   assert.equal(stored.runs.civilview.acceptedCount, 1);
   assert.equal(fs.existsSync(lockPath), false);
 });
+
+// --- real production status vocabulary ---------------------------------
+//
+// The anchored ^enum$ classifier matched 0 of 1,526 real status transitions
+// because publisher statuses are prose. These tests pin the exact strings
+// observed in the live store so the classifier can never silently regress
+// to enum-only matching.
+
+test('classifyStatusActivity normalizes real publisher status prose', () => {
+  const { classifyStatusActivity } = require('../server/sources/observations');
+  // The exact strings counted across 10,285 live records:
+  assert.equal(classifyStatusActivity('Status: Active - Postponed'), 'inactive', '950 live listings carry this status');
+  assert.equal(classifyStatusActivity('Status: Cancelled'), 'inactive');
+  assert.equal(classifyStatusActivity('Status: Auctioned - Reverted to Beneficiary'), 'inactive');
+  assert.equal(classifyStatusActivity('Status: Withdrawn'), 'inactive');
+  assert.equal(classifyStatusActivity('Auction Ends: Oct 07, 2026'), 'active');
+  assert.equal(classifyStatusActivity('Status: Active'), 'active');
+  assert.equal(classifyStatusActivity('Status: Active - Accepting Bids'), 'active');
+  assert.equal(classifyStatusActivity('Re-Scheduled'), 'inactive');
+  assert.equal(classifyStatusActivity(''), 'unknown');
+  assert.equal(classifyStatusActivity(null), 'unknown');
+  // An inactive marker wins over an "Active" prefix: "Active - Postponed"
+  // means the sale is currently postponed.
+  assert.equal(classifyStatusActivity('ACTIVE - POSTPONED'), 'inactive');
+});
+
+test('compareSnapshots classifies real-vocabulary returned-to-market transitions', () => {
+  const { compareSnapshots } = require('../server/sources/observations');
+  const base = { observedAt: '2026-10-01T00:00:00.000Z', fields: {} };
+  const next = { observedAt: '2026-10-05T00:00:00.000Z', fields: {} };
+
+  // The relist event that matters most in production: a property auctioned
+  // off and reverted to the beneficiary, later posted active again.
+  const reverted = { ...base, fields: { status: 'Status: Auctioned - Reverted to Beneficiary' } };
+  const activeAgain = { ...next, fields: { status: 'Status: Active' } };
+  const relist = compareSnapshots(reverted, activeAgain).find((c) => c.field === 'status');
+  assert.equal(relist.kind, 'returned_to_market');
+
+  // Postponed -> new auction date is a return to the active schedule.
+  const postponed = { ...base, fields: { status: 'Status: Active - Postponed' } };
+  const rescheduled = { ...next, fields: { status: 'Auction Ends: Oct 21, 2026' } };
+  const relist2 = compareSnapshots(postponed, rescheduled).find((c) => c.field === 'status');
+  assert.equal(relist2.kind, 'returned_to_market');
+
+  // Active -> cancelled is a status change, not a relist.
+  const cancel = compareSnapshots(activeAgain, { ...next, fields: { status: 'Status: Cancelled' } })
+    .find((c) => c.field === 'status');
+  assert.equal(cancel.kind, 'status_changed');
+
+  // Staying postponed is not a relist either.
+  const still = compareSnapshots(postponed, { ...next, fields: { status: 'Status: Active - Postponed until November' } })
+    .find((c) => c.field === 'status');
+  assert.equal(still.kind, 'status_changed');
+});
+
+test('recordSourceRun reports the accepted snapshots for database persistence', () => {
+  const result = updateObservations(emptyObservations(), 'civilview', {
+    listings: [listing()], error: null,
+  }, { now: NOW });
+  assert.equal(result.accepted, 1);
+  assert.ok(Array.isArray(result.snapshots) && result.snapshots.length === 1);
+  assert.equal(result.snapshots[0].recordId, '2128964683');
+  assert.equal(result.snapshots[0].fields.openingBid, 100000);
+
+  // Stale captures that do not advance the record must not be reported as
+  // persisted snapshots.
+  const data = emptyObservations();
+  updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
+  const stale = listing({ sourceObservedAt: '2026-09-05T16:00:00.000Z' });
+  stale.provenance = { ...stale.provenance, observedAt: stale.sourceObservedAt };
+  const staleResult = updateObservations(data, 'civilview', { listings: [stale], error: null }, { now: NOW });
+  assert.equal(staleResult.accepted, 0);
+  assert.equal(staleResult.snapshots.length, 0);
+});

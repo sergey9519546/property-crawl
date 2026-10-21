@@ -145,6 +145,25 @@ function snapshot(listing) {
 
 function present(value) { return value !== null && value !== undefined && value !== ''; }
 
+// Production publisher statuses are prose, not enums: "Status: Active - Postponed"
+// (950 live listings), "Status: Cancelled", "Status: Auctioned - Reverted to
+// Beneficiary", "Auction Ends: Oct 07, 2026". Anchored ^enum$ matching against
+// that vocabulary classifies 0 of 1,526 real transitions, so a returned-to-market
+// event never fires. Normalize first (strip the "Status:" prefix, collapse
+// whitespace, lowercase), then match on substrings. A postponement or
+// cancellation marker wins over an "active" prefix, because "Active - Postponed"
+// means the sale is currently postponed, not currently active.
+const INACTIVE_STATUS_MARKERS = /(postpon|adjourn|stayed|reschedul|withdraw|cancell|cancel|unsold|inactive|revert)/;
+const ACTIVE_STATUS_MARKERS = /(active|scheduled|available|relisted|accepting bids|open for bidding|auction ends|auction:)/;
+
+function classifyStatusActivity(value) {
+  const normalized = String(value || '').replace(/^status\s*:\s*/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!normalized) return 'unknown';
+  if (INACTIVE_STATUS_MARKERS.test(normalized)) return 'inactive';
+  if (ACTIVE_STATUS_MARKERS.test(normalized)) return 'active';
+  return 'unknown';
+}
+
 function compareSnapshots(previous, current) {
   // New records and newly populated fields do not demonstrate a change in sale terms.
   if (!previous || Date.parse(current.observedAt) <= Date.parse(previous.observedAt)) return [];
@@ -156,8 +175,8 @@ function compareSnapshots(previous, current) {
     if (field === 'openingBid') kind = Number(after) < Number(before) ? 'bid_reduced' : 'bid_changed';
     if (field === 'saleDate') kind = 'sale_date_changed';
     if (field === 'status') {
-      kind = /^(withdrawn|cancelled|canceled|unsold|postponed|inactive)$/i.test(String(before))
-        && /^(active|scheduled|available|relisted)$/i.test(String(after)) ? 'returned_to_market' : 'status_changed';
+      kind = classifyStatusActivity(before) === 'inactive'
+        && classifyStatusActivity(after) === 'active' ? 'returned_to_market' : 'status_changed';
     }
     if (field === 'deposit') kind = 'terms_changed';
     if (field === 'address') kind = 'address_changed';
@@ -177,6 +196,7 @@ function updateObservations(data, sourceId, run, options = {}) {
   });
   let newSignals = 0;
   let applied = 0;
+  const acceptedSnapshots = [];
   // A failed request is never evidence that an item disappeared or sold.
   if (!run.error) {
     for (const listing of accepted) {
@@ -213,6 +233,9 @@ function updateObservations(data, sourceId, run, options = {}) {
         latest: current,
         history: [...(existing?.history || []), ...(archivedPrevious ? [archivedPrevious] : [])].slice(-20),
       };
+      // Only snapshots that actually advanced the record are reported to the
+      // persistence hook, so PostgreSQL rows mirror the filesystem history.
+      acceptedSnapshots.push(current);
       applied++;
     }
   }
@@ -230,7 +253,7 @@ function updateObservations(data, sourceId, run, options = {}) {
     runs: (priorRun?.runs || 0) + 1,
   };
   data.updatedAt = now;
-  return { accepted: applied, newSignals };
+  return { accepted: applied, newSignals, snapshots: acceptedSnapshots };
 }
 
 function compactObservations(data) {
@@ -314,6 +337,6 @@ function recordSourceRun(sourceId, run, options = {}) {
 }
 
 module.exports = {
-  DEFAULT_PATH, MAX_BYTES, compactObservations, compareSnapshots, loadObservations,
+  DEFAULT_PATH, MAX_BYTES, classifyStatusActivity, compactObservations, compareSnapshots, loadObservations,
   observationStoreCapacity, publicObservationStoreCapacity, recordSourceRun, updateObservations,
 };

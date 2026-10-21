@@ -1,14 +1,21 @@
 {
   "worktrees": {},
-  "sessions": {},
+  "sessions": {
+    "ses_ea2d89632ffeIwLHg96G04gEPe": {
+      "worktreeId": null,
+      "createdAt": "2026-10-21T06:30:26.544Z"
+    }
+  },
   "tabOrder": {
     "local": [
-      "pending:b278a485-b723-4a5f-8790-63069aa7dbf6"
+      "pending:b278a485-b723-4a5f-8790-63069aa7dbf6",
+      "ses_ea2d89632ffeIwLHg96G04gEPe"
     ]
   },
   "sessionsCollapsed": true,
   "activeTarget": {
     "projectId": "prj-7308412530d0",
-    "kind": "local"
+    "kind": "session",
+    "sessionId": "ses_ea2d89632ffeIwLHg96G04gEPe"
   }
 }

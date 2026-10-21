@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS listings (
       END
     ) STORED,
     deal_score INT CHECK (deal_score BETWEEN 1 AND 99),
+    triage_priority INT CHECK (triage_priority BETWEEN 0 AND 99),
     equity_spread NUMERIC(14, 2) GENERATED ALWAYS AS (
       CASE
         WHEN est_low IS NULL OR est_high IS NULL OR opening_bid IS NULL
@@ -208,6 +209,24 @@ CREATE TABLE IF NOT EXISTS ingestion_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 6. Source Observations & Snapshot History
+CREATE TABLE IF NOT EXISTS source_observations (
+    id VARCHAR(64) PRIMARY KEY,
+    listing_id VARCHAR(64) NOT NULL,
+    source_key VARCHAR(32) NOT NULL REFERENCES sources(key) ON DELETE CASCADE,
+    record_id VARCHAR(128) NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    opening_bid NUMERIC(14, 2),
+    sale_date DATE,
+    status VARCHAR(64),
+    deposit TEXT,
+    address TEXT,
+    notice_excerpt TEXT,
+    notice_sha256 CHAR(64),
+    raw_payload JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ==========================================================
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 -- ==========================================================
@@ -216,6 +235,7 @@ CREATE INDEX IF NOT EXISTS idx_listings_source ON listings(source_key);
 CREATE INDEX IF NOT EXISTS idx_listings_state ON listings(state);
 CREATE INDEX IF NOT EXISTS idx_listings_sale_date ON listings(sale_date);
 CREATE INDEX IF NOT EXISTS idx_listings_deal_score ON listings(deal_score DESC NULLS LAST);
+CREATE INDEX IF NOT EXISTS idx_listings_triage_priority ON listings(triage_priority DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_listings_equity_spread ON listings(equity_spread DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_listings_opening_bid ON listings(opening_bid ASC NULLS LAST);
 CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
@@ -233,6 +253,9 @@ CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_i
 CREATE INDEX IF NOT EXISTS idx_alert_matches_listing ON alert_matches(listing_id);
 CREATE INDEX IF NOT EXISTS idx_listing_history_listing ON listing_history(listing_id, source_observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listing_history_recorded ON listing_history(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_observations_listing_observed ON source_observations(listing_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_observations_source_record ON source_observations(source_key, record_id, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_observations_observed_at ON source_observations(observed_at DESC);
 
 -- ==========================================================
 -- Migration 002: Spatial Radius Search Function

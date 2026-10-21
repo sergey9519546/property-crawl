@@ -23,10 +23,19 @@ export type OpportunitySignal = {
   nextAction: string;
 };
 
+export type ComponentScore = {
+  label: string;
+  weight: number;
+  maxPoints: number;
+  earnedPoints: number;
+  status: string;
+};
+
 export type OpportunitySignalsData = {
   triagePriority: number;
   signals: OpportunitySignal[];
   weights?: Record<string, number>;
+  componentScores?: Record<string, ComponentScore>;
   summary?: { supported: number; unknown: number; contradicted: number };
   disclaimer?: string;
   /** True when the observation history could not be read, so negative findings are unverified. */
@@ -148,7 +157,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
               <span className="text-2xl font-black text-white">{priority}</span>
               <span className="text-xs font-semibold text-slate-400">/99</span>
             </div>
-            <p className="text-[9px] text-slate-500 mt-0.5">6-signal · independent of modeled Deal Score</p>
+            <p className="text-[9px] text-slate-500 mt-0.5">{data.signals.length}-signal · independent of modeled Deal Score</p>
           </div>
           <div
             className={cn(
@@ -190,17 +199,42 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         </button>
 
 {showWeights && (
-          <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          <div className="mt-3 pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {Object.entries(weights).map(([key, value]) => {
               const detail = WEIGHT_DETAILS[key];
               if (!detail) return null;
+              const comp = data.componentScores?.[key];
+              const maxPts = comp?.maxPoints ?? Math.round(value * 100);
+              const earnedPts = comp?.earnedPoints ?? 0;
+              const fillPct = maxPts > 0 ? Math.min(100, Math.round((earnedPts / maxPts) * 100)) : 0;
               return (
-                <div key={key} className="p-2 rounded-lg bg-white border border-slate-200 flex flex-col justify-between">
+                <div key={key} className="p-2.5 rounded-lg bg-white border border-slate-200 flex flex-col justify-between gap-1.5">
                   <div className="flex items-center justify-between font-semibold text-slate-900">
                     <span>{detail.label}</span>
-                    <span className="text-emerald-700 font-extrabold">{weightPercent(value)}</span>
+                    <div className="flex items-center gap-1.5 text-right">
+                      {comp ? (
+                        <span className="font-mono text-[11px] font-bold text-slate-800">
+                          {earnedPts} / {maxPts} <span className="text-[10px] text-slate-500 font-normal">pts</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-extrabold">{weightPercent(value)}</span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">{detail.desc}</p>
+                  {/* Mini-bar */}
+                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-300",
+                        earnedPts > 0 ? "bg-emerald-600" : "bg-slate-300"
+                      )}
+                      style={{ width: `${fillPct}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <p className="leading-snug text-[10px]">{detail.desc}</p>
+                    <span className="text-[10px] font-semibold text-slate-400 shrink-0 ml-1.5">{weightPercent(value)} wt</span>
+                  </div>
                 </div>
               );
             })}
