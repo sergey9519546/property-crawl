@@ -1,6 +1,6 @@
 const db = require('../db/client');
 const { createHash } = require('node:crypto');
-const { loadObservations } = require('../sources/observations');
+const { loadObservationsForRecord } = require('../db/observations-persistence');
 const { buildPropertyDossier } = require('../intelligence/dossier');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const durableEvidence = require('../discovery/evidence');
@@ -8,7 +8,6 @@ const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
 function createPropertyIntelligenceHandler(dependencies = {}) {
   const database = dependencies.database || db;
-  const readHistory = dependencies.loadObservations || loadObservations;
   const publicRecords = dependencies.buildPublicRecordEvidence || ((listing) => require('../public-records').buildPublicRecordEvidence(listing, { allowNetwork: true, timeoutMs: 7000 }));
   const evidenceStore = dependencies.durableEvidence || durableEvidence;
   const env = dependencies.env || process.env;
@@ -53,11 +52,19 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
         evidence = await inFlight.get(key);
       }
       let observations = { records: {}, signals: [] }, historyUnavailable = false, stored = null;
-      if (database.isPg) {
+      if (database.isPg && database.pool) {
         stored = await evidenceStore.loadEvidence(database.pool, listing);
-        observations = stored.observations;
+        // source_observations (migrations 025 + 027) is the operational
+        // history. While it is still filling for a record, the durable
+        // discovery-evidence timeline supplies the evaluator's history — both
+        // are Postgres, and both replay the same compareSnapshots classifier,
+        // so a transition cannot be classified two different ways.
+        const pgHistory = await loadObservationsForRecord(database.pool, listing);
+        observations = Object.keys(pgHistory.records).length ? pgHistory : (stored.observations || observations);
       } else {
-        try { observations = await readHistory(); } catch (_) { historyUnavailable = true; }
+        // No Postgres: observation history is unavailable, and the dossier
+        // must not read a stale local file to pretend otherwise.
+        historyUnavailable = true;
       }
       const { observations: _observations, ...extensions } = stored || {};
       // Anonymous GET must never leak operator-funded research, durable

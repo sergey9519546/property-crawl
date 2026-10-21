@@ -42,7 +42,7 @@ function parseOptions(args) {
 }
 
 async function collect(source, options = {}) {
-  if (source !== 'civilview' && Object.keys(options).some((key) => key !== 'storePath' && key !== 'observationPath' && key !== 'restart')) throw new Error('Coverage options are supported only for civilview');
+  if (source !== 'civilview' && Object.keys(options).some((key) => key !== 'storePath' && key !== 'restart')) throw new Error('Coverage options are supported only for civilview');
   const storePath = options.storePath || process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../.cache/live-listings.json');
   const previous = loadLiveRecords(storePath);
   const scraperMap = supportedScraperMap();
@@ -91,37 +91,33 @@ async function collect(source, options = {}) {
   try {
     records = await scraper.scrapeFeed();
     if (!Array.isArray(records)) throw new TypeError(`${source} returned a non-array payload`);
-    const { recordSourceRun } = require('../server/sources/observations');
-    const observationResult = recordSourceRun(source, {
+    // PostgreSQL is the sole operational observation store (migrations 025 +
+    // 027). Without a reachable database the run cannot record its history
+    // anywhere, and that failure is surfaced on the error instead of being
+    // absorbed by a local file.
+    const { recordSourceRun } = require('../server/db/observations-persistence');
+    const db = require('../server/db/client');
+    await db.verifyConnection();
+    const observationResult = await recordSourceRun(db.pool, source, {
       listings: records,
       error: null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
-    }, { filePath: options.observationPath });
-    // Mirror the accepted snapshots into PostgreSQL (migration 025), the
-    // same as the scheduler's ingest path. Best-effort: the filesystem store
-    // remains the operational record.
-    try {
-      const db = require('../server/db/client');
-      if (db.isPg && observationResult.snapshots && observationResult.snapshots.length) {
-        const { persistSourceObservations } = require('../server/db/observations-persistence');
-        const persisted = await persistSourceObservations(db.pool, source, observationResult.snapshots);
-        if (persisted.persisted > 0) {
-          console.error(`[collect-source] persisted ${persisted.persisted} observation(s) for ${source} to PostgreSQL`);
-        }
-      }
-    } catch (persistError) {
-      console.error(`[collect-source] source observations were not persisted: ${persistError.message}`);
+    });
+    if (observationResult.persisted > 0) {
+      console.error(`[collect-source] persisted ${observationResult.persisted} observation(s) for ${source} to PostgreSQL`);
     }
   } catch (error) {
     try {
-      const { recordSourceRun } = require('../server/sources/observations');
-      recordSourceRun(source, {
+      const { recordSourceRun } = require('../server/db/observations-persistence');
+      const db = require('../server/db/client');
+      await db.verifyConnection();
+      await recordSourceRun(db.pool, source, {
         listings: [],
         error: error.message,
         rejectedCount: 0,
         durationMs: Date.now() - startedAt,
-      }, { filePath: options.observationPath });
+      });
     } catch (observationError) {
       error.observationError = observationError;
     }

@@ -694,6 +694,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <option value="score">Modeled score</option>
             <option value="quality">Evidence quality</option>
             <option value="opportunity">Opportunity rank</option>
+            <option value="triage">Research priority</option>
             <option value="date">Sale date</option>
             <option value="bid-asc">Opening amount</option>
           </select>

@@ -2,20 +2,12 @@
 
 // test/health-observation-store-capacity.test.js
 //
-// The observation store has a 64MB ceiling and loadObservations throws past
-// it. Measured on this deployment: 51.84MB after a 32.6-day window, ~1.59MB per
-// day, about 7.6 days of headroom left.
-//
-// Nothing reported that. /api/health carried inventoryFreshness, documentReview
-// store errors and workspace store errors -- every other backing store was
-// observable -- and the one file that provably fills up and then degrades had
-// no numbers at all. The degradation is honest when it arrives (sources flip to
-// history_unavailable), but an operator learns about it only once it is
-// already happening.
-//
-// This adds the numbers to /api/health. It does NOT decide a retention policy:
-// what to drop is a product decision. Making the remaining runway legible is
-// not.
+// Observation history is stored in Postgres (migrations 025 + 027). The old
+// bounded JSON file had a ceiling it provably reached — 51.84MB of 64MB,
+// ~7.6 days of runway — and nothing reported it until loadObservations threw.
+// /api/health still publishes the store's numbers, but the facts changed with
+// the store: rows, observed span and table size, not a countdown to a file
+// ceiling that no longer exists.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -24,45 +16,58 @@ const { test } = require('node:test');
 
 const ROOT = path.resolve(__dirname, '..');
 const SERVER = fs.readFileSync(path.join(ROOT, 'server', 'server.js'), 'utf8');
-const OBSERVATIONS = fs.readFileSync(path.join(ROOT, 'server', 'sources', 'observations.js'), 'utf8');
+const PERSISTENCE = fs.readFileSync(path.join(ROOT, 'server', 'db', 'observations-persistence.js'), 'utf8');
 
-test('/api/health publishes the observation store size against its ceiling', () => {
+test('/api/health publishes the observation store state', () => {
   assert.match(
     SERVER,
     /observationStore/,
     'the observation store is a backing store like the others health already '
       + 'reports on; it should be visible there too',
   );
-});
-
-test('the reported capacity is derived from the real file and the real ceiling', () => {
-  // A health field that quotes constants instead of measuring the file would be
-  // worse than no field: it would report the same numbers on a full disk.
   assert.match(
-    OBSERVATIONS,
-    /statSync\(/,
-    'capacity must be measured with statSync, not asserted from a constant',
-  );
-  assert.match(
-    OBSERVATIONS,
-    /function\s+\w*(capacity|Capacity|stats|Stats)\w*/,
-    'observations should expose a capacity helper the health route can call',
+    SERVER,
+    /observationStoreStats/,
+    'health must call the Postgres-backed stats reader, not the retired file measurement',
   );
 });
 
-test('the runway is reported, not only the percentage', () => {
+test('the reported facts are measured from Postgres, not asserted from constants', () => {
+  // A health field that quotes constants instead of querying the store would
+  // report the same numbers regardless of what the store holds.
   assert.match(
-    OBSERVATIONS,
-    /runway|daysRemaining|estimatedDays/i,
-    'a percentage of a cap does not tell an operator when to act; the number of '
-      + 'days at the observed growth rate does',
+    PERSISTENCE,
+    /FROM source_observations/,
+    'stats must be measured with a query against the store, not asserted from a constant',
+  );
+  assert.match(
+    PERSISTENCE,
+    /pg_total_relation_size/,
+    'the table size must be measured by Postgres itself',
+  );
+  assert.match(
+    PERSISTENCE,
+    /function\s+\w*observationStoreStats\w*/,
+    'the persistence layer should expose a stats helper the health route can call',
   );
 });
 
-test('an absent store reports zero rather than null', () => {
+test('the report names the freshness an operator can act on, not just volume', () => {
   assert.match(
-    OBSERVATIONS,
-    /return\s*\{[^}]*bytes:\s*0/,
-    'an absent store is a real, reportable state -- 0 bytes -- not an unknown',
+    PERSISTENCE,
+    /newestObservedAt/,
+    'a table full of stale rows is not current coverage; the newest observation '
+      + 'is the fact an operator acts on',
+  );
+});
+
+test('a store with no rows is a real, reportable state — zero rows, not an outage', () => {
+  // The SQL aggregates one row even over an empty table (COUNT/MIN/MAX over
+  // zero rows), so an empty store reads as rows: 0 with null bounds rather
+  // than null or an error.
+  assert.match(
+    PERSISTENCE,
+    /count\(\*\)::int AS rows/,
+    'an empty store must aggregate to a real zero-row report',
   );
 });

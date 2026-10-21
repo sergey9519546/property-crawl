@@ -128,25 +128,21 @@ test('the suite passes under the pinned runtime when it is available', (t) => {
   assert.equal(out.status, 0, `parser suite failed under the pinned runtime:\n${out.stderr || ''}`);
 });
 
-test('the observation store has real headroom and is overridable', () => {
-  // The store sat at 39.7MB against a bare 40MB literal. Every route that
-  // reads observation history would have failed together, about one collection
-  // run from now, and before the historyUnavailable work one of them reported
-  // the result as a confident negative finding.
+test('observation history has no file ceiling left to overflow', () => {
+  // The store sat at 39.7MB against a bare 40MB literal, one collection run
+  // from an outage that took every history-reading route down with it. The
+  // fix that lasted was not a bigger ceiling — it was moving the store to
+  // Postgres (migrations 025 + 027) and deleting the file machinery. These
+  // assertions pin the deletion so the ceiling cannot quietly return.
   const src = fs.readFileSync(path.join(ROOT, 'server', 'sources', 'observations.js'), 'utf8');
-  assert.doesNotMatch(src, /const MAX_BYTES = 40 \* 1024 \* 1024/,
-    'the hard 40MB ceiling is back');
-  assert.match(src, /PROPERTY_OBSERVATIONS_MAX_BYTES/,
-    'the ceiling must be overridable, like the live-record store');
-  assert.match(src, /64 \* 1024 \* 1024/, 'the default ceiling should give real headroom');
+  assert.doesNotMatch(src, /MAX_BYTES|mkdtemp|writeFileSync|\.lock/,
+    'the file-store machinery (ceiling, temp writes, lock file) is back in the observation module');
+  assert.match(src, /classifyStatusActivity/,
+    'the shared classifier must stay in the pure vocabulary module');
 
-  // And if the store really is on disk, check it is not already over the line.
-  const store = path.join(ROOT, '.cache', 'source-observations.json');
-  if (!fs.existsSync(store)) return;
-  const size = fs.statSync(store).size;
-  const { loadObservations } = require('../server/sources/observations');
-  const result = loadObservations({ filePath: store });
-  assert.ok(result.records, 'the store must load');
-  assert.ok(size < 64 * 1024 * 1024,
-    `store is ${(size / 1024 / 1024).toFixed(1)}MB; it must load under the default ceiling`);
+  // The retired file is allowed to exist until the one-time import consumes
+  // it (scripts/import-observation-store.js); nothing reads it at runtime.
+  const { loadObservationsFromPg } = require('../server/db/observations-persistence');
+  assert.equal(typeof loadObservationsFromPg, 'function',
+    'the Postgres reader must be the observation history path');
 });

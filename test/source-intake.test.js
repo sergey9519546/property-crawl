@@ -13,7 +13,6 @@ const {
 const { loadStore } = require('../server/sources/store');
 const { parseOptions } = require('../scripts/source-intake');
 const { collect, parseOptions: parseCollectOptions, supportedSources } = require('../scripts/collect-source');
-const { loadObservations } = require('../server/sources/observations');
 
 const temporaryDirectories = [];
 
@@ -159,11 +158,23 @@ test('collector support is derived from production scheduler scrapers only', () 
 
 test('collector writes successful and failed source-run observations without admitting unsupported keys', async () => {
   const scheduler = require('../server/scrapers/scheduler');
+  const dbClient = require('../server/db/client');
   const original = scheduler.realScrapers;
+  const originalVerify = dbClient.verifyConnection;
+  const originalPool = dbClient.pool;
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-source-collect-'));
   temporaryDirectories.push(directory);
   const storePath = path.join(directory, 'live.json');
-  const observationPath = path.join(directory, 'observations.json');
+  const queries = [];
+  // The collector records runs directly into Postgres now; this mock pool
+  // stands in for it and captures the writes.
+  const pool = {
+    async query(text, params) {
+      queries.push({ text: String(text), params });
+      if (/SELECT 1 FROM sources/.test(String(text))) return { rows: [{ '?column?': 1 }], rowCount: 1 };
+      return { rows: [], rowCount: 1 };
+    },
+  };
   const observedAt = '2025-09-05T10:00:00.000Z';
   const record = {
     id: 'HUD-OH-COLLECT-1', source: 'hud', state: 'OH', county: 'Cuyahoga', city: 'Cleveland', zip: '44101',
@@ -177,17 +188,27 @@ test('collector writes successful and failed source-run observations without adm
     },
   };
   try {
+    dbClient.verifyConnection = async () => { dbClient.pool = pool; dbClient.isPg = true; return true; };
     scheduler.realScrapers = [{ name: 'HudTestCollector', sourceKey: 'hud', scrapeFeed: async () => [record] }];
-    const success = await collect('hud', { storePath, observationPath });
+    const success = await collect('hud', { storePath });
     assert.equal(success.accepted, 1);
-    assert.equal(loadObservations({ filePath: observationPath }).runs.hud.acceptedCount, 1);
+    const runUpsert = queries.find((query) => query.text.includes('source_observation_runs'));
+    assert.ok(runUpsert, 'a successful collect must upsert its run metadata');
+    assert.equal(runUpsert.params[2], 1, 'accepted_count');
     assert.deepEqual(supportedSources(), ['hud']);
-    await assert.rejects(() => collect('irs', { storePath, observationPath }), /scheduler-backed collector/);
+    await assert.rejects(() => collect('irs', { storePath }), /scheduler-backed collector/);
 
     scheduler.realScrapers = [{ name: 'HudFailingCollector', sourceKey: 'hud', scrapeFeed: async () => { throw new Error('upstream unavailable'); } }];
-    await assert.rejects(() => collect('hud', { storePath, observationPath }), /upstream unavailable/);
-    assert.equal(loadObservations({ filePath: observationPath }).runs.hud.error, 'upstream unavailable');
+    const insertsAfterSuccess = queries.filter((query) => query.text.startsWith('INSERT INTO source_observations')).length;
+    await assert.rejects(() => collect('hud', { storePath }), /upstream unavailable/);
+    const errorUpsert = queries.filter((query) => query.text.includes('source_observation_runs')).at(-1);
+    assert.equal(errorUpsert.params[5], 'upstream unavailable', 'the failed run must be recorded');
+    assert.equal(errorUpsert.params[2], 0);
+    assert.equal(queries.filter((query) => query.text.startsWith('INSERT INTO source_observations')).length, insertsAfterSuccess,
+      'a failed run must not be ingested as evidence');
   } finally {
     scheduler.realScrapers = original;
+    dbClient.verifyConnection = originalVerify;
+    dbClient.pool = originalPool;
   }
 });

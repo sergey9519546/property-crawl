@@ -603,7 +603,7 @@ async function commitBrowserImport(listingIds, previewHash, options = {}) {
     const listing = await options.database.getListingById(candidate.listingId);
     const timestamp = nowIso(options.now);
     const dossier = typeof options.buildDossier === 'function'
-      ? options.buildDossier(listing, timestamp)
+      ? await options.buildDossier(listing, timestamp)
       : buildPropertyDossier(listing, { now: Date.parse(timestamp) });
     const result = createCase({ listing, dossier, origin: { type: 'browser_import', observedAt: candidate.observedAt } }, options);
     (result.created ? created : existing).push(result.case);

@@ -5,12 +5,47 @@ const assert = require('node:assert/strict');
 const { buildPropertyDossier } = require('../server/intelligence/dossier');
 const { createPropertyIntelligenceHandler } = require('../server/routes/property-intelligence');
 const { validateListingForIngestion } = require('../server/scrapers/validation');
-const { updateObservations } = require('../server/sources/observations');
+const { compareSnapshots, snapshot } = require('../server/sources/observations');
 const { buildPublicRecordEvidence } = require('../server/public-records');
 
 const NOW = Date.now();
 const observedAt = new Date(NOW - 3600000).toISOString();
-const emptyHistory = () => ({ version: 1, runs: {}, records: {}, signals: [] });
+
+// Test-local stand-in for the Postgres observation view
+// (loadObservationsForRecord): consecutive snapshots per record with change
+// signals derived by the same shared classifier, shaped exactly as the route
+// feeds the dossier.
+function storeHistory(listings) {
+  const snapshots = listings.map((item) => snapshot(item));
+  const signals = [];
+  for (let index = 1; index < snapshots.length; index++) {
+    const previous = snapshots[index - 1];
+    const current = snapshots[index];
+    for (const change of compareSnapshots(previous, current)) {
+      signals.push({
+        id: `${index}-${change.field}`, listingId: current.listingId, sourceId: 'civilview',
+        recordId: current.recordId, observedAt: current.observedAt, ...change,
+        evidence: [
+          { sourceUrl: previous.sourceUrl, observedAt: previous.observedAt, value: change.before },
+          { sourceUrl: current.sourceUrl, observedAt: current.observedAt, value: change.after },
+        ],
+      });
+    }
+  }
+  const latest = snapshots.at(-1);
+  return {
+    runs: {},
+    records: latest ? {
+      [latest.recordId]: {
+        firstObservedAt: snapshots[0].observedAt,
+        observations: snapshots.length,
+        latest,
+        history: snapshots.slice(0, -1),
+      },
+    } : {},
+    signals,
+  };
+}
 
 // Synthetic in-memory test records shaped like the real CivilView publisher
 // contract. No fixture is written to inventory or claimed as a live discovery.
@@ -53,10 +88,10 @@ async function invoke(handler, method, id = publisherFixture().id, options = {})
   return res;
 }
 
-function handlerFor(getListing, buildEvidence = async () => ({ parcel: null, areaContext: null, issues: [], sources: [] }), readHistory = emptyHistory) {
+function handlerFor(getListing, buildEvidence = async () => ({ parcel: null, areaContext: null, issues: [], sources: [] })) {
   return createPropertyIntelligenceHandler({
     database: { getListingById: getListing }, buildPublicRecordEvidence: buildEvidence,
-    loadObservations: readHistory, env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' },
+    env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' },
   });
 }
 
@@ -237,13 +272,11 @@ test('a past sale date is an open research question and never implies sold statu
 });
 
 test('observed changes preserve camelCase fields, before/after values, publisher URLs and both timestamps', () => {
-  const observations = emptyHistory();
   const beforeTime = new Date(NOW - 7200000).toISOString();
   const afterTime = observedAt;
   const before = publisherFixture({ sourceObservedAt: beforeTime, deposit: 5000, status: 'withdrawn', saleDate: '2027-10-01' });
   const after = publisherFixture({ sourceObservedAt: afterTime, openingBid: 90000, deposit: 10000, status: 'scheduled', saleDate: '2027-11-01' });
-  updateObservations(observations, 'civilview', { listings: [before], error: null }, { now: new Date(NOW).toISOString() });
-  updateObservations(observations, 'civilview', { listings: [after], error: null }, { now: new Date(NOW).toISOString() });
+  const observations = storeHistory([before, after]);
   observations.signals.push({ ...observations.signals[0], id: 'unrelated', listingId: 'OTHER-LISTING' });
   const dossier = buildPropertyDossier(after, { observations, now: NOW });
   const expected = {
@@ -271,8 +304,7 @@ test('observed changes preserve camelCase fields, before/after values, publisher
 });
 
 test('unverified snapshots cannot inherit supported changes or tracked source history', () => {
-  const observations = emptyHistory();
-  updateObservations(observations, 'civilview', { listings: [publisherFixture()], error: null }, { now: new Date(NOW).toISOString() });
+  const observations = storeHistory([publisherFixture()]);
   const listing = publisherFixture({ provenance: { observed: false, origin: 'snapshot' } });
   const dossier = buildPropertyDossier(listing, { observations, now: NOW });
   assert.equal(dossier.source.status, 'unverified_snapshot');
@@ -283,9 +315,10 @@ test('unverified snapshots cannot inherit supported changes or tracked source hi
 });
 
 test('reused listing IDs cannot attach another publisher record\'s supported changes', () => {
-  const observations = emptyHistory();
-  updateObservations(observations, 'civilview', { listings: [publisherFixture({ sourceObservedAt: new Date(NOW - 7200000).toISOString() })], error: null }, { now: new Date(NOW).toISOString() });
-  updateObservations(observations, 'civilview', { listings: [publisherFixture({ openingBid: 90000 })], error: null }, { now: new Date(NOW).toISOString() });
+  const observations = storeHistory([
+    publisherFixture({ sourceObservedAt: new Date(NOW - 7200000).toISOString() }),
+    publisherFixture({ openingBid: 90000 }),
+  ]);
   const replacement = publisherFixture({ sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964699', provenance: { recordId: '2128964699' } });
   assert.equal(validateListingForIngestion(replacement).isValid, true);
   const dossier = buildPropertyDossier(replacement, { observations, now: NOW });
@@ -305,7 +338,10 @@ test('explicitly derived listing fields are not publisher facts or evidence of a
 });
 
 test('history read failure leaves stored publisher facts available with an explicit flag', async () => {
-  const handler = handlerFor(async () => publisherFixture(), undefined, () => { throw new Error('Local history unavailable'); });
+  // No Postgres pool: the route reports historyUnavailable instead of reading
+  // a stale local file, while the publisher facts from the listing itself
+  // stay available.
+  const handler = handlerFor(async () => publisherFixture());
   const result = await invoke(handler, 'GET');
   assert.equal(result.statusCode, 200);
   assert.equal(result.body.historyUnavailable, true);

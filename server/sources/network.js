@@ -63,7 +63,10 @@ function buildSourceNetwork({ catalog, adapters, observations, listings = [], co
       needsAttention: sources.filter((source) => ['attention', 'stale', 'empty'].includes(source.status)).length,
       importSources: sources.filter((source) => !source.automated).length,
       observedRecords: sources.reduce((sum, source) => sum + source.observedRecords, 0),
-      trackedRecords: Object.keys(observations.records).length,
+      // The Postgres observation view reports a counted total without
+      // materializing one key per record; the legacy {records} shape is still
+      // accepted so tests and injected stores keep working.
+      trackedRecords: observations.trackedRecords ?? Object.keys(observations.records).length,
     },
     // Signals are stored newest-first and only the first 100 travel. Against the
     // live observation store that is 100 of 2,000 -- 5% -- and the payload used

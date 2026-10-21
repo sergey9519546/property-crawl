@@ -299,10 +299,24 @@ async function startEmbeddedPostgres(options = {}) {
   // on "is the listings table there" meant a newly added seed row never reached
   // an existing database, so two real scrapers' records could not be stored
   // and the FK failure looked like missing data rather than a missing seed.
+  const pool = new EmbeddedPool(db, options);
+
   if (options.applySchema !== false) {
     const fresh = !(await schemaIsPresent(db));
+    // schema.sql is the CURRENT snapshot: it indexes columns (for example
+    // listings.triage_priority, migration 025) that an older on-disk database
+    // only gains through a migration, because CREATE TABLE IF NOT EXISTS never
+    // adds columns to a table that already exists. Re-applying the snapshot
+    // before those migrations failed boot with `column ... does not exist` -
+    // and `npm run discovery:migrate` could not repair it, since it boots
+    // through this same function. So an existing database is brought forward
+    // by its pending migrations first; a fresh one gets the snapshot directly.
+    if (!fresh && options.migrateExisting !== false) {
+      const migrateFn = options.migrate || require('../../scripts/discovery-migrate').migrate;
+      await migrateFn(pool);
+    }
     await db.exec(fs.readFileSync(schemaPath, 'utf8'));
-    log(`[PG] applied schema from ${path.relative(process.cwd(), schemaPath)}${fresh ? '' : ' (idempotent re-apply)'}`);
+    log(`[PG] applied schema from ${path.relative(process.cwd(), schemaPath)}${fresh ? '' : ' (idempotent re-apply after pending migrations)'}`);
   }
 
   // A Pool is not a connection. Prove the engine answers before claiming the
@@ -310,8 +324,6 @@ async function startEmbeddedPostgres(options = {}) {
   const probe = await db.query('SELECT postgis_version() AS postgis');
   const version = probe.rows[0] && probe.rows[0].postgis;
   if (!version) throw new Error('Embedded PostgreSQL started without a usable PostGIS');
-
-  const pool = new EmbeddedPool(db, options);
   log(`[PG] embedded PostgreSQL ready at ${dataDir} (PostGIS ${version}); embedded, single connection`);
 
   return { db, pool, dataDir, postgisVersion: version, engine: 'pglite-embedded' };

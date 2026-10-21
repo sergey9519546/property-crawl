@@ -7,7 +7,7 @@ const { createSourceNetworkHandler } = require('../server/routes/source-network'
 const { buildSourceNetwork, enrolledSources } = require('../server/sources/network');
 const { IngestionScheduler } = require('../server/scrapers/scheduler');
 const { ScraperResponseError } = require('../server/scrapers/circuit-breaker');
-const { loadObservations, recordSourceRun } = require('../server/sources/observations');
+const { recordSourceRun, loadObservationsFromPg } = require('../server/db/observations-persistence');
 const sourceIntake = require('../server/sources/intake');
 const { loadStore: loadIntakeStore } = require('../server/sources/store');
 
@@ -162,7 +162,7 @@ test('public coverage is readable while intake, review, and run operations fail 
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, collector, scheduler: collector,
     catalog: [catalogEntry('hud-homestore', 'hud')],
-    loadObservations: () => ({ runs: {}, records: {}, signals: [] }), env: {},
+    loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }), env: {},
     intake: { listEvidence: () => [] },
   });
 
@@ -194,7 +194,7 @@ test('public coverage counts safe evidence packets and appends approved custom w
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
     catalog: [catalogEntry('federal-register', null)],
-    loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     evidenceCollectors: { 'federal-register': async () => ({ submitted: 0 }) }, env: {},
     intake: { listEvidence(filters) { calls.push(filters); return packets; } },
   });
@@ -251,7 +251,7 @@ test('complete public summaries retain an approved local enrollment behind more 
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
     catalog: [catalogEntry('federal-register', null)],
-    loadObservations: () => ({ runs: {}, records: {}, signals: [] }), evidenceCollectors: {}, env: {},
+    loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }), evidenceCollectors: {}, env: {},
     intake: {
       listEvidenceSummaries() { allSummaryCalls++; return sourceIntake.listEvidenceSummaries({ storePath }); },
       listEvidence() { throw new Error('Public coverage must not use the bounded raw review queue.'); },
@@ -274,7 +274,7 @@ test('older injected intake APIs retain their bounded-summary limitation flag', 
   const collector = { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: false };
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
-    catalog: [catalogEntry('federal-register', null)], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    catalog: [catalogEntry('federal-register', null)], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     evidenceCollectors: {}, env: {},
     intake: { listEvidence: () => Array.from({ length: 200 }, () => ({ sourceId: 'federal-register' })) },
   });
@@ -284,22 +284,24 @@ test('older injected intake APIs retain their bounded-summary limitation flag', 
   assert.equal(result.body.sources[0].evidencePackets, 200);
 });
 
-test('corrupt evidence and history files preserve public coverage with explicit availability flags', async () => {
+test('a Postgres history read failure preserves public coverage with explicit availability flags', async () => {
   for (const scenario of [{ evidence: true, history: false }, { evidence: false, history: true }, { evidence: true, history: true }]) {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-source-network-'));
     temporaryDirectories.push(directory);
     const storePath = path.join(directory, 'intake.json');
-    const historyPath = path.join(directory, 'observations.json');
     const evidenceBytes = scenario.evidence ? '{ PRIVATE BROKEN EVIDENCE' : JSON.stringify({ version: 1, records: [] });
-    const historyBytes = scenario.history ? '{ PRIVATE BROKEN HISTORY' : JSON.stringify({ version: 1, runs: {}, records: {}, signals: [] });
     fs.writeFileSync(storePath, evidenceBytes);
-    fs.writeFileSync(historyPath, historyBytes);
     const collector = { realScrapers: [{ sourceKey: 'hud' }], realScraperKeys: new Set(['hud']), isRunning: false, networkEnabled: false };
     const handler = createSourceNetworkHandler({
       database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
       catalog: [catalogEntry('hud-homestore', 'hud')], env: {}, evidenceCollectors: {},
       intake: { listEvidenceSummaries: () => sourceIntake.listEvidenceSummaries({ storePath }) },
-      loadObservations: () => loadObservations({ filePath: historyPath }),
+      // Postgres is the only observation history: a failed read (or a broken
+      // retired file that once backed it) must surface as historyUnavailable,
+      // never as a silent "no history".
+      loadObservationsFromPg: scenario.history
+        ? async () => { throw new Error('PRIVATE BROKEN HISTORY'); }
+        : async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     });
     const result = await invoke(handler, { url: '/api/source-network' });
     assert.equal(result.statusCode, 200);
@@ -309,7 +311,6 @@ test('corrupt evidence and history files preserve public coverage with explicit 
     assert.deepEqual(result.body.signals, []);
     assert.equal(JSON.stringify(result.body).includes('PRIVATE BROKEN'), false);
     assert.equal(fs.readFileSync(storePath, 'utf8'), evidenceBytes);
-    assert.equal(fs.readFileSync(historyPath, 'utf8'), historyBytes);
   }
 });
 
@@ -317,7 +318,7 @@ test('configured source operations reject a missing or incorrect token', async (
   const collector = { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true };
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
-    catalog: [], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    catalog: [], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     env: { SCRAPER_ADMIN_TOKEN: 'correct-token' }, intake: { listEvidence: () => [] },
   });
 
@@ -336,7 +337,7 @@ test('authorized intake GET is safe by default and exposes original evidence onl
   const collector = { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true };
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
-    catalog: [], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    catalog: [], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake,
   });
 
@@ -362,7 +363,7 @@ test('authorized intake and review validate input and retain evidence-only statu
   const collector = { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true };
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
-    catalog: [], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    catalog: [], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake,
   });
 
@@ -397,7 +398,7 @@ test('authorized run validates catalog selection and sends the adapter key to th
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector,
     catalog: [catalogEntry('hud-homestore', 'hud'), catalogEntry('fdic-asset-sales', null)],
-    loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
   });
 
@@ -427,7 +428,7 @@ test('collection jobs expose a bounded activity list, exact job status, and sour
   const collector = { realScrapers: [{ sourceKey: 'hud' }], realScraperKeys: new Set(['hud']), isRunning: false, networkEnabled: true };
   const handler = createSourceNetworkHandler({
     database: { getListings: async () => ({ listings: [], total: 0 }) }, scheduler: collector, coordinator,
-    catalog: [catalogEntry('hud-homestore', 'hud')], loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    catalog: [catalogEntry('hud-homestore', 'hud')], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
   });
   const unauthorizedList = await invoke(handler, { url: '/api/source-network/jobs?limit=50' });
@@ -456,7 +457,7 @@ test('an authorized all-source run starts one unscoped coordinator job', async (
     database: { getListings: async () => ({ listings: [], total: 0 }) },
     scheduler: { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true },
     coordinator: { store: { list: () => ({ items: [], total: 0 }), get: () => null }, start(input) { started.push(input); return job; } },
-    catalog: [], loadObservations: () => ({ runs: {}, records: {}, signals: [] }), env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
+    catalog: [], loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }), env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: {},
   });
   const result = await invoke(handler, {
     url: '/api/source-network/run', method: 'POST', token: 'operator-secret',
@@ -479,9 +480,11 @@ test('authorized evidence runs enqueue review packets and record success or fail
   const collector = { realScrapers: [], realScraperKeys: new Set(), isRunning: false, networkEnabled: true };
   const makeHandler = (evidenceCollector) => createSourceNetworkHandler({
     database, scheduler: collector, catalog: [catalogEntry('federal-register', null)],
-    loadObservations: () => ({ runs: {}, records: {}, signals: [] }),
+    loadObservationsFromPg: async () => ({ runs: {}, records: {}, signals: [], trackedRecords: 0 }),
     evidenceCollectors: { 'federal-register': evidenceCollector },
-    recordSourceRun: (sourceId, run) => runs.push({ sourceId, run }),
+    // The route hands the pool as the first argument; the injection records
+    // the runs metadata the PG write path would have upserted.
+    recordSourceRun: async (pool, sourceId, run) => runs.push({ pool, sourceId, run }),
     env: { SCRAPER_ADMIN_TOKEN: 'operator-secret' }, intake: { listEvidence: () => [] },
   });
 
@@ -532,9 +535,14 @@ test('scheduler source selection runs only requested collectors and calls the so
 });
 
 test('a scraper challenge is persisted as an error observation without inventory', async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-source-network-'));
-  temporaryDirectories.push(directory);
-  const filePath = path.join(directory, 'observations.json');
+  const queries = [];
+  const pool = {
+    async query(text, params) {
+      queries.push({ text: String(text), params });
+      if (/SELECT 1 FROM sources/.test(String(text))) return { rows: [{ '?column?': 1 }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    },
+  };
   const scraper = {
     name: 'CivilViewChallenge', sourceKey: 'civilview',
     async scrapeFeed() {
@@ -546,13 +554,15 @@ test('a scraper challenge is persisted as an error observation without inventory
   const scheduler = new IngestionScheduler({
     realScrapers: [scraper], networkEnabled: true,
     database: { createListing: async () => {} }, telemetry: { recordRun() {} },
-    onSourceRun: async (sourceId, run) => recordSourceRun(sourceId, run, { filePath, now: '2026-09-05T18:00:00.000Z' }),
+    onSourceRun: async (sourceId, run) => recordSourceRun(pool, sourceId, run, { now: '2026-09-05T18:00:00.000Z' }),
   });
 
   const result = await scheduler.runAll({ sourceIds: ['civilview'] });
-  const stored = loadObservations({ filePath });
   assert.equal(result.totalIngested, 0);
-  assert.match(stored.runs.civilview.error, /challenge/i);
-  assert.equal(stored.runs.civilview.acceptedCount, 0);
-  assert.equal(Object.keys(stored.records).length, 0);
+  const runUpsert = queries.find((query) => query.text.includes('source_observation_runs'));
+  assert.ok(runUpsert, 'the failed run must still be recorded in run metadata');
+  assert.match(runUpsert.params[5], /challenge/i);
+  assert.equal(runUpsert.params[2], 0, 'a failed run accepts nothing');
+  assert.equal(queries.some((query) => query.text.startsWith('INSERT INTO source_observations')), false,
+    'a failed request must not be ingested as inventory evidence');
 });

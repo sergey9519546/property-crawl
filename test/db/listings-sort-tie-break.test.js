@@ -59,7 +59,8 @@ const SORTS = [
   ['equity', { equity: 1000 }],
   ['bid-asc', { openingBid: 5000 }],
   ['date', { saleDate: '2026-10-01' }],
-  ['images', { images: [] }]
+  ['images', { images: [] }],
+  ['triage', { triagePriority: null }]
 ];
 
 for (const [sort, shared] of SORTS) {
@@ -73,6 +74,36 @@ for (const [sort, shared] of SORTS) {
     );
   });
 }
+
+test('getListings (memory): sort="triage" ranks known priorities above unknowns with the id tie-break', async () => {
+  // triage_priority is a Postgres write-through cache (migration 025 + 026);
+  // the in-memory provider computes none. Any carried value must still rank
+  // above unknowns, and unknowns must not read as zeros.
+  const db = memoryDbWith([
+    listing('C-unknown-3'),
+    listing('A-low-1', { triagePriority: 12 }),
+    listing('D-unknown-4'),
+    listing('B-high-2', { triagePriority: 64 })
+  ]);
+  const { listings } = await db.getListings({ sort: 'triage' });
+  assert.deepEqual(
+    listings.map((l) => l.id),
+    ['B-high-2', 'A-low-1', 'C-unknown-3', 'D-unknown-4'],
+    'known priorities must rank first (desc), unknowns last with the id tie-break'
+  );
+});
+
+test('getListings (Postgres): sort="triage" is guarded by the refreshed_at staleness window', () => {
+  // Source-text pin: the ORDER BY must rank only rows refreshed inside the
+  // staleness window and must keep the id ASC tie-break. A stale score is a
+  // time-dependent value (a confirmed sale date passes; observations
+  // accumulate) and must never read as a fresh ranking.
+  const source = require('node:fs').readFileSync(
+    require('node:path').resolve(__dirname, '../../server/db/client.js'), 'utf8'
+  );
+  const match = source.match(/else if \(sort === 'triage'\) sql \+= ` ORDER BY \(CASE WHEN triage_priority_refreshed_at >= NOW\(\) - INTERVAL '\$\{TRIAGE_PRIORITY_STALE_DAYS\} days' THEN triage_priority END\) DESC NULLS LAST, id ASC`;/);
+  assert.ok(match, 'sort="triage" must order by the staleness-guarded column with the id tie-break');
+});
 
 test('getListings (memory): offset paging over tied rows covers the set exactly once', async () => {
   // 25 rows, all tied on every sort key. Paged 10 at a time.

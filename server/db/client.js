@@ -99,7 +99,9 @@ const LISTING_SELECT = `
   auction_program AS "auctionProgram",
   lifecycle_status AS "lifecycleStatus",
   transaction_outcome AS "transactionOutcome",
-  has_documents AS "hasDocuments"
+  has_documents AS "hasDocuments",
+  triage_priority::int AS "triagePriority",
+  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt"
 `;
 
 const SUMMARY_LISTING_SELECT = `
@@ -134,8 +136,18 @@ const SUMMARY_LISTING_SELECT = `
   occupancy,
   source_observed_at::text AS "sourceObservedAt",
   fetched_at::text     AS "fetchedAt",
-  status
+  status,
+  triage_priority::int AS "triagePriority",
+  triage_priority_refreshed_at::text AS "triagePriorityRefreshedAt"
 `;
+
+// How long a persisted triage_priority ranking may drive sort=triage. The
+// score is time-dependent (a confirmed sale date passes; observations
+// accumulate), so sorting consumers must treat an older value as unknown
+// rather than as a fresh ranking (migration 026 contract). Applied in the
+// ORDER BY itself: stale or never-refreshed rows rank last via NULLS LAST,
+// never as fresh.
+const TRIAGE_PRIORITY_STALE_DAYS = 7;
 
 function optionalFiniteNumber(value, { positive = false, nonNegative = false } = {}) {
   if (value === null || value === undefined || value === '') return null;
@@ -1955,6 +1967,11 @@ class DatabaseClient {
       else if (sort === 'bid-asc') sql += ' ORDER BY opening_bid ASC NULLS LAST, id ASC';
       else if (sort === 'date') sql += ' ORDER BY sale_date ASC NULLS LAST, id ASC';
       else if (sort === 'images') sql += ' ORDER BY COALESCE(array_length(images, 1), 0) DESC NULLS LAST, id ASC';
+      // DB-side research-priority ranking on the persisted, indexed
+      // triage_priority column (migration 025 + 026). The staleness guard
+      // ranks never-refreshed or older-than-TRIAGE_PRIORITY_STALE_DAYS rows
+      // last: a stale score must never read as a fresh ranking.
+      else if (sort === 'triage') sql += ` ORDER BY (CASE WHEN triage_priority_refreshed_at >= NOW() - INTERVAL '${TRIAGE_PRIORITY_STALE_DAYS} days' THEN triage_priority END) DESC NULLS LAST, id ASC`;
       else sql += ' ORDER BY deal_score DESC NULLS LAST, id ASC';
 
       sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
@@ -2018,6 +2035,12 @@ class DatabaseClient {
       results.sort(thenId((a, b) => compareNumbersUnknownLast(Date.parse(a.saleDate), Date.parse(b.saleDate), false)));
     } else if (sort === 'images') {
       results.sort(thenId((a, b) => (b.images?.length || 0) - (a.images?.length || 0)));
+    } else if (sort === 'triage') {
+      // The in-memory provider holds no observation history, so no triage
+      // priority is computed here: listings sort by any carried value and
+      // unknowns rank last. The real ranking lives in Postgres, where the
+      // evaluator writes triage_priority at ingest (migration 025 + 026).
+      results.sort(thenId((a, b) => compareNumbersUnknownLast(a.triagePriority, b.triagePriority)));
     } else results.sort(thenId((a, b) => compareNumbersUnknownLast(a.dealScore, b.dealScore)));
 
     const total = results.length;

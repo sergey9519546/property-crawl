@@ -1,12 +1,10 @@
 'use strict';
 const db = require('../db/client');
-const { loadObservations } = require('../sources/observations');
 const { evaluateOpportunitySignals } = require('../intelligence/signals');
 const { loadObservationsForRecord, updateTriagePriority } = require('../db/observations-persistence');
 
 function createPropertySignalsHandler(dependencies = {}) {
   const database = dependencies.database || db;
-  const readHistory = dependencies.loadObservations || loadObservations;
   const readDbHistory = dependencies.loadObservationsForRecord || loadObservationsForRecord;
   const persistTriagePriority = dependencies.persistTriagePriority
     || ((client, listingId, priority) => updateTriagePriority(client.pool, listingId, priority));
@@ -33,24 +31,19 @@ function createPropertySignalsHandler(dependencies = {}) {
       // workspace) all report this; swallowing it here would let the
       // evaluation assert "no bid reduction observed" without ever looking.
       let historyUnavailable = false;
-      let haveHistory = false;
-      // PostgreSQL first: the source_observations table is the durable
-      // mirror and outlives filesystem-store compaction. While it is still
-      // filling, fall back to the filesystem store so no history is lost.
+      // Postgres is the only observation history (migrations 025 + 027); the
+      // retired file store has no successor fallback, so without a reachable
+      // database the evaluation says historyUnavailable instead of asserting
+      // a negative it never checked.
       if (database.isPg && database.pool) {
         try {
           observations = await readDbHistory(database.pool, listing);
-          haveHistory = Object.keys(observations.records).length > 0;
         } catch (error) {
           console.warn('[Property Signals] PostgreSQL observation history unavailable:', error.message);
-        }
-      }
-      if (!haveHistory) {
-        try {
-          observations = readHistory();
-        } catch (_) {
           historyUnavailable = true;
         }
+      } else {
+        historyUnavailable = true;
       }
 
       const evaluation = evaluateOpportunitySignals(listing, { observations, historyUnavailable });

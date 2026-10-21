@@ -4,7 +4,7 @@ const db = require('../db/client');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
 const { buildPropertyDossier } = require('../intelligence/dossier');
 const research = require('../intelligence/research-cases');
-const { loadObservations } = require('../sources/observations');
+const { loadObservationsForRecord } = require('../db/observations-persistence');
 const intake = require('../sources/intake');
 const intakeStore = require('../sources/store');
 
@@ -13,7 +13,6 @@ function createWorkspaceHandler(dependencies = {}) {
   const env = dependencies.env || process.env;
   const filePath = dependencies.filePath;
   const intakePath = dependencies.intakePath;
-  const readObservations = dependencies.loadObservations || loadObservations;
   const dossierBuilder = dependencies.buildPropertyDossier || buildPropertyDossier;
   const currentTime = () => typeof dependencies.now === 'function' ? dependencies.now() : dependencies.now;
   const evidenceById = dependencies.getEvidence || ((id) => {
@@ -25,11 +24,18 @@ function createWorkspaceHandler(dependencies = {}) {
     return { filePath, now: currentTime() };
   }
 
-  function dossierFor(listing, timestamp) {
+  async function dossierFor(listing, timestamp) {
     let observations = { records: {}, signals: [] };
     let historyUnavailable = false;
-    try { observations = readObservations(); }
-    catch { historyUnavailable = true; }
+    // Postgres is the only observation history. Without a reachable database
+    // the dossier says historyUnavailable rather than reading a stale local
+    // file, so a degraded evaluation can never pass for a current one.
+    if (database.pool) {
+      try { observations = await loadObservationsForRecord(database.pool, listing); }
+      catch { historyUnavailable = true; }
+    } else {
+      historyUnavailable = true;
+    }
     const dossierNow = timestamp instanceof Date ? timestamp.getTime()
       : (typeof timestamp === 'number' ? timestamp : Date.parse(timestamp));
     return { ...dossierBuilder(listing, { observations, now: dossierNow, historyUnavailable }), historyUnavailable };
@@ -66,7 +72,7 @@ function createWorkspaceHandler(dependencies = {}) {
           const timestamp = configuredNow === undefined ? Date.now() : configuredNow;
           const result = research.createCase({
             listing, sourceRef: req.body?.sourceRef, origin: req.body?.origin,
-            dossier: dossierFor(listing, timestamp),
+            dossier: await dossierFor(listing, timestamp),
           }, { filePath, now: timestamp });
           return res.status(result.created ? 201 : 200).json(result);
         }

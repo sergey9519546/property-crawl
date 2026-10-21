@@ -92,6 +92,58 @@ const COUNTY_ARCGIS_REGISTRY = {
     assessedLandField: 'Land_Val',
     assessedImprvField: 'Bld_Val',
     legalDescField: 'Legal_Desc'
+  },
+  // Endpoints below were verified live against each service's layer metadata
+  // and a sampled spatial query on 2026-10-21 (see
+  // reports/assessor-enrollment-2026-10-21.md). Where a lookup was verified
+  // but the value semantics were not, the county is converted nowhere — see
+  // WITHHOLD in server/enrichment/assessor-reading.js.
+  'OH-FRANKLIN': {
+    name: 'Franklin County Auditor (Columbus)',
+    fips: '39049',
+    endpoint: 'https://gis.franklincountyohio.gov/hosting/rest/services/ParcelFeatures/Parcel_Features/MapServer/0/query',
+    apnField: 'PARCELID',
+    landUseField: 'PCLASSDSCRP',
+    assessedTotalField: 'TOTVALUEBASE',
+    assessedLandField: 'LNDVALUEBASE',
+    assessedImprvField: 'BLDVALUEBASE'
+  },
+  'OH-HAMILTON': {
+    name: 'Hamilton County Auditor / CAGIS (Cincinnati)',
+    fips: '39061',
+    endpoint: 'https://cagisonline.hamilton-co.org/arcgis/rest/services/COUNTYWIDE/Cadastral/MapServer/2/query',
+    apnField: 'PARCELID',
+    landUseField: 'CLASS',
+    assessedTotalField: 'MKT_TOTAL_VAL',
+    assessedLandField: 'MKTLND',
+    assessedImprvField: 'MKTIMP',
+    legalDescField: 'LGLDS1',
+    // Parcel centroids, not polygons: a point-intersect matches only an exact
+    // centroid coordinate, so the query falls back to a small envelope
+    // around the listing point.
+    spatialFallback: 'envelope'
+  },
+  'TX-TARRANT': {
+    name: 'Tarrant Appraisal District (Fort Worth public parcels)',
+    fips: '48439',
+    endpoint: 'https://services5.arcgis.com/3ddLCBXe1bRt7mzj/arcgis/rest/services/Parcels_Public_Vview/FeatureServer/0/query',
+    apnField: 'TAXPIN',
+    landUseField: 'STATE_USE_CODE',
+    assessedTotalField: 'APPRAISED_VALUE',
+    assessedLandField: 'LAND_VAL',
+    assessedImprvField: 'IMPR_VAL',
+    legalDescField: 'PARCEL_LEGAL_DESCRIPTION'
+  },
+  'NV-WASHOE': {
+    name: 'Washoe County Assessor (Reno)',
+    fips: '32031',
+    endpoint: 'https://services.arcgis.com/iCGWaR7ZHc5saRIl/arcgis/rest/services/Nightly_OpenData_Update/FeatureServer/1/query',
+    apnField: 'APN',
+    landUseField: 'LAND_USE',
+    assessedTotalField: 'TOTALASS',
+    assessedLandField: 'LANDASS',
+    assessedImprvField: 'BUILDASS',
+    legalDescField: 'SUBNAME'
   }
 };
 
@@ -213,11 +265,35 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
     if (!res.ok) return null;
 
     const data = await res.json();
-    if (!data || !Array.isArray(data.features) || data.features.length === 0) {
+    let features = data && Array.isArray(data.features) ? data.features : [];
+
+    // Centroid-point layers (spatialFallback: 'envelope') cannot be matched by
+    // an exact point-intersect — the listing coordinate is not the parcel's
+    // centroid. Retry once with a ~44 m envelope around the same point, which
+    // matches the parcel whose centroid is nearest without drifting into a
+    // neighboring parcel's catchment. Bounded to one retry.
+    if (!features.length && config.spatialFallback === 'envelope' && Number.isFinite(lat) && Number.isFinite(lng)) {
+      const delta = 0.0004;
+      queryParams.set('geometry', `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`);
+      queryParams.set('geometryType', 'esriGeometryEnvelope');
+      const retry = await fetchFn(`${config.endpoint}?${queryParams.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'PropertyCrawl/2.0 (ArcGIS Open Parcel Gateway)'
+        }
+      });
+      if (retry.ok) {
+        const retryData = await retry.json();
+        features = retryData && Array.isArray(retryData.features) ? retryData.features : [];
+      }
+    }
+
+    if (!features.length) {
       return null;
     }
 
-    const feature = data.features[0];
+    const feature = features[0];
     return normalizeArcgisAttributes(feature.attributes, config);
   } catch (err) {
     return null;

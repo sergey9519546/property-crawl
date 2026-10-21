@@ -31,7 +31,11 @@ function feature(overrides = {}) {
   return {
     attributes: {
       OBJECTID: 100001,
-      CO_NO: 48,
+      // CO_NO 58 is Orange County in the FDOR cadastral namespace (11-77),
+      // verified against the DOR attribution reference workbook — NOT the
+      // 1-67 tax-admin list (see the namespace warning in
+      // server/scrapers/fl-dor-cadastral.js).
+      CO_NO: 58,
       PARCEL_ID: '12-34-56-789-0000-0000',
       PARCELNO: null,
       ASMNT_YR: 2025,
@@ -182,14 +186,17 @@ test('classifies DOR use codes and computes acreage from land square footage', (
 });
 
 test('maps every Florida DOR county code to a valid 5-digit FIPS', () => {
+  // The cadastral namespace is CO_NO 11-77 (67 codes), not the 1-67
+  // tax-admin list — see the namespace warning in the scraper.
   assert.equal(Object.keys(DOR_COUNTY_BY_CODE).length, 67);
   for (const [code, info] of Object.entries(DOR_COUNTY_BY_CODE)) {
     assert.match(info.fips, /^12\d{3}$/, `county ${code} FIPS`);
     assert.ok(info.name && info.name.length > 2, `county ${code} name`);
   }
-  assert.equal(countyFromDorCode(48).fips, '12095');
-  assert.equal(countyFromDorCode(1).name, 'Alachua');
-  assert.equal(countyFromDorCode(67).fips, '12133');
+  assert.equal(countyFromDorCode(58).fips, '12095', 'Orange in the cadastral namespace');
+  assert.equal(countyFromDorCode(11).name, 'Alachua');
+  assert.equal(countyFromDorCode(77).fips, '12133');
+  assert.equal(countyFromDorCode(1), null, 'tax-admin codes do not exist in this namespace');
   assert.equal(countyFromDorCode(99), null);
 });
 

@@ -16,6 +16,11 @@
 //      or the publisher reports exhausted/exceeded-transfer-limit.
 //   3. Map ArcGIS attributes to the canonical camelCase listing contract and
 //      record the exact feature URL plus query URL as provenance.
+//   4. Attribute county from the record's own situs evidence first (CENSUS_BK
+//      census-block FIPS prefix, then a scoped situs-city cross-check), with
+//      the CO_NO DOR county code as the last-resort fallback. Code-vs-situs
+//      disagreements resolve to the situs-derived county and are counted in
+//      the run report; they are never silently guessed.
 //
 // Safety:
 //   - Default 100 records per run (configurable).
@@ -39,77 +44,117 @@ const MAX_RECORDS_CAP = 5000;
 const MAX_RAW_BYTES = 64 * 1024;
 const FL_STATE_FIPS = '12';
 
-// Florida DOR county code (CO_NO, 1-67) → { fips, name }.
-// FIPS county codes are the standard 12001-12133 odd-number sequence.
+// Florida DOR cadastral county code (CO_NO, 11-77) → { fips, name }.
+//
+// NAMESPACE WARNING: this is NOT the FDOR tax-admin 1-67 county code list.
+//
+// The published layer (ArcGIS item efa909d6b1c841d298b0a649e7f71cf2,
+// "Florida Statewide Parcels") encodes CO_NO in a separate DOR cadastral
+// namespace numbered 11-77. The authoritative definition is the DOR-provided
+// reference workbook "Parcel2025AttributionDefinitions.xls" ("County Codes"
+// sheet; ArcGIS item 55e830fd6c8948baae1601fbfc33a3b2, described as "DOR
+// provided attribute reference and county code look up"), which the layer's
+// own item description links as the "DOR reference with FIPS county codes
+// and attribution definitions". Verified against the live service on
+// 2026-10-21: the layer contains exactly CO_NO 0 (unassigned) plus 11-77,
+// and every observed CO_NO=11 record is an Alachua County parcel
+// (Gainesville/Alachua/High Springs/Waldo situs, CENSUS_BK block GEOIDs
+// prefixed 12001, STATE_PAR_ parcel ids prefixed "C11").
+//
+// This is the namespace confusion recorded in docs/alachua-pilot.md:10 —
+// "The existing statewide cadastral source uses its separate Florida DOR
+// namespace, `fl-dor:11`" — which that doc ties to Alachua GEOID 12001.
+// An earlier revision of this file decoded CO_NO with the FDOR tax-admin
+// 1-67 list (where 11 = Collier/12021) and stamped all 101 live-store
+// records (Gainesville/Alachua/High Springs/Waldo situs) as "Collier".
+// The live canary observed the contradiction and passed it anyway
+// (reports/live-canary-results-2026-09-13.md:22: "Counties observed |
+// 12021 (Alachua)"). A later review claimed codes 13-43 were "rotated one
+// position"; the official reference disproves that too — this namespace is
+// offset from the tax-admin list (it starts at 11), not rotated:
+// 23 = Miami-Dade, 24 = DeSoto, 25 = Dixie.
+//
+// Names follow the DOR reference, with spellings normalized to this repo's
+// canonical listing contract ("St. Johns"/"St. Lucie" for the workbook's
+// "Saint Johns"/"Saint Lucie"). FIPS codes are the Census 12001-12133
+// sequence (state+county list:
+// www2.census.gov/geo/docs/reference/codes/files/st12_fl_cou.txt).
 const DOR_COUNTY_BY_CODE = Object.freeze({
-  1: { fips: '12001', name: 'Alachua' },
-  2: { fips: '12003', name: 'Baker' },
-  3: { fips: '12005', name: 'Bay' },
-  4: { fips: '12007', name: 'Bradford' },
-  5: { fips: '12009', name: 'Brevard' },
-  6: { fips: '12011', name: 'Broward' },
-  7: { fips: '12013', name: 'Calhoun' },
-  8: { fips: '12015', name: 'Charlotte' },
-  9: { fips: '12017', name: 'Citrus' },
-  10: { fips: '12019', name: 'Clay' },
-  11: { fips: '12021', name: 'Collier' },
-  12: { fips: '12023', name: 'Columbia' },
-  13: { fips: '12027', name: 'DeSoto' },
-  14: { fips: '12029', name: 'Dixie' },
-  15: { fips: '12031', name: 'Duval' },
-  16: { fips: '12033', name: 'Escambia' },
-  17: { fips: '12035', name: 'Flagler' },
-  18: { fips: '12037', name: 'Franklin' },
-  19: { fips: '12039', name: 'Gadsden' },
-  20: { fips: '12041', name: 'Gilchrist' },
-  21: { fips: '12043', name: 'Glades' },
-  22: { fips: '12045', name: 'Gulf' },
-  23: { fips: '12047', name: 'Hamilton' },
-  24: { fips: '12049', name: 'Hardee' },
-  25: { fips: '12051', name: 'Hendry' },
-  26: { fips: '12053', name: 'Hernando' },
-  27: { fips: '12055', name: 'Highlands' },
-  28: { fips: '12057', name: 'Hillsborough' },
-  29: { fips: '12059', name: 'Holmes' },
-  30: { fips: '12061', name: 'Indian River' },
-  31: { fips: '12063', name: 'Jackson' },
-  32: { fips: '12065', name: 'Jefferson' },
-  33: { fips: '12067', name: 'Lafayette' },
-  34: { fips: '12069', name: 'Lake' },
-  35: { fips: '12071', name: 'Lee' },
-  36: { fips: '12073', name: 'Leon' },
-  37: { fips: '12075', name: 'Levy' },
-  38: { fips: '12077', name: 'Liberty' },
-  39: { fips: '12079', name: 'Madison' },
-  40: { fips: '12081', name: 'Manatee' },
-  41: { fips: '12083', name: 'Marion' },
-  42: { fips: '12085', name: 'Martin' },
-  43: { fips: '12086', name: 'Miami-Dade' },
-  44: { fips: '12087', name: 'Monroe' },
-  45: { fips: '12089', name: 'Nassau' },
-  46: { fips: '12091', name: 'Okaloosa' },
-  47: { fips: '12093', name: 'Okeechobee' },
-  48: { fips: '12095', name: 'Orange' },
-  49: { fips: '12097', name: 'Osceola' },
-  50: { fips: '12099', name: 'Palm Beach' },
-  51: { fips: '12101', name: 'Pasco' },
-  52: { fips: '12103', name: 'Pinellas' },
-  53: { fips: '12105', name: 'Polk' },
-  54: { fips: '12107', name: 'Putnam' },
-  55: { fips: '12109', name: 'St. Johns' },
-  56: { fips: '12111', name: 'St. Lucie' },
-  57: { fips: '12113', name: 'Santa Rosa' },
-  58: { fips: '12115', name: 'Sarasota' },
-  59: { fips: '12117', name: 'Seminole' },
-  60: { fips: '12119', name: 'Sumter' },
-  61: { fips: '12121', name: 'Suwannee' },
-  62: { fips: '12123', name: 'Taylor' },
-  63: { fips: '12125', name: 'Union' },
-  64: { fips: '12127', name: 'Volusia' },
-  65: { fips: '12129', name: 'Wakulla' },
-  66: { fips: '12131', name: 'Walton' },
-  67: { fips: '12133', name: 'Washington' }
+  11: { fips: '12001', name: 'Alachua' },
+  12: { fips: '12003', name: 'Baker' },
+  13: { fips: '12005', name: 'Bay' },
+  14: { fips: '12007', name: 'Bradford' },
+  15: { fips: '12009', name: 'Brevard' },
+  16: { fips: '12011', name: 'Broward' },
+  17: { fips: '12013', name: 'Calhoun' },
+  18: { fips: '12015', name: 'Charlotte' },
+  19: { fips: '12017', name: 'Citrus' },
+  20: { fips: '12019', name: 'Clay' },
+  21: { fips: '12021', name: 'Collier' },
+  22: { fips: '12023', name: 'Columbia' },
+  23: { fips: '12086', name: 'Miami-Dade' },
+  24: { fips: '12027', name: 'DeSoto' },
+  25: { fips: '12029', name: 'Dixie' },
+  26: { fips: '12031', name: 'Duval' },
+  27: { fips: '12033', name: 'Escambia' },
+  28: { fips: '12035', name: 'Flagler' },
+  29: { fips: '12037', name: 'Franklin' },
+  30: { fips: '12039', name: 'Gadsden' },
+  31: { fips: '12041', name: 'Gilchrist' },
+  32: { fips: '12043', name: 'Glades' },
+  33: { fips: '12045', name: 'Gulf' },
+  34: { fips: '12047', name: 'Hamilton' },
+  35: { fips: '12049', name: 'Hardee' },
+  36: { fips: '12051', name: 'Hendry' },
+  37: { fips: '12053', name: 'Hernando' },
+  38: { fips: '12055', name: 'Highlands' },
+  39: { fips: '12057', name: 'Hillsborough' },
+  40: { fips: '12059', name: 'Holmes' },
+  41: { fips: '12061', name: 'Indian River' },
+  42: { fips: '12063', name: 'Jackson' },
+  43: { fips: '12065', name: 'Jefferson' },
+  44: { fips: '12067', name: 'Lafayette' },
+  45: { fips: '12069', name: 'Lake' },
+  46: { fips: '12071', name: 'Lee' },
+  47: { fips: '12073', name: 'Leon' },
+  48: { fips: '12075', name: 'Levy' },
+  49: { fips: '12077', name: 'Liberty' },
+  50: { fips: '12079', name: 'Madison' },
+  51: { fips: '12081', name: 'Manatee' },
+  52: { fips: '12083', name: 'Marion' },
+  53: { fips: '12085', name: 'Martin' },
+  54: { fips: '12087', name: 'Monroe' },
+  55: { fips: '12089', name: 'Nassau' },
+  56: { fips: '12091', name: 'Okaloosa' },
+  57: { fips: '12093', name: 'Okeechobee' },
+  58: { fips: '12095', name: 'Orange' },
+  59: { fips: '12097', name: 'Osceola' },
+  60: { fips: '12099', name: 'Palm Beach' },
+  61: { fips: '12101', name: 'Pasco' },
+  62: { fips: '12103', name: 'Pinellas' },
+  63: { fips: '12105', name: 'Polk' },
+  64: { fips: '12107', name: 'Putnam' },
+  65: { fips: '12109', name: 'St. Johns' },
+  66: { fips: '12111', name: 'St. Lucie' },
+  67: { fips: '12113', name: 'Santa Rosa' },
+  68: { fips: '12115', name: 'Sarasota' },
+  69: { fips: '12117', name: 'Seminole' },
+  70: { fips: '12119', name: 'Sumter' },
+  71: { fips: '12121', name: 'Suwannee' },
+  72: { fips: '12123', name: 'Taylor' },
+  73: { fips: '12125', name: 'Union' },
+  74: { fips: '12127', name: 'Volusia' },
+  75: { fips: '12129', name: 'Wakulla' },
+  76: { fips: '12131', name: 'Walton' },
+  77: { fips: '12133', name: 'Washington' }
 });
+
+// Reverse index (county FIPS → code-table entry) derived from the single
+// source of truth above; used to validate CENSUS_BK prefixes and to resolve
+// situs-city map entries.
+const FL_COUNTY_BY_FIPS = new Map(
+  Object.values(DOR_COUNTY_BY_CODE).map((county) => [county.fips, county])
+);
 
 // DOR use-code first two digits → coarse property type. Codes are published
 // by FDOR Property Tax Oversight; this is a screening label only.
@@ -168,6 +213,81 @@ function truncateRaw(payload, maxBytes = MAX_RAW_BYTES) {
 function countyFromDorCode(value) {
   const code = Number.parseInt(value, 10);
   return DOR_COUNTY_BY_CODE[code] || null;
+}
+
+// CENSUS_BK carries the parcel's census block GEOID (e.g. "120010019081");
+// its first five digits are the state+county FIPS. This is the layer's own
+// per-record FIPS attribution ("The dataset extends countywide and is
+// attribute[d] by Federal Information Processing Standards (FIPS) code" —
+// layer item description), which makes it the strongest situs evidence a
+// record can carry: parcel-precise geography straight from the publisher.
+function countyFipsFromCensusBlock(value) {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length < 5) return null;
+  const fips = digits.slice(0, 5);
+  if (!/^12\d{3}$/.test(fips)) return null;
+  return FL_COUNTY_BY_FIPS.get(fips) || null;
+}
+
+// Situs-city → county cross-check, scoped to the municipalities of the one
+// county this source has actually served live (Alachua; see the namespace
+// comment above and docs/alachua-pilot.md). PHY_CITY is a mailing-city
+// string, not parcel geography, so this is deliberately a FALLBACK behind
+// CENSUS_BK: observed record FLDOR-123 ("21728 NW 29TH TER, BROOKER, FL
+// 32622", live OBJECTID 123) is an Alachua parcel in census block
+// 120010019083 even though Brooker is a Bradford County municipality —
+// rural-route situs cities can point at a neighboring county. Brooker is
+// therefore intentionally absent here: a city whose municipality-county is
+// unreliable evidence of the PARCEL's county must not produce situs
+// evidence at all. Keys are normalized (uppercase, punctuation removed) to
+// absorb roll spellings like "LA CROSSE" vs "LaCrosse".
+const FL_SITUS_CITY_TO_COUNTY = Object.freeze({
+  ALACHUA: '12001',
+  ARCHER: '12001',
+  GAINESVILLE: '12001',
+  HAWTHORNE: '12001',
+  HIGHSPRINGS: '12001',
+  LACROSSE: '12001',
+  MICANOPY: '12001',
+  NEWBERRY: '12001',
+  WALDO: '12001'
+});
+
+function normalizeCityKey(value) {
+  return String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function countyFromSitusCity(city) {
+  const fips = FL_SITUS_CITY_TO_COUNTY[normalizeCityKey(city)];
+  return fips ? (FL_COUNTY_BY_FIPS.get(fips) || null) : null;
+}
+
+// County attribution hierarchy for one cadastral feature:
+//   1. CENSUS_BK census-block FIPS prefix (the layer's own per-record
+//      attribution — parcel-precise).
+//   2. Scoped situs-city cross-check (see FL_SITUS_CITY_TO_COUNTY).
+//   3. CO_NO via the official DOR cadastral code table.
+// Situs evidence (1, then 2) outranks the code. When the code-derived
+// county and the situs-derived county disagree, the record carries the
+// situs-derived county and the disagreement is surfaced as a counted
+// discrepancy — never silently guessed, and never left as two competing
+// county claims on the record. A feature with no county evidence at all is
+// rejected by the caller rather than attributed by guesswork.
+function resolveCountyAttribution(attrs) {
+  const dorCountyCode = Number.parseInt(attrs.CO_NO, 10);
+  const codeCounty = countyFromDorCode(attrs.CO_NO);
+  const censusCounty = countyFipsFromCensusBlock(attrs.CENSUS_BK);
+  const situsCityCounty = countyFromSitusCity(attrs.PHY_CITY);
+  const resolved = censusCounty || situsCityCounty || codeCounty;
+  if (!resolved) return null;
+  return {
+    county: resolved,
+    method: censusCounty ? 'census_block' : situsCityCounty ? 'situs_city' : 'dor_county_code',
+    dorCountyCode: Number.isInteger(dorCountyCode) ? dorCountyCode : null,
+    codeCounty,
+    censusBlockFips: censusCounty ? censusCounty.fips : null,
+    discrepancy: Boolean(codeCounty && codeCounty.fips !== resolved.fips)
+  };
 }
 
 function acreageFromAttributes(attrs) {
@@ -258,7 +378,7 @@ class FlDorCadastralScraper extends BaseScraper {
     url.searchParams.set(
       'outFields',
       [
-        'OBJECTID', 'CO_NO', 'PARCEL_ID', 'PARCELNO', 'ASMNT_YR', 'DOR_UC', 'PA_UC',
+        'OBJECTID', 'CO_NO', 'CENSUS_BK', 'PARCEL_ID', 'PARCELNO', 'ASMNT_YR', 'DOR_UC', 'PA_UC',
         'JV', 'AV_SD', 'AV_NSD', 'TV_SD', 'LND_VAL', 'LND_SQFOOT', 'LND_UNTS_C',
         'NO_LND_UNT', 'NO_RES_UNT', 'TOT_LVG_AR', 'EFF_YR_BLT', 'ACT_YR_BLT',
         'OWN_NAME', 'OWN_ADDR1', 'OWN_ADDR2', 'OWN_CITY', 'OWN_STATE', 'OWN_STATE_',
@@ -315,15 +435,20 @@ class FlDorCadastralScraper extends BaseScraper {
     const parcelId = textOrNull(attrs.PARCEL_ID, 40) || textOrNull(attrs.PARCELNO, 40);
     if (!parcelId) return null;
 
-    const county = countyFromDorCode(attrs.CO_NO);
-    if (!county) return null;
-
     const situs = situsFromAttributes(attrs);
     // Every ingested listing needs a usable situs address. Parcels without
     // one are evidence noise for opportunity screening and are rejected.
     if (!situs.address || situs.address.length < 8 || !/^\d/.test(situs.street || '')) {
       return null;
     }
+
+    // County attribution: the record's own situs evidence (CENSUS_BK census
+    // block, then the scoped situs-city cross-check) outranks the CO_NO
+    // county code. A feature with no county evidence at all is rejected
+    // rather than attributed by guesswork.
+    const countyAttribution = resolveCountyAttribution(attrs);
+    if (!countyAttribution) return null;
+    const county = countyAttribution.county;
 
     const ownerName = textOrNull(attrs.OWN_NAME, 120);
     const mailing = mailingAddressFromAttributes(attrs);
@@ -388,9 +513,17 @@ class FlDorCadastralScraper extends BaseScraper {
           objectId,
           parcelId,
           normalizedApn,
-          dorCountyCode: Number(attrs.CO_NO) || null,
+          dorCountyCode: countyAttribution.dorCountyCode,
           countyFips: county.fips,
           countyName: county.name,
+          // Exactly one county claim (the resolved one) is carried. The raw
+          // CO_NO is retained as publisher evidence; any disagreement
+          // between the code and the situs-derived county is flagged and
+          // counted in the run report — never silently resolved and never
+          // duplicated as a second county claim.
+          countyAttributionMethod: countyAttribution.method,
+          countyCodeDiscrepancy: countyAttribution.discrepancy,
+          censusBlockCountyFips: countyAttribution.censusBlockFips,
           dorUseCode: dorUse,
           paUseCode: textOrNull(attrs.PA_UC, 8),
           assessmentYear,
@@ -418,7 +551,7 @@ class FlDorCadastralScraper extends BaseScraper {
           alternateKey: textOrNull(attrs.ALT_KEY, 40),
           stateParcelId: textOrNull(attrs.STATE_PAR_, 24),
           arcgisFieldNames: [
-            'OBJECTID', 'CO_NO', 'PARCEL_ID', 'ASMNT_YR', 'DOR_UC',
+            'OBJECTID', 'CO_NO', 'CENSUS_BK', 'PARCEL_ID', 'ASMNT_YR', 'DOR_UC',
             'JV', 'LND_SQFOOT', 'NO_LND_UNT', 'OWN_NAME',
             'PHY_ADDR1', 'PHY_CITY', 'PHY_ZIPCD'
           ],
@@ -488,6 +621,20 @@ class FlDorCadastralScraper extends BaseScraper {
         }
       }
 
+      // County attribution evidence for the run report: how many records
+      // were attributed from each evidence class, and how many carried a
+      // CO_NO code that contradicted the resolved (situs-derived) county.
+      const countyAttributionCounts = { censusBlock: 0, situsCity: 0, dorCountyCode: 0 };
+      let countyCodeDiscrepancies = 0;
+      for (const listing of collected) {
+        const facts = listing.provenance && listing.provenance.sourceFacts;
+        if (!facts) continue;
+        if (facts.countyCodeDiscrepancy === true) countyCodeDiscrepancies += 1;
+        if (facts.countyAttributionMethod === 'census_block') countyAttributionCounts.censusBlock += 1;
+        else if (facts.countyAttributionMethod === 'situs_city') countyAttributionCounts.situsCity += 1;
+        else if (facts.countyAttributionMethod === 'dor_county_code') countyAttributionCounts.dorCountyCode += 1;
+      }
+
       const truncated = collected.length >= this.maxRecords || exceededTransferLimit;
       const complete = failures.length === 0 && !truncated;
       this.lastRunReport = {
@@ -501,6 +648,8 @@ class FlDorCadastralScraper extends BaseScraper {
         recordsDiscovered: publisherFeatures,
         recordsEmitted: collected.length,
         recordsRejected: rejectedFeatures,
+        countyCodeDiscrepancies,
+        countyAttributionCounts,
         exceededTransferLimit,
         truncated,
         complete,
@@ -527,3 +676,8 @@ module.exports.SERVICE_ROOT = SERVICE_ROOT;
 module.exports.classifyDorUse = classifyDorUse;
 module.exports.acreageFromAttributes = acreageFromAttributes;
 module.exports.countyFromDorCode = countyFromDorCode;
+module.exports.FL_COUNTY_BY_FIPS = FL_COUNTY_BY_FIPS;
+module.exports.FL_SITUS_CITY_TO_COUNTY = FL_SITUS_CITY_TO_COUNTY;
+module.exports.countyFipsFromCensusBlock = countyFipsFromCensusBlock;
+module.exports.countyFromSitusCity = countyFromSitusCity;
+module.exports.resolveCountyAttribution = resolveCountyAttribution;

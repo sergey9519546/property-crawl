@@ -187,9 +187,14 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
 
   test('HTTP route handler evaluates signals and returns valid JSON response', async () => {
     const mockDb = {
+      isPg: true,
+      pool: {},
       getListingById: async (id) => id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null
     };
-    const handler = createPropertySignalsHandler({ database: mockDb, loadObservations: () => ({ records: {}, signals: [] }) });
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservationsForRecord: async () => ({ records: {}, signals: [] })
+    });
 
     let status = 200;
     let body = null;
@@ -222,10 +227,10 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
   // this; the signal route used to swallow it with an empty catch, which let
   // the evaluation assert "no bid reduction observed" without ever looking.
   test('an unreadable observation store is reported, not treated as no history', async () => {
-    const mockDb = { getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
+    const mockDb = { isPg: true, pool: {}, getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
     const handler = createPropertySignalsHandler({
       database: mockDb,
-      loadObservations: () => { throw new Error('Source observation store exceeds size limit'); }
+      loadObservationsForRecord: async () => { throw new Error('connection refused'); }
     });
 
     let status = 200;
@@ -245,10 +250,10 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
   });
 
   test('a readable store with no history still reports the real negative finding', async () => {
-    const mockDb = { getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
+    const mockDb = { isPg: true, pool: {}, getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null) };
     const handler = createPropertySignalsHandler({
       database: mockDb,
-      loadObservations: () => ({ records: {}, signals: [] })
+      loadObservationsForRecord: async () => ({ records: {}, signals: [] })
     });
 
     let body = null;
@@ -270,7 +275,10 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     const mockDb = {
       getListingById: async (id) => id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null
     };
-    const handler = createPropertySignalsHandler({ database: mockDb, loadObservations: () => ({ records: {}, signals: [] }) });
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservationsForRecord: async () => ({ records: {}, signals: [] })
+    });
 
     let status = 200;
     let body = null;
@@ -420,7 +428,7 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(persisted[0].priority, body.triagePriority);
   });
 
-  test('an empty Postgres history falls back to the filesystem store', async () => {
+  test('an empty Postgres history is no history, never backfilled from a file', async () => {
     let fsRead = false;
     const mockDb = {
       isPg: true,
@@ -429,7 +437,6 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     };
     const handler = createPropertySignalsHandler({
       database: mockDb,
-      loadObservations: () => { fsRead = true; return { records: {}, signals: [] }; },
       loadObservationsForRecord: async () => ({ records: {}, signals: [] }),
       persistTriagePriority: async () => { throw new Error('must still respond if persistence hiccups'); },
     });
@@ -438,8 +445,9 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
     await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
     assert.ok(body, 'the route must still respond if triage persistence hiccups');
-    assert.equal(fsRead, true, 'the filesystem store must backfill while the table fills');
-    assert.equal(body.historyUnavailable, false);
+    assert.equal(fsRead, false, 'the retired filesystem store must not be consulted');
+    assert.equal(body.historyUnavailable, false, 'an empty durable history is a real empty, not an outage');
+    assert.equal(body.signals.find((s) => s.key === 'bid_reduction').label, 'No bid reduction observed');
   });
 
   test('a degraded-view score (unreadable history) is never persisted', async () => {

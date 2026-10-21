@@ -27,8 +27,8 @@ Next.js proxies these routes to the same Node API used by the listing feed. `SCR
 ## Persistence and operation
 
 - `.cache/live-listings.json`: canonical validated live observations, merged without rewriting fixture/seed files. **128 MB** default (`PROPERTY_LIVE_STORE_MAX_BYTES`), ceiling 128 MB.
-- `.cache/source-observations.json`: source runs, latest snapshots, up to 20 changed snapshots per record and 2,000 recent change signals. **64 MB** default (`PROPERTY_OBSERVATIONS_MAX_BYTES`), ceiling 128 MB; exhaustion surfaces an error instead of silently deleting history, and every consumer then reports `historyUnavailable` rather than a confident negative finding.
-  - This was 40 MB until the store sat at 39.7 MB against it and every route reading history began failing together. Raised deliberately; the ceiling is a fail-closed guard, not a quota. **Check the file size rather than transcribing it here** - it grows with every collection run, and how close it is to the ceiling is the operational fact that matters, not its value on any given day.
+- Postgres `source_observations` (migration 025) + `source_observation_runs` (migration 027): the operational observation history — every collection run's advancing snapshots and per-source run metadata. There is no file ceiling left to overflow; history grows roughly a megabyte a day in rows, which Postgres absorbs. Change events are derived on read by replaying the same snapshot classifier, so no stored event log can fall behind. Without a reachable database the observation surfaces report `historyUnavailable` rather than a confident negative finding; the retired bounded JSON store (`.cache/source-observations.json`) is imported once by `npm run observations:import` and read by nothing at runtime.
+  - The old file store hit its 64 MB ceiling after 32.6 days (~1.59 MB/day) and every route reading history began failing together. The durable fix was Postgres, not a bigger ceiling; `/api/health` reports the store's row count, observed span and table size instead of a runway countdown.
 - `.cache/source-intake.json`: review evidence, up to 2,000 packets / 20 MB. Each packet is bounded. Exhaustion surfaces an error and requires an operator archive/export policy.
 - Writes use exclusive locks and temporary-file rename. Do not remove an active lock. Mount these stores on a persistent volume for container operation. This file-backed implementation assumes a single shared writer host; use transactional database storage before scaling independent hosts.
 - Network collectors keep the existing six-hour scheduler by default (`SCRAPE_INTERVAL_HOURS`). Source-specific catalog cadences are suggested check intervals displayed in Source Radar, not individually enforced scheduler schedules.
@@ -38,7 +38,8 @@ Next.js proxies these routes to the same Node API used by the listing feed. `SCR
 
 Two collectors write here and they leave evidence in two different places. The
 scheduler records a row in the `discovery_source_runs` ledger; `collect-source.js`
-records a run in `.cache/source-observations.json` and writes listings straight to
+records a run in the Postgres `source_observation_runs` table (migrations 025 +
+027) and writes listings straight to
 the store. A source can therefore hold a real run, thousands of stored records and
 no ledger row at all.
 

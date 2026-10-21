@@ -66,6 +66,11 @@ const mockDb = {
   },
 };
 
+// Explicit operator-token env for stub-based tests: the route now fails closed
+// with 503 when no token is configured, so tests exercising post-auth behavior
+// must run against a configured environment regardless of ambient process.env.
+const CONFIGURED_ENV = { SCRAPER_ADMIN_TOKEN: 'test-operator-secret' };
+
 test('Decision Packet API: rejects unauthenticated requests with 401', async () => {
   const req = { method: 'GET', headers: {} };
   const res = mockResponse();
@@ -73,6 +78,7 @@ test('Decision Packet API: rejects unauthenticated requests with 401', async () 
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: false, role: null }),
   });
 
@@ -87,6 +93,7 @@ test('Decision Packet API: rejects viewer role with 403 Forbidden', async () => 
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: true, role: 'viewer' }),
   });
 
@@ -102,6 +109,7 @@ test('Decision Packet API: permits analyst role and returns decision-packet/v1 J
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: true, role: 'analyst' }),
   });
 
@@ -122,6 +130,7 @@ test('Decision Packet API: returns GitHub-Flavored Markdown when format=markdown
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: true, role: 'operator' }),
   });
 
@@ -154,6 +163,7 @@ test('Decision Packet API: accepts operator overrides via query or body', async 
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: true, role: 'operator' }),
   });
 
@@ -177,6 +187,7 @@ test('Decision Packet API: returns 404 for unknown listing', async () => {
 
   await handleDecisionPacket(req, res, url, {
     database: mockDb,
+    env: CONFIGURED_ENV,
     resolveAuth: () => ({ authenticated: true, role: 'operator' }),
   });
 
@@ -194,4 +205,187 @@ test('Decision Packet API: rejects invalid HTTP methods with 405', async () => {
   });
 
   assert.equal(res.statusCode, 405);
+});
+
+// ---------------------------------------------------------------------------
+// Real-auth coverage (no resolveAuth stubs): exercises resolveRequestAuth with
+// explicit env objects. The unconfigured-env branch previously had zero
+// coverage and failed OPEN — any junk credential authenticated as 'operator'.
+// ---------------------------------------------------------------------------
+
+// --- Fail-closed: no operator token configured (SCRAPER_ADMIN_TOKEN unset) ---
+
+test('Decision Packet API: 503 with junk cookie credential when operator token is unset', async () => {
+  const req = { method: 'GET', headers: { cookie: 'workspace_session=garbage' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: {} });
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.requiredConfiguration, 'SCRAPER_ADMIN_TOKEN');
+  assert.ok(String(res.body.error).includes('SCRAPER_ADMIN_TOKEN'));
+  assert.equal(res.body.authenticated, undefined);
+});
+
+test('Decision Packet API: 503 with junk Authorization header when operator token is unset', async () => {
+  const req = { method: 'GET', headers: { authorization: 'Bearer definitely-not-the-secret' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: {} });
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.requiredConfiguration, 'SCRAPER_ADMIN_TOKEN');
+  assert.ok(String(res.body.error).includes('SCRAPER_ADMIN_TOKEN'));
+});
+
+test('Decision Packet API: 503 with no credentials when operator token is unset', async () => {
+  const req = { method: 'GET', headers: {} };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: {} });
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.requiredConfiguration, 'SCRAPER_ADMIN_TOKEN');
+});
+
+test('Decision Packet API: 503 on POST overrides when operator token is unset', async () => {
+  const req = { method: 'POST', headers: { cookie: 'workspace_session=garbage' }, body: { disposition: 'BID' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/decision-packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: {} });
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.requiredConfiguration, 'SCRAPER_ADMIN_TOKEN');
+});
+
+test('Decision Packet API: unconfigured resolveRequestAuth never authenticates junk credentials (fail-open regression)', () => {
+  // Auditor reproduction: resolveRequestAuth({headers:{cookie:'workspace_session=garbage'}}, {})
+  // used to return { authenticated: true, role: 'operator' } for ANY non-empty
+  // credential when no operator token was configured.
+  const junkCookie = resolveRequestAuth({ headers: { cookie: 'workspace_session=garbage' } }, {});
+  assert.equal(junkCookie.authenticated, false);
+  assert.equal(junkCookie.role, null);
+
+  const junkBearer = resolveRequestAuth({ headers: { authorization: 'Bearer junk-credentials' } }, {});
+  assert.equal(junkBearer.authenticated, false);
+  assert.equal(junkBearer.role, null);
+
+  const junkScraperToken = resolveRequestAuth({ headers: { 'x-scraper-token': 'junk' } }, {});
+  assert.equal(junkScraperToken.authenticated, false);
+  assert.equal(junkScraperToken.role, null);
+
+  const rolePrefixedJunk = resolveRequestAuth({ headers: { authorization: 'Bearer analyst:unverified' } }, {});
+  assert.equal(rolePrefixedJunk.authenticated, false);
+  assert.equal(rolePrefixedJunk.role, null);
+
+  const noCredentials = resolveRequestAuth({ headers: {} }, {});
+  assert.equal(noCredentials.authenticated, false);
+  assert.equal(noCredentials.role, null);
+});
+
+// --- Characterization: operator token configured (real auth, no stubs) ---
+
+test('Decision Packet API: with token configured, anonymous GET gets 401 AUTH_REQUIRED', async () => {
+  const req = { method: 'GET', headers: {} };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'AUTH_REQUIRED');
+});
+
+test('Decision Packet API: with token configured, anonymous POST gets 401 AUTH_REQUIRED', async () => {
+  const req = { method: 'POST', headers: {}, body: {} };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'AUTH_REQUIRED');
+});
+
+test('Decision Packet API: with token configured, junk credentials are rejected and never authenticated as operator', async () => {
+  const junkBearer = resolveRequestAuth({ headers: { authorization: 'Bearer junk-credentials' } }, CONFIGURED_ENV);
+  assert.equal(junkBearer.authenticated, false);
+  assert.equal(junkBearer.role, null);
+  assert.equal(junkBearer.reason, 'invalid_credentials');
+
+  const junkCookie = resolveRequestAuth({ headers: { cookie: 'workspace_session=garbage' } }, CONFIGURED_ENV);
+  assert.equal(junkCookie.authenticated, false);
+  assert.equal(junkCookie.role, null);
+  assert.equal(junkCookie.reason, 'invalid_credentials');
+
+  const req = { method: 'GET', headers: { authorization: 'Bearer junk-credentials' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'AUTH_REQUIRED');
+});
+
+test('Decision Packet API: with token configured, exact operator token authenticates as operator (200)', async () => {
+  const req = { method: 'GET', headers: { authorization: 'Bearer test-operator-secret' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.schemaVersion, 'decision-packet/v1');
+  assert.equal(res.body.property.id, 'SHERIFF-OH-CUY-4401');
+});
+
+test('Decision Packet API: with token configured, analyst-prefixed token authenticates as analyst (200)', async () => {
+  const req = { method: 'GET', headers: { authorization: 'Bearer analyst:test-operator-secret' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.schemaVersion, 'decision-packet/v1');
+});
+
+test('Decision Packet API: with token configured, JSON session token authenticates the embedded role', async () => {
+  const req = {
+    method: 'GET',
+    headers: { authorization: 'Bearer ' + JSON.stringify({ role: 'analyst', secret: 'test-operator-secret' }) },
+  };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.schemaVersion, 'decision-packet/v1');
+});
+
+test('Decision Packet API: with token configured, viewer-prefixed token is authenticated but forbidden (403)', async () => {
+  const req = { method: 'GET', headers: { authorization: 'Bearer viewer:test-operator-secret' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: CONFIGURED_ENV });
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'PERMISSION_DENIED');
+  assert.equal(res.body.role, 'viewer');
+});
+
+test('Decision Packet API: PROPERTY_OPERATOR_SECRET alias configures the route (200)', async () => {
+  const req = { method: 'GET', headers: { authorization: 'Bearer alias-secret' } };
+  const res = mockResponse();
+  const url = new URL('http://localhost/api/listings/SHERIFF-OH-CUY-4401/packet');
+
+  await handleDecisionPacket(req, res, url, { database: mockDb, env: { PROPERTY_OPERATOR_SECRET: 'alias-secret' } });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.schemaVersion, 'decision-packet/v1');
 });

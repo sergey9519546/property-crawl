@@ -57,7 +57,7 @@ const WEIGHT_DETAILS: Record<string, { label: string; desc: string }> = {
   bidReduction: { label: 'Bid Reduction', desc: 'Detects same-record opening bid drops in source observation history.' },
   areaDiscrepancy: { label: 'Building Area Discrepancy', desc: 'Flags discrepancies between publisher sqft and official cadastral records.' },
   returnedToMarket: { label: 'Returned to Market', desc: 'Detects relisting notices, auction restarts, or back-on-market tags.' },
-  dataCompleteness: { label: 'Data Completeness', desc: 'Measures how many of the six candidate signals resolved to supported evidence.' },
+  dataCompleteness: { label: 'Data Completeness', desc: 'Measures how many of the three canonical research artifacts — title facts, area corroboration, and a valuation band — resolved to supported evidence.' },
 };
 
 function weightPercent(value: number): string {
@@ -132,10 +132,11 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
   const contradictedCount = data.summary?.contradicted ?? data.signals.filter((s) => s.status === 'contradicted').length;
   // Say the unresolved ones out loud. The score is a headline number resting on
   // whichever signals actually resolved, and "1 supported · 0 conflicting" alone
-  // reads like a clean bill of health. Today one of six signals resolves at all,
-  // because there are no valuation bands to score a bid against - the per-signal
-  // badges below do say "Needs checking", but this is the line the reader sees
-  // first when they ask how the number was reached.
+  // reads like a clean bill of health — a mostly-unknown score is an invitation
+  // to open the record, not a verdict. Resolution rates across the live set are
+  // measured by `npm run triage:measure` (see reports/triage-resolution-*.md);
+  // valuation bands in particular arrive from harvested assessor rolls, so a
+  // record without one says so instead of guessing.
   const unknownCount = data.summary?.unknown
     ?? data.signals.filter((s) => s.status === 'unknown').length;
   const weights = data.weights ?? {};

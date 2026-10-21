@@ -486,6 +486,78 @@ function validateAccessForAdapter(adapterKey, url, options = {}) {
   return { allowed: true, reason: 'no_allow_list_declared', matchedPolicy: null };
 }
 
+
+// ---------------------------------------------------------------------------
+// Listing-admission gate (keyed on catalog status).
+// ---------------------------------------------------------------------------
+// The catalog status is the single source of truth for whether a source may
+// surface its records as actionable sale listings. A DISCOVERY_ONLY row is an
+// investigation entry: a court docket filing and a cadastral parcel are
+// evidence for discovering a sale, never a sale listing themselves.
+//
+// The gate is deliberately an ALLOW-list, not a block-list: a source key the
+// catalog does not know fails closed (it cannot serve listings), so adapter
+// drift, or a scraper added without a catalog review, can never quietly
+// re-open the listing feed. Flipping a catalog entry's status away from
+// DISCOVERY_ONLY re-admits the source everywhere at once -- no code change.
+//
+// A key is matched against BOTH entry.adapterKey (what a stored listing's
+// `source` field carries) and entry.id, so callers may pass either form. Any
+// catalog row naming the key that declares DISCOVERY_ONLY fails the whole key:
+// if the catalog is ambiguous about a source, the source does not serve.
+function listingSourceAdmission(sourceKey) {
+  const key = typeof sourceKey === 'string' ? sourceKey.trim().toLowerCase() : '';
+  if (!key) return { source: key || null, serves: false, reason: 'NOT_IN_CATALOG' };
+  let known = false;
+  for (const entry of SOURCE_CATALOG) {
+    if (entry.adapterKey !== key && entry.id !== key) continue;
+    known = true;
+    if (entry.status === 'DISCOVERY_ONLY') {
+      return { source: key, serves: false, reason: 'DISCOVERY_ONLY' };
+    }
+  }
+  return { source: key, serves: known, reason: known ? null : 'NOT_IN_CATALOG' };
+}
+
+function servesListings(sourceKey) {
+  return listingSourceAdmission(sourceKey).serves;
+}
+
+function isDiscoveryOnlySource(sourceKey) {
+  return !servesListings(sourceKey);
+}
+
+// Every key the gate admits, for SQL allow-lists (pgWhere, getListings) and
+// tests. Computed once: SOURCE_CATALOG is frozen at module load.
+let listingServingKeysCache = null;
+function listingServingSourceKeys() {
+  if (!listingServingKeysCache) {
+    const keys = new Set();
+    for (const entry of SOURCE_CATALOG) {
+      if (entry.status === 'DISCOVERY_ONLY') continue;
+      if (entry.adapterKey) keys.add(entry.adapterKey);
+      keys.add(entry.id);
+    }
+    listingServingKeysCache = Object.freeze([...keys].sort());
+  }
+  return listingServingKeysCache;
+}
+
+// Single-quoted, SQL-escaped literal list. Built here (not at each caller) so
+// the in-memory matcher and every SQL allow-list can never drift apart. The
+// clause is parameter-free on purpose: pgWhere's bound-parameter positions are
+// pinned by the discovery parity suite, and an inline literal list leaves
+// them untouched.
+let listingServingSqlCache = null;
+function listingServingSourceSqlList() {
+  if (!listingServingSqlCache) {
+    listingServingSqlCache = listingServingSourceKeys()
+      .map((key) => `'${key.replace(/'/g, "''")}'`)
+      .join(',');
+  }
+  return listingServingSqlCache;
+}
+
 function getAccessPolicyForAdapter(adapterKey) {
   if (typeof adapterKey !== 'string') return null;
   for (const entry of SOURCE_CATALOG) {
@@ -494,4 +566,4 @@ function getAccessPolicyForAdapter(adapterKey) {
   return null;
 }
 
-module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl, getRobotsExclusionForAdapter, isPathExcludedForAdapter, validateAccessForAdapter, getAccessPolicyForAdapter };
+module.exports = { SOURCE_CATALOG, SOURCE_STATUSES, SOURCE_STATUS_BY_ID, SCHEDULED_ADAPTER_KEYS, getSource, summarizeCatalog, validateJurisdictionDiscoveryUrl, getRobotsExclusionForAdapter, isPathExcludedForAdapter, validateAccessForAdapter, getAccessPolicyForAdapter, listingSourceAdmission, servesListings, isDiscoveryOnlySource, listingServingSourceKeys, listingServingSourceSqlList };

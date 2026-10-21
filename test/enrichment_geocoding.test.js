@@ -197,3 +197,55 @@ test('ArcGIS Resolver: fails closed on unmapped county or network error', async 
   });
   assert.equal(failed, null, 'Network failure must return null without crashing');
 });
+
+test('ArcGIS Resolver: centroid layers fall back to a small envelope after an empty point match', async () => {
+  // Hamilton County's CAGIS layer carries parcel centroids, not polygons: a
+  // point-intersect only matches an exact centroid, so the resolver retries
+  // once with a ~44 m envelope around the same point. The retry must carry
+  // the envelope geometry type and stay bounded to a single attempt.
+  const requested = [];
+  const mockFetch = async (url) => {
+    requested.push(String(url));
+    const isEnvelope = /geometryType=esriGeometryEnvelope/.test(String(url));
+    return {
+      ok: true,
+      json: async () => ({
+        features: isEnvelope
+          ? [{ attributes: { PARCELID: '050002130146', CLASS: '510', MKT_TOTAL_VAL: 282790, MKTLND: 47250, MKTIMP: 235540, LGLDS1: 'LOT 14' } }]
+          : []
+      })
+    };
+  };
+
+  const parcel = await queryArcgisParcel({
+    lat: 39.1029,
+    lng: -84.5150,
+    state: 'OH',
+    county: 'Hamilton',
+    fetchFn: mockFetch
+  });
+
+  assert.ok(parcel, 'the envelope retry must recover the centroid match');
+  assert.equal(parcel.rawApn, '050002130146');
+  assert.equal(parcel.assessedValue.total, 282790);
+  assert.equal(requested.length, 2, 'exactly one point query and one envelope retry');
+  assert.match(requested[0], /geometryType=esriGeometryPoint/);
+  assert.match(requested[1], /geometryType=esriGeometryEnvelope/);
+});
+
+test('ArcGIS Resolver: the envelope fallback is bounded to one retry even when it also misses', async () => {
+  const requested = [];
+  const mockFetch = async (url) => {
+    requested.push(String(url));
+    return { ok: true, json: async () => ({ features: [] }) };
+  };
+  const miss = await queryArcgisParcel({
+    lat: 39.1029,
+    lng: -84.5150,
+    state: 'OH',
+    county: 'Hamilton',
+    fetchFn: mockFetch
+  });
+  assert.equal(miss, null, 'a genuine miss returns null');
+  assert.equal(requested.length, 2, 'point query plus at most one envelope retry');
+});

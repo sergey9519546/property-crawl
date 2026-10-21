@@ -144,14 +144,14 @@ type Network = {
   inventoryTruncated: boolean;
   evidenceQueueError: boolean;
   historyUnavailable: boolean;
-  /** Capacity of the observation store this page's change history reads from. Absent when it could not be measured. */
+  /** The observation store's Postgres facts (migrations 025 + 027). Null when Postgres is unreachable. */
   observationStore?: {
-    bytes: number;
-    capBytes: number;
-    headroomBytes: number;
-    usedFraction: number;
-    bytesPerDay: number | null;
-    estimatedDaysRemaining: number | null;
+    store: "postgres";
+    rows: number;
+    trackedRecords: number;
+    oldestObservedAt: string | null;
+    newestObservedAt: string | null;
+    tableBytes: number;
     willExceedCeiling: boolean;
   } | null;
   summary: {
@@ -1102,29 +1102,30 @@ export function SourceNetwork() {
               remain fully listed.
             </p>
           )}
-          {data?.observationStore?.estimatedDaysRemaining !== null &&
-            data?.observationStore !== null &&
-            data?.observationStore !== undefined && (
-              <p
-                className={`mb-4 text-sm ${
-                  data.observationStore.willExceedCeiling
-                    ? "bg-red-100 p-3 rounded-lg text-red-950"
-                    : data.observationStore.estimatedDaysRemaining <= 14
-                      ? "bg-amber-100 p-3 rounded-lg text-amber-950"
-                      : "text-slate-600"
-                }`}
-              >
-                Observation history is {Math.round(
-                  data.observationStore.usedFraction * 100,
-                )}
-                % of its {Math.round(
-                  data.observationStore.capBytes / (1024 * 1024),
-                )}MB store, about {data.observationStore.estimatedDaysRemaining}{" "}
-                days of room left at the current collection rate.
-                {data.observationStore.willExceedCeiling &&
-                  " Past the ceiling, change history stops loading and every source above falls back to History unavailable."}
-              </p>
-            )}
+          {data?.observationStore && (
+            <p className="mb-4 text-sm text-slate-600">
+              Observation history: {data.observationStore.rows.toLocaleString()} snapshots
+              across {data.observationStore.trackedRecords.toLocaleString()} publisher
+              records in Postgres
+              {data.observationStore.newestObservedAt
+                ? `, newest observed ${new Date(data.observationStore.newestObservedAt).toLocaleString()}`
+                : ""}
+              {" "}({Math.max(1, Math.round(data.observationStore.tableBytes / (1024 * 1024)))} MB).
+              History is durable — there is no file ceiling it can overflow.
+            </p>
+          )}
+          {data?.observationStore?.newestObservedAt && (
+            (() => {
+              const ageDays = (Date.now() - Date.parse(data.observationStore.newestObservedAt)) / 86_400_000;
+              if (ageDays <= 3) return null;
+              return (
+                <p className={`mb-4 rounded-lg p-3 text-sm ${ageDays > 14 ? "bg-red-100 text-red-950" : "bg-amber-100 text-amber-950"}`}>
+                  No observation has been recorded in {Math.floor(ageDays)} days. Collection may be
+                  stopped — the "collected" verdicts below are only as current as that last observation.
+                </p>
+              );
+            })()
+          )}
           {loading && !data ? (
             <p className="flex items-center gap-2 py-12">
               <Loader2 size={18} className="animate-spin" /> Loading source

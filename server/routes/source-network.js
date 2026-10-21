@@ -2,7 +2,8 @@ const db = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
 const scheduler = require('../scrapers/scheduler');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
-const { loadObservations, recordSourceRun } = require('../sources/observations');
+const { recordSourceRun } = require('../db/observations-persistence');
+const { loadObservationsFromPg } = require('../db/observations-persistence');
 const { buildSourceNetwork, enrolledSources } = require('../sources/network');
 const { attachDiscoveryCoverage } = require('../sources/discovery-coverage');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
@@ -16,7 +17,11 @@ const unbrowseTool = require('../../scripts/crawler-tools-unbrowse.cjs');
 function createSourceNetworkHandler(dependencies = {}) {
   const database = dependencies.database || db;
   const collector = dependencies.scheduler || scheduler;
-  const observations = dependencies.loadObservations || loadObservations;
+  // The whole-store observation view (runs, tracked-record count, change
+  // events) comes from Postgres. There is no file fallback: without a
+  // reachable database the page says historyUnavailable instead of reading a
+  // stale local file.
+  const readStore = dependencies.loadObservationsFromPg || loadObservationsFromPg;
   const recordRun = dependencies.recordSourceRun || recordSourceRun;
   // The production scheduler owns this singleton. Tests and alternative
   // schedulers may inject a coordinator explicitly.
@@ -60,7 +65,7 @@ function createSourceNetworkHandler(dependencies = {}) {
           packets = completeEvidenceSummaries ? intake.listEvidenceSummaries() : intake.listEvidence({ limit: 200 });
           if (!Array.isArray(packets)) throw new Error('Evidence summaries are unavailable');
         } catch (_) { packets = []; evidenceQueueError = true; }
-        try { history = observations(); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [] }; }
+        try { history = await readStore(database.pool); } catch (_) { historyUnavailable = true; history = { runs: {}, records: {}, signals: [], trackedRecords: 0 }; }
         const evidenceSummary = {};
         for (const packet of packets) { evidenceSummary[packet.sourceId] ||= { count: 0 }; evidenceSummary[packet.sourceId].count++; }
         const network = buildSourceNetwork({ catalog: [...catalog, ...enrolledSources(packets, catalog)], adapters: collector.realScrapers, observations: history, listings: inventory, countsMap, evidenceCollectors: Object.keys(evidenceCollectors), evidenceSummary });
@@ -200,10 +205,13 @@ function createSourceNetworkHandler(dependencies = {}) {
           evidenceJobs.add(source.id);
           const startedAt = Date.now();
           Promise.resolve().then(() => evidenceCollectors[source.id]({ perPage: 10, daysBack: 30 }))
-            .then((result) => recordRun(source.id, { listings: [], evidenceCount: result.submitted, error: null, durationMs: Date.now() - startedAt }))
+            .then((result) => recordRun(database.pool, source.id, { listings: [], evidenceCount: result.submitted, error: null, durationMs: Date.now() - startedAt }))
             .catch((error) => {
-              try { recordRun(source.id, { listings: [], error: error.message, durationMs: Date.now() - startedAt }); }
-              catch (storeError) { console.error('[Source Network] Evidence history unavailable:', storeError.message); }
+              // recordSourceRun is Postgres-only now: a dead or missing
+              // database cannot record the failure anywhere, and the audit
+              // trail for this run is the response + log line below.
+              Promise.resolve().then(() => recordRun(database.pool, source.id, { listings: [], error: error.message, durationMs: Date.now() - startedAt }))
+                .catch((storeError) => console.error('[Source Network] Run metadata was not recorded:', storeError.message));
             }).finally(() => evidenceJobs.delete(source.id));
           return res.status(202).json({ status: 'collecting', sourceId: source.id, message: 'Collecting official notices into the evidence review queue.' });
         }

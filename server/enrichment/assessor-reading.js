@@ -29,12 +29,27 @@ const MARKET_CONVERSION = Object.freeze({
     mode: 'market-figure',
     citation: 'Harris County Appraisal District (HCAD) appraised value, compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01.',
   }),
+  // Enrolled 2026-10-21 from live-verified endpoints; see
+  // reports/assessor-enrollment-2026-10-21.md for the verification method.
+  'OH-FRANKLIN': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Franklin County Auditor TOTVALUEBASE (Base Total Value), compared 1:1 with the published opening amount. The layer carries the Ohio Rev. Code § 5715.01 taxable figure in a separate column (CNTTXBLVAL), so the base figure is the auditor\'s appraised value; sampled sale prices corroborate a market basis.',
+  }),
+  'OH-HAMILTON': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Hamilton County Auditor market value (CAGIS MKT_TOTAL_VAL), compared 1:1 with the published opening amount. Ohio Rev. Code § 5715.01 assesses real property at 35 percent of true value; the CAGIS MKT_ fields carry the pre-fraction market figure.',
+  }),
+  'TX-TARRANT': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Tarrant Appraisal District appraised value (APPRAISED_VALUE via the Fort Worth public parcels layer), compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01. Sampled 2026-roll records show APPRAISED_VALUE equal to MARKET_VALUE.',
+  }),
 });
 
 const WITHHOLD = Object.freeze({
   'IL-COOK': 'Cook County CERTIFIED_TOTAL is class-dependent. The raw figure is shown. No market comparison is computed.',
   'NV-CLARK': 'Clark County TAX_VAL is taxable value, not market value. The raw figure is shown. No market comparison is computed.',
   'ID-BANNOCK': 'Bannock County TOTAL_VAL has no confirmed market ratio in this registry. The raw figure is shown. No market comparison is computed.',
+  'NV-WASHOE': 'Washoe County TOTALASS is the assessed value; Nevada derives it from taxable value by the NRS 361.227 35 percent ratio, and the chain from full cash (market) value is not confirmed in this layer (TOTALAPR is present but its basis is unconfirmed). The raw figure is shown. No market comparison is computed.',
 });
 
 function dealScoreFromRatio(ratio) {

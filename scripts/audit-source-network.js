@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { loadObservations, recordSourceRun, DEFAULT_PATH } = require('../server/sources/observations');
+const { recordSourceRun } = require('../server/db/observations-persistence');
 
 const ROOT = path.resolve(__dirname, '..');
 const CACHE_DIR = path.join(ROOT, '.cache');
@@ -30,8 +30,25 @@ function clip(text) {
   return value.length <= MAX_LOG_BYTES ? value : `${value.slice(0, MAX_LOG_BYTES)}\n[truncated]`;
 }
 
-function runCount(sourceId, filePath) {
-  try { return loadObservations({ filePath }).runs[sourceId]?.runs || 0; } catch (_) { return 0; }
+// Run metadata lives in source_observation_runs (migration 027). A dead or
+// unconfigured database reads as zero runs — the audit still classifies the
+// collector's own output, it just cannot record a failed-run observation.
+let resolvedPool = null;
+async function resolvePool() {
+  if (resolvedPool) return resolvedPool;
+  const db = require('../server/db/client');
+  await db.verifyConnection();
+  if (!db.pool) throw new Error('Source observations require PostgreSQL (DATABASE_URL is not configured)');
+  resolvedPool = db.pool;
+  return resolvedPool;
+}
+
+async function runCount(sourceId) {
+  try {
+    const pool = await resolvePool();
+    const result = await pool.query('SELECT runs_count FROM source_observation_runs WHERE source_key = $1', [sourceId]);
+    return Number(result.rows[0]?.runs_count) || 0;
+  } catch (_) { return 0; }
 }
 
 function commandFor(sourceId) {
@@ -122,7 +139,7 @@ async function diagnoseEndpoint(sourceId) {
 async function auditOne(sourceId, options) {
   const startedAt = new Date().toISOString();
   const start = Date.now();
-  const observationRunsBefore = runCount(sourceId, options.observationPath);
+  const observationRunsBefore = await runCount(sourceId);
   const { args, env } = commandFor(sourceId);
   let stdout = '';
   let stderr = '';
@@ -154,7 +171,7 @@ async function auditOne(sourceId, options) {
   });
 
   const durationMs = Date.now() - start;
-  const observationRunsAfter = runCount(sourceId, options.observationPath);
+  const observationRunsAfter = await runCount(sourceId);
   let status = timedOut ? 'timeout' : exit.code === 0 ? 'completed' : 'failed';
   const classification = classificationFor({ timedOut, exitCode: exit.code, stdout, stderr });
   const endpointDiagnostic = classification.classification === 'zero_yield_unverified'
@@ -173,7 +190,8 @@ async function auditOne(sourceId, options) {
 
   if (error && (observationRunsAfter === observationRunsBefore || classification.auditError)) {
     try {
-      recordSourceRun(sourceId, { listings: [], error, rejectedCount: 0, durationMs }, { filePath: options.observationPath });
+      const pool = await resolvePool();
+      await recordSourceRun(pool, sourceId, { listings: [], error, rejectedCount: 0, durationMs });
       observationWrittenByAudit = true;
     } catch (recordError) {
       status = 'failed';
@@ -184,7 +202,7 @@ async function auditOne(sourceId, options) {
   const result = {
     sourceId, status, classification: classification.classification, collectorSummary: classification.summary, endpointDiagnostic, startedAt, finishedAt: new Date().toISOString(), durationMs,
     timeoutMs: options.timeoutMs, exitCode: exit.code, signal: exit.signal,
-    observationPath: options.observationPath, liveStorePath: options.liveStorePath,
+    liveStorePath: options.liveStorePath,
     observationWrittenByCollector: observationRunsAfter > observationRunsBefore,
     observationWrittenByAudit, command: { executable: process.execPath, args },
     stdout: clip(stdout), stderr: clip(stderr), error
@@ -213,7 +231,6 @@ async function main() {
   fs.mkdirSync(runDirectory, { recursive: true, mode: 0o700 });
   const options = {
     timeoutMs: DEFAULT_TIMEOUT_MS,
-    observationPath: process.env.PROPERTY_OBSERVATIONS_PATH || DEFAULT_PATH,
     liveStorePath: process.env.PROPERTY_LIVE_CACHE_PATH || path.join(CACHE_DIR, 'live-listings.json'),
     runDirectory
   };
@@ -223,7 +240,7 @@ async function main() {
   const report = {
     startedAt: results.map((result) => result.startedAt).filter(Boolean).sort()[0] || new Date().toISOString(),
     finishedAt: new Date().toISOString(), concurrency: MAX_CONCURRENCY, timeoutMs: options.timeoutMs,
-    runDirectory, observationPath: options.observationPath, liveStorePath: options.liveStorePath,
+    runDirectory, liveStorePath: options.liveStorePath,
     results
   };
   fs.writeFileSync(path.join(runDirectory, 'report.json'), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });

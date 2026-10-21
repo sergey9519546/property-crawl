@@ -1,21 +1,24 @@
+'use strict';
+
+// test/source-observations.test.js
+//
+// The observation pipeline's pure vocabulary — acceptedLiveListings,
+// snapshot, classifyStatusActivity, compareSnapshots — plus the ingest-gate
+// semantics recordSourceRun (Postgres, migrations 025 + 027) inherits. The
+// bounded JSON file store these tests once exercised was retired after its
+// history was imported; the PG write/read paths have their own suites in
+// test/db/observations-cutover.test.js and test/observations-persistence.test.js.
+
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { afterEach, test } = require('node:test');
+const { test } = require('node:test');
 const {
-  compactObservations,
-  loadObservations,
-  recordSourceRun,
-  updateObservations,
+  acceptedLiveListings,
+  classifyStatusActivity,
+  compareSnapshots,
+  snapshot,
 } = require('../server/sources/observations');
 
-const temporaryDirectories = [];
 const NOW = '2026-09-05T18:00:00.000Z';
-
-function emptyObservations() {
-  return { version: 1, runs: {}, records: {}, signals: [] };
-}
 
 function listing(overrides = {}) {
   const observedAt = overrides.sourceObservedAt || '2026-09-05T17:00:00.000Z';
@@ -42,15 +45,9 @@ function listing(overrides = {}) {
   };
 }
 
-afterEach(() => {
-  while (temporaryDirectories.length) {
-    const target = temporaryDirectories.pop();
-    if (target.startsWith(os.tmpdir())) fs.rmSync(target, { recursive: true, force: true });
-  }
-});
+// --- ingest gate (shared by the Postgres write path) --------------------
 
 test('observations reject fixtures and future captures rather than treating them as inventory', () => {
-  const data = emptyObservations();
   const fixture = listing({
     id: 'CIV-FIXTURE-1',
     provenance: { origin: 'fixture', observed: false, fixture: true, publisher: 'Fixture', recordId: 'fixture-1' },
@@ -58,126 +55,41 @@ test('observations reject fixtures and future captures rather than treating them
   const future = listing({ id: 'CIV-FUTURE-1', sourceObservedAt: '2026-09-06T18:00:00.000Z' });
   future.provenance = { ...future.provenance, recordId: 'future-1', observedAt: future.sourceObservedAt };
 
-  const result = updateObservations(data, 'civilview', {
+  const accepted = acceptedLiveListings('civilview', {
     listings: [fixture, future], error: null, rejectedCount: 0, durationMs: 10,
-  }, { now: NOW });
-
-  assert.equal(result.accepted, 0);
-  assert.equal(data.runs.civilview.acceptedCount, 0);
-  assert.equal(data.runs.civilview.rejectedCount, 2);
-  assert.equal(Object.keys(data.records).length, 0);
+  }, NOW);
+  assert.equal(accepted.length, 0);
 });
 
-test('out-of-order and duplicate captures cannot refresh source freshness or overwrite latest evidence', () => {
-  const data = emptyObservations();
-  updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
-  const original = Object.values(data.records)[0].latest;
-  const stale = listing({ sourceObservedAt: '2026-09-05T16:00:00.000Z', openingBid: 50000 });
-  stale.provenance = { ...stale.provenance, observedAt: stale.sourceObservedAt };
-
-  const staleResult = updateObservations(data, 'civilview', { listings: [stale], error: null }, { now: NOW });
-  assert.equal(staleResult.accepted, 0);
-  assert.equal(data.runs.civilview.acceptedCount, 0);
-  assert.equal(data.runs.civilview.rejectedCount, 1);
-  assert.deepEqual(Object.values(data.records)[0].latest, original);
-
-  const duplicateResult = updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
-  assert.equal(duplicateResult.accepted, 0);
-  assert.equal(duplicateResult.newSignals, 0);
-  assert.equal(Object.values(data.records)[0].observations, 1);
+test('a failed run produces no snapshots — a failed request is never evidence', () => {
+  const accepted = acceptedLiveListings('civilview', {
+    listings: [listing()], error: 'WAF challenge', rejectedCount: 0, durationMs: 10,
+  }, NOW);
+  assert.equal(accepted.length, 0, 'error runs must not be ingested as observations');
 });
 
-test('a published bid reduction creates one deduplicated signal with both exact evidence points', () => {
-  const data = emptyObservations();
-  updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
-  const reduced = listing({ sourceObservedAt: '2026-09-05T17:30:00.000Z', openingBid: 90000 });
-  reduced.provenance = { ...reduced.provenance, observedAt: reduced.sourceObservedAt };
-
-  const first = updateObservations(data, 'civilview', { listings: [reduced], error: null }, { now: NOW });
-  const repeated = updateObservations(data, 'civilview', { listings: [reduced], error: null }, { now: NOW });
-
-  assert.equal(first.newSignals, 1);
-  assert.equal(repeated.newSignals, 0);
-  assert.equal(data.signals.length, 1);
-  assert.equal(data.signals[0].kind, 'bid_reduced');
-  assert.equal(data.signals[0].before, 100000);
-  assert.equal(data.signals[0].after, 90000);
-  assert.deepEqual(data.signals[0].evidence.map((item) => item.sourceUrl), [listing().sourceUrl, reduced.sourceUrl]);
+test('accepted listings arrive in observation order so in-run advances are deterministic', () => {
+  const earlier = listing({ sourceObservedAt: '2026-09-05T16:00:00.000Z', id: 'CIV-EARLY', provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: 'EARLY', observedAt: '2026-09-05T16:00:00.000Z' } });
+  const later = listing({ sourceObservedAt: '2026-09-05T17:00:00.000Z', id: 'CIV-LATE', provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: 'LATE', observedAt: '2026-09-05T17:00:00.000Z' } });
+  const accepted = acceptedLiveListings('civilview', { listings: [later, earlier], error: null }, NOW);
+  assert.deepEqual(accepted.map((item) => item.id), ['CIV-EARLY', 'CIV-LATE']);
 });
 
-test('failed and empty runs preserve records without inventing disappearance or sold signals', () => {
-  const data = emptyObservations();
-  updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
+// --- snapshot shape ------------------------------------------------------
 
-  updateObservations(data, 'civilview', { listings: [], error: 'WAF challenge', rejectedCount: 0 }, {
-    now: '2026-09-05T18:10:00.000Z',
-  });
-  assert.equal(data.runs.civilview.error, 'WAF challenge');
-  assert.equal(data.runs.civilview.lastSuccessAt, NOW);
-  assert.equal(data.signals.length, 0);
-  assert.equal(Object.keys(data.records).length, 1);
-
-  updateObservations(data, 'civilview', { listings: [], error: null, rejectedCount: 0 }, {
-    now: '2026-09-05T18:20:00.000Z',
-  });
-  assert.equal(data.runs.civilview.error, null);
-  assert.equal(data.runs.civilview.acceptedCount, 0);
-  assert.equal(data.signals.length, 0);
-  assert.equal(Object.keys(data.records).length, 1);
+test('snapshot preserves the exact tracked fields and hashes the raw notice', () => {
+  const snap = snapshot(listing());
+  assert.equal(snap.recordId, '2128964683');
+  assert.equal(snap.listingId, 'CIV-NJ-7-2128964683');
+  assert.equal(snap.state, 'NJ');
+  assert.equal(snap.county, 'Bergen');
+  assert.equal(snap.fields.openingBid, 100000);
+  assert.equal(snap.fields.status, 'scheduled');
+  assert.match(snap.noticeSha256, /^[a-f0-9]{64}$/);
+  assert.ok(snap.noticeExcerpt.startsWith('Official CivilView source record'));
 });
 
-test('recordSourceRun persists an atomic observation history', () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-source-observations-'));
-  temporaryDirectories.push(directory);
-  const filePath = path.join(directory, 'observations.json');
-
-  recordSourceRun('civilview', { listings: [listing()], error: null, durationMs: 12 }, { filePath, now: NOW });
-  const stored = loadObservations({ filePath });
-  assert.equal(stored.runs.civilview.acceptedCount, 1);
-  assert.equal(Object.keys(stored.records).length, 1);
-  assert.equal(fs.existsSync(`${filePath}.lock`), false);
-  assert.equal(fs.readdirSync(directory).some((name) => name.endsWith('.tmp')), false);
-});
-
-test('compactObservations strips superseded noticeExcerpts from history while preserving latest', () => {
-  const data = emptyObservations();
-  data.records['test-key'] = {
-    firstObservedAt: '2026-09-01T00:00:00.000Z',
-    observations: 3,
-    latest: { noticeExcerpt: 'latest excerpt text', fields: { openingBid: 100 } },
-    history: [
-      { noticeExcerpt: 'old excerpt 1', fields: { openingBid: 120 } },
-      { noticeExcerpt: 'old excerpt 2', fields: { openingBid: 110 } },
-    ],
-  };
-
-  const pruned = compactObservations(data);
-  assert.equal(pruned, 2);
-  assert.equal(data.records['test-key'].latest.noticeExcerpt, 'latest excerpt text');
-  assert.equal(data.records['test-key'].history[0].noticeExcerpt, undefined);
-  assert.equal(data.records['test-key'].history[0].fields.openingBid, 120);
-  assert.equal(data.records['test-key'].history[1].noticeExcerpt, undefined);
-  assert.equal(data.records['test-key'].history[1].fields.openingBid, 110);
-});
-
-test('recordSourceRun recovers from a stale lock older than 30s', () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'property-stale-lock-'));
-  temporaryDirectories.push(directory);
-  const filePath = path.join(directory, 'observations.json');
-  const lockPath = `${filePath}.lock`;
-
-  // Create an abandoned lock file with mtime in the distant past (1 hour ago)
-  fs.writeFileSync(lockPath, 'crashed_process_pid');
-  const past = (Date.now() - 3600_000) / 1000;
-  fs.utimesSync(lockPath, past, past);
-
-  recordSourceRun('civilview', { listings: [listing()], error: null, durationMs: 12 }, { filePath, now: NOW });
-  const stored = loadObservations({ filePath });
-  assert.equal(stored.runs.civilview.acceptedCount, 1);
-  assert.equal(fs.existsSync(lockPath), false);
-});
-
-// --- real production status vocabulary ---------------------------------
+// --- real production status vocabulary -----------------------------------
 //
 // The anchored ^enum$ classifier matched 0 of 1,526 real status transitions
 // because publisher statuses are prose. These tests pin the exact strings
@@ -185,7 +97,6 @@ test('recordSourceRun recovers from a stale lock older than 30s', () => {
 // to enum-only matching.
 
 test('classifyStatusActivity normalizes real publisher status prose', () => {
-  const { classifyStatusActivity } = require('../server/sources/observations');
   // The exact strings counted across 10,285 live records:
   assert.equal(classifyStatusActivity('Status: Active - Postponed'), 'inactive', '950 live listings carry this status');
   assert.equal(classifyStatusActivity('Status: Cancelled'), 'inactive');
@@ -203,7 +114,6 @@ test('classifyStatusActivity normalizes real publisher status prose', () => {
 });
 
 test('compareSnapshots classifies real-vocabulary returned-to-market transitions', () => {
-  const { compareSnapshots } = require('../server/sources/observations');
   const base = { observedAt: '2026-10-01T00:00:00.000Z', fields: {} };
   const next = { observedAt: '2026-10-05T00:00:00.000Z', fields: {} };
 
@@ -231,24 +141,4 @@ test('compareSnapshots classifies real-vocabulary returned-to-market transitions
   const still = compareSnapshots(postponed, { ...next, fields: { status: 'Status: Active - Postponed until November' } })
     .find((c) => c.field === 'status');
   assert.equal(still.kind, 'status_changed');
-});
-
-test('recordSourceRun reports the accepted snapshots for database persistence', () => {
-  const result = updateObservations(emptyObservations(), 'civilview', {
-    listings: [listing()], error: null,
-  }, { now: NOW });
-  assert.equal(result.accepted, 1);
-  assert.ok(Array.isArray(result.snapshots) && result.snapshots.length === 1);
-  assert.equal(result.snapshots[0].recordId, '2128964683');
-  assert.equal(result.snapshots[0].fields.openingBid, 100000);
-
-  // Stale captures that do not advance the record must not be reported as
-  // persisted snapshots.
-  const data = emptyObservations();
-  updateObservations(data, 'civilview', { listings: [listing()], error: null }, { now: NOW });
-  const stale = listing({ sourceObservedAt: '2026-09-05T16:00:00.000Z' });
-  stale.provenance = { ...stale.provenance, observedAt: stale.sourceObservedAt };
-  const staleResult = updateObservations(data, 'civilview', { listings: [stale], error: null }, { now: NOW });
-  assert.equal(staleResult.accepted, 0);
-  assert.equal(staleResult.snapshots.length, 0);
 });

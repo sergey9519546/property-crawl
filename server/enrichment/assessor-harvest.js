@@ -25,11 +25,22 @@ const { queryArcgisParcel, resolveCountyKey } = require('./arcgis-parcels');
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
 const DEFAULT_CACHE_LIMIT = 5000;
 const DEFAULT_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
-const DEFAULT_HARVEST_LIMIT = 25;
+// Per-run fetch budget. With 12 enrolled counties the default 25 left whole
+// runs unharvested; the env knob lets a deployment raise it without a code
+// change. Clamped so a bad value cannot turn the harvest into an unbounded
+// loop against county endpoints.
+function resolveHarvestLimit(overrides = {}) {
+  if (Number.isInteger(overrides.limit) && overrides.limit > 0) return overrides.limit;
+  const fromEnv = Number.parseInt(process.env.PROPERTY_ASSESSOR_HARVEST_LIMIT, 10);
+  if (Number.isInteger(fromEnv) && fromEnv > 0) return Math.min(fromEnv, 500);
+  return DEFAULT_HARVEST_LIMIT;
+}
+const DEFAULT_HARVEST_LIMIT = 100;
 
 // Assessor rolls name the roll year inconsistently. These are the common
-// ArcGIS attribute spellings; anything outside 1900-2100 is rejected.
-const TAX_YEAR_FIELDS = ['taxYear', 'TAX_YEAR', 'tax_yr', 'TAX_YR', 'assessYr', 'ASSESS_YR', 'rollYear', 'ROLL_YEAR', 'assessmentYear', 'YEAR_ASSESSED'];
+// ArcGIS attribute spellings plus the Florida DOR NAL roll (ASMNT_YR); anything
+// outside 1900-2100 is rejected.
+const TAX_YEAR_FIELDS = ['taxYear', 'TAX_YEAR', 'tax_yr', 'TAX_YR', 'assessYr', 'ASSESS_YR', 'rollYear', 'ROLL_YEAR', 'assessmentYear', 'YEAR_ASSESSED', 'ASMNT_YR'];
 
 function cacheKeyFor(countyKey, lat, lng) {
   return `${countyKey}:${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
@@ -117,7 +128,7 @@ function applyHarvest(candidate, parcel, observedAt) {
 
 async function harvestAssessorRolls(listings, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
-  const limit = Number.isInteger(options.limit) && options.limit > 0 ? options.limit : DEFAULT_HARVEST_LIMIT;
+  const limit = resolveHarvestLimit(options);
   const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : DEFAULT_CACHE_TTL_MS;
   const now = Number.isFinite(options.now) ? options.now : Date.now();
@@ -181,5 +192,6 @@ module.exports = {
   DEFAULT_HARVEST_LIMIT,
   cacheKeyFor,
   harvestAssessorRolls,
+  resolveHarvestLimit,
   taxYearFromRawAttributes,
 };

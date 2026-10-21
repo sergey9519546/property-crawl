@@ -18,13 +18,15 @@
  *   transferTax, delinquentTaxes, settlementCosts: numbers
  *
  * Protected by RBAC permission: 'canExportDossier' (operator and analyst roles).
+ * Fails closed with 503 when no operator token is configured, mirroring the
+ * other operator surfaces (hunts, document-review, enrichment).
  */
 
 const db = require('../db/client');
 const { buildDecisionPacket, formatDecisionPacketMarkdown } = require('../export/decision-packet');
-const { hasPermission, extractRoleFromToken } = require('../security/auth');
+const { hasPermission } = require('../security/auth');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
-const { resolveOperatorToken } = require('../security/operator-token');
+const { resolveOperatorToken, operatorTokenConfigured } = require('../security/operator-token');
 
 function extractCookie(req, name) {
   const cookieHeader = req.headers && req.headers.cookie;
@@ -67,13 +69,15 @@ function resolveRequestAuth(req, env = process.env) {
     return { authenticated: false, role: null, reason: 'invalid_credentials' };
   }
 
-  // 3. No operator token configured in environment (e.g. dev/test mode): extract role directly from token
-  const role = extractRoleFromToken(presented, { allowNull: true });
-  if (role) {
-    return { authenticated: true, role };
-  }
-
-  return { authenticated: true, role: 'operator' };
+  // 3. No operator token configured: fail closed. Operator surfaces require
+  // SCRAPER_ADMIN_TOKEN (or PROPERTY_OPERATOR_SECRET); the route maps this case
+  // to 503 (see handleDecisionPacket), mirroring hunts/document-review/enrichment.
+  return {
+    authenticated: false,
+    role: null,
+    reason: 'operator_token_not_configured',
+    requiredConfiguration: 'SCRAPER_ADMIN_TOKEN',
+  };
 }
 
 function parseNumber(value) {
@@ -116,9 +120,20 @@ async function handleDecisionPacket(req, res, url, dependencies = {}) {
     return res.status(400).json({ error: 'Invalid listing identifier' });
   }
 
+  // Operator token must be configured: operator surfaces fail closed with 503
+  // when SCRAPER_ADMIN_TOKEN (or PROPERTY_OPERATOR_SECRET) is unset - mirrors
+  // hunts.js / document-review.js / enrichment.js.
+  const env = dependencies.env || process.env;
+  if (!operatorTokenConfigured(env)) {
+    return res.status(503).json({
+      error: 'Decision packet export needs SCRAPER_ADMIN_TOKEN (or PROPERTY_OPERATOR_SECRET) on the API server.',
+      requiredConfiguration: 'SCRAPER_ADMIN_TOKEN',
+    });
+  }
+
   // Authentication & RBAC Authorization
   const authResolve = dependencies.resolveAuth || resolveRequestAuth;
-  const auth = authResolve(req, dependencies.env || process.env);
+  const auth = authResolve(req, env);
 
   if (!auth.authenticated) {
     return res.status(401).json({

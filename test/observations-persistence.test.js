@@ -127,26 +127,23 @@ test('recomputeTriageForListings evaluates durable history and persists the scor
   assert.equal(updates[0].params[1], 'CIV-NJ-7-2128964683');
 });
 
-test('recomputeTriageForListings falls back to the filesystem store while the mirror is empty', async () => {
+test('recomputeTriageForListings treats an empty durable history as no history (no file fallback)', async () => {
   const pool = mockPool({
     handlerFor: (text) => text.startsWith('SELECT')
       ? { rows: [], rowCount: 0 }
       : { rows: [], rowCount: 1 },
   });
-  let fileHistoryReads = 0;
-  const readFileHistory = () => {
-    fileHistoryReads += 1;
-    return { records: {}, signals: [] };
-  };
-  const result = await recomputeTriageForListings(pool, [listing()], { readFileHistory });
-  assert.equal(fileHistoryReads, 1);
+  // The retired filesystem store must not be consulted: an empty durable
+  // history is a real empty, and the evaluate contract receives it as such.
+  const result = await recomputeTriageForListings(pool, [listing()], {});
   assert.equal(result.evaluated, 1);
+  assert.equal(result.updated, 1);
 });
 
 test('recomputeTriageForListings is bounded and skips malformed listings', async () => {
   const pool = mockPool({ handlerFor: () => ({ rows: [], rowCount: 0 }) });
   const many = Array.from({ length: 12 }, (_, index) => listing({ id: `L-${index}` }));
-  const result = await recomputeTriageForListings(pool, [...many, null, {}], { limit: 5, readFileHistory: () => { throw new Error('unreadable'); } });
+  const result = await recomputeTriageForListings(pool, [...many, null, {}], { limit: 5 });
   // Limit respected; malformed listings skipped; unreadable history never crashes.
   assert.equal(result.evaluated, 5);
 });

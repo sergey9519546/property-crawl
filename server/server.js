@@ -256,6 +256,16 @@ async function handleRequest(req, res) {
           freshness = { error: String(error && error.message ? error.message : error).slice(0, 160) };
         }
       }
+      // Observation history lives in Postgres (migrations 025 + 027). The
+      // report is the store's own facts — row count, observed span, table
+      // size — because there is no file ceiling left to count down from.
+      let observationStore = null;
+      try {
+        const { observationStoreStats } = require('./db/observations-persistence');
+        observationStore = await observationStoreStats(db.pool);
+      } catch (error) {
+        observationStore = { store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) };
+      }
       return res.json({
         status: 'ok',
         uptime: process.uptime(),
@@ -301,18 +311,9 @@ async function handleRequest(req, res) {
         // same claim as an inventory somebody checked today, and the difference
         // is exactly what a buyer is relying on when they read "active".
         ...(freshness ? { inventoryFreshness: freshness } : {}),
-        // The observation store is the one backing store that provably fills
-        // up and then degrades, so it publishes its own capacity rather than
-        // waiting until loadObservations starts throwing. Reporting is not
-        // pruning: what to drop stays a product decision.
-        ...(() => {
-          try {
-            const { publicObservationStoreCapacity } = require('./sources/observations');
-            return { observationStore: publicObservationStoreCapacity() };
-          } catch {
-            return {};
-          }
-        })(),
+        // The observation store's Postgres facts. A failed read still reports
+        // the store with its error rather than vanishing from the payload.
+        ...(observationStore ? { observationStore } : {}),
         ...(process.env.WORKSPACE_BOOT_ID ? { workspaceBootId: process.env.WORKSPACE_BOOT_ID } : {}),
       });
     }
