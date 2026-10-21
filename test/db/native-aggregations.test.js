@@ -220,8 +220,8 @@ test('getNeighborhoodStatsNative fast-path leverages mv_neighborhood_stats when 
   client.pool = {
     async query(sql, params) {
       queries.push({ sql, params });
-      if (sql.includes('COUNT(*)::int as total')) {
-        return { rows: [{ total: 1, listings_bucketed: 15 }] };
+      if (sql.includes('listings_bucketed')) {
+        return { rows: [{ scanned: 20, listings_bucketed: 15, buckets_total: 1 }] };
       }
       return {
         rows: [
@@ -250,10 +250,37 @@ test('getNeighborhoodStatsNative fast-path leverages mv_neighborhood_stats when 
 
   assert.equal(queries.length, 2, 'Queries MV table and total counts');
   assert.ok(queries[0].sql.includes('FROM mv_neighborhood_stats'), 'Queries materialized view directly');
+  assert.equal(result.scanned, 20);
   assert.equal(result.bucketsTotal, 1);
   assert.equal(result.listingsBucketed, 15);
+  assert.equal(result.rowsWithoutNeighborhoodKey, 5);
   assert.equal(result.neighborhoods[0].key, '90210');
   assert.equal(result.neighborhoods[0].medianOpeningBid, 500000);
+});
+
+test('getCompsCandidatesNative handles target without an existing listing id', async () => {
+  const queries = [];
+  const client = new DatabaseClient({ NODE_ENV: 'test' });
+  client.isPg = true;
+  client.pool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rows: [] };
+    }
+  };
+
+  const adHocTarget = {
+    lat: 34.05,
+    lng: -118.25,
+    state: 'CA'
+  };
+
+  await client.getCompsCandidatesNative(adHocTarget, { radiusKm: 5 });
+  assert.equal(queries.length, 2, 'Ran spatial query then state fallback');
+  assert.ok(!queries[0].sql.includes('AND id !='), 'Spatial query has no id exclusion when target.id is absent');
+  assert.ok(!queries[1].sql.includes('AND id !='), 'State fallback query has no id exclusion when target.id is absent');
+  assert.equal(queries[0].params.length, 7, 'Spatial params length is exactly 7 without target.id');
+  assert.equal(queries[1].params.length, 1, 'State fallback params length is exactly 1 without target.id');
 });
 
 test('getSingleNeighborhoodStatsNative fast-path leverages mv_neighborhood_stats', async () => {

@@ -316,13 +316,15 @@ WITH base AS (
     prop_type,
     source_observed_at
   FROM listings
-  WHERE (status IS NULL OR status NOT IN ('sold', 'cancelled', 'withdrawn', 'closed'))
+  WHERE (status = 'active' OR status IS NULL)
+    AND source_observed_at IS NOT NULL
+    AND source_observed_at >= (NOW() - INTERVAL '365 days')
 ),
 zip_counts AS (
   SELECT
     'zip'::text AS kind,
-    zip::text AS key,
-    zip::text AS label,
+    SUBSTRING(TRIM(zip) FROM 1 FOR 5)::text AS key,
+    SUBSTRING(TRIM(zip) FROM 1 FOR 5)::text AS label,
     state::text AS state,
     COUNT(*)::int AS count,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
@@ -339,18 +341,18 @@ zip_counts AS (
   FROM (
     SELECT
       b.*,
-      COUNT(*) OVER (PARTITION BY zip, source_key) AS src_count,
-      COUNT(*) OVER (PARTITION BY zip, prop_type) AS pt_count
+      COUNT(*) OVER (PARTITION BY SUBSTRING(TRIM(zip) FROM 1 FOR 5), source_key) AS src_count,
+      COUNT(*) OVER (PARTITION BY SUBSTRING(TRIM(zip) FROM 1 FOR 5), prop_type) AS pt_count
     FROM base b
-    WHERE zip IS NOT NULL AND zip != ''
+    WHERE zip IS NOT NULL AND TRIM(zip) != ''
   ) s
-  GROUP BY zip, state
+  GROUP BY SUBSTRING(TRIM(zip) FROM 1 FOR 5), state
 ),
 city_counts AS (
   SELECT
     'city'::text AS kind,
-    (state || '::' || lower(city))::text AS key,
-    (city || ', ' || state)::text AS label,
+    (UPPER(TRIM(state)) || '::' || LOWER(TRIM(city)))::text AS key,
+    (LOWER(TRIM(city)) || ', ' || UPPER(TRIM(state)))::text AS label,
     state::text AS state,
     COUNT(*)::int AS count,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY opening_bid)::float8 AS "medianOpeningBid",
@@ -367,12 +369,14 @@ city_counts AS (
   FROM (
     SELECT
       b.*,
-      COUNT(*) OVER (PARTITION BY state, lower(city), source_key) AS src_count,
-      COUNT(*) OVER (PARTITION BY state, lower(city), prop_type) AS pt_count
+      COUNT(*) OVER (PARTITION BY UPPER(TRIM(state)), LOWER(TRIM(city)), source_key) AS src_count,
+      COUNT(*) OVER (PARTITION BY UPPER(TRIM(state)), LOWER(TRIM(city)), prop_type) AS pt_count
     FROM base b
-    WHERE city IS NOT NULL AND city != '' AND state IS NOT NULL AND state != ''
+    WHERE (zip IS NULL OR TRIM(zip) = '')
+      AND city IS NOT NULL AND TRIM(city) != ''
+      AND state IS NOT NULL AND TRIM(state) != ''
   ) c
-  GROUP BY state, lower(city), city
+  GROUP BY UPPER(TRIM(state)), LOWER(TRIM(city)), state, city
 )
 SELECT * FROM zip_counts
 UNION ALL
@@ -380,4 +384,4 @@ SELECT * FROM city_counts;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_key ON mv_neighborhood_stats(kind, key);
 CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_state ON mv_neighborhood_stats(state);
-CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_count ON mv_neighborhood_stats(count DESC);
+CREATE INDEX IF NOT EXISTS idx_mv_neighborhood_stats_count_label ON mv_neighborhood_stats(count DESC, label ASC);

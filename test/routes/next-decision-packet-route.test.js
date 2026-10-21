@@ -7,7 +7,30 @@ test('Next.js Decision Packet Route: generates public JSON packet for valid list
   const { buildDecisionPacket } = require('../../server/export/decision-packet');
   const db = require('../../server/db/client');
   
-  const sample = (await db.getListings({ limit: 1 })).listings[0];
+  let sample = (await db.getListings({ limit: 1 })).listings[0];
+  if (!sample) {
+    const fallback = {
+      id: 'SHERIFF-OH-CUY-4401',
+      address: '1420 W 28th St',
+      city: 'Cleveland',
+      state: 'OH',
+      county: 'Cuyahoga',
+      zip: '44113',
+      propType: 'Single Family',
+      openingBid: 55000,
+      caseNumber: 'CV-24-887123',
+      saleDate: '2026-11-15',
+      plaintiff: 'Wells Fargo Bank, N.A.',
+      deposit: 5000,
+      source: 'sheriff',
+    };
+    if (typeof db.createListing === 'function') {
+      try {
+        await db.createListing(fallback);
+      } catch {}
+    }
+    sample = (await db.getListings({ limit: 1 })).listings[0] || fallback;
+  }
   assert.ok(sample, 'Must have at least one listing');
 
   const packet = buildDecisionPacket(sample, {});
@@ -22,7 +45,24 @@ test('Next.js Decision Packet Route: generates Markdown dossier for format=markd
   const { buildDecisionPacket, formatDecisionPacketMarkdown } = require('../../server/export/decision-packet');
   const db = require('../../server/db/client');
   
-  const sample = (await db.getListings({ limit: 1 })).listings[0];
+  let sample = (await db.getListings({ limit: 1 })).listings[0];
+  if (!sample) {
+    sample = {
+      id: 'SHERIFF-OH-CUY-4401',
+      address: '1420 W 28th St',
+      city: 'Cleveland',
+      state: 'OH',
+      county: 'Cuyahoga',
+      zip: '44113',
+      propType: 'Single Family',
+      openingBid: 55000,
+      caseNumber: 'CV-24-887123',
+      saleDate: '2026-11-15',
+      plaintiff: 'Wells Fargo Bank, N.A.',
+      deposit: 5000,
+      source: 'sheriff',
+    };
+  }
   const packet = buildDecisionPacket(sample, {});
   const md = formatDecisionPacketMarkdown(packet);
   

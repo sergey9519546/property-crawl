@@ -483,21 +483,7 @@ class DatabaseClient {
     this.liveCacheErrorSignature = null;
     // Set only after SELECT 1 succeeds. A Pool object is not a connection.
     this.postgresReachable = false;
-    const roUrl = this.env.DATABASE_RO_URL || this.env.DATABASE_READ_URL || null;
-    if (roUrl && !embeddedRequested) {
-      try {
-        const { Pool } = require('pg');
-        this.readPool = new Pool({
-          connectionString: roUrl,
-          max: Number(this.env.DATABASE_RO_POOL_MAX) || 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
-        });
-      } catch (err) {
-        console.warn('[DB] PostgreSQL read-replica driver not initialized, using primary pool:', err.message);
-        this.readPool = null;
-      }
-    }
+
     this.postgresError = null;
     this.inMemoryData = {
       sources: {},
@@ -554,6 +540,22 @@ class DatabaseClient {
         this.isPg = false;
         this.postgresError = err.message;
       }
+
+      const roUrl = this.env.DATABASE_RO_URL || this.env.DATABASE_READ_URL || null;
+      if (roUrl && !this.readPool) {
+        try {
+          const { Pool } = require('pg');
+          this.readPool = new Pool({
+            connectionString: roUrl,
+            max: Number(this.env.DATABASE_RO_POOL_MAX) || 20,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000,
+          });
+        } catch (err) {
+          console.warn('[DB] PostgreSQL read-replica driver not initialized, using primary pool:', err.message);
+          this.readPool = null;
+        }
+      }
     }
 
     if (!this.isPg) {
@@ -607,6 +609,16 @@ class DatabaseClient {
       this.postgresReachable = true;
       this.isPg = true;
       this.postgresError = null;
+      if (this.readPool) {
+        try {
+          await this.readPool.query('SELECT 1');
+        } catch (roErr) {
+          console.warn('[DB] Read-replica pool unreachable, falling back to primary pool:', roErr.message);
+          const dead = this.readPool;
+          this.readPool = null;
+          dead.end().catch(() => {});
+        }
+      }
       console.log('[DB] PostgreSQL connection verified');
       return true;
     } catch (err) {
@@ -924,17 +936,37 @@ class DatabaseClient {
         const mvRes = await pool.query(`
           SELECT * FROM mv_neighborhood_stats
           WHERE kind = 'zip'
-          ORDER BY count DESC, key ASC
+          ORDER BY count DESC, label ASC
           LIMIT $1
         `, [limit]);
         if (mvRes && mvRes.rows && mvRes.rows.length > 0) {
-          const totalRes = await pool.query(`
-            SELECT COUNT(*)::int as total, COALESCE(SUM(count), 0)::int as listings_bucketed
-            FROM mv_neighborhood_stats
-            WHERE kind = 'zip'
-          `);
-          const bucketsTotal = totalRes.rows[0]?.total || mvRes.rows.length;
-          const listingsBucketed = totalRes.rows[0]?.listings_bucketed || 0;
+          const metaRes = await pool.query(`
+            SELECT
+              COUNT(*)::int AS scanned,
+              COUNT(*) FILTER (
+                WHERE (zip IS NOT NULL AND TRIM(zip) != '')
+                   OR (city IS NOT NULL AND TRIM(city) != '' AND state IS NOT NULL AND TRIM(state) != '')
+              )::int AS listings_bucketed,
+              COUNT(DISTINCT (
+                CASE
+                  WHEN zip IS NOT NULL AND TRIM(zip) != '' THEN 'zip:' || SUBSTRING(TRIM(zip) FROM 1 FOR 5)
+                  WHEN city IS NOT NULL AND TRIM(city) != '' AND state IS NOT NULL AND TRIM(state) != ''
+                    THEN 'city:' || UPPER(TRIM(state)) || '::' || LOWER(TRIM(city))
+                  ELSE NULL
+                END
+              )) FILTER (
+                WHERE (zip IS NOT NULL AND TRIM(zip) != '')
+                   OR (city IS NOT NULL AND TRIM(city) != '' AND state IS NOT NULL AND TRIM(state) != '')
+              )::int AS buckets_total
+            FROM listings
+            WHERE (status = 'active' OR status IS NULL)
+              AND source_observed_at IS NOT NULL
+              AND source_observed_at >= $1::timestamptz
+          `, [cutoffDate]);
+
+          const scanned = metaRes.rows[0]?.scanned || 0;
+          const listingsBucketed = metaRes.rows[0]?.listings_bucketed || 0;
+          const bucketsTotal = metaRes.rows[0]?.buckets_total || mvRes.rows.length;
           const neighborhoods = mvRes.rows.map((r) => ({
             kind: r.kind,
             key: r.key,
@@ -950,15 +982,15 @@ class DatabaseClient {
           }));
           return {
             truncated: false,
-            scanned: listingsBucketed,
-            availableTotal: listingsBucketed,
+            scanned,
+            availableTotal: scanned,
             bucketsTotal,
             bucketsReturned: neighborhoods.length,
             bucketsTruncated: neighborhoods.length < bucketsTotal,
             listingsBucketed,
             listingsCovered: neighborhoods.reduce((sum, b) => sum + b.count, 0),
             listingsNotCovered: listingsBucketed - neighborhoods.reduce((sum, b) => sum + b.count, 0),
-            rowsWithoutNeighborhoodKey: 0,
+            rowsWithoutNeighborhoodKey: scanned - listingsBucketed,
             neighborhoods
           };
         }
@@ -1302,10 +1334,12 @@ class DatabaseClient {
           json_agg(
             json_build_object(
               'id', id,
+              'source', source_key,
               'address', address,
               'city', city,
               'state', state,
               'openingBid', opening_bid::float8,
+              'mid', CASE WHEN est_low > 0 AND est_high >= est_low THEN ((est_low + est_high) / 2.0)::float8 ELSE NULL END,
               'dealScore', deal_score,
               'propType', coalesce(prop_type, 'Unknown'),
               'saleDate', sale_date::text
@@ -1441,6 +1475,21 @@ class DatabaseClient {
       const latRad = (target.lat * Math.PI) / 180.0;
       const lngDelta = radiusKm / (111.0 * Math.max(0.1, Math.cos(latRad)));
 
+      const params = [
+        target.lng,
+        target.lat,
+        radiusMeters,
+        target.lat - latDelta,
+        target.lat + latDelta,
+        target.lng - lngDelta,
+        target.lng + lngDelta
+      ];
+      let idCondition = '';
+      if (target.id) {
+        params.push(String(target.id));
+        idCondition = `AND id != ${params.length}`;
+      }
+
       const sql = `
         SELECT ${SUMMARY_LISTING_SELECT},
           CASE WHEN geog IS NOT NULL
@@ -1453,7 +1502,7 @@ class DatabaseClient {
             OR
             (geog IS NULL AND latitude BETWEEN $4 AND $5 AND longitude BETWEEN $6 AND $7)
           )
-          AND id != $8
+          ${idCondition}
         ORDER BY
           CASE WHEN geog IS NOT NULL
                THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
@@ -1461,16 +1510,7 @@ class DatabaseClient {
           id ASC
         LIMIT 200;
       `;
-      const res = await this.getReadPool().query(sql, [
-        target.lng,
-        target.lat,
-        radiusMeters,
-        target.lat - latDelta,
-        target.lat + latDelta,
-        target.lng - lngDelta,
-        target.lng + lngDelta,
-        target.id
-      ]);
+      const res = await this.getReadPool().query(sql, params);
 
       if (res.rows.length > 0) {
         const rows = res.rows.map(mapPgListingRow);
@@ -1485,16 +1525,22 @@ class DatabaseClient {
 
     // Fallback: state-scoped candidate retrieval
     if (target.state) {
+      const params = [String(target.state).toUpperCase()];
+      let idCondition = '';
+      if (target.id) {
+        params.push(String(target.id));
+        idCondition = `AND id != ${params.length}`;
+      }
       const stateSql = `
         SELECT ${SUMMARY_LISTING_SELECT}
         FROM listings
         WHERE (status = 'active' OR status IS NULL)
           AND state = $1
-          AND id != $2
+          ${idCondition}
         ORDER BY id ASC
         LIMIT 500;
       `;
-      const res = await this.getReadPool().query(stateSql, [target.state, target.id]);
+      const res = await this.getReadPool().query(stateSql, params);
       const rows = res.rows.map(mapPgListingRow);
       return {
         pool: rows,
