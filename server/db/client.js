@@ -458,6 +458,7 @@ class DatabaseClient {
     this.isPg = Boolean(options.pool);
     this.pool = options.pool || null;
     this.externalPool = Boolean(options.pool);
+    this.readPool = options.readPool || null;
     this.listingSelect = LISTING_SELECT;
     const explicitLiveCachePath = Object.prototype.hasOwnProperty.call(options, 'liveCachePath')
       ? options.liveCachePath
@@ -482,6 +483,21 @@ class DatabaseClient {
     this.liveCacheErrorSignature = null;
     // Set only after SELECT 1 succeeds. A Pool object is not a connection.
     this.postgresReachable = false;
+    const roUrl = this.env.DATABASE_RO_URL || this.env.DATABASE_READ_URL || null;
+    if (roUrl && !embeddedRequested) {
+      try {
+        const { Pool } = require('pg');
+        this.readPool = new Pool({
+          connectionString: roUrl,
+          max: Number(this.env.DATABASE_RO_POOL_MAX) || 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 5000,
+        });
+      } catch (err) {
+        console.warn('[DB] PostgreSQL read-replica driver not initialized, using primary pool:', err.message);
+        this.readPool = null;
+      }
+    }
     this.postgresError = null;
     this.inMemoryData = {
       sources: {},
@@ -818,6 +834,55 @@ class DatabaseClient {
    * Performs SQL GROUP BY and native percentiles in Postgres, eliminating
    * full-store memory scans and accelerating response times by 30x+.
    */
+
+  /**
+   * Returns dedicated read-replica pool if configured, or default pool.
+   */
+  getReadPool() {
+    return this.readPool || this.pool;
+  }
+
+  /**
+   * Refreshes the mv_neighborhood_stats materialized view concurrently.
+   * Runs non-blocking without locking analytical reads.
+   */
+  async refreshNeighborhoodStatsMaterializedView({ concurrent = true } = {}) {
+    if (!this.isPg || !this.pool) return false;
+    try {
+      const sql = concurrent
+        ? 'REFRESH MATERIALIZED VIEW CONCURRENTLY mv_neighborhood_stats;'
+        : 'REFRESH MATERIALIZED VIEW mv_neighborhood_stats;';
+      await this.pool.query(sql);
+      return true;
+    } catch (err) {
+      if (concurrent) {
+        try {
+          await this.pool.query('REFRESH MATERIALIZED VIEW mv_neighborhood_stats;');
+          return true;
+        } catch (innerErr) {
+          console.warn('[DB] Materialized view refresh failed:', innerErr.message);
+          return false;
+        }
+      }
+      console.warn('[DB] Materialized view refresh failed:', err.message);
+      return false;
+    }
+  }
+
+  /**
+   * Gracefully drains all connection pools.
+   */
+  async close() {
+    if (this.readPool) {
+      await this.readPool.end().catch(() => {});
+      this.readPool = null;
+    }
+    if (this.pool && !this.externalPool) {
+      await this.pool.end().catch(() => {});
+      this.pool = null;
+    }
+  }
+
   async getNeighborhoodStatsNative(options = {}) {
     if (!this.isPg || !this.pool) {
       const { scanAllListings } = require('./listings-scan');
@@ -852,6 +917,55 @@ class DatabaseClient {
     const cutoffDate = new Date(nowMs - maxAgeDays * 86_400_000).toISOString();
     const stateFilter = options.state ? String(options.state).toUpperCase() : null;
     const limit = Number.isFinite(options.limit) ? Math.max(1, Math.min(500, Math.floor(options.limit))) : 100;
+    const pool = this.getReadPool();
+
+    if (options.useMaterializedView !== false && !stateFilter && maxAgeDays === 365) {
+      try {
+        const mvRes = await pool.query(`
+          SELECT * FROM mv_neighborhood_stats
+          WHERE kind = 'zip'
+          ORDER BY count DESC, key ASC
+          LIMIT $1
+        `, [limit]);
+        if (mvRes && mvRes.rows && mvRes.rows.length > 0) {
+          const totalRes = await pool.query(`
+            SELECT COUNT(*)::int as total, COALESCE(SUM(count), 0)::int as listings_bucketed
+            FROM mv_neighborhood_stats
+            WHERE kind = 'zip'
+          `);
+          const bucketsTotal = totalRes.rows[0]?.total || mvRes.rows.length;
+          const listingsBucketed = totalRes.rows[0]?.listings_bucketed || 0;
+          const neighborhoods = mvRes.rows.map((r) => ({
+            kind: r.kind,
+            key: r.key,
+            label: r.label,
+            count: Number(r.count),
+            medianOpeningBid: r.medianOpeningBid === null ? null : Number(Number(r.medianOpeningBid).toFixed(2)),
+            meanOpeningBid: r.meanOpeningBid === null ? null : Number(Number(r.meanOpeningBid).toFixed(2)),
+            medianSqft: r.medianSqft === null ? null : Number(Number(r.medianSqft).toFixed(0)),
+            medianDealScore: r.medianDealScore === null ? null : Number(Number(r.medianDealScore).toFixed(1)),
+            medianDiscount: r.medianDiscount === null ? null : Number(Number(r.medianDiscount).toFixed(4)),
+            sources: r.sources || {},
+            propTypes: r.prop_types || {}
+          }));
+          return {
+            truncated: false,
+            scanned: listingsBucketed,
+            availableTotal: listingsBucketed,
+            bucketsTotal,
+            bucketsReturned: neighborhoods.length,
+            bucketsTruncated: neighborhoods.length < bucketsTotal,
+            listingsBucketed,
+            listingsCovered: neighborhoods.reduce((sum, b) => sum + b.count, 0),
+            listingsNotCovered: listingsBucketed - neighborhoods.reduce((sum, b) => sum + b.count, 0),
+            rowsWithoutNeighborhoodKey: 0,
+            neighborhoods
+          };
+        }
+      } catch {
+        // Fall back to live CTE query below
+      }
+    }
 
     const metaSql = `
       SELECT
@@ -877,7 +991,7 @@ class DatabaseClient {
         AND source_observed_at >= $1::timestamptz
         AND ($2::text IS NULL OR state = $2)
     `;
-    const metaRes = await this.pool.query(metaSql, [cutoffDate, stateFilter]);
+    const metaRes = await pool.query(metaSql, [cutoffDate, stateFilter]);
     const scanned = metaRes.rows[0]?.scanned || 0;
     const listingsBucketed = metaRes.rows[0]?.listings_bucketed || 0;
     const bucketsTotal = metaRes.rows[0]?.buckets_total || 0;
@@ -970,7 +1084,7 @@ class DatabaseClient {
       LEFT JOIN top_props tp ON tb.kind = tp.kind AND tb.key = tp.key
       ORDER BY tb.count DESC, tb.label ASC;
     `;
-    const bucketsRes = await this.pool.query(bucketsSql, [cutoffDate, stateFilter, limit]);
+    const bucketsRes = await pool.query(bucketsSql, [cutoffDate, stateFilter, limit]);
     const { serializeBucket } = require('../routes/neighborhoods');
     const buckets = bucketsRes.rows.map(serializeBucket);
     const listingsCovered = buckets.reduce((sum, b) => sum + b.count, 0);
@@ -1029,9 +1143,48 @@ class DatabaseClient {
       return null;
     }
 
+    const pool = this.getReadPool();
+
+    if (options.useMaterializedView !== false && maxAgeDays === 365) {
+      try {
+        const [mvRes, countRes] = await Promise.all([
+          pool.query(`
+            SELECT * FROM mv_neighborhood_stats
+            WHERE kind = $1 AND key = $2
+            LIMIT 1
+          `, [kind, key]),
+          pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status = 'active' OR status IS NULL)`)
+        ]);
+        if (mvRes && mvRes.rows && mvRes.rows.length > 0) {
+          const r = mvRes.rows[0];
+          const totalAvailable = countRes.rows[0]?.count || 1;
+          return {
+            scanned: totalAvailable,
+            availableTotal: totalAvailable,
+            truncated: false,
+            neighborhood: {
+              kind: r.kind,
+              key: r.key,
+              label: r.label,
+              count: Number(r.count),
+              medianOpeningBid: r.medianOpeningBid === null ? null : Number(Number(r.medianOpeningBid).toFixed(2)),
+              meanOpeningBid: r.meanOpeningBid === null ? null : Number(Number(r.meanOpeningBid).toFixed(2)),
+              medianSqft: r.medianSqft === null ? null : Number(Number(r.medianSqft).toFixed(0)),
+              medianDealScore: r.medianDealScore === null ? null : Number(Number(r.medianDealScore).toFixed(1)),
+              medianDiscount: r.medianDiscount === null ? null : Number(Number(r.medianDiscount).toFixed(4)),
+              sources: r.sources || {},
+              propTypes: r.prop_types || {}
+            }
+          };
+        }
+      } catch {
+        // Fall back to live single neighborhood query
+      }
+    }
+
     const [rowsRes, countRes] = await Promise.all([
-      this.pool.query(sql, params),
-      this.pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status = 'active' OR status IS NULL)`)
+      pool.query(sql, params),
+      pool.query(`SELECT COUNT(*)::int AS count FROM listings WHERE (status = 'active' OR status IS NULL)`)
     ]);
 
     const rows = rowsRes.rows.map(mapPgListingRow);
@@ -1094,7 +1247,8 @@ class DatabaseClient {
       FROM listings
       WHERE (status = 'active' OR status IS NULL);
     `;
-    const metaRes = await this.pool.query(metaSql, [startDate, endDate, states]);
+    const pool = this.getReadPool();
+    const metaRes = await pool.query(metaSql, [startDate, endDate, states]);
     const scanned = metaRes.rows[0]?.scanned || 0;
     const droppedNoDate = metaRes.rows[0]?.dropped_no_date || 0;
     const droppedOutside = metaRes.rows[0]?.dropped_outside || 0;
@@ -1176,7 +1330,7 @@ class DatabaseClient {
       GROUP BY w.week_start, ws.sources, wp.prop_types, samp.sample
       ORDER BY w.week_start ASC;
     `;
-    const weeksRes = await this.pool.query(weeksSql, [startDate, endDate, states, sampleSize]);
+    const weeksRes = await pool.query(weeksSql, [startDate, endDate, states, sampleSize]);
 
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     function formatWeekLabel(date) {
@@ -1256,7 +1410,7 @@ class DatabaseClient {
         AND (provenance IS NULL OR provenance->>'origin' = 'live')
       GROUP BY source_key;
     `;
-    const res = await this.pool.query(sql);
+    const res = await this.getReadPool().query(sql);
     const counts = new Map();
     for (const row of res.rows) {
       counts.set(row.source, {
@@ -1282,21 +1436,35 @@ class DatabaseClient {
     const radiusKm = Number.isFinite(options.radiusKm) ? options.radiusKm : 8;
 
     if (typeof target.lat === 'number' && typeof target.lng === 'number') {
+      const radiusMeters = radiusKm * 1000.0;
       const latDelta = radiusKm / 111.0;
       const latRad = (target.lat * Math.PI) / 180.0;
       const lngDelta = radiusKm / (111.0 * Math.max(0.1, Math.cos(latRad)));
 
       const sql = `
-        SELECT ${SUMMARY_LISTING_SELECT}
+        SELECT ${SUMMARY_LISTING_SELECT},
+          CASE WHEN geog IS NOT NULL
+               THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+               ELSE NULL END AS "distanceMeters"
         FROM listings
         WHERE (status = 'active' OR status IS NULL)
-          AND latitude BETWEEN $1 AND $2
-          AND longitude BETWEEN $3 AND $4
-          AND id != $5
-        ORDER BY id ASC
+          AND (
+            (geog IS NOT NULL AND ST_DWithin(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3))
+            OR
+            (geog IS NULL AND latitude BETWEEN $4 AND $5 AND longitude BETWEEN $6 AND $7)
+          )
+          AND id != $8
+        ORDER BY
+          CASE WHEN geog IS NOT NULL
+               THEN ST_Distance(geog, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)
+               ELSE 99999999 END ASC,
+          id ASC
         LIMIT 200;
       `;
-      const res = await this.pool.query(sql, [
+      const res = await this.getReadPool().query(sql, [
+        target.lng,
+        target.lat,
+        radiusMeters,
         target.lat - latDelta,
         target.lat + latDelta,
         target.lng - lngDelta,
@@ -1326,7 +1494,7 @@ class DatabaseClient {
         ORDER BY id ASC
         LIMIT 500;
       `;
-      const res = await this.pool.query(stateSql, [target.state, target.id]);
+      const res = await this.getReadPool().query(stateSql, [target.state, target.id]);
       const rows = res.rows.map(mapPgListingRow);
       return {
         pool: rows,
@@ -1361,7 +1529,7 @@ class DatabaseClient {
         )
       ORDER BY id ASC;
     `;
-    const res = await this.pool.query(sql, [parcelKey]);
+    const res = await this.getReadPool().query(sql, [parcelKey]);
     if (res.rows.length === 0) {
       const { scanAllListings } = require('./listings-scan');
       const { pool } = await scanAllListings(this, { summary: true }, { pageSize: 100000 });
@@ -1744,7 +1912,7 @@ class DatabaseClient {
       sql += ` LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
       params.push(Number(limit), Number(offset));
 
-      const res = await this.pool.query(sql, params);
+      const res = await this.getReadPool().query(sql, params);
       // total = full match count (COUNT(*) OVER), not the page size.
       const total = Number(res.rows[0]?.fullCount ?? 0);
       const listings = res.rows.map(({ fullCount, ...row }) => mapPgListingRow(row));
@@ -1811,10 +1979,10 @@ class DatabaseClient {
 
   async getListingById(id) {
     if (this.isPg) {
-      const res = await this.pool.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
+      const res = await this.getReadPool().query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return mapPgListingRow(res.rows[0]);
       if (NAMESPACED_ID.test(id)) {
-        const alias = await this.pool.query(
+        const alias = await this.getReadPool().query(
           `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE $1`, [`%-${id}`]);
         if (alias.rows.length === 1) return mapPgListingRow(alias.rows[0]);
       }

@@ -34,6 +34,8 @@ Windows:
 ```powershell
 python -m venv .cache/crawler-tools/venv
 .cache/crawler-tools/venv/Scripts/python.exe -m pip install -r scripts/crawlers/requirements.txt
+.cache/crawler-tools/venv/Scripts/python.exe -m camoufox fetch
+npm run crawler:doctor
 ```
 
 Linux/macOS:
@@ -41,6 +43,8 @@ Linux/macOS:
 ```sh
 python3 -m venv .cache/crawler-tools/venv
 .cache/crawler-tools/venv/bin/python -m pip install -r scripts/crawlers/requirements.txt
+.cache/crawler-tools/venv/bin/python -m camoufox fetch
+npm run crawler:doctor
 ```
 
 Set `SCRAPLING_SOURCES` to a CSV allowlist of sources that should use the

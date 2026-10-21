@@ -206,8 +206,137 @@ test('getCompsCandidatesNative executes bounded geospatial query', async () => {
 
   const result = await client.getCompsCandidatesNative(target, { radiusKm: 10 });
   assert.equal(queries.length, 1);
-  assert.ok(queries[0].sql.includes('latitude BETWEEN $1 AND $2'));
-  assert.ok(queries[0].sql.includes('longitude BETWEEN $3 AND $4'));
+  assert.ok(queries[0].sql.includes('ST_DWithin(geog'));
+  assert.ok(queries[0].sql.includes('ST_Distance(geog'));
+  assert.ok(queries[0].sql.includes('latitude BETWEEN $4 AND $5'));
   assert.equal(result.pool.length, 1);
   assert.equal(result.pool[0].id, 'comp-1');
 });
+
+test('getNeighborhoodStatsNative fast-path leverages mv_neighborhood_stats when populated', async () => {
+  const queries = [];
+  const client = new DatabaseClient({ NODE_ENV: 'test' });
+  client.isPg = true;
+  client.pool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes('COUNT(*)::int as total')) {
+        return { rows: [{ total: 1, listings_bucketed: 15 }] };
+      }
+      return {
+        rows: [
+          {
+            kind: 'zip',
+            key: '90210',
+            label: '90210',
+            count: 15,
+            medianOpeningBid: 500000,
+            meanOpeningBid: 520000,
+            medianSqft: 2800,
+            medianDealScore: 82,
+            medianDiscount: 0.28,
+            sources: { fannie: 10, freddie: 5 },
+            prop_types: { 'Single Family': 15 }
+          }
+        ]
+      };
+    }
+  };
+
+  const result = await client.getNeighborhoodStatsNative({
+    maxAgeDays: 365,
+    limit: 20
+  });
+
+  assert.equal(queries.length, 2, 'Queries MV table and total counts');
+  assert.ok(queries[0].sql.includes('FROM mv_neighborhood_stats'), 'Queries materialized view directly');
+  assert.equal(result.bucketsTotal, 1);
+  assert.equal(result.listingsBucketed, 15);
+  assert.equal(result.neighborhoods[0].key, '90210');
+  assert.equal(result.neighborhoods[0].medianOpeningBid, 500000);
+});
+
+test('getSingleNeighborhoodStatsNative fast-path leverages mv_neighborhood_stats', async () => {
+  const queries = [];
+  const client = new DatabaseClient({ NODE_ENV: 'test' });
+  client.isPg = true;
+  client.pool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes('COUNT(*)::int AS count')) {
+        return { rows: [{ count: 1200 }] };
+      }
+      return {
+        rows: [
+          {
+            kind: 'zip',
+            key: '90210',
+            label: '90210',
+            count: 15,
+            medianOpeningBid: 500000,
+            meanOpeningBid: 520000,
+            medianSqft: 2800,
+            medianDealScore: 82,
+            medianDiscount: 0.28,
+            sources: { fannie: 10, freddie: 5 },
+            prop_types: { 'Single Family': 15 }
+          }
+        ]
+      };
+    }
+  };
+
+  const result = await client.getSingleNeighborhoodStatsNative('zip', '90210', { maxAgeDays: 365 });
+  assert.ok(result, 'Returns result from MV');
+  assert.equal(result.neighborhood.key, '90210');
+  assert.equal(result.neighborhood.medianOpeningBid, 500000);
+  assert.ok(queries[0].sql.includes('FROM mv_neighborhood_stats'), 'Queries MV by key');
+});
+
+test('refreshNeighborhoodStatsMaterializedView executes REFRESH query', async () => {
+  const queries = [];
+  const client = new DatabaseClient({ NODE_ENV: 'test' });
+  client.isPg = true;
+  client.pool = {
+    async query(sql) {
+      queries.push(sql);
+      return { rows: [] };
+    }
+  };
+
+  const ok = await client.refreshNeighborhoodStatsMaterializedView({ concurrent: true });
+  assert.equal(ok, true);
+  assert.equal(queries.length, 1);
+  assert.ok(queries[0].includes('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_neighborhood_stats'));
+});
+
+test('read-replica pool routing directs analytical reads to readPool and mutations to pool', async () => {
+  const readQueries = [];
+  const writeQueries = [];
+
+  const client = new DatabaseClient({ NODE_ENV: 'test' });
+  client.isPg = true;
+  client.readPool = {
+    async query(sql, params) {
+      readQueries.push({ sql, params });
+      return { rows: [{ source: 'hud', observed_count: 5, active_states: ['TX'], latest_observed_at: '2026-10-15T00:00:00Z' }] };
+    }
+  };
+  client.pool = {
+    async query(sql, params) {
+      writeQueries.push({ sql, params });
+      return { rows: [] };
+    }
+  };
+
+  // 1. Analytical read should hit readPool
+  await client.getSourceInventoryAggregatesNative();
+  assert.equal(readQueries.length, 1, 'Source radar read hit readPool');
+  assert.equal(writeQueries.length, 0, 'No write queries executed');
+
+  // 2. Mutation should hit primary pool
+  await client.saveDeal('user-1', 'deal-1');
+  assert.equal(writeQueries.length, 1, 'saveDeal mutation hit primary pool');
+  assert.ok(writeQueries[0].sql.includes('INSERT INTO saved_deals'));
+});
+

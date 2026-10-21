@@ -1,2 +1,7 @@
-# Optional structural parser. Native Node collection remains the default.
+# Optional structural parser and anti-detect crawler toolchain.
+# Native Node collection remains the default.
 scrapling==0.4.15
+camoufox==0.5.8
+curl_cffi==0.16.3
+patchright==1.64.1
+browserforge==1.2.4
