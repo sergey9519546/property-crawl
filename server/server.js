@@ -408,6 +408,15 @@ async function startServer() {
 
   if (typeof db.verifyConnection === 'function') {
     await db.verifyConnection();
+    if (db.isPg && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
+      try {
+        const { migrate } = require('../scripts/discovery-migrate');
+        await migrate(db.pool);
+        console.log('[Server] discovery migrations verified and applied to database');
+      } catch (migErr) {
+        console.warn('[Server] auto-migration warning:', migErr.message);
+      }
+    }
   }
 
   // Wire verified database into dependent stores (document-review, hunts durable, etc.)
