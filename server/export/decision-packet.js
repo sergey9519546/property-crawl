@@ -82,6 +82,19 @@ function publishedRedemptionDays(listing) {
 
 function municipalSurvivability(listing) {
   if (!Array.isArray(listing.municipalViolations)) {
+    if (listing.codeEnforcement && typeof listing.codeEnforcement === 'object') {
+      const ce = listing.codeEnforcement;
+      return {
+        hasCondemnationOrder: Boolean(ce.vacantBuildingNotice),
+        estimatedSurvivingLiability: null,
+        activeViolationsCount: typeof ce.openViolationsCount === 'number'
+          ? ce.openViolationsCount
+          : (Array.isArray(ce.violations) ? ce.violations.length : 0),
+        lastInspectionDate: ce.lastInspectionDate || null,
+        criticalAlerts: ce.vacantBuildingNotice ? ['VACANT_BUILDING_NOTICE_ON_RECORD'] : [],
+        source: ce.source || 'MUNICIPAL_OPEN_DATA'
+      };
+    }
     return {
       hasCondemnationOrder: null,
       estimatedSurvivingLiability: null,

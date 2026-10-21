@@ -124,7 +124,7 @@ test('UI fetch paths have a Next App Router route that can proxy them', () => {
     `UI calls without a Next route:\n${missing.map((m) => `  ${m}`).join('\n')}`);
 });
 
-test('allowlist covers operator document-review, unbrowse, jobs list, workspace import, hunts evaluate', () => {
+test('allowlist covers operator document-review, unbrowse, jobs list, workspace import, hunts evaluate, and decision-packets', () => {
   for (const p of [
     '/api/document-review',
     '/api/document-review/foo',
@@ -136,7 +136,11 @@ test('allowlist covers operator document-review, unbrowse, jobs list, workspace 
     '/api/workspace/import/commit',
     '/api/hunts/hunt_0123456789abcdef/evaluate',
     '/api/hunts/hunt_0123456789abcdef/events',
+    '/api/listings/USDA-TN-6237/packet',
+    '/api/listings/USDA-TN-6237/decision-packet',
+    '/api/listings/compare',
   ]) {
     assert.ok(API_PATH.test(p), `API_PATH must accept ${p}`);
   }
+  assert.equal(API_PATH.test('/api/listings/USDA-TN-6237/unauthorized-action'), false, 'API_PATH must fail closed for unknown listing subactions');
 });

@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText, Download } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
@@ -357,14 +357,36 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-col gap-1.5">
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
               >
                 <FileText className="h-4 w-4 text-slate-600" />
-                Export Decision Packet
+                View Decision Packet Dossier
               </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={`/api/listings/${encodeURIComponent(listing.id)}/packet`}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={`decision-packet-${listing.id}.json`}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Download className="h-3.5 w-3.5 text-slate-500" />
+                  JSON Packet
+                </a>
+                <a
+                  href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=markdown`}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={`decision-packet-${listing.id}.md`}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Download className="h-3.5 w-3.5 text-slate-500" />
+                  Markdown
+                </a>
+              </div>
             </div>
           </div>
 
@@ -545,14 +567,36 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
-            <div className="mt-2">
+            <div className="mt-2 flex flex-col gap-1.5">
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
               >
                 <FileText className="h-4 w-4 text-slate-600" />
-                Export Decision Packet
+                View Decision Packet Dossier
               </Link>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={`/api/listings/${encodeURIComponent(listing.id)}/packet`}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={`decision-packet-${listing.id}.json`}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Download className="h-3.5 w-3.5 text-slate-500" />
+                  JSON Packet
+                </a>
+                <a
+                  href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=markdown`}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={`decision-packet-${listing.id}.md`}
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs font-medium text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Download className="h-3.5 w-3.5 text-slate-500" />
+                  Markdown
+                </a>
+              </div>
             </div>
           </div>
         </aside>
