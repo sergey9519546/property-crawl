@@ -329,3 +329,109 @@ test('bridge rejects output exceeding 2 MB', async t => {
     fs.rmSync(temp, { recursive: true, force: true });
   }
 });
+
+test('sheriff, marshals, fannie, freddie, and va invoke Scrapling table-extract when useScrapling is enabled and HTML regex yields 0 cards', async () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const { UsMarshalsScraper } = require('../server/scrapers/marshals');
+  const { FannieMaeScraper } = require('../server/scrapers/fannie');
+  const { FreddieMacScraper } = require('../server/scrapers/freddie');
+  const { VaReoScraper } = require('../server/scrapers/va');
+
+  let sheriffExtractCalls = 0;
+  const sheriff = new SheriffSaleScraper({
+    counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }],
+    useScrapling: true,
+    extractImpl: async (profile) => {
+      sheriffExtractCalls += 1;
+      assert.equal(profile, 'table-extract');
+      return {
+        engine: 'scrapling',
+        rows: [['Case # CV-25-1001', '742 Evergreen Terrace, Cleveland, OH', 'Opening Bid: $85,000', 'Appraised: $150,000', '11/15/2026']],
+      };
+    },
+  });
+  sheriff.requestText = async () => '<html><body><table><tr><td>nonstandard skin</td></tr></table></body></html>';
+  const sheriffRows = await sheriff.fetchCountyRealauction({ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' });
+  assert.equal(sheriffExtractCalls, 1);
+  assert.equal(sheriffRows.length, 1);
+  assert.equal(sheriffRows[0].id, 'SHERIFF-OH-CUY-CV-25-1001');
+  assert.equal(sheriffRows[0].openingBid, 85000);
+  assert.equal(sheriffRows[0].provenance.scraplingProfile, 'table-extract');
+
+  let marshalsExtractCalls = 0;
+  const marshals = new UsMarshalsScraper({
+    useScrapling: true,
+    extractImpl: async (profile) => {
+      marshalsExtractCalls += 1;
+      assert.equal(profile, 'table-extract');
+      return {
+        engine: 'scrapling',
+        rows: [['500 Federal Plaza, Columbus, OH 43215', '$195,000', 'Asset ID: USMS-9001']],
+      };
+    },
+  });
+  marshals.requestText = async () => '<html><body><table><tr><td>nonstandard table</td></tr></table></body></html>';
+  const marshalsReport = { statesFailed: [], statesSucceeded: [], endpointsSucceeded: 0, recordsDiscovered: 0, failures: [] };
+  const marshalsRows = await marshals.fetchSeizedListings(marshalsReport);
+  assert.equal(marshalsExtractCalls, 1);
+  assert.equal(marshalsRows.length, 1);
+  assert.equal(marshalsRows[0].id, 'USMS-9001');
+  assert.equal(marshalsRows[0].openingBid, 195000);
+  assert.equal(marshalsRows[0].provenance.scraplingProfile, 'table-extract');
+
+  for (const [Label, ScraperClass, expectedPrefix] of [
+    ['fannie', FannieMaeScraper, 'FNMA-'],
+    ['freddie', FreddieMacScraper, 'FRE-'],
+    ['va', VaReoScraper, 'VA-'],
+  ]) {
+    let calls = 0;
+    const scraper = new ScraperClass({
+      useScrapling: true,
+      extractImpl: async (profile) => {
+        calls += 1;
+        assert.equal(profile, 'table-extract');
+        return {
+          engine: 'scrapling',
+          rows: [['800 Market St, Cleveland, OH', '$140,000', `${expectedPrefix}7788`]],
+        };
+      },
+    });
+    scraper.requestText = async () => '<html><body><table><tr><td>fallback table</td></tr></table></body></html>';
+    const res = await scraper.fetchStateHtml('OH');
+    assert.equal(calls, 1, `${Label} should call extractImpl`);
+    assert.equal(res.listings.length, 1, `${Label} should emit 1 row`);
+    assert.equal(res.listings[0].id, `${expectedPrefix}7788`);
+    assert.equal(res.listings[0].openingBid, 140000);
+    assert.equal(res.listings[0].provenance.scraplingProfile, 'table-extract');
+  }
+});
+
+test('sheriff and marshals reject HTTP 200 SPA shells with SOURCE_OBSERVATION_ERROR instead of reporting empty inventory', async () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const { UsMarshalsScraper } = require('../server/scrapers/marshals');
+
+  const sheriff = new SheriffSaleScraper({
+    counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }],
+    useScrapling: false,
+  });
+  sheriff.executeWithRetry = (fn) => fn();
+  sheriff.requestText = async () => '<html><body><div id="root"></div></body></html>';
+  await assert.rejects(
+    () => sheriff.scrapeFeed(),
+    (err) => err && err.code === 'SOURCE_OBSERVATION_ERROR' && sheriff.lastRunReport?.outcome === 'observation_error'
+  );
+
+  const marshals = new UsMarshalsScraper({ useScrapling: false });
+  marshals.executeWithRetry = (fn) => fn();
+  marshals.requestText = async () => '<html><body><div id="__next"></div></body></html>';
+  await assert.rejects(
+    () => marshals.scrapeFeed(),
+    (err) => err && err.code === 'SOURCE_OBSERVATION_ERROR' && marshals.lastRunReport?.outcome === 'observation_error'
+  );
+  const temp = path.join(os.tmpdir(), 'scrapling-noop-clean');
+  try {
+    assert.ok(temp);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});

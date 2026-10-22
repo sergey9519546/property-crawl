@@ -28,6 +28,11 @@ const SCRAPLING_PROFILES = {
   'ca-controller-tax-sale': ['table-extract'],
   usda: ['usda-table'],
   civilview: ['civilview-sales'],
+  sheriff: ['table-extract'],
+  marshals: ['table-extract'],
+  fannie: ['table-extract'],
+  freddie: ['table-extract'],
+  va: ['table-extract'],
 };
 
 // End coverage required for a "government/bank auction" product.

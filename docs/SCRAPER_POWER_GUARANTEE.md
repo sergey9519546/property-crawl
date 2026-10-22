@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-16T02:38:02.783Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-22T11:38:47.287Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -9,7 +9,7 @@
 |---|---:|
 | Catalog sources (all ends) | **163** |
 | Scheduled production adapters | **21** |
-| Adapters with Scrapling profiles | **8** |
+| Adapters with Scrapling profiles | **14** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -21,7 +21,7 @@
 | Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
-| Foreclosure/sheriff/trustee auction | 7 | 6 | 2 | yes | ✅ adapter |
+| Foreclosure/sheriff/trustee auction | 7 | 6 | 4 | yes | ✅ adapter |
 | Tax lien/deed sale | 58 | 1 | 0 | yes | ✅ adapter |
 | Land bank inventory | 2 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
@@ -39,8 +39,8 @@
 
 | Tier | Meaning | Count |
 |---|---|---:|
-| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 7 |
-| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 3 |
+| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 9 |
+| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 1 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 11 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
 | P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 140 |
@@ -54,24 +54,24 @@
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 41 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 1 | — |
+| `sheriff` (Ohio Sheriff Sale Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 16 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
 | `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
-| `sheriff` (Ohio Sheriff Sale Auction) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P3_LIVE_ADAPTER | — | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `courtlistener` (CourtListener / RECAP) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; enrichment only — never invents bid/sale |
-| `fannie` (Fannie Mae HomePath) | P2_DISCOVERY_ADAPTER | — | 0 | SPA/API often unparseable without partner feed; fail-closed + SPA observation_error |
+| `fannie` (Fannie Mae HomePath) | P2_DISCOVERY_ADAPTER | table-extract | 0 | SPA/API often unparseable without partner feed; fail-closed + SPA observation_error |
 | `fl-dor-cadastral` (FL DOR Statewide Cadastral (ArcGIS REST)) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY until two clean canaries (parcel evidence, not sale inventory) |
-| `freddie` (Freddie Mac HomeSteps) | P2_DISCOVERY_ADAPTER | — | 0 | SPA/API often unparseable; fail-closed + SPA observation_error |
+| `freddie` (Freddie Mac HomeSteps) | P2_DISCOVERY_ADAPTER | table-extract | 0 | SPA/API often unparseable; fail-closed + SPA observation_error |
 | `government-land` (State Trust/Public Land Auction Office) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: GOV_LAND_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `hud-usps-vacancy` (HUD/USPS Vacancy Data) | P2_DISCOVERY_ADAPTER | — | 0 | — |
 | `landbank` (Land Bank Search) | P2_BLOCKED_PUBLISHER | — | 0 | Turnstile/CAPTCHA on some portals |
 | `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
-| `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | — | 0 | USMS bot-protection / brokered RealLook; fail-closed |
+| `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | table-extract | 0 | USMS bot-protection / brokered RealLook; fail-closed |
 | `public-notices-email` (Press-Association Public Notice Email Alerts) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; operator IMAP/corpus evidence only |
-| `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | — | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
+| `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
 
 ## What we guarantee (code)
 

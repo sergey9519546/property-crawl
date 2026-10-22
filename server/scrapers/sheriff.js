@@ -7,7 +7,7 @@
 
 const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport, applyEmptyInventoryHonesty } = require('./run-report');
 const { mapWithConcurrency } = require('./http');
 
 // Expanded default Ohio Realauction jurisdictions (10x collection footprint).
@@ -70,6 +70,8 @@ class SheriffSaleScraper extends BaseScraper {
       this.lastRunReport = report;
 
       const allListings = [];
+      this._htmlSamples = [];
+      this._lastExtraction = null;
       const concurrency = Math.max(1, Math.min(4, Number(process.env.SHERIFF_COUNTY_CONCURRENCY) || 3));
       const countyResults = await mapWithConcurrency(this.counties, concurrency, async (c) => {
         const unit = `${c.name},${c.state}`;
@@ -91,9 +93,13 @@ class SheriffSaleScraper extends BaseScraper {
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
       finalizeRunReport(report, { emitted: standardized.length });
+      report.scrapling = this.useScrapling
+        ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }
+        : { enabled: false };
       if (report.outcome === 'failed') {
         throw new Error(`SHERIFF_UPSTREAM_UNAVAILABLE: all ${this.counties.length} county endpoints failed`);
       }
+      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'sheriff' });
       console.log(`[${this.name}] Standardized ${standardized.length} Sheriff Sale listings (${report.outcome})`);
       return standardized;
     });
@@ -108,7 +114,19 @@ class SheriffSaleScraper extends BaseScraper {
           Accept: 'text/html,application/xhtml+xml',
         }
       });
-      const listings = this.parseRealauctionHtml(html, county);
+      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
+      let listings = this.parseRealauctionHtml(html, county);
+      if (!listings.length && this.useScrapling && typeof this.extract === 'function') {
+        try {
+          const extracted = await this.extract('table-extract', { html, url });
+          this._lastExtraction = extracted;
+          if (Array.isArray(extracted?.rows) && extracted.rows.length) {
+            listings = this.parseExtractedTableRows(extracted.rows, county, url);
+          }
+        } catch (err) {
+          this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
+        }
+      }
       return listings.length > 0 ? listings : this.fetchCountyPublicNotices(county);
     } catch (err) {
       return this.fetchCountyPublicNotices(county);
@@ -188,6 +206,50 @@ class SheriffSaleScraper extends BaseScraper {
     return null;
   }
 
+  parseExtractedTableRows(rows, county, baseUrl) {
+    const listings = [];
+    for (const cells of (rows || [])) {
+      if (!Array.isArray(cells) || cells.length < 2) continue;
+      const line = cells.map((c) => String(c || '').trim()).filter(Boolean).join(' | ');
+      const caseMatch = line.match(/Case\s*(?:#|No\.)?\s*([A-Z0-9-]+)/i) || line.match(/\b(CV-[0-9-]+|\d{2,4}[A-Z]{0,2}-\d{2,6})\b/i);
+      const addressMatch = line.match(/\b(\d{1,6}\s+[NSEW]?\s*[A-Za-z0-9 .'-]{4,80}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Way|Place|Pl|Terrace|Ter|Circle|Cir|Parkway|Pkwy|Trail|Trl)\.?[^|]*)/i);
+      if (!caseMatch || !addressMatch) continue;
+      const bidMatch = line.match(/(?:Opening|Upset|Minimum)\s*Bid\s*:?\s*\$?\s*([0-9,]+)/i) || line.match(/\$([0-9,]+)/);
+      const appraisalMatch = line.match(/Apprais(?:al|ed(?:\s*Value)?)\s*:?\s*\$?\s*([0-9,]+)/i);
+      const saleDateMatch = line.match(/\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/);
+      const caseNum = caseMatch[1] || caseMatch[0];
+      const address = addressMatch[1].trim();
+      const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ''), 10) : null;
+      const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ''), 10) : null;
+      const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
+      const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
+      listings.push({
+        id,
+        state: county.state,
+        county: county.name,
+        city: null,
+        zip: null,
+        address,
+        openingBid,
+        estLow: null,
+        estHigh: null,
+        assessed: appraisal,
+        saleDate,
+        plaintiff: null,
+        defendant: null,
+        judgment: null,
+        attorney: null,
+        occupancy: null,
+        deposit: null,
+        sourceUrl: `${baseUrl}#case-${encodeURIComponent(caseNum)}`,
+        raw: line.slice(0, 2000),
+        sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
+        provenance: { origin: 'live', observed: true, publisher: `${county.name} County Sheriff`, recordId: caseNum, scraplingProfile: 'table-extract' },
+      });
+    }
+    return listings;
+  }
+
   async fetchCountyPublicNotices(county) {
     // Fallback public notice aggregation query
     const fallbackUrl = `https://publicnoticesohio.com/search?county=${encodeURIComponent(county.name)}`;
@@ -198,6 +260,7 @@ class SheriffSaleScraper extends BaseScraper {
           Accept: 'text/html,application/xhtml+xml',
         }
       });
+      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
       return this.parsePublicNoticeHtml(html, county);
     } catch (err) {
       // Rethrow rather than return [].

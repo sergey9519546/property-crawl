@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-16T02:38:02.783Z",
+  "generatedAt": "2026-10-22T11:38:47.287Z",
   "guarantee": {
     "catalogSources": 163,
     "scheduledAdapters": 21,
-    "scraplingEnabledAdapters": 8,
+    "scraplingEnabledAdapters": 14,
     "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
@@ -24,8 +24,8 @@
   },
   "tiers": {
     "P0_CATALOG_ONLY": 140,
-    "P3_LIVE_ADAPTER": 3,
-    "P4_LIVE_STRONG": 7,
+    "P3_LIVE_ADAPTER": 1,
+    "P4_LIVE_STRONG": 9,
     "P2_DISCOVERY_ADAPTER": 11,
     "P2_BLOCKED_PUBLISHER": 2
   },
@@ -43,7 +43,7 @@
     "foreclosure_auction": {
       "total": 7,
       "scheduled": 6,
-      "strong": 2
+      "strong": 4
     },
     "government_reo": {
       "total": 7,
@@ -243,7 +243,7 @@
       "required": true,
       "catalogEntries": 7,
       "scheduledAdapters": 6,
-      "strongAdapters": 2,
+      "strongAdapters": 4,
       "opportunityScheduled": 6,
       "coveredByCode": true,
       "honestGap": null,
@@ -630,9 +630,12 @@
         "tier": "P2_DISCOVERY_ADAPTER",
         "score": 3,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"
@@ -654,9 +657,12 @@
         "tier": "P2_DISCOVERY_ADAPTER",
         "score": 3,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"
@@ -703,9 +709,12 @@
         "tier": "P2_DISCOVERY_ADAPTER",
         "score": 3,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"
@@ -804,9 +813,12 @@
         "tier": "P2_DISCOVERY_ADAPTER",
         "score": 3,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"
@@ -1023,12 +1035,15 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://sheriffsaleauction.ohio.gov/",
       "power": {
-        "tier": "P3_LIVE_ADAPTER",
-        "score": 4,
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"
@@ -1866,12 +1881,15 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://www.realauction.com/",
       "power": {
-        "tier": "P3_LIVE_ADAPTER",
-        "score": 4,
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport",
           "fail-closed-upstream",
           "limitation"

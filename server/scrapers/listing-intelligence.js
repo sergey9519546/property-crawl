@@ -8,6 +8,9 @@
  * or geocodes. All scores are triage aids — not appraisals or investment advice.
  */
 
+const { resolveCountyKey } = require('../enrichment/arcgis-parcels');
+const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+
 const IDENTITY_FALLBACK_FIELDS = ['address', 'city', 'state', 'zip', 'county'];
 
 function hasValue(value) {
@@ -93,6 +96,11 @@ function computeResearchQuality(listing = {}, now = Date.now()) {
     factors.push({ factor: 'cross_source_match', weight: 5 });
   }
 
+  if (hasValue(listing.parcelKey) || listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel) {
+    score += 5;
+    factors.push({ factor: 'cadastral_parcel_verified', weight: 5 });
+  }
+
   score = Math.max(0, Math.min(100, score));
   const band = score >= 75 ? 'strong' : score >= 50 ? 'usable' : score >= 25 ? 'thin' : 'weak';
   return {
@@ -110,10 +118,29 @@ function computeOpportunity(listing = {}, now = Date.now()) {
   const openingBid = numberOrNull(listing.openingBid);
   const estLow = numberOrNull(listing.estLow);
   const estHigh = numberOrNull(listing.estHigh);
-  const mid = numberOrNull(listing.mid) ?? (
+  let mid = numberOrNull(listing.mid) ?? (
     estLow !== null && estHigh !== null && estHigh >= estLow ? (estLow + estHigh) / 2 : null
   );
-  const dealScore = numberOrNull(listing.dealScore);
+  let dealScore = numberOrNull(listing.dealScore);
+  let valuationBasis = mid !== null || dealScore !== null ? 'publisher_reported' : null;
+  const assessorParcel = listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel || null;
+  if (mid === null && dealScore === null && assessorParcel) {
+    const countyKey = resolveCountyKey(listing.state, listing.county);
+    if (countyKey) {
+      const reading = interpretAssessorParcel({
+        countyKey,
+        parcel: assessorParcel,
+        openingBid: listing.openingBid,
+      });
+      if (reading && reading.marketComparison > 0) {
+        mid = reading.marketComparison;
+        valuationBasis = 'enrolled_assessor_registry';
+        if (reading.dealScore !== null && reading.dealScore !== undefined) {
+          dealScore = reading.dealScore;
+        }
+      }
+    }
+  }
   const saleMs = listing.saleDate ? Date.parse(`${listing.saleDate}T12:00:00Z`) : NaN;
   const daysToSale = Number.isFinite(saleMs) ? Math.ceil((saleMs - now) / 86_400_000) : null;
 
@@ -155,6 +182,7 @@ function computeOpportunity(listing = {}, now = Date.now()) {
     dealScore,
     bidSpread,
     bidToMidRatio: bidToMid !== null ? Number(bidToMid.toFixed(4)) : null,
+    valuationBasis,
     note: 'Opportunity rank combines modeled deal score, sale urgency, and evidence completeness. Triage only.',
   };
 }

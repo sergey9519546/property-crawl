@@ -119,3 +119,57 @@ test('the inventory summary declares that it describes the returned page', () =>
   assert.match(summary.note, /returned page/);
   assert.doesNotMatch(summary.note, /Inventory quality summary/);
 });
+
+test('annotateListing derives opportunity dealScore and rank from enrolled county assessor roll without mutating top-level valuation fields', () => {
+  const withAssessor = annotateListing({
+    id: 'SHERIFF-OH-CUY-1',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    address: '100 Main St, Cleveland, OH 44113',
+    openingBid: 70000,
+    saleDate: new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10),
+    provenance: {
+      origin: 'live',
+      observed: true,
+      derivedFields: {
+        assessorRoll: {
+          parcel: {
+            canonicalApn: '101-23-001',
+            countyFips: '39035',
+            assessedValue: { total: 70000 },
+          },
+        },
+      },
+    },
+  });
+  // Top-level valuation fields remain untouched (undefined)
+  assert.equal(withAssessor.estLow, undefined);
+  assert.equal(withAssessor.estHigh, undefined);
+  assert.equal(withAssessor.dealScore, undefined);
+  // Opportunity model reads Cuyahoga 35% taxable fraction -> $200,000 marketComparison
+  assert.equal(withAssessor.opportunity.valuationBasis, 'enrolled_assessor_registry');
+  assert.equal(withAssessor.opportunity.bidSpread, 130000);
+  assert.equal(withAssessor.opportunity.bidToMidRatio, 0.35);
+  assert.equal(withAssessor.opportunity.dealScore, 85);
+  assert.equal(withAssessor.opportunity.shape, 'deep_discount_model');
+  assert.ok(withAssessor.opportunity.rank >= 70);
+  assert.ok(withAssessor.researchQuality.factors.some((f) => f.factor === 'cadastral_parcel_verified' && f.weight === 5));
+
+  // Negative control: un-enrolled or withheld county (IL-COOK) does not fabricate marketComparison
+  const withheld = annotateListing({
+    id: 'SHERIFF-IL-COOK-1',
+    source: 'sheriff',
+    state: 'IL',
+    county: 'Cook',
+    address: '200 State St, Chicago, IL 60601',
+    openingBid: 70000,
+    assessorParcel: {
+      canonicalApn: '14-28-100-001-0000',
+      assessedValue: { total: 70000 },
+    },
+  });
+  assert.equal(withheld.opportunity.valuationBasis, null);
+  assert.equal(withheld.opportunity.dealScore, null);
+  assert.equal(withheld.opportunity.bidSpread, null);
+});

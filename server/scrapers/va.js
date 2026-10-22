@@ -6,6 +6,7 @@
 // Scrapes acquired properties managed by VRM Mortgage Services for VA.
 
 const BaseScraper = require('./base');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const {
   createRunReport,
   recordUnitFailure,
@@ -24,8 +25,8 @@ class VaReoScraper extends BaseScraper {
     // host has returned 404; VA REO disposition channels have moved over time.
     this.baseUrl = (process.env.VA_REO_BASE_URL || 'https://vrmproperties.com').replace(/\/$/, '');
     this.timeoutMs = 4000;
-    this.useScrapling = options.useScrapling ?? false;
-    this.extract = options.extractImpl || null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled('va');
+    this.extract = options.extractImpl || extractWithScrapling;
     this.lastRunReport = null;
   }
 
@@ -95,7 +96,18 @@ class VaReoScraper extends BaseScraper {
         Accept: 'text/html,application/xhtml+xml',
       }
     });
-    const listings = this.parseHtmlCards(html, state);
+    let listings = this.parseHtmlCards(html, state);
+    if (!listings.length && this.useScrapling && typeof this.extract === 'function') {
+      try {
+        const extracted = await this.extract('table-extract', { html, url: searchUrl });
+        this._lastExtraction = extracted;
+        if (Array.isArray(extracted?.rows) && extracted.rows.length) {
+          listings = this.parseExtractedRows(extracted.rows, state);
+        }
+      } catch (err) {
+        this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
+      }
+    }
     if (!listings.length && looksLikeClientRenderedShell(html)) {
       if (spaXhrEnabled('va', process.env)) {
         const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'va' });
@@ -150,6 +162,41 @@ class VaReoScraper extends BaseScraper {
       }
     }
 
+    return listings;
+  }
+
+  parseExtractedRows(rows, state) {
+    const listings = [];
+    for (const cells of (rows || [])) {
+      if (!Array.isArray(cells) || cells.length < 2) continue;
+      const line = cells.map((c) => String(c || '').trim()).filter(Boolean).join(' | ');
+      const idMatch = line.match(/\b(?:VA-|id\s*[:#]?\s*)([A-Z0-9-]{3,})\b/i) || line.match(/\b(\d{5,})\b/);
+      const address = String(cells[0] || cells[1] || '').trim();
+      const priceMatch = line.match(/\$([0-9,]+)/);
+      if (!idMatch || !/^\d/.test(address)) continue;
+      const propId = String(idMatch[1]).replace(/^VA-/i, '');
+      const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+      listings.push({
+        id: `VA-${propId}`,
+        state,
+        county: null,
+        city: null,
+        zip: null,
+        address,
+        openingBid: price,
+        estLow: null,
+        estHigh: null,
+        assessed: null,
+        saleDate: null,
+        plaintiff: null,
+        defendant: null,
+        occupancy: null,
+        deposit: null,
+        sourceUrl: `${this.baseUrl}/property/${propId}`,
+        raw: line.slice(0, 2000),
+        provenance: { origin: 'live', observed: true, publisher: 'VRM Properties', recordId: propId, scraplingProfile: 'table-extract' },
+      });
+    }
     return listings;
   }
 

@@ -175,7 +175,7 @@
 - canary-live strict exit + distinct runId tracking + refreshScraplingFlags after env set.
 - scrapling-bridge treasury/irs detail requires typed fields; refreshScraplingFlags exported.
 - usda.js + civilview.js call Scrapling (usda-table / civilview-sales) when enabled.
-- Remaining: fannie/freddie/va/marshals/sheriff declare useScrapling but do not call extract; SPA 200+empty still classifies as empty.
+- Resolved (2026-10-22): fannie/freddie/va/marshals/sheriff now invoke Scrapling `table-extract` when `useScrapling` is enabled and HTML regex parsing yields 0 rows/cards, and sheriff/marshals enforce `applyEmptyInventoryHonesty` so HTTP 200 SPA shells classify as `observation_error` (`SOURCE_OBSERVATION_ERROR`).
 - Source: scripts/canary-live.js, scrapling-bridge.js, usda.js, civilview.js
 
 
@@ -304,4 +304,6 @@
   3. **Chronological History Sorting & Date-Push Adjournment Detection**: Updated `evaluateOpportunitySignals` (`server/intelligence/signals.js`) to sort observation `history` chronologically ascending by `observedAt` and detect forward `saleDate` shifts across consecutive snapshots as postponements even when portal `status` remains `"Scheduled"`, plus surfaced `dossier.trajectory` in `src/components/listings/property-intelligence.tsx`.
   4. **Decimal-to-Percentage Normalization in Reconsideration Conditions**: Normalized `condition.value` in `(0, 1]` to `[0, 100]` for `dropped_by_pct` and `bid_to_assessed_lte` in `server/intelligence/research-cases.js`.
   5. **Raw-Notice Character-Offset Preservation Under OCR Normalization**: Updated `deterministicParse` (`server/ai/notice-parser.js`) to verify `evidenceSpans` against `rawNotice` before falling back to `clean`, preventing `"Jdgmt:" -> "Judgment:"` (+3 chars) from shifting downstream `start`/`end` character offsets.
-  - Source: `test/decision_packet_export.test.js`, `test/assessor-harvest.test.js`, `test/signals.test.js`, `test/research-workspace.test.js`, `test/ai/notice-parser.test.js`
+  6. **Enrolled Assessor Registry to `listing.opportunity` & `listing.researchQuality` Bridge**: Wired `resolveCountyKey` and `interpretAssessorParcel` into `computeOpportunity(listing)` (`server/scrapers/listing-intelligence.js`) so listings with harvested county assessor rolls (`assessorParcel` or `provenance.derivedFields.assessorRoll`) compute `opportunity.dealScore`, `opportunity.bidSpread`, `opportunity.bidToMidRatio`, `opportunity.valuationBasis: 'enrolled_assessor_registry'`, and full 0–100 `opportunity.rank` for `?sort=opportunity` without mutating top-level `listing.estLow`/`listing.dealScore`, and added `cadastral_parcel_verified` (+5 pts) to `computeResearchQuality(listing)`.
+  7. **Scrapling `table-extract` & SPA Empty-Inventory Honesty Closure (`sheriff`, `marshals`, `fannie`, `freddie`, `va`)**: Wired `this.extract('table-extract', { html, url })` fallback and `parseExtractedTableRows`/`parseExtractedRows` into `sheriff.js`, `marshals.js`, `fannie.js`, `freddie.js`, and `va.js`, and enforced `applyEmptyInventoryHonesty` (`SOURCE_OBSERVATION_ERROR`) on HTTP 200 SPA shells in `sheriff.js` and `marshals.js`.
+  - Source: `test/decision_packet_export.test.js`, `test/assessor-harvest.test.js`, `test/signals.test.js`, `test/research-workspace.test.js`, `test/ai/notice-parser.test.js`, `test/listing-intelligence.test.js`, `test/scrapling-bridge.test.js`

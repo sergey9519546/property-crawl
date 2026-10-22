@@ -7,7 +7,7 @@
 
 const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport } = require('./run-report');
+const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport, looksLikeClientRenderedShell, applyEmptyInventoryHonesty } = require('./run-report');
 
 class UsMarshalsScraper extends BaseScraper {
   constructor(options = {}) {
@@ -28,11 +28,27 @@ class UsMarshalsScraper extends BaseScraper {
       report.endpointsTried = 3;
       this.lastRunReport = report;
 
+      this._htmlSamples = [];
+      this._lastExtraction = null;
       const allListings = await this.fetchSeizedListings(report);
       const standardized = allListings
         .filter(l => this.passesFilter(l))
         .map(l => this.standardizeListing(l));
       finalizeRunReport(report, { emitted: standardized.length });
+      report.scrapling = this.useScrapling
+        ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }
+        : { enabled: false };
+      if (standardized.length === 0 && (this._htmlSamples || []).some((h) => looksLikeClientRenderedShell(h))) {
+        report.outcome = 'observation_error';
+        report.complete = false;
+        report.fullSweepComplete = false;
+        report.observationError = 'marshals: HTTP 200 response(s) looked like client-rendered shells without parseable listing cards — not verified empty inventory';
+        const err = new Error(report.observationError);
+        err.code = 'SOURCE_OBSERVATION_ERROR';
+        err.lastRunReport = report;
+        throw err;
+      }
+      applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'marshals' });
       if (report.outcome === 'failed') {
         throw new Error('USMS_UPSTREAM_UNAVAILABLE: US Marshals primary and partner endpoints all failed');
       }
@@ -50,7 +66,19 @@ class UsMarshalsScraper extends BaseScraper {
           Accept: 'text/html,application/xhtml+xml',
         }
       });
-      const listings = this.parseMarshalsHtml(html);
+      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
+      let listings = this.parseMarshalsHtml(html);
+      if (!listings.length && this.useScrapling && typeof this.extract === 'function') {
+        try {
+          const extracted = await this.extract('table-extract', { html, url });
+          this._lastExtraction = extracted;
+          if (Array.isArray(extracted?.rows) && extracted.rows.length) {
+            listings = this.parseExtractedTableRows(extracted.rows, url);
+          }
+        } catch (err) {
+          this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
+        }
+      }
       if (listings.length > 0) {
         recordUnitSuccess(report, 'usms', listings.length);
         return listings;
@@ -128,6 +156,7 @@ class UsMarshalsScraper extends BaseScraper {
           Accept: 'text/html,application/xhtml+xml',
         }
       });
+      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
       const listings = this.parsePartnerCards(html);
       if (listings.length > 0) {
         if (report) recordUnitSuccess(report, 'reallook', listings.length);
@@ -139,6 +168,45 @@ class UsMarshalsScraper extends BaseScraper {
       if (report) recordUnitFailure(report, 'reallook', err, 'upstream');
       return [];
     }
+  }
+
+  parseExtractedTableRows(rows, baseUrl) {
+    const listings = [];
+    for (const cells of (rows || [])) {
+      if (!Array.isArray(cells) || cells.length < 2) continue;
+      const line = cells.map((c) => String(c || '').trim()).filter(Boolean).join(' | ');
+      const address = String(cells[0] || cells[1] || '').trim();
+      const stateMatch = line.match(/,\s*([A-Z]{2})(?:\s+(\d{5}))?\b/);
+      const state = stateMatch?.[1] || null;
+      const zip = stateMatch?.[2] || null;
+      const priceMatch = line.match(/\$([0-9,]+)/);
+      const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : null;
+      const recordMatch = line.match(/(?:asset|case|property)\s*(?:id|no\.?|#)?\s*[:#]?\s*([A-Z0-9-]{4,})/i) || line.match(/\b(USMS-[A-Z0-9-]+|[A-Z]{2,4}-\d{3,})\b/i);
+      const recordId = recordMatch?.[1];
+      if (!address || !state || !recordId) continue;
+      const cleanId = String(recordId).replace(/^USMS-/i, '').replace(/[^a-zA-Z0-9-]/g, '');
+      listings.push({
+        id: `USMS-${cleanId}`,
+        state,
+        county: null,
+        city: null,
+        zip,
+        address,
+        openingBid: price,
+        estLow: null,
+        estHigh: null,
+        assessed: null,
+        saleDate: null,
+        plaintiff: null,
+        defendant: null,
+        occupancy: null,
+        deposit: null,
+        sourceUrl: `${baseUrl}#asset-${encodeURIComponent(cleanId)}`,
+        raw: line.slice(0, 2000),
+        provenance: { origin: 'live', observed: true, publisher: 'U.S. Marshals Service', recordId: String(recordId), scraplingProfile: 'table-extract' },
+      });
+    }
+    return listings;
   }
 
   parsePartnerCards(html) {
