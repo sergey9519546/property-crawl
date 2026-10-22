@@ -217,10 +217,10 @@ const UPSERT_RUN_SQL = `
   INSERT INTO source_observation_runs AS r
     (source_key, last_run_at, last_success_at, last_non_empty_at, accepted_count,
      evidence_count, rejected_count, error, duration_ms, runs_count, updated_at)
-  VALUES ($1, $2,
-          CASE WHEN $6::text IS NULL THEN $2 ELSE NULL END,
-          CASE WHEN $3 > 0 THEN $2 ELSE NULL END,
-          $3, $4, $5, $6, $7, 1, NOW())
+  VALUES ($1, $2::timestamptz,
+          CASE WHEN $6::text IS NULL THEN $2::timestamptz ELSE NULL END,
+          CASE WHEN $3::int > 0 THEN $2::timestamptz ELSE NULL END,
+          $3::int, $4::int, $5::int, $6::text, $7::bigint, 1, NOW())
   ON CONFLICT (source_key) DO UPDATE SET
     last_run_at = EXCLUDED.last_run_at,
     last_success_at = CASE WHEN EXCLUDED.error IS NULL THEN EXCLUDED.last_run_at ELSE r.last_success_at END,

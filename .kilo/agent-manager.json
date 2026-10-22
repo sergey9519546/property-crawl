@@ -4,24 +4,19 @@
     "ses_ea28fd299ffeLt4R5rbeS48Wlc": {
       "worktreeId": null,
       "createdAt": "2026-10-21T07:49:55.215Z"
-    },
-    "ses_ea2828cdfffenWk8WxrMII51Kq": {
-      "worktreeId": null,
-      "createdAt": "2026-10-21T08:04:25.035Z"
     }
   },
   "tabOrder": {
     "local": [
       "pending:b278a485-b723-4a5f-8790-63069aa7dbf6",
       "pending:96893248-d6b2-494f-8172-974510bb16ec",
-      "ses_ea28fd299ffeLt4R5rbeS48Wlc",
-      "ses_ea2828cdfffenWk8WxrMII51Kq"
+      "ses_ea28fd299ffeLt4R5rbeS48Wlc"
     ]
   },
   "sessionsCollapsed": true,
   "activeTarget": {
     "projectId": "prj-7308412530d0",
     "kind": "session",
-    "sessionId": "ses_ea2828cdfffenWk8WxrMII51Kq"
+    "sessionId": "ses_ea28fd299ffeLt4R5rbeS48Wlc"
   }
 }

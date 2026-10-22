@@ -175,7 +175,7 @@ test('the Postgres occupancy facet folds blanks into unknown, and unknown is sel
   assert.match(sql, /coalesce\(nullif\(occupancy,''\)::text,'unknown'\) AS value/);
   // Selecting the sentinel has to return the records it describes, not an
   // empty set, or the dropdown is a dead end.
-  assert.match(sql, /WHERE coalesce\(occupancy,''\)=''/);
+  assert.match(sql, /WHERE .*AND coalesce\(occupancy,''\)=''/);
 });
 
 // --- parseBbox -------------------------------------------------------

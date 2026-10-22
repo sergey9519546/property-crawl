@@ -275,7 +275,7 @@ test('fixture-only collectors are excluded before scrape execution', async () =>
   const isolatedScheduler = new schedulerModule.IngestionScheduler({
     realScrapers: [{
       name: 'FixtureOnlyCollector',
-      sourceKey: 'fixture-only',
+      sourceKey: 'hud',
       fixtureOnly: true,
       async scrapeFeed() { scrapeCalled = true; return [validListing()]; }
     }],
@@ -297,7 +297,7 @@ test('historical-only collectors are excluded from live opportunity ingestion', 
   const isolatedScheduler = new schedulerModule.IngestionScheduler({
     realScrapers: [{
       name: 'HistoricalCollector',
-      sourceKey: 'historical',
+      sourceKey: 'hud',
       historicalOnly: true,
       async scrapeFeed() { scrapeCalled = true; return [validListing()]; }
     }],

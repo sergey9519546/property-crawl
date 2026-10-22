@@ -1,5 +1,9 @@
 "use strict";
 const { hash } = require("./store");
+// Listing-admission gate: a DISCOVERY_ONLY catalog source (court dockets,
+// cadastral parcels) is discovery evidence, never an actionable sale listing.
+// The catalog is the single source of truth; import the gate, never re-derive it.
+const { servesListings, listingServingSourceSqlList } = require("../sources/catalog");
 const MAX_SCAN = Math.max(50000, Number(process.env.DISCOVERY_MAX_SCAN) || 50000),
   MAX_LIMIT = 1000;
 class DiscoveryQueryError extends Error {
@@ -222,6 +226,14 @@ function publishedRedemptionDays(row) {
   return Number.isFinite(days) ? days : null;
 }
 function matches(row, f) {
+  // Admission gate. A record whose declared source is a DISCOVERY_ONLY
+  // catalog entry (court docket, cadastral parcel) is never an actionable
+  // sale listing, so the in-memory matcher refuses it before any filter
+  // runs. A row that carries no source at all is a synthetic/parity fixture
+  // shape (real ingestion requires source) and is judged on its filters
+  // alone; the store-level gates exclude source-less rows from the feed.
+  if (row && typeof row.source === 'string' && row.source !== ''
+      && !servesListings(row.source)) return false;
   const d = derived(row);
   if (
     f.q &&
@@ -382,6 +394,12 @@ function buildFacets(rows, fields) {
 function pgWhere(f, start = 1) {
   const p = [],
     w = [];
+  // Admission gate. The inline literal list is deliberate: pgWhere's bound
+  // parameter positions are pinned by the discovery parity suite, and
+  // listingServingSourceSqlList() is built parameter-free for exactly this
+  // caller (see server/sources/catalog.js). DISCOVERY_ONLY and uncataloged
+  // sources never enter the SQL inventory.
+  w.push(`source_key IN (${listingServingSourceSqlList()})`);
   const add = (sql, v) => {
     w.push(sql.replace("?", `$${start + p.length}`));
     p.push(v);

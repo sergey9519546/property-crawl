@@ -7,6 +7,10 @@ const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
 const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+// Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
+// catalog source is discovery evidence, never an actionable sale listing,
+// so its records answer the same 404 an absent record answers.
+const { servesListings } = require('../sources/catalog');
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
 
 function mediaEntries() {
@@ -256,6 +260,11 @@ async function handleListings(req, res) {
       if (id.length > 256 || /[\/\\\u0000-\u001f\u007f]/.test(id)) return res.status(400).json({ error: 'Invalid listing identifier' });
       const listing = await db.getListingById(id);
       if (!listing) return res.status(404).json({ error: 'Listing not found' });
+      // Admission gate: a stored record from a DISCOVERY_ONLY source is not
+      // an actionable listing and is presented as not found, not as data.
+      if (typeof listing.source === 'string' && listing.source !== '' && !servesListings(listing.source)) {
+        return res.status(404).json({ error: 'Listing not found' });
+      }
       return res.json({ ...presentListing(attachMedia(listing, mediaEntries())), documentEvidence: buildDocumentEvidence(listing) });
     }
 

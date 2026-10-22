@@ -26,6 +26,10 @@ const { validateListingForIngestion } = require('./validation');
 const { requireCollectionStorage, inspectCollectionStorage } = require('../discovery/storage-health');
 const { sanitizeRunReport } = require('../discovery/run-report');
 const { collectionScope } = require('./collection-scope');
+// Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
+// catalog source is discovery evidence, never an actionable sale listing,
+// so its collector never gets a run slot. Uncataloged keys fail closed too.
+const { listingSourceAdmission } = require('../sources/catalog');
 const { validateScraperAdapters } = require('./scraper-interface');
 const { hash: scopeHash } = require('../discovery/store');
 
@@ -60,6 +64,27 @@ async function mapWithConcurrency(items, concurrency, worker) {
 
   await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
   return results;
+}
+
+/**
+ * Registration admission gate. A scraper whose source key fails
+ * servesListings() (DISCOVERY_ONLY status or not in the source catalog)
+ * is dropped from the runnable set and logged; scrapeFeed must not run
+ * for it at all. The full registry is kept on this.realScrapers so the
+ * catalog adapter join and Source Radar adapter view stay observable;
+ * the gate controls run slots, not the catalog join.
+ */
+function admitListingsScrapers(scrapers) {
+  return (scrapers || []).filter((scraper) => {
+    const key = (scraper && (scraper.sourceKey || scraper.name)) || '<unnamed>';
+    const admission = listingSourceAdmission(scraper && scraper.sourceKey);
+    if (admission.serves) return true;
+    const reason = admission.reason === 'DISCOVERY_ONLY'
+      ? 'DISCOVERY_ONLY, not a listing collector'
+      : 'not in source catalog';
+    console.log(`[Scheduler] Skipping ${key}: ${reason}`);
+    return false;
+  });
 }
 
 function parseScrapeIntervalHours(value, options = {}) {
@@ -137,6 +162,9 @@ class IngestionScheduler {
     this.concurrency = normalizeConcurrency(options.concurrency ?? (options.env || process.env).SCRAPER_CONCURRENCY);
     // Derive key set from actual array so the log message never drifts.
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
+    // Registration gate: only listing-serving collectors get run slots.
+    // Logged once per scheduler construction.
+    this.listingServingScrapers = admitListingsScrapers(this.realScrapers);
     this.isRunning = false;
   }
 
@@ -155,13 +183,18 @@ class IngestionScheduler {
     if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
       throw new Error('Choose registered live source collectors');
     }
-    const scrapers = requested ? this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)) : this.realScrapers;
+    // Default cycles run only listing-serving collectors; an explicitly
+    // requested key that fails the admission gate is skipped (and logged)
+    // rather than run.
+    const scrapers = requested
+      ? admitListingsScrapers(this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)))
+      : this.listingServingScrapers;
     let ownership = options.jobId && options.owner ? { jobId: options.jobId, owner: options.owner } : {};
     let leaseGuard = options.leaseGuard || null;
     const assertLease = async (message = 'Collection job lease was lost') => {
       if (leaseGuard && !await leaseGuard()) { const error=new Error(message);error.code='DISCOVERY_JOB_LEASE_LOST';throw error; }
     };
-    const completeCycle = !requested && scrapers.length === this.realScrapers.length;
+    const completeCycle = !requested && scrapers.length === this.listingServingScrapers.length;
     this.isRunning = true;
     let cycleContext = null;
     try {

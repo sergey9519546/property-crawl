@@ -88,9 +88,9 @@ for (const bucket of ['true', 'false', 'unknown']) test(`Postgres ${bucket} docu
   const memory = documentCases.filter((item) => query.matches(item, filter)).map((item) => item.id).sort();
   assert.deepEqual(memory, expected, 'memory query must match the stated tri-state contract');
   const where = query.pgWhere(filter);
-  const values = documentCases.map((item, index) => `($${where.params.length + index * 3 + 1},$${where.params.length + index * 3 + 2}::boolean,$${where.params.length + index * 3 + 3}::jsonb)`).join(',');
+  const values = documentCases.map((item, index) => `('servicelink',$${where.params.length + index * 3 + 1},$${where.params.length + index * 3 + 2}::boolean,$${where.params.length + index * 3 + 3}::jsonb)`).join(',');
   const params = [...where.params, ...documentCases.flatMap((item) => [item.id, item.hasDocuments, JSON.stringify(item.provenance)])];
-  const result = await pool.query(`WITH listings(id,has_documents,provenance) AS (VALUES ${values}) SELECT id FROM listings${where.sql} ORDER BY id`, params);
+  const result = await pool.query(`WITH listings(source_key,id,has_documents,provenance) AS (VALUES ${values}) SELECT id FROM listings${where.sql} ORDER BY id`, params);
   assert.deepEqual(result.rows.map((row) => row.id), expected, 'Postgres query must match the stated tri-state contract');
 });
 
@@ -102,9 +102,9 @@ test('Postgres program and lifecycle fallbacks match canonical memory semantics'
   const filter = query.queryFromUrl(new URL('http://localhost/api/listings?program=HUD%20REO&lifecycle=active'));
   const expected = rows.filter((row) => query.matches(row, filter)).map((row) => row.id);
   const where = query.pgWhere(filter);
-  const values = rows.map((row, index) => `($${where.params.length + index * 6 + 1},$${where.params.length + index * 6 + 2},$${where.params.length + index * 6 + 3},$${where.params.length + index * 6 + 4},$${where.params.length + index * 6 + 5},$${where.params.length + index * 6 + 6}::jsonb)`).join(',');
+  const values = rows.map((row, index) => `('servicelink',$${where.params.length + index * 6 + 1},$${where.params.length + index * 6 + 2},$${where.params.length + index * 6 + 3},$${where.params.length + index * 6 + 4},$${where.params.length + index * 6 + 5},$${where.params.length + index * 6 + 6}::jsonb)`).join(',');
   const params = [...where.params, ...rows.flatMap((row) => [row.id, row.auctionProgram, row.lifecycleStatus, row.status, null, JSON.stringify(row.provenance)])];
-  const result = await pool.query(`WITH listings(id,auction_program,lifecycle_status,status,occupancy,provenance) AS (VALUES ${values}) SELECT id FROM listings${where.sql} ORDER BY id`, params);
+  const result = await pool.query(`WITH listings(source_key,id,auction_program,lifecycle_status,status,occupancy,provenance) AS (VALUES ${values}) SELECT id FROM listings${where.sql} ORDER BY id`, params);
   assert.deepEqual(result.rows.map((row) => row.id), expected);
 });
 
@@ -311,8 +311,8 @@ test('sorting uses the same derived values the API returns', async () => {
   // withholds because there is no estimate range. "genuinely-scored": 50 with
   // the estimate range present, so the projection returns 50.
   for (const row of [
-    { id: 'scored-but-withheld', deal_score: 90, opening_bid: 60000, est_low: null, est_high: null, equity_spread: null, sale_date: '2026-11-05' },
-    { id: 'genuinely-scored', deal_score: 50, opening_bid: 60000, est_low: 80000, est_high: 100000, equity_spread: 30000, sale_date: '2026-11-10' },
+    { id: 'scored-but-withheld', deal_score: 90, opening_bid: 60000, est_low: null, est_high: null, equity_spread: null, sale_date: '2026-11-05', source_key: 'servicelink' },
+    { id: 'genuinely-scored', deal_score: 50, opening_bid: 60000, est_low: 80000, est_high: 100000, equity_spread: 30000, sale_date: '2026-11-10', source_key: 'servicelink' },
   ]) {
     const keys = Object.keys(row);
     await pool.query(
@@ -349,7 +349,7 @@ test('date sort puts upcoming sales first and concluded ones last', async () => 
     { id: 'soon-upcoming', sale_date: iso(3) },
     { id: 'later-upcoming', sale_date: iso(40) },
   ]) {
-    await pool.query('INSERT INTO listings (id, sale_date) VALUES ($1, $2)', [row.id, row.sale_date]);
+    await pool.query("INSERT INTO listings (id, sale_date, source_key) VALUES ($1, $2, 'servicelink')", [row.id, row.sale_date]);
   }
   const database = { isPg: true, pool, listingSelect: 'id, sale_date::text AS "saleDate"' };
   const sorted = await query.search(

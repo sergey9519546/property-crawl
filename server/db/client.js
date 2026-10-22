@@ -5,6 +5,10 @@ const { seedProvenance } = require('./seed-provenance');
 const { loadLiveRecords } = require('./live-record-store');
 const { createAiCacheStore } = require('./ai-cache-store');
 const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
+// Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
+// catalog source is discovery evidence, never an actionable sale listing.
+// The catalog is the single source of truth; import the gate, never re-derive it.
+const { servesListings, listingServingSourceSqlList } = require('../sources/catalog');
 
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -1289,7 +1293,7 @@ class DatabaseClient {
         COUNT(*) FILTER (WHERE sale_date IS NOT NULL AND (sale_date < $1::date OR sale_date > $2::date))::int AS dropped_outside,
         COUNT(*) FILTER (WHERE sale_date IS NOT NULL AND sale_date >= $1::date AND sale_date <= $2::date AND ($3::text[] IS NOT NULL AND (state IS NULL OR NOT (state = ANY($3::text[])))))::int AS dropped_state
       FROM listings
-      WHERE (status = 'active' OR status IS NULL);
+      WHERE COALESCE(status, 'unknown') NOT IN ('sold', 'closed', 'cancelled');
     `;
     const pool = this.getReadPool();
     const metaRes = await pool.query(metaSql, [startDate, endDate, states]);
@@ -1312,13 +1316,13 @@ class DatabaseClient {
           prop_type,
           source_key,
           sale_date,
-          DATE_TRUNC('week', sale_date::timestamp AT TIME ZONE 'UTC') AS week_start,
+          DATE_TRUNC('week', sale_date::timestamp) AT TIME ZONE 'UTC' AS week_start,
           ROW_NUMBER() OVER(
-            PARTITION BY DATE_TRUNC('week', sale_date::timestamp AT TIME ZONE 'UTC')
+            PARTITION BY DATE_TRUNC('week', sale_date::timestamp)
             ORDER BY sale_date ASC, deal_score DESC NULLS LAST, id ASC
           ) AS rn
         FROM listings
-        WHERE (status = 'active' OR status IS NULL)
+        WHERE COALESCE(status, 'unknown') NOT IN ('sold', 'closed', 'cancelled')
           AND sale_date IS NOT NULL
           AND sale_date >= $1::date
           AND sale_date <= $2::date
@@ -1345,8 +1349,8 @@ class DatabaseClient {
       week_samples AS (
         SELECT
           week_start,
-          json_agg(
-            json_build_object(
+          jsonb_agg(
+            jsonb_build_object(
               'id', id,
               'source', source_key,
               'address', address,
@@ -1358,6 +1362,7 @@ class DatabaseClient {
               'propType', coalesce(prop_type, 'Unknown'),
               'saleDate', sale_date::text
             )
+            ORDER BY rn
           ) AS sample
         FROM in_scope
         WHERE rn <= $4
@@ -1370,7 +1375,7 @@ class DatabaseClient {
         PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY w.deal_score) FILTER (WHERE w.deal_score IS NOT NULL)::float8 AS "medianDealScore",
         coalesce(ws.sources, '{}'::jsonb) AS sources,
         coalesce(wp.prop_types, '{}'::jsonb) AS "propTypes",
-        coalesce(samp.sample, '[]'::json) AS sample
+        coalesce(samp.sample, '[]'::jsonb) AS sample
       FROM in_scope w
       LEFT JOIN week_sources ws ON w.week_start = ws.week_start
       LEFT JOIN week_props wp ON w.week_start = wp.week_start
@@ -1905,6 +1910,8 @@ class DatabaseClient {
     if (this.isPg) {
       const selectCols = filters.summary ? SUMMARY_LISTING_SELECT : LISTING_SELECT;
       let sql = `SELECT ${selectCols}, COUNT(*) OVER() AS "fullCount" FROM listings WHERE 1=1`;
+      // Admission gate: DISCOVERY_ONLY and uncataloged sources never serve.
+      sql += ` AND source_key IN (${listingServingSourceSqlList()})`;
       const params = [];
       let paramIdx = 1;
 
@@ -1986,6 +1993,9 @@ class DatabaseClient {
 
     this.refreshLiveCache();
     let results = this.inMemoryData.listings.filter(l => {
+      // Admission gate: a record whose declared source is DISCOVERY_ONLY or
+      // unknown to the catalog is discovery evidence, not a sale listing.
+      if (typeof l.source === 'string' && l.source !== '' && !servesListings(l.source)) return false;
       if (state !== 'all' && l.state !== state) return false;
       if (source !== 'all' && l.source !== source) return false;
       if (type !== 'all' && l.propType !== type) return false;

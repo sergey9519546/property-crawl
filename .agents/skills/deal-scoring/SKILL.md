@@ -73,8 +73,11 @@ Deal Score is a **single-factor, price-only** triage: it measures only the sprea
 between the opening bid and the valuation midpoint (`ratio = openingBid / mid`).
 
 The Opportunity Signal Engine (`server/intelligence/signals.js`) produces a separate
-`triagePriority` (also bounded 1–99) that aggregates **six** evidence signals — the
-bid-to-value ratio is only one of them (weighted 30%). The two numbers are intentionally
+`triagePriority` (clamped **0–99**) that evaluates **eight** signals — six weighted
+scoring components (the bid-to-value ratio among them, weighted 30%) plus two
+unweighted ledger signals (`municipal_code_enforcement`, `publisher_documents`).
+The presentation bands (moderate >= 30, high >= 50) live in `src/lib/triage-bands.ts`
+and are calibrated to the measured live distribution. The two numbers are intentionally
 different metrics and must never be presented as the same score:
 
 - `dealScore` = "how deep is the discount" (pure price triage).

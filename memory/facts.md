@@ -3,7 +3,7 @@
 > Persistent global facts. Every entry cites its source file. No hallucinated facts.
 > Updated by the agent after significant changes; read at session start.
 >
-> Last refreshed: 2026-09-20. Current seed count and route list: `memory/facts-refresh-2026-09-20.md`.
+> Last refreshed: 2026-10-21 (opportunity-signal expansion, listing admission gate, decision-packet fail-closed, FL-DOR situs resolution). Current seed count and route list: read `CONTEXT.md`.
 
 ## Architecture
 
@@ -13,7 +13,7 @@
   - Source: `src/lib/terminal-filter-store.ts`, `src/components/terminal/interactive-terminal.tsx`
 - **Hunt match ranking**: `server/intelligence/hunt-ranking.js` ranks *matched* hunt results for triage (criterion closeness, research quality, urgency, SCORE_BANDS band). Binary match remains the gate; rank is presentation-only and never invents publisher facts. `server/intelligence/score-bands.js` + `src/lib/score-bands.ts` are the Elite/Strong/Fair/Thin presentation bands.
   - Source: `server/intelligence/hunt-ranking.js`, `server/intelligence/hunts.js`, `src/lib/score-bands.ts`, `test/hunt-ranking.test.js`
-- **No database required to boot**: `server/db/client.js` falls back to in-memory provider seeded from `data.js` when `DATABASE_URL` is unset.
+- **No silent database fallback**: with no reachable database configured, `server/db/client.js` reports `dataMode()` `unavailable` and listing routes refuse rather than serving an implied demo inventory. The in-memory provider is reachable only by explicit opt-in (`PROPERTY_INVENTORY_BACKEND=memory`) or under `NODE_ENV=test`.
   - Source: `server/db/client.js`, `AGENTS.md`
 - **API port**: `server/server.js` listens on port 3000; Next dev on 3001. Base44 compose maps UI to 3000 and proxies API.
   - Source: `AGENTS.md`, `docker-compose.base44.yml`
@@ -45,7 +45,7 @@
 - Server API route modules: alerts, auction-calendar, coverage, document-review, enrich, enrichment, export, hunts, listings, neighborhoods, parcel-boundary, parse, portfolio-dashboard, price-drop, property-comparison, property-image, property-image-providers, property-intelligence, property-signals, saved-searches, scrapers, source-network, verify-docket, watchlist-comps, workspace. Inline handlers: sources, health.
   - Source: `CONTEXT.md`, `server/routes/`
   - Source: `CONTEXT.md`, `server/routes/`
-- 35 scraper modules in `server/scrapers/` (adapter + infrastructure mix).
+- 50 scraper modules in `server/scrapers/` (adapter + infrastructure mix).
   - Source: `server/scrapers/`
 
 ## Agent system
@@ -66,7 +66,10 @@
   - Source: `scripts/skills-doctor.js`, `test/skills-doctor.test.js`
 - Capability Graph at `scripts/capability-graph.js` — typed DAG orchestrator with input/output validation, cycle detection, topological sort, and stratified parallel stage execution.
   - Source: `scripts/capability-graph.js`, `test/capability-graph.test.js`
-- Opportunity Signal Evaluator at `server/intelligence/signals.js` — 6 deterministic candidate signals with tri-state status, published component weights, and triage priority.
+- Opportunity Signal Evaluator at `server/intelligence/signals.js` — **8** signals with tri-state status: 6 weighted scoring components (bidToValueRatio 0.30, saleDateKnown 0.20, bidReduction 0.20, areaDiscrepancy 0.10, returnedToMarket 0.10, dataCompleteness 0.10) plus 2 unweighted ledger signals (municipal_code_enforcement, publisher_documents). `triagePriority` is clamped **0–99**; presentation bands (moderate >= 30, high >= 50) live in `src/lib/triage-bands.ts`, calibrated to the 2026-10-21 measured distribution.
+- **Listing admission gate**: DISCOVERY_ONLY or uncataloged sources are never served as listings — `servesListings()` in `server/sources/catalog.js`, enforced at the scheduler run selection, the discovery query (`matches()`/`pgWhere()`), both `getListings` branches, and the single-listing 404. Records stay in the store and on the `/sources` evidence surfaces; promotion is a catalog status flip.
+- **Operator surfaces fail closed**: `SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`) unset => 503, including the decision-packet route. No route grants a default role for unrecognized credentials.
+- **FL-DOR cadastral county attribution**: resolved from the record's own situs evidence, never from `CO_NO` last-resort fallback — the published layer's code namespace is not the FDOR tax-admin 1–67 list (see `server/scrapers/fl-dor-cadastral.js` header and `docs/alachua-pilot.md`).
   - Source: `server/intelligence/signals.js`, `test/signals.test.js`
 - Database Seeder at `scripts/seed-from-v0.js` — parameter-safe PostgreSQL seeder from v0 `data.js` with dry-run validation.
   - Source: `scripts/seed-from-v0.js`, `test/seed-from-v0.test.js`
@@ -268,11 +271,11 @@
 
 ## Facts refresh (2026-09-20)
 
-- Seed inventory is **2093** records. Older 2096 notes in this file are historical.
+- Seed inventory is **2130** records (read the live total from `CONTEXT.md`). Older 2093/2096 notes in this file are historical.
   - Source: `CONTEXT.md`, `memory/facts-refresh-2026-09-20.md`
 - Onboarding crawl budget honors env clamps unless an explicit option is passed.
   - Source: `server/discovery/onboarding-pass.js`
 - Search-page coverage counts are page-scoped.
   - Source: `src/lib/inventory-honesty.ts`
-- Still open: CSP `unsafe-inline`; live Postgres round-trip; gsa, irs, and nationwide HUD promotion; operator secrets.
+- Still open: gsa, irs, and nationwide HUD source promotion; production operator-secret rotation. (CSP `unsafe-inline` and the live Postgres round-trip closed 2026-09-27.)
   - Source: `docs/OPEN_RESIDUALS.md`

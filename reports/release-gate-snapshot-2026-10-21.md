@@ -1,4 +1,4 @@
-# Release gate snapshot — 2026-10-21 (tree `0f9bcc8`)
+# Release gate snapshot — 2026-10-21 (tree `2c99e62`)
 
 > Committed evidence for PP-05. The live per-run ledger
 > (`reports/release-gate-ledger.json`) is gitignored by PP-02 convention and is

@@ -22,14 +22,17 @@ listing API is a plain Node `http` server in `server/`. They share one
   `http://localhost:3000`). In the Base44 compose the UI runs on port 3000
   and proxies API calls server-side to the internal `api` service.
 
-No database is required to boot. `server/db/client.js` falls back to an
-in-memory provider seeded from `data.js` whenever `DATABASE_URL` is unset
-(seed listings across 16 catalog sources — read the current totals from
-CONTEXT.md, which is generated and digest-checked; live scrapers and
-`.cache/live-listings.json` can raise the served total further). Set
-`DATABASE_URL` to a Postgres+PostGIS URL only to enable persistence. The
-repo's own `docker-compose.yml` wires PostGIS, but the Base44 dev compose
-intentionally omits it for a lighter dev loop.
+No database is required to boot, and there is no silent demo fallback. With no
+reachable database configured, `server/db/client.js` reports `dataMode()`
+`unavailable` and listing routes refuse rather than implying an inventory. The
+in-memory provider is reachable only by explicit opt-in
+(`PROPERTY_INVENTORY_BACKEND=memory`) or under `NODE_ENV=test`; it is seeded from
+`data.js` (read the current totals from CONTEXT.md, which is generated and
+digest-checked; live scrapers and `.cache/live-listings.json` can raise the
+served total further). Configure a Postgres+PostGIS `DATABASE_URL` (or the
+embedded engine via `PROPERTY_DB=embedded` + `PROPERTY_PG_DATA_DIR`) for a
+durable inventory. The repo's own `docker-compose.yml` wires PostGIS, but the
+Base44 dev compose intentionally omits it for a lighter dev loop.
 
 No external secrets are required to **boot** public listing pages. Optional
 `SCRAPER_ADMIN_TOKEN` (or `PROPERTY_OPERATOR_SECRET`) is required for operator
@@ -71,7 +74,7 @@ Shared: one `package.json` / `node_modules`. The Next UI reaches the API via `PR
 - **SOURCES**: 16 source types (key:label:tier). Tier A (high-trust): `fannie`, `fdic`, `freddie`, `gsa`, `hud`, `irs`, `marshals`, `treasury`, `usda`, `va`. Tier B: `bid4assets`, `civilview`, `landbank`, `servicelink`, `sheriff`, `trustee`.
 - **LISTINGS**: seed records in `data.js` — see the generated `LISTINGS` count in
 `CONTEXT.md`; do not hand-copy it here. States: AK, AL, AR, AZ, CA, CO, CT, DE, FL, GA, HI, IA, ID, IL, IN, KS, KY, LA, MA, MD, ME, MI, MN, MO, MS, MT, NC, ND, NE, NH, NJ, NM, NV, NY, OH, OK, OR, PA, PR, RI, SC, SD, TN, TX, UT, VA, VT, WA, WI, WV, WY.
-- **Property types**: Commercial, Condo, Duplex, Land, Single Family, Single Family Home, Town House, Triplex, Unknown.
+- **Property types**: Commercial, Condo, Courthouse, Duplex, Lab, Land, Office, PUD, Parking, Service, Single Family, Single Family Home, Town House, Triplex, Warehouse, Unknown (read the current list from `CONTEXT.md`).
 - **Data contract**: camelCase (`dealScore`, `openingBid`, `propType`, ...). Postgres stores `snake_case`; `server/db/client.js` aliases back — production-only breakage risk (`CONTEXT.md` invariants).
 
 ## 4. Key commands (from `CONTEXT.md` — verified live)

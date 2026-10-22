@@ -38,6 +38,9 @@ if the seed count drifts.
 | Source catalog entries | **163** | `server/sources/catalog.js` |
 | Dispatched API paths | **41** | `server/server.js` |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
+| Opportunity-signal evaluator | **8** signals (6 weighted scoring components + 2 ledger signals); `triagePriority` clamped 0–99; bands moderate >= 30 / high >= 50 | `server/intelligence/signals.js`, `src/lib/triage-bands.ts` |
+| Listing admission gate | DISCOVERY_ONLY or uncataloged sources are never served as listings; records stay in the store and on `/sources` evidence surfaces | `server/sources/catalog.js` `servesListings()`, enforced at the scheduler run selection, discovery query, both `getListings` branches, and the single-listing 404 |
+| Decision-packet auth | Fails closed with 503 when the operator token is unset (no default role for unrecognized credentials) | `server/routes/decision-packet.js` |
 
 ## Open work, in dependency order
 
