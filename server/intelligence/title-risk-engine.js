@@ -48,17 +48,17 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
   const combined = `${plaintiff} ${noticeText}`.toLowerCase();
 
   // 1. Municipal or property tax authority
-  if (/(?:county\s*treasurer|tax\s*collector|city\s*of|dept\s*of\s*revenue|internal\s*revenue|irs|tax\s*lien|delinquent\s*tax)/i.test(combined)) {
+  if (/(?:county\s*treasurer|tax\s*collector|city\s*of|dept\s*of\s*revenue|internal\s*revenue|\birs\b|tax\s*lien|delinquent\s*tax)/i.test(combined)) {
     return 'TAX_AUTHORITY';
   }
 
   // 2. HOA / Condo Association
-  if (/(?:homeowners?\s*association|condominium\s*association|hoa|condo\s*owners|master\s*association|community\s*association|property\s*owners\s*association)/i.test(combined)) {
+  if (/(?:homeowners?\s*association|condominium\s*association|\bhoa\b|condo\s*owners|master\s*association|community\s*association|property\s*owners\s*association)/i.test(combined)) {
     return 'HOA_ASSESSMENT';
   }
 
   // 3. Junior Mortgage / HELOC / Second Trust Deed
-  if (/(?:second\s*mortgage|2nd\s*mortgage|junior\s*mortgage|heloc|home\s*equity\s*line|subordinate\s*deed|subordinate\s*mortgage)/i.test(combined)) {
+  if (/(?:second\s*(?:mortgage|(?:trust\s*)?deed)|2nd\s*(?:mortgage|(?:trust\s*)?deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien))/i.test(combined)) {
     return 'SECOND_MORTGAGE_HELOC';
   }
 
@@ -75,7 +75,7 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
  */
 function detectIrsFederalTaxLien(noticeText = '') {
   const text = String(noticeText || '');
-  const hasIrs = /(?:united\s*states\s*of\s*america|internal\s*revenue\s*service|irs|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(text);
+  const hasIrs = /(?:united\s*states\s*of\s*america|internal\s*revenue\s*service|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(text);
 
   return {
     hasIrsLien: hasIrs,

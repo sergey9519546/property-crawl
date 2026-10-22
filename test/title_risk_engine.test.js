@@ -130,3 +130,16 @@ test('statutory redemption periods match state statutes', () => {
   assert.equal(ncListing.statutoryRedemption.days, 10);
   assert.ok(ncListing.titleWarnings.some((w) => w.includes('NORTH CAROLINA 10-DAY UPSET BID')));
 });
+
+test('regex word boundaries prevent substring false positives on irs and hoa', () => {
+  assert.equal(classifyForeclosingParty('First Horizon Home Equity Line Corporation'), 'SECOND_MORTGAGE_HELOC');
+  assert.equal(classifyForeclosingParty('First National Bank'), 'FIRST_MORTGAGE');
+  assert.equal(classifyForeclosingParty('Shoal Creek Mortgage Partners'), 'FIRST_MORTGAGE');
+  assert.equal(classifyForeclosingParty('KeyBank National Association Second Trust Deed Division'), 'SECOND_MORTGAGE_HELOC');
+
+  const cleanNotice = 'First National Bank vs. John Smith. Foreclosure of mortgage deed.';
+  const detection = detectIrsFederalTaxLien(cleanNotice);
+  assert.equal(detection.hasIrsLien, false);
+  assert.equal(detection.redemptionDays, 0);
+  assert.equal(detection.warning, null);
+});
