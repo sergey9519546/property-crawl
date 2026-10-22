@@ -4,6 +4,8 @@
  * Cleans irregular courthouse abbreviations, unit ranges, and extracts parcel IDs.
  */
 
+const { US_STATE_OR_TERRITORY_CODES } = require('../state-codes');
+
 const CITY_NORMALIZATION = {
   CLEV: 'Cleveland',
   CLEVELAND: 'Cleveland',
@@ -76,7 +78,17 @@ function normalizeAddressAndParcel(rawString = '') {
   let state = '';
   let streetName = addrPart;
 
-  const cityStateMatch = addrPart.match(/,\s*([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?/i);
+  let cityStateMatch = addrPart.match(/,\s*([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?/i);
+  if (!cityStateMatch) {
+    const noCommaMatch = addrPart.match(/\s+([A-Za-z]+)\s+([A-Z]{2})(?:\s+(\d{5}))?[\s\.,]*$/i);
+    if (noCommaMatch) {
+      const stateCand = noCommaMatch[2].toUpperCase();
+      const cityCand = noCommaMatch[1].toUpperCase();
+      if (US_STATE_OR_TERRITORY_CODES.has(stateCand) && !STREET_SUFFIXES[cityCand]) {
+        cityStateMatch = noCommaMatch;
+      }
+    }
+  }
   if (cityStateMatch) {
     const rawCity = cityStateMatch[1].toUpperCase();
     city = CITY_NORMALIZATION[rawCity] || cityStateMatch[1];

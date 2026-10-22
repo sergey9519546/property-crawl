@@ -152,6 +152,18 @@ test('normalizeAddressAndParcel: address without city/state returns just the cle
   assert.equal(result.standardizedAddress, '500 Main St');
 });
 
+test('normalizeAddressAndParcel: city + state code at end (no comma)', () => {
+  const result = normalizeAddressAndParcel('100 Main St MIA FL');
+  assert.equal(result.city, 'Miami');
+  assert.equal(result.state, 'FL');
+});
+
+test('normalizeAddressAndParcel: preserves trailing zip code when present', () => {
+  const result = normalizeAddressAndParcel('500 Pine Ave, MIA FL 33101');
+  assert.equal(result.city, 'Miami');
+  assert.equal(result.state, 'FL');
+});
+
 test('normalizeAddressAndParcel: directional prefix is preserved as-is (N, S, E, W, NE, etc.)', () => {
   const result = normalizeAddressAndParcel('100 NW Main St, MIA FL');
   assert.match(result.standardizedAddress, /\bNW\b/);
