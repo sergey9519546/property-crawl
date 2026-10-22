@@ -225,3 +225,33 @@ test('parseLegalNotice: single-parcel input returns a one-element array', () => 
   assert.equal(out.length, 1);
   assert.equal(out[0].opening_bid, 0);
 });
+
+test('deterministicParse: extracts labeled APN and verifies verbatim character-span citations', () => {
+  const notice = 'SHERIFF SALE: U.S. Bank National Association vs. Jane Roe, Case No. 2025-CV-04412. Property at 742 Evergreen Terrace, Columbus, OH 43215. APN: 010-234567-00. Judgment: $185,000.00. Opening bid: $123,400.00. Sale Date: November 18, 2026.';
+  const parsed = deterministicParse(notice);
+  assert.equal(parsed.apn, '010-234567-00');
+  assert.equal(parsed.confidence_score, 1);
+  assert.ok(parsed.evidenceSpans.property_address?.verified);
+  assert.ok(parsed.evidenceSpans.case_number?.verified);
+  assert.ok(parsed.evidenceSpans.judgment_amount?.verified);
+  assert.ok(parsed.evidenceSpans.opening_bid?.verified);
+  assert.ok(parsed.evidenceSpans.apn?.verified);
+  for (const span of Object.values(parsed.evidenceSpans)) {
+    assert.equal(notice.slice(span.start, span.end), span.quote);
+  }
+});
+
+test('deterministicParse: preserves exact rawNotice character offsets when Jdgmt or OCR substitutions occur', () => {
+  const notice = 'SHERIFF SALE: Wells Fargo Bank vs. John Doe, Case No. 2025-CV-9911. 123 Main St, Cleveland, OH 44115. Jdgmt: $4S,OOO. Opening bid: $3O,OOO. APN: 101-22-333. Sale Date: October 14, 2026.';
+  const parsed = deterministicParse(notice);
+  assert.equal(parsed.judgment_amount, 45000);
+  assert.equal(parsed.opening_bid, 30000);
+  assert.equal(parsed.apn, '101-22-333');
+  assert.ok(parsed.evidenceSpans.judgment_amount?.verified);
+  assert.ok(parsed.evidenceSpans.opening_bid?.verified);
+  assert.ok(parsed.evidenceSpans.sale_date?.verified);
+  assert.ok(parsed.evidenceSpans.apn?.verified);
+  for (const [key, span] of Object.entries(parsed.evidenceSpans)) {
+    assert.equal(notice.slice(span.start, span.end), span.quote, `span mismatch in rawNotice for ${key}`);
+  }
+});

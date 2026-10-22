@@ -201,10 +201,11 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
         riskLevel: titleRisk.riskLevel,
         canProceedWithBid: titleRisk.canProceedWithBid,
         firstMortgageSurvives: titleRisk.firstMortgageSurvives,
-        hasIrsTaxLien: titleRisk.irsTaxLienRedemption?.hasLien || false,
+        hasIrsTaxLien: Boolean(titleRisk.irsTaxLienRedemption?.hasIrsLien || titleRisk.irsTaxLienRedemption?.hasLien),
         irsRedemptionDays: titleRisk.irsTaxLienRedemption?.redemptionDays || 0,
         statutoryRedemptionDays: publishedRedemptionDays(listing),
         hoaSuperPriorityApplies: titleRisk.hoaSuperPriority?.isSuperPriorityState || false,
+        instrumentPriority: titleRisk.instrumentPriority || null,
         titleWarnings: titleRisk.titleWarnings || [],
         titleActionAdvice: titleRisk.titleActionAdvice || ''
       },
@@ -260,6 +261,15 @@ function formatDecisionPacketMarkdown(packet) {
   const warningBlock = Array.isArray(t.titleWarnings) && t.titleWarnings.length > 0
     ? `\n### Pattern flags from the published text\n${t.titleWarnings.map((w) => `- ${w}`).join('\n')}\n`
     : '';
+  const inst = t.instrumentPriority;
+  const instrumentParts = [
+    inst?.instrumentNumber ? `Instrument #${inst.instrumentNumber}` : null,
+    inst?.bookPage ? `Book ${inst.bookPage.book}, Page ${inst.bookPage.page}` : null,
+    inst?.recordedDate ? `Recorded ${inst.recordedDate}` : null,
+  ].filter(Boolean);
+  const instrumentLine = instrumentParts.length > 0
+    ? `\n- **Recorded Instrument Reference**: ${instrumentParts.join(' · ')}`
+    : '';
   const openingLine = Number.isFinite(p.openingBid) ? `$${p.openingBid.toLocaleString()} (published opening amount)` : 'Not published';
 
   return `# FORECLOSURE DUE DILIGENCE DECISION PACKET
@@ -288,7 +298,7 @@ function formatDecisionPacketMarkdown(packet) {
 - **1st Mortgage Status**: ${mortgageLine}
 - **IRS Federal Tax Lien (26 U.S.C. § 7425)**: ${irsLine}
 - **Recorded redemption period**: ${redemptionLine}
-- **HOA Assessment Priority**: ${t.hoaSuperPriorityApplies ? 'A super-priority assessment statute is on file for this state. It is not a finding that an assessment exists on this property.' : 'No super-priority assessment statute is applied from this state code.'}
+- **HOA Assessment Priority**: ${t.hoaSuperPriorityApplies ? 'A super-priority assessment statute is on file for this state. It is not a finding that an assessment exists on this property.' : 'No super-priority assessment statute is applied from this state code.'}${instrumentLine}
 ${warningBlock}
 
 ---

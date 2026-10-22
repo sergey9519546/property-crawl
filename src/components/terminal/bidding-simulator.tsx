@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Sparkles } from "lucide-react";
-import { computeCashToClose, computeTargetPriceScenario } from "@/lib/underwriting";
+import { computeCashToClose, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 
@@ -40,6 +40,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [assessorError, setAssessorError] = useState<string | null>(null);
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
+  const [appliedPresetCitations, setAppliedPresetCitations] = useState<string[] | null>(null);
 
   useEffect(() => {
     const stored = readUnderwriteScenario(listing.id);
@@ -148,6 +149,31 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     }
   };
 
+  const statutoryPreset = computeStatutoryFeePreset({ purchasePrice: openingBid, state: listing.state, source: listing.source, depositText: typeof listing.deposit === "string" ? listing.deposit : null });
+  const applyStatutoryPreset = () => {
+    if (!statutoryPreset) return;
+    const next: Record<ScenarioField, string> = {
+      registrationFunds: String(statutoryPreset.registrationFunds),
+      creditedDeposit: String(statutoryPreset.creditedDeposit),
+      buyersPremium: String(statutoryPreset.buyersPremium),
+      sheriffPoundage: String(statutoryPreset.sheriffPoundage),
+      transferTax: String(statutoryPreset.transferTax),
+      delinquentTaxes: scenario.delinquentTaxes || "0",
+      settlementCosts: scenario.settlementCosts || "0",
+    };
+    setScenario(next);
+    persistScenario(next, rehabBudget, targetMargin, customValuation);
+    setAppliedPresetCitations([statutoryPreset.scheduleLabel, ...statutoryPreset.citations]);
+    setAiStrategy(null);
+  };
+  const hasIrsNoticeFlag = listing.source === "irs" || /(?:internal\s*revenue|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(`${listing.seniorLienWarning || ""} ${listing.redemptionWarning || ""}`);
+  const deadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
+    saleDate: listing.saleDate,
+    state: listing.state,
+    purchasePrice: cash.totalAcquisitionCost ?? openingBid,
+    redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
+    hasIrsLien: hasIrsNoticeFlag,
+  });
   const affirmZeroCosts = () => {
     const next = { ...scenario, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" };
     setScenario(next);
@@ -220,7 +246,42 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </label>
           ))}
         </div>
-        <button type="button" onClick={affirmZeroCosts} className="text-xs font-bold text-slate-700 underline underline-offset-2">Explicitly set all acquisition-cost fields to $0</button>
+        <div className="flex flex-wrap items-center gap-4">
+          <button type="button" onClick={affirmZeroCosts} className="text-xs font-bold text-slate-700 underline underline-offset-2">Explicitly set all acquisition-cost fields to $0</button>
+          {statutoryPreset && (
+            <button type="button" onClick={applyStatutoryPreset} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-900 transition hover:bg-slate-100">
+              Apply {statutoryPreset.state} statutory schedule preset
+            </button>
+          )}
+        </div>
+        {appliedPresetCitations && (
+          <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-[11px] leading-relaxed text-sky-950">
+            <p className="font-bold">Applied statutory schedule assumption ({appliedPresetCitations[0]}):</p>
+            <ul className="mt-1 list-disc pl-4 space-y-0.5">
+              {appliedPresetCitations.slice(1).map((cite) => <li key={cite}>{cite}</li>)}
+            </ul>
+            <p className="mt-1 text-[10px] text-sky-900/80">Explicit scenario assumptions only — verify exact county clerk / sheriff fee sheet before bidding.</p>
+          </div>
+        )}
+        {deadlinesAndCarry.effectiveLockupDays > 0 && (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-slate-950">Post-sale statutory window: {deadlinesAndCarry.effectiveLockupDays} days</span>
+              {deadlinesAndCarry.estimatedCarryCost !== null && (
+                <span className="font-semibold text-slate-700">Modeled lockup carry ({deadlinesAndCarry.annualCostOfCapitalPct}%/yr): {displayMoney(deadlinesAndCarry.estimatedCarryCost)}</span>
+              )}
+            </div>
+            {deadlinesAndCarry.objectionLabel && (
+              <p className="mt-1 text-[11px] text-slate-600">{deadlinesAndCarry.objectionLabel}{deadlinesAndCarry.objectionDeadline ? ` — window ends ${deadlinesAndCarry.objectionDeadline}` : ""}</p>
+            )}
+            {deadlinesAndCarry.stateRedemptionDeadline && (
+              <p className="mt-0.5 text-[11px] text-slate-600">Recorded redemption window ends {deadlinesAndCarry.stateRedemptionDeadline} ({deadlinesAndCarry.stateRedemptionDays}d)</p>
+            )}
+            {deadlinesAndCarry.irsRedemptionDeadline && (
+              <p className="mt-0.5 text-[11px] text-amber-800 font-semibold">26 U.S.C. § 7425(d) IRS 120-day redemption window ends {deadlinesAndCarry.irsRedemptionDeadline}</p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-4 border-t border-[#E5E7EB] pt-4">
           <div className="space-y-2">

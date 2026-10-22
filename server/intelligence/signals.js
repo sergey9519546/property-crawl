@@ -166,13 +166,43 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   const recordKey = listing.source && listing.provenance?.recordId
     ? crypto.createHash('sha256').update(`${listing.source}\n${listing.provenance.recordId}`).digest('hex')
     : null;
-  const recordHistory = (recordKey && observations?.records?.[recordKey]?.history) || [];
-  // Publisher statuses are prose ("Status: Active - Postponed"), so the same
-  // normalize-then-match classifier the observation producer uses decides
-  // whether a history entry shows an inactive/adjourned sale that the current
-  // record has returned to active from.
-  const hasHistoryRelist = recordHistory.some((h) => classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive'
-    && classifyStatusActivity(listing.status || listing.lifecycleStatus) === 'active');
+  const rawHistory = (recordKey && observations?.records?.[recordKey]?.history) || [];
+  const recordHistory = rawHistory
+    .map((entry, idx) => ({ entry, idx, ts: Number.isFinite(Date.parse(entry?.observedAt)) ? Date.parse(entry.observedAt) : null }))
+    .sort((a, b) => (a.ts !== null && b.ts !== null && a.ts !== b.ts ? a.ts - b.ts : a.idx - b.idx))
+    .map((item) => item.entry);
+  const parseSaleDateMs = (val) => {
+    if (!val) return null;
+    const ms = Date.parse(String(val).slice(0, 10));
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const currentActive = classifyStatusActivity(listing.status || listing.lifecycleStatus) === 'active';
+  const currentSaleMs = parseSaleDateMs(listing.saleDate);
+  let priorPostponements = 0;
+  let hasDatePushRelist = false;
+  for (let i = 0; i < recordHistory.length; i += 1) {
+    const h = recordHistory[i];
+    const isInactive = classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive';
+    const currSnapSaleMs = parseSaleDateMs(h?.fields?.saleDate ?? h?.saleDate);
+    const nextSnap = i + 1 < recordHistory.length ? recordHistory[i + 1] : null;
+    const nextSnapSaleMs = nextSnap ? parseSaleDateMs(nextSnap?.fields?.saleDate ?? nextSnap?.saleDate) : currentSaleMs;
+    const pushedForward = !isInactive && currSnapSaleMs !== null && nextSnapSaleMs !== null && nextSnapSaleMs > currSnapSaleMs;
+    if (isInactive || pushedForward) {
+      priorPostponements += 1;
+      if (pushedForward && currentActive) hasDatePushRelist = true;
+    }
+  }
+  const hasHistoryRelist = hasDatePushRelist || recordHistory.some((h) => classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive'
+    && currentActive);
+  const statutoryStayExhausted = priorPostponements >= 2 && currentActive;
+  const historicalBids = recordHistory
+    .map((h) => Number(h?.fields?.openingBid ?? h?.openingBid))
+    .filter((v) => Number.isFinite(v) && v > 0);
+  const currentBidNum = Number(listing.openingBid);
+  const earliestBid = historicalBids.length > 0 ? historicalBids[0] : null;
+  const cumulativeBidDropPct = earliestBid !== null && Number.isFinite(currentBidNum) && currentBidNum > 0 && currentBidNum < earliestBid
+    ? Number((((earliestBid - currentBidNum) / earliestBid) * 100).toFixed(1))
+    : null;
 
   // Explicit relist wording. "Returned" / "re-listed" anywhere in the status
   // (word-boundary so "deposits returned" prose cannot fire it), or a whole
@@ -195,9 +225,10 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       evidenceClass: (hasObservationRelist || hasHistoryRelist) ? 'exact_source_observation' : 'publisher_reported',
       sourceUrl,
       observedAt,
-      reason: hasObservationRelist || hasHistoryRelist
+      reason: (hasObservationRelist || hasHistoryRelist
         ? 'Observation history confirms property returned to active schedule following prior postponement or adjournment.'
-        : 'Publisher record indicates property was re-listed or returned following a prior postponement.',
+        : 'Publisher record indicates property was re-listed or returned following a prior postponement.')
+        + (statutoryStayExhausted ? ` (${priorPostponements} prior postponements recorded — statutory borrower adjournments may be exhausted.)` : ''),
       nextAction: 'Review docket for bankruptcy relief, bankruptcy dismissals, or creditor motions.',
     });
   } else if (historyUnavailable && !isReturned) {
@@ -601,6 +632,11 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     weights: SIGNAL_WEIGHTS,
     componentScores,
     signals,
+    trajectory: {
+      priorPostponements,
+      statutoryStayExhausted,
+      cumulativeBidDropPct,
+    },
     historyUnavailable,
     summary: {
       supported: signals.filter((s) => s.status === 'supported').length,

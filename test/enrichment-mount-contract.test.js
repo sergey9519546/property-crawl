@@ -100,3 +100,76 @@ test('the API delivers parcelKey when the record has one, and never invents one'
     'a record with no parcel identifier must not have one invented for it'
   );
 });
+
+test('Next.js enrichment proxy routes allow public GET and gate POST behind operator session', () => {
+  const catchAllRoute = fs.readFileSync(
+    path.join(ROOT, 'src', 'app', 'api', 'enrichment', '[...path]', 'route.ts'),
+    'utf8'
+  );
+  assert.match(
+    catchAllRoute,
+    /export const GET = \(request: Request\) => proxyPropertyApi\(request\)/,
+    'GET /api/enrichment/[...path] must use public proxyPropertyApi so anonymous listing detail visitors can read parcel enrichment'
+  );
+  assert.match(
+    catchAllRoute,
+    /export const POST = \(request: Request\) => proxyPrivatePropertyApi\(request\)/,
+    'POST /api/enrichment/[...path] must stay gated behind proxyPrivatePropertyApi'
+  );
+
+  const bareRoutePath = path.join(ROOT, 'src', 'app', 'api', 'enrichment', 'route.ts');
+  assert.equal(fs.existsSync(bareRoutePath), true, 'bare /api/enrichment route.ts must exist for fetchEnrichmentAdapters()');
+  const bareRoute = fs.readFileSync(bareRoutePath, 'utf8');
+  assert.match(
+    bareRoute,
+    /export const GET = \(request: Request\) => proxyPropertyApi\(request\)/,
+    'GET /api/enrichment must use public proxyPropertyApi'
+  );
+});
+
+test('EnrichmentView prompts workspace unlock when unauthenticated user clicks refresh', () => {
+  const view = fs.readFileSync(VIEW, 'utf8');
+  assert.match(view, /useWorkspaceSession/, 'EnrichmentView must inspect operator session state');
+  assert.match(view, /session\.requestUnlock\(\)/, 'EnrichmentView must request unlock instead of firing an unauthenticated POST');
+  assert.match(view, /Unlock to refresh adapters/, 'EnrichmentView button label must disclose when unlock is required');
+});
+
+test('labeled APN in raw notice text and county FIPS registry enrich parcelKey without fabricating keys', async () => {
+  const { presentListing } = require('../server/routes/listings');
+  const { resolveCadastralParcelIdentity } = require('../server/enrichment/arcgis-parcels');
+
+  const cuyahogaRecord = presentListing({
+    id: 'SHERIFF-OH-901',
+    source: 'sheriff',
+    state: 'OH',
+    county: 'Cuyahoga',
+    address: '1420 Lakeside Ave, Cleveland, OH 44114',
+    raw: 'SHERIFF SALE: Case CV-25-100. Parcel ID: 101-23-045. Opening bid $75,000.',
+    provenance: {
+      origin: 'live',
+      recordKind: 'source_record',
+      observed: true,
+      publisher: 'Cuyahoga Sheriff',
+      recordId: 'SHERIFF-OH-901',
+      sourceFacts: {},
+    },
+  });
+  assert.equal(cuyahogaRecord.parcelKey, '39035-10123045');
+
+  const resolved = await resolveCadastralParcelIdentity(
+    { state: 'OH', county: 'Cuyahoga', lat: 41.504, lng: -81.691 },
+    {
+      fetchFn: async () => ({
+        ok: true,
+        json: async () => ({
+          features: [{ attributes: { PARCELPIN: '101-23-045', TOTAL_ASSESSED_VAL: 165000, LUC_DESC: 'SINGLE FAMILY' } }],
+        }),
+      }),
+    }
+  );
+  assert.ok(resolved !== null);
+  assert.equal(resolved.countyFips, '39035');
+  assert.equal(resolved.canonicalApn, '10123045');
+  assert.equal(resolved.parcelKey, '39035-10123045');
+  assert.equal(resolved.matchBasis, 'cadastral_point_in_polygon');
+});

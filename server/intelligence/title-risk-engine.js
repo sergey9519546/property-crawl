@@ -79,11 +79,27 @@ function detectIrsFederalTaxLien(noticeText = '') {
 
   return {
     hasIrsLien: hasIrs,
+    hasLien: hasIrs,
     redemptionDays: hasIrs ? 120 : 0,
     statute: '26 U.S.C. § 7425(d)',
     warning: hasIrs
       ? 'FEDERAL TAX LIEN ACTIVE: United States holds statutory 120-day right of redemption under 26 U.S.C. § 7425(d).'
       : null,
+  };
+}
+
+function extractInstrumentPrioritySignals(noticeText = '') {
+  const text = String(noticeText || '');
+  const instrumentMatch = text.match(/(?:instrument\s*(?:no\.?|#)|doc(?:ument)?\s*(?:no\.?|#))\s*([A-Za-z0-9-]{4,24})/i);
+  const bookPageMatch = text.match(/(?:book|liber|volume)\s*([0-9A-Za-z]+)\s*,?\s*(?:page|folio)\s*([0-9A-Za-z]+)/i);
+  const recordedDateMatch = text.match(/(?:recorded|filed)\s+(?:on\s+)?([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
+  const seniorSubjectToMatch = /(?:subject\s+to\s+(?:a\s+|any\s+)?(?:(?:prior|senior|first)\s+)+(?:mortgage|deed\s+of\s+trust|lien)|senior\s+lien\s+remains)/i.test(text);
+
+  return {
+    instrumentNumber: instrumentMatch ? instrumentMatch[1] : null,
+    bookPage: bookPageMatch ? { book: bookPageMatch[1], page: bookPageMatch[2] } : null,
+    recordedDate: recordedDateMatch ? recordedDateMatch[1] : null,
+    explicitlySubjectToSeniorMortgage: seniorSubjectToMatch,
   };
 }
 
@@ -97,6 +113,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
 
   const partyType = classifyForeclosingParty(plaintiff, notice);
   const irsLien = detectIrsFederalTaxLien(notice);
+  const instrumentSignals = extractInstrumentPrioritySignals(notice);
   const hoaConfig = HOA_SUPER_PRIORITY_STATES[state] || null;
   const redemptionRule = (STATE_REDEMPTION_RULES || {})[state] || { days: 0, label: 'Standard statutory confirmation' };
 
@@ -106,7 +123,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   let canProceedWithBid = true;
 
   // 1. Junior Lien Foreclosure Alert
-  if (partyType === 'SECOND_MORTGAGE_HELOC') {
+  if (partyType === 'SECOND_MORTGAGE_HELOC' || instrumentSignals.explicitlySubjectToSeniorMortgage) {
     firstMortgageSurvives = true;
     riskLevel = 'CRITICAL';
     canProceedWithBid = false;
@@ -174,6 +191,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       days: redemptionRule.days,
       label: redemptionRule.label,
     },
+    instrumentPriority: instrumentSignals,
     titleWarnings: warnings,
     titleActionAdvice,
     canProceedWithBid,
@@ -184,5 +202,6 @@ module.exports = {
   HOA_SUPER_PRIORITY_STATES,
   classifyForeclosingParty,
   detectIrsFederalTaxLien,
+  extractInstrumentPrioritySignals,
   arbitrateTitleRisk,
 };

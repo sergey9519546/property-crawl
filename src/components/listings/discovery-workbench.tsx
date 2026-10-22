@@ -1058,7 +1058,7 @@ function DiscoveryCalendar({
               {rollupLoading
                 ? "Loading…"
                 : neighborhoodRollup
-                  ? `${neighborhoodRollup.count.toLocaleString()} markets`
+                  ? (neighborhoodRollup.bucketsTruncated && typeof neighborhoodRollup.bucketsTotal === "number" ? `Top ${neighborhoodRollup.count.toLocaleString()} of ${neighborhoodRollup.bucketsTotal.toLocaleString()} markets` : `${neighborhoodRollup.count.toLocaleString()} markets`)
                   : "Unavailable"}
             </span>
           </div>

@@ -2,16 +2,18 @@
   "skills": [
     {
       "name": "agent-verification",
-      "description": "Proportional verification gate, evidence-cited completion, and drift detection\nfor the property-crawl agent system. Use this when the agent must verify its\nown output before claiming completion.",
+      "description": "Proportional verification gate, evidence-cited completion, control-test discipline,\nand drift detection for the property-crawl agent system. Use this when the agent\nmust verify its own output before claiming completion.",
       "domain": "agent-system",
-      "version": "v1",
+      "version": "v2",
       "trigger": [
         "agent",
         "agent-verification",
         "before",
         "claiming",
         "completion",
+        "control-test",
         "detection",
+        "discipline",
         "drift",
         "evidence-cited",
         "gate",
@@ -27,45 +29,50 @@
     },
     {
       "name": "deal-scoring",
-      "description": "Deal Score formula, SCORE_BANDS taxonomy, and worked examples for the\nproperty-crawl triage indicator. Use this when explaining, verifying,\nor debugging the Deal Score calculation.",
+      "description": "Deal Score formula, SCORE_BANDS taxonomy, Opportunity Signal triagePriority,\nadjournment trajectory, Value-of-Information (VoI) gap ranking, and Second-Look\nreconsideration triggers for property-crawl.",
       "domain": "property-data",
-      "version": "v1",
+      "version": "v2",
       "trigger": [
+        "adjournment",
         "bands",
-        "calculation",
         "deal",
         "deal-scoring",
-        "debugging",
-        "examples",
-        "explaining",
         "formula",
-        "indicator",
+        "opportunity",
         "property-crawl",
+        "ranking",
+        "reconsideration",
         "score",
+        "second-look",
+        "signal",
         "taxonomy",
-        "triage",
-        "verifying",
-        "worked"
+        "trajectory",
+        "triagepriority",
+        "triggers",
+        "value-of-information"
       ],
       "dir": ".agents/skills/deal-scoring",
       "file": ".agents/skills/deal-scoring/SKILL.md"
     },
     {
       "name": "foreclosure-title-intelligence",
-      "description": "Specialized skill for real estate auction underwriting, title risk arbitration,\njunior lien survival analysis, 50-state statutory redemption periods, and cash-to-close fee schedules.",
+      "description": "Specialized skill for real estate auction underwriting, title risk arbitration,\njunior lien survival analysis, 50-state statutory redemption periods, instrument\npriority chronologies, and statutory cash-to-close fee schedules.",
       "domain": "real-estate-intelligence",
-      "version": "v1",
+      "version": "v2",
       "trigger": [
         "50-state",
         "analysis",
         "arbitration",
         "auction",
         "cash-to-close",
+        "chronologies",
         "estate",
         "foreclosure-title-intelligence",
+        "instrument",
         "junior",
         "lien",
         "periods",
+        "priority",
         "real",
         "redemption",
         "risk",
@@ -149,17 +156,18 @@
     },
     {
       "name": "property-scraper-engineering",
-      "description": "Patterns and best practices for building resilient government auction scrapers,\ncounty docket crawlers, circuit breaker protection, WAF bypass, and anti-poisoning data gates.",
+      "description": "Patterns and best practices for building resilient government auction scrapers,\ncounty docket crawlers, circuit breaker protection, cadastral APN resolution,\nverbatim citation span verification, and anti-poisoning data gates.",
       "domain": "data-engineering",
-      "version": "v1",
+      "version": "v2",
       "trigger": [
         "anti-poisoning",
         "auction",
         "best",
         "breaker",
         "building",
-        "bypass",
+        "cadastral",
         "circuit",
+        "citation",
         "county",
         "crawlers",
         "data",
@@ -171,7 +179,11 @@
         "property-scraper-engineering",
         "protection",
         "resilient",
-        "scrapers"
+        "resolution",
+        "scrapers",
+        "span",
+        "verbatim",
+        "verification"
       ],
       "dir": ".agents/skills/property-scraper-engineering",
       "file": ".agents/skills/property-scraper-engineering/SKILL.md"
@@ -220,5 +232,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "9bf0c7c7ea1c128bd3d501267bd54a3de82899ad92017d9a9a67a2985e0ac922"
+  "digest": "309250a106f2de95ecc6f844b831235c650cfbee93aea35ce9a04f6af5afb1ac"
 }

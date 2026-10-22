@@ -14,6 +14,13 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+export interface EvidenceSpan {
+  quote: string;
+  start: number;
+  end: number;
+  verified: boolean;
+}
+
 export interface DocumentReviewItem {
   id: string;
   listingId: string;
@@ -28,8 +35,39 @@ export interface DocumentReviewItem {
     saleDate?: string;
     apn?: string;
     confidenceScore?: number;
+    evidenceSpans?: Record<string, EvidenceSpan>;
   };
   reviewStatus: 'pending' | 'approved' | 'rejected';
+}
+
+function resolveVerbatimSpan(
+  rawText: string | undefined,
+  fieldKey: string,
+  value: unknown,
+  providedSpans?: Record<string, EvidenceSpan>
+): EvidenceSpan | null {
+  if (!rawText || value === null || value === undefined || value === '' || value === 0) return null;
+  const provided = providedSpans?.[fieldKey];
+  if (provided && provided.start >= 0 && provided.end <= rawText.length && rawText.slice(provided.start, provided.end) === provided.quote) {
+    return { ...provided, verified: true };
+  }
+  const candidates: string[] = [];
+  if (typeof value === 'number') {
+    candidates.push(`$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+    candidates.push(`$${value.toLocaleString('en-US')}`);
+    candidates.push(value.toLocaleString('en-US'));
+    candidates.push(String(value));
+  } else {
+    candidates.push(String(value).trim());
+  }
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const idx = rawText.indexOf(candidate);
+    if (idx >= 0) {
+      return { quote: candidate, start: idx, end: idx + candidate.length, verified: true };
+    }
+  }
+  return { quote: String(value), start: -1, end: -1, verified: false };
 }
 
 interface ReviewSplitPaneProps {
@@ -49,6 +87,7 @@ export function ReviewSplitPane({
   const [editMode, setEditMode] = useState(false);
   const [editedFields, setEditedFields] = useState<any>({});
   const [reviewNote, setReviewNote] = useState('');
+  const [activeFieldKey, setActiveFieldKey] = useState<string | null>(null);
 
   const currentItem = items[currentIndex];
 
@@ -57,6 +96,7 @@ export function ReviewSplitPane({
       setEditedFields({ ...currentItem.extractedFields });
       setEditMode(false);
       setReviewNote('');
+      setActiveFieldKey(null);
     }
   }, [currentIndex, currentItem]);
 
@@ -140,6 +180,51 @@ export function ReviewSplitPane({
     : null;
   const isHighConfidence = confidence !== null && confidence >= 0.8;
 
+  const rawText = currentItem?.rawText || '';
+  const spansByField: Record<string, EvidenceSpan | null> = {
+    caseNumber: resolveVerbatimSpan(rawText, 'case_number', currentItem?.extractedFields?.caseNumber, currentItem?.extractedFields?.evidenceSpans),
+    defendant: resolveVerbatimSpan(rawText, 'defendant', currentItem?.extractedFields?.defendant, currentItem?.extractedFields?.evidenceSpans),
+    plaintiff: resolveVerbatimSpan(rawText, 'plaintiff_or_seller', currentItem?.extractedFields?.plaintiff, currentItem?.extractedFields?.evidenceSpans),
+    openingBid: resolveVerbatimSpan(rawText, 'opening_bid', currentItem?.extractedFields?.openingBid, currentItem?.extractedFields?.evidenceSpans),
+    judgmentAmount: resolveVerbatimSpan(rawText, 'judgment_amount', currentItem?.extractedFields?.judgmentAmount, currentItem?.extractedFields?.evidenceSpans),
+    saleDate: resolveVerbatimSpan(rawText, 'sale_date', currentItem?.extractedFields?.saleDate, currentItem?.extractedFields?.evidenceSpans),
+    apn: resolveVerbatimSpan(rawText, 'apn', currentItem?.extractedFields?.apn, currentItem?.extractedFields?.evidenceSpans),
+  };
+  const activeSpan = activeFieldKey ? spansByField[activeFieldKey] : null;
+  const canHighlight = Boolean(activeSpan && activeSpan.verified && activeSpan.start >= 0 && activeSpan.end > activeSpan.start);
+
+  function renderSpanBadge(fieldKey: string) {
+    const span = spansByField[fieldKey];
+    if (!span) return null;
+    if (span.verified) {
+      const isSelected = activeFieldKey === fieldKey;
+      return (
+        <button
+          type="button"
+          onClick={() => setActiveFieldKey(isSelected ? null : fieldKey)}
+          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${
+            isSelected
+              ? 'bg-amber-200 text-slate-950 ring-1 ring-amber-400'
+              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+          }`}
+          title={`Characters ${span.start}–${span.end}: "${span.quote}"`}
+        >
+          <ShieldCheck className="w-3 h-3" />
+          <span>{isSelected ? 'Highlighted' : 'Verified span'}</span>
+        </button>
+      );
+    }
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+        title="Value was not found verbatim in raw notice text"
+      >
+        <AlertCircle className="w-3 h-3" />
+        <span>Unverified in text</span>
+      </span>
+    );
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[750px]">
       {/* Top Navigation & Shortcut Legend */}
@@ -201,7 +286,19 @@ export function ReviewSplitPane({
             )}
           </div>
           <div className="flex-1 p-5 overflow-y-auto font-mono text-xs leading-relaxed text-slate-800 whitespace-pre-wrap select-text">
-            {currentItem?.rawText || 'No raw document text available.'}
+            {!rawText ? (
+              'No raw document text available.'
+            ) : canHighlight && activeSpan ? (
+              <>
+                {rawText.slice(0, activeSpan.start)}
+                <mark className="bg-amber-200 text-slate-950 px-1 py-0.5 rounded font-bold ring-2 ring-amber-400">
+                  {rawText.slice(activeSpan.start, activeSpan.end)}
+                </mark>
+                {rawText.slice(activeSpan.end)}
+              </>
+            ) : (
+              rawText
+            )}
           </div>
         </div>
 
@@ -226,7 +323,10 @@ export function ReviewSplitPane({
           <div className="flex-1 p-5 overflow-y-auto space-y-4 text-xs">
             {/* Field: Case Number */}
             <div>
-              <label className="font-semibold text-slate-600 block mb-1">Case / Docket Number</label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="font-semibold text-slate-600">Case / Docket Number</label>
+                {renderSpanBadge('caseNumber')}
+              </div>
               {editMode ? (
                 <input
                   type="text"
@@ -243,7 +343,10 @@ export function ReviewSplitPane({
 
             {/* Field: Defendant */}
             <div>
-              <label className="font-semibold text-slate-600 block mb-1">Defendant (Owner / Heirs)</label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="font-semibold text-slate-600">Defendant (Owner / Heirs)</label>
+                {renderSpanBadge('defendant')}
+              </div>
               {editMode ? (
                 <input
                   type="text"
@@ -260,7 +363,10 @@ export function ReviewSplitPane({
 
             {/* Field: Plaintiff */}
             <div>
-              <label className="font-semibold text-slate-600 block mb-1">Plaintiff (Foreclosing Lender)</label>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <label className="font-semibold text-slate-600">Plaintiff (Foreclosing Lender)</label>
+                {renderSpanBadge('plaintiff')}
+              </div>
               {editMode ? (
                 <input
                   type="text"
@@ -278,7 +384,10 @@ export function ReviewSplitPane({
             {/* Field: Opening Bid & Judgment Amount */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-semibold text-slate-600 block mb-1">Opening Bid ($)</label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <label className="font-semibold text-slate-600">Opening Bid ($)</label>
+                  {renderSpanBadge('openingBid')}
+                </div>
                 {editMode ? (
                   <input
                     type="number"
@@ -293,7 +402,10 @@ export function ReviewSplitPane({
                 )}
               </div>
               <div>
-                <label className="font-semibold text-slate-600 block mb-1">Judgment Amount ($)</label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <label className="font-semibold text-slate-600">Judgment Amount ($)</label>
+                  {renderSpanBadge('judgmentAmount')}
+                </div>
                 {editMode ? (
                   <input
                     type="number"
@@ -312,7 +424,10 @@ export function ReviewSplitPane({
             {/* Field: Sale Date & APN */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="font-semibold text-slate-600 block mb-1">Auction Sale Date</label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <label className="font-semibold text-slate-600">Auction Sale Date</label>
+                  {renderSpanBadge('saleDate')}
+                </div>
                 {editMode ? (
                   <input
                     type="text"
@@ -327,7 +442,10 @@ export function ReviewSplitPane({
                 )}
               </div>
               <div>
-                <label className="font-semibold text-slate-600 block mb-1">APN / Parcel ID</label>
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <label className="font-semibold text-slate-600">APN / Parcel ID</label>
+                  {renderSpanBadge('apn')}
+                </div>
                 {editMode ? (
                   <input
                     type="text"

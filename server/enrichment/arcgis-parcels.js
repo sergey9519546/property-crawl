@@ -300,10 +300,42 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
   }
 }
 
+/**
+ * Resolves a canonical parcel identity (countyFips + canonicalApn + parcelKey)
+ * via county cadastral point-in-polygon or APN lookup when an ArcGIS parcel
+ * layer is available for the listing's county.
+ */
+async function resolveCadastralParcelIdentity(listing = {}, options = {}) {
+  const existingApn = listing.apn || listing.parcelNumber || listing.parcelId || listing.provenance?.parcelNumber || null;
+  const parcel = await queryArcgisParcel({
+    lat: Number(listing.lat),
+    lng: Number(listing.lng),
+    apn: existingApn,
+    state: listing.state,
+    county: listing.county,
+    fetchFn: options.fetchFn,
+  });
+  if (!parcel || !parcel.canonicalApn) return null;
+  const parcelKey = parcel.countyFips
+    ? `${parcel.countyFips}-${parcel.canonicalApn}`
+    : parcel.canonicalApn;
+  return {
+    countyFips: parcel.countyFips || null,
+    rawApn: parcel.rawApn,
+    canonicalApn: parcel.canonicalApn,
+    parcelKey,
+    matchBasis: Number.isFinite(Number(listing.lat)) && Number.isFinite(Number(listing.lng))
+      ? 'cadastral_point_in_polygon'
+      : 'cadastral_apn_lookup',
+    parcel,
+  };
+}
+
 module.exports = {
   COUNTY_ARCGIS_REGISTRY,
   resolveCountyKey,
   normalizeApn,
   normalizeArcgisAttributes,
-  queryArcgisParcel
+  queryArcgisParcel,
+  resolveCadastralParcelIdentity
 };

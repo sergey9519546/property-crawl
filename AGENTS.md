@@ -178,3 +178,20 @@ current total read `CONTEXT.md`), UI proxy matches API. The full verify gate has
 - Never invent sources, scores, or listings. Every claim must point to a file, a test, or a verified URL.
 - When editing, prefer `replace_string_in_file` with 3–5 lines of unchanged context; never print code blocks unless asked.
 - After any edit, verify with the relevant `npm run test:*` or `npm run verify:gate` command.
+
+## 10. Blueprint Decision Principles, 10x Underwriting Architecture & Working-Method Guards (2026-10-22)
+- **Derived Blueprint Decision Principles (`docs/STRATEGY.md`, `docs/COMPLETION_CHECKLIST.md`)**:
+  - **Zero-Fabrication Underwriting**: Never impute `estLow`, `estHigh`, or ARV from `openingBid` or assessed value; when publisher valuations are absent, require an explicit buyer-supplied assumption (`src/lib/underwriting.ts`). Never equate `closed` with `sold` or `bidsPlaced=10` with real bid competition.
+  - **Legal/ToS/Robots Non-Negotiables ($0 Liability Moat)**: Discovery + triage layer only (zero cold homeowner outreach -> avoids TCPA & CA Civil Code § 1695). Never bypass CAPTCHAs (`landbank`, `ca-controller-tax-sale`), never violate `robots.txt` (`gsa` `/our-listing`), never bot-scrape press portals that impose liquidated damages (use `server/scrapers/email-intake.js`), and never feed Google Maps Street View imagery to AI models.
+  - **Control-Tested Verification**: Never promote a source or certify a fix from index-only or structural checks; run a runtime control test covering both positive and negative paths (`npm run test:meta-guards`, `node scripts/verify-test-coverage.js`, `npm run release:gate`).
+- **10x Product Intelligence Capabilities**:
+  - **Statutory Cash-to-Close, Redemption Carry & Instrument Priority**: `computeStatutoryFeePreset` and `computeStatutoryDeadlinesAndCarry` in `src/lib/underwriting.ts` (wired into `src/components/terminal/bidding-simulator.tsx`), plus `extractInstrumentPrioritySignals` in `server/intelligence/title-risk-engine.js`.
+  - **Adjournment-Exhaustion Trajectory & VoI Gap Ranking**: `trajectory` (`priorPostponements`, `statutoryStayExhausted`, `cumulativeBidDropPct`) in `server/intelligence/signals.js` and Value-of-Information (`potentialPointsGain`, `priorityTier`) in `server/intelligence/dossier.js` and `src/components/listings/property-intelligence.tsx`.
+  - **Relative Second-Look Reconsideration Triggers**: `openingBid` `dropped_by_pct`, `openingBid` `bid_to_assessed_lte`, and `saleDate` `within_days` in `server/intelligence/research-cases.js` and `src/components/research/research-case.tsx`.
+  - **Deterministic APN + County FIPS + Cadastral Parcel Bridge**: `extractRawApn` and `extractCountyFips` in `server/scrapers/normalization.js` & `server/routes/listings.js`, plus `resolveCadastralParcelIdentity` in `server/enrichment/arcgis-parcels.js`.
+  - **Verbatim Character-Span Citations**: `verifyVerbatimSpan`, `evidenceSpans`, and `confidence_score` in `server/ai/notice-parser.js` with interactive click-to-highlight badges in `src/components/workspace/review-split-pane.tsx`.
+- **Working-Method Guards**:
+  - **Grid Payload Strip Invariant (`test/list-response-payload.test.mjs`)**: `GET /api/listings` strips `raw`, `provenance.sourceFields`, and `provenance.statusHistory`. Never read `listing.raw` in grid-mounted components (`bidding-simulator.tsx`, `discovery-card.tsx`).
+  - **Enrichment Proxy Split (`src/app/api/enrichment/`)**: `GET` is public (`proxyPropertyApi`); `POST` (refresh) requires an operator session (`proxyPrivatePropertyApi`).
+  - **Dated Auction Rollup Helper**: Always use `calendarDatedTotal(calendarRollup)` in `discovery-workbench.tsx` so `undatedCount` is never mislabeled as dated auctions.
+  - **CRLF Edit Rule**: On Windows CRLF files, always use single-line `Target` strings in `edit_file` or `write_file` (`Overwrite: true`).

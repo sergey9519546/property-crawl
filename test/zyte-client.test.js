@@ -207,3 +207,14 @@ test('scheduleZyteJob: requires spider and posts form parameters with recipe', a
   const settings = JSON.parse(params.get('job_settings'));
   assert.equal(settings.LOVABLE_RECIPE, 'foreclosure');
 });
+
+test('src/lib/zyte.server TypeScript wrapper re-exports canonical zyte-client operations', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const wrapperRel = '../src/lib/zyte.server';
+  const wrapperSrc = fs.readFileSync(path.resolve(__dirname, `${wrapperRel}.ts`), 'utf8');
+  assert.match(wrapperSrc, /from "@server\/scrapers\/zyte-client"/);
+  for (const fn of ['zyteConfigured', 'zyteFetch', 'zyteFetchLike', 'scrapyCloudListJobs', 'scheduleZyteJob']) {
+    assert.match(wrapperSrc, new RegExp(`\\b${fn}\\b`), `zyte.server.ts must expose ${fn}`);
+  }
+});

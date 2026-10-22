@@ -87,6 +87,26 @@ function splitMultiParcelNotice(rawNotice = '') {
 }
 
 /**
+ * Verifies whether a candidate quote or value appears verbatim in raw text and returns its character span.
+ * @param {string} rawText
+ * @param {string|number} candidate
+ * @param {number} [fromIndex=0]
+ * @returns {{ quote: string, start: number, end: number, verified: boolean } | null}
+ */
+function verifyVerbatimSpan(rawText = '', candidate = '', fromIndex = 0) {
+  if (!rawText || candidate === null || candidate === undefined || candidate === '') return null;
+  const text = String(rawText);
+  const query = String(candidate).trim();
+  if (!query) return null;
+  const start = text.indexOf(query, Math.max(0, fromIndex));
+  if (start >= 0) {
+    const end = start + query.length;
+    return { quote: query, start, end, verified: text.slice(start, end) === query };
+  }
+  return null;
+}
+
+/**
  * Deterministic air-gapped parser that extracts key legal foreclosure attributes
  * via pure regex, without calling any external LLM APIs.
  * @param {string} rawNotice
@@ -107,6 +127,8 @@ function deterministicParse(rawNotice = '') {
   const vsMatch = clean.match(/([A-Za-z0-9\s,\.\(\)]+?)\s+(?:vs\.?|v\.|against)\s+([A-Za-z0-9\s,\.\(\)]+?)(?:,|\.|\n|case)/i);
   // Extract Sale Date: e.g. "Sale Date: October 14, 2026" or "2026-10-14"
   const dateMatch = clean.match(/(?:sale\s+date|auction\s+date|to\s+be\s+sold\s+on)\s*(?:is|:)?\s*([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{4}-\d{2}-\d{2})/i);
+  // Extract Labeled APN / Parcel ID: e.g. "APN: 123-45-678" or "Parcel ID: 010-234567"
+  const apnMatch = clean.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-\s.][0-9A-Za-z]{2,6}(?:[-\s.][0-9A-Za-z]{1,8})+|\d{8,14})\b/i);
 
   const state = addressMatch ? addressMatch[3].toUpperCase() : 'OH';
   const judgmentNum = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : 0;
@@ -114,10 +136,46 @@ function deterministicParse(rawNotice = '') {
 
   const plaintiff = vsMatch ? vsMatch[1].trim() : '';
   const defendant = vsMatch ? vsMatch[2].trim() : '';
+  const apn = apnMatch ? apnMatch[1].trim() : '';
 
   const seniorLienInfo = detectSeniorLienSurvival(plaintiff, clean);
   const redemptionInfo = getRedemptionRule(state);
   const statusInfo = detectBankruptcyOrAdjournment(clean);
+
+  const rawText = String(rawNotice || '');
+  const rawJudgmentSpanMatch = rawText.match(/(?:judgment(?:\s+amount)?|jdgmt|amount\s+due|debt)\s*(?:of|is|:)?\s*\$[0-9OoSs,]+(?:\.[0-9OoSs]{2})?/i);
+  const rawBidSpanMatch = rawText.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$[0-9OoSs,]+(?:\.[0-9OoSs]{2})?/i);
+  const verifySpanInRawOrClean = (candidate, rawFallbackMatch = null) => {
+    if (!candidate) return null;
+    const direct = verifyVerbatimSpan(rawText, candidate);
+    if (direct && direct.verified) return direct;
+    if (rawFallbackMatch) {
+      const fallback = verifyVerbatimSpan(rawText, rawFallbackMatch[0].trim(), rawFallbackMatch.index);
+      if (fallback && fallback.verified) return fallback;
+    }
+    return verifyVerbatimSpan(clean, candidate);
+  };
+  const rawEvidenceSpans = {
+    property_address: addressMatch ? verifySpanInRawOrClean(addressMatch[1].trim()) : null,
+    case_number: caseMatch ? verifySpanInRawOrClean(caseMatch[0].trim()) : null,
+    judgment_amount: judgmentMatch ? verifySpanInRawOrClean(judgmentMatch[0].trim(), rawJudgmentSpanMatch) : null,
+    opening_bid: bidMatch ? verifySpanInRawOrClean(bidMatch[0].trim(), rawBidSpanMatch) : null,
+    plaintiff_or_seller: vsMatch ? verifySpanInRawOrClean(plaintiff) : null,
+    defendant: vsMatch ? verifySpanInRawOrClean(defendant) : null,
+    sale_date: dateMatch ? verifySpanInRawOrClean(dateMatch[0].trim()) : null,
+    apn: apnMatch ? verifySpanInRawOrClean(apnMatch[0].trim()) : null,
+  };
+  const evidenceSpans = Object.fromEntries(
+    Object.entries(rawEvidenceSpans).filter(([, span]) => span && span.verified)
+  );
+  const coreFound = [
+    Boolean(evidenceSpans.property_address),
+    Boolean(evidenceSpans.case_number),
+    Boolean(evidenceSpans.judgment_amount || evidenceSpans.opening_bid),
+    Boolean(evidenceSpans.plaintiff_or_seller),
+    Boolean(evidenceSpans.sale_date),
+  ].filter(Boolean).length;
+  const confidenceScore = Math.round((coreFound / 5) * 100) / 100;
 
   return {
     property_address: addressMatch ? addressMatch[1].trim() : '',
@@ -125,6 +183,7 @@ function deterministicParse(rawNotice = '') {
     state,
     zip: addressMatch && addressMatch[4] ? addressMatch[4] : '',
     case_number: caseMatch ? caseMatch[1].trim() : '',
+    apn,
     plaintiff_or_seller: plaintiff,
     defendant,
     judgment_amount: judgmentNum,
@@ -136,6 +195,8 @@ function deterministicParse(rawNotice = '') {
     redemption_warning: redemptionInfo.warning,
     status: statusInfo.status,
     adjournment_date: statusInfo.adjournmentDate,
+    confidence_score: confidenceScore,
+    evidenceSpans,
     _strategy: 'deterministic_fallback'
   };
 }
@@ -154,6 +215,7 @@ module.exports = {
   normalizeOcrText,
   neutralizePromptInjection,
   splitMultiParcelNotice,
+  verifyVerbatimSpan,
   deterministicParse,
   parseLegalNotice
 };

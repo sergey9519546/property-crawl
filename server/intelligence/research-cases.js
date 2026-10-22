@@ -20,8 +20,8 @@ const MAX_EVIDENCE_LINKS = 100;
 const MAX_IMPORT_IDS = 200;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 const RECONSIDERATION_FIELDS = Object.freeze({
-  openingBid: new Set(['changed', 'lte', 'gte']),
-  saleDate: new Set(['changed']),
+  openingBid: new Set(['changed', 'lte', 'gte', 'dropped_by_pct', 'bid_to_assessed_lte']),
+  saleDate: new Set(['changed', 'within_days']),
   status: new Set(['changed']),
   sqft: new Set(['changed', 'lte', 'gte']),
   requiredEvidence: new Set(['available']),
@@ -211,6 +211,16 @@ function normalizeReconsideration(value) {
         throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}].value must be a nonnegative number`);
       }
       normalized.value = condition.value;
+    } else if (condition.operator === 'dropped_by_pct' || condition.operator === 'bid_to_assessed_lte') {
+      if (typeof condition.value !== 'number' || !Number.isFinite(condition.value) || condition.value <= 0 || condition.value > 100) {
+        throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}].value must be a percentage between 0 and 100`);
+      }
+      normalized.value = condition.value <= 1 ? Math.round(condition.value * 10000) / 100 : condition.value;
+    } else if (condition.operator === 'within_days') {
+      if (typeof condition.value !== 'number' || !Number.isFinite(condition.value) || condition.value < 1 || condition.value > 365) {
+        throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}].value must be between 1 and 365 days`);
+      }
+      normalized.value = Math.round(condition.value);
     } else if (condition.operator === 'available') {
       normalized.value = cleanText(condition.value, 64, `reconsideration.conditions[${index}].value`, { required: true }).toLowerCase();
       if (!/^[a-z][a-z0-9_]{0,63}$/.test(normalized.value)) {
@@ -224,7 +234,7 @@ function normalizeReconsideration(value) {
   return { mode: value.mode, conditions };
 }
 
-function matchedReconsiderationConditions(item, trigger = {}) {
+function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) {
   const policy = item.reconsideration;
   if (!policy) return trigger.substantive ? [{ field: 'supportedEvidence', operator: 'changed' }] : [];
   if (trigger.type === 'origin' && !trigger.substantive) return [];
@@ -236,6 +246,34 @@ function matchedReconsiderationConditions(item, trigger = {}) {
       const value = item.listingSnapshot?.[condition.field];
       return typeof value === 'number' && Number.isFinite(value)
         && (condition.operator === 'lte' ? value <= condition.value : value >= condition.value);
+    }
+    if (condition.operator === 'dropped_by_pct') {
+      if (trigger.type !== 'origin') return false;
+      const currentBid = item.listingSnapshot?.openingBid;
+      const previousBid = typeof trigger.origin?.changes?.openingBid?.previous === 'number'
+        ? trigger.origin.changes.openingBid.previous
+        : trigger.previousSnapshot?.openingBid;
+      if (typeof currentBid !== 'number' || typeof previousBid !== 'number' || previousBid <= 0 || currentBid >= previousBid) return false;
+      const dropPct = ((previousBid - currentBid) / previousBid) * 100;
+      return dropPct + 1e-9 >= condition.value;
+    }
+    if (condition.operator === 'bid_to_assessed_lte') {
+      if (trigger.type !== 'origin') return false;
+      const currentBid = item.listingSnapshot?.openingBid;
+      const assessed = item.listingSnapshot?.assessed ?? Number(item.dossierSnapshot?.publicRecords?.parcel?.properties?.assessedValue);
+      if (typeof currentBid !== 'number' || !Number.isFinite(assessed) || assessed <= 0) return false;
+      const ratioPct = (currentBid / assessed) * 100;
+      return ratioPct - 1e-9 <= condition.value;
+    }
+    if (condition.operator === 'within_days') {
+      if (trigger.type !== 'origin') return false;
+      const saleDateStr = item.listingSnapshot?.saleDate;
+      if (!saleDateStr) return false;
+      const saleMs = Date.parse(String(saleDateStr).slice(0, 10));
+      const refMs = Date.parse(String(timestamp || item.updatedAt || new Date().toISOString()).slice(0, 10));
+      if (!Number.isFinite(saleMs) || !Number.isFinite(refMs)) return false;
+      const daysUntil = Math.round((saleMs - refMs) / 86_400_000);
+      return daysUntil >= 0 && daysUntil <= condition.value;
     }
     if (condition.operator === 'available') {
       return item.evidenceLinks.some((link) => condition.value === 'any'
@@ -249,7 +287,7 @@ function matchedReconsiderationConditions(item, trigger = {}) {
 
 function applyReconsiderationTrigger(item, trigger, timestamp) {
   if (item.state !== 'pass') return false;
-  const matchedConditions = matchedReconsiderationConditions(item, trigger);
+  const matchedConditions = matchedReconsiderationConditions(item, trigger, timestamp);
   if (!matchedConditions.length) return false;
   item.reconsiderationRequired = true;
   item.latestTrigger = {
@@ -304,6 +342,7 @@ function createCase(input, options = {}) {
       }
       const incomingObserved = Date.parse(listingSnapshot.sourceObservedAt || listingSnapshot.provenance.observedAt);
       const retainedObserved = Date.parse(existing.listingSnapshot?.sourceObservedAt || existing.listingSnapshot?.provenance?.observedAt);
+      const previousSnapshot = existing.listingSnapshot ? { ...existing.listingSnapshot } : null;
       if (Number.isFinite(incomingObserved) && (!Number.isFinite(retainedObserved) || incomingObserved > retainedObserved)) {
         const previousListingId = existing.listingId;
         existing.listingId = listingSnapshot.id;
@@ -322,7 +361,7 @@ function createCase(input, options = {}) {
       existing.updatedAt = timestamp;
       const substantive = origin.type === 'new_match' || origin.type === 'hunt_match' || origin.type === 'evaluation_unknown'
         || (origin.type === 'material_change' && (origin.changedFields || []).length > 0);
-      applyReconsiderationTrigger(existing, { type: 'origin', origin, substantive }, timestamp);
+      applyReconsiderationTrigger(existing, { type: 'origin', origin, substantive, previousSnapshot }, timestamp);
       if (listingAliasChange) existing.history.unshift(historyEvent('listing_alias_updated', existing, timestamp, listingAliasChange));
       existing.history.unshift(historyEvent('origin_recorded', existing, timestamp, { originId: origin.id }));
       existing.history = existing.history.slice(0, MAX_CASE_HISTORY);

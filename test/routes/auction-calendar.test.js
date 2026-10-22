@@ -206,3 +206,49 @@ test('createAuctionCalendarHandler: bogus params fall back to defaults', async (
   assert.equal(res.body.windowDays, 60);
   assert.ok(res.body.weeks.every((w) => w.sample.length <= 10));
 });
+
+test('createAuctionCalendarHandler: caches repeated queries within TTL and publishes cachedAt + ageMs', async () => {
+  let currentNow = NOW_MS;
+  const database = pagedDb(POOL);
+  const handler = createAuctionCalendarHandler({
+    database,
+    now: () => currentNow,
+    cacheTtlMs: 60_000
+  });
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+
+  const res1 = makeRes();
+  await handler(makeReq('GET'), res1, url);
+  assert.equal(res1.body.ageMs, 0);
+  assert.equal(res1.body.cachedAt, new Date(NOW_MS).toISOString());
+  const callsAfterFirst = database.calls.length;
+  assert.ok(callsAfterFirst >= 1);
+
+  currentNow = NOW_MS + 15_000;
+  const res2 = makeRes();
+  await handler(makeReq('GET'), res2, url);
+  assert.equal(database.calls.length, callsAfterFirst, 'second request within TTL must be served from cache');
+  assert.equal(res2.body.ageMs, 15_000);
+  assert.equal(res2.body.cachedAt, new Date(NOW_MS).toISOString());
+
+  currentNow = NOW_MS + 61_000;
+  const res3 = makeRes();
+  await handler(makeReq('GET'), res3, url);
+  assert.ok(database.calls.length > callsAfterFirst, 'request after TTL expiry must re-scan store');
+  assert.equal(res3.body.ageMs, 0);
+});
+
+test('createAuctionCalendarHandler: AUCTION_CALENDAR_CACHE_MS=0 disables caching', async () => {
+  const database = pagedDb(POOL);
+  const handler = createAuctionCalendarHandler({
+    database,
+    now: FIXED_NOW,
+    env: { AUCTION_CALENDAR_CACHE_MS: '0' }
+  });
+  const url = new URL('http://localhost/api/auction-calendar?windowDays=60');
+
+  await handler(makeReq('GET'), makeRes(), url);
+  const firstCalls = database.calls.length;
+  await handler(makeReq('GET'), makeRes(), url);
+  assert.equal(database.calls.length, firstCalls * 2, 'cache disabled must re-query store on every request');
+});

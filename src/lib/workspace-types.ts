@@ -12,7 +12,7 @@ export type CaseOrigin = {
 
 export type ReconsiderationCondition = {
   field: "openingBid" | "saleDate" | "status" | "sqft" | "requiredEvidence";
-  operator: "changed" | "lte" | "gte" | "available";
+  operator: "changed" | "lte" | "gte" | "dropped_by_pct" | "bid_to_assessed_lte" | "within_days" | "available";
   value?: string | number;
 };
 

@@ -107,6 +107,9 @@ function interpretAssessorParcel({ countyKey, parcel, openingBid } = {}) {
     endpoint: config.endpoint,
     field: config.assessedTotalField,
     apn: parcel?.canonicalApn || null,
+    parcelKey: parcel?.canonicalApn
+      ? (parcel?.countyFips ? `${parcel.countyFips}-${parcel.canonicalApn}` : parcel.canonicalApn)
+      : null,
     landUse: parcel && parcel.landUse && parcel.landUse !== 'UNKNOWN' ? parcel.landUse : null,
     evidenceClass: 'assessor-figure-v1',
     rawFigure,

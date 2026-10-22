@@ -630,3 +630,208 @@ ${gapSummary}
 ## UNDERWRITING RECOMMENDATION
 NO BID RECOMMENDATION. Do not place a deposit or authorize a bid from this draft. Confirm the exact source listing, current sale status and terms, title and lien priority, redemption or objection rights, occupancy, property condition, and every buyer-supplied financial assumption with qualified professionals.`;
 }
+
+export interface StatutoryFeePreset {
+  state: string;
+  scheduleLabel: string;
+  buyersPremium: number;
+  sheriffPoundage: number;
+  transferTax: number;
+  creditedDeposit: number;
+  registrationFunds: number;
+  citations: string[];
+}
+
+function parsePublishedDepositAmount(depositText: string | null | undefined, price: number): number | null {
+  if (!depositText || typeof depositText !== "string") return null;
+  const dollarMatch = depositText.match(/\$\s*([0-9,]+(?:\.[0-9]{1,2})?)/);
+  if (dollarMatch) {
+    const val = Number(dollarMatch[1].replace(/,/g, ""));
+    if (Number.isFinite(val) && val >= 0) return Math.round(val);
+  }
+  const pctMatch = depositText.match(/([0-9]{1,2}(?:\.[0-9]{1,2})?)\s*%/);
+  if (pctMatch) {
+    const pct = Number(pctMatch[1]);
+    if (Number.isFinite(pct) && pct > 0 && pct <= 100) return Math.round(price * (pct / 100));
+  }
+  return null;
+}
+
+export function computeStatutoryFeePreset(params: {
+  purchasePrice: number | string | null;
+  state?: string | null;
+  source?: string | null;
+  depositText?: string | null;
+}): StatutoryFeePreset | null {
+  const price = positiveNumber(params.purchasePrice);
+  if (price === null) return null;
+  const st = (params.state || "").trim().toUpperCase();
+  const src = (params.source || "").trim().toLowerCase();
+  const citations: string[] = [];
+
+  let buyersPremium = 0;
+  if (src === "bid4assets" || src === "servicelink") {
+    buyersPremium = Math.max(2500, Math.round(price * 0.05));
+    citations.push("Marketplace schedule assumption: 5% ($2,500 min) buyer's premium on portal auctions.");
+  } else {
+    citations.push("Direct government / court auction assumption: $0 marketplace buyer's premium.");
+  }
+
+  let sheriffPoundage = 0;
+  let transferTax = 0;
+  let defaultDepositPct = 0.10;
+  let scheduleLabel = `${st || "State"} Statutory Baseline Schedule`;
+
+  if (st === "NJ") {
+    scheduleLabel = "New Jersey Sheriff Statutory Schedule (N.J.S.A. 22A:4-8 & 46:15-7)";
+    const tier1 = Math.min(price, 5000) * 0.06;
+    const tier2 = Math.max(0, Math.min(price - 5000, 15000)) * 0.04;
+    const tier3 = Math.max(0, price - 20000) * 0.02;
+    sheriffPoundage = Math.max(150, Math.round(tier1 + tier2 + tier3));
+    transferTax = Math.round(price * 0.01);
+    defaultDepositPct = 0.20;
+    citations.push(
+      "N.J.S.A. 22A:4-8: Sheriff commission 6% on first $5k, 4% on next $15k, 2% above $20k ($150 min).",
+      "N.J.S.A. 46:15-7: NJ Realty Transfer Fee baseline (~1.0% tiered statutory schedule).",
+      "N.J.S.A. 2A:50-64: 20% statutory sheriff sale deposit at knockdown."
+    );
+  } else if (st === "OH") {
+    scheduleLabel = "Ohio Sheriff Statutory Schedule (ORC § 311.17 & § 319.54)";
+    sheriffPoundage = Math.round(price * 0.015);
+    transferTax = Math.round((price / 1000) * 4);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "ORC § 311.17(B)(1): Sheriff poundage 1.5% of foreclosure sale proceeds.",
+      "ORC § 319.54(G)(3): County auditor conveyance fee baseline ($4.00 per $1,000)."
+    );
+  } else if (st === "FL") {
+    scheduleLabel = "Florida Clerk Judicial Schedule (Fla. Stat. § 28.24 & § 201.02)";
+    sheriffPoundage = Math.round(Math.min(price, 500) * 0.03 + Math.max(0, price - 500) * 0.015);
+    transferTax = Math.round(Math.ceil(price / 100) * 0.70);
+    defaultDepositPct = 0.05;
+    citations.push(
+      "Fla. Stat. § 28.24(10): Clerk registry fee 3% on first $500 + 1.5% on balance.",
+      "Fla. Stat. § 201.02: Documentary stamp tax $0.70 per $100 of consideration.",
+      "Fla. Stat. § 45.031(3): 5% statutory judicial auction deposit at sale."
+    );
+  } else if (st === "PA") {
+    scheduleLabel = "Pennsylvania Sheriff Statutory Schedule (42 Pa.C.S. § 21107 & 72 P.S. § 8102-C)";
+    sheriffPoundage = Math.round(Math.min(price, 250000) * 0.02 + Math.max(0, price - 250000) * 0.005);
+    transferTax = Math.round(price * 0.02);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "42 Pa.C.S. § 21107: Sheriff poundage 2% up to $250k + 0.5% on excess.",
+      "72 P.S. § 8102-C: PA Realty Transfer Tax (1% state + 1% typical local municipal/school)."
+    );
+  } else if (st === "NC") {
+    scheduleLabel = "North Carolina Judicial / Trustee Schedule (N.C.G.S. § 45-21.15 & § 105-228.30)";
+    sheriffPoundage = Math.min(Math.round(price * 0.05), 25000);
+    transferTax = Math.round(price / 500);
+    defaultDepositPct = 0.05;
+    citations.push(
+      "N.C.G.S. § 45-21.15: Trustee/commissioner statutory commission cap (up to 5%).",
+      "N.C.G.S. § 105-228.30: NC Excise Tax $1.00 per $500 ($2.00 per $1,000).",
+      "N.C.G.S. § 45-21.27: 5% minimum deposit ($750 floor) for judicial/upset bids."
+    );
+  } else if (st === "TX") {
+    scheduleLabel = "Texas Constable / Trustee Schedule (Tex. Civ. Prac. & Rem. Code)";
+    sheriffPoundage = 0;
+    transferTax = 0;
+    defaultDepositPct = 0.10;
+    citations.push("Texas Const. art. VIII § 29: $0 state real estate transfer tax.");
+  } else {
+    transferTax = Math.round(price * 0.005);
+    citations.push("Baseline state recording/transfer assumption (0.5% of price); verify county fee schedule.");
+  }
+
+  const parsedDeposit = parsePublishedDepositAmount(params.depositText, price);
+  const creditedDeposit = parsedDeposit !== null ? parsedDeposit : Math.round(price * defaultDepositPct);
+  if (parsedDeposit !== null) {
+    citations.push(`Credited deposit parsed from published deposit terms (${params.depositText}).`);
+  }
+
+  return {
+    state: st || "US",
+    scheduleLabel,
+    buyersPremium,
+    sheriffPoundage,
+    transferTax,
+    creditedDeposit,
+    registrationFunds: creditedDeposit,
+    citations,
+  };
+}
+
+export interface StatutoryDeadlinesAndCarry {
+  saleDateIso: string | null;
+  objectionOrConfirmationDays: number;
+  objectionLabel: string | null;
+  objectionDeadline: string | null;
+  irsRedemptionDays: number;
+  irsRedemptionDeadline: string | null;
+  stateRedemptionDays: number;
+  stateRedemptionDeadline: string | null;
+  effectiveLockupDays: number;
+  estimatedCarryCost: number | null;
+  annualCostOfCapitalPct: number;
+}
+
+function addDaysIso(baseDateStr: string | null | undefined, days: number): string | null {
+  if (!baseDateStr || days <= 0) return null;
+  const time = Date.parse(String(baseDateStr).slice(0, 10));
+  if (!Number.isFinite(time)) return null;
+  return new Date(time + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+export function computeStatutoryDeadlinesAndCarry(params: {
+  saleDate?: string | null;
+  state?: string | null;
+  purchasePrice?: number | string | null;
+  redemptionDays?: number | null;
+  hasIrsLien?: boolean;
+  annualCostOfCapitalPct?: number;
+}): StatutoryDeadlinesAndCarry {
+  const st = (params.state || "").trim().toUpperCase();
+  const saleDateIso = params.saleDate && Number.isFinite(Date.parse(String(params.saleDate).slice(0, 10)))
+    ? String(params.saleDate).slice(0, 10)
+    : null;
+
+  let objectionOrConfirmationDays = 0;
+  let objectionLabel: string | null = null;
+  if (st === "NC") {
+    objectionOrConfirmationDays = 10;
+    objectionLabel = "NC 10-day rolling upset-bid window (N.C.G.S. § 45-21.27)";
+  } else if (st === "NJ") {
+    objectionOrConfirmationDays = 10;
+    objectionLabel = "NJ 10-day sheriff deed objection / redemption window (R. 4:65-5)";
+  } else if (st === "FL") {
+    objectionOrConfirmationDays = 10;
+    objectionLabel = "FL 10-day Certificate of Title objection window (Fla. Stat. § 45.031(5))";
+  } else if (st === "OH") {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = "OH 30-day court confirmation & deed delivery window (ORC § 2329.31)";
+  }
+
+  const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
+  const stateRedemptionDays = Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
+  const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
+  const annualCostOfCapitalPct = nonNegativeNumber(params.annualCostOfCapitalPct) ?? 10;
+  const price = positiveNumber(params.purchasePrice);
+  const estimatedCarryCost = price !== null && effectiveLockupDays > 0
+    ? Math.round(price * (annualCostOfCapitalPct / 100) * (effectiveLockupDays / 365))
+    : null;
+
+  return {
+    saleDateIso,
+    objectionOrConfirmationDays,
+    objectionLabel,
+    objectionDeadline: addDaysIso(saleDateIso, objectionOrConfirmationDays),
+    irsRedemptionDays,
+    irsRedemptionDeadline: addDaysIso(saleDateIso, irsRedemptionDays),
+    stateRedemptionDays,
+    stateRedemptionDeadline: addDaysIso(saleDateIso, stateRedemptionDays),
+    effectiveLockupDays,
+    estimatedCarryCost,
+    annualCostOfCapitalPct,
+  };
+}

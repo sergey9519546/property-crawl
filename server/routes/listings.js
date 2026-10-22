@@ -3,7 +3,7 @@ const Validator = require('../security/validation');
 const { readMediaStore, attachMedia } = require('../db/property-media-store');
 const discovery = require('../discovery/query');
 const { buildDocumentEvidence } = require('../intelligence/document-evidence');
-const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
+const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
 const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
@@ -45,9 +45,9 @@ function presentListing(listing) {
   if (presented.parcelKey == null) {
     const sourceFacts = listing.provenance?.sourceFacts || {};
     presented.parcelKey = buildParcelKey({
-      apn: listing.apn ?? listing.parcelNumber ?? listing.parcelId
+      apn: extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
         ?? sourceFacts.apn ?? sourceFacts.parcelNumber ?? sourceFacts.parcelId,
-      countyFips: listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
+      countyFips: extractCountyFips(listing) ?? listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
     });
   }
   for (const field of ['raw', 'plaintiff', 'defendant', 'attorney', 'deposit', 'description', 'notes', 'photoProvider']) {
@@ -181,7 +181,7 @@ function publishedApn(listing) {
   for (const value of candidates) {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
-  return null;
+  return extractRawApn(listing) || null;
 }
 
 async function handleAssessorLookup(encodedId, res) {

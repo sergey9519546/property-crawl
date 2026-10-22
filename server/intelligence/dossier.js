@@ -39,7 +39,10 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     && (!signal.recordId || signal.recordId === String(listing.provenance?.recordId))
     && signal.evidence?.every((point) => recordUrls.has(point.sourceUrl))).slice(0, 10) : [];
   const gaps = [];
-  function gap(id, title, reason, nextAction) { gaps.push({ id, title, reason, nextAction }); }
+  const VOI_POINTS = { source_identity: 25, title: 22, value_and_debt: 20, opening_bid: 18, payment_terms: 15, sale_date_passed: 14, transaction_outcome: 12, source_stale: 10, occupancy: 10, archive_snapshot: 8 };
+  const VOI_TIER = { source_identity: 'critical_risk', title: 'critical_risk', value_and_debt: 'high_leverage', opening_bid: 'high_leverage', payment_terms: 'high_leverage', sale_date_passed: 'high_leverage', transaction_outcome: 'standard', source_stale: 'standard', occupancy: 'standard', archive_snapshot: 'standard' };
+  const TIER_ORDER = { critical_risk: 0, high_leverage: 1, standard: 2 };
+  function gap(id, title, reason, nextAction) { gaps.push({ id, title, reason, nextAction, potentialPointsGain: VOI_POINTS[id] || 8, priorityTier: VOI_TIER[id] || 'standard' }); }
   if (!capturedEvidence) gap('source_identity', 'Source evidence is missing', 'This record has not passed the source-observation checks.', 'Locate and capture the exact publisher record before relying on its property facts.');
   if (archived) gap('archive_snapshot', 'Archive snapshot requires a current observation', 'The attachment preserves a dated publisher record. Import time does not verify current availability or terms.', 'Collect the exact publisher record to establish current evidence.');
   if (source.freshness === 'stale') gap('source_stale', 'The publisher observation needs refreshing', 'The saved observation is older than this source’s planned refresh interval. Its current availability and terms are unresolved.', 'Refresh this source in Source Radar or verify the exact publisher record. Public-record lookups are separate evidence with their own dates.');
@@ -78,10 +81,12 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   }
   const opportunityEvaluation = evaluateOpportunitySignals(listing, { observations, publicRecords, now, historyUnavailable });
   const documentEvidence = buildDocumentEvidence(listing, { capturedEvidence, observedAt: timestamp, sourceUrl: source.url });
+  gaps.sort((a, b) => (TIER_ORDER[a.priorityTier] ?? 2) - (TIER_ORDER[b.priorityTier] ?? 2) || (b.potentialPointsGain || 0) - (a.potentialPointsGain || 0));
   return {
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
     opportunitySignals: opportunityEvaluation.signals,
+    trajectory: opportunityEvaluation.trajectory,
     triagePriority: opportunityEvaluation.triagePriority,
     opportunityWeights: opportunityEvaluation.weights,
     componentScores: opportunityEvaluation.componentScores,

@@ -469,5 +469,60 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1' }, res);
     assert.equal(body.historyUnavailable, true);
     assert.equal(persisted.length, 0, 'a score computed without history is not a fact about the listing');
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const uiSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'listings', 'property-intelligence.tsx'), 'utf8');
+    assert.match(uiSrc, /componentScores:\s*dossier\.componentScores/);
+    assert.match(uiSrc, /historyUnavailable:\s*dossier\.historyUnavailable/);
+  });
+
+  test('adjournment-exhaustion trajectory and VoI-ranked dossier gaps surface priority leverage', () => {
+    const crypto = require('node:crypto');
+    const recordKey = crypto.createHash('sha256').update('civilview\n99999').digest('hex');
+    const observations = {
+      records: {
+        [recordKey]: {
+          history: [
+            { fields: { status: 'Postponed - Debtor Adjournment 1', openingBid: 200000 } },
+            { fields: { status: 'Postponed - Statutory Adjournment 2', openingBid: 180000 } },
+          ],
+          latest: { listingId: 'TEST-LISTING-001', source: 'civilview', recordId: '99999', fields: { status: 'Scheduled', openingBid: 150000 } }
+        }
+      },
+      signals: []
+    };
+    const dossier = buildPropertyDossier(sampleListing({ openingBid: 150000, status: 'scheduled' }), { observations });
+    assert.ok(dossier.trajectory);
+    assert.equal(dossier.trajectory.priorPostponements, 2);
+    assert.equal(dossier.trajectory.statutoryStayExhausted, true);
+    assert.equal(dossier.trajectory.cumulativeBidDropPct, 25);
+    const relistSig = dossier.opportunitySignals.find((s) => s.key === 'returned_to_market');
+    assert.equal(relistSig.status, 'supported');
+    assert.match(relistSig.reason, /2 prior postponements recorded/);
+    assert.ok(dossier.gaps.every((g) => typeof g.potentialPointsGain === 'number' && typeof g.priorityTier === 'string'));
+    for (let i = 1; i < dossier.gaps.length; i++) {
+      const tierOrder = { critical_risk: 0, high_leverage: 1, standard: 2 };
+      const prevTier = tierOrder[dossier.gaps[i - 1].priorityTier];
+      const currTier = tierOrder[dossier.gaps[i].priorityTier];
+      assert.ok(prevTier <= currTier);
+    const crypto2 = require('node:crypto');
+    const rk2 = crypto2.createHash('sha256').update('civilview\n99999').digest('hex');
+    const outOfOrderObs = {
+      records: {
+        [rk2]: {
+          history: [
+            { observedAt: '2026-08-15T12:00:00.000Z', fields: { status: 'Scheduled', saleDate: '2026-09-15', openingBid: 180000 } },
+            { observedAt: '2026-08-01T12:00:00.000Z', fields: { status: 'Scheduled', saleDate: '2026-09-01', openingBid: 200000 } },
+          ],
+          latest: { listingId: 'TEST-LISTING-001', source: 'civilview', recordId: '99999', fields: { status: 'Scheduled', saleDate: '2026-09-29', openingBid: 150000 } }
+        }
+      },
+      signals: []
+    };
+    const datePushDossier = buildPropertyDossier(sampleListing({ openingBid: 150000, status: 'scheduled', saleDate: '2026-09-29' }), { observations: outOfOrderObs });
+    assert.equal(datePushDossier.trajectory.priorPostponements, 2);
+    assert.equal(datePushDossier.trajectory.statutoryStayExhausted, true);
+    assert.equal(datePushDossier.trajectory.cumulativeBidDropPct, 25);
+    }
   });
 });

@@ -1,18 +1,18 @@
 ---
 name: deal-scoring
 description: |
-  Deal Score formula, SCORE_BANDS taxonomy, and worked examples for the
-  property-crawl triage indicator. Use this when explaining, verifying,
-  or debugging the Deal Score calculation.
+  Deal Score formula, SCORE_BANDS taxonomy, Opportunity Signal triagePriority,
+  adjournment trajectory, Value-of-Information (VoI) gap ranking, and Second-Look
+  reconsideration triggers for property-crawl.
 license: MIT
 metadata:
-  version: v1
+  version: v2
   domain: property-data
 ---
 
-# Deal Scoring Skill
+# Deal Scoring & Opportunity Triage Skill
 
-Use this skill when working with the Deal Score calculation or its UI presentation.
+Use this skill when working with the Deal Score calculation, `SCORE_BANDS`, Opportunity Signal `triagePriority`, adjournment trajectory, Value-of-Information (VoI) dossier gap ranking, or Second-Look reconsideration triggers.
 
 ## Formula
 
@@ -25,6 +25,7 @@ dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)))
 - Multiplier `130` maps a 50% discount (ratio=0.50) to score `65` (Strong).
 - Clamping to `1–99` prevents division anomalies and NaN.
 - Score is a **triage indicator** of opening price spread, not an appraisal.
+- When either `openingBid` or `mid` is missing/zero, `dealScore` is `null` (never fabricated).
 
 ## SCORE_BANDS (presentation taxonomy)
 
@@ -66,6 +67,7 @@ same numbers — `test/suite.test.js` [Suite 2] verifies this.
   `src/components/` (v2 Next.js). `test/sync.test.js` guards cross-surface drift.
 - The worked example score must match the formula output. `test/suite.test.js`
   [Suite 2] verifies: `app.js SCORE_EXAMPLE_PLACEHOLDER score matches formula (77)`.
+- Auction calendar summaries in `src/components/listings/discovery-workbench.tsx` must use `calendarDatedTotal(calendarRollup)` from `src/lib/property-api.ts` (which sums dated `byDate` buckets or subtracts `undatedCount`) rather than raw `calendarRollup.total`, so undated listings are never mislabeled as "dated auctions".
 
 ## Relationship to Opportunity-Signal `triagePriority`
 
@@ -86,3 +88,16 @@ different metrics and must never be presented as the same score:
 Do not re-tune the `×130` multiplier to match `triagePriority`'s linear ratio mapping
 and do not collapse the two into one number; the `×130` calibration and `SCORE_BANDS`
 are a documented, test-guarded decision (`test/sync.test.js`, `test/suite.test.js`).
+
+## Multi-Signal Extensions (2026-10-22)
+
+1. **Adjournment-Exhaustion Trajectory (`server/intelligence/signals.js`)**:
+   - `evaluateOpportunitySignals(listing, observations)` emits a deterministic `trajectory` object (`priorPostponements`, `statutoryStayExhausted`, `cumulativeBidDropPct`, `summary`) derived from chronological `saleDate` and `openingBid` transitions across publisher observations.
+   - When `priorPostponements >= 2`, `statutoryStayExhausted` is `true` (reflecting statutory borrower adjournment caps such as N.J.S.A. 2A:17-36, signaling higher probability of actual auction execution).
+2. **Value-of-Information (VoI) Dossier Gap Ranking (`server/intelligence/dossier.js`)**:
+   - Dossier `gaps` are annotated with `potentialPointsGain` (exact `triagePriority` points unlocked by resolving that field, e.g. `+30 pts` for `openingBid`, `+20 pts` for `saleDate`) and `priorityTier` (`critical` $\ge 20$, `high` $\ge 8$, `standard` $< 8$), sorted descending by `potentialPointsGain`.
+3. **Relative/Delta Second-Look Reconsideration Triggers (`server/intelligence/research-cases.js`)**:
+   - In addition to absolute comparisons (`lte`, `gte`, `changed`, `becomes_present`), `evaluateTrigger` supports scale-invariant underwriting operators:
+     - `openingBid` `dropped_by_pct`: fires when `openingBid` drops by at least $X\%$ from the baseline snapshot (`((baseline - current) / baseline) * 100 >= targetPct`).
+     - `openingBid` `bid_to_assessed_lte`: fires when `openingBid / assessed <= ratio` (normalized whether passed as `0.65` or `65`).
+     - `saleDate` `within_days`: fires when `saleDate` is in the future and within $N$ calendar days of `options.now`.

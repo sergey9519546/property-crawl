@@ -119,6 +119,10 @@ function applyHarvest(candidate, parcel, observedAt) {
     assessmentYear,
     note: 'County assessor roll figure harvested at ingest; the market comparison applies the county conversion rule, never the raw figure where none is configured.',
   };
+  if (parcel.canonicalApn && !listing.parcelKey) {
+    listing.parcelKey = parcel.countyFips ? `${parcel.countyFips}-${parcel.canonicalApn}` : parcel.canonicalApn;
+    listing.provenance.derivedFields.parcelKey = true;
+  }
   const total = Number(parcel.assessedValue?.total);
   if (Number.isFinite(total) && total > 0) {
     if (!(Number(listing.assessed) > 0)) listing.assessed = total;

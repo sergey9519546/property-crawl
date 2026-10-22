@@ -1,32 +1,9 @@
 "use client";
 
 /**
- * acknowledged-orphan: built and tested, deliberately unmounted. Reason below.
- *
- * Cross-source enrichment: which OTHER sources report a listing sharing this
- * record's parcelKey, and how confident each is. Not the same as
- * PropertyIntelligence, which shows documents for one listing.
- *
- * The whole chain exists and is green -- this UI, an API client, a route, and a
- * gateway covered by three passing test files -- with nothing importing the
- * component. Green tests over a stack no user can reach is its own kind of lie.
- *
- * A mount on the listing detail page was written and measured, then withdrawn.
- * What was established, and is worth keeping:
- *
- *   * the listing API DOES return parcelKey, and it was missing from the
- *     PropertyListing type (fixed separately)
- *   * only 10 of 2,024 records carry one. The rest are null because most
- *     publishers report no parcel identifier, so buildParcelKey() has nothing to
- *     derive from. So any mount must be conditional, or it tells almost every
- *     reader that no source shares "the parcelKey null"
- *   * the mount did not render, and the reason could not be pinned down: build
- *     timestamps were inconclusive against a turbopack cache, and the SSR
- *     payload carries parcelKey for the listing either way, so the HTML cannot
- *     distinguish a stale build from a false conditional
- *
- * A change that cannot be shown to work is not a fix, so nothing is mounted.
- * Wiring this is small once the data path is understood.
+ * Cross-source parcel enrichment view.
+ * Mounted on /listings/[id] whenever listing.parcelKey is present
+ * (see src/app/listings/[id]/page.tsx and test/enrichment-mount-contract.test.js).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -39,6 +16,7 @@ import {
   type EnrichmentAggregateResponse,
   type EnrichmentAdapterOutcome,
 } from "@/lib/enrichment-api";
+import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 interface EnrichmentViewProps {
   parcelKey: string | null | undefined;
@@ -52,14 +30,8 @@ const ADAPTER_LABELS: Record<string, string> = {
   'ca-controller-tax-sale': 'CA Controller tax-sale',
 };
 
-function describeOutcome(outcome: EnrichmentAdapterOutcome): string {
-  if (outcome.outcome === 'success') return outcome.records && outcome.records.length ? `${outcome.records.length} record${outcome.records.length === 1 ? '' : 's'}` : 'clean run';
-  if (outcome.outcome === 'empty') return 'no new records';
-  if (outcome.outcome === 'skipped') return outcome.reason ? `skipped (${outcome.reason})` : 'skipped';
-  return outcome.error ? `failed (${outcome.error.slice(0, 80)})` : 'failed';
-}
-
 export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true }: EnrichmentViewProps) {
+  const session = useWorkspaceSession();
   const [view, setView] = useState<EnrichmentAggregateResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,7 +45,6 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     setLoading(true);
     setError(null);
     try {
-      // Session cookie only — never pass operator tokens from client components.
       const result = await fetchEnrichmentByParcelKey(parcelKey as string, { fetchImpl });
       setView(result);
     } catch (err) {
@@ -90,13 +61,17 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
 
   const onRefresh = useCallback(async () => {
     if (!isValidKey) return;
+    if (!fetchImpl && !session.authenticated) {
+      session.requestUnlock();
+      return;
+    }
     setRefreshing(true);
     setRefreshStatus(null);
     setError(null);
     try {
       const refreshed = await refreshEnrichmentByParcelKey(parcelKey as string, { fetchImpl });
       setView(refreshed.view);
-      const counts = refreshed.adapterOutcomes.reduce<Record<string, number>>((acc, outcome) => {
+      const counts = refreshed.adapterOutcomes.reduce<Record<string, number>>((acc, outcome: EnrichmentAdapterOutcome) => {
         acc[outcome.outcome] = (acc[outcome.outcome] || 0) + 1;
         return acc;
       }, {});
@@ -108,7 +83,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     } finally {
       setRefreshing(false);
     }
-  }, [parcelKey, fetchImpl, isValidKey]);
+  }, [parcelKey, fetchImpl, isValidKey, session]);
 
   if (!isValidKey) {
     return (
@@ -136,6 +111,10 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
     );
   }
 
+  const refreshLabel = refreshing
+    ? 'Refreshing...'
+    : (!fetchImpl && !session.authenticated ? 'Unlock to refresh adapters' : 'Refresh from adapters');
+
   if (!view || !view.found) {
     return (
       <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-sm text-slate-600">
@@ -143,7 +122,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
         <p>No other source has reported a listing that shares the parcelKey <code>{parcelKey}</code>.</p>
         {showRefreshButton && (
           <button onClick={onRefresh} disabled={refreshing} className="mt-3 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-semibold">
-            {refreshing ? 'Refreshing...' : 'Refresh from adapters'}
+            {refreshLabel}
           </button>
         )}
         {refreshStatus && <p className="mt-2 text-xs text-slate-500">{refreshStatus}</p>}
@@ -170,7 +149,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
             disabled={refreshing}
             className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-semibold"
           >
-            {refreshing ? 'Refreshing...' : 'Refresh from adapters'}
+            {refreshLabel}
           </button>
         )}
       </header>

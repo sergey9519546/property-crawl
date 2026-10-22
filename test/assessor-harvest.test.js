@@ -88,6 +88,20 @@ test('harvest attaches the assessor parcel and records durable provenance', asyn
   // The roll figure fills assessed + assessmentYear for the FHFA fallback.
   assert.equal(listing.assessed, 70000);
   assert.equal(listing.assessmentYear, 2024);
+  assert.equal(listing.parcelKey, '39035-10101001');
+
+  // Verify Postgres JSONB reload path: when only provenance.derivedFields.assessorRoll survives,
+  // presentListing still reconstructs the canonical parcelKey.
+  const { presentListing } = require('../server/routes/listings');
+  const pgReloaded = presentListing({
+    id: listing.id,
+    source: listing.source,
+    state: listing.state,
+    county: listing.county,
+    address: listing.address,
+    provenance: listing.provenance,
+  });
+  assert.equal(pgReloaded.parcelKey, '39035-10101001');
 });
 
 test('harvest uses the disk cache and does not refetch within the TTL', async () => {

@@ -169,6 +169,7 @@ function getGate(changeType) {
         'node test/scrapers.test.js',
         'node test/suite.test.js',
         'node test/telemetry.test.js',
+        'node --test test/list-response-payload.test.mjs test/underwriting-truth.test.mjs',
       ],
       label: 'module load + scraper + unit + telemetry',
       maxDuration: 60000
@@ -190,6 +191,7 @@ function getGate(changeType) {
         'node test/server.test.js',
         'node test/suite.test.js',
         'node test/hardening.test.js',
+        'node --test test/list-response-payload.test.mjs test/underwriting-truth.test.mjs',
       ],
       label: 'module load + server + unit + hardening',
       maxDuration: 60000

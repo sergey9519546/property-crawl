@@ -9,6 +9,8 @@ import {
   generateLetterOfIntent,
   parseRentRollSchedule,
   redemptionLabel,
+  computeStatutoryFeePreset,
+  computeStatutoryDeadlinesAndCarry,
 } from '../src/lib/underwriting.ts';
 
 test('cash requirements stay unresolved until every cost is explicit', () => {
@@ -265,6 +267,46 @@ test('UnderwriteScenario persists custom valuation assumption across sessions', 
   assert.ok(restored !== null);
   assert.equal(restored.customValuation, '185000');
   assert.equal(restored.rehabBudget, 25000);
+  delete globalThis.sessionStorage;
+});
+
+test('computeStatutoryFeePreset models state statutory poundage, transfer tax, and deposit terms as explicit presets', () => {
+  const nj = computeStatutoryFeePreset({ purchasePrice: 120_000, state: 'NJ', source: 'civilview', depositText: '20% at gavel' });
+  assert.ok(nj !== null);
+  assert.equal(nj.sheriffPoundage, 2900);
+  assert.equal(nj.registrationFunds, 24_000);
+  assert.match(nj.citations.join(' '), /N\.J\.S\.A\. 22A:4-8/);
+
+  const fl = computeStatutoryFeePreset({ purchasePrice: 100_000, state: 'FL', source: 'sheriff', depositText: '$5,000 wire' });
+  assert.ok(fl !== null);
+  assert.equal(fl.sheriffPoundage, Math.round(500 * 0.03 + 99_500 * 0.015));
+  assert.equal(fl.transferTax, 700);
+  assert.equal(fl.registrationFunds, 5000);
+
+  const oh = computeStatutoryFeePreset({ purchasePrice: 100_000, state: 'OH', source: 'sheriff' });
+  assert.ok(oh !== null);
+  assert.equal(oh.sheriffPoundage, 1500);
+  assert.equal(oh.transferTax, 400);
+});
+
+test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and IRS 120-day lockup carry', async () => {
+  const nc = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'NC', purchasePrice: 200_000, annualCostOfCapitalPct: 12 });
+  assert.equal(nc.objectionDeadline, '2026-10-11');
+  assert.match(nc.objectionLabel, /N\.C\.G\.S\. § 45-21\.27/);
+  assert.equal(nc.effectiveLockupDays, 10);
+  assert.ok(nc.estimatedCarryCost > 0);
+
+  const irs = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'OH', hasIrsLien: true, purchasePrice: 150_000 });
+  assert.equal(irs.irsRedemptionDays, 120);
+  assert.equal(irs.irsRedemptionDeadline, '2027-01-29');
+  assert.equal(irs.effectiveLockupDays, 120);
+
+  const titleEngine = await import('../server/intelligence/title-risk-engine.js');
+  const priority = titleEngine.extractInstrumentPrioritySignals('Foreclosing Mortgage Recorded 04/12/2019 in Book 4812 Page 309, Instrument # 20190048192. Sale is subject to prior senior mortgage.');
+  assert.equal(priority.instrumentNumber, '20190048192');
+  assert.deepEqual(priority.bookPage, { book: '4812', page: '309' });
+  assert.equal(priority.recordedDate, '04/12/2019');
+  assert.equal(priority.explicitlySubjectToSeniorMortgage, true);
   delete globalThis.sessionStorage;
 });
 

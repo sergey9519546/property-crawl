@@ -185,3 +185,43 @@ test('Decision Packet: a marketplace source does not invent a buyer premium or a
   assert.doesNotMatch(md, /Unassigned/);
   assert.match(md, /\*\*Auction Date\*\* \| Not published/);
 });
+
+test('Decision Packet Export Page: gates research case lookup on authenticated workspace session', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const exportPageSrc = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'app', 'research', '[id]', 'export', 'page.tsx'),
+    'utf8'
+  );
+  assert.match(exportPageSrc, /readWorkspaceSession/);
+  assert.match(exportPageSrc, /workspaceSessionConfiguration/);
+  assert.match(exportPageSrc, /'x-operator-token':\s*configuration\.credential/);
+});
+
+test('Decision Packet: propagates IRS 120-day tax lien redemption and recorded instrument priority into JSON and Markdown', () => {
+  const irsListing = {
+    id: 'SHERIFF-OH-IRS-501',
+    address: '500 Euclid Ave',
+    city: 'Cleveland',
+    state: 'OH',
+    county: 'Cuyahoga',
+    openingBid: 80000,
+    plaintiff: 'U.S. Bank National Association',
+    raw: 'Foreclosure of mortgage recorded on March 14, 2019 in Book 4412, Page 889, Instrument No. 2019-0041982. Defendant United States of America (Internal Revenue Service) joined for federal tax lien.',
+    source: 'sheriff'
+  };
+
+  const packet = buildDecisionPacket(irsListing);
+  const t = packet.underwriting.titleRisk;
+  assert.equal(t.hasIrsTaxLien, true);
+  assert.equal(t.irsRedemptionDays, 120);
+  assert.equal(t.riskLevel, 'HIGH');
+  assert.ok(t.instrumentPriority);
+  assert.equal(t.instrumentPriority.instrumentNumber, '2019-0041982');
+  assert.deepEqual(t.instrumentPriority.bookPage, { book: '4412', page: '889' });
+  assert.equal(t.instrumentPriority.recordedDate, 'March 14, 2019');
+
+  const md = formatDecisionPacketMarkdown(packet);
+  assert.match(md, /IRS phrase in the supplied record \(120-day redemption period\)/);
+  assert.match(md, /Recorded Instrument Reference\*\*: Instrument #2019-0041982 · Book 4412, Page 889 · Recorded March 14, 2019/);
+});

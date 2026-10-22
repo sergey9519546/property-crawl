@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { sourceDisplayText } from '@/lib/source-display';
 import { ArrowRight, Download, ExternalLink, Loader2, Radar } from 'lucide-react';
 import { OpportunitySignalsCard } from '@/components/listings/opportunity-signals-card';
-import type { OpportunitySignal } from '@/components/listings/opportunity-signals-card';
+import type { ComponentScore, OpportunitySignal } from '@/components/listings/opportunity-signals-card';
 import { DiscoveryEvidence, type DiscoveryEvidenceData } from '@/components/listings/discovery-evidence';
 import { useWorkspaceSession } from '@/components/workspace/workspace-shell';
 
@@ -14,11 +14,12 @@ type Dossier = DiscoveryEvidenceData & {
   facts: { key: string; title: string; value: unknown; evidenceClass: string }[];
   signals: { id: string; title: string; field: string; before: unknown; after: unknown; observedAt: string }[];
   contradictions: { id: string; title: string; listingValue: number; publicRecordValue: number; unit: string; explanation: string; nextAction: string }[];
-  gaps: { id: string; title: string; reason: string; nextAction: string }[];
+  gaps: { id: string; title: string; reason: string; nextAction: string; potentialPointsGain?: number; priorityTier?: string }[];
   history: { firstObservedAt: string; observations: number } | null;
+  trajectory?: { priorPostponements: number; statutoryStayExhausted: boolean; cumulativeBidDropPct: number | null };
   opportunitySignals?: OpportunitySignal[];
   triagePriority?: number;
-  opportunityWeights?: Record<string, number>;
+  opportunityWeights?: Record<string, number>; componentScores?: Record<string, ComponentScore>;
   opportunitySummary?: { supported: number; unknown: number; contradicted: number };
   opportunityDisclaimer?: string;
   publicRecords: {
@@ -98,6 +99,25 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
         {dossier.source.freshness === 'stale' && <p className="rounded-lg bg-amber-50 p-4 text-xs leading-6 text-amber-900">The saved publisher observation needs refreshing. Confirm current availability and terms at the publisher. New public-record research has its own observation date.</p>}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><p>{sourceDisplayText(dossier.source.publisher)} · {dossier.source.observedAt ? `Observed ${date(dossier.source.observedAt)}` : 'Snapshot requires source verification'}</p>{dossier.source.url && <a href={dossier.source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-slate-900 underline hover:text-slate-700">Publisher record <ExternalLink size={12} /></a>}</div>
         <div className="rounded-xl bg-slate-50 p-4"><h3 className="text-sm font-semibold text-slate-950">Changes &amp; discrepancies</h3>
+          {dossier.trajectory && (dossier.trajectory.priorPostponements > 0 || dossier.trajectory.cumulativeBidDropPct !== null) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="dossier-trajectory-summary">
+              {dossier.trajectory.priorPostponements > 0 && (
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 font-semibold text-slate-700">
+                  {dossier.trajectory.priorPostponements} prior {dossier.trajectory.priorPostponements === 1 ? 'postponement' : 'postponements'}
+                </span>
+              )}
+              {dossier.trajectory.statutoryStayExhausted && (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 font-semibold text-amber-900">
+                  Statutory adjournments exhausted
+                </span>
+              )}
+              {dossier.trajectory.cumulativeBidDropPct !== null && (
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-semibold text-emerald-800">
+                  Cumulative bid drop: -{dossier.trajectory.cumulativeBidDropPct}%
+                </span>
+              )}
+            </div>
+          )}
           {dossier.signals.length || dossier.contradictions.length ? <div className="mt-3 space-y-4">
             {dossier.signals.slice(0, 3).map((signal) => <div key={signal.id}><p className="text-sm font-semibold">{signal.title}</p><p className="mt-1 text-sm text-slate-600">{valueLabel(signal.before, signal.field)} <ArrowRight className="mx-1 inline" size={13} /> {valueLabel(signal.after, signal.field)}</p><p className="mt-1 text-xs text-slate-500">Observed {date(signal.observedAt)}. Confirm the current offering.</p></div>)}
             {dossier.contradictions.map((item) => <div key={item.id}><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-sm">Listing: {item.listingValue.toLocaleString()} {item.unit} · Parcel record: {item.publicRecordValue.toLocaleString()} {item.unit}</p><p className="mt-2 text-xs leading-6 text-slate-600">{item.explanation}</p><p className="mt-1 text-xs font-semibold">Next: {item.nextAction}</p></div>)}
@@ -120,7 +140,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
             initialData={{
               triagePriority: dossier.triagePriority ?? 0,
               signals: dossier.opportunitySignals,
-              weights: dossier.opportunityWeights,
+              weights: dossier.opportunityWeights, componentScores: dossier.componentScores, historyUnavailable: dossier.historyUnavailable,
               summary: dossier.opportunitySummary,
               disclaimer: dossier.opportunityDisclaimer,
             }}
@@ -128,7 +148,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
           </div>
           </details>
         )}
-        <details className="border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">What still needs checking · {dossier.gaps.length}</summary><div className="mt-4 space-y-4">{dossier.gaps.map((gap) => <div key={gap.id}><h4 className="text-sm font-semibold">{gap.title}</h4><p className="mt-1 text-sm leading-6 text-slate-600">{gap.reason}</p><p className="mt-1 text-sm leading-6 text-emerald-800">Next: {gap.nextAction}</p></div>)}</div></details>
+        <details className="border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">What still needs checking · {dossier.gaps.length}</summary><div className="mt-4 space-y-4">{dossier.gaps.map((gap) => <div key={gap.id}><div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold">{gap.title}</h4>{typeof gap.potentialPointsGain === 'number' && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">+{gap.potentialPointsGain} priority pts if verified</span>}</div><p className="mt-1 text-sm leading-6 text-slate-600">{gap.reason}</p><p className="mt-1 text-sm leading-6 text-emerald-800">Next: {gap.nextAction}</p></div>)}</div></details>
       </>}
     </div>
   </section>;

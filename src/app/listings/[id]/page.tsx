@@ -446,6 +446,15 @@ export default async function ListingPage({ params, searchParams }: Props) {
               {titleRules ? (
                 <ul className="mt-3 space-y-2">
                   <li>Classifier: {titleRules.plaintiffType}. Risk label: {titleRules.riskLevel}.</li>
+                  {(titleRules.instrumentPriority?.instrumentNumber || titleRules.instrumentPriority?.bookPage || titleRules.instrumentPriority?.recordedDate) ? (
+                    <li data-testid="title-instrument-reference">
+                      Recorded instrument reference: {[
+                        titleRules.instrumentPriority.instrumentNumber ? `Instrument #${titleRules.instrumentPriority.instrumentNumber}` : null,
+                        titleRules.instrumentPriority.bookPage ? `Book ${titleRules.instrumentPriority.bookPage.book}, Page ${titleRules.instrumentPriority.bookPage.page}` : null,
+                        titleRules.instrumentPriority.recordedDate ? `Recorded ${titleRules.instrumentPriority.recordedDate}` : null,
+                      ].filter(Boolean).join(" · ")}.
+                    </li>
+                  ) : null}
                   {titleRules.titleWarnings.filter((warning): warning is string => typeof warning === "string" && warning.length > 0).map((warning) => <li key={warning}>{warning}</li>)}
                 </ul>
               ) : <p className="mt-2">State was not published, so the statute table was not applied.</p>}

@@ -304,3 +304,49 @@ test('main Node server dispatches the protected workspace route against live inv
   assert.equal(detail.status, 200);
   assert.equal((await detail.json()).case.sourceRef.recordId, String(observed.provenance.recordId));
 });
+
+test('relative and delta reconsideration triggers (dropped_by_pct, bid_to_assessed_lte, within_days) evaluate accurately', (t) => {
+  const filePath = tempStore(t);
+  const created = cases.createCase({ listing: listing({ openingBid: 150000, assessed: 200000, saleDate: '2026-10-01' }) }, { filePath, now: NOW }).case;
+  const passed = cases.updateCase(created.id, {
+    expectedRevision: 1,
+    state: 'pass',
+    reasonCodes: ['price_above_target'],
+    reconsideration: {
+      mode: 'all',
+      conditions: [
+        { field: 'openingBid', operator: 'dropped_by_pct', value: 15 },
+        { field: 'openingBid', operator: 'bid_to_assessed_lte', value: 65 },
+        { field: 'saleDate', operator: 'within_days', value: 30 },
+      ],
+    },
+  }, { filePath, now: '2026-09-05T18:01:00.000Z' });
+  assert.equal(passed.workspaceState, 'pass');
+
+  const smallDrop = cases.createCase({
+    listing: listing({ sourceObservedAt: '2026-09-06T12:00:00.000Z', openingBid: 140000, assessed: 200000, saleDate: '2026-10-01' }),
+    origin: { type: 'material_change', changedFields: ['openingBid'], changes: { openingBid: { previous: 150000, current: 140000 } } },
+  }, { filePath, now: '2026-09-06T12:05:00.000Z' }).case;
+  assert.equal(smallDrop.reconsiderationRequired, false);
+
+  const bigDrop = cases.createCase({
+    listing: listing({ sourceObservedAt: '2026-09-07T12:00:00.000Z', openingBid: 120000, assessed: 200000, saleDate: '2026-10-01' }),
+    origin: { type: 'material_change', changedFields: ['openingBid'], changes: { openingBid: { previous: 150000, current: 120000 } } },
+  }, { filePath, now: '2026-09-07T12:05:00.000Z' }).case;
+  assert.equal(bigDrop.reconsiderationRequired, true);
+  assert.equal(bigDrop.latestTrigger.matchedConditions.length, 3);
+  const normalizedDecimal = cases.updateCase(created.id, {
+    expectedRevision: bigDrop.revision,
+    state: 'pass',
+    reasonCodes: ['price_above_target'],
+    reconsideration: {
+      mode: 'all',
+      conditions: [
+        { field: 'openingBid', operator: 'dropped_by_pct', value: 0.15 },
+        { field: 'openingBid', operator: 'bid_to_assessed_lte', value: 0.65 },
+      ],
+    },
+  }, { filePath, now: '2026-09-07T12:10:00.000Z' });
+  assert.equal(normalizedDecimal.reconsideration.conditions[0].value, 15);
+  assert.equal(normalizedDecimal.reconsideration.conditions[1].value, 65);
+});

@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 import { DecisionPacketView } from '@/components/research/decision-packet-view';
+import { readWorkspaceSession, workspaceSessionConfiguration } from '@/lib/workspace-session';
 import { buildDecisionPacket } from '@server/export/decision-packet';
 
 export const metadata: Metadata = {
@@ -32,24 +34,34 @@ async function fetchListingOrCase(id: string) {
     // API down or network issue
   }
 
-  // 2. If not found, try fetching as research case ID
+  // 2. If not found, try fetching as research case ID (gated on authenticated workspace session)
   if (!listing) {
     try {
-      const caseRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(decodedId)}`, {
-        cache: 'no-store'
+      const incomingHeaders = await headers();
+      const cookieHeader = incomingHeaders.get('cookie') || '';
+      const sessionRequest = new Request(`${baseUrl}/research/${encodeURIComponent(decodedId)}/export`, {
+        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
       });
-      if (caseRes.ok) {
-        const caseData = await caseRes.json();
-        if (caseData?.case?.listingId) {
-          caseDecision = caseData.case;
-          // Now fetch the listing for this case
-          const res = await fetch(`${baseUrl}/api/listings/${encodeURIComponent(caseData.case.listingId)}`, {
-            cache: 'no-store'
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data === 'object' && !('error' in data)) {
-              listing = data;
+      const configuration = workspaceSessionConfiguration();
+      const session = readWorkspaceSession(sessionRequest);
+      if (configuration.configured && session.authenticated) {
+        const caseRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(decodedId)}`, {
+          cache: 'no-store',
+          headers: { 'x-operator-token': configuration.credential },
+        });
+        if (caseRes.ok) {
+          const caseData = await caseRes.json();
+          if (caseData?.case?.listingId) {
+            caseDecision = caseData.case;
+            // Now fetch the listing for this case
+            const res = await fetch(`${baseUrl}/api/listings/${encodeURIComponent(caseData.case.listingId)}`, {
+              cache: 'no-store'
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data && typeof data === 'object' && !('error' in data)) {
+                listing = data;
+              }
             }
           }
         }

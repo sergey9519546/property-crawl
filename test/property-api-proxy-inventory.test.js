@@ -34,7 +34,7 @@ function walk(dir, files = []) {
 function extractFromSource(source) {
   const calls = new Set();
   const prefixes = new Set();
-  const re = /fetch\(\s*[`'"](\/api\/[^`'"?]+)[`'"]/g;
+  const re = /(?:fetch|callApi|getJson|requestJson)(?:<[^>]+>)?\(\s*[`'"](\/api\/[^`'"?]+)[`'"]/g;
   let match;
   while ((match = re.exec(source))) {
     const raw = match[1];

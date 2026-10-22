@@ -2,6 +2,7 @@ const { normalizeOcrText } = require('../ai/notice-parser');
 const { inspectImageUrl } = require('./media-policy');
 const { inspectSourceRecordUrl } = require('./source-policy');
 const { getRedemptionRule, detectSeniorLienSurvival } = require('../ai/legal-rules');
+const { COUNTY_ARCGIS_REGISTRY, resolveCountyKey } = require('../enrichment/arcgis-parcels');
 
 function cleanText(value, placeholders = []) {
   if (value === null || value === undefined) return null;
@@ -76,6 +77,8 @@ function extractCountyFips(listing) {
     listing.countyFips,
     listing.provenance?.countyFips,
     listing.provenance?.sourceFacts?.countyFips,
+    listing.assessorParcel?.countyFips,
+    listing.provenance?.derivedFields?.assessorRoll?.parcel?.countyFips,
     listing.provenance?.jurisdiction
   ];
   for (const candidate of candidates) {
@@ -89,6 +92,10 @@ function extractCountyFips(listing) {
   if (stateFips && /^\d{2}$/.test(stateFips) && countyFips && /^\d{3}$/.test(countyFips)) {
     return `${stateFips}${countyFips}`;
   }
+  const countyKey = resolveCountyKey(listing.state, listing.county);
+  if (countyKey && COUNTY_ARCGIS_REGISTRY[countyKey]?.fips) {
+    return COUNTY_ARCGIS_REGISTRY[countyKey].fips;
+  }
   return null;
 }
 
@@ -100,11 +107,23 @@ function extractRawApn(listing) {
     listing.parcelId,
     sourceFacts.apn,
     sourceFacts.parcelNumber,
-    sourceFacts.parcelId
+    sourceFacts.parcelId,
+    listing.assessorParcel?.rawApn,
+    listing.assessorParcel?.canonicalApn,
+    listing.provenance?.derivedFields?.assessorRoll?.apn,
+    listing.provenance?.derivedFields?.assessorRoll?.parcel?.rawApn,
+    listing.provenance?.derivedFields?.assessorRoll?.parcel?.canonicalApn
   ];
   for (const candidate of candidates) {
     const text = cleanText(candidate);
     if (text) return text;
+  }
+  const provenanceApn = cleanText(listing.provenance?.apn || listing.provenance?.parcelNumber || listing.provenance?.parcelId);
+  if (provenanceApn) return provenanceApn;
+  const rawNotice = [listing.raw, listing.description, listing.legalDescription, listing.notes].filter((s) => typeof s === 'string' && s).join(' ');
+  if (rawNotice) {
+    const labeledApnMatch = rawNotice.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-\s.][0-9A-Za-z]{2,6}(?:[-\s.][0-9A-Za-z]{1,8})+|\d{8,14})\b/i);
+    if (labeledApnMatch) return cleanText(labeledApnMatch[1]);
   }
   return null;
 }
@@ -411,6 +430,8 @@ module.exports = {
   observationTimestamp,
   standardizeListingRecord,
   normalizeApn,
+  extractRawApn,
+  extractCountyFips,
   buildParcelKey,
   computeTriage,
   mapDistressStage
