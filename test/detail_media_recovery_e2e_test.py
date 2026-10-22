@@ -88,6 +88,10 @@ class DetailMediaRecoveryE2E(unittest.TestCase):
                 self.assertEqual(street_view_requests, [], "Street View must remain dormant before explicit consent")
                 self.page.get_by_role("button", name="Check Street View", exact=True).click()
                 self.page.get_by_role("status").first.wait_for(state="visible")
+                for _ in range(50):
+                    if any("mode=walkthrough" in url for url in requests):
+                        break
+                    self.page.wait_for_timeout(100)
                 # Assert the consent property, not a request count. Two separate
                 # components ask for imagery on this page - the detail-page
                 # Street View control and the alternative-imagery panel
