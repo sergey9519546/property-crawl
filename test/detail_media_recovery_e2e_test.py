@@ -84,6 +84,11 @@ class DetailMediaRecoveryE2E(unittest.TestCase):
 
                 self.page.route("**/api/property-image?**", property_image)
                 self.page.goto(detail_url(self.page), wait_until="domcontentloaded")
+                # "Check Street View" is server-rendered, but its onClick handler only
+                # exists once React hydrates. Clicking straight after domcontentloaded
+                # finds the button and silently swallows the click. Wait for the page to
+                # go quiet so hydration has actually landed before driving the UI.
+                self.page.wait_for_load_state("networkidle", timeout=20_000)
                 street_view_requests = [url for url in requests if "mode=walkthrough" in url or "mode=image" in url or "mode=metadata" in url]
                 self.assertEqual(street_view_requests, [], "Street View must remain dormant before explicit consent")
                 self.page.get_by_role("button", name="Check Street View", exact=True).click()
