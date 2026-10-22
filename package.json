@@ -78,7 +78,7 @@
     "swarm": "node scripts/swarm.js",
     "swarm:real": "node scripts/swarm.js --real --testing",
     "test": "node test/verify.js",
-    "test:adversary": "node test/adversary.test.js",
+    "test:adversary": "node test/adversary.test.js && node --test test/challenger-m1-adversary.test.mjs test/listings-compare-adversarial.test.mjs",
     "test:agent-system": "node --test test/agent-system.test.js",
     "test:agents": "node --test test/agents.test.js",
     "test:ai": "node test/ai.test.js && node --test test/ai/notice-parser.test.js test/ai/bidding-simulator.test.js test/ai/address-normalizer-helpers.test.js test/ai/cost-tracker-helpers.test.js test/ai/cache-helpers.test.js test/ai/address-normalizer.test.js test/bidding.test.js test/fetch-strategy-ssrf.test.js",

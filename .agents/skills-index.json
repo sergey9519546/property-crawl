@@ -206,6 +206,48 @@
       "file": ".agents/skills/schema-mapping/SKILL.md"
     },
     {
+      "name": "scrapling-official",
+      "description": "Scrape web pages using Scrapling with HTTP requests, stealth browsers, JavaScript rendering, browser actions, API response capture, concurrent spiders, and adaptive parsing. Use when asked to scrape, crawl, or extract data from websites; web_fetch fails; the site has anti-bot protections; write Python code to scrape/crawl; or write spiders.",
+      "domain": "general",
+      "version": "v1",
+      "trigger": [
+        "actions",
+        "adaptive",
+        "anti-bot",
+        "asked",
+        "browser",
+        "browsers",
+        "capture",
+        "code",
+        "concurrent",
+        "crawl",
+        "data",
+        "extract",
+        "fails",
+        "fetch",
+        "http",
+        "javascript",
+        "pages",
+        "parsing",
+        "protections",
+        "python",
+        "rendering",
+        "requests",
+        "response",
+        "scrape",
+        "scrapling",
+        "scrapling-official",
+        "site",
+        "spiders",
+        "stealth",
+        "using",
+        "websites",
+        "write"
+      ],
+      "dir": ".agents/skills/scrapling-official",
+      "file": ".agents/skills/scrapling-official/SKILL.md"
+    },
+    {
       "name": "skill-repair",
       "description": "Use this to fix and re-install agent skills that have failed installation.\nThis skill provides the necessary context and permissions to surgically update\nthe `manifest.json` after a fix has been applied.",
       "domain": "general",
@@ -232,5 +274,5 @@
       "file": ".agents/skills/skill-repair/SKILL.md"
     }
   ],
-  "digest": "309250a106f2de95ecc6f844b831235c650cfbee93aea35ce9a04f6af5afb1ac"
+  "digest": "5576fade7a38aab21a3407a6f3b088d83218d29c8c6d016c3799ddd85ef1c4f4"
 }

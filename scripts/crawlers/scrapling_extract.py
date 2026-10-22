@@ -387,7 +387,7 @@ def main():
     extracted = HANDLERS[request["profile"]](page, source_url)
     version = getattr(scrapling, "__version__", None)
     response = {"version": 1, "profile": request["profile"], "sourceUrl": source_url,
-                "engine": "scrapling", "engineVersion": str(version or "unknown"),
+                "engine": "scrapling", "engineVersion": str(version or "unknown"), "sessionType": str(request.get("sessionType") or "stateless-parser"),
                 "contentSha256": hashlib.sha256(html.encode("utf-8")).hexdigest(), **extracted}
     json.dump(response, sys.stdout, separators=(",", ":"), ensure_ascii=False)
 
