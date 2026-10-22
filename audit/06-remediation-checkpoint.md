@@ -207,20 +207,20 @@ Every claim is backed by empirical test execution receipts:
 ```
 ========================================================================
 PP-02 RELEASE GATE
-tree    : 80dfeddfdada758e6d23b369809134eb15b650a5
-working : DIRTY (results are not source-bound)
+tree    : a878f40835efbda19f96915fd89c7dd08719046f
+working : clean
 ========================================================================
-PASS  typecheck             1860ms  tsc --noEmit
-PASS  generated-context      121ms  CONTEXT.md current
-PASS  schema-mirrors          41ms  src/lib/db mirrors byte-identical
-PASS  test-wiring             99ms  every test file reachable from a runner
-PASS  ops-suites           11099ms  meta/wiring/contract suites
-PASS  scraper-parser        2527ms  Scrapling parser on the pinned runtime
-PASS  production-smoke        81ms  boot contract + guards without booting
-PASS  next-build            6443ms  production bundle
-PASS  production-e2e       15305ms  full stack, 25 checks, isolated embedded database
+PASS  typecheck             1884ms  tsc --noEmit
+PASS  generated-context      122ms  CONTEXT.md current
+PASS  schema-mirrors          37ms  src/lib/db mirrors byte-identical
+PASS  test-wiring            100ms  every test file reachable from a runner
+PASS  ops-suites           11044ms  meta/wiring/contract suites
+PASS  scraper-parser        2548ms  Scrapling parser on the pinned runtime
+PASS  production-smoke        78ms  boot contract + guards without booting
+PASS  next-build            6398ms  production bundle
+PASS  production-e2e       15208ms  full stack, 25 checks, isolated embedded database
 ------------------------------------------------------------------------
-PP-02: 9/9 gates passed against 80dfeddfdada
+PP-02: 9/9 gates passed against a878f40835ef
 ledger: reports\release-gate-ledger.json
 ```
 
