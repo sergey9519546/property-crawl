@@ -26,6 +26,7 @@ import { CaseAction } from "@/components/research/case-action";
 import { SaleMechanics } from "@/components/listings/sale-mechanics";
 import { PropertyDocuments } from "@/components/listings/property-documents";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
+import { NearbyComps } from "@/components/listings/nearby-comps";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -550,6 +551,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <BiddingSimulator listing={listing} />
             <ListingCompare listingId={listing.id} label={listing.address} />
             <Parcel3DVisualizer listing={listing} />
+            <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
           </div>
         </section>
 

@@ -21,6 +21,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: "Source Radar", href: "/sources" },
       { label: "Second Look", href: "/research" },
       { label: "Saved Hunts", href: "/hunts" },
+      { label: "Portfolio dashboard", href: "/portfolio" },
       { label: "Collection activity", href: "/activity" },
       { label: "States with a live count", href: "/states" },
       { label: "What's in beta", href: "/#pricing" },

@@ -20,6 +20,7 @@ import {
   Map,
   History,
   BarChart3,
+  PieChart,
   ArrowRight,
   KeyRound,
   type LucideIcon,
@@ -64,6 +65,7 @@ const GROUPS: MenuGroup[] = [
         { label: "Listing workspace", desc: "Search grid, map, and deal detail", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
         { label: "Source Radar", desc: "Coverage, trust status, and collector health", icon: Plug, href: "/sources", tint: "#E2E8F0" },
         { label: "Saved Hunts", desc: "Explain matches and track evidence changes", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
+        { label: "Portfolio", desc: "Tracked deals, price drops, and calendar", icon: PieChart, href: "/portfolio", tint: "#FEF3C7" },
       ],
       [
         { label: "Second Look", desc: "Research cases and reconsideration queue", icon: Eye, href: "/research", tint: "#E9D5FF" },

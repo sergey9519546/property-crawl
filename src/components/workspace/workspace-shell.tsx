@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, X } from "lucide-react";
+import { Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -23,6 +23,7 @@ const navigation = [
   { href: "/listings", label: "Discover", icon: ListFilter },
   { href: "/research", label: "Research", icon: BookOpenCheck },
   { href: "/hunts", label: "Hunts", icon: Crosshair },
+  { href: "/portfolio", label: "Portfolio", icon: PieChart },
   { href: "/sources", label: "Sources", icon: Database },
   { href: "/activity", label: "Activity", icon: Activity },
   { href: "/workspace/documents-review", label: "Reviews", icon: FileWarning },
