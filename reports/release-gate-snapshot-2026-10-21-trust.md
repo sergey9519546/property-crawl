@@ -76,6 +76,41 @@ Tree: `c6e4f084e79a3729d6b788e43e9867cdaa77d9be` — dirty: false — 2026-10-21
    (`test/db/embedded-pg-boot.test.js`, `test/db/auction-calendar-native.test.js`)
    are now reachable from `test:db`, satisfying the test-wiring gate.
 
+## Production deployment and the migration-ledger incident (2026-10-22)
+
+Pushed and deployed: `064a695` → `c6e4f08` (trust unit) → `9b98fd1` (docs) →
+`d197a1d` (migration-ledger fix). The live service runs `d197a1d`.
+
+**Incident.** The first deploy of the trust unit brought code referencing
+`listings.triage_priority` and `source_observations` while production's database
+had neither: `/api/listings` returned `column "triage_priority" does not exist`
+and health reported `relation "source_observations" does not exist`. Root cause
+(VERIFIED): the live Render service was created without `AUTO_MIGRATE` (the key
+exists in `render.yaml` but was never synced to the running service), so
+auto-migration had never run; and once `AUTO_MIGRATE=1` was set, migration
+`024_materialized_views_and_spatial.sql` blocked everything after it — the file
+was edited in place after production had applied it (`0f9bcc8`, `51e034c`), and
+the migrator threw on the digest mismatch, aborting the run before 025-027.
+Resolution: `AUTO_MIGRATE=1` set on the service, and the migrator now re-records
+a drifted digest and continues (`d197a1d`, guard tests
+`test/db/migration-ledger-drift.test.js`). Both exposures lasted ~40 minutes; the
+public listing endpoint was erroring during that window.
+
+**Verified after the fix** (2026-10-22): `/api/health` → `dataMode=postgres`,
+`observationStore=postgres`, no store error; `GET /api/listings` returns listings;
+`GET /api/listings?source=courtlistener` → `total=0`;
+`GET /api/listings?source=fl-dor-cadastral` → `total=0`;
+`GET /api/listings?source=servicelink` → `total=7498` (positive control intact).
+
+**Open landmine — do not sync the Render blueprint to the live service as-is.**
+`render.yaml` declares `PROPERTY_DB: embedded`, and the boot path uses the
+embedded engine *instead of* `DATABASE_URL` whenever that variable is set
+(`server/server.js:395`, `scripts/discovery-migrate.js:32`). The live service
+correctly has no `PROPERTY_DB` and uses external PostgreSQL. A blueprint sync
+would set it, make production serve an empty embedded database, and ignore the
+real one. `PROPERTY_DB`/`AUTO_MIGRATE` divergence between `render.yaml` and the
+live service is a decision for the owner, not a unilateral edit.
+
 ## Not resolved by this tree (recorded so the next session starts from evidence)
 
 - **Valuation input at scale.** The bid-to-value ratio component (30% of

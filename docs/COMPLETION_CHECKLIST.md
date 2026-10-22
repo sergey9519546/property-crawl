@@ -30,7 +30,7 @@ if the seed count drifts.
 
 | Fact | Value | Source |
 |---|---|---|
-| Tree | `c6e4f08` (9/9, clean, 2026-10-21) | `reports/release-gate-snapshot-2026-10-21-trust.md` |
+| Tree | `d197a1d` (9/9, clean, deployed 2026-10-22) | `reports/release-gate-snapshot-2026-10-21-trust.md` |
 | Live URL | `https://property-crawl.onrender.com` (10,335 listings, PostgreSQL 16 + PostGIS 3.6) | `curl -sS https://property-crawl.onrender.com/api/health` |
 | Release gate | **9/9**, E2E 25/25, clean tree — source-bound | `npm run release:gate` |
 | Test runners green | **50/50** suites; default run reports 18 PG-gated skips, real-server run (2026-10-10) executes 17 of them. Targeted at `c6e4f08`: test:db 135/135, test:discovery 74/0 fail, test:intelligence 633/633, test:evidence-truth 598/598, test:ops 226/226 | `npm test`, both configurations |
