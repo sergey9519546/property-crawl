@@ -127,6 +127,7 @@ function isValidHttpsUrl(value) {
 
 function validResponse(result, profile, url, expectedHash) {
   if (!result || result.version !== 1 || result.profile !== profile || result.sourceUrl !== url || result.engine !== 'scrapling' || result.engineVersion !== '0.4.15' || result.contentSha256 !== expectedHash) return false;
+  if (result.sessionType !== undefined && (typeof result.sessionType !== 'string' || !result.sessionType.trim())) return false;
   if (profile === 'gsa-index') {
     return Array.isArray(result.items) && result.items.every(item =>
       item && /^\d+$/.test(String(item.propertyId))
@@ -202,14 +203,14 @@ function validateScriptPath(scriptPath) {
   return resolved;
 }
 
-async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DEFAULT_TIMEOUT_MS, python = defaultPython(), scriptPath } = {}) {
+async function extractWithScrapling(profile, { html, url, signal, timeoutMs = DEFAULT_TIMEOUT_MS, python = defaultPython(), scriptPath, sessionType = 'stateless-parser' } = {}) {
   rejectInvalidInput(profile, html, url);
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_TIMEOUT_MS) throw new ScraplingBridgeError('Scrapling timeout must be between 1 and 5000 ms', 'SCRAPLING_INVALID_TIMEOUT');
   const runtime = getScraplingRuntimeStatus(python);
   if (!runtime.available) return Promise.reject(new ScraplingBridgeError('Scrapling Python runtime was not found or is not a regular file', runtime.code));
   python = runtime.python;
   const script = validateScriptPath(scriptPath || path.resolve(__dirname, '..', '..', 'scripts', 'crawlers', 'scrapling_extract.py'));
-  const request = JSON.stringify({ version: 1, profile, url, html });
+  const request = JSON.stringify({ version: 1, profile, url, html, sessionType });
 
   return new Promise((resolve, reject) => {
     let settled = false, stdoutBytes = 0, stderrBytes = 0;
