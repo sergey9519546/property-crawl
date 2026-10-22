@@ -16,7 +16,18 @@ async function migrate(pool) {
       const digest = crypto.createHash('sha256').update(sql).digest('hex');
       const found = await client.query('SELECT sha256 FROM discovery_schema_migrations WHERE name=$1', [name]);
       if (found.rows.length) {
-        if (found.rows[0].sha256 !== digest) throw new Error(`Previously applied migration changed: ${name}`);
+        if (found.rows[0].sha256 !== digest) {
+          // The file changed after it was applied (an in-place edit of an
+          // already-applied migration). Re-running its SQL would be unsafe, but
+          // aborting wedges every later migration permanently: production
+          // recorded `024_materialized_views_and_spatial.sql`, the file was then
+          // edited twice (0f9bcc8, 51e034c), and 025-027 could never apply —
+          // the listings column and observation tables were missing on a live
+          // deploy. Re-record the digest and continue; the applied SQL stays
+          // exactly as it ran.
+          console.warn(`[migrate] previously applied migration changed; re-recording digest: ${name}`);
+          await client.query('UPDATE discovery_schema_migrations SET sha256=$1 WHERE name=$2', [digest, name]);
+        }
         continue;
       }
       await client.query('BEGIN');
