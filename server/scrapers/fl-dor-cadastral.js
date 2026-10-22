@@ -357,6 +357,14 @@ class FlDorCadastralScraper extends BaseScraper {
     // Publisher feature JSON keyed by the listing object we emit, so the
     // scheduler can ingest the original ArcGIS payload as evidence.
     this.rawPublisherRecords = new WeakMap();
+    this.resumeOffset = 0;
+  }
+
+  setCheckpoint(checkpoint) {
+    const token = checkpoint?.continuationToken;
+    const parsed = typeof token === 'string' ? Number.parseInt(token, 10) : Number.NaN;
+    this.resumeOffset = Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+    return this;
   }
 
   getCollectionScope() {
@@ -578,7 +586,7 @@ class FlDorCadastralScraper extends BaseScraper {
       const observedAt = new Date().toISOString();
       const collected = [];
       const failures = [];
-      let resultOffset = 0;
+      let resultOffset = this.resumeOffset || 0;
       let pagesFetched = 0;
       let publisherFeatures = 0;
       let rejectedFeatures = 0;

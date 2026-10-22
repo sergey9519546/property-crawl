@@ -89,6 +89,36 @@ async function run() {
     lng: -81.6944,
     provenance: { origin: "snapshot", observed: false, recordKind: "demo" }
   });
+  if (!await db.getListingById('CIV-NJ-10-2129335075')) {
+    await db.createListing({
+      id: 'CIV-NJ-10-2129335075',
+      source: 'civilview',
+      state: 'NJ',
+      county: 'Camden',
+      city: 'Camden',
+      address: '100 Federal St',
+      openingBid: 100000,
+      estLow: 150000,
+      estHigh: 200000,
+      mid: 175000,
+      dealScore: 75,
+    });
+  }
+  if (!await db.getListingById('CIV-NJ-10-2129335092')) {
+    await db.createListing({
+      id: 'CIV-NJ-10-2129335092',
+      source: 'civilview',
+      state: 'NJ',
+      county: 'Camden',
+      city: 'Camden',
+      address: '200 Federal St',
+      openingBid: 120000,
+      estLow: 160000,
+      estHigh: 220000,
+      mid: 190000,
+      dealScore: 70,
+    });
+  }
   const seedResponse = await request('/api/listings?limit=100');
   const seedListings = seedResponse.body.listings;
   assert.ok(seedListings.length > 0, 'server test requires at least one seeded listing');
@@ -141,6 +171,7 @@ async function run() {
       '/api/portfolio/dashboard', '/api/price-drops', '/api/verify-docket',
       '/api/parcel-boundary', '/api/property-image/providers', '/api/property-intelligence',
       '/api/property-signals', '/api/document-review', '/api/workspace',
+      '/api/listings/compare?ids=CIV-NJ-10-2129335075,CIV-NJ-10-2129335092',
     ];
     const stalled = [];
     for (const path of routes) {
@@ -243,6 +274,22 @@ async function run() {
     assert.strictEqual(res.status, 405);
     assert.match(res.body.error, /method not allowed/i);
     assert.strictEqual(await db.getListingById('UNTRUSTED-HTTP-INSERT'), null);
+  });
+
+  await test('GET /api/listings/compare?ids=CIV-NJ-10-2129335075,CIV-NJ-10-2129335092 returns HTTP 200 with schema property-crawl.compare/v1 and count 2', async () => {
+    const res = await request('/api/listings/compare?ids=CIV-NJ-10-2129335075,CIV-NJ-10-2129335092');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.schema, 'property-crawl.compare/v1');
+    assert.strictEqual(res.body.count, 2);
+    assert.strictEqual(res.body.targetId, 'CIV-NJ-10-2129335075');
+    assert.ok(Array.isArray(res.body.rows));
+    assert.strictEqual(res.body.rows.length, 2);
+  });
+
+  await test('GET /api/listings/compare without ids returns HTTP 400 ids_required', async () => {
+    const res = await request('/api/listings/compare');
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'ids_required');
   });
 
   await test('POST /api/scrapers/run fails closed without an admin token', async () => {

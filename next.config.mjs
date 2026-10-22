@@ -20,6 +20,9 @@ const nextConfig = {
   // from configuration. The value here is pinning the floor explicitly rather
   // than inheriting a framework default that could move under us.
   reactStrictMode: true,
+  turbopack: {
+    root: __dirname,
+  },
 
   // Keep production verification separate from an active development server.
   distDir: process.env.NEXT_DISCOVERY_PREVIEW === '1' ? '.next-discovery-preview'

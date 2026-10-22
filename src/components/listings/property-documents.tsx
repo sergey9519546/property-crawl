@@ -43,10 +43,10 @@ export function PropertyDocuments({ evidence, publisherUrl, id = 'property-docum
         const href = safeLink(item.url);
         const label = sourceDisplayText(item.label || `Publisher document ${index + 1}`);
         const observed = observedDate(item.observedAt);
-        return <li key={`${item.provenance.sourceField}:${index}`} className="py-4">
+        return <li key={`${item?.provenance?.sourceField || 'doc'}:${index}`} className="py-4">
           {href ? <a href={href} target="_blank" rel="noreferrer" className="inline-flex min-h-8 items-center gap-2 break-words text-sm font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-950">{label}<ExternalLink className="h-3.5 w-3.5 shrink-0" /></a> : <p className="text-sm font-semibold text-slate-950">{label}</p>}
           <p className="mt-1 text-xs leading-5 text-slate-600">{accessLabels[item.accessState] || accessLabels.unknown}{!href ? ' · Link not captured' : ''}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">{item.provenance.origin === 'archived_publisher_snapshot' ? 'Archive reference' : 'Publisher reference'}{observed ? ` · Observed ${observed}` : ' · Observation date unknown'}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{item?.provenance?.origin === 'archived_publisher_snapshot' ? 'Archive reference' : 'Publisher reference'}{observed ? ` · Observed ${observed}` : ' · Observation date unknown'}</p>
         </li>;
       })}
     </ul>}
