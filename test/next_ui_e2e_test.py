@@ -1642,8 +1642,8 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         )
 
     def test_account_entry_does_not_collect_credentials_for_a_nonexistent_service(self):
-        # Sign-in accepts the shared operator key. Registration stays closed and
-        # must not collect a password for an account system that does not exist.
+        # Sign-in offers an emailed link for members and the shared operator key.
+        # Registration is the same emailed link and never collects a password.
         sign_in = self.page.goto(f"{BASE_URL}/sign-in", wait_until="domcontentloaded")
         self.assertEqual(sign_in.status, 200)
         expect(self.page.get_by_role("heading", name="Operator sign-in")).to_be_visible(timeout=20_000)
@@ -1652,7 +1652,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
 
         register = self.page.goto(f"{BASE_URL}/register", wait_until="domcontentloaded")
         self.assertEqual(register.status, 200)
-        expect(self.page.get_by_role("heading", name="Registration is not open")).to_be_visible(timeout=20_000)
+        expect(self.page.get_by_role("heading", name="Create an account")).to_be_visible(timeout=20_000)
         self.assertEqual(self.page.locator('input[type="password"]').count(), 0)
 
     def test_watchlist_modal_is_escape_closeable(self):

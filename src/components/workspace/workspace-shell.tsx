@@ -3,13 +3,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
+import { Settings, UserRound, Activity, BookOpenCheck, Crosshair, Database, FileWarning, Home, KeyRound, ListFilter, LockKeyhole, LogOut, PieChart, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/site/logo";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 
+export type MemberState = { email: string; entitled: boolean } | null;
+
 type SessionState = {
+  /** Operator session (shared key). */
   authenticated: boolean;
+  /** Signed-in email member, entitled or not. */
+  member: MemberState;
+  /** Per-user tools (hunts, watchlist, portfolio, alerts) are usable. */
+  memberTools: boolean;
   configured: boolean;
   expiresAt: string | null;
   loading: boolean;
@@ -27,10 +34,18 @@ const navigation = [
   { href: "/sources", label: "Sources", icon: Database },
   { href: "/activity", label: "Activity", icon: Activity },
   { href: "/workspace/documents-review", label: "Reviews", icon: FileWarning },
+  { href: "/workspace/settings", label: "Status", icon: Settings },
 ];
+
+function readMember(value: unknown): MemberState {
+  const m = value as { email?: unknown; entitled?: unknown } | null;
+  return m && typeof m.email === "string" ? { email: m.email, entitled: m.entitled === true } : null;
+}
 
 const defaultSession: SessionState = {
   authenticated: false,
+  member: null,
+  memberTools: false,
   configured: false,
   expiresAt: null,
   loading: false,
@@ -71,8 +86,12 @@ export function useResolvedWorkspaceSession(): SessionState | null {
         const response = await fetch("/api/workspace/session", { cache: "no-store", credentials: "same-origin" });
         const result = await response.json();
         if (cancelled) return;
+        const authenticated = Boolean(response.ok && result.authenticated);
+        const member = response.ok ? readMember(result.member) : null;
         setProbed({
-          authenticated: Boolean(response.ok && result.authenticated),
+          authenticated,
+          member,
+          memberTools: authenticated || Boolean(member?.entitled),
           configured: result.configured !== false,
           expiresAt: typeof result.expiresAt === "string" ? result.expiresAt : null,
           loading: false,
@@ -94,6 +113,7 @@ export function useResolvedWorkspaceSession(): SessionState | null {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [authenticated, setAuthenticated] = React.useState(false);
+  const [member, setMember] = React.useState<MemberState>(null);
   const [configured, setConfigured] = React.useState(true);
   const [expiresAt, setExpiresAt] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -113,6 +133,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       if (requestId !== authRequest.current) return false;
       const accepted = Boolean(response.ok && result.authenticated);
       setAuthenticated(accepted);
+      setMember(response.ok ? readMember(result.member) : null);
       setConfigured(result.configured !== false);
       setExpiresAt(typeof result.expiresAt === "string" ? result.expiresAt : null);
       return accepted;
@@ -192,10 +213,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   }
 
   const context = React.useMemo<SessionState>(() => ({
-    authenticated, configured, expiresAt, loading,
+    authenticated, member, memberTools: authenticated || Boolean(member?.entitled), configured, expiresAt, loading,
     requestUnlock: openUnlock,
     refresh,
-  }), [authenticated, configured, expiresAt, loading, refresh, openUnlock]);
+  }), [authenticated, member, configured, expiresAt, loading, refresh, openUnlock]);
 
   return <SessionContext.Provider value={context}>
     <div className="workspace-shell min-h-screen bg-[#F5F6F7] text-[#111827]">
@@ -211,6 +232,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/" className="hidden items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-[#5B6472] hover:bg-[#F3F4F6] md:flex"><Home size={14} />Site</Link>
+            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-xl border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#111827] hover:bg-[#F3F4F6]"><UserRound size={14} />{member ? (member.entitled ? "Account" : "Subscribe") : "Sign in"}</Link>
             {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? "Locking…" : "Lock"}</button>
               : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1E293B]"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
           </div>
@@ -223,7 +245,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     <Dialog open={unlockOpen} onOpenChange={(value) => { if (!submitting) { setUnlockOpen(value); if (!value) setCredential(""); } }}>
       <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); (unlockOpener.current || document.body).focus(); }} className="z-[100] gap-0 rounded-2xl bg-white p-6 text-slate-950 sm:max-w-md">
         <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-900">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-slate-100"><X size={18} /></button></div>
-        <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">This beta uses a single shared operator key. Anyone with the key can access research, hunts, and activity.</DialogDescription>
+        <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">Subscribers use hunts, alerts, the watchlist, and the portfolio with their own account.</DialogDescription>
+        <Link href={member && !member.entitled ? "/account" : "/sign-in"} onClick={() => setUnlockOpen(false)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-900 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"><UserRound size={16} />{member && !member.entitled ? "Your subscription is inactive. Manage it" : "Sign in with email"}</Link>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Operator key</p>
+        <p className="mt-1 text-xs leading-5 text-slate-600">The shared operator key also opens research, sources, reviews, and collection controls.</p>
         <form onSubmit={unlock} className="mt-5">
           <label htmlFor="workspace-credential" className="text-xs font-semibold">Operator key <span className="sr-only">(Workspace access key)</span></label>
           <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-300 px-3"><KeyRound size={16} className="text-slate-400" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></div>

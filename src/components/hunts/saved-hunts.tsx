@@ -22,6 +22,7 @@ type Hunt = {
   version: number;
   enabled: boolean;
   webhookUrl?: string | null;
+  notifyEmail?: string | null;
   criteria:
     | { mode: "all" | "any"; rules: Rule[]; discoveryFilters?: never }
     | { discoveryFilters: Record<string, string>; mode?: never; rules?: never };
@@ -74,6 +75,7 @@ type Evaluation = {
   unsatisfiableCriteria?: { field: string; operator: string; value?: unknown; reason: string }[];
   unsatisfiableCriteriaNote?: string | null;
   webhook?: { delivery: string; sent: boolean; reason?: string };
+  email?: { delivery: string; sent: boolean; reason?: string };
 };
 const fields = [
   ["state", "State", "text"],
@@ -195,6 +197,7 @@ export function SavedHunts() {
   const [inbox, setInbox] = useState<(Event & { huntName: string })[]>([]);
   const [name, setName] = useState("My overlooked-property hunt");
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [notifyEmail, setNotifyEmail] = useState("");
   const [mode, setMode] = useState<"all" | "any">("all");
   const [rules, setRules] = useState<Rule[]>([
     { field: "state", operator: "eq", value: "FL" },
@@ -209,7 +212,7 @@ export function SavedHunts() {
   const [missingDependencies, setMissingDependencies] = useState<string[]>([]);
   const selectedSectionRef = useRef<HTMLElement>(null);
   async function api(path = "", method = "GET", body?: unknown) {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       session.requestUnlock();
       throw new Error("Unlock the private workspace to use saved hunts.");
     }
@@ -226,7 +229,7 @@ export function SavedHunts() {
     return data;
   }
   useEffect(() => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       setConnected(false);
       setHunts([]);
       setSelected(null);
@@ -273,7 +276,7 @@ export function SavedHunts() {
     });
     // `api` and `run` are stable function declarations over current session state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.authenticated]);
+  }, [session.memberTools]);
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -323,13 +326,16 @@ export function SavedHunts() {
         </p>
         <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-[#E5E7EB] bg-white p-5">
           <div>
-            <p className="text-sm font-semibold">Private operator workspace</p>
+            <p className="text-sm font-semibold">{session.member?.entitled && !session.authenticated ? `Your hunts · ${session.member.email}` : "Hunts"}</p>
             <p className="mt-1 text-xs leading-5 text-[#5B6472]">
-              One HttpOnly session opens hunts, cases, evidence, and collection
-              controls for eight hours.
+              {session.memberTools
+                ? "Hunts re-run after every collection and email you when a match appears or changes."
+                : session.member
+                  ? "Hunts need an active membership. Subscribe from your account page."
+                  : "Sign in as a member, or unlock with the operator key, to save hunts."}
             </p>
           </div>
-          {session.authenticated ? (
+          {session.memberTools ? (
             <button
               disabled={busy}
               onClick={() =>
@@ -499,6 +505,7 @@ export function SavedHunts() {
                     const data = await api("", "POST", {
                       name,
                       webhookUrl: webhookUrl.trim() || undefined,
+                      notifyEmail: notifyEmail.trim() || undefined,
                       criteria: {
                         mode,
                         rules: rules.map((rule) =>
@@ -526,6 +533,17 @@ export function SavedHunts() {
                     maxLength={80}
                     value={name}
                     onChange={(event) => setName(event.target.value)}
+                    className={`${inputClass} mt-2`}
+                  />
+                </label>
+                <label className="mt-4 block text-xs font-semibold">
+                  Email alerts <span className="text-[10px] font-normal text-slate-500">(Sent when a later run finds a new match or a changed fact.)</span>
+                  <input
+                    type="email"
+                    placeholder="you@example.com"
+                    maxLength={254}
+                    value={notifyEmail}
+                    onChange={(event) => setNotifyEmail(event.target.value)}
                     className={`${inputClass} mt-2`}
                   />
                 </label>
@@ -713,6 +731,12 @@ export function SavedHunts() {
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
                       </h2>
+                      {selected.notifyEmail && (
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-emerald-700">
+                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-900">Email</span>
+                          <span className="truncate max-w-sm">{selected.notifyEmail}</span>
+                        </p>
+                      )}
                       {selected.webhookUrl && (
                         <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-indigo-700">
                           <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-900">Webhook</span>
@@ -748,7 +772,15 @@ export function SavedHunts() {
                               : hook.delivery === "refused"
                                 ? " The webhook address is not a public https endpoint, so nothing was sent."
                                 : " The webhook did not accept the notice.";
-                          setMessage(`${base}${delivery}`);
+                          const mail = data.evaluation.email;
+                          const mailNote = !mail || mail.delivery === "skipped"
+                            ? ""
+                            : mail.sent
+                              ? " Alert email sent."
+                              : mail.delivery === "local"
+                                ? " Alert email queued to the local outbox (RESEND_API_KEY is not set)."
+                                : " The alert email could not be sent.";
+                          setMessage(`${base}${delivery}${mailNote}`);
                         })
                       }
                       className="flex items-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"

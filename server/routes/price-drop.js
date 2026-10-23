@@ -14,10 +14,10 @@
 
 const db = require('../db/client');
 const { detectPriceDrop, summarizePriceDrops } = require('../intelligence/price-drop-detector');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { requireUserIdentity } = require('../security/workspace-identity');
 
 function defaultIdentity(req, res) {
-  return requireWorkspaceIdentity(req, res);
+  return requireUserIdentity(req, res);
 }
 
 async function loadHistoryLookup(database, listingIds) {

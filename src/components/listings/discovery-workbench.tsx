@@ -287,7 +287,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     };
   }, [refresh, filters.q]);
   React.useEffect(() => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       try {
         const stored = window.localStorage.getItem("perfectproperty:saved-listings");
         const ids = stored ? JSON.parse(stored) : [];
@@ -303,7 +303,33 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       return;
     }
     let active = true;
-    void fetch("/api/alerts", { credentials: "same-origin", cache: "no-store" })
+    // Carry properties saved while signed out into the server watchlist, then
+    // drop only the ids the server accepted.
+    let localIds: string[] = [];
+    try {
+      const stored = window.localStorage.getItem("perfectproperty:saved-listings");
+      const parsed = stored ? JSON.parse(stored) : [];
+      localIds = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+    } catch {}
+    void Promise.all(localIds.map((listingId) =>
+      fetch("/api/alerts", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
+      }).then((response) => (response.ok ? listingId : null), () => null),
+    ))
+      .then((merged) => {
+        const accepted = new Set(merged.filter(Boolean));
+        if (accepted.size) {
+          try {
+            const left = localIds.filter((id) => !accepted.has(id));
+            if (left.length) window.localStorage.setItem("perfectproperty:saved-listings", JSON.stringify(left));
+            else window.localStorage.removeItem("perfectproperty:saved-listings");
+          } catch {}
+        }
+      })
+      .then(() => fetch("/api/alerts", { credentials: "same-origin", cache: "no-store" }))
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok)
@@ -326,7 +352,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     return () => {
       active = false;
     };
-  }, [session.authenticated]);
+  }, [session.memberTools]);
   // Typed characters are held inside DiscoverySearchField, not here. Holding
   // the draft in this component made every keystroke re-render all 48 result
   // cards (~4,600 nodes) to change one input's value.
@@ -336,7 +362,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   );
   const toggleSaved = React.useCallback(async (id: string) => {
     const wasSaved = savedRef.current.has(id);
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       try {
         const stored = window.localStorage.getItem("perfectproperty:saved-listings");
         const ids: string[] = stored ? JSON.parse(stored) : [];

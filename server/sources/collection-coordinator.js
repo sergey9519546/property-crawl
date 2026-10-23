@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { notifyHuntWebhook } = require('../delivery/webhook-notify');
+const { notifyHuntWebhook, notifyHuntEmail } = require('../delivery/webhook-notify');
 const DEFAULT_JOB_PATH = path.resolve(__dirname, '../../.cache/collection-jobs.json');
 const MAX_JOBS = 200;
 const ID = /^job_[a-f0-9]{24}$/;
@@ -188,6 +188,7 @@ class CollectionCoordinator {
     this.store = options.store || (this.database?.isPg && (options.env||process.env).DISCOVERY_MODE==='advanced'
       ? new PgCollectionJobStore(require('../discovery/store').createDiscoveryStore(this.database)) : new CollectionJobStore(options));
     this.now = options.now;
+    this.accounts = options.accounts || null;
     this.inFlight = new Map();
   }
   async start(input = {}) {
@@ -235,7 +236,13 @@ class CollectionCoordinator {
       // from the same publisher are retained in the baseline, but cannot become
       // fresh positive evidence merely because a sweep reported completeness.
       if(!this.durableHunts){if(this.database?.isPg){const discoveryQuery=require('../discovery/query'),baseQuery=discoveryQuery.queryFromUrl(new URL('http://localhost/api/listings?limit=1000'));let cursor=null;do{inventory=await discoveryQuery.search(this.database,{...baseQuery,cursor});const page=inventory?.listings;if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||!item.source));cursor=inventory.page?.nextCursor||null;}while(cursor);}else{let offset=0,total=Infinity;while(offset<total){inventory=await this.database.getListings({limit:1000,offset});const page=Array.isArray(inventory)?inventory:inventory?.listings;total=Array.isArray(inventory)?page.length:Number(inventory?.total);if(!Array.isArray(page))throw new Error('Listing inventory is unavailable');listings.push(...page.filter(item=>safeSources.has(item.source)||!item.source));offset+=page.length;if(!page.length||Array.isArray(inventory))break;}}}
-      const enabled = (this.durableHunts ? await this.durableHunts.list() : this.hunts.listHunts({ filePath: this.huntFilePath })).filter((hunt) => hunt.enabled);
+      const allEnabled = (this.durableHunts ? await this.durableHunts.list() : this.hunts.listHunts({ filePath: this.huntFilePath })).filter((hunt) => hunt.enabled);
+      // A member's hunts run only while that member's subscription is active.
+      const accounts = this.accounts || require('../accounts/store').accountServiceFor(this.database);
+      const enabled = [];
+      for (const hunt of allEnabled) {
+        if (!hunt.owner || (await accounts.get(hunt.owner))?.entitled) enabled.push(hunt);
+      }
       const evaluations = [];
       for (const hunt of enabled) {
         if (this.durableHunts) {
@@ -251,6 +258,13 @@ class CollectionCoordinator {
             entry.evaluation.webhook = await notifyHuntWebhook(entry.hunt, entry.evaluation, this.webhookOptions || {});
           } catch {
             entry.evaluation.webhook = { delivery: 'unavailable', sent: false, reason: 'network' };
+          }
+        }
+        if (entry?.hunt?.notifyEmail) {
+          try {
+            entry.evaluation.email = await notifyHuntEmail(entry.hunt, entry.evaluation, this.webhookOptions || {});
+          } catch {
+            entry.evaluation.email = { delivery: 'unavailable', sent: false, reason: 'mail' };
           }
         }
       }

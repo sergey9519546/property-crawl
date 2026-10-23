@@ -20,7 +20,7 @@
 
 const db = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { requireUserIdentity } = require('../security/workspace-identity');
 const { runAlertsForUser } = require('../intelligence/alerts-runner');
 
 // Pagination bounds for GET /api/alerts/matches.
@@ -153,7 +153,7 @@ function createSavedSearchesHandler(dependencies = {}) {
     const url = urlInput instanceof URL ? urlInput : new URL(req.url, 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
 
-    const userId = requireWorkspaceIdentity(req, res);
+    const userId = requireUserIdentity(req, res);
     if (!userId) return;
     res.setHeader('Cache-Control', 'no-store');
 
@@ -250,7 +250,7 @@ function createSavedSearchesHandler(dependencies = {}) {
     const url = urlInput instanceof URL ? urlInput : new URL(req.url, 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
 
-    const userId = requireWorkspaceIdentity(req, res);
+    const userId = requireUserIdentity(req, res);
     if (!userId) return;
     res.setHeader('Cache-Control', 'no-store');
 

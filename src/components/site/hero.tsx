@@ -247,6 +247,20 @@ export function Hero() {
     setStatus(`${suggestion.label} selected.`);
   };
 
+  // A picked state/county market opens Discover with real filters, not a text query.
+  const listingsHref = (() => {
+    const label = url.trim();
+    if (!label) return "/listings";
+    if (selectedMarket?.label === label) {
+      const st = selectedMarket.id.split(":").pop() || "";
+      if (selectedMarket.kind === "state") return `/listings?state=${encodeURIComponent(selectedMarket.query)}`;
+      if (selectedMarket.kind === "county") return `/listings?state=${encodeURIComponent(st)}&county=${encodeURIComponent(selectedMarket.query)}`;
+      if (selectedMarket.kind === "country") return "/listings";
+      return `/listings?q=${encodeURIComponent(selectedMarket.query)}`;
+    }
+    return `/listings?q=${encodeURIComponent(label)}`;
+  })();
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const label = url.trim();
@@ -517,7 +531,7 @@ export function Hero() {
           </motion.button>
           <span className="hidden text-slate-400 sm:inline" aria-hidden>•</span>
           <Link
-            href={url.trim() ? `/listings?q=${encodeURIComponent(url.trim())}` : "/listings"}
+            href={listingsHref}
             className="flex items-center gap-1.5 font-semibold text-slate-900 underline underline-offset-4 hover:text-emerald-700"
           >
             <Database className="h-4 w-4 text-emerald-600" />

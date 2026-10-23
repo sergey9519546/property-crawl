@@ -91,7 +91,7 @@ export function SiteFooter() {
               Subscribe for source coverage notes
             </p>
             <p className="mt-2 max-w-[520px] text-[15px] leading-6 text-[#5B6472]">
-              Occasional updates on scraper coverage, seed inventory changes, and what this beta actually ships. No accuracy guarantee is claimed — evidence requires review.
+              The operator keeps this list and writes to it by hand; there is no automatic send schedule. No accuracy guarantee is claimed — evidence requires review.
             </p>
           </div>
           <form

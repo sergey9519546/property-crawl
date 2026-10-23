@@ -1,6 +1,8 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Gavel, Scale, ShieldAlert, TrendingUp, Calculator, CheckSquare } from "lucide-react";
+import { notFound } from "next/navigation";
+import { bandForScore } from "@/lib/score-bands";
+import { ArrowLeft, ExternalLink, Gavel, Scale, TrendingUp, Calculator, CheckSquare } from "lucide-react";
 import { computeStatutoryFeePreset, computeStatutoryDeadlinesAndCarry } from "@/lib/underwriting";
 import { serializeJsonLd } from "@/lib/json-ld";
 import {
@@ -116,11 +118,25 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
   const countyName = normalizeCountySlug(rawCounty);
   const formalCounty = formatCountyDisplayName(countyName);
-  const listings = await loadCountyData(state, rawCounty);
+  const loaded = await loadCountyData(state, rawCounty);
+  // No records for this slug: a real 404, not an indexable empty page.
+  if (loaded.length === 0) notFound();
+  // Upcoming sales first (soonest at top), then undated/past records.
+  const today = new Date().toISOString().slice(0, 10);
+  const weekOut = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const saleOf = (item: ListingSummary) => (item.saleDate || item.auctionDate || "").slice(0, 10);
+  const listings = [...loaded].sort((a, b) => {
+    const da = saleOf(a), db = saleOf(b);
+    const ua = da >= today ? 0 : 1, ub = db >= today ? 0 : 1;
+    return ua - ub || (ua === 0 ? da.localeCompare(db) : db.localeCompare(da));
+  });
+  const upcomingCount = listings.filter((item) => saleOf(item) >= today).length;
+  const thisWeekCount = listings.filter((item) => saleOf(item) >= today && saleOf(item) <= weekOut).length;
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
-  const baselinePrice = stats.medianOpeningBid || 100000;
-  const feePreset = computeStatutoryFeePreset({ purchasePrice: baselinePrice, state });
+  // Fee math only runs on a published median bid; no stand-in price.
+  const baselinePrice = stats.medianOpeningBid || 0;
+  const feePreset = baselinePrice > 0 ? computeStatutoryFeePreset({ purchasePrice: baselinePrice, state }) : null;
   const carrySchedule = computeStatutoryDeadlinesAndCarry({ state, purchasePrice: baselinePrice, redemptionDays: redemption.days });
 
   const breadcrumbsSchema = buildCountyBreadcrumbs({ state, county: countyName });
@@ -158,19 +174,18 @@ export default async function CountyDocketPage({ params }: PageProps) {
             Distressed &amp; Foreclosure Property in {formalCounty}, {state}
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">
-            Verified foreclosure auctions, tax deeds, and trustee dispositions published for {formalCounty}.
-            Track opening bids, triage deal scores, and observe statutory redemption boundaries before bidding.
+            {thisWeekCount} sale{thisWeekCount === 1 ? "" : "s"} scheduled in the next 7 days and {upcomingCount} upcoming in total, out of {stats.totalCount} foreclosure, tax-deed, and government-sale records collected for {formalCounty}. Confirm every record at its publisher before bidding.
           </p>
         </div>
 
         {/* Key Metrics Grid */}
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Active Dockets</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales Next 7 Days</div>
             <div className="mt-2 text-2xl font-bold text-slate-950 tabular-nums">
-              {stats.totalCount}
+              {thisWeekCount}
             </div>
-            <div className="mt-1 text-xs text-slate-500">Recorded cases</div>
+            <div className="mt-1 text-xs text-slate-500">{upcomingCount} upcoming of {stats.totalCount} records</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -236,7 +251,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                   ${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  Certified funds baseline for ${Math.round(baselinePrice).toLocaleString("en-US")} bid
+                  Certified funds at the median published opening bid (${Math.round(baselinePrice).toLocaleString("en-US")})
                 </div>
               </div>
 
@@ -341,8 +356,8 @@ export default async function CountyDocketPage({ params }: PageProps) {
         <div className="mt-10">
           <div className="flex items-center justify-between border-b border-slate-200 pb-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-950">Active Case Dockets</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Showing verified foreclosure and distressed records</p>
+              <h2 className="text-xl font-bold text-slate-950">Records by sale date</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Upcoming sales first, soonest at the top. Undated and past records follow.</p>
             </div>
             <Link
               href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`}
@@ -352,24 +367,6 @@ export default async function CountyDocketPage({ params }: PageProps) {
             </Link>
           </div>
 
-          {listings.length === 0 ? (
-            <div className="mt-8 rounded-2xl border border-dashed border-slate-300 p-12 text-center">
-              <ShieldAlert className="mx-auto h-8 w-8 text-slate-400" />
-              <h3 className="mt-3 text-base font-semibold text-slate-950">No Live Dockets Currently Captured</h3>
-              <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
-                No active records are currently indexed for {formalCounty}, {state}. Check neighboring county dockets or
-                subscribe to email alert notices.
-              </p>
-              <div className="mt-6 flex justify-center gap-4">
-                <Link
-                  href={`/states/${state}`}
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  View All {state} Counties
-                </Link>
-              </div>
-            </div>
-          ) : (
             <div className="mt-6 grid gap-4">
               {listings.map((item) => {
                 const address = item.address || "Address upon official request";
@@ -377,7 +374,8 @@ export default async function CountyDocketPage({ params }: PageProps) {
                 const propType = item.propType || "Distressed Property";
                 const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : "Unpublished";
                 const score = item.dealScore != null ? Number(item.dealScore) : null;
-                const saleDate = item.saleDate || item.auctionDate || "Date Pending";
+                const saleDate = saleOf(item) || null;
+                const band = bandForScore(score);
                 const source = item.source || "Notice";
 
                 return (
@@ -400,6 +398,9 @@ export default async function CountyDocketPage({ params }: PageProps) {
                       <div className="text-xs text-slate-500">
                         {[city, formalCounty, state, item.zip].filter(Boolean).join(", ")}
                       </div>
+                      <div className={`text-xs font-semibold ${saleDate && saleDate >= today ? "text-slate-900" : "text-slate-500"}`}>
+                        {saleDate ? `${saleDate >= today ? "Sale" : "Sale date passed"}: ${saleDate}` : "Sale date not published"}
+                      </div>
                     </div>
 
                     <div className="mt-4 sm:mt-0 sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-3 sm:gap-1">
@@ -408,11 +409,9 @@ export default async function CountyDocketPage({ params }: PageProps) {
                         <div className="text-base font-bold text-blue-600 tabular-nums">{openingBid}</div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {score !== null && (
-                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-bold text-white ${
-                            score >= 80 ? 'bg-emerald-600' : score >= 60 ? 'bg-blue-600' : 'bg-amber-600'
-                          }`}>
-                            Score: {score}/99
+                        {band && score !== null && (
+                          <span className="inline-block rounded px-2 py-0.5 text-xs font-bold" style={{ background: `${band.color}${band.alpha}`, color: band.color }}>
+                            Score: {Math.round(score)}/99 · {band.label}
                           </span>
                         )}
                         <Link
@@ -427,7 +426,6 @@ export default async function CountyDocketPage({ params }: PageProps) {
                 );
               })}
             </div>
-          )}
         </div>
 
         {/* Back Link Footer */}

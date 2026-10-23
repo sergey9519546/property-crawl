@@ -14,9 +14,23 @@ function isWorkspaceAuthorized(req, env = process.env) {
   return Boolean(credential) && tokensMatch(presentedRunToken(req), credential);
 }
 
-// One private operator workspace today. Identity comes from server configuration,
-// never from x-user-id, query parameters, or an untrusted request body.
+// A paid member's account id. The Next app verifies the member session and
+// entitlement, then forwards it with the operator token; without that token
+// the header is never trusted.
+const ACCOUNT_HEADER = /^acct_[a-f0-9]{24}$/;
+function memberAccountId(req) {
+  const value = req.headers && req.headers['x-pp-account'];
+  return typeof value === 'string' && ACCOUNT_HEADER.test(value) ? value : null;
+}
+
+// Operator-only surfaces. Identity comes from server configuration, never from
+// x-user-id, query parameters, or an untrusted request body. A member-scoped
+// request is refused so the shared operator token cannot widen a member's reach.
 function requireWorkspaceIdentity(req, res, env = process.env) {
+  if (req.headers && req.headers['x-pp-account']) {
+    res.status(403).json({ error: 'This workspace tool is for the operator account only' });
+    return null;
+  }
   const credential = resolveCredential(env);
   if (!credential) {
     res.status(503).json({ error: 'Private workspace access is not configured' });
@@ -46,7 +60,8 @@ function resolveWatchlistIdentity(req, res, env = process.env) {
       res.status(401).json({ error: 'Unlock the private workspace to continue' });
       return null;
     }
-    return `workspace:${String(env.PROPERTY_WORKSPACE_ID || 'operator').slice(0, 100)}`;
+    const account = memberAccountId(req);
+    return account ? `account:${account}` : `workspace:${String(env.PROPERTY_WORKSPACE_ID || 'operator').slice(0, 100)}`;
   }
   const existing = watchlistDeviceIdFromCookie(req);
   if (existing) return `device:${existing}`;
@@ -55,9 +70,31 @@ function resolveWatchlistIdentity(req, res, env = process.env) {
   return `device:${id}`;
 }
 
+// Per-user surfaces (saved searches, portfolio, price drops): the operator
+// workspace, or the paid member the Next app forwarded.
+function requireUserIdentity(req, res, env = process.env) {
+  const account = memberAccountId(req);
+  if (req.headers && req.headers['x-pp-account'] && !account) {
+    res.status(400).json({ error: 'Invalid member account' });
+    return null;
+  }
+  const credential = resolveCredential(env);
+  if (!credential) {
+    res.status(503).json({ error: 'Private workspace access is not configured' });
+    return null;
+  }
+  if (!tokensMatch(presentedRunToken(req), credential)) {
+    res.status(401).json({ error: 'Sign in to continue' });
+    return null;
+  }
+  return account ? `account:${account}` : `workspace:${String(env.PROPERTY_WORKSPACE_ID || 'operator').slice(0, 100)}`;
+}
+
 requireWorkspaceIdentity.isAuthorized = isWorkspaceAuthorized;
 
 module.exports = {
+  memberAccountId,
+  requireUserIdentity,
   requireWorkspaceIdentity,
   isWorkspaceAuthorized,
   resolveWatchlistIdentity,

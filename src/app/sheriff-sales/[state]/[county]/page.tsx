@@ -1,5 +1,7 @@
-import StateCountyPage, { generateMetadata as stateCountyMetadata } from "@/app/states/[state]/[county]/page";
+import { permanentRedirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-export const generateMetadata = stateCountyMetadata;
-export default StateCountyPage;
+// One canonical county page lives under /states; this path only redirects.
+export default async function SheriffSalesRedirect({ params }: { params: Promise<{ state: string; county: string }> }) {
+  const { state, county } = await params;
+  permanentRedirect(`/states/${encodeURIComponent(state.toUpperCase())}/${encodeURIComponent(county)}`);
+}

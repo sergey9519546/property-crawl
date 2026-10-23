@@ -35,6 +35,9 @@ export async function POST(request: Request) {
   }
 
   const result = await persistFormSubmission("contact", { name, email, company, message });
+  if (!result.ok) {
+    return Response.json({ error: "The message could not be stored or delivered. Please try again later." }, { status: 503, headers: responseHeaders });
+  }
   return Response.json(
     {
       ok: true,
@@ -42,9 +45,7 @@ export async function POST(request: Request) {
       delivery: result.delivery,
       message: result.delivery === "sent" || result.delivery === "forwarded"
         ? "Message accepted."
-        : result.delivery === "local"
-          ? "Message saved for the operator. Outbound delivery is not configured yet."
-          : "Message accepted for review, but this deployment cannot write local form storage.",
+        : "Message saved for the operator. Outbound delivery is not configured yet.",
     },
     { status: 202, headers: responseHeaders }
   );

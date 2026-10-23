@@ -84,7 +84,7 @@ export function PortfolioView() {
   const [refreshing, setRefreshing] = React.useState(false);
 
   const loadData = React.useCallback(async () => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       setLoading(false);
       return;
     }
@@ -130,7 +130,7 @@ export function PortfolioView() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session.authenticated]);
+  }, [session.memberTools]);
 
   React.useEffect(() => {
     loadData();
@@ -138,20 +138,21 @@ export function PortfolioView() {
 
   async function handleRemove(listingId: string) {
     try {
-      const res = await fetch(`/api/alerts/${encodeURIComponent(listingId)}`, {
+      const res = await fetch("/api/alerts", {
         method: "DELETE",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
       });
-      if (res.ok) {
-        setDeals((prev) => prev.filter((d) => d.id !== listingId && d.listingId !== listingId));
-        loadData();
-      }
-    } catch {
-      // ignore
+      if (!res.ok) throw new Error(`Could not remove from watchlist (HTTP ${res.status}).`);
+      setDeals((prev) => prev.filter((d) => d.id !== listingId && d.listingId !== listingId));
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove from watchlist.");
     }
   }
 
-  if (!session.authenticated) {
+  if (!session.memberTools) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 mb-6">

@@ -23,6 +23,7 @@ const handleSourceNetwork = require('./routes/source-network');
 const handlePropertyIntelligence = require('./routes/property-intelligence');
 const handlePropertySignals = require('./routes/property-signals');
 const handleHunts = require('./routes/hunts');
+const handleAccounts = require('./routes/accounts');
 const handleWorkspace = require('./routes/workspace');
 const handleDocumentReview = require('./routes/document-review');
 const handleCoverage = require('./routes/coverage');
@@ -201,6 +202,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/property-image/providers') return handlePropertyImageProviders(req, res);
     if (url.pathname === '/api/property-intelligence') return handlePropertyIntelligence(req, res);
     if (url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
+    if (url.pathname.startsWith('/api/accounts/')) return handleAccounts(req, res, url);
     if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
     if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return handleWorkspace(req, res, url);
     if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return handleDocumentReview(req, res, { database: db });

@@ -13,10 +13,10 @@
 
 const db = require('../db/client');
 const { computePortfolioDashboard } = require('../intelligence/portfolio-dashboard');
-const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { requireUserIdentity } = require('../security/workspace-identity');
 
 function defaultIdentity(req, res) {
-  return requireWorkspaceIdentity(req, res);
+  return requireUserIdentity(req, res);
 }
 
 function boundedInt(raw, fallback, min, max) {

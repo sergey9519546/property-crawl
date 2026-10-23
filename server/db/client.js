@@ -2285,6 +2285,17 @@ class DatabaseClient {
     return record;
   }
 
+  // Every user with an active saved search, so the scheduler can alert each one.
+  async listSavedSearchUserIds() {
+    if (this.isPg) {
+      const res = await this.pool.query('SELECT DISTINCT user_id FROM saved_searches WHERE is_active = TRUE');
+      return res.rows.map((row) => row.user_id);
+    }
+    const ids = new Set();
+    for (const record of this.inMemoryData.savedSearches.values()) if (record.isActive) ids.add(record.userId);
+    return [...ids];
+  }
+
   async listSavedSearches(userId, { includeInactive = false } = {}) {
     if (this.isPg) {
       const sql = includeInactive

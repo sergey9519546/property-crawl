@@ -116,6 +116,26 @@ async function notifyHuntWebhook(hunt, evaluation, options = {}) {
   }, options);
 }
 
+// Email twin of the hunt webhook: same change set, sent via outbound-mail
+// (Resend when RESEND_API_KEY is set, local outbox file otherwise).
+async function notifyHuntEmail(hunt, evaluation, options = {}) {
+  const to = typeof hunt?.notifyEmail === 'string' ? hunt.notifyEmail.trim() : '';
+  if (!to) return { delivery: 'skipped', sent: false, reason: 'no_email' };
+  if (evaluation?.baselineCreated) return { delivery: 'skipped', sent: false, reason: 'baseline' };
+  const changes = notifyEvents(evaluation);
+  if (!changes.length) return { delivery: 'skipped', sent: false, reason: 'no_changes' };
+  const { sendOutboundMail } = require('./outbound-mail');
+  const name = hunt.name || hunt.label || 'Saved hunt';
+  const lines = changeRows(changes).map((c) => `- ${c.type === 'new_match' ? 'New match' : 'Changed'}: ${c.address || c.listingId || 'listing'}${c.message ? ` (${c.message})` : ''}${c.sourceUrl ? `\n  ${c.sourceUrl}` : ''}`);
+  if (changes.length > MAX_CHANGES) lines.push(`...and ${changes.length - MAX_CHANGES} more.`);
+  return sendOutboundMail({
+    to,
+    kind: 'hunt-alert',
+    subject: `${name}: ${changes.length} change${changes.length === 1 ? '' : 's'}`,
+    text: `${name} found ${changes.length} change${changes.length === 1 ? '' : 's'}.\n\n${lines.join('\n')}\n\nVerify every record at its source before bidding.`,
+  }, options.mail || {});
+}
+
 async function notifySavedSearchWebhook(search, listings, options = {}) {
   const url = String(search?.filters?.webhookUrl || search?.webhookUrl || '').trim();
   if (!url) return { delivery: 'skipped', sent: false, reason: 'no_webhook' };
@@ -140,6 +160,7 @@ async function notifySavedSearchWebhook(search, listings, options = {}) {
 }
 
 module.exports = {
+  notifyHuntEmail,
   notifyHuntWebhook,
   notifySavedSearchWebhook,
   postWebhook,

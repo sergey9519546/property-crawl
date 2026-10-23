@@ -58,7 +58,7 @@ function sameBrowserOrigin(origin: string, requestUrl: string) {
 }
 
 export async function proxyPropertyApi(request: Request, dependencies: {
-  fetchImpl?: typeof fetch; apiUrl?: string; operatorToken?: string;
+  fetchImpl?: typeof fetch; apiUrl?: string; operatorToken?: string; accountId?: string;
 } = {}) {
   const url = new URL(request.url);
   if (!API_PATH.test(url.pathname)) return jsonError(404, "Unknown API route");
@@ -83,6 +83,8 @@ export async function proxyPropertyApi(request: Request, dependencies: {
   // Same-origin mutation marker for API-side CSRF checks when Origin is stripped.
   headers.set("x-workspace-request", "1");
   if (dependencies.operatorToken) headers.set("Authorization", `Bearer ${dependencies.operatorToken}`);
+  // Member scope: set only by proxyMemberPropertyApi after it verified the session.
+  if (dependencies.operatorToken && dependencies.accountId) headers.set("x-pp-account", dependencies.accountId);
   else {
     const authorization = request.headers.get("authorization");
     if (authorization) headers.set("Authorization", authorization);
