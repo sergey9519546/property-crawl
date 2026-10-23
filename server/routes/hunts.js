@@ -6,7 +6,9 @@ const { presentedRunToken, tokensMatch } = require('./scrapers');
 const hunts = require('../intelligence/hunts');
 const discoveryQuery = require('../discovery/query');
 const { notifyHuntWebhook, notifyHuntEmail } = require('../delivery/webhook-notify');
+const { memberAccountId } = require('../security/workspace-identity');
 
+const MEMBER_HUNT_LIMIT = 20;
 
 
 function createHuntsHandler(dependencies = {}) {
@@ -52,18 +54,32 @@ function createHuntsHandler(dependencies = {}) {
       return res.status(401).json({ error: 'Source operator credential required' });
     }
 
+    // A member sees and edits only their own hunts; the operator sees all.
+    const owner = memberAccountId(req);
+    if (req.headers['x-pp-account'] && !owner) return res.status(400).json({ error: 'Invalid member account' });
+    const visible = (hunt) => !owner || (hunt && hunt.owner === owner);
+
     try {
       const durable = getDurableStore();
+      const idMatch = url.pathname.match(/^\/api\/hunts\/(hunt_[a-f0-9]{24})(?:\/(events|evaluate))?$/);
+      if (owner && idMatch) {
+        const existing = durable ? await durable.get(idMatch[1]) : hunts.getHunt(idMatch[1], { filePath }).hunt;
+        if (!visible(existing)) return res.status(404).json({ error: 'Hunt was not found' });
+      }
+      if (owner && url.pathname === '/api/hunts' && req.method === 'POST') {
+        const mine = (durable ? await durable.list() : hunts.listHunts({ filePath })).filter(visible);
+        if (mine.length >= MEMBER_HUNT_LIMIT) return res.status(409).json({ error: `Members can keep up to ${MEMBER_HUNT_LIMIT} hunts`, code: 'HUNT_LIMIT' });
+      }
       if (durable) {
-        if (url.pathname === '/api/hunts' && req.method === 'GET') return res.json({items:await durable.list()});
-        if (url.pathname === '/api/hunts' && req.method === 'POST') { const v=hunts.validateHuntInput(req.body||{});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);return res.status(201).json({hunt:await durable.create(v.value)}); }
+        if (url.pathname === '/api/hunts' && req.method === 'GET') return res.json({items:(await durable.list()).filter(visible)});
+        if (url.pathname === '/api/hunts' && req.method === 'POST') { const v=hunts.validateHuntInput(req.body||{});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);return res.status(201).json({hunt:await durable.create({...v.value,owner})}); }
         const durableMatch=url.pathname.match(/^\/api\/hunts\/(hunt_[a-f0-9]{24})(?:\/(events|evaluate))?$/);
         if(durableMatch){const [,id,action]=durableMatch;if(action==='events'&&req.method==='GET')return res.json({items:await durable.events(id,url.searchParams.get('limit'))});if(action==='evaluate'&&req.method==='POST'){const hunt=await durable.get(id);if(!hunt)return res.status(404).json({error:'Hunt was not found'});const evaluation=await evaluateDurableInventory(durable,hunt);const webhook=await notifyHuntWebhook(hunt,evaluation,dependencies.webhookOptions||{});const email=await notifyHuntEmail(hunt,evaluation,dependencies.webhookOptions||{});return res.json({evaluation:{...evaluation,webhook,email}});}if(!action&&req.method==='GET'){const hunt=await durable.get(id);return hunt?res.json({hunt,baseline:await durable.baseline(id),recentEvents:await durable.events(id,20)}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='PATCH'){const v=hunts.validateHuntInput(req.body||{},{partial:true});if(!v.isValid)throw new hunts.HuntError('HUNT_INVALID','Hunt needs corrections',v.errors);const hunt=await durable.update(id,v.value);return hunt?res.json({hunt}):res.status(404).json({error:'Hunt was not found'});}if(!action&&req.method==='DELETE'){const deleted=await durable.delete(id);return deleted?res.json({deleted:true,id}):res.status(404).json({error:'Hunt was not found'});}}
       }
       if (url.pathname === '/api/hunts') {
-        if (req.method === 'GET') return res.json({ items: hunts.listHunts({ filePath }) });
+        if (req.method === 'GET') return res.json({ items: hunts.listHunts({ filePath }).filter(visible) });
         if (req.method === 'POST') {
-          const hunt = hunts.createHunt(req.body || {}, { filePath, now: now() });
+          const hunt = hunts.createHunt(req.body || {}, { filePath, now: now(), owner });
           return res.status(201).json({ hunt });
         }
         return res.status(405).json({ error: 'Use GET to list hunts or POST to create one' });

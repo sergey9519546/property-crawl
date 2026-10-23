@@ -84,7 +84,7 @@ export function PortfolioView() {
   const [refreshing, setRefreshing] = React.useState(false);
 
   const loadData = React.useCallback(async () => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       setLoading(false);
       return;
     }
@@ -130,7 +130,7 @@ export function PortfolioView() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [session.authenticated]);
+  }, [session.memberTools]);
 
   React.useEffect(() => {
     loadData();
@@ -152,7 +152,7 @@ export function PortfolioView() {
     }
   }
 
-  if (!session.authenticated) {
+  if (!session.memberTools) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 mb-6">

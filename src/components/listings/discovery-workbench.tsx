@@ -287,7 +287,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     };
   }, [refresh, filters.q]);
   React.useEffect(() => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       try {
         const stored = window.localStorage.getItem("perfectproperty:saved-listings");
         const ids = stored ? JSON.parse(stored) : [];
@@ -352,7 +352,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     return () => {
       active = false;
     };
-  }, [session.authenticated]);
+  }, [session.memberTools]);
   // Typed characters are held inside DiscoverySearchField, not here. Holding
   // the draft in this component made every keystroke re-render all 48 result
   // cards (~4,600 nodes) to change one input's value.
@@ -362,7 +362,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   );
   const toggleSaved = React.useCallback(async (id: string) => {
     const wasSaved = savedRef.current.has(id);
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       try {
         const stored = window.localStorage.getItem("perfectproperty:saved-listings");
         const ids: string[] = stored ? JSON.parse(stored) : [];

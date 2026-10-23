@@ -11,14 +11,14 @@ function prune(now: number) {
 
 /** Shared in-memory ceiling for unauthenticated marketing form posts. */
 export function checkFormRateLimit(
-  kind: "contact" | "newsletter" | "checkout",
-  options: { maxPerWindow?: number; windowMs?: number; now?: number } = {},
+  kind: "contact" | "newsletter" | "checkout" | "account-login",
+  options: { maxPerWindow?: number; windowMs?: number; now?: number; key?: string } = {},
 ): FormRateDecision {
   const now = options.now ?? Date.now();
   const max = options.maxPerWindow ?? (kind === "contact" ? 8 : 12);
   const windowMs = options.windowMs ?? 10 * 60_000;
   prune(now);
-  const key = `form:${kind}`;
+  const key = `form:${kind}${options.key ? `:${options.key}` : ""}`;
   const current = buckets.get(key);
   const state = !current || now > current.resetAt ? { count: 0, resetAt: now + windowMs } : current;
   if (state.count >= max) {

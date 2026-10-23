@@ -1,4 +1,5 @@
-import { verifyStripeWebhook, stripeWebhookConfigured } from "@server/billing/stripe-checkout";
+import { getSubscription, subscriptionState, verifyStripeWebhook, stripeWebhookConfigured } from "@server/billing/stripe-checkout";
+import { accountsApi } from "@/lib/member-account";
 
 const MAX_STRIPE_WEBHOOK_BYTES = 512 * 1024;
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
@@ -56,13 +57,33 @@ export async function POST(request: Request) {
     );
   }
 
-  // Event successfully verified.
-  // Note: Receipt is acknowledged without creating fake accounts or issuing tokens.
+  // Record the subscription state on the member account. That state is the
+  // entitlement: the API checks it before serving hunts, saved searches,
+  // portfolio and alerts, and before sending any member alert.
   const event = result.event;
-  console.log(`[Stripe Webhook] Verified event ${event?.id} (${event?.type})`);
-
-  return Response.json(
-    { received: true, id: event?.id, type: event?.type },
-    { status: 200, headers: responseHeaders }
-  );
+  const object = event?.data?.object || {};
+  let state: ReturnType<typeof subscriptionState> = null;
+  if (event?.type === "checkout.session.completed" && object.mode === "subscription") {
+    state = subscriptionState(await getSubscription(object.subscription));
+    if (state && !state.accountId) state.accountId = object.client_reference_id || null;
+    if (!state) {
+      // Stripe will retry; we could not read the subscription yet.
+      return Response.json({ error: "Subscription lookup failed" }, { status: 502, headers: responseHeaders });
+    }
+  } else if (typeof event?.type === "string" && event.type.startsWith("customer.subscription.")) {
+    // Events can arrive out of order; the live subscription is the truth.
+    state = subscriptionState((await getSubscription(object.id)) || object);
+  }
+  if (!state) {
+    return Response.json({ received: true, id: event?.id, type: event?.type, applied: false }, { status: 200, headers: responseHeaders });
+  }
+  const applied = await accountsApi("/subscription", { method: "POST", body: state });
+  if (applied.status === 404) {
+    console.warn(`[Stripe Webhook] ${event?.id}: no account for customer ${state.customerId}`);
+    return Response.json({ received: true, id: event?.id, applied: false }, { status: 200, headers: responseHeaders });
+  }
+  if (!applied.ok) {
+    return Response.json({ error: "Account update failed" }, { status: 503, headers: responseHeaders });
+  }
+  return Response.json({ received: true, id: event?.id, type: event?.type, applied: true }, { status: 200, headers: responseHeaders });
 }

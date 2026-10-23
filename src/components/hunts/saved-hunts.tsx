@@ -212,7 +212,7 @@ export function SavedHunts() {
   const [missingDependencies, setMissingDependencies] = useState<string[]>([]);
   const selectedSectionRef = useRef<HTMLElement>(null);
   async function api(path = "", method = "GET", body?: unknown) {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       session.requestUnlock();
       throw new Error("Unlock the private workspace to use saved hunts.");
     }
@@ -229,7 +229,7 @@ export function SavedHunts() {
     return data;
   }
   useEffect(() => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       setConnected(false);
       setHunts([]);
       setSelected(null);
@@ -276,7 +276,7 @@ export function SavedHunts() {
     });
     // `api` and `run` are stable function declarations over current session state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.authenticated]);
+  }, [session.memberTools]);
   async function run(work: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -326,13 +326,16 @@ export function SavedHunts() {
         </p>
         <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-[#E5E7EB] bg-white p-5">
           <div>
-            <p className="text-sm font-semibold">Private operator workspace</p>
+            <p className="text-sm font-semibold">{session.member?.entitled && !session.authenticated ? `Your hunts · ${session.member.email}` : "Hunts"}</p>
             <p className="mt-1 text-xs leading-5 text-[#5B6472]">
-              One HttpOnly session opens hunts, cases, evidence, and collection
-              controls for eight hours.
+              {session.memberTools
+                ? "Hunts re-run after every collection and email you when a match appears or changes."
+                : session.member
+                  ? "Hunts need an active membership. Subscribe from your account page."
+                  : "Sign in as a member, or unlock with the operator key, to save hunts."}
             </p>
           </div>
-          {session.authenticated ? (
+          {session.memberTools ? (
             <button
               disabled={busy}
               onClick={() =>

@@ -37,7 +37,7 @@ export default function UnsubscribePage() {
       <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Newsletter</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Remove a newsletter address</h1>
       <p className="mt-4 text-sm leading-6 text-slate-600">
-        This removes an exact email from the newsletter list. Contact messages are not changed. There is no public account to delete.
+        This removes an exact email from the newsletter list. Contact messages are not changed. Member accounts are not deleted here; ask through the contact form.
       </p>
       <form onSubmit={submit} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <label htmlFor="unsubscribe-email" className="block text-xs font-bold uppercase tracking-wide text-slate-500">

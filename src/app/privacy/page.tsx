@@ -103,6 +103,12 @@ export default function PrivacyPage() {
             automated <Link href="/newsletter/unsubscribe" className="text-slate-950 font-semibold underline">Unsubscribe portal</Link>,
             which removes your address from the stored subscriber list.
           </p>
+          <p>
+            A member account stores your email, the hunts, saved searches, and watchlist you create, and the
+            subscription status Stripe reports. Stripe processes card payments; we never see or store card numbers.
+            Sign-in uses a one-time emailed link kept only as a hash until it is used or expires. The{" "}
+            <code>pp_member_session</code> cookie keeps you signed in for 30 days.
+          </p>
         </section>
 
         {/* Section 5 */}

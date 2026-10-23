@@ -1,4 +1,5 @@
 import { workspaceUnlockBucket, workspaceUnlockLimiter } from "@/lib/workspace-unlock-limiter";
+import { currentMember } from "@/lib/member-account";
 import {
   clearWorkspaceSession,
   issueWorkspaceSession,
@@ -15,7 +16,12 @@ export async function GET(request: Request) {
   const config = workspaceSessionConfiguration();
   // Do not disclose configured=true/false as a cheap oracle without session;
   // still report authentication state for the workspace shell.
-  return Response.json({ configured: config.configured, ...readWorkspaceSession(request) }, { headers: responseHeaders });
+  const member = config.configured ? await currentMember(request) : null;
+  return Response.json({
+    configured: config.configured,
+    ...readWorkspaceSession(request),
+    member: member && { email: member.email, entitled: member.entitled },
+  }, { headers: responseHeaders });
 }
 
 export async function POST(request: Request) {

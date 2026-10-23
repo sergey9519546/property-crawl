@@ -2,51 +2,71 @@
 
 import { GsapReveal, GsapStaggerGroup } from "./gsap-reveal";
 import { Check, X, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 
 type Col = {
   name: string;
   tag: string;
   features: { label: string; ok: boolean }[];
   highlight?: boolean;
+  cta?: boolean;
 };
 
 const COLS: Col[] = [
   {
-    name: "Research workspace",
-    tag: "Available in this beta",
+    name: "Free",
+    tag: "No account needed",
     features: [
-      { label: "Market and source filters", ok: true },
-      { label: "Source-observed record labels", ok: true },
-      { label: "Exact listing detail pages", ok: true },
-      { label: "Local watchlists and saved searches", ok: true },
-      { label: "Saved-search matches, with email when mail is configured", ok: true },
-      { label: "CSV and JSON watchlist exports", ok: true },
+      { label: "Market and source filters, map, calendar", ok: true },
+      { label: "Listing pages with Deal Score and the catch", ok: true },
+      { label: "Watchlist saved on this device", ok: true },
+      { label: "Hunts and email alerts", ok: false },
     ],
   },
   {
-    name: "Evidence and judgment",
-    tag: "Review required for each property",
+    name: "Member",
+    tag: "Monthly subscription",
+    highlight: true,
+    cta: true,
     features: [
-      { label: "Published facts separated from models", ok: true },
-      { label: "Notice extraction for supported formats", ok: true },
-      { label: "Publisher photos when source-matched", ok: true },
-      { label: "Qualified Street View fallback", ok: true },
-      { label: "Title and valuation require verification", ok: false },
+      { label: "Hunts that re-run after every collection", ok: true },
+      { label: "Email alerts on new matches and changes", ok: true },
+      { label: "Saved searches with match alerts", ok: true },
+      { label: "Account watchlist, portfolio, and price drops", ok: true },
     ],
   },
   {
     name: "Not connected yet",
     tag: "These are not active services",
-    highlight: false,
     features: [
-      { label: "Cloud accounts and device sync", ok: false },
       { label: "Guaranteed complete national coverage", ok: false },
       { label: "Verified title reports and live comps", ok: false },
+      { label: "Title and valuation still need verification", ok: false },
     ],
   },
 ];
 
+function useMemberPrice() {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/checkout", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((body) => {
+        const price = body?.price;
+        if (cancelled || !price || typeof price.unitAmount !== "number" || typeof price.currency !== "string") return;
+        const amount = new Intl.NumberFormat("en-US", { style: "currency", currency: price.currency.toUpperCase() }).format(price.unitAmount / 100);
+        setLabel(price.interval ? `${amount} / ${price.interval}` : amount);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  return label;
+}
+
 export function AiComparison() {
+  const memberPrice = useMemberPrice();
   return (
     <section id="pricing" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
@@ -55,9 +75,9 @@ export function AiComparison() {
             Know what is ready. Know what needs review.
           </h2>
           <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
-            The research workspace is free during beta. Source evidence, modeled
-            scenarios, and unfinished services are kept separate so you can make
-            an informed next move.
+            Browsing is free. A membership adds hunts that watch the inventory for
+            you and email you when something changes. Unfinished services are
+            listed as unfinished.
           </p>
         </GsapReveal>
 
@@ -83,7 +103,7 @@ export function AiComparison() {
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[13px] font-medium text-[#5B6472]">{col.tag}</p>
+              <p className="mt-1 text-[13px] font-medium text-[#5B6472]">{col.cta && memberPrice ? memberPrice : col.tag}</p>
               <ul className="mt-5 space-y-3">
                 {col.features.map((f) => (
                   <li key={f.label} className="flex items-center gap-2.5">
@@ -106,6 +126,11 @@ export function AiComparison() {
                   </li>
                 ))}
               </ul>
+              {col.cta && (
+                <Link href="/account" className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-[#0F172A] text-sm font-semibold text-white hover:bg-[#1E293B]">
+                  Become a member
+                </Link>
+              )}
             </div>
           ))}
         </GsapStaggerGroup>

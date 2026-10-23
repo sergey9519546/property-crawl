@@ -492,11 +492,18 @@ const scheduler = new IngestionScheduler({
     if (Array.isArray(run.listings) && run.listings.length > 0) {
       try {
         const { runAlertsForUser } = require('../intelligence/alerts-runner');
+        const { accountServiceFor } = require('../accounts/store');
         const wsId = process.env.PROPERTY_WORKSPACE_ID || 'operator';
-        const userId = `workspace:${wsId}`;
-        const alertResult = await runAlertsForUser({ userId, listings: run.listings, database: db });
-        if (alertResult && alertResult.totalNewMatches > 0) {
-          console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);
+        const userIds = new Set([`workspace:${wsId}`, ...(typeof db.listSavedSearchUserIds === 'function' ? await db.listSavedSearchUserIds() : [])]);
+        const accounts = accountServiceFor(db);
+        for (const userId of userIds) {
+          // Members get saved-search alerts only while their subscription is active.
+          if (userId.startsWith('account:') && !(await accounts.get(userId.slice(8)))?.entitled) continue;
+          if (!userId.startsWith('workspace:') && !userId.startsWith('account:')) continue;
+          const alertResult = await runAlertsForUser({ userId, listings: run.listings, database: db });
+          if (alertResult && alertResult.totalNewMatches > 0) {
+            console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);
+          }
         }
       } catch (alertErr) {
         console.warn('[Alerts] Saved search alert processing failed (non-fatal):', alertErr && alertErr.message);

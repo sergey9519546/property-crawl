@@ -11,7 +11,7 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       setSaved(false);
       setError("");
       return;
@@ -39,10 +39,10 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
     return () => {
       active = false;
     };
-  }, [listingId, session.authenticated]);
+  }, [listingId, session.memberTools]);
 
   async function toggle() {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       session.requestUnlock();
       return;
     }

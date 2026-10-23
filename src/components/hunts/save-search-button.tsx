@@ -26,7 +26,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   function begin() {
-    if (!session.authenticated) {
+    if (!session.memberTools) {
       session.requestUnlock();
       return;
     }

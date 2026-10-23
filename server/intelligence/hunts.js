@@ -255,6 +255,7 @@ function summary(hunt) {
     id: hunt.id, name: hunt.name, enabled: hunt.enabled, version: hunt.version,
     webhookUrl: hunt.webhookUrl || null,
     notifyEmail: hunt.notifyEmail || null,
+    owner: hunt.owner || null,
     criteria: hunt.criteria, criteriaHash: hunt.criteriaHash, createdAt: hunt.createdAt,
     updatedAt: hunt.updatedAt, versionCount: hunt.versions.length,
   };
@@ -271,6 +272,7 @@ function createHunt(input, options = {}) {
     enabled: validation.value.enabled,
     webhookUrl: validation.value.webhookUrl || null,
     notifyEmail: validation.value.notifyEmail || null,
+    owner: typeof options.owner === 'string' ? options.owner : null,
     version: 1,
     criteria: validation.value.criteria,
     criteriaHash,

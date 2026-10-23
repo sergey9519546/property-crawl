@@ -36,7 +36,7 @@ const INFO_PAGES: Record<string, InfoPage> = {
   enterprise: {
     eyebrow: "Enterprise",
     title: "One shared operator workspace.",
-    intro: "PerfectProperty is a private beta. The workspace uses one shared operator credential. This build has no per-seat accounts, role list, or enterprise contract.",
+    intro: "PerfectProperty has individual member accounts with a monthly subscription, plus one shared operator credential for research and collection tools. There is no per-seat team plan, role list, or enterprise contract.",
     sections: [
       { title: "What you can use", body: "The live listing feed, the source catalog, saved searches inside the operator workspace, and the contact form." },
       { title: "What this build does not include", body: "There is no role-based access, no separate customer tenancy, and no published enterprise plan." },
@@ -59,7 +59,7 @@ const INFO_PAGES: Record<string, InfoPage> = {
     intro: "The beta separates the public interface from the data API and validates untrusted notice text before it reaches downstream workflows.",
     sections: [
       { title: "Current controls", body: "The backend includes input validation, sanitization, rate limiting, bounded request bodies, AI prompt delimiters, and output validation tests. Scraper runs and workspace writes require the operator credential." },
-      { title: "What is not in this beta", body: "There is no public account system and no separate disclosure program." },
+      { title: "What is not in this beta", body: "There is no separate disclosure program." },
       { title: "Reporting", body: "Use the contact form. That is the security-reporting channel in this beta.", link: { label: "Open the contact form", href: "/contact" } },
     ],
   },
