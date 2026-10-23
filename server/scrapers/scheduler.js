@@ -23,6 +23,7 @@ const localSurplus = require('./local-surplus');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 const { validateListingForIngestion } = require('./validation');
+const { evaluateRecordsForDrift } = require('./drift-alarm');
 const { requireCollectionStorage, inspectCollectionStorage } = require('../discovery/storage-health');
 const { sanitizeRunReport } = require('../discovery/run-report');
 const { collectionScope } = require('./collection-scope');
@@ -332,14 +333,22 @@ class IngestionScheduler {
             totalIngested++;
           }
           const latency = Date.now() - scraperStart;
+          let driftAlarm = null;
+          if (accepted.length > 0) {
+            driftAlarm = evaluateRecordsForDrift(scraper.sourceKey, accepted);
+            if (driftAlarm.hasDrift) {
+              console.warn(`[Scheduler] ${driftAlarm.warning}`);
+            }
+          }
           this.telemetry.recordRun(scraper.name, accepted, latency, null, {
             rejectedCount: rejectedForScraper,
-            circuitOpen: false
+            circuitOpen: false,
+            driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
           });
           const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
           const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
-            ? { outcome: coverage.outcome || null, truncated: coverage.truncated === true, complete: coverage.complete, fullSweepComplete: coverage.fullSweepComplete === true, scope: coverage.acquisitionScope || null, coverage }
-            : null;
+            ? { outcome: coverage.outcome || null, truncated: coverage.truncated === true, complete: coverage.complete, fullSweepComplete: coverage.fullSweepComplete === true, scope: coverage.acquisitionScope || null, coverage, ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+            : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {
             // Listing writes above are awaited before the observation boundary.

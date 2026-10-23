@@ -141,3 +141,53 @@ test('evaluateRecordsForDrift: evaluates batch records and flags drift when sele
   assert.ok(evalResult.currentYield <= 0.25);
   assert.ok(evalResult.warning.includes('fannie'));
 });
+test('IngestionScheduler: records driftAlarm when accepted records suffer selector drift', async () => {
+  const schedulerModule = require('../../server/scrapers/scheduler');
+  let recordedTelemetry = null;
+  let runReport = null;
+
+  const mockScraper = {
+    name: 'DriftFixtureScraper',
+    sourceKey: 'hud',
+    getRawPublisherRecord: () => ({ fixture: true }),
+    async scrapeFeed() {
+      // Ingestible minimal record that lacks optional fields (saleDate, openingBid, county)
+      return [{
+        id: 'DRIFT-001',
+        source: 'hud',
+        state: 'OH',
+        address: '100 Main St, Columbus, OH 43215',
+        sourceUrl: 'https://www.hudhomestore.gov/Property/PropertyDetails?caseNumber=123-456789',
+        provenance: {
+          origin: 'live',
+          observed: true,
+          publisher: 'HUD Homestore',
+          recordId: 'rec-001',
+          observedAt: '2026-06-01T00:00:00Z'
+        },
+        raw: 'Valid text with more than ten characters.'
+      }];
+    }
+  };
+
+  const sched = new schedulerModule.IngestionScheduler({
+    realScrapers: [mockScraper],
+    database: { async createListing() {} },
+    telemetry: {
+      recordRun(name, accepted, latency, err, meta) {
+        recordedTelemetry = meta;
+      }
+    },
+    networkEnabled: true
+  });
+
+  sched.onSourceRun = async (sourceKey, outcome) => {
+    runReport = outcome.report;
+  };
+
+  const result = await sched.runAll();
+  assert.equal(result.totalIngested, 1);
+  assert.ok(recordedTelemetry);
+  assert.equal(recordedTelemetry.driftAlarm?.hasDrift, true);
+  assert.ok(runReport?.driftAlarm?.hasDrift);
+});

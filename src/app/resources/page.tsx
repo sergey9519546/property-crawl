@@ -63,53 +63,173 @@ export default function ResourcesPage() {
             </div>
           </div>
 
-          {/* Card 2: Cash-to-Close Calculations */}
+          {/* Card 2: 10-State Statutory Foreclosure & Settlement Schedules */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-slate-700" />
-              2. Statutory Cash-to-Close & Settlement Requirements
-            </h3>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-blue-600" />
+                2. Top-10 State Foreclosure Statutory Comparison Matrix
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Audited Legal Presets
+              </span>
+            </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Winning bids at distressed auctions require more than the hammer price. Bidders must tender certified funds within rigid statutory settlement windows:
+              Every jurisdiction enforces strict statutory rules governing certified knockdown deposits, confirmation stays, post-sale upset periods, and transfer taxes. Underwriting bids without verifying these parameters leads to forfeited deposits or unexpected statutory carrying costs:
             </p>
-            <ul className="list-disc pl-5 space-y-2 text-xs text-slate-700">
-              <li>
-                <strong>Florida (Fla. Stat. § 201.02):</strong> Requires 5% deposit at hammer fall. State documentary stamp tax ($0.70 per $100 of consideration) plus electronic clerk fees due within 24 hours.
-              </li>
-              <li>
-                <strong>Pennsylvania (Pa. R.C.P. 3129):</strong> Requires 10% day-of deposit. 2% state realty transfer tax, 2% sheriff poundage fee, and delinquent taxes due within 30 days.
-              </li>
-              <li>
-                <strong>New Jersey:</strong> 20% certified deposit due immediately upon hammer fall. Balance due within 30 days with interest accruing at 8% from day 30.
-              </li>
-              <li>
-                <strong>North Carolina (G.S. 45-21.27):</strong> 10-day statutory upset bid window remains open after sale; any third party may file a 5% upset bid with the clerk of superior court.
-              </li>
-            </ul>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
+                <thead className="bg-slate-50 font-bold text-slate-900">
+                  <tr>
+                    <th className="p-3">State</th>
+                    <th className="p-3">Primary Mechanism</th>
+                    <th className="p-3">Knockdown Deposit</th>
+                    <th className="p-3">Confirmation / Upset</th>
+                    <th className="p-3">Statutory Redemption</th>
+                    <th className="p-3">Statutory Fees / Taxes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">California (CA)</td>
+                    <td className="p-3">Non-Judicial Trustee</td>
+                    <td className="p-3">100% Cashier's Check</td>
+                    <td className="p-3">45-Day SB 1079 Window</td>
+                    <td className="p-3">0 Days (Cal. Civ. Code § 2924m)</td>
+                    <td className="p-3">$1.10 per $1,000 transfer tax</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Florida (FL)</td>
+                    <td className="p-3">Judicial Foreclosure</td>
+                    <td className="p-3">5% Electronic Tender</td>
+                    <td className="p-3">10-Day Certificate of Title</td>
+                    <td className="p-3">0 Days (Cert. of Sale cut-off)</td>
+                    <td className="p-3">Fla. Stat. § 201.02 ($0.70 / $100 doc stamps) + 1.5% registry</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Georgia (GA)</td>
+                    <td className="p-3">Non-Judicial Deed of Trust</td>
+                    <td className="p-3">10% Certified Deposit</td>
+                    <td className="p-3">Immediate (First Tuesday)</td>
+                    <td className="p-3">0 Days mortgage; 1 yr tax deed</td>
+                    <td className="p-3">$1.00 per $1,000 transfer tax</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Illinois (IL)</td>
+                    <td className="p-3">Judicial Foreclosure</td>
+                    <td className="p-3">10% Certified Funds</td>
+                    <td className="p-3">30-Day Confirmation Motion</td>
+                    <td className="p-3">30–90 Days residential (735 ILCS 5/15)</td>
+                    <td className="p-3">$1.50 per $1,000 combined stamps</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">New Jersey (NJ)</td>
+                    <td className="p-3">Judicial Sheriff Sale</td>
+                    <td className="p-3">20% Certified Knockdown</td>
+                    <td className="p-3">10-Day Objection / Redemption</td>
+                    <td className="p-3">10 Days (R. 4:65-5)</td>
+                    <td className="p-3">Tiered commission (2-6%) + ~1% transfer fee</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">New York (NY)</td>
+                    <td className="p-3">Judicial Referee Sale</td>
+                    <td className="p-3">10% Certified Check</td>
+                    <td className="p-3">30-Day Referee Report</td>
+                    <td className="p-3">0 Days (Gavel fall cut-off)</td>
+                    <td className="p-3">$4.00 per $1,000 state transfer tax</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">North Carolina (NC)</td>
+                    <td className="p-3">Non-Judicial Trustee</td>
+                    <td className="p-3">5% Minimum ($750 floor)</td>
+                    <td className="p-3">10-Day Rolling Upset Bid</td>
+                    <td className="p-3">10-Day Upset Period (N.C.G.S. § 45-21)</td>
+                    <td className="p-3">$2.00 per $1,000 excise tax</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Ohio (OH)</td>
+                    <td className="p-3">Judicial Sheriff Sale</td>
+                    <td className="p-3">10% Certified Deposit</td>
+                    <td className="p-3">30-Day Confirmation Entry</td>
+                    <td className="p-3">Expires at confirmation (R.C. 2329.33)</td>
+                    <td className="p-3">1.5% sheriff poundage + $4/k conveyance</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Pennsylvania (PA)</td>
+                    <td className="p-3">Judicial Sheriff Sale</td>
+                    <td className="p-3">10% Day-of Certified</td>
+                    <td className="p-3">30-Day Schedule of Distribution</td>
+                    <td className="p-3">0 Days mortgage; 9 mo tax claims</td>
+                    <td className="p-3">2% realty transfer tax + 2% poundage</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3 font-semibold text-slate-950">Texas (TX)</td>
+                    <td className="p-3">Non-Judicial Trustee / Tax</td>
+                    <td className="p-3">100% Cash / Cashier's Check</td>
+                    <td className="p-3">Immediate (First Tuesday)</td>
+                    <td className="p-3">0 Days mortgage; 180 d / 2 yr tax</td>
+                    <td className="p-3">$0 state real estate transfer tax</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Card 3: Title Risk & Lien Priority Hierarchy */}
+          {/* Card 3: 7 Deal-Killer Due Diligence Checklist */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-amber-600" />
-              3. Forensic Lien Priority & Surviving Encumbrances
-            </h3>
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 text-amber-600" />
+                3. The 7 Deal-Killer Due Diligence Checklist
+              </h3>
+              <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
+                Forensic Protocol
+              </span>
+            </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Winning an auction does NOT automatically deliver clean title. Surviving lien risks depend on the foreclosing instrument&apos;s recordation date:
+              Every auction bidder must audit seven statutory failure modes before tendering funds. Missing even one can result in complete capital loss:
             </p>
             <div className="grid gap-3 sm:grid-cols-2 text-xs">
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                <h4 className="font-bold text-amber-950">Junior 2nd Mortgage Foreclosure</h4>
-                <p className="mt-1 text-amber-900 leading-relaxed">
-                  If the plaintiff is a 2nd mortgage or HELOC, the foreclosure <strong>DOES NOT extinguish the 1st mortgage</strong>.
-                  The winning bidder takes the deed strictly subject to the outstanding senior loan balance.
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">1. Senior Lien Priority &amp; 1st Mortgage Survival</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  A junior mortgage or HOA lien foreclosure never wipes out a recorded senior 1st mortgage. The purchaser takes title subject to the full unpaid principal and default interest of the senior lien.
                 </p>
               </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-                <h4 className="font-bold text-amber-950">IRS Federal Tax Liens (26 U.S.C. § 7425)</h4>
-                <p className="mt-1 text-amber-900 leading-relaxed">
-                  Federal tax liens recorded against the borrower grant the United States a statutory <strong>120-day right of redemption</strong>
-                  to buy back the property from the auction purchaser at the bid price plus interest.
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">2. Municipal Super-Priority Ad Valorem Taxes</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  County real property taxes, municipal water/sewer assessments, and demolition liens carry absolute statutory super-priority over all private mortgages and must be paid in full by the auction buyer.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">3. IRS § 7425(d) 120-Day Federal Redemption</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  Recorded federal tax liens give the United States Department of the Treasury a 120-day right of redemption from the sale date to take the property back at the auction purchase price.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">4. State Statutory Redemption &amp; Confirmation Stays</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  States like Alabama (180 days), Tennessee (2 years), or North Carolina (10-day rolling upset bids) permit prior owners or third parties to redeem or overturn auction sales post-gavel fall.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">5. Bankruptcy Automatic Stay (11 U.S.C. § 362)</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  A bankruptcy petition filed minutes before the sale triggers an immediate statutory stay. Any auction conducted in violation of the stay is void ab initio under federal bankruptcy law.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+                <h4 className="font-bold text-slate-950">6. Certified Funds Deposit &amp; Tender Deadlines</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  Sheriff departments and referees strictly enforce certified check or wire deadlines (e.g. 24 hours in FL, 30 days in NJ/PA). Failure to tender timely results in default forfeiture of the deposit.
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
+                <h4 className="font-bold text-slate-950">7. Occupancy &amp; Protecting Tenants at Foreclosure Act (12 U.S.C. § 5220)</h4>
+                <p className="mt-1 text-slate-600 leading-relaxed">
+                  Foreclosure deeds do not grant immediate physical possession. Under federal PTFA and state tenant protection laws, bona fide residential tenants must be provided with a mandatory 90-day written notice to vacate before eviction proceedings may begin.
                 </p>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Gavel, Scale, ShieldAlert, TrendingUp } from "lucide-react";
+import { ArrowLeft, ExternalLink, Gavel, Scale, ShieldAlert, TrendingUp, Calculator, CheckSquare } from "lucide-react";
+import { computeStatutoryFeePreset, computeStatutoryDeadlinesAndCarry } from "@/lib/underwriting";
 import { serializeJsonLd } from "@/lib/json-ld";
 import {
   normalizeCountySlug,
@@ -118,6 +119,9 @@ export default async function CountyDocketPage({ params }: PageProps) {
   const listings = await loadCountyData(state, rawCounty);
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
+  const baselinePrice = stats.medianOpeningBid || 100000;
+  const feePreset = computeStatutoryFeePreset({ purchasePrice: baselinePrice, state });
+  const carrySchedule = computeStatutoryDeadlinesAndCarry({ state, purchasePrice: baselinePrice, redemptionDays: redemption.days });
 
   const breadcrumbsSchema = buildCountyBreadcrumbs({ state, county: countyName });
   const itemListSchema = buildCountyItemList({ state, county: countyName, listings });
@@ -206,6 +210,107 @@ export default async function CountyDocketPage({ params }: PageProps) {
                 {redemption.label}. Pre-sale or post-sale statutory redemption periods determine whether a prior owner
                 can reclaim the property after gavel fall. Ensure official docket confirmation and statutory deadlines are verified.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Statutory Bidding & Closing Playbook for State */}
+        {feePreset && (
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-blue-600" />
+                <h2 className="text-base font-bold text-slate-950">
+                  {state} Statutory Auction &amp; Settlement Framework
+                </h2>
+              </div>
+              <span className="text-xs font-semibold text-slate-500">
+                {feePreset.scheduleLabel}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Estimated Deposit At Knockdown</div>
+                <div className="mt-1 text-lg font-bold text-slate-900">
+                  ${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Certified funds baseline for ${Math.round(baselinePrice).toLocaleString("en-US")} bid
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Transfer Tax &amp; Poundage</div>
+                <div className="mt-1 text-lg font-bold text-slate-900">
+                  ${Math.round(feePreset.transferTax + feePreset.sheriffPoundage).toLocaleString("en-US")}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  Statutory deed stamps + sheriff/referee commission
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Confirmation / Upset Window</div>
+                <div className="mt-1 text-lg font-bold text-amber-700">
+                  {carrySchedule.objectionOrConfirmationDays > 0 ? `${carrySchedule.objectionOrConfirmationDays} Days` : "Immediate"}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-500">
+                  {carrySchedule.objectionLabel || "Court confirmation or gavel drop"}
+                </div>
+              </div>
+            </div>
+
+            {feePreset.citations.length > 0 && (
+              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+                <div className="text-xs font-bold text-blue-950 mb-1 flex items-center gap-1.5">
+                  <Scale className="h-3.5 w-3.5 text-blue-700" /> Statutory Authorities &amp; Governing Codes:
+                </div>
+                <ul className="list-disc pl-5 space-y-1 text-xs text-blue-900/90">
+                  {feePreset.citations.map((cite, idx) => (
+                    <li key={idx}>{cite}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 7 Deal-Killer Due Diligence Checklist for County */}
+        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-4">
+            <CheckSquare className="h-5 w-5 text-indigo-600" />
+            <div>
+              <h2 className="text-base font-bold text-slate-950">
+                7-Point Foreclosure Due Diligence Checklist ({formalCounty}, {state})
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Critical title and statutory failure modes to verify at the county clerk &amp; sheriff office before bidding
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">1. Senior Lien Priority:</span> Ensure the foreclosing mortgage is senior. Junior mortgage foreclosures take subject to the 1st mortgage balance.
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">2. Municipal Ad Valorem Taxes:</span> In {state}, delinquent property taxes and utility water/sewer liens enjoy super-priority status and survive foreclosure.
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">3. IRS § 7425 120-Day Redemption:</span> Any recorded federal tax lien gives the United States a statutory 120-day right of redemption post-sale.
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">4. State Confirmation &amp; Objection:</span> {redemption.label}
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">5. Bankruptcy Automatic Stay (11 U.S.C. § 362):</span> Verify PACER / CourtListener dockets immediately prior to gavel fall to confirm no bankruptcy petition was filed.
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+              <span className="font-bold text-slate-900">6. Certified Funds Tender Rules:</span> Have cashier&apos;s checks prepared for the exact deposit percentage required by {formalCounty} rules.
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 sm:col-span-2">
+              <span className="font-bold text-slate-900">7. Occupancy &amp; PTFA (12 U.S.C. § 5220):</span> Verify whether the property is occupied; bona fide tenants require a statutory 90-day notice to vacate under the Protecting Tenants at Foreclosure Act.
             </div>
           </div>
         </div>
