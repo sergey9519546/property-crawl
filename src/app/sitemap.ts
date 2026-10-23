@@ -1,3 +1,4 @@
+import { countyToSlug } from "@/lib/county-seo";
 import type { MetadataRoute } from 'next';
 
 /**
@@ -55,19 +56,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           priority: 0.8,
         }));
 
-      const countyMap = new Set<string>();
-      for (const item of records as Array<{ state?: unknown; county?: unknown }>) {
-        if (typeof item?.state === 'string' && typeof item?.county === 'string' && /^[A-Z]{2}$/.test(item.state)) {
-          const slug = item.county.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-          if (slug) countyMap.add(`${item.state}/${slug}`);
-        }
-      }
-      countyPages = Array.from(countyMap).map((combo) => ({
-        url: `${baseUrl}/states/${combo}`,
-        lastModified: now,
-        changeFrequency: 'daily',
-        priority: 0.7,
-      }));
     }
   } catch {
     // Inventory unreachable at build time; static pages still describe the site.
@@ -92,6 +80,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.5,
           }];
         });
+        // Every county with a live record, from the same coverage rollup the
+        // state pages render, so no county is dropped past a listing cap.
+        const byCounty = payload?.liveByState?.byCounty;
+        if (byCounty && typeof byCounty === 'object') {
+          countyPages = Object.entries(byCounty as Record<string, unknown>).flatMap(([state, rows]) =>
+            /^[A-Z]{2}$/.test(state) && Array.isArray(rows)
+              ? rows.flatMap((row: { county?: unknown; count?: unknown }) => {
+                  const slug = typeof row?.county === 'string' ? countyToSlug(row.county) : '';
+                  return slug && typeof row.count === 'number' && row.count > 0
+                    ? [{ url: `${baseUrl}/states/${state}/${slug}`, lastModified: now, changeFrequency: 'daily' as const, priority: 0.7 }]
+                    : [];
+                })
+              : []);
+        }
       }
     }
   } catch {

@@ -84,7 +84,7 @@ const GROUPS: MenuGroup[] = [
       ],
       [
         { label: "Underwriting", desc: "Cash inputs, assumptions, and gaps", icon: Calculator, href: "/listings?hasDocuments=true&minQuality=50", tint: "#E2E8F0" },
-        { label: "Capital", desc: "Lender-ready evidence packages (roadmap)", icon: Landmark, href: "/research#dossier", tint: "#E9D5FF" },
+        { label: "Capital", desc: "Decision packets exported from research cases", icon: Landmark, href: "/research", tint: "#E9D5FF" },
       ],
     ],
   },
@@ -231,7 +231,7 @@ export function SiteHeader() {
               Enterprise
             </Link>
             <Link
-              href="#pricing"
+              href="/#pricing"
               onMouseEnter={() => setOpen(null)}
               className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
             >
@@ -356,7 +356,7 @@ export function SiteHeader() {
               <Link href="/enterprise" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
                 Enterprise
               </Link>
-              <Link href="#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
                 Pricing
               </Link>
             </Accordion>

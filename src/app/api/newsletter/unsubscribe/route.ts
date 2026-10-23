@@ -24,7 +24,12 @@ export async function POST(request: Request) {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return Response.json({ error: "A valid email is required" }, { status: 400, headers: responseHeaders });
   }
-  const result = removeNewsletterEmail(email);
+  let result: { removed: number };
+  try {
+    result = removeNewsletterEmail(email);
+  } catch {
+    return Response.json({ error: "The subscriber list could not be updated. Please try again later." }, { status: 503, headers: responseHeaders });
+  }
   return Response.json(
     {
       ok: true,

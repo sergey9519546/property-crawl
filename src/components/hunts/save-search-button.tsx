@@ -18,6 +18,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("My property search");
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [notifyEmail, setNotifyEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
     setError("");
     setSavedId(null);
     setWebhookUrl("");
+    setNotifyEmail("");
     setOpen(true);
   }
 
@@ -63,6 +65,7 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
           name: cleanName,
           enabled: true,
           webhookUrl: cleanWebhook || undefined,
+          notifyEmail: notifyEmail.trim() || undefined,
           criteria: { discoveryFilters },
         }),
       });
@@ -97,6 +100,10 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
         </div> : <form onSubmit={save} className="mt-5">
           <label htmlFor="saved-search-name" className="text-sm font-semibold text-slate-800">Name</label>
           <input ref={inputRef} id="saved-search-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={80} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
+          <label htmlFor="saved-search-email" className="mt-4 block text-sm font-semibold text-slate-800">
+            Email alerts <span className="text-xs font-normal text-slate-500">(Sent when a later run finds a new match or a changed fact.)</span>
+          </label>
+          <input id="saved-search-email" type="email" placeholder="you@example.com" value={notifyEmail} onChange={(event) => setNotifyEmail(event.target.value)} maxLength={254} disabled={busy} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-900" />
           <label htmlFor="saved-search-webhook" className="mt-4 block text-sm font-semibold text-slate-800">
             Webhook URL <span className="text-xs font-normal text-slate-500">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
           </label>

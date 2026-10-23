@@ -75,12 +75,15 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const priorityKnown = t.plaintiffType && t.plaintiffType !== 'UNKNOWN';
   const decisionRecorded = d.decision === 'BID' || d.decision === 'PASS' || d.decision === 'UNDERWRITE';
   const bidAmount = typeof p.openingBid === 'number' && p.openingBid > 0 ? p.openingBid : 0;
-  const waterfall = bidAmount > 0
+  // A surviving first mortgage has no published balance, so the waterfall is only
+  // computed when nothing senior survives; otherwise we say the amount is unknown.
+  const seniorBalanceUnknown = Boolean(t.firstMortgageSurvives);
+  const waterfall = bidAmount > 0 && !seniorBalanceUnknown
     ? computeLienWaterfall({
         winningBid: bidAmount,
         foreclosingLienType: t.firstMortgageSurvives ? "second_mortgage" : "first_mortgage",
         foreclosingLienAmount: bidAmount,
-        seniorMortgageAmount: t.firstMortgageSurvives ? 150_000 : 0,
+        seniorMortgageAmount: 0,
         delinquentTaxesAmount: typeof c.delinquentTaxes === 'number' ? c.delinquentTaxes : 0,
         state: p.state,
       })
@@ -235,6 +238,11 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
       </div>
 
       {/* Lien Priority & Waterfall Schedule */}
+      {seniorBalanceUnknown && bidAmount > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900" data-testid="lien-waterfall-unknown">
+          <strong>A first mortgage may survive this sale, and its balance is not published.</strong> The lien waterfall is not computed. Pull the recorded mortgage and payoff before bidding.
+        </div>
+      )}
       {waterfall && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3" data-testid="lien-waterfall-schedule">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">

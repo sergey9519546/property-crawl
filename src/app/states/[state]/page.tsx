@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { countyToSlug } from "@/lib/county-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
           {counties.map((row) => (
             <li key={row.county}>
               <Link
-                href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(row.county)}`}
+                href={`/states/${state}/${countyToSlug(row.county)}`}
                 className="block px-4 py-3 text-sm hover:bg-slate-50"
               >
                 <span className="flex items-center justify-between gap-4">

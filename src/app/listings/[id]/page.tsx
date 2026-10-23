@@ -20,7 +20,8 @@ import { arbitrateTitleRisk } from "@server/intelligence/title-risk-engine";
 import { AssessorReading } from "@/components/listings/assessor-reading";
 import { inspectMapLocation } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
-import { scoreBandLabel } from "@/lib/score-bands";
+import { bandForScore, scoreBandLabel, DEAL_SCORE_MEANING } from "@/lib/score-bands";
+import { listingCatch } from "@/lib/listing-catch";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { CaseAction } from "@/components/research/case-action";
 import { SaleMechanics } from "@/components/listings/sale-mechanics";
@@ -267,6 +268,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
       })
     : null;
 
+  const scoreBand = bandForScore(listing.dealScore);
+  const catchSummary = listingCatch(listing, (titleRules?.titleWarnings ?? []).filter((w): w is string => typeof w === "string" && w.length > 0));
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
@@ -319,6 +323,20 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <h1 className="text-4xl font-bold tracking-tight text-slate-950 sm:text-5xl">{headlineAddress}</h1>
           <p className="mt-2 flex min-w-0 items-start gap-2 text-lg text-slate-600"><MapPin className="mt-1 h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{[publishedText(listing.city, ""), publishedText(listing.state, ""), publishedText(listing.zip, ""), publishedText(listing.county, "") ? `${publishedText(listing.county, "").replace(/\s+county$/i, "")} County` : null].filter(Boolean).join(" · ") || "Location not published"}</span></p>
           <p className="mt-2 text-sm text-slate-600"><span className="font-semibold text-slate-900">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}</span>{observedAt ? <> <span aria-hidden>·</span> Source observed {observedAt} UTC</> : null}</p>
+          <section data-testid="listing-catch" aria-label="Deal Score and the catch" className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              {scoreBand ? (
+                <span data-testid="deal-score-badge" className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }}>
+                  Deal Score {Math.round(Number(listing.dealScore))}/99 · {scoreBand.label}
+                </span>
+              ) : (
+                <span data-testid="deal-score-badge" className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">Deal Score unavailable</span>
+              )}
+              <span className="text-xs text-slate-600">{scoreBand ? scoreBand.desc : "Needs a published opening amount and value range."} {DEAL_SCORE_MEANING}</span>
+            </div>
+            <h2 className="mt-4 text-base font-bold text-slate-950">{catchSummary.flags.length ? `The catch: ${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check before bidding` : "No published red flags. Still verify at the source."}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-800">{[...catchSummary.notes, ...catchSummary.flags].join(" ")}</p>
+          </section>
           {(openingBid !== null || optionalPublishedText(listing.saleDate) || saleTime) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-3 text-sm lg:hidden">
               {openingBid !== null ? <p><span className="text-slate-600">Opening amount </span><strong className="text-slate-950">{formatMoney(openingBid)}</strong></p> : null}

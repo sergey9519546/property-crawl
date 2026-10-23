@@ -82,7 +82,7 @@ export default function PrivacyPage() {
               <code>pp_compare_ids</code>: Local storage token tracking properties selected for pairwise financial comparison.
             </li>
             <li>
-              <code>pp_workspace_operator</code>: Cryptographically secure HTTP-only session cookie verifying operator permissions.
+              <code>pp_operator_session</code>: Cryptographically secure HTTP-only session cookie verifying operator permissions.
             </li>
           </ul>
           <p className="mt-2">
@@ -99,9 +99,9 @@ export default function PrivacyPage() {
           </h2>
           <p>
             When you register for coverage alerts or submit an inquiry through our contact portal, your email address
-            and message are stored in encrypted, append-only persistence stores. You may unsubscribe at any time using our
+            and message are stored in plain-text files on the server. You may unsubscribe at any time using our
             automated <Link href="/newsletter/unsubscribe" className="text-slate-950 font-semibold underline">Unsubscribe portal</Link>,
-            which immediately purges your address from future notification cycles.
+            which removes your address from the stored subscriber list.
           </p>
         </section>
 
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
           </p>
           <ul className="list-disc pl-5 space-y-1 text-xs text-slate-600">
             <li><strong>Right to Know:</strong> You may request disclosure of any personal data we hold associated with your email.</li>
-            <li><strong>Right to Delete:</strong> You may request prompt deletion of your submitted contact or alert details.</li>
+            <li><strong>Right to Delete:</strong> You may request deletion of your submitted contact or alert details through the <Link href="/contact" className="text-slate-950 font-semibold underline">contact form</Link>; the operator deletes them by hand.</li>
             <li><strong>Right to Non-Discrimination:</strong> We never discriminate or alter service pricing based on the exercise of statutory privacy rights.</li>
           </ul>
         </section>

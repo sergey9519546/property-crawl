@@ -39,9 +39,8 @@ export default function AboutPage() {
           </h2>
           <p>
             For decades, investors seeking distressed real estate—sheriff sales, tax deed sales, HUD/REO homes,
-            and federal seized assets—have been forced to rely on expensive legacy aggregators charging $40–$50/month.
-            These platforms suffer from fatal shortcomings: manual data entry backlogs, hallucinated bid activity
-            (like the infamous &ldquo;10 bids placed&rdquo; artifact appearing across 99% of entries), and zero explanation
+            and federal seized assets—have relied on paid legacy aggregators.
+            These platforms suffer from fatal shortcomings: manual data entry backlogs, placeholder bid activity, and no explanation
             of statutory risks.
           </p>
           <p>
@@ -56,7 +55,7 @@ export default function AboutPage() {
         <section className="space-y-6">
           <h2 className="text-xl font-bold text-slate-950 flex items-center gap-2">
             <Cpu className="h-5 w-5 text-indigo-600" />
-            The Five Verified AI & Data Innovations
+            Four Data Techniques
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
@@ -66,7 +65,7 @@ export default function AboutPage() {
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 State press association smart search subscriptions ingest statutory publication notices directly via IMAP,
-                allowing zero-cost, legal-safe ingestion within hours of publication without bot-scraping risks.
+                allowing zero-cost, legal-safe ingestion without bot-scraping risks.
               </p>
             </div>
 
@@ -98,7 +97,7 @@ export default function AboutPage() {
                 Free Government Enrichment Stack
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                US Census Geocoder, County ArcGIS parcel endpoints, and FHFA House Price Index data replace thousands in monthly API fees
+                US Census Geocoder, County ArcGIS parcel endpoints, and FHFA House Price Index data replace paid data APIs
                 with authoritative public ground-truth.
               </p>
             </div>

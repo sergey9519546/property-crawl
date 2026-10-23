@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { notifyHuntWebhook } = require('../delivery/webhook-notify');
+const { notifyHuntWebhook, notifyHuntEmail } = require('../delivery/webhook-notify');
 const DEFAULT_JOB_PATH = path.resolve(__dirname, '../../.cache/collection-jobs.json');
 const MAX_JOBS = 200;
 const ID = /^job_[a-f0-9]{24}$/;
@@ -251,6 +251,13 @@ class CollectionCoordinator {
             entry.evaluation.webhook = await notifyHuntWebhook(entry.hunt, entry.evaluation, this.webhookOptions || {});
           } catch {
             entry.evaluation.webhook = { delivery: 'unavailable', sent: false, reason: 'network' };
+          }
+        }
+        if (entry?.hunt?.notifyEmail) {
+          try {
+            entry.evaluation.email = await notifyHuntEmail(entry.hunt, entry.evaluation, this.webhookOptions || {});
+          } catch {
+            entry.evaluation.email = { delivery: 'unavailable', sent: false, reason: 'mail' };
           }
         }
       }

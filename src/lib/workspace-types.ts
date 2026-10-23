@@ -49,6 +49,7 @@ export type ResearchCaseDetail = ResearchCaseSummary & {
   origins: CaseOrigin[];
   evidenceLinks: EvidenceLink[];
   listingSnapshot: Record<string, unknown>;
+  latestTrigger?: { at: string; type: string; matchedConditions?: ReconsiderationCondition[] } | null;
   dossierSnapshot: Record<string, unknown>;
   history: CaseHistory[];
   timeline: CaseHistory[];

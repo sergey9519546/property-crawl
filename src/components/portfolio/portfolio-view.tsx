@@ -138,16 +138,17 @@ export function PortfolioView() {
 
   async function handleRemove(listingId: string) {
     try {
-      const res = await fetch(`/api/alerts/${encodeURIComponent(listingId)}`, {
+      const res = await fetch("/api/alerts", {
         method: "DELETE",
         credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId }),
       });
-      if (res.ok) {
-        setDeals((prev) => prev.filter((d) => d.id !== listingId && d.listingId !== listingId));
-        loadData();
-      }
-    } catch {
-      // ignore
+      if (!res.ok) throw new Error(`Could not remove from watchlist (HTTP ${res.status}).`);
+      setDeals((prev) => prev.filter((d) => d.id !== listingId && d.listingId !== listingId));
+      loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove from watchlist.");
     }
   }
 

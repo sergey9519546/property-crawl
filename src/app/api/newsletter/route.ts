@@ -26,6 +26,9 @@ export async function POST(request: Request) {
   }
 
   const result = await persistFormSubmission("newsletter", { email });
+  if (!result.ok) {
+    return Response.json({ error: "The subscription could not be stored or delivered. Please try again later." }, { status: 503, headers: responseHeaders });
+  }
   return Response.json(
     {
       ok: true,

@@ -99,6 +99,7 @@ function safeListingSnapshot(listing) {
   const allowed = [
     'id', 'address', 'state', 'county', 'city', 'zip', 'source', 'sourceUrl', 'sourceObservedAt',
     'propType', 'status', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'sqft', 'assessed',
+    'estLow', 'estHigh', 'dealScore', 'redemptionDays', 'redemptionWarning', 'seniorLienRisk',
   ];
   const snapshot = {};
   for (const field of allowed) {

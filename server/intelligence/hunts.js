@@ -234,7 +234,13 @@ function validateHuntInput(input, options = {}) {
       value.webhookUrl = null;
     }
   }
-  if (partial && !Object.keys(value).length && !errors.length) errors.push('provide name, enabled, webhookUrl, or criteria to update');
+  if (Object.hasOwn(input, 'notifyEmail')) {
+    const email = typeof input.notifyEmail === 'string' ? input.notifyEmail.trim() : '';
+    if (!email) value.notifyEmail = null;
+    else if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('notifyEmail must be a valid email address');
+    else value.notifyEmail = email;
+  }
+  if (partial && !Object.keys(value).length && !errors.length) errors.push('provide name, enabled, webhookUrl, notifyEmail, or criteria to update');
   return { isValid: errors.length === 0, errors, value: errors.length ? undefined : value };
 }
 
@@ -248,6 +254,7 @@ function summary(hunt) {
   return {
     id: hunt.id, name: hunt.name, enabled: hunt.enabled, version: hunt.version,
     webhookUrl: hunt.webhookUrl || null,
+    notifyEmail: hunt.notifyEmail || null,
     criteria: hunt.criteria, criteriaHash: hunt.criteriaHash, createdAt: hunt.createdAt,
     updatedAt: hunt.updatedAt, versionCount: hunt.versions.length,
   };
@@ -263,6 +270,7 @@ function createHunt(input, options = {}) {
     name: validation.value.name,
     enabled: validation.value.enabled,
     webhookUrl: validation.value.webhookUrl || null,
+    notifyEmail: validation.value.notifyEmail || null,
     version: 1,
     criteria: validation.value.criteria,
     criteriaHash,
@@ -321,6 +329,8 @@ function updateHunt(id, input, options = {}) {
     const hunt = findHunt(store, id);
     if (validation.value.name !== undefined) hunt.name = validation.value.name;
     if (validation.value.enabled !== undefined) hunt.enabled = validation.value.enabled;
+    if (validation.value.webhookUrl !== undefined) hunt.webhookUrl = validation.value.webhookUrl;
+    if (validation.value.notifyEmail !== undefined) hunt.notifyEmail = validation.value.notifyEmail;
     if (validation.value.criteria) {
       const criteriaHash = sha(validation.value.criteria);
       if (criteriaHash !== hunt.criteriaHash) {
