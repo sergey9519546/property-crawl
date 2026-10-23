@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download, Printer, ShieldAlert, CheckCircle2, DollarSign, Scale, FileText } from 'lucide-react';
-import { computeCashToClose } from '@/lib/underwriting';
+import { computeCashToClose, computeLienWaterfall } from '@/lib/underwriting';
 import { readUnderwriteScenario, scenarioCashInput } from '@/lib/underwrite-scenario';
 
 interface DecisionPacketViewProps {
@@ -74,6 +74,17 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const municipalCount = Number.isFinite(municipal.activeViolationsCount) ? municipal.activeViolationsCount : null;
   const priorityKnown = t.plaintiffType && t.plaintiffType !== 'UNKNOWN';
   const decisionRecorded = d.decision === 'BID' || d.decision === 'PASS' || d.decision === 'UNDERWRITE';
+  const bidAmount = typeof p.openingBid === 'number' && p.openingBid > 0 ? p.openingBid : 0;
+  const waterfall = bidAmount > 0
+    ? computeLienWaterfall({
+        winningBid: bidAmount,
+        foreclosingLienType: t.firstMortgageSurvives ? "second_mortgage" : "first_mortgage",
+        foreclosingLienAmount: bidAmount,
+        seniorMortgageAmount: t.firstMortgageSurvives ? 150_000 : 0,
+        delinquentTaxesAmount: typeof c.delinquentTaxes === 'number' ? c.delinquentTaxes : 0,
+        state: p.state,
+      })
+    : null;
 
   const handleDownloadJson = () => {
     setDownloading(true);
@@ -222,6 +233,74 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Lien Priority & Waterfall Schedule */}
+      {waterfall && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3" data-testid="lien-waterfall-schedule">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Scale className="w-4 h-4 text-slate-800" />
+              <h3 className="font-bold text-sm text-slate-900">Lien Priority & Debt Extinguishment Waterfall</h3>
+            </div>
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${waterfall.totalSurvivingDebtOnProperty > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              {waterfall.totalSurvivingDebtOnProperty > 0 ? `Surviving Senior Debt: $${waterfall.totalSurvivingDebtOnProperty.toLocaleString()}` : 'Zero Surviving Liens'}
+            </span>
+          </div>
+
+          {waterfall.criticalAlert && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-950 font-medium">
+              {waterfall.criticalAlert}
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="py-1.5 pr-2 font-semibold">Priority</th>
+                  <th className="py-1.5 pr-2 font-semibold">Instrument / Lienholder</th>
+                  <th className="py-1.5 pr-2 text-right font-semibold">Claim Amount</th>
+                  <th className="py-1.5 pr-2 text-right font-semibold">Paid From Bid</th>
+                  <th className="py-1.5 text-right font-semibold">Title Status on Property</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {waterfall.items.map((item) => (
+                  <tr key={item.id} className="text-slate-800">
+                    <td className="py-1.5 pr-2 font-bold text-slate-600">#{item.seniority}</td>
+                    <td className="py-1.5 pr-2 font-semibold text-slate-900">
+                      {item.name}
+                      {item.isForeclosingLien && (
+                        <span className="ml-1.5 rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800">
+                          Foreclosing
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1.5 pr-2 text-right">${item.amount.toLocaleString()}</td>
+                    <td className="py-1.5 pr-2 text-right text-emerald-700 font-semibold">${item.amountPaidFromProceeds.toLocaleString()}</td>
+                    <td className={`py-1.5 text-right font-bold ${item.remainingBalanceAgainstProperty > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                      {item.remainingBalanceAgainstProperty > 0 ? `SURVIVES ($${item.remainingBalanceAgainstProperty.toLocaleString()})` : 'EXTINGUISHED'}
+                    </td>
+                  </tr>
+                ))}
+                {waterfall.surplusProceedsToBorrower > 0 && (
+                  <tr className="bg-sky-50/60 font-semibold text-sky-950">
+                    <td className="py-1.5 pr-2 text-[10px] uppercase font-bold text-sky-800">Surplus</td>
+                    <td className="py-1.5 pr-2" colSpan={2}>
+                      Debtor / Mortgagor Surplus Proceeds
+                    </td>
+                    <td className="py-1.5 pr-2 text-right text-emerald-700">
+                      ${waterfall.surplusProceedsToBorrower.toLocaleString()}
+                    </td>
+                    <td className="py-1.5 text-right text-slate-400">—</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-slate-600 leading-snug">{waterfall.summary}</p>
+        </div>
+      )}
 
       {municipalCount !== null && municipalCount > 0 && (
         <div className="bg-white border border-rose-200 rounded-xl p-5 shadow-sm space-y-2" data-testid="municipal-violations">

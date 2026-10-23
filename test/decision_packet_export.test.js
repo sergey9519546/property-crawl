@@ -225,3 +225,12 @@ test('Decision Packet: propagates IRS 120-day tax lien redemption and recorded i
   assert.match(md, /IRS phrase in the supplied record \(120-day redemption period\)/);
   assert.match(md, /Recorded Instrument Reference\*\*: Instrument #2019-0041982 · Book 4412, Page 889 · Recorded March 14, 2019/);
 });
+
+test('Decision Packet View: component declares lien priority & debt extinguishment waterfall', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const viewSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/decision-packet-view.tsx'), 'utf8');
+  assert.match(viewSrc, /data-testid="lien-waterfall-schedule"/);
+  assert.match(viewSrc, /computeLienWaterfall/);
+  assert.match(viewSrc, /Lien Priority & Debt Extinguishment Waterfall/);
+});

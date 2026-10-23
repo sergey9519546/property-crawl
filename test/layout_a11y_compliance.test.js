@@ -56,3 +56,13 @@ test('Accessibility (a11y): Triage chips enforce accessible list semantics and h
   // Text label must be visible
   assert.match(triageChipsSrc, /<span>\{chip\.label\}<\/span>/);
 });
+
+test('Due Diligence Binder: component is mounted on listing detail page with accessible landmarks', () => {
+  const listingPageSrc = read('src/app/listings/[id]/page.tsx');
+  assert.match(listingPageSrc, /<DueDiligenceChecklist listing=\{listing\} \/>/, 'DueDiligenceChecklist must be mounted on listing detail page');
+
+  const checklistSrc = read('src/components/terminal/due-diligence-checklist.tsx');
+  assert.match(checklistSrc, /aria-labelledby="due-diligence-heading"/, 'Checklist section must declare accessible heading landmark');
+  assert.match(checklistSrc, /window\.print\(\)/, 'Checklist must support one-click bidding binder print');
+  assert.match(checklistSrc, /Interactive Lien Waterfall & Surplus Proceeds Simulator/, 'Checklist must embed interactive debt waterfall simulator');
+});

@@ -739,6 +739,45 @@ export function computeStatutoryFeePreset(params: {
     transferTax = 0;
     defaultDepositPct = 0.10;
     citations.push("Texas Const. art. VIII § 29: $0 state real estate transfer tax.");
+  } else if (st === "CA") {
+    scheduleLabel = "California Non-Judicial Trustee Schedule (Cal. Civ. Code § 2924h & § 2924m; Rev. & Tax Code § 11911)";
+    sheriffPoundage = Math.min(Math.round(price * 0.01), 1500);
+    transferTax = Math.round((price / 1000) * 1.10);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "Cal. Civ. Code § 2924h: 100% cashier's check / certified funds requirement at trustee sale.",
+      "Cal. Rev. & Tax Code § 11911: County documentary transfer tax ($1.10 per $1,000 baseline).",
+      "Cal. Civ. Code § 2924m (SB 1079): 45-day post-sale eligible bidder window on 1-4 unit residential."
+    );
+  } else if (st === "GA") {
+    scheduleLabel = "Georgia Non-Judicial Foreclosure Schedule (O.C.G.A. § 44-14-162 & § 48-6-1)";
+    sheriffPoundage = 0;
+    transferTax = Math.round(price / 1000);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "O.C.G.A. § 44-14-162: Non-judicial foreclosure under power of sale (first Tuesday auction).",
+      "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
+    );
+  } else if (st === "IL") {
+    scheduleLabel = "Illinois Judicial Mortgage Foreclosure Schedule (735 ILCS 5/15-1507 & 35 ILCS 200/31-10)";
+    sheriffPoundage = Math.min(Math.round(price * 0.01), 1000);
+    transferTax = Math.round((price / 1000) * 1.50);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "735 ILCS 5/15-1507(e): Sheriff or designated selling officer statutory fee schedule.",
+      "35 ILCS 200/31-10: Combined state ($1.00/k) and county ($0.50/k) real estate transfer stamps.",
+      "735 ILCS 5/15-1508: Mandatory judicial confirmation of sale before deed delivery."
+    );
+  } else if (st === "NY") {
+    scheduleLabel = "New York Judicial Referee Schedule (RPAPL § 1354 & CPLR § 8003(b))";
+    sheriffPoundage = Math.min(Math.round(price * 0.01), 1100);
+    transferTax = Math.round((price / 500) * 2.00);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "RPAPL § 1354: Distribution of mortgage foreclosure sale proceeds and referee deed.",
+      "CPLR § 8003(b): Statutory referee compensation cap on mortgage foreclosure sales ($750–$1,100).",
+      "NY Tax Law § 1402: NY State Real Estate Transfer Tax ($2.00 per $500 / $4.00 per $1,000)."
+    );
   } else {
     transferTax = Math.round(price * 0.005);
     citations.push("Baseline state recording/transfer assumption (0.5% of price); verify county fee schedule.");
@@ -810,6 +849,15 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   } else if (st === "OH") {
     objectionOrConfirmationDays = 30;
     objectionLabel = "OH 30-day court confirmation & deed delivery window (ORC § 2329.31)";
+  } else if (st === "CA") {
+    objectionOrConfirmationDays = 45;
+    objectionLabel = "CA 45-day post-sale eligible bidder intent & upset period (Cal. Civ. Code § 2924m / SB 1079)";
+  } else if (st === "IL") {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = "IL 30-day court confirmation of judicial sale (735 ILCS 5/15-1508)";
+  } else if (st === "NY") {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = "NY 30-day referee report of sale & deed delivery (RPAPL § 1354)";
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
@@ -833,5 +881,158 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     effectiveLockupDays,
     estimatedCarryCost,
     annualCostOfCapitalPct,
+  };
+}
+
+export interface LienWaterfallItem {
+  id: string;
+  name: string;
+  type: "super_priority_tax" | "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "mechanic_lien" | "judgment_creditor" | "tax_deed" | "other";
+  amount: number;
+  seniority: number;
+  isForeclosingLien: boolean;
+  status: "survives_against_purchaser" | "satisfied_from_proceeds" | "partially_satisfied_from_proceeds" | "extinguished_unpaid";
+  amountPaidFromProceeds: number;
+  remainingBalanceAgainstProperty: number;
+}
+
+export interface LienWaterfallResult {
+  winningBidAmount: number;
+  totalSurvivingDebtOnProperty: number;
+  totalEffectiveAcquisitionCost: number;
+  surplusProceedsToBorrower: number;
+  items: LienWaterfallItem[];
+  criticalAlert: string | null;
+  summary: string;
+}
+
+export function computeLienWaterfall(params: {
+  winningBid: number;
+  foreclosingLienType: "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed" | "mechanic_lien";
+  foreclosingLienAmount: number;
+  delinquentTaxesAmount?: number;
+  seniorMortgageAmount?: number;
+  subordinateLiens?: Array<{ name: string; amount: number; type?: string }>;
+  state?: string;
+}): LienWaterfallResult {
+  const winningBid = Math.max(0, Number(params.winningBid) || 0);
+  const foreclosingAmount = Math.max(0, Number(params.foreclosingLienAmount) || 0);
+  const delinquentTaxes = Math.max(0, Number(params.delinquentTaxesAmount) || 0);
+  const seniorMortgage = Math.max(0, Number(params.seniorMortgageAmount || (params.foreclosingLienType === "first_mortgage" ? params.foreclosingLienAmount : 0)) || 0);
+  const isJuniorForeclosure = params.foreclosingLienType === "second_mortgage" ||
+    params.foreclosingLienType === "heloc" ||
+    params.foreclosingLienType === "hoa_assessment" ||
+    params.foreclosingLienType === "mechanic_lien";
+
+  const items: LienWaterfallItem[] = [];
+  let availableProceeds = winningBid;
+  let totalSurvivingDebt = 0;
+  let criticalAlert: string | null = null;
+
+  if (delinquentTaxes > 0) {
+    const paidTaxes = Math.min(availableProceeds, delinquentTaxes);
+    availableProceeds -= paidTaxes;
+    const remainingTaxes = delinquentTaxes - paidTaxes;
+    if (remainingTaxes > 0) {
+      totalSurvivingDebt += remainingTaxes;
+    }
+    items.push({
+      id: "tax-lien-01",
+      name: "Ad Valorem County/Municipal Real Property Taxes",
+      type: "super_priority_tax",
+      amount: delinquentTaxes,
+      seniority: 1,
+      isForeclosingLien: params.foreclosingLienType === "tax_deed",
+      status: remainingTaxes > 0 ? "survives_against_purchaser" : "satisfied_from_proceeds",
+      amountPaidFromProceeds: paidTaxes,
+      remainingBalanceAgainstProperty: remainingTaxes,
+    });
+  }
+
+  if (seniorMortgage > 0) {
+    if (isJuniorForeclosure) {
+      totalSurvivingDebt += seniorMortgage;
+      criticalAlert = `CRITICAL WARNING: Junior ${params.foreclosingLienType.replace("_", " ").toUpperCase()} foreclosure. The senior 1st mortgage ($${seniorMortgage.toLocaleString()}) SURVIVES against the purchaser! Your true effective acquisition cost is your bid plus this surviving senior mortgage.`;
+      items.push({
+        id: "senior-mtg-01",
+        name: "Senior First Mortgage / Deed of Trust",
+        type: "first_mortgage",
+        amount: seniorMortgage,
+        seniority: 2,
+        isForeclosingLien: false,
+        status: "survives_against_purchaser",
+        amountPaidFromProceeds: 0,
+        remainingBalanceAgainstProperty: seniorMortgage,
+      });
+    } else {
+      const paidSenior = Math.min(availableProceeds, seniorMortgage);
+      availableProceeds -= paidSenior;
+      const unpaidSenior = seniorMortgage - paidSenior;
+      items.push({
+        id: "foreclosing-mtg-01",
+        name: "Foreclosing First Mortgage (Senior Deed of Trust)",
+        type: "first_mortgage",
+        amount: seniorMortgage,
+        seniority: 2,
+        isForeclosingLien: true,
+        status: unpaidSenior === 0 ? "satisfied_from_proceeds" : "partially_satisfied_from_proceeds",
+        amountPaidFromProceeds: paidSenior,
+        remainingBalanceAgainstProperty: 0,
+      });
+    }
+  }
+
+  if (isJuniorForeclosure && foreclosingAmount > 0) {
+    const paidForeclosing = Math.min(availableProceeds, foreclosingAmount);
+    availableProceeds -= paidForeclosing;
+    const unpaidForeclosing = foreclosingAmount - paidForeclosing;
+    items.push({
+      id: "foreclosing-lien-01",
+      name: `Foreclosing Lien (${params.foreclosingLienType.replace("_", " ").toUpperCase()})`,
+      type: params.foreclosingLienType,
+      amount: foreclosingAmount,
+      seniority: 3,
+      isForeclosingLien: true,
+      status: unpaidForeclosing === 0 ? "satisfied_from_proceeds" : "partially_satisfied_from_proceeds",
+      amountPaidFromProceeds: paidForeclosing,
+      remainingBalanceAgainstProperty: 0,
+    });
+  }
+
+  if (Array.isArray(params.subordinateLiens) && params.subordinateLiens.length > 0) {
+    params.subordinateLiens.forEach((sub, idx) => {
+      const subAmount = Math.max(0, Number(sub.amount) || 0);
+      const paidSub = Math.min(availableProceeds, subAmount);
+      availableProceeds -= paidSub;
+      const unpaidSub = subAmount - paidSub;
+      items.push({
+        id: `subordinate-lien-${idx + 1}`,
+        name: sub.name || `Subordinate Lien #${idx + 1}`,
+        type: (sub.type as LienWaterfallItem["type"]) || "second_mortgage",
+        amount: subAmount,
+        seniority: 4 + idx,
+        isForeclosingLien: false,
+        status: unpaidSub === 0 ? "satisfied_from_proceeds" : (paidSub > 0 ? "partially_satisfied_from_proceeds" : "extinguished_unpaid"),
+        amountPaidFromProceeds: paidSub,
+        remainingBalanceAgainstProperty: 0,
+      });
+    });
+  }
+
+  const surplusProceedsToBorrower = availableProceeds;
+  const totalEffectiveAcquisitionCost = winningBid + totalSurvivingDebt;
+
+  const summary = totalSurvivingDebt > 0
+    ? `Winning bid of $${winningBid.toLocaleString()} leaves $${totalSurvivingDebt.toLocaleString()} in surviving priority debt on the property. Total effective acquisition: $${totalEffectiveAcquisitionCost.toLocaleString()}.`
+    : `Winning bid of $${winningBid.toLocaleString()} fully extinguishes all noticed subordinate mortgages and liens. Zero surviving lien debt against the purchaser.${surplusProceedsToBorrower > 0 ? ` Surplus proceeds of $${surplusProceedsToBorrower.toLocaleString()} to debtor.` : ""}`;
+
+  return {
+    winningBidAmount: winningBid,
+    totalSurvivingDebtOnProperty: totalSurvivingDebt,
+    totalEffectiveAcquisitionCost,
+    surplusProceedsToBorrower,
+    items,
+    criticalAlert,
+    summary,
   };
 }

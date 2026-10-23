@@ -11,6 +11,7 @@ import {
   redemptionLabel,
   computeStatutoryFeePreset,
   computeStatutoryDeadlinesAndCarry,
+  computeLienWaterfall,
 } from '../src/lib/underwriting.ts';
 
 test('cash requirements stay unresolved until every cost is explicit', () => {
@@ -270,6 +271,44 @@ test('UnderwriteScenario persists custom valuation assumption across sessions', 
   delete globalThis.sessionStorage;
 });
 
+test('computeLienWaterfall calculates debt extinguishment, surplus distribution, and surviving priority liens', () => {
+  // Scenario 1: Senior 1st mortgage foreclosing with sufficient proceeds
+  const seniorForeclosure = computeLienWaterfall({
+    winningBid: 250_000,
+    foreclosingLienType: 'first_mortgage',
+    foreclosingLienAmount: 180_000,
+    delinquentTaxesAmount: 10_000,
+    subordinateLiens: [
+      { name: 'Second Mortgage', amount: 30_000, type: 'second_mortgage' },
+      { name: 'HELOC', amount: 15_000, type: 'heloc' },
+    ],
+  });
+  assert.equal(seniorForeclosure.totalSurvivingDebtOnProperty, 0);
+  assert.equal(seniorForeclosure.totalEffectiveAcquisitionCost, 250_000);
+  assert.equal(seniorForeclosure.surplusProceedsToBorrower, 15_000);
+  assert.equal(seniorForeclosure.criticalAlert, null);
+  assert.equal(seniorForeclosure.items[0].status, 'satisfied_from_proceeds');
+  assert.equal(seniorForeclosure.items[1].status, 'satisfied_from_proceeds');
+  assert.equal(seniorForeclosure.items[2].status, 'satisfied_from_proceeds');
+  assert.equal(seniorForeclosure.items[3].status, 'satisfied_from_proceeds');
+
+  // Scenario 2: CRITICAL FORECLOSURE TRAP - Junior 2nd mortgage foreclosing
+  // Senior 1st mortgage ($200k) SURVIVES in full against the buyer!
+  const juniorForeclosure = computeLienWaterfall({
+    winningBid: 50_000,
+    foreclosingLienType: 'second_mortgage',
+    foreclosingLienAmount: 40_000,
+    seniorMortgageAmount: 200_000,
+    delinquentTaxesAmount: 5_000,
+  });
+  assert.equal(juniorForeclosure.totalSurvivingDebtOnProperty, 200_000);
+  assert.equal(juniorForeclosure.totalEffectiveAcquisitionCost, 250_000);
+  assert.ok(juniorForeclosure.criticalAlert !== null);
+  assert.match(juniorForeclosure.criticalAlert, /CRITICAL WARNING: Junior SECOND MORTGAGE foreclosure/);
+  assert.equal(juniorForeclosure.items.find(x => x.type === 'first_mortgage').status, 'survives_against_purchaser');
+  assert.equal(juniorForeclosure.surplusProceedsToBorrower, 5_000);
+});
+
 test('computeStatutoryFeePreset models state statutory poundage, transfer tax, and deposit terms as explicit presets', () => {
   const nj = computeStatutoryFeePreset({ purchasePrice: 120_000, state: 'NJ', source: 'civilview', depositText: '20% at gavel' });
   assert.ok(nj !== null);
@@ -287,6 +326,27 @@ test('computeStatutoryFeePreset models state statutory poundage, transfer tax, a
   assert.ok(oh !== null);
   assert.equal(oh.sheriffPoundage, 1500);
   assert.equal(oh.transferTax, 400);
+
+  const ca = computeStatutoryFeePreset({ purchasePrice: 500_000, state: 'CA', source: 'trustee' });
+  assert.ok(ca !== null);
+  assert.equal(ca.sheriffPoundage, 1500);
+  assert.equal(ca.transferTax, 550);
+  assert.match(ca.citations.join(' '), /Cal\. Civ\. Code § 2924h/);
+
+  const ga = computeStatutoryFeePreset({ purchasePrice: 200_000, state: 'GA', source: 'sheriff' });
+  assert.ok(ga !== null);
+  assert.equal(ga.transferTax, 200);
+  assert.match(ga.citations.join(' '), /O\.C\.G\.A\. § 48-6-1/);
+
+  const il = computeStatutoryFeePreset({ purchasePrice: 150_000, state: 'IL', source: 'sheriff' });
+  assert.ok(il !== null);
+  assert.equal(il.transferTax, 225);
+  assert.match(il.citations.join(' '), /735 ILCS 5\/15-1507/);
+
+  const ny = computeStatutoryFeePreset({ purchasePrice: 400_000, state: 'NY', source: 'sheriff' });
+  assert.ok(ny !== null);
+  assert.equal(ny.transferTax, 1600);
+  assert.match(ny.citations.join(' '), /RPAPL § 1354/);
 });
 
 test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and IRS 120-day lockup carry', async () => {
@@ -300,6 +360,14 @@ test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and I
   assert.equal(irs.irsRedemptionDays, 120);
   assert.equal(irs.irsRedemptionDeadline, '2027-01-29');
   assert.equal(irs.effectiveLockupDays, 120);
+
+  const caCarry = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'CA', purchasePrice: 400_000 });
+  assert.equal(caCarry.objectionOrConfirmationDays, 45);
+  assert.match(caCarry.objectionLabel, /SB 1079/);
+
+  const ilCarry = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'IL', purchasePrice: 200_000 });
+  assert.equal(ilCarry.objectionOrConfirmationDays, 30);
+  assert.match(ilCarry.objectionLabel, /735 ILCS 5\/15-1508/);
 
   const titleEngine = await import('../server/intelligence/title-risk-engine.js');
   const priority = titleEngine.extractInstrumentPrioritySignals('Foreclosing Mortgage Recorded 04/12/2019 in Book 4812 Page 309, Instrument # 20190048192. Sale is subject to prior senior mortgage.');

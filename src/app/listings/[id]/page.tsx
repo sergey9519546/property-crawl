@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
-import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText, Download } from "lucide-react";
+import { ArrowLeft, CalendarDays, ExternalLink, Gavel, MapPin, TrendingUp, AlertTriangle, Clock, FileText, Download, FileCheck2 } from "lucide-react";
 import { Listing, SOURCES } from "@/data/listings";
 import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
@@ -27,6 +27,7 @@ import { SaleMechanics } from "@/components/listings/sale-mechanics";
 import { PropertyDocuments } from "@/components/listings/property-documents";
 import { EnrichmentView } from "@/components/listings/enrichment-view";
 import { NearbyComps } from "@/components/listings/nearby-comps";
+import { DueDiligenceChecklist } from "@/components/terminal/due-diligence-checklist";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -359,6 +360,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
             <div className="mt-2 flex flex-col gap-1.5">
+              <a
+                href="#due-diligence-binder"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50/60 px-4 text-xs font-semibold text-emerald-950 shadow-xs transition hover:bg-emerald-100/70"
+              >
+                <FileCheck2 className="h-4 w-4 text-emerald-700" />
+                7-Point Due Diligence & Waterfall
+              </a>
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
@@ -549,6 +557,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </details>
           <div className="mt-8 space-y-8">
             <BiddingSimulator listing={listing} />
+            <DueDiligenceChecklist listing={listing} />
             <ListingCompare listingId={listing.id} label={listing.address} />
             <Parcel3DVisualizer listing={listing} />
             <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
@@ -579,6 +588,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
             <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
             <div className="mt-2 flex flex-col gap-1.5">
+              <a
+                href="#due-diligence-binder"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50/60 px-4 text-xs font-semibold text-emerald-950 shadow-xs transition hover:bg-emerald-100/70"
+              >
+                <FileCheck2 className="h-4 w-4 text-emerald-700" />
+                7-Point Due Diligence & Waterfall
+              </a>
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
