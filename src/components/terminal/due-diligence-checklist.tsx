@@ -68,9 +68,11 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   });
 
   // 2. Foreclosure type detection
-  const isSeniorLienRisk = /(?:junior|second|2nd|heloc|hoa|subordinate)/i.test(
-    `${listing.seniorLienRisk || ""} ${listing.seniorLienWarning || ""}`
-  );
+  // Only the detector's own verdict counts: its "nothing found" message
+  // (NO_TITLE_CONCLUSION) contains the word "junior" and must not trip this.
+  const isSeniorLienRisk =
+    /^(?:high|critical)$/i.test(String(listing.seniorLienRisk || "").trim()) ||
+    /^SENIOR_LIEN_RISK/i.test(String(listing.seniorLienWarning || "").trim());
   const detectedForeclosingType: "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed" =
     /(?:hoa|homeowners\s*assoc)/i.test(`${listing.seniorLienWarning || ""}`)
       ? "hoa_assessment"
@@ -83,12 +85,12 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       : "first_mortgage";
 
   // 3. Waterfall Simulation state
-  const [waterfallBid, setWaterfallBid] = useState<number>(openingBid > 0 ? openingBid : 100_000);
+  const [waterfallBid, setWaterfallBid] = useState<string>(openingBid > 0 ? String(openingBid) : "");
   const [waterfallLienType, setWaterfallLienType] = useState<
     "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed"
   >(detectedForeclosingType);
-  const [waterfallSeniorMtg, setWaterfallSeniorMtg] = useState<number>(isSeniorLienRisk ? 150_000 : 0);
-  const [waterfallTaxes, setWaterfallTaxes] = useState<number>(3_500);
+  const [waterfallSeniorMtg, setWaterfallSeniorMtg] = useState<string>("");
+  const [waterfallTaxes, setWaterfallTaxes] = useState<string>("");
   const [showWaterfallDetails, setShowWaterfallDetails] = useState<boolean>(isSeniorLienRisk);
 
   // 4. Verification Checklist Items
@@ -197,12 +199,15 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   };
 
   // Compute waterfall
+  // Results come only from amounts the buyer entered (or the published opening bid).
+  const bidAmount = Number(waterfallBid) || 0;
+  const hasBid = bidAmount > 0;
   const waterfallResult: LienWaterfallResult = computeLienWaterfall({
-    winningBid: waterfallBid,
+    winningBid: bidAmount,
     foreclosingLienType: waterfallLienType,
-    foreclosingLienAmount: waterfallBid,
-    delinquentTaxesAmount: waterfallTaxes,
-    seniorMortgageAmount: waterfallSeniorMtg,
+    foreclosingLienAmount: bidAmount,
+    delinquentTaxesAmount: Number(waterfallTaxes) || 0,
+    seniorMortgageAmount: Number(waterfallSeniorMtg) || 0,
     state: stateCode,
   });
 
@@ -395,7 +400,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 min="0"
                 step="1000"
                 value={waterfallBid}
-                onChange={(e) => setWaterfallBid(Math.max(0, Number(e.target.value) || 0))}
+                onChange={(e) => setWaterfallBid(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
               />
             </label>
@@ -420,7 +425,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 min="0"
                 step="5000"
                 value={waterfallSeniorMtg}
-                onChange={(e) => setWaterfallSeniorMtg(Math.max(0, Number(e.target.value) || 0))}
+                onChange={(e) => setWaterfallSeniorMtg(e.target.value)}
                 placeholder="0 if 1st mtg foreclosing"
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
               />
@@ -432,7 +437,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 min="0"
                 step="500"
                 value={waterfallTaxes}
-                onChange={(e) => setWaterfallTaxes(Math.max(0, Number(e.target.value) || 0))}
+                onChange={(e) => setWaterfallTaxes(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
               />
             </label>
@@ -443,7 +448,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
             <span className="text-[11px] font-semibold text-slate-500">Your Winning Bid</span>
-            <p className="mt-0.5 text-lg font-black text-slate-950">{displayMoney(waterfallBid)}</p>
+            <p className="mt-0.5 text-lg font-black text-slate-950">{hasBid ? displayMoney(bidAmount) : "Enter a bid"}</p>
             <span className="text-[10px] text-slate-500">Knock-down price at auction</span>
           </div>
 
@@ -466,23 +471,25 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-rose-950" : "text-emerald-950"
               }`}
             >
-              {displayMoney(waterfallResult.totalSurvivingDebtOnProperty)}
+              {hasBid ? displayMoney(waterfallResult.totalSurvivingDebtOnProperty) : "—"}
             </p>
             <span
               className={`text-[10px] ${
                 waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-rose-700" : "text-emerald-700"
               }`}
             >
-              {waterfallResult.totalSurvivingDebtOnProperty > 0
+              {!hasBid
+                ? "Enter amounts to calculate"
+                : waterfallResult.totalSurvivingDebtOnProperty > 0
                 ? "Buyer must satisfy this senior debt!"
-                : "Zero surviving priority liens"}
+                : "No surviving liens in the amounts entered"}
             </span>
           </div>
 
           <div className="rounded-xl border border-slate-900 bg-slate-900 p-3 text-white shadow-xs">
             <span className="text-[11px] font-semibold text-slate-300">True Effective Cost</span>
             <p className="mt-0.5 text-lg font-black text-emerald-400">
-              {displayMoney(waterfallResult.totalEffectiveAcquisitionCost)}
+              {hasBid ? displayMoney(waterfallResult.totalEffectiveAcquisitionCost) : "—"}
             </p>
             <span className="text-[10px] text-slate-400">Bid + surviving mortgages & taxes</span>
           </div>
@@ -501,7 +508,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {waterfallResult.items.map((item) => (
+              {(hasBid ? waterfallResult.items : []).map((item) => (
                 <tr key={item.id} className="text-slate-800">
                   <td className="py-2 pr-3">
                     <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-800">
@@ -531,7 +538,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                   </td>
                 </tr>
               ))}
-              {waterfallResult.surplusProceedsToBorrower > 0 && (
+              {hasBid && waterfallResult.surplusProceedsToBorrower > 0 && (
                 <tr className="bg-sky-50/60 font-semibold text-sky-950">
                   <td className="py-2 pr-3 text-[10px] uppercase font-bold text-sky-800">Surplus</td>
                   <td className="py-2 pr-3" colSpan={2}>
@@ -548,7 +555,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         </div>
 
         <p className="mt-3 text-[11px] leading-relaxed text-slate-600 font-medium">
-          {waterfallResult.summary}
+          {hasBid ? waterfallResult.summary : "Enter a simulated winning bid and any lien amounts you have verified to run the waterfall."}
         </p>
       </div>
     </section>

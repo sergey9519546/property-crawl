@@ -28,41 +28,41 @@ type Step = {
 
 const STEPS: Step[] = [
   {
-    label: "Ingest",
-    title: "Ingest the notice",
-    desc: "When AI parse is configured, legal prose maps to structured fields. Without it, you still get the source notice and listing facts — nothing is invented.",
+    label: "Score",
+    title: "See how the Deal Score works",
+    desc: "Slide the opening bid. The Deal Score compares it to the county's value figure. It is a quick sort, not an appraisal.",
     href: "/listings",
     icon: Palette,
     visual: <DealKitVisual />,
   },
   {
-    label: "Score",
-    title: "Score the county figure",
-    desc: "Deal Score is the published opening amount divided by a county assessor figure, and only where the market conversion is confirmed. Every other county shows the raw figure or nothing, and the score stays blank.",
+    label: "Compare",
+    title: "Check the county's number",
+    desc: "Listings show the county's value figure next to the opening bid when one is published. If the data can't support a score, we leave it blank.",
     href: "/listings",
     icon: FileStack,
     visual: <ParcelContextVisual />,
   },
   {
-    label: "Explain",
+    label: "Catch",
     title: "Read the catch",
-    desc: "Each listing runs the published plaintiff through the state statute table and prints the warnings next to occupancy and deposit terms when those were published. That check is not a title opinion.",
+    desc: "The catch lists the risks in plain English: the redemption period, liens, who lives there and deposit terms. Always check title before you bid.",
     href: "/listings",
     icon: Sparkles,
     visual: <PromptVisual />,
   },
   {
-    label: "Watch",
-    title: "Save the listing",
-    desc: "The watchlist toggle is on the listing. The home underwrite sliders start at zero and use only amounts you enter.",
+    label: "Save",
+    title: "Save it and run your numbers",
+    desc: "Save listings to your watchlist from the listings page. The sliders use only the amounts you enter, so the math is yours.",
     href: "/listings",
     icon: SlidersHorizontal,
     visual: <FineTuneVisual />,
   },
   {
-    label: "Export",
-    title: "Export the record",
-    desc: "The feed exports CSV or JSON after operator sign-in. A decision packet is on each listing. Partner PDFs are not built.",
+    label: "Keep",
+    title: "Keep a copy",
+    desc: "Listings link to the original notice when the source publishes one, so you can keep your own records. Spreadsheet downloads are for staff only for now.",
     href: "/listings",
     icon: Share2,
     visual: <DownloadVisual />,
@@ -82,12 +82,11 @@ export function FastestWay() {
             <GsapReveal>
               <div className="flex flex-col justify-center">
                 <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-                  From posted notice to bid, in one afternoon.
+                  From a posted sale to a confident bid.
                 </h2>
                 <p className="mt-4 max-w-[420px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
-                  Federal auctions update by the hour. County sheriffs post on
-                  Tuesdays. The loop that ships is the notice, the county figure,
-                  the statute check, the watchlist, and the export.
+                  Find a sale, read the catch, save it, and check the details
+                  before you bid.
                 </p>
               </div>
             </GsapReveal>
@@ -155,12 +154,12 @@ function DealKitVisual() {
     <div className="w-full max-w-[280px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2 border-b border-[#F3F4F6] pb-2">
         <Palette className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Live Deal Kit</span>
-        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">Interactive</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Try it</span>
+        <span className="ml-auto rounded-full bg-[#e7faef] px-2 py-0.5 text-[11px] font-bold text-[#15803D]">Example</span>
       </div>
       <div className="mt-3 space-y-2.5">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-[#5B6472]">County Assessor</span>
+          <span className="text-[#5B6472]">County value</span>
           <span className="font-mono font-semibold text-[#111827]">${countyFigure.toLocaleString()}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
@@ -200,17 +199,17 @@ function ParcelContextVisual() {
         <span className="ml-auto text-[11px] font-medium text-emerald-700">Cleveland, OH</span>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">Assessed Value</p>
+        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">County value</p>
         <p className="mt-1 font-mono text-[12px] font-bold text-[#111827]">$145,000</p>
       </div>
       <div className="rounded-lg border border-[#E5E7EB] bg-white p-2.5">
-        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">Statutory Floor</p>
-        <p className="mt-1 font-mono text-[12px] font-bold text-emerald-700">66.6% min bid</p>
+        <p className="text-[10px] font-semibold uppercase text-[#5B6472]">Opening bid</p>
+        <p className="mt-1 font-mono text-[12px] font-bold text-emerald-700">$62,000</p>
       </div>
       <div className="col-span-2 flex items-center justify-between rounded-lg border border-slate-200 bg-[#F8FAFC] px-3 py-2 text-[11px]">
-        <span className="text-slate-600">Parcel 002-14-082</span>
+        <span className="text-slate-600">Example listing only</span>
         <Link href="/listings?state=OH" className="font-semibold text-slate-900 underline hover:text-slate-700">
-          Inspect OH records →
+          Browse Ohio listings →
         </Link>
       </div>
     </div>
@@ -222,14 +221,14 @@ function PromptVisual() {
     <div className="w-full max-w-[300px] space-y-2">
       <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <Sparkles className="h-4 w-4 text-[#0F172A]" />
-        <span className="text-[12px] font-semibold text-[#111827]">Statute & Catch Analysis</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Example: the catch</span>
       </div>
       <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-[11px] leading-relaxed text-amber-950">
-        <strong className="block text-amber-900">Ohio ORC § 2329:</strong>
-        Confirmation-of-sale delay typical; 10% cash/certified funds due day of sale; junior tax liens extinguished at sheriff confirmation.
+        <strong className="block text-amber-900">Example catch:</strong>
+        The sale may not be final until a judge confirms it. A deposit may be due on sale day. Check for liens before you bid.
       </div>
       <Link href="/listings" className="flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-[11px] font-semibold text-slate-900 hover:bg-slate-50">
-        <span>Read listing catch details</span>
+        <span>See the catch on a listing</span>
         <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
       </Link>
     </div>
@@ -250,9 +249,9 @@ function FineTuneVisual() {
       <div className="flex items-center justify-between border-b border-[#F3F4F6] pb-2">
         <div className="flex items-center gap-1.5">
           <SlidersHorizontal className="h-4 w-4 text-[#111827]" />
-          <span className="text-[12px] font-semibold text-[#111827]">Live Underwriter</span>
+          <span className="text-[12px] font-semibold text-[#111827]">Example math</span>
         </div>
-        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">70% Rule</span>
+        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">Rule of thumb</span>
       </div>
       <div className="mt-3 space-y-2.5">
         <div>
@@ -273,17 +272,17 @@ function FineTuneVisual() {
         </div>
         <div className="rounded-lg bg-slate-50 p-2 space-y-1 text-[11px]">
           <div className="flex justify-between">
-            <span className="text-slate-600">Est. Market Value:</span>
+            <span className="text-slate-600">Your value guess:</span>
             <span className="font-semibold text-slate-900">${estimatedVal.toLocaleString()}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-slate-600">Max Allowable Offer:</span>
+            <span className="text-slate-600">Your max bid (example):</span>
             <span className={`font-bold ${targetMao >= bid ? "text-emerald-700" : "text-amber-700"}`}>
               ${targetMao.toLocaleString()}
             </span>
           </div>
           <div className="flex justify-between border-t border-slate-200 pt-1">
-            <span className="text-slate-600">Est. Cash to Close:</span>
+            <span className="text-slate-600">Rough cash to close:</span>
             <span className="font-mono font-bold text-slate-900">${estimatedCashClose.toLocaleString()}</span>
           </div>
         </div>
@@ -311,9 +310,9 @@ function DownloadVisual() {
       <div className="col-span-2 flex items-center justify-between rounded-lg border border-[#E5E7EB] bg-white p-2.5">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-[#0F172A]" />
-          <span className="text-[12px] font-semibold text-[#111827]">Live Data Export</span>
+          <span className="text-[12px] font-semibold text-[#111827]">Spreadsheet download</span>
         </div>
-        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Active API</span>
+        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">Staff only</span>
       </div>
       <button
         type="button"
@@ -323,7 +322,7 @@ function DownloadVisual() {
       >
         <Download className="h-3.5 w-3.5 text-[#5B6472]" />
         <span className="text-[11px] font-medium text-[#111827]">
-          {downloading === "csv" ? "Downloading…" : "Download CSV"}
+          {downloading === "csv" ? "Downloading…" : "Download spreadsheet"}
         </span>
       </button>
       <button
@@ -334,7 +333,7 @@ function DownloadVisual() {
       >
         <FileText className="h-3.5 w-3.5 text-[#5B6472]" />
         <span className="text-[11px] font-medium text-[#111827]">
-          {downloading === "json" ? "Downloading…" : "Download JSON"}
+          {downloading === "json" ? "Downloading…" : "Download data file"}
         </span>
       </button>
     </div>

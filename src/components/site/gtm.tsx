@@ -10,16 +10,10 @@ import {
   Send,
   Calculator,
   FileText,
-  Image as ImageIcon,
-  Sparkles,
   Layers,
-  Eye,
   Radar,
-  FileDown,
   LayoutDashboard,
   Gauge,
-  ShieldCheck,
-  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,12 +33,9 @@ const TEAMS: Team[] = [
     key: "marketing",
     label: "Marketing",
     icon: Megaphone,
-    desc: "Turn source-observed listing facts into clear deal notes and shareable evidence packets. What ships today is structured research, not automated brand campaigns.",
+    desc: "Keep a short summary of a listing: the opening bid, the sale date and the catch.",
     chips: [
       { label: "Deal notes", icon: FileText, href: "/listings" },
-      { label: "Source photos", icon: ImageIcon, href: "/listings" },
-      { label: "Evidence packet", icon: Sparkles, href: "/research" },
-      { label: "Share-ready export", icon: Layers, href: "/listings" },
     ],
     tint: "#e7faef",
   },
@@ -52,11 +43,10 @@ const TEAMS: Team[] = [
     key: "acquisitions",
     label: "Acquisitions",
     icon: Target,
-    desc: "Triage from posted notice to research case. Filters, maps, hunts, and source evidence are live in this beta. Advanced deal-stack products remain roadmap.",
+    desc: "Filter by place, price and sale date, then save what you like. Members can start a hunt and get an email when a new listing fits.",
     chips: [
-      { label: "Listing grid", icon: LayoutDashboard, href: "/listings" },
-      { label: "Saved hunts", icon: Radar, href: "/hunts" },
-      { label: "Second Look", icon: Eye, href: "/research" },
+      { label: "Search and filters", icon: LayoutDashboard, href: "/listings" },
+      { label: "Start a hunt", icon: Radar, href: "/hunts" },
       { label: "Watchlist", icon: Gauge, href: "/listings" },
     ],
     tint: "#E2E8F0",
@@ -65,12 +55,9 @@ const TEAMS: Team[] = [
     key: "disposition",
     label: "Disposition",
     icon: Send,
-    desc: "Export structured listing facts and research notes for partners. Shared public links and polished lender PDFs are still roadmap — exports are CSV/JSON today.",
+    desc: "Working with a partner or lender? Open a listing to see its sale date, opening bid and what to check before bidding.",
     chips: [
-      { label: "CSV export", icon: FileDown, href: "/listings" },
-      { label: "JSON export", icon: FileDown, href: "/listings" },
-      { label: "Research case", icon: FileText, href: "/research" },
-      { label: "Partner portal (roadmap)", icon: ShieldCheck },
+      { label: "Original notice links", icon: FileText, href: "/listings" },
     ],
     tint: "#FFD6C8",
   },
@@ -78,12 +65,11 @@ const TEAMS: Team[] = [
     key: "underwriting",
     label: "Underwriting",
     icon: Calculator,
-    desc: "Cash inputs, opening bids, and modeled value bands stay separated from published source facts. AI notice parsing runs only when an API key is configured — never as a silent substitute for evidence.",
+    desc: "Work out what a property could cost you. The Deal Score compares the opening bid to the county's value figure. It is a quick sort, not an appraisal.",
     chips: [
-      { label: "Opening bid facts", icon: Layers, href: "/listings" },
-      { label: "Deal score band", icon: Gauge, href: "/listings" },
-      { label: "Risk notes (AI optional)", icon: FileText, href: "/listings" },
-      { label: "Coverage honesty", icon: BarChart3, href: "/sources" },
+      { label: "Opening bid", icon: Layers, href: "/listings" },
+      { label: "Deal Score", icon: Gauge, href: "/listings" },
+      { label: "The catch", icon: FileText, href: "/listings" },
     ],
     tint: "#E9D5FF",
   },
@@ -98,11 +84,10 @@ export function Gtm() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            Research that matches how flippers actually work.
+            Whatever you are buying, start with the facts.
           </h2>
           <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#4B5563] sm:text-[18px]">
-            Different roles need different cuts of the same evidence. Here&rsquo;s what
-            this beta ships today — and where roadmap items are labeled.
+            Pick the job you are doing. Each view shows what you can do today.
           </p>
         </GsapReveal>
 
@@ -197,12 +182,12 @@ function GtmVisual({ team }: { team: string }) {
         <div className="aspect-[16/10] w-full overflow-hidden rounded-lg bg-[#F3F4F6]">
           <img
             src="https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=600&q=60"
-            alt="Deal memo"
+            alt="Sample home"
             className="h-full w-full object-cover"
           />
         </div>
-        <p className="mt-3 text-[13px] font-bold text-[#111827]">Listing record</p>
-        <p className="text-[11px] text-[#5B6472]">County figure on the listing</p>
+        <p className="mt-3 text-[13px] font-bold text-[#111827]">Sample listing</p>
+        <p className="text-[11px] text-[#5B6472]">Photo is for illustration</p>
       </div>
     );
   }
@@ -210,7 +195,7 @@ function GtmVisual({ team }: { team: string }) {
     return (
       <div className="w-full max-w-[300px] space-y-2">
         {[
-          { r: "Record", a: "Open the feed", s: "—", c: "#e7faef" },
+          { r: "Browse", a: "See upcoming sales", s: "→", c: "#e7faef" },
         ].map((row) => (
           <div
             key={row.a}
@@ -235,9 +220,9 @@ function GtmVisual({ team }: { team: string }) {
     return (
       <div className="w-full max-w-[300px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_28px_rgba(0,0,0,0.08)]">
         <p className="text-[13px] font-bold text-[#111827]">Decision packet</p>
-        <p className="mt-1 text-[11px] text-[#5B6472]">CSV or JSON from the feed</p>
+        <p className="mt-1 text-[11px] text-[#5B6472]">A short summary of one listing</p>
         <Link href="/listings" className="mt-3 inline-flex rounded-lg border border-[#E5E7EB] bg-[#F5F6F7] px-2.5 py-1 text-[11px] font-semibold text-[#111827] hover:bg-white">
-          Open the feed export
+          Open a listing
         </Link>
 
       </div>
@@ -247,14 +232,14 @@ function GtmVisual({ team }: { team: string }) {
   return (
     <div className="w-full max-w-[300px] rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_28px_rgba(0,0,0,0.08)]">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-semibold text-[#111827]">Listing score</span>
+        <span className="text-[12px] font-semibold text-[#111827]">Sample listing score</span>
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e7faef] text-[14px] font-bold text-[#3F6B00]">
           —
         </span>
       </div>
       <div className="mt-3 space-y-1.5">
         <Row label="Opening" value="—" />
-        <Row label="Figure" value="—" />
+        <Row label="County value" value="—" />
         <Row label="Score" value="—" />
       </div>
     </div>

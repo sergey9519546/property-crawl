@@ -74,17 +74,17 @@ const defaults: Record<string, string> = {
   source: "All sources",
   type: "All property types",
   program: "All programs",
-  lifecycle: "All lifecycle states",
-  occupancy: "All occupancy",
+  lifecycle: "Any sale status",
+  occupancy: "Any occupancy",
   freshness: "Any freshness",
-  distressStage: "All distress stages",
+  distressStage: "All sale types",
 };
 const filterLabels: Record<string, string> = {
   q: "Search", state: "State", county: "County", source: "Source", type: "Property type",
   program: "Program", lifecycle: "Sale status", occupancy: "Occupancy", freshness: "Freshness",
-  saleFrom: "From", saleTo: "Until", maxBid: "Max opening amount", minScore: "Min score",
-  minEquity: "Min spread", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption",
-  distressStage: "Distress stage", minQuality: "Min evidence quality",
+  saleFrom: "From", saleTo: "Until", maxBid: "Max opening bid", minScore: "Min Deal Score",
+  minEquity: "Min equity (value minus bid)", hasDocuments: "Documents", seniorLien: "Senior lien", redemption: "Redemption period",
+  distressStage: "Sale type", minQuality: "Min listing detail",
 };
 // The search box owns the text being typed. While it lived in
 // DiscoveryWorkbench, every keystroke re-rendered the whole workbench and
@@ -253,18 +253,18 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (request.controller.signal.aborted || requestRef.current?.id !== request.id) return;
       if (response.status === 401) {
         session.requestUnlock();
-        throw new Error("Operator unlock required to view inventory.");
+        throw new Error("We couldn't load listings right now. Try again in a minute.");
       }
       if (response.status === 409) {
         setCursor(undefined);
         setCursorStack([]);
         throw new Error(
-          "Results changed while paging. Refreshed the search; choose Next again.",
+          "The results changed while you were paging. We refreshed them. Choose Next again.",
         );
       }
       if (!response.ok || !Array.isArray(result.listings))
         throw new Error(
-          result.error || "Discovery records could not be loaded.",
+          result.error || "We couldn't load listings right now. Try again in a minute.",
         );
       if (requestRef.current?.id === request.id) setLoadedResult({ key: requestKey, payload: result });
     } catch (caught) {
@@ -272,7 +272,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       setError(
         caught instanceof TypeError
           ? "Property search could not be reached. Try again."
-          : caught instanceof Error ? caught.message : "Properties could not be loaded.",
+          : caught instanceof Error ? caught.message : "We couldn't load listings right now. Try again in a minute.",
       );
     } finally {
       if (requestRef.current?.id === request.id) setLoading(false);
@@ -333,7 +333,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok)
-          throw new Error(result.error || "Watchlist could not be loaded.");
+          throw new Error(result.error || "We couldn't load your watchlist.");
         const ids = Array.isArray(result.deals)
           ? result.deals
               .map((deal: unknown) =>
@@ -347,7 +347,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         if (active) { setSaved(new Set(ids)); setWatchlistError(""); }
       })
       .catch(() => {
-        if (active) setWatchlistError("Saved properties could not be checked. Your watchlist has not been changed.");
+        if (active) setWatchlistError("We couldn't check your saved properties. Your watchlist is unchanged.");
       });
     return () => {
       active = false;
@@ -375,7 +375,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         });
         setWatchlistError("");
       } catch {
-        setWatchlistError("Browser storage is unavailable. Watchlist could not be updated.");
+        setWatchlistError("Your browser is blocking saved properties, so the watchlist was not updated.");
       }
       return;
     }
@@ -396,7 +396,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         session.requestUnlock();
       }
       if (!response.ok)
-        throw new Error(result.error || "Watchlist could not be updated.");
+        throw new Error(result.error || "We couldn't update your watchlist. Try again.");
       setSaved((items) => {
         const next = new Set(items);
         wasSaved ? next.delete(id) : next.add(id);
@@ -406,7 +406,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       setWatchlistError(
         caught instanceof Error
           ? caught.message
-          : "Watchlist could not be updated.",
+          : "We couldn't update your watchlist. Try again.",
       );
     } finally {
       pendingSaves.current.delete(id);
@@ -522,7 +522,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
       <header className="mb-4">
         <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Find properties</h1>
-        <p className="mt-1 text-sm text-slate-600">Search by address, parcel, publisher ID, or keyword.</p>
+        <p className="mt-1 text-sm text-slate-600">Search by address, parcel number, listing number, or keyword. Open any listing to see the catch before you bid.</p>
       </header>
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <DiscoverySearchField q={filters.q} onSearch={onSearch} />
@@ -555,21 +555,21 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                 {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
               </select>
             ))}
-            <select aria-label="Distress stage" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
-              <option value="all">All distress stages</option>
-              <option value="reo">REO</option>
+            <select aria-label="Sale type" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+              <option value="all">All sale types</option>
+              <option value="reo">Bank-owned (REO)</option>
               <option value="pre_foreclosure">Pre-foreclosure</option>
-              <option value="scheduled">Scheduled</option>
+              <option value="scheduled">Auction scheduled</option>
               <option value="tax_sale">Tax sale</option>
-              <option value="unknown">Unknown</option>
+              <option value="unknown">Not stated</option>
             </select>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Max published amount<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min equity ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
-              <option value="all">Any document status</option><option value="true">Documents available</option><option value="false">No documents reported</option><option value="unknown">Document status unknown</option>
+              <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
             </select>
           </div>
         )}
@@ -588,7 +588,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-900"
                 >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None reported" : "Unknown" : sourceDisplayText(value!).replace(/_/g, " ")}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}
@@ -609,9 +609,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
         {([
           { key: "isNew" as const, label: "New" },
           { key: "priceDropped" as const, label: "Price dropped" },
-          { key: "hasDocs" as const, label: "Has docs" },
-          { key: "stale" as const, label: "Stale >30d" },
-          { key: "occupancyKnown" as const, label: "Occupancy known" },
+          { key: "hasDocs" as const, label: "Has documents" },
+          { key: "stale" as const, label: "Not updated in 30+ days" },
+          { key: "occupancyKnown" as const, label: "Occupancy stated" },
         ]).map(({ key, label: chipLabel }) => (
           <button
             key={key}
@@ -660,7 +660,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                 }`
               : loading || !error
                 ? "Updating results…"
-                : "Results unavailable"}
+                : "Results unavailable right now"}
           </p>
           {/* Always rendered, never popped in. This line used to be
               conditional on `payload`, so it appeared from nothing once the
@@ -673,7 +673,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             {payload?.listings
               ? (() => {
                   const honesty = summarizeInventoryHonesty(payload.listings);
-                  return `${honesty.openingBidPublished} of ${honesty.shown} on this page publish an opening amount`;
+                  return `${honesty.openingBidPublished} of ${honesty.shown} on this page list an opening bid`;
                 })()
               : "Checking published amounts…"}
           </p>
@@ -704,10 +704,10 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               && (filters.sort || "score") === "score"
               && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
               && payload.listings.length > 0
-              ? "No listing on this page carries a modeled score yet, so this order is not ranking by score. Scores need a published opening amount and an estimated range."
+              ? "No listing on this page has a Deal Score yet, so this order isn't ranking by score. A Deal Score needs a published opening bid and a value range."
               : payload?.listings
-                ? "This order is ranking by modeled score."
-                : "Checking whether this page carries a modeled score…"}
+                ? "Sorted by Deal Score, highest first."
+                : "Checking which listings have a Deal Score…"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -717,31 +717,31 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             onChange={(event) => setFilters({ sort: event.target.value })}
             className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
           >
-            <option value="score">Modeled score</option>
-            <option value="quality">Evidence quality</option>
-            <option value="opportunity">Opportunity rank</option>
-            <option value="triage">Research priority</option>
+            <option value="score">Deal Score</option>
+            <option value="quality">Most complete listing</option>
+            <option value="opportunity">Highest Deal Score</option>
+            <option value="triage">Check first</option>
             <option value="date">Sale date</option>
-            <option value="bid-asc">Opening amount</option>
+            <option value="bid-asc">Opening bid, low to high</option>
           </select>
           <select
-            aria-label="Minimum evidence quality"
+            aria-label="Minimum listing detail"
             value={filters.minQuality || ""}
             onChange={(event) => setFilters({ minQuality: event.target.value || undefined })}
             className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
           >
-            <option value="">Any evidence</option>
-            <option value="25">Evidence ≥ 25</option>
-            <option value="50">Evidence ≥ 50</option>
-            <option value="75">Evidence ≥ 75</option>
+            <option value="">Any amount of detail</option>
+            <option value="25">Some detail</option>
+            <option value="50">Good detail</option>
+            <option value="75">Full detail</option>
           </select>
           <SaveSearchButton filters={filters} />
           <details className="relative">
             <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold">More</summary>
             <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-slate-50">Saved searches &amp; changes</Link>
-              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export CSV results</button>
-              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export JSON results</button>
+              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-slate-50">Hunts and email alerts</Link>
+              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export spreadsheet (staff only)</button>
+              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export data file (staff only)</button>
             </div>
           </details>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">
@@ -829,7 +829,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   viewport keeps everything below the fold for the whole load. It also
                   scales with the viewport, which a pixel reservation does not. */}
               <Loader2 className="mb-3 animate-spin" />
-              Loading properties…
+              Loading listings…
             </div>
           ) : !filteredListings.length ? (
             <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
@@ -867,12 +867,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   <h2 className="mt-4 text-lg font-bold">
                     {saved.size === 0
                       ? "Your watchlist is empty."
-                      : "No saved properties match your current search criteria."}
+                      : "None of your saved properties match this search."}
                   </h2>
                   <p className="mt-2 text-sm text-slate-600">
                     {saved.size === 0
-                      ? "Click the bookmark icon on any property card or detail page to add it to your watchlist."
-                      : "Clear other search filters or switch off the watchlist filter to see all properties."}
+                      ? "Tap the bookmark on any listing to save it here."
+                      : "Clear a filter or turn off the watchlist view to see everything."}
                   </p>
                   <button
                     type="button"
@@ -895,7 +895,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                         sends the user to tune a filter that was never the
                         problem. */}
                     {derivedFloorActive
-                      ? "A minimum deal score or minimum spread only matches records that carry one. These are derived values, not published ones — if the inventory has none yet, that filter matches nothing."
+                      ? "A minimum deal score or equity filter skips listings without those numbers. They're derived values, not published by the source: we work them out from the opening bid and value range. Try removing the filter."
                       : "Try a different location or fewer filters."}
                   </p>
                   <Link
@@ -1020,12 +1020,12 @@ function DiscoveryCalendar({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
-            Publisher sale dates
+            Sale dates
           </p>
           <h2 className="mt-1 text-xl font-bold">Calendar view</h2>
         </div>
         <span className="text-xs text-slate-500">
-          Only dates published by a source are placed on the calendar.
+          Only sales with a published date appear here.
         </span>
       </div>
 
@@ -1034,14 +1034,14 @@ function DiscoveryCalendar({
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              60-Day Store-Wide Auction Rollup
+              Auctions in the next 60 days
             </h3>
             <span className="text-xs font-semibold text-slate-600">
               {rollupLoading
                 ? "Loading…"
                 : calendarRollup
-                  ? `${calendarDatedTotal(calendarRollup).toLocaleString()} dated auctions`
-                  : "Unavailable"}
+                  ? `${calendarDatedTotal(calendarRollup).toLocaleString()} auctions with a date`
+                  : "Not available right now"}
             </span>
           </div>
           {calendarRollup && calendarRollup.weeks.length > 0 ? (
@@ -1063,14 +1063,14 @@ function DiscoveryCalendar({
                     Median:{" "}
                     {week.medianOpeningBid !== null
                       ? displayMoney(week.medianOpeningBid)
-                      : "Unpublished"}
+                      : "Not published"}
                   </span>
                 </div>
               ))}
             </div>
           ) : !rollupLoading ? (
             <p className="mt-2 text-xs text-slate-500">
-              No dated auctions found within the next 60 days for the current state scope.
+              No dated auctions in the next 60 days for this search.
             </p>
           ) : null}
         </div>
@@ -1078,14 +1078,14 @@ function DiscoveryCalendar({
         <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex items-center justify-between gap-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              Neighborhood &amp; Market Medians
+              Typical prices by area
             </h3>
             <span className="text-xs font-semibold text-slate-600">
               {rollupLoading
                 ? "Loading…"
                 : neighborhoodRollup
                   ? (neighborhoodRollup.bucketsTruncated && typeof neighborhoodRollup.bucketsTotal === "number" ? `Top ${neighborhoodRollup.count.toLocaleString()} of ${neighborhoodRollup.bucketsTotal.toLocaleString()} markets` : `${neighborhoodRollup.count.toLocaleString()} markets`)
-                  : "Unavailable"}
+                  : "Not available right now"}
             </span>
           </div>
           {neighborhoodRollup && neighborhoodRollup.neighborhoods.length > 0 ? (
@@ -1106,7 +1106,7 @@ function DiscoveryCalendar({
                     <span className="font-bold text-slate-800">
                       {bucket.medianOpeningBid !== null
                         ? displayMoney(bucket.medianOpeningBid)
-                        : "Bid unpublished"}
+                        : "Opening bid not published"}
                     </span>
                     {bucket.medianDealScore !== null && (
                       <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
@@ -1119,7 +1119,7 @@ function DiscoveryCalendar({
             </div>
           ) : !rollupLoading ? (
             <p className="mt-2 text-xs text-slate-500">
-              No market clusters computed for the current filter scope.
+              Not enough listings in this search to show area prices.
             </p>
           ) : null}
         </div>
@@ -1128,7 +1128,7 @@ function DiscoveryCalendar({
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {truncated && (
           <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 md:col-span-2 xl:col-span-3">
-            More than 1,000 records match this calendar. Narrow the sale window or other filters to review every matching date.
+            Too many sales match to show them all. Narrow the dates or add a filter to see more sales.
           </p>
         )}
         {[...groups.entries()]
@@ -1159,7 +1159,7 @@ function DiscoveryCalendar({
                         {sourceDisplayText(
                           SOURCES[listing.source]?.label || listing.source,
                         )}{" "}
-                        · {listing.discoveryStatus || "status not established"}
+                        · {listing.discoveryStatus || "status not stated"}
                       </span>
                     </Link>
                     <button type="button" aria-pressed={selected} aria-label={`${selected ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull} onClick={() => onCompare(listing.id)} className="mt-2 inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">

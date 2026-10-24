@@ -51,16 +51,16 @@ test('Privacy policy page exists and enforces zero personal data monetization', 
   assert.match(content, /Right to Delete/i);
 });
 
-test('About page documents mission, 5 architectural innovations and $0 liability moat', () => {
+test('About page says who it is for and what it does not do, in buyer language', () => {
   const aboutPath = path.join(ROOT, 'src/app/about/page.tsx');
   assert.ok(fs.existsSync(aboutPath), 'About page must exist');
   const content = fs.readFileSync(aboutPath, 'utf8');
 
-  assert.match(content, /Zillow for distressed and government-sold property/i);
-  assert.match(content, /Email-as-API/i);
-  assert.match(content, /Platform-Level County Parsers/i);
-  assert.match(content, /Scrapling/i);
   assert.match(content, /Zero Cold Calls/i);
+  assert.match(content, /title search/i);
+  assert.match(content, /href="\/listings"/);
+  // Buyer copy, not a borrowed brand or engineering vocabulary.
+  assert.doesNotMatch(content, /Zillow for distressed|Email-as-API|Scrapling|Platform-Level County Parsers/i);
 });
 
 test('Contact page provides interactive inquiry form', () => {
@@ -82,7 +82,6 @@ test('Resources page provides knowledge base and changelog', () => {
   assert.match(content, /id="changelog"/);
   assert.match(content, /Judicial Foreclosure/i);
   assert.match(content, /Fla\. Stat\. § 201\.02/);
-  assert.match(content, /Next\.js 16/i);
 });
 
 test('Portfolio page exists and renders within WorkspaceShell', () => {

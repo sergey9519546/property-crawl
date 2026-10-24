@@ -71,11 +71,11 @@ export function DataModeBanner() {
       >
         {/* Same reserved box as the real banner. A one-line placeholder against
             a two-line real message still moved the page 24px, because the
-            runtime-mode copy wraps at desktop widths. Both states therefore
+            banner copy wraps at desktop widths. Both states therefore
             claim two lines up front, so the answer to the probe can change the
             words without changing the geometry. */}
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
-          <p className="leading-6">Checking runtime mode…</p>
+          <p className="leading-6">Checking for the latest listings…</p>
         </div>
       </div>
     );
@@ -92,9 +92,9 @@ export function DataModeBanner() {
       >
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
           <p className="leading-6">
-            <strong className="font-semibold">Runtime mode unverified:</strong>{" "}
-            the health check did not respond, so we cannot confirm a database is
-            serving inventory.
+            <strong className="font-semibold">Listings may be out of date:</strong>{" "}
+            we could not check whether the listings on this page are up to date.
+            Treat what you see as unconfirmed and check each sale at its source.
           </p>
           <button
             type="button"
@@ -114,17 +114,15 @@ export function DataModeBanner() {
   const freshness = health.inventoryFreshness;
   const stale = Boolean(freshness?.stale) && typeof freshness?.ageHours === "number";
 
-  if (health.dataMode !== "unavailable" && health.documentReviewStore !== "file" && !stale) return null;
+  // Where reviews are stored (health.documentReviewStore) is a staff matter, not shown to buyers.
+  if (health.dataMode !== "unavailable" && !stale) return null;
 
   const parts: string[] = [];
   if (health.dataMode === "unavailable") {
     // Not dismissible: there is no inventory behind this page. A warning the
     // user can wave away would leave an empty result looking like a finding.
-    parts.push(
-      health.inventoryUnavailableReason
-        ? `No inventory is being served — ${health.inventoryUnavailableReason}`
-        : "No inventory is being served — no database is available."
-    );
+    // The internal reason (health.inventoryUnavailableReason) is never shown to buyers.
+    parts.push("Listings are not available right now. Please try again soon.");
   } else if (stale) {
     // A database full of rows is not the same claim as an inventory somebody
     // checked today. "Active" on a record nobody has re-observed in three weeks
@@ -134,19 +132,10 @@ export function DataModeBanner() {
     // bounded, so a fresh sweep makes the newest record minutes old while the
     // rest is untouched - "last observed 0 hours ago" would be true and useless.
     parts.push(
-      (typeof freshness?.staleBecause === "string" && freshness.staleBecause
-        ? freshness.staleBecause
-        : `Inventory has not been re-collected within ${freshness?.staleAfterHours ?? 24}h.`) +
-        " Records are kept as observed, but sale status and availability are unverified."
+      `These listings have not been refreshed in the last ${freshness?.staleAfterHours ?? 24} hours.` +
+        " Sale dates and availability may have changed, so check each sale at its source."
     );
   }
-  if (health.documentReviewStore === "file") {
-    parts.push("Document reviews persist to a host-local file store; attach a volume or PostgreSQL for redeploy durability.");
-  }
-
-  // An outage is not a notice. Only the document-store half can be dismissed.
-  const mayDismiss = health.dataMode !== "unavailable" && !stale;
-
   return (
     <div
       role="status"
@@ -156,19 +145,10 @@ export function DataModeBanner() {
       <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
         <p className="leading-6">
           <strong className="font-semibold">
-            {health.dataMode === "unavailable" ? "No inventory:" : "Runtime mode:"}
+            {health.dataMode === "unavailable" ? "No listings:" : "Listings may be out of date:"}
           </strong>{" "}
           {parts.join(" ")}
         </p>
-        {mayDismiss && (
-          <button
-            type="button"
-            className="shrink-0 rounded border border-amber-300 px-2 py-0.5 text-xs font-semibold text-amber-900"
-            onClick={() => setDismissed(true)}
-          >
-            Dismiss
-          </button>
-        )}
       </div>
     </div>
   );

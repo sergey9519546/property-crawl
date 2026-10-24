@@ -147,7 +147,7 @@ export function Hero() {
     mouseY.set(0);
   }, [mouseX, mouseY]);
 
-  const placeholder = "City, county, state, country, ZIP, or address";
+  const placeholder = "City, county, state, ZIP, or address";
 
   React.useEffect(() => {
     if (deferredUrl.length < 2 || /^https?:\/\//i.test(deferredUrl)) {
@@ -267,7 +267,7 @@ export function Hero() {
     const query = selectedMarket?.label === label ? selectedMarket.query : label;
 
     if (!label) {
-      setStatus("Enter a city, county, state, country, ZIP, or address first.");
+      setStatus("Enter a city, county, state, ZIP, or address first.");
       return;
     }
 
@@ -278,7 +278,7 @@ export function Hero() {
     );
     window.location.hash = "live-feed";
     setSuggestionsOpen(false);
-    setStatus(`Opened the live feed for ${label}.`);
+    setStatus(`Showing listings for ${label}.`);
   };
 
   return (
@@ -494,10 +494,10 @@ export function Hero() {
                 >
                   <span className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-emerald-700" />
-                    Search full database for &ldquo;{deferredUrl}&rdquo;
+                    Search all listings for &ldquo;{deferredUrl}&rdquo;
                   </span>
                   <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
-                    Nationwide public records <ArrowRight className="h-3.5 w-3.5" />
+                    All listings <ArrowRight className="h-3.5 w-3.5" />
                   </span>
                 </li>
               ) : null}
@@ -519,7 +519,7 @@ export function Hero() {
               };
               setUrl(sampleMarket.label);
               setSelectedMarket(sampleMarket);
-              setStatus("Cleveland, OH selected. Select Search market to open the live feed.");
+              setStatus("Cleveland, OH selected. Select Search market to see listings.");
             }}
             initial={{ opacity: 1, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -527,7 +527,7 @@ export function Hero() {
             className="flex items-center gap-1.5 text-[#0F172A] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
           >
             <Undo2 className="h-4 w-4 text-[#0F172A]" />
-            Try the Cleveland market
+            Try Cleveland, OH
           </motion.button>
           <span className="hidden text-slate-400 sm:inline" aria-hidden>•</span>
           <Link
@@ -535,7 +535,7 @@ export function Hero() {
             className="flex items-center gap-1.5 font-semibold text-slate-900 underline underline-offset-4 hover:text-emerald-700"
           >
             <Database className="h-4 w-4 text-emerald-600" />
-            Explore nationwide public records database
+            Browse listings
             <ArrowRight className="h-3.5 w-3.5 text-slate-700" />
           </Link>
         </div>

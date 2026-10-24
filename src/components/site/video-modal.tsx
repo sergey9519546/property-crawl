@@ -110,10 +110,10 @@ const SCENARIOS: WalkthroughScenario[] = [
 ];
 
 const STAGES = [
-  { id: 0, label: "1. Raw Notice Ingestion", icon: FileText, desc: "Source publication capture & legal notice OCR" },
-  { id: 1, label: "2. Fine-Print Extraction", icon: FileSearch, desc: "NLP entity, docket, and plaintiff parsing" },
-  { id: 2, label: "3. Title & Cadastral Risk", icon: Scale, desc: "Lien priority & redemption statutory rules" },
-  { id: 3, label: "4. Cash-to-Close & Triage", icon: Calculator, desc: "Acquisition cash basis & Deal Score verdict" },
+  { id: 0, label: "1. Find the sale", icon: FileText, desc: "The sale notice as published" },
+  { id: 1, label: "2. Read the fine print", icon: FileSearch, desc: "Who is selling, the case number and the deposit" },
+  { id: 2, label: "3. Read the catch", icon: Scale, desc: "The redemption period and liens to check" },
+  { id: 3, label: "4. Run your numbers", icon: Calculator, desc: "Cash to close and the Deal Score" },
 ];
 
 function formatCurrency(val: number): string {
@@ -194,10 +194,10 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
             </div>
             <div>
               <h3 id="walkthrough-title" className="text-base font-bold text-slate-950">
-                Listing record
+                Sample listing
               </h3>
               <p className="text-xs text-slate-500">
-                Interactive Underwriting Simulator — How PerfectProperty parses distressed legal publications into verified triage verdicts
+                A sample walk-through of how a sale notice becomes a listing with a Deal Score. The listing below is an example.
               </p>
             </div>
           </div>
@@ -212,7 +212,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
 
         {/* Scenario Selector */}
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <span className="font-semibold text-slate-600">Sample verified scenario:</span>
+          <span className="font-semibold text-slate-600">Pick a sample listing:</span>
           <div className="flex flex-wrap gap-1.5">
             {SCENARIOS.map((sc, idx) => (
               <button
@@ -282,13 +282,13 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                    Step 1: Statutory Notice Capture
+                    Step 1: Find the sale
                   </span>
                   <span className="text-xs font-mono text-slate-500">Source: {sourceDisplayText(current.source)}</span>
                 </div>
                 <h4 className="text-lg font-bold text-slate-900">{current.address}</h4>
                 <div className="p-4 rounded-xl bg-slate-950 text-slate-200 font-mono text-xs leading-relaxed border border-slate-800">
-                  <p className="text-emerald-400 font-bold mb-2">// Raw statutory publication notice text</p>
+                  <p className="text-emerald-400 font-bold mb-2">// Sample sale notice text</p>
                   <p>{current.rawExcerpt}</p>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
@@ -297,7 +297,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
                     <strong className="text-slate-950 font-bold">{current.county}, {current.state}</strong>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block">Published Floor</span>
+                    <span className="text-slate-500 block">Opening bid</span>
                     <strong className="text-slate-950 font-bold">{formatCurrency(current.openingBid)}</strong>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
@@ -305,7 +305,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
                     <strong className="text-slate-950 font-bold">{current.saleDate}</strong>
                   </div>
                   <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <span className="text-slate-500 block">Verified ID</span>
+                    <span className="text-slate-500 block">Sample ID</span>
                     <strong className="text-slate-950 font-bold font-mono">{current.id}</strong>
                   </div>
                 </div>
@@ -319,30 +319,30 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                    Step 2: Structured Entity Extraction
+                    Step 2: Read the fine print
                   </span>
                   <span className="text-xs text-slate-500 font-mono">Case: {current.docket}</span>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Judicial Docket</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Case number</p>
                     <p className="text-sm font-bold text-slate-950 font-mono">{current.docket}</p>
-                    <p className="text-xs text-slate-600">Cross-referenced against county clerk record books.</p>
+                    <p className="text-xs text-slate-600">Case number from the notice.</p>
                   </div>
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Plaintiff Entity</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Who is selling</p>
                     <p className="text-sm font-bold text-slate-950">{current.plaintiff}</p>
-                    <p className="text-xs text-slate-600">Originating lender or foreclosing government authority.</p>
+                    <p className="text-xs text-slate-600">The lender or government agency behind the sale.</p>
                   </div>
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Defendant / Estate</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current owner</p>
                     <p className="text-sm font-bold text-slate-950">{current.defendant}</p>
-                    <p className="text-xs text-slate-600">Title chain and encumbrance obligor.</p>
+                    <p className="text-xs text-slate-600">The owner named in the notice.</p>
                   </div>
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deposit Terms</p>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Deposit</p>
                     <p className="text-sm font-bold text-slate-950">{current.depositRule}</p>
-                    <p className="text-xs text-emerald-700 font-semibold">Immediate cash required: {formatCurrency(current.depositAmount)}</p>
+                    <p className="text-xs text-emerald-700 font-semibold">Cash due right away: {formatCurrency(current.depositAmount)}</p>
                   </div>
                 </div>
               </div>
@@ -355,30 +355,30 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
-                    Step 3: Title Priority &amp; Statutory Caveats
+                    Step 3: Read the catch
                   </span>
-                  <span className="text-xs font-semibold text-slate-500">Statutory Rules Engine</span>
+                  <span className="text-xs font-semibold text-slate-500">Sample</span>
                 </div>
                 <div className="space-y-3">
                   <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 space-y-1.5">
                     <p className="flex items-center gap-2 text-xs font-bold text-amber-950 uppercase tracking-wider">
                       <AlertTriangle className="w-4 h-4 text-amber-600" />
-                      Statutory Redemption Period
+                      Redemption period
                     </p>
                     <p className="text-sm font-semibold text-slate-900">{current.redemptionWindow}</p>
                     <p className="text-xs text-slate-600">
-                      Determines how long the prior owner or junior lienholder has to redeem the property post-sale.
+                      How long the former owner may have to buy the property back after the sale.
                     </p>
                   </div>
 
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
                     <p className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
                       <Scale className="w-4 h-4 text-slate-700" />
-                      Lien Priority &amp; Extinguishing Standard
+                      Liens to check
                     </p>
                     <p className="text-sm font-semibold text-slate-900">{current.titleRule}</p>
                     <p className="text-xs text-slate-600">
-                      Senior liens (e.g. IRS tax assessments, special municipal utility assessments) survive foreclosure if not properly noticed.
+                      Some liens, such as IRS tax debts or city utility charges, can stay with the property after the sale. Check them before you bid.
                     </p>
                   </div>
                 </div>
@@ -392,7 +392,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-                    Step 4: Underwriting Cash Basis &amp; Triage Score
+                    Step 4: Run your numbers
                   </span>
                   {(() => {
                     const scoreBand = bandForScore(current.dealScore);
@@ -414,24 +414,23 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
 
                 <div className="grid sm:grid-cols-3 gap-3">
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                    <span className="text-xs text-slate-500 font-semibold block">Opening Upset</span>
+                    <span className="text-xs text-slate-500 font-semibold block">Opening bid</span>
                     <strong className="text-xl font-bold text-slate-950">{formatCurrency(current.openingBid)}</strong>
                   </div>
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                    <span className="text-xs text-slate-500 font-semibold block">Estimated Midpoint</span>
+                    <span className="text-xs text-slate-500 font-semibold block">Middle of value range</span>
                     <strong className="text-xl font-bold text-slate-950">{formatCurrency(current.estMid)}</strong>
                   </div>
                   <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
-                    <span className="text-xs text-emerald-800 font-semibold block">Total Cash to Close</span>
+                    <span className="text-xs text-emerald-800 font-semibold block">Estimated cash to close</span>
                     <strong className="text-xl font-bold text-emerald-950">{formatCurrency(current.cashToClose)}</strong>
                   </div>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs leading-relaxed space-y-2 text-slate-700">
-                  <p className="font-bold text-slate-900">Triage Formulation:</p>
+                  <p className="font-bold text-slate-900">How the Deal Score is worked out:</p>
                   <p>
-                    Deal Score {current.dealScore} is calculated via opening amount vs. modeled valuation-range midpoint
-                    ({formatCurrency(current.openingBid)} vs {formatCurrency(current.estMid)}), penalizing unaddressed junior liens or missing title confirmation.
+                    Deal Score {current.dealScore} compares the opening bid ({formatCurrency(current.openingBid)}) to the middle of the value range ({formatCurrency(current.estMid)}). Always check title and liens before you bid.
                   </p>
                 </div>
               </div>
@@ -448,7 +447,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               onClick={() => setCurrentStage((s) => Math.max(0, s - 1))}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40 transition"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Previous Stage
+              <ArrowLeft className="w-3.5 h-3.5" /> Previous step
             </button>
             {currentStage < STAGES.length - 1 ? (
               <button
@@ -456,7 +455,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
                 onClick={() => setCurrentStage((s) => Math.min(STAGES.length - 1, s + 1))}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
               >
-                Next Stage <ArrowRight className="w-3.5 h-3.5" />
+                Next step <ArrowRight className="w-3.5 h-3.5" />
               </button>
             ) : null}
           </div>
@@ -467,7 +466,7 @@ export function VideoModal({ isOpen, onClose }: VideoModalProps) {
               onClick={onClose}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800 transition"
             >
-              Inspect {current.id} Record <ExternalLink className="w-3.5 h-3.5" />
+              Open sample listing <ExternalLink className="w-3.5 h-3.5" />
             </Link>
             <button
               onClick={onClose}

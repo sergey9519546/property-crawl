@@ -17,31 +17,28 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Property workspace", href: "/listings" },
-      { label: "Source Radar", href: "/sources" },
-      { label: "Second Look", href: "/research" },
-      { label: "Saved Hunts", href: "/hunts" },
-      { label: "Portfolio dashboard", href: "/portfolio" },
-      { label: "Collection activity", href: "/activity" },
+      { label: "Browse listings", href: "/listings" },
+      { label: "Hunts", href: "/hunts" },
+      { label: "Portfolio", href: "/portfolio" },
       { label: "States with a live count", href: "/states" },
-      { label: "What's in beta", href: "/#pricing" },
+      { label: "Free vs member", href: "/#pricing" },
     ],
   },
   {
     title: "Solutions",
     links: [
       { label: "Acquisitions", href: "/listings" },
-      { label: "Underwriting notes", href: "/listings" },
-      { label: "Operator access", href: "/sign-in" },
+      { label: "Run your numbers", href: "/listings" },
+      { label: "Staff sign-in", href: "/sign-in" },
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Knowledge base", href: "/resources#knowledge-base" },
+      { label: "Buyer's guide", href: "/resources#knowledge-base" },
       { label: "States with a live count", href: "/states" },
-      { label: "Changelog", href: "/resources#changelog" },
-      { label: "About the beta", href: "/about" },
+      { label: "What's new", href: "/resources#changelog" },
+      { label: "How it works", href: "/about" },
     ],
   },
   {
@@ -75,10 +72,10 @@ export function SiteFooter() {
       setNewsletterStatus(
         payload?.delivery === "forwarded" || payload?.delivery === "sent"
           ? "Thanks — you're on the list."
-          : "Saved. Email delivery is not configured yet."
+          : "Saved. We can't send email yet, so you won't get a confirmation."
       );
     } catch {
-      setNewsletterStatus("Something went wrong. Please try again.");
+      setNewsletterStatus("That did not go through. Please try again.");
     }
   };
 
@@ -91,7 +88,7 @@ export function SiteFooter() {
               Subscribe for source coverage notes
             </p>
             <p className="mt-2 max-w-[520px] text-[15px] leading-6 text-[#5B6472]">
-              The operator keeps this list and writes to it by hand; there is no automatic send schedule. No accuracy guarantee is claimed — evidence requires review.
+              Occasional notes on which sources we added or fixed. We write them by hand, so there is no regular schedule. Always check a sale at its source before you bid.
             </p>
           </div>
           <form
@@ -144,7 +141,7 @@ export function SiteFooter() {
               <Logo className="text-[16px]" />
             </Link>
             <p className="mt-4 max-w-[230px] text-[14px] leading-6 text-[#475569]">
-              Find, compare, and underwrite distressed property opportunities in one focused workspace.
+              Auction and government-sold homes in one place, with the catch spelled out.
             </p>
             <div className="mt-5 flex items-center gap-3">
               {[

@@ -124,7 +124,7 @@ test('contact route delegates to shared form store', async () => {
 test('form UI copy no longer claims email delivery when local-only', () => {
   const footer = fs.readFileSync(path.resolve(__dirname, '../src/components/site/site-footer.tsx'), 'utf8');
   const contact = fs.readFileSync(path.resolve(__dirname, '../src/app/api/contact/route.ts'), 'utf8');
-  assert.match(footer, /Email delivery is not configured yet/);
-  assert.match(contact, /Outbound delivery is not configured yet/);
+  assert.match(footer, /We can't send email yet/);
+  assert.match(contact, /can't send an email confirmation/);
   assert.doesNotMatch(contact, /will follow up by email/);
 });

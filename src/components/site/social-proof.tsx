@@ -2,18 +2,18 @@
 
 import { GsapReveal } from "./gsap-reveal";
 
-// Heterogeneous logo marks — different visual treatments, not uniform text
-const LOGOS: { name: string; style: "bold" | "mono" | "light" | "boxed" }[] = [
-  { name: "Scrapy", style: "bold" },
-  { name: "Zyte", style: "mono" },
-  { name: "Realie", style: "light" },
-  { name: "Attom", style: "boxed" },
-  { name: "PropStream", style: "bold" },
-  { name: "BatchLeads", style: "mono" },
-  { name: "Census", style: "light" },
-  { name: "Zillow", style: "boxed" },
-  { name: "Redfin", style: "bold" },
-  { name: "FHFA", style: "mono" },
+// Plain-text list of the public source types we read. No logos: these are
+// agencies and sale types, not partners.
+const SOURCES: string[] = [
+  "HUD homes",
+  "Fannie Mae and Freddie Mac bank-owned homes",
+  "Sheriff sales",
+  "Trustee sales",
+  "County tax sales",
+  "IRS and Treasury seizures",
+  "USDA and VA homes",
+  "GSA and US Marshals sales",
+  "Land banks",
 ];
 
 export function SocialProof() {
@@ -21,61 +21,25 @@ export function SocialProof() {
     <section id="proof" className="pt-12 pb-16">
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="text-center">
-          <p className="text-[16px] font-medium text-[#4B5563]">
-            Built for{" "}
-            <span className="inline-flex items-center rounded-md border border-[rgba(17,24,39,0.10)] bg-white px-1.5 py-0.5 text-[14px] font-semibold text-[#111827]">
-              faster triage
-            </span>{" "}
-            using public property and market data sources
+          <h2 className="text-[20px] font-semibold text-[#111827]">Where listings come from</h2>
+          <p className="mx-auto mt-3 max-w-[720px] text-[15px] leading-6 text-[#4B5563]">
+            We read public sale notices and government listings, then put them in one place.
           </p>
-          <p className="mx-auto mt-3 max-w-[720px] text-[13px] leading-5 text-[#5B6472]">
-            Names below mark the source/tooling landscape this beta models or
-            evaluates. They are not customer logos, partnerships, or proof of
-            live commercial integrations.
+          <ul className="mx-auto mt-6 flex max-w-[860px] flex-wrap justify-center gap-2">
+            {SOURCES.map((name) => (
+              <li
+                key={name}
+                className="rounded-full border border-[rgba(17,24,39,0.10)] bg-white px-3 py-1.5 text-[14px] font-medium text-[#111827]"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+          <p className="mx-auto mt-5 max-w-[720px] text-[13px] leading-5 text-[#5B6472]">
+            Coverage varies by county. These names are for reference only, not endorsements.
           </p>
         </GsapReveal>
       </div>
-      {/* Logo marquee with edge-fade mask */}
-      <div
-        className="mt-8 overflow-hidden"
-        style={{
-          maskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
-          WebkitMaskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
-        }}
-      >
-        <div className="logo-marquee-track gap-12">
-          {[...LOGOS, ...LOGOS].map((logo, i) => (
-            <LogoMark key={i} name={logo.name} style={logo.style} />
-          ))}
-        </div>
-      </div>
     </section>
-  );
-}
-
-function LogoMark({ name, style }: { name: string; style: string }) {
-  // Heterogeneous visual treatment — different weights/sizes, not uniform text.
-  //
-  // Measured on the #f5f6f7 band: opacity-50 gave 2.26:1 and opacity-75 only
-  // 3.83:1, against a 4.5:1 requirement - the publisher names in the proof
-  // section were effectively unreadable at every step. The grayscale filter
-  // already makes them read as secondary, so the opacity was carrying the same
-  // signal twice and paying for it in legibility. Full opacity + grayscale
-  // measures ~15:1 and still looks deliberately muted.
-  const base = "flex items-center justify-center whitespace-nowrap grayscale transition-all duration-200 hover:grayscale-0";
-  if (style === "bold") {
-    return <span className={`${base} text-[18px] font-extrabold tracking-tight text-[#111827]`}>{name}</span>;
-  }
-  if (style === "mono") {
-    return <span className={`${base} text-[15px] font-mono-arcade font-medium text-[#374151]`}>{name}</span>;
-  }
-  if (style === "light") {
-    return <span className={`${base} text-[17px] font-light tracking-wide text-[#4B5563]`}>{name}</span>;
-  }
-  // boxed
-  return (
-    <span className={`${base} text-[13px] font-bold tracking-tight text-[#111827]`}>
-      <span className="rounded border border-[#9CA3AF] px-1.5 py-0.5">{name}</span>
-    </span>
   );
 }

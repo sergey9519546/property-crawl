@@ -4,22 +4,10 @@ import { GsapReveal, GsapStaggerGroup } from "./gsap-reveal";
 import { ArrowRight } from "lucide-react";
 
 const INTEGRATIONS = [
-  "Scrapy",
-  "Zyte",
-  "Realie",
-  "Attom",
-  "PropStream",
-  "BatchLeads",
-  "Census",
-  "FHFA",
-  "Zillow",
-  "Redfin",
-  "OpenStreetMap",
-  "Resend",
-  "Stripe",
-  "Supabase",
-  "Cloudflare",
-  "GitHub",
+  "Links to original notices",
+  "Sale-date calendar",
+  "Watchlist on this device",
+  "Email alerts for members",
 ];
 
 export function Integrations() {
@@ -28,14 +16,13 @@ export function Integrations() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal>
           <h2 className="text-center text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            A connected research ecosystem, in progress.
+            What you can use today.
           </h2>
         </GsapReveal>
         <GsapReveal delay={0.7}>
           <p className="mx-auto mt-4 max-w-[600px] text-center text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
-            Sources and tools on our integration roadmap. Inclusion here does not
-            mean a native integration is active; availability depends on the
-            connector, credentials, and source permissions.
+            Listings link back to the original sale notice. Connections to
+            other tools are planned, but none are live yet.
           </p>
         </GsapReveal>
 
@@ -58,10 +45,10 @@ export function Integrations() {
         <GsapReveal delay={0.7}>
           <div className="mt-8 flex justify-center">
             <a
-              href="/resources#integrations"
+              href="/resources#changelog"
               className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-[14px] font-semibold text-[#111827] transition-colors hover:bg-[#F5F6F7]"
             >
-              Explore all integrations
+              See what&apos;s new
               <ArrowRight className="h-4 w-4" />
             </a>
           </div>

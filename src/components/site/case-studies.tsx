@@ -14,20 +14,20 @@ type Metric = {
 const INITIAL_METRICS: Metric[] = [
   {
     value: "…",
-    label: "Inventory mode",
-    desc: "Reading the health check.",
+    label: "Listings right now",
+    desc: "Checking the current number.",
     tint: "#E2E8F0",
   },
   {
     value: "…",
-    label: "Catalog entries",
-    desc: "Reading the coverage matrix.",
+    label: "Sources on our list",
+    desc: "Checking the current number.",
     tint: "#e7faef",
   },
   {
     value: "…",
-    label: "Catalog categories",
-    desc: "Reading the coverage matrix.",
+    label: "Kinds of sources",
+    desc: "Checking the current number.",
     tint: "#E9D5FF",
   },
 ];
@@ -35,21 +35,21 @@ const INITIAL_METRICS: Metric[] = [
 const CASES = [
   {
     metric: "Search",
-    text: "City, county, state, ZIP, country, and nearby-address scopes",
+    text: "A first-time buyer in Ohio searches her county and sees upcoming sheriff sales on a list and a map.",
     company: "Market discovery",
     href: "#hero",
   },
   {
-    metric: "Parse",
-    text: "Structured extraction for supported court notice formats",
+    metric: "Judge",
+    text: "A small landlord opens a bank-owned home, reads the catch, and spots a lien risk before bidding.",
     company: "Notice parser",
     href: "/listings",
   },
   {
-    metric: "Export",
-    text: "Persistent watchlists with CSV and JSON downloads",
+    metric: "Watch",
+    text: "A flipper saves five listings and, as a member, gets an email if one changes its sale date.",
     company: "Watchlist workflow",
-    href: "/research",
+    href: "/listings",
   },
 ];
 
@@ -61,13 +61,12 @@ export function CaseStudies() {
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
       .then((data: { dataMode?: string; inventoryFreshness?: { listings?: number | null } }) => {
         if (cancelled) return;
-        const mode = typeof data.dataMode === "string" ? data.dataMode : "unknown";
         const count = data.inventoryFreshness?.listings;
         setMetrics((current) => [
           {
-            value: mode,
-            label: "Inventory mode",
-            desc: typeof count === "number" ? `${count.toLocaleString()} listings reported by the health check.` : "The health check did not report a listing count.",
+            value: typeof count === "number" ? count.toLocaleString() : "Unavailable",
+            label: "Listings right now",
+            desc: typeof count === "number" ? "Listings on the site right now. The number changes as sales are added and end." : "We could not load this number right now.",
             tint: "#E2E8F0",
           },
           current[1],
@@ -79,8 +78,8 @@ export function CaseStudies() {
         setMetrics((current) => [
           {
             value: "Unavailable",
-            label: "Inventory mode",
-            desc: "The health check did not return an inventory mode.",
+            label: "Listings right now",
+            desc: "We could not load this number right now.",
             tint: "#E2E8F0",
           },
           current[1],
@@ -97,14 +96,14 @@ export function CaseStudies() {
           current[0],
           {
             value: typeof total === "number" ? total.toLocaleString() : "Unavailable",
-            label: "Catalog entries",
-            desc: typeof total === "number" ? "Entries in the source catalog returned by the coverage matrix." : "The coverage matrix did not return a catalog total.",
+            label: "Sources on our list",
+            desc: typeof total === "number" ? "Public websites and notices we know about. Not every one is collected yet." : "We could not load this number right now.",
             tint: "#e7faef",
           },
           {
             value: typeof categories === "number" ? String(categories) : "Unavailable",
-            label: "Catalog categories",
-            desc: typeof categories === "number" ? "Distinct category keys on the source catalog." : "The coverage matrix did not return categories.",
+            label: "Kinds of sources",
+            desc: typeof categories === "number" ? "Groups the sources fall into, such as courts and federal agencies." : "We could not load this number right now.",
             tint: "#E9D5FF",
           },
         ]);
@@ -113,8 +112,8 @@ export function CaseStudies() {
         if (cancelled) return;
         setMetrics((current) => [
           current[0],
-          { value: "Unavailable", label: "Catalog entries", desc: "The coverage matrix did not return a catalog total.", tint: "#e7faef" },
-          { value: "Unavailable", label: "Catalog categories", desc: "The coverage matrix did not return categories.", tint: "#E9D5FF" },
+          { value: "Unavailable", label: "Sources on our list", desc: "We could not load this number right now.", tint: "#e7faef" },
+          { value: "Unavailable", label: "Kinds of sources", desc: "We could not load this number right now.", tint: "#E9D5FF" },
         ]);
       });
     return () => {
@@ -126,8 +125,11 @@ export function CaseStudies() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            What is working in the beta today
+            Ways buyers use it
           </h2>
+          <p className="mt-3 text-[16px] leading-[1.6] text-[#5B6472]">
+            These are made-up examples, not stories from real customers.
+          </p>
         </GsapReveal>
 
         {/* Big metric cards */}
@@ -145,7 +147,7 @@ export function CaseStudies() {
                 className="inline-block rounded-lg px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#111827]"
                 style={{ backgroundColor: m.tint }}
               >
-                Beta snapshot
+                Live count
               </span>
               <p className="mt-4 text-[44px] font-bold tracking-[-0.03em] text-[#111827]">
                 {m.value}
@@ -174,7 +176,7 @@ export function CaseStudies() {
               </span>
               <div className="flex-1">
                 <p className="text-[14px] font-medium text-[#111827]">{c.text}</p>
-                <p className="text-[12px] text-[#5B6472]">Open the workflow</p>
+                <p className="text-[12px] text-[#5B6472]">Example only. Open listings</p>
               </div>
               <ArrowRight className="h-4 w-4 text-[#5B6472] transition-colors group-hover:text-[#0F172A]" />
             </a>

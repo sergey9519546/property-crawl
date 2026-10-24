@@ -3,10 +3,11 @@ import Link from "next/link";
 import { ArrowLeft, Target, Cpu, ShieldCheck, Database, Award, CheckCircle2 } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "About PerfectProperty — Evidence-First Distressed Real Estate Discovery",
+  title: "About PerfectProperty — Find Foreclosure and Government-Sold Homes",
   description:
-    "The mission, architecture, and $0-liability engineering principles behind PerfectProperty: Zillow for distressed real estate with an AI that reads the fine print.",
+    "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
 };
+
 
 export default function AboutPage() {
   return (
@@ -21,110 +22,99 @@ export default function AboutPage() {
       </div>
 
       <div className="border-b border-slate-200 pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Our Mission & Principles</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Who we are</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-          About PerfectProperty
+          Find auction and bank-owned homes, and know the catch before you bid
         </h1>
         <p className="mt-3 text-base text-slate-600 leading-relaxed">
-          &ldquo;Zillow for distressed and government-sold property, with an AI that reads the fine print and tells you if each one is actually a deal — and what the catch is.&rdquo;
+          PerfectProperty is for flippers, small landlords and first-time auction buyers. We bring foreclosure,
+          sheriff, tax and government-sold properties into one place and spell out the risks in plain English.
         </p>
       </div>
 
       <div className="mt-10 space-y-12 text-sm leading-7 text-slate-700">
-        {/* The Problem */}
         <section className="space-y-4">
           <h2 className="text-xl font-bold text-slate-950 flex items-center gap-2">
             <Target className="h-5 w-5 text-indigo-600" />
-            The Broken Legacy of Distressed Property
+            Why we built it
           </h2>
           <p>
-            For decades, investors seeking distressed real estate—sheriff sales, tax deed sales, HUD/REO homes,
-            and federal seized assets—have relied on paid legacy aggregators.
-            These platforms suffer from fatal shortcomings: manual data entry backlogs, placeholder bid activity, and no explanation
-            of statutory risks.
+            Distressed property is spread across county websites, court notices and government pages. It is easy to miss
+            a sale, and easy to miss the fine print. Buyers sometimes win an auction and then find a second mortgage
+            that stays with the property. Others find a right of redemption (a window when the old owner can take it back).
           </p>
           <p>
-            Buyers routinely win an auction only to discover an uncancelled second mortgage, an unexpired IRS 120-day
-            right of redemption, or an automatic bankruptcy stay that renders the certificate of sale void.
-            PerfectProperty was engineered from the ground up to solve this information asymmetry through
-            <strong> evidence-first discovery and forensic document analysis</strong>.
+            We put the sales in one list, map and calendar, and show the risks next to each one.
           </p>
         </section>
 
-        {/* The 5 Architectural Pillars */}
         <section className="space-y-6">
           <h2 className="text-xl font-bold text-slate-950 flex items-center gap-2">
             <Cpu className="h-5 w-5 text-indigo-600" />
-            Four Data Techniques
+            What it does
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
               <h3 className="font-bold text-slate-950 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-800">1</span>
-                Email-as-API Ingestion
+                Find
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                State press association smart search subscriptions ingest statutory publication notices directly via IMAP,
-                allowing zero-cost, legal-safe ingestion without bot-scraping risks.
+                Search a city, county or ZIP and see upcoming sales from many public sources. It is free and needs no account.
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
               <h3 className="font-bold text-slate-950 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-800">2</span>
-                Platform-Level County Parsers
+                Judge
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Rather than writing hundreds of brittle county scrapers, we build unified parsers for the municipal platforms
-                that counties buy (CivilView for NJ, Realauction for OH, AcclaimWeb for NV).
+                Each listing can show a Deal Score and &ldquo;the catch&rdquo;: risks such as redemption periods, liens and
+                occupancy. Listings link to the original notice where one is published.
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
               <h3 className="font-bold text-slate-950 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-800">3</span>
-                Stateless Scrapling Anti-Detect
+                Get alerts
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Stateless streaming Scrapling spider workers run underneath our Node.js coordinator, isolating TLS sessions
-                and cookie jars while fail-closing immediately on robots exclusions.
+                Members start a hunt and get an email when a new listing fits, or when a saved one changes its date or opening bid.
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm space-y-2">
               <h3 className="font-bold text-slate-950 flex items-center gap-2">
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-800">4</span>
-                Free Government Enrichment Stack
+                Verify
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                US Census Geocoder, County ArcGIS parcel endpoints, and FHFA House Price Index data replace paid data APIs
-                with authoritative public ground-truth.
+                We point you to what to check before you bid: title, condition and sale terms.
               </p>
             </div>
           </div>
         </section>
 
-        {/* The $0 Liability Moat */}
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-6 space-y-4">
           <h2 className="text-lg font-bold text-emerald-950 flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-emerald-700" />
-            The $0 Liability Moat: Non-Brokerage & Non-Interference
+            What it does not do
           </h2>
           <p className="text-xs leading-relaxed text-emerald-900">
-            We are strictly a discovery and research tool. We never touch transactions, never hold earnest deposits,
-            never sell phone numbers, and never contact homeowners. This single design decision completely avoids the
-            Telephone Consumer Protection Act (TCPA), California Civil Code § 1695 mortgage rescue regulations,
-            and state real estate licensing requirements.
+            We help you find and size up a property. We don&apos;t replace a title search or an inspection, we don&apos;t bid for
+            you, and we don&apos;t cover every county. Always check title before you bid.
           </p>
           <div className="grid gap-2 sm:grid-cols-3 text-xs font-semibold text-emerald-950">
             <div className="flex items-center gap-2 rounded-lg bg-emerald-100/70 p-2.5">
               <CheckCircle2 className="h-4 w-4 text-emerald-800 shrink-0" /> Zero Cold Calls or Robocalls
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-emerald-100/70 p-2.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-800 shrink-0" /> Zero Homeowner Solicitation
+              <CheckCircle2 className="h-4 w-4 text-emerald-800 shrink-0" /> We never contact homeowners
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-emerald-100/70 p-2.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-800 shrink-0" /> 100% Public Source Provenance
+              <CheckCircle2 className="h-4 w-4 text-emerald-800 shrink-0" /> Public sources only
             </div>
           </div>
         </section>
@@ -135,13 +125,13 @@ export default function AboutPage() {
           href="/listings"
           className="rounded-xl bg-[#0F172A] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] transition"
         >
-          Explore Listing Workspace
+          Browse listings
         </Link>
         <Link
-          href="/sources"
+          href="/resources#knowledge-base"
           className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition"
         >
-          View Source Radar
+          See where listings come from
         </Link>
       </div>
     </main>

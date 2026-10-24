@@ -5,7 +5,7 @@ import { GsapReveal } from "./gsap-reveal";
 import { Play } from "lucide-react";
 import { VideoModal } from "./video-modal";
 
-const TAGS = ["Notice facts", "Source evidence", "AI parse (optional)"];
+const TAGS = ["Original notice", "Plain-English catch", "Software reading (optional)"];
 
 export function AiKnows() {
   const [previewOpen, setPreviewOpen] = React.useState(false);
@@ -16,16 +16,16 @@ export function AiKnows() {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
           <GsapReveal>
             <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-              Evidence first. AI notice parsing when configured.
+              Evidence first: each listing links to its source notice where one is published.
             </h2>
           </GsapReveal>
           <GsapReveal delay={0.1}>
             <p className="text-[16px] leading-[1.6] text-[#4B5563] sm:text-[18px]">
-              Distress deals hide in legal prose — statutory publication, certified
-              funds, redemption periods, confirmation-of-sale delays. The workspace
-              keeps published source facts separate from models. AI notice extraction
-              is optional and runs only when an API key is configured on the server;
-              it never replaces source evidence or invents inventory.
+              Foreclosure and tax-sale notices are written in dense legal language.
+              We pull out what matters to a buyer, like the deposit, the redemption
+              period and any delay before the sale is final. You can always open the
+              original notice. Some notices are summarized by software, which is optional and
+              never replaces the source.
             </p>
           </GsapReveal>
         </div>
@@ -36,7 +36,7 @@ export function AiKnows() {
               {/* property backdrop */}
               <img
                 src="https://images.unsplash.com/photo-1518780664697-55e3ad937233?auto=format&fit=crop&w=1400&q=70"
-                alt="Property underwriting preview"
+                alt="Sample property preview"
                 className="absolute inset-0 h-full w-full object-cover opacity-[0.18]"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#e7faef] via-[#e7faef]/30 to-transparent" />
@@ -53,10 +53,10 @@ export function AiKnows() {
               <div className="absolute bottom-5 left-5 right-5 z-10 flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#3F6B00]">
-                    Underwriting preview
+                    Sample preview
                   </p>
                   <p className="text-[18px] font-bold text-[#111827]">
-                    Score is read from the listing
+                    See a sample listing, step by step
                   </p>
                 </div>
               </div>

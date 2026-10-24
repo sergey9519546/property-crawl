@@ -110,48 +110,48 @@ const STAGES: StageDefinition[] = [
     key: "find",
     step: "01",
     label: "Find",
-    summary: "Rank live signals",
-    eyebrow: "Market scan",
-    headline: "See where the opening is.",
+    summary: "Search by place",
+    eyebrow: "Step 1",
+    headline: "Upcoming sales near you, in one list.",
     description:
-      "Start with a real market, then inspect the opportunities that deserve attention first.",
-    output: "Ranked opportunity list",
+      "Search a city, county or ZIP. See upcoming auction and government sales on a map, a list and a calendar.",
+    output: "A list of upcoming sales",
     icon: Search,
   },
   {
     key: "verify",
     step: "02",
     label: "Verify",
-    summary: "Trace the evidence",
-    eyebrow: "Evidence check",
-    headline: "Know what posted—and what it means.",
+    summary: "Read the fine print",
+    eyebrow: "Step 2",
+    headline: "See the catch before you bid.",
     description:
-      "Connect the signal to its source, extract the filing, and surface the facts that still need review.",
-    output: "Source-backed evidence packet",
+      "Each listing shows what was posted, what is missing, and a link to the original notice. Check title and condition yourself before you bid.",
+    output: "Facts with a link to the source",
     icon: ShieldCheck,
   },
   {
     key: "underwrite",
     step: "03",
     label: "Underwrite",
-    summary: "Set the bid ceiling",
-    eyebrow: "Bid guardrail",
-    headline: "See the ceiling and the catch.",
+    summary: "Set your top bid",
+    eyebrow: "Step 3",
+    headline: "Set your own top bid.",
     description:
-      "Pressure-test value, costs, required profit, and risk before the deposit becomes real.",
-    output: "Risk-adjusted bid range",
+      "Enter what you think it is worth, plus repairs and your target profit. See the most you can bid and still hit it.",
+    output: "Your maximum bid",
     icon: Calculator,
   },
   {
     key: "act",
     step: "04",
     label: "Act",
-    summary: "Leave with a next move",
-    eyebrow: "Execution plan",
-    headline: "Turn conviction into a deadline-driven plan.",
+    summary: "Track what you like",
+    eyebrow: "Step 4",
+    headline: "Keep the winners. Get an email on new ones.",
     description:
-      "Carry only the winner forward with the evidence, deadlines, and next actions visible to the team.",
-    output: "Decision-ready shortlist",
+      "Save properties to your watchlist. Members can start a hunt and get an email when a new listing fits or a saved one changes.",
+    output: "A short list with sale dates",
     icon: FileText,
   },
 ];
@@ -187,7 +187,7 @@ const PublishedListingContext = React.createContext<PublishedState>({
 
 function moneyText(value: unknown): string {
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n <= 0) return "Not published";
+  if (!Number.isFinite(n) || n <= 0) return "Not listed";
   return `$${Math.round(n).toLocaleString()}`;
 }
 
@@ -251,7 +251,7 @@ export function Storyteller() {
   };
 
   const headline = published.listing?.address
-    || (published.status === "loading" ? "Reading the listing feed" : published.status === "error" ? "Listing feed unavailable" : "No listing returned");
+    || (published.status === "loading" ? "Loading a sample listing" : published.status === "error" ? "Listing unavailable right now" : "No listing to show yet");
   const place = [published.listing?.city, published.listing?.state].filter(Boolean).join(", ");
 
   const contextValue = React.useMemo<PublishedState>(
@@ -274,14 +274,13 @@ export function Storyteller() {
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[820px] text-center">
           <p className="text-[12px] font-extrabold uppercase tracking-[0.16em] text-slate-900">
-            One property. Four decisions.
+            One property, four steps
           </p>
           <h2 className="mt-4 text-[36px] font-semibold leading-[1.12] tracking-[-0.025em] text-[#111827] sm:text-[48px]">
-            A lead is not a deal until it survives all four.
+            From first look to bid day.
           </h2>
           <p className="mx-auto mt-5 max-w-[650px] text-[16px] leading-[1.65] text-[#5B6472] sm:text-[17px]">
-            Find the signal, verify the filing, pressure-test the spread, and leave
-            with a next move your team can defend.
+            Find a sale, read the catch, work out your top bid, and keep track of the ones you want.
           </p>
         </GsapReveal>
 
@@ -298,7 +297,7 @@ export function Storyteller() {
               </div>
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800">
                 <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
-                {published.status === "ready" ? "Published listing" : headline}
+                {published.status === "ready" ? "Latest listing" : headline}
               </span>
             </div>
 
@@ -399,7 +398,7 @@ export function Storyteller() {
               <div className="hidden items-center gap-2 text-[11px] font-semibold text-[#5B6472] sm:flex">
                 <span className="text-[#0F172A]">{activeIndex + 1} of {STAGES.length}</span>
                 <span aria-hidden>·</span>
-                <span>Keep the same opportunity in view</span>
+                <span>The same property in every step</span>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 {activeIndex > 0 ? (
@@ -425,7 +424,7 @@ export function Storyteller() {
                     href="/listings"
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
                   >
-                    Open live workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                    Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </a>
                 )}
               </div>
@@ -448,9 +447,9 @@ function VerificationPanel() {
   const { listing, status } = React.useContext(PublishedListingContext);
   const checks = [
     { icon: Landmark, label: "Opening amount", detail: moneyText(listing?.openingBid) },
-    { icon: Building2, label: "Parcel key", detail: listing?.parcelKey || "Not published" },
-    { icon: Database, label: "Sale date", detail: listing?.saleDate || "Not published" },
-    { icon: Scale, label: "Occupancy", detail: listing?.occupancy || "Not published" },
+    { icon: Building2, label: "Parcel number", detail: listing?.parcelKey || "Not listed" },
+    { icon: Database, label: "Sale date", detail: listing?.saleDate || "Not listed" },
+    { icon: Scale, label: "Occupancy", detail: listing?.occupancy || "Not listed" },
   ];
 
   return (
@@ -458,24 +457,24 @@ function VerificationPanel() {
       <article className="relative overflow-hidden rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-slate-500/20 blur-3xl" />
         <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-300">
-          Published listing
+          Latest listing
         </p>
-        <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{listing?.address || (status === "loading" ? "Reading the listing feed" : "No listing returned")}</h4>
-        <p className="relative mt-1 text-[13px] font-medium text-slate-300">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Fields below are the record"}</p>
+        <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{listing?.address || (status === "loading" ? "Loading a sample listing" : "No listing to show yet")}</h4>
+        <p className="relative mt-1 text-[13px] font-medium text-slate-300">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Details from the listing"}</p>
 
         <dl className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
-          <EvidenceFact label="Source" value={listing?.source || "Not published"} />
+          <EvidenceFact label="Source" value={listing?.source || "Not listed"} />
           <EvidenceFact label="Opening" value={moneyText(listing?.openingBid)} />
-          <EvidenceFact label="Sale date" value={listing?.saleDate || "Not published"} />
+          <EvidenceFact label="Sale date" value={listing?.saleDate || "Not listed"} />
           <EvidenceFact label="Deposit" value={moneyText(listing?.deposit)} />
         </dl>
 
         <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="flex items-center gap-2 text-[11px] font-bold text-white">
-            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> Record fields
+            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> What the listing says
           </div>
           <p className="mt-2 text-[12px] leading-[1.55] text-slate-300">
-            {listing?.id ? "These values are the fields on the loaded listing." : "The feed did not return a listing to read."}
+            {listing?.id ? "These details come straight from the listing. Check the original notice before you bid." : "We could not load a listing just now."}
           </p>
         </div>
       </article>
@@ -483,8 +482,8 @@ function VerificationPanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">Source-by-source check</p>
-            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">What is known—and what is not</h4>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">Quick check</p>
+            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">What we know, and what is missing</h4>
           </div>
           <ShieldCheck className="h-7 w-7 text-emerald-600" aria-hidden />
         </div>
@@ -499,11 +498,11 @@ function VerificationPanel() {
                 <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#5B6472]">{check.detail}</span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
-                check.detail === "Not published"
+                check.detail === "Not listed"
                   ? "bg-amber-50 text-amber-700"
                   : "bg-emerald-50 text-emerald-700"
               }`}>
-                {check.detail === "Not published" ? "Not published" : "Published"}
+                {check.detail === "Not listed" ? "Not listed" : "Listed"}
               </span>
             </div>
           ))}
@@ -602,16 +601,16 @@ function UnderwritePanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-6 shadow-sm sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Operator assumptions</p>
-            <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Build the walk-away number</h4>
-            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Every estimate stays visible, editable, and attributable.</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your numbers</p>
+            <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Work out your top bid</h4>
+            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Change any number. These are your estimates, not ours.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-900">
             <Calculator className="h-4 w-4" aria-hidden /> Conservative model
           </span>
         </div>
 
-        <div className="mt-7 space-y-4" aria-label="Modeled value deductions">
+        <div className="mt-7 space-y-4" aria-label="Value minus costs">
           {deductions.map((item) => (
             <div key={item.label}>
               <div className="flex items-center justify-between text-[12px] font-bold">
@@ -639,26 +638,26 @@ function UnderwritePanel() {
         </div>
 
         <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-[#F8FAFC] p-2">
-          <ModelStat label="Opening bid" value={opening === null ? "Not published" : dollars(opening)} />
-          <ModelStat label="Bid ceiling" value={ceiling === null ? "—" : dollars(ceiling)} emphasis />
+          <ModelStat label="Opening bid" value={opening === null ? "Not listed" : dollars(opening)} />
+          <ModelStat label="Top bid" value={ceiling === null ? "—" : dollars(ceiling)} emphasis />
           <ModelStat label="Offer room" value={offerRoom === null ? "—" : dollars(offerRoom)} />
         </div>
       </article>
 
       <article className="flex flex-col rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
-        <p className="mt-3 text-[13px] font-semibold text-slate-300">Modeled bid range</p>
+        <p className="mt-3 text-[13px] font-semibold text-slate-300">Your top bid</p>
         <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "—" : dollars(ceiling)}</p>
         <div className="mt-5 h-px bg-white/10" />
         <div className="mt-5 space-y-4">
-          <DecisionLine icon={DollarSign} label="Walk away above" value={ceiling === null ? "—" : dollars(ceiling)} />
-          <DecisionLine icon={AlertTriangle} label="Published deposit" value={moneyText(listing?.deposit)} />
-          <DecisionLine icon={Calendar} label="Sale date" value={listing?.saleDate || "Not published"} />
+          <DecisionLine icon={DollarSign} label="Your top bid (from your numbers)" value={ceiling === null ? "—" : dollars(ceiling)} />
+          <DecisionLine icon={AlertTriangle} label="Deposit" value={moneyText(listing?.deposit)} />
+          <DecisionLine icon={Calendar} label="Sale date" value={listing?.saleDate || "Not listed"} />
         </div>
         <div className="mt-auto rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
           <p className="text-[11px] font-bold text-amber-200">Occupancy</p>
           <p className="mt-1 text-[11px] leading-[1.5] text-slate-300">
-            {listing?.occupancy ? `Published occupancy: ${listing.occupancy}.` : "Occupancy is not published on this listing."}
+            {listing?.occupancy ? `Occupancy: ${listing.occupancy}.` : "The listing does not say if anyone lives there."}
           </p>
         </div>
       </article>
@@ -692,9 +691,9 @@ function ActionPanel() {
   const scoreN = Number(listing?.dealScore);
   const score = Number.isFinite(scoreN) && scoreN > 0 ? String(scoreN) : "—";
   const [actions, setActions] = React.useState([
-    { label: "Order title review", detail: "Confirm lien priority and exceptions", owner: "Legal", done: false },
-    { label: "Check occupancy", detail: "Use the published occupancy field, or record that it is missing", owner: "Acquisitions", done: false },
-    { label: "Stage deposit funds", detail: "Use the published deposit on the listing", owner: "Capital", done: false },
+    { label: "Order a title search", detail: "Find out which liens survive the sale", owner: "You", done: false },
+    { label: "Check occupancy", detail: "Use what the listing says, or note that it is missing", owner: "You", done: false },
+    { label: "Line up the deposit", detail: "Check the deposit the listing asks for", owner: "You", done: false },
   ]);
 
   const completedCount = actions.filter((a) => a.done).length;
@@ -709,28 +708,28 @@ function ActionPanel() {
       <article className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white shadow-sm">
         <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-[#0F172A] px-6 py-5 text-white">
           <div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Listing record</p>
-            <h4 className="mt-1 text-[21px] font-bold">{listing?.address || "No listing loaded"}</h4>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-400">Prepared for acquisition review</p>
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Listing</p>
+            <h4 className="mt-1 text-[21px] font-bold">{listing?.address || "No listing to show yet"}</h4>
+            <p className="mt-0.5 text-[11px] font-medium text-slate-400">Your shortlist card</p>
           </div>
           <span className="rounded-xl bg-emerald-400/15 px-3 py-2 text-[11px] font-extrabold text-emerald-200">
-            {completedCount === actions.length ? "Checklist complete" : "Checklist open"}
+            {completedCount === actions.length ? "All done" : "To do"}
           </span>
         </div>
         <div className="p-6">
           <div className="grid grid-cols-3 gap-2">
-            <MemoMetric label="Deal score" value={score} />
+            <MemoMetric label="Deal Score" value={score} />
             <MemoMetric label="Opening" value={moneyText(listing?.openingBid)} />
-            <MemoMetric label="Bid ceiling" value={modeledCeiling !== null ? formatDollars(modeledCeiling) : "—"} />
+            <MemoMetric label="Top bid" value={modeledCeiling !== null ? formatDollars(modeledCeiling) : "—"} />
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Why it advances</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Why it made the list</p>
               <ul className="mt-3 space-y-2">
                 {[
-                  listing?.saleDate ? `Sale date ${listing.saleDate}` : "Sale date is not published",
-                  listing?.source ? `Source ${listing.source}` : "Source is not published",
-                  listing?.parcelKey ? `Parcel ${listing.parcelKey}` : "Parcel key is not published",
+                  listing?.saleDate ? `Sale date ${listing.saleDate}` : "No sale date listed",
+                  listing?.source ? `Source ${listing.source}` : "No source listed",
+                  listing?.parcelKey ? `Parcel ${listing.parcelKey}` : "No parcel number listed",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden /> {item}
@@ -742,9 +741,9 @@ function ActionPanel() {
               <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Conditions</p>
               <ul className="mt-3 space-y-2">
                 {[
-                  listing?.occupancy ? `Occupancy: ${listing.occupancy}` : "Occupancy is not published",
-                  moneyText(listing?.deposit) === "Not published" ? "Deposit is not published" : `Deposit ${moneyText(listing?.deposit)}`,
-                  "Title priority is not decided on this page",
+                  listing?.occupancy ? `Occupancy: ${listing.occupancy}` : "Occupancy not listed",
+                  moneyText(listing?.deposit) === "Not listed" ? "Deposit not listed" : `Deposit ${moneyText(listing?.deposit)}`,
+                  "Title still needs checking",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
                     <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden /> {item}
@@ -759,8 +758,8 @@ function ActionPanel() {
       <article className="rounded-[24px] border border-[#E2E8F0] bg-[#F8FAFC] p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Next-action board</p>
-            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Move before the deadline</h4>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your to-do list</p>
+            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Before the sale date</h4>
           </div>
           <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">
             {completedCount} of {actions.length} done
@@ -788,7 +787,7 @@ function ActionPanel() {
           ))}
         </div>
         <a href={listing?.id ? `/listings/${encodeURIComponent(listing.id)}` : "/listings"} className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
-          Open opportunity workspace <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
       </article>
     </div>

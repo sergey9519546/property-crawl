@@ -4,6 +4,18 @@ import * as React from "react";
 import { Bookmark } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
+// Same device-storage key and shape (JSON array of listing ids) as the /listings grid.
+const DEVICE_KEY = "perfectproperty:saved-listings";
+
+function readDeviceIds(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DEVICE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
   const session = useWorkspaceSession();
   const [saved, setSaved] = React.useState(false);
@@ -12,7 +24,7 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
 
   React.useEffect(() => {
     if (!session.memberTools) {
-      setSaved(false);
+      setSaved(readDeviceIds().includes(listingId));
       setError("");
       return;
     }
@@ -43,7 +55,15 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
 
   async function toggle() {
     if (!session.memberTools) {
-      session.requestUnlock();
+      try {
+        const ids = readDeviceIds();
+        const next = saved ? ids.filter((id) => id !== listingId) : Array.from(new Set([...ids, listingId]));
+        window.localStorage.setItem(DEVICE_KEY, JSON.stringify(next));
+        setSaved(!saved);
+        setError("");
+      } catch {
+        setError("Your browser is blocking saved properties, so the watchlist was not updated.");
+      }
       return;
     }
     if (busy) return;

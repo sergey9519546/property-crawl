@@ -470,9 +470,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             # away from, so those subtests could never pass and the menus were
             # effectively untested. The property under test is unchanged: each
             # desktop menu opens and reveals a real feature link.
-            "Product": "Listing workspace",
+            "Product": "Search listings",
             "Solutions": "Acquisitions",
-            "Resources": "Knowledge base",
+            "Resources": "Buyer's guide",
         }
         for menu_name, link_name in menu_expectations.items():
             with self.subTest(menu=menu_name):
@@ -497,13 +497,13 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                     self.assertLessEqual(brand["x"] + brand["width"], menu["x"])
                 else:
                     nav = header.locator("nav").bounding_box()
-                    # The desktop header's trailing control is the operator-key
+                    # The desktop header's trailing control is the staff sign-in
                     # link, not "Sign in" - there is no Sign in link in this
                     # header, so asserting one could never pass and the 1280px
                     # and 1440px subtests never actually ran. The property under
                     # test is the one that matters: brand, nav and the trailing
                     # control must each end before the next one begins.
-                    trailing = header.get_by_role("link", name="Operator key", exact=True).bounding_box()
+                    trailing = header.get_by_role("link", name="Staff sign-in", exact=True).bounding_box()
                     self.assertIsNotNone(nav)
                     self.assertIsNotNone(trailing)
                     self.assertLessEqual(brand["x"] + brand["width"], nav["x"])
@@ -991,10 +991,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.set_viewport_size({"width": 2322, "height": 1272})
         header = self.page.locator("header").first
         brand = self.page.get_by_role("link", name="PerfectProperty home").first
-        # The header's right-hand control is "Operator key"; "Operator access"
+        # The header's right-hand control is "Staff sign-in"; "Operator access"
         # is a CTA further down the page. Assert the header's own control sits
         # hard right - a page-wide .first was measuring the CTA's position.
-        signup = header.get_by_role("link", name="Operator key", exact=True)
+        signup = header.get_by_role("link", name="Staff sign-in", exact=True)
         navigation = header.locator("nav")
         header_box = header.bounding_box()
         brand_box = brand.bounding_box()
@@ -1186,7 +1186,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertEqual(self.page.get_by_text("Saved searches with instant alerts", exact=True).count(), 0)
         self.assertEqual(self.page.get_by_text("Verified", exact=True).count(), 0)
         self.assertEqual(self.page.get_by_text(re.compile(r"2k flippers", re.I)).count(), 0)
-        self.assertTrue(self.page.get_by_text("Beta snapshot", exact=True).first.is_visible())
+        self.assertTrue(self.page.get_by_text("Live count", exact=True).first.is_visible())
 
     def test_storyteller_uses_a_real_map_engine_with_accessible_opportunities(self):
         # Install the local map fixture before loading. Without it this test
@@ -1418,7 +1418,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.assertTrue(
             text in (
                 "Thanks — you're on the list.",
-                "Saved. Email delivery is not configured yet.",
+                "Saved. We can't send email yet, so you won't get a confirmation.",
             ),
             f"newsletter must report what actually happened, got: {text!r}",
         )
@@ -1669,9 +1669,9 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         menu = self.page.get_by_role("dialog")
         menu.wait_for(state="visible")
         menu.get_by_role("button", name="Product").click()
-        menu.get_by_role("link", name="Listing workspace").click()
+        menu.get_by_role("link", name="Search listings").click()
 
-        # "Listing workspace" is the renamed nav entry and it routes to
+        # "Search listings" is the renamed nav entry and it routes to
         # /listings, not to the old #live-feed anchor on the home page.
         self.page.wait_for_url(f"{BASE_URL}/listings", wait_until="commit")
         self.assertEqual(self.page.url, f"{BASE_URL}/listings")
@@ -1746,7 +1746,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         play.scroll_into_view_if_needed()
         play.click()
 
-        dialog = self.page.get_by_role("dialog", name="Listing record")
+        dialog = self.page.get_by_role("dialog", name="Sample listing")
         dialog.wait_for(state="visible")
         self.page.keyboard.press("Escape")
         self.assertEqual(dialog.count(), 0)
@@ -1943,28 +1943,28 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # into view by a viewport change alone.
         self.page.reload(wait_until="domcontentloaded")
         self.page.wait_for_timeout(1_500)
-        # Watchlists are operator-gated: the toggle POSTs /api/alerts, which
-        # returns 401 for a signed-out visitor, and the component calls
-        # session.requestUnlock() instead of marking it saved. So a save-then-
-        # assert-saved sequence can never pass here. The property worth keeping
-        # is the honesty one - a REFUSED save must not present as a saved
-        # watchlist - which is what this now checks.
+        # Signed-out buyers save to the watchlist on this device (the same
+        # storage the listings grid uses), so the save must show as saved and
+        # survive a reload. A save must never open the staff unlock dialog.
         save = self.page.get_by_role("button", name="Save to watchlist", exact=True).filter(visible=True)
-        save.click()
-        self.page.wait_for_timeout(1_500)
-        self.assertEqual(
+        save.first.click()
+        self.page.wait_for_timeout(1_000)
+        self.assertGreater(
             self.page.get_by_role("button", name="Saved to watchlist", exact=True).filter(visible=True).count(),
             0,
-            "a refused watchlist save must not present as saved",
+            "a device watchlist save must show as saved",
         )
-        # Locate by state, not by label: the button's text changes to
-        # "Updating watchlist." while the save is in flight, so a name-based
-        # locator stops resolving the moment it is clicked.
-        pressed = self.page.locator('button[aria-pressed="true"]',
-                                    has_text=re.compile("watchlist", re.I))
         self.assertEqual(
-            pressed.count(), 0,
-            "a refused save must not leave the watchlist toggle pressed",
+            self.page.get_by_role("dialog", name=re.compile("operator|staff", re.I)).count(),
+            0,
+            "saving must not open the staff unlock dialog",
+        )
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_timeout(1_500)
+        self.assertGreater(
+            self.page.get_by_role("button", name="Saved to watchlist", exact=True).filter(visible=True).count(),
+            0,
+            "a device watchlist save must survive a reload",
         )
 
     def test_street_view_detail_card_is_on_demand_and_discloses_its_context(self):

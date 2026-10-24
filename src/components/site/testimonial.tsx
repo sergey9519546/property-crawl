@@ -11,19 +11,8 @@ export function Testimonial() {
             className="font-serif-arcade text-[26px] leading-[1.35] text-[#111827] sm:text-[32px] lg:text-[36px]"
             style={{ fontStyle: "italic", fontWeight: 400 }}
           >
-            Every opportunity starts with a source. Every decision needs evidence.
+            Every sale starts with a public notice. Every bid should start with the facts.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0F172A]/10 text-[14px] font-bold text-[#0F172A]">
-              PP
-            </div>
-            <div className="text-left">
-              <p className="text-[15px] font-semibold text-[#111827]">Our research standard</p>
-              <p className="text-[13px] text-[#5B6472]">
-                Published facts first. Assumptions made visible.
-              </p>
-            </div>
-          </div>
         </GsapReveal>
       </div>
     </section>

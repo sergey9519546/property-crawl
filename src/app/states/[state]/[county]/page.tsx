@@ -104,13 +104,13 @@ export default async function CountyDocketPage({ params }: PageProps) {
   if (!state) {
     return (
       <main className="mx-auto max-w-4xl px-6 py-16">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Coverage</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Invalid State Code</h1>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Browse by state</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">We don&apos;t recognize that state</h1>
         <p className="mt-4 text-sm leading-6 text-slate-600">
-          County docket intelligence requires a valid two-letter US state postal code.
+          Use a two-letter state code, like OH or FL.
         </p>
         <Link href="/states" className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-slate-950 underline">
-          <ArrowLeft className="h-4 w-4" /> All States Directory
+          <ArrowLeft className="h-4 w-4" /> All states
         </Link>
       </main>
     );
@@ -132,6 +132,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
   });
   const upcomingCount = listings.filter((item) => saleOf(item) >= today).length;
   const thisWeekCount = listings.filter((item) => saleOf(item) >= today && saleOf(item) <= weekOut).length;
+  const nextSale = upcomingCount > 0 ? saleOf(listings[0]) : null;
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
   // Fee math only runs on a published median bid; no stand-in price.
@@ -168,48 +169,55 @@ export default async function CountyDocketPage({ params }: PageProps) {
         {/* Page Header */}
         <div className="border-b border-slate-200 pb-8">
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/70 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
-            <Gavel className="h-3.5 w-3.5" /> County Docket &amp; Foreclosure Directory
+            <Gavel className="h-3.5 w-3.5" /> Foreclosure and auction listings
           </div>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            Distressed &amp; Foreclosure Property in {formalCounty}, {state}
+            Foreclosure and government property auctions in {formalCounty}, {state}
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 sm:text-base">
-            {thisWeekCount} sale{thisWeekCount === 1 ? "" : "s"} scheduled in the next 7 days and {upcomingCount} upcoming in total, out of {stats.totalCount} foreclosure, tax-deed, and government-sale records collected for {formalCounty}. Confirm every record at its publisher before bidding.
+            {upcomingCount > 0
+              ? `${stats.totalCount} listing${stats.totalCount === 1 ? "" : "s"} in ${formalCounty}. ${upcomingCount} ${upcomingCount === 1 ? "sale is" : "sales are"} coming up, ${thisWeekCount} in the next 7 days. Next sale: ${nextSale}.`
+              : `No upcoming sales listed here right now. ${stats.totalCount} past or undated listing${stats.totalCount === 1 ? "" : "s"} below.`}
+            {" "}Always confirm the date and terms with the county before you bid.
           </p>
+          <div className="mt-5 flex flex-wrap gap-3 text-sm font-semibold">
+            <Link href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`} className="text-blue-600 underline hover:text-blue-800">Browse these listings</Link>
+            <Link href="/hunts" className="text-blue-600 underline hover:text-blue-800">Start a hunt for this county</Link>
+          </div>
         </div>
 
         {/* Key Metrics Grid */}
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales Next 7 Days</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales in the next 7 days</div>
             <div className="mt-2 text-2xl font-bold text-slate-950 tabular-nums">
               {thisWeekCount}
             </div>
-            <div className="mt-1 text-xs text-slate-500">{upcomingCount} upcoming of {stats.totalCount} records</div>
+            <div className="mt-1 text-xs text-slate-500">{upcomingCount} upcoming of {stats.totalCount} listings</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Median Opening Bid</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Typical opening bid</div>
             <div className="mt-2 text-2xl font-bold text-blue-600 tabular-nums">
-              {stats.medianOpeningBid ? `$${Math.round(stats.medianOpeningBid).toLocaleString("en-US")}` : "Unpublished"}
+              {stats.medianOpeningBid ? `$${Math.round(stats.medianOpeningBid).toLocaleString("en-US")}` : "Not published"}
             </div>
-            <div className="mt-1 text-xs text-slate-500">Live auction baseline</div>
+            <div className="mt-1 text-xs text-slate-500">Middle of the published opening bids</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Median Deal Score</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Typical Deal Score</div>
             <div className="mt-2 text-2xl font-bold text-emerald-600 tabular-nums">
-              {stats.medianDealScore ? `${Math.round(stats.medianDealScore)}/99` : "Evaluating"}
+              {stats.medianDealScore ? `${Math.round(stats.medianDealScore)}/99` : "Not scored yet"}
             </div>
-            <div className="mt-1 text-xs text-slate-500">Triage indicator</div>
+            <div className="mt-1 text-xs text-slate-500">A quick read on each deal, not an appraisal</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Statutory Redemption</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Time to redeem after the sale</div>
             <div className="mt-2 text-2xl font-bold text-amber-600 tabular-nums">
-              {redemption.days !== null ? `${redemption.days} Days` : "Judicial"}
+              {redemption.days !== null ? `${redemption.days} Days` : "Set by the court"}
             </div>
-            <div className="mt-1 text-xs text-slate-500">{state} post-sale window</div>
+            <div className="mt-1 text-xs text-slate-500">How long the previous owner can buy it back</div>
           </div>
         </div>
 
@@ -219,11 +227,11 @@ export default async function CountyDocketPage({ params }: PageProps) {
             <Scale className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             <div>
               <div className="text-sm font-semibold text-amber-900">
-                {state} Statutory Redemption Rule: {redemption.days !== null ? `${redemption.days} Days` : "Judicial Law Day"}
+                {state} redemption rule: {redemption.days !== null ? `${redemption.days} days` : "set by the court"}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-amber-800">
-                {redemption.label}. Pre-sale or post-sale statutory redemption periods determine whether a prior owner
-                can reclaim the property after gavel fall. Ensure official docket confirmation and statutory deadlines are verified.
+                {redemption.label}. Where a redemption period applies, the previous owner can reclaim the property after the sale,
+                so ownership may not be final right away. Check the exact rules with the county before you bid.
               </p>
             </div>
           </div>
@@ -236,7 +244,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
               <div className="flex items-center gap-2">
                 <Calculator className="h-5 w-5 text-blue-600" />
                 <h2 className="text-base font-bold text-slate-950">
-                  {state} Statutory Auction &amp; Settlement Framework
+                  What to expect at a {state} auction
                 </h2>
               </div>
               <span className="text-xs font-semibold text-slate-500">
@@ -246,32 +254,32 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Estimated Deposit At Knockdown</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Estimated deposit when you win</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">
                   ${Math.round(feePreset.creditedDeposit).toLocaleString("en-US")}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  Certified funds at the median published opening bid (${Math.round(baselinePrice).toLocaleString("en-US")})
+                  Certified funds, based on the typical opening bid (${Math.round(baselinePrice).toLocaleString("en-US")})
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Transfer Tax &amp; Poundage</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Transfer tax and sale fees</div>
                 <div className="mt-1 text-lg font-bold text-slate-900">
                   ${Math.round(feePreset.transferTax + feePreset.sheriffPoundage).toLocaleString("en-US")}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  Statutory deed stamps + sheriff/referee commission
+                  Deed stamps plus the sheriff or referee fee
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Confirmation / Upset Window</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Court approval or upset window</div>
                 <div className="mt-1 text-lg font-bold text-amber-700">
-                  {carrySchedule.objectionOrConfirmationDays > 0 ? `${carrySchedule.objectionOrConfirmationDays} Days` : "Immediate"}
+                  {carrySchedule.objectionOrConfirmationDays > 0 ? `${carrySchedule.objectionOrConfirmationDays} Days` : "None"}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-500">
-                  {carrySchedule.objectionLabel || "Court confirmation or gavel drop"}
+                  {carrySchedule.objectionLabel || "Court approval, or the sale is final when the gavel drops"}
                 </div>
               </div>
             </div>
@@ -279,7 +287,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
             {feePreset.citations.length > 0 && (
               <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
                 <div className="text-xs font-bold text-blue-950 mb-1 flex items-center gap-1.5">
-                  <Scale className="h-3.5 w-3.5 text-blue-700" /> Statutory Authorities &amp; Governing Codes:
+                  <Scale className="h-3.5 w-3.5 text-blue-700" /> Laws behind these numbers:
                 </div>
                 <ul className="list-disc pl-5 space-y-1 text-xs text-blue-900/90">
                   {feePreset.citations.map((cite, idx) => (
@@ -297,35 +305,35 @@ export default async function CountyDocketPage({ params }: PageProps) {
             <CheckSquare className="h-5 w-5 text-indigo-600" />
             <div>
               <h2 className="text-base font-bold text-slate-950">
-                7-Point Foreclosure Due Diligence Checklist ({formalCounty}, {state})
+                7 things to check before you bid in {formalCounty}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Critical title and statutory failure modes to verify at the county clerk &amp; sheriff office before bidding
+                Ask the county clerk and the sheriff&apos;s office about each one. This does not replace a title search.
               </p>
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">1. Senior Lien Priority:</span> Ensure the foreclosing mortgage is senior. Junior mortgage foreclosures take subject to the 1st mortgage balance.
+              <span className="font-bold text-slate-900">1. Is the foreclosing loan first in line?</span> If it is a second mortgage, you take the property and the first mortgage balance too.
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">2. Municipal Ad Valorem Taxes:</span> In {state}, delinquent property taxes and utility water/sewer liens enjoy super-priority status and survive foreclosure.
+              <span className="font-bold text-slate-900">2. Unpaid property taxes and water bills:</span> In {state}, these are paid ahead of other debts and usually stay with the property after the sale.
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">3. IRS § 7425 120-Day Redemption:</span> Any recorded federal tax lien gives the United States a statutory 120-day right of redemption post-sale.
+              <span className="font-bold text-slate-900">3. IRS liens (§ 7425):</span> If a federal tax lien is involved, the IRS may be able to buy the property back within 120 days after the sale.
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">4. State Confirmation &amp; Objection:</span> {redemption.label}
+              <span className="font-bold text-slate-900">4. Court approval and objections:</span> {redemption.label}
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">5. Bankruptcy Automatic Stay (11 U.S.C. § 362):</span> Verify PACER / CourtListener dockets immediately prior to gavel fall to confirm no bankruptcy petition was filed.
+              <span className="font-bold text-slate-900">5. Bankruptcy (11 U.S.C. § 362):</span> A bankruptcy filing usually pauses the sale. Check PACER or CourtListener just before the sale.
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
-              <span className="font-bold text-slate-900">6. Certified Funds Tender Rules:</span> Have cashier&apos;s checks prepared for the exact deposit percentage required by {formalCounty} rules.
+              <span className="font-bold text-slate-900">6. Deposit rules:</span> Bring a cashier&apos;s check for the exact deposit the sale notice says.
             </div>
             <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 sm:col-span-2">
-              <span className="font-bold text-slate-900">7. Occupancy &amp; PTFA (12 U.S.C. § 5220):</span> Verify whether the property is occupied; bona fide tenants require a statutory 90-day notice to vacate under the Protecting Tenants at Foreclosure Act.
+              <span className="font-bold text-slate-900">7. Who lives there (12 U.S.C. § 5220):</span> Find out if the home is occupied. Tenants with a real lease must get 90 days&apos; notice to move out.
             </div>
           </div>
         </div>
@@ -334,7 +342,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
         {Object.keys(stats.sourceBreakdown).length > 0 && (
           <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">
-              Source &amp; Publisher Breakdown in {formalCounty}
+              Where {formalCounty} listings come from
             </h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {Object.entries(stats.sourceBreakdown).map(([srcKey, count]) => (
@@ -356,23 +364,23 @@ export default async function CountyDocketPage({ params }: PageProps) {
         <div className="mt-10">
           <div className="flex items-center justify-between border-b border-slate-200 pb-4">
             <div>
-              <h2 className="text-xl font-bold text-slate-950">Records by sale date</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Upcoming sales first, soonest at the top. Undated and past records follow.</p>
+              <h2 className="text-xl font-bold text-slate-950">Listings by sale date</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Upcoming sales first, soonest at the top. Past and undated sales follow.</p>
             </div>
             <Link
               href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
             >
-              Open in Terminal Workbench &rarr;
+              Search and filter these listings &rarr;
             </Link>
           </div>
 
             <div className="mt-6 grid gap-4">
               {listings.map((item) => {
-                const address = item.address || "Address upon official request";
+                const address = item.address || "Address not published";
                 const city = item.city || "";
-                const propType = item.propType || "Distressed Property";
-                const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : "Unpublished";
+                const propType = item.propType || "Property";
+                const openingBid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString("en-US")}` : "Not published";
                 const score = item.dealScore != null ? Number(item.dealScore) : null;
                 const saleDate = saleOf(item) || null;
                 const band = bandForScore(score);
@@ -405,7 +413,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
                     <div className="mt-4 sm:mt-0 sm:text-right flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto gap-3 sm:gap-1">
                       <div>
-                        <div className="text-xs text-slate-500">Opening Bid</div>
+                        <div className="text-xs text-slate-500">Opening bid</div>
                         <div className="text-base font-bold text-blue-600 tabular-nums">{openingBid}</div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -418,7 +426,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                           href={`/listings/${encodeURIComponent(item.id)}`}
                           className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
                         >
-                          Dossier <ExternalLink className="h-3 w-3" />
+                          View details <ExternalLink className="h-3 w-3" />
                         </Link>
                       </div>
                     </div>
@@ -434,7 +442,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
             href={`/states/${state}`}
             className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:underline"
           >
-            <ArrowLeft className="h-4 w-4" /> Return to all {state} Counties
+            <ArrowLeft className="h-4 w-4" /> Back to all {state} counties
           </Link>
         </div>
       </main>

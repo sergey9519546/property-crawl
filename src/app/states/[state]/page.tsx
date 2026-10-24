@@ -20,9 +20,9 @@ async function loadStateCounties(state: string): Promise<{ total: number; counti
       cache: "no-store",
       signal: AbortSignal.timeout(5_000),
     });
-    if (!response.ok) return { total: 0, counties: [], error: "The coverage feed did not return county counts." };
+    if (!response.ok) return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
     const body = (await response.json()) as CoveragePayload;
-    if (body.liveByState?.readError) return { total: 0, counties: [], error: "The coverage feed did not return county counts." };
+    if (body.liveByState?.readError) return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
     const totalRaw = body.liveByState?.byStateTotal?.[state];
     const total = typeof totalRaw === "number" && Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
     const raw = body.liveByState?.byCounty?.[state];
@@ -42,7 +42,7 @@ async function loadStateCounties(state: string): Promise<{ total: number; counti
       : [];
     return { total, counties, error: null };
   } catch {
-    return { total: 0, counties: [], error: "The coverage feed did not return county counts." };
+    return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
   }
 }
 
@@ -52,9 +52,9 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   if (!state) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Coverage</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">State code not recognized</h1>
-        <p className="mt-4 text-sm leading-6 text-slate-600">County counts are listed only for a two-letter state code in the coverage feed.</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Browse by state</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">We don't recognize that state</h1>
+        <p className="mt-4 text-sm leading-6 text-slate-600">Use a two-letter state code, like OH or FL.</p>
         <Link href="/states" className="mt-6 inline-block text-sm font-semibold text-slate-950 underline">All states</Link>
       </main>
     );
@@ -63,24 +63,24 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   const { total, counties, error } = await loadStateCounties(state);
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Coverage</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{state}</h1>
+      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Browse by state</p>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Foreclosure and government property auctions in {state}</h1>
       <p className="mt-4 text-sm leading-6 text-slate-600">
-        Counties appear only when a live record names one. The count and the sources are what the store recorded. This page does not describe a market.
+        Pick a county to see its upcoming sales and listings. Under each county name you can see where the sale notices come from.
       </p>
       <p className="mt-4 text-sm">
         <Link href="/states" className="font-semibold text-slate-950 underline">All states</Link>
         {total > 0 ? (
           <>
             <span className="text-slate-400"> · </span>
-            <Link href={`/listings?state=${state}`} className="font-semibold text-slate-950 underline">{total} live records</Link>
+            <Link href={`/listings?state=${state}`} className="font-semibold text-slate-950 underline">Browse all {total} {state} listings</Link>
           </>
         ) : null}
       </p>
       {error ? (
         <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{error}</p>
       ) : counties.length === 0 ? (
-        <p className="mt-6 text-sm text-slate-600">No live record in {state} names a county.</p>
+        <p className="mt-6 text-sm text-slate-600">No listings in {state} show a county yet. Browse all {state} listings above.</p>
       ) : (
         <ul className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
           {counties.map((row) => (
@@ -91,7 +91,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
               >
                 <span className="flex items-center justify-between gap-4">
                   <span className="font-semibold text-slate-950">{row.county}</span>
-                  <span className="tabular-nums text-slate-600">{row.count}</span>
+                  <span className="tabular-nums text-slate-600">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
                 </span>
                 {row.sources.length > 0 ? (
                   <span className="mt-1 block text-xs text-slate-500">{row.sources.join(", ")}</span>

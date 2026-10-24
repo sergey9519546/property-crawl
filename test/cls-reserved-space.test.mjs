@@ -60,7 +60,7 @@ test('the runtime-mode banner reserves its box before the health probe answers',
     `${BANNER}: returning null while the probe is in flight is what pushed the page down 65px`);
   assert.match(src, /data-testid="data-mode-banner-pending"/,
     `${BANNER}: there must be a pending state that occupies the banner's box`);
-  assert.match(src, /Checking runtime mode/,
+  assert.match(src, /Checking for the latest listings/,
     `${BANNER}: the pending state should say what it is doing rather than showing nothing`);
 });
 

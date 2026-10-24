@@ -66,3 +66,19 @@ test('Due Diligence Binder: component is mounted on listing detail page with acc
   assert.match(checklistSrc, /window\.print\(\)/, 'Checklist must support one-click bidding binder print');
   assert.match(checklistSrc, /Interactive Lien Waterfall & Surplus Proceeds Simulator/, 'Checklist must embed interactive debt waterfall simulator');
 });
+
+test('Listing page logic: no invented lien amounts, no false junior-lien alarm', () => {
+  const src = read('src/components/terminal/due-diligence-checklist.tsx');
+  assert.doesNotMatch(src, /150_000|3_500|100_000/, 'waterfall inputs must not be prefilled with invented amounts');
+  assert.match(src, /\^\(\?:high\|critical\)\$/, 'lien warning must be gated on detector risk high/critical');
+  assert.match(src, /\^SENIOR_LIEN_RISK/, 'lien warning must honor the SENIOR_LIEN_RISK detector warning');
+  assert.doesNotMatch(src, /\(\?:junior\|second/, 'free-text junior/second regex must not drive the warning');
+});
+
+test('Listing page logic: watchlist toggle saves to device storage for signed-out visitors', () => {
+  const src = read('src/components/listings/listing-watchlist-toggle.tsx');
+  assert.match(src, /perfectproperty:saved-listings/, 'must share the /listings grid device key');
+  const toggleBody = src.slice(src.indexOf('async function toggle'));
+  const beforeAuthed = toggleBody.slice(0, toggleBody.indexOf('if (busy)'));
+  assert.doesNotMatch(beforeAuthed, /requestUnlock/, 'signed-out branch must not call requestUnlock');
+});

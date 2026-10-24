@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Clock3, ExternalLink, FileCheck2, GitCompareArrows, RotateCcw, SearchCheck } from "lucide-react";
+import { ArrowRight, Check, Clock3, ExternalLink, GitCompareArrows, RotateCcw, SearchCheck } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 
 type ChangeItem = {
@@ -18,35 +18,35 @@ type ChangeItem = {
 const DEMO_ITEMS: ChangeItem[] = [
   {
     id: "demo-cuyahoga-drop",
-    label: "Opening upset dropped (-33%)",
+    label: "Example: opening bid dropped 33%",
     before: "$148,000",
     after: "$98,667",
-    reason: "Statutory Ohio ORC § 2329.52 reappraisal trigger: first sheriff sale failed with no bidders; court ordered re-offered at secondary statutory minimum floor.",
+    reason: "Example: the opening bid was lowered after a failed sale.",
     listingId: "HUD-412-652610",
-    observedAt: "Statutory 2nd Sale",
+    observedAt: "Second sale",
   },
   {
     id: "demo-orange-clerk",
-    label: "Tax deed upset bid recalculated (-34%)",
+    label: "Example: tax deed bid lowered 34%",
     before: "$62,500",
     after: "$41,200",
-    reason: "Orange County Clerk updated statutory opening upset bid to eliminate extinguished junior municipal utility liens upon judicial confirmation.",
+    reason: "Example: the opening bid was lowered after a failed sale.",
     listingId: "TRSY-27-66-110",
-    observedAt: "Cadastral audit",
+    observedAt: "County update",
   },
   {
     id: "demo-dallas-trustee",
-    label: "Lender upset credit bid adjusted (-17%)",
+    label: "Example: lender bid lowered 17%",
     before: "$210,000",
     after: "$175,000",
-    reason: "Trustee re-noticed foreclosure auction with lowered lender upset reserve, crossing beneath the 70% MAO underwriting threshold.",
+    reason: "Example: the opening bid was lowered after a failed sale.",
     listingId: "TRSY-26-66-189",
-    observedAt: "Postponement reset",
+    observedAt: "Sale re-posted",
   },
 ];
 
 function formatCurrency(val: number | null | undefined): string {
-  if (val === null || val === undefined) return "Not published";
+  if (val === null || val === undefined) return "Not listed";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(val);
 }
 
@@ -68,12 +68,12 @@ export function SecondLookShowcase() {
         if (liveDrops.length > 0 && !unmounted) {
           const mapped: ChangeItem[] = liveDrops.slice(0, 4).map((drop: { listingId: string; previousBid: number | null; currentBid: number | null; deltaPct: number | null; delta: number | null; reason: string | null }, idx: number) => ({
             id: drop.listingId || `drop-${idx}`,
-            label: `Opening amount dropped (${Math.round((drop.deltaPct || 0) * 100)}%)`,
+            label: `Opening bid dropped ${Math.abs(Math.round((drop.deltaPct || 0) * 100))}%`,
             before: formatCurrency(drop.previousBid),
             after: formatCurrency(drop.currentBid),
-            reason: drop.reason || `Opening amount reduced by ${formatCurrency(Math.abs(drop.delta || 0))}`,
+            reason: drop.reason || `The opening bid went down by ${formatCurrency(Math.abs(drop.delta || 0))}.`,
             listingId: drop.listingId,
-            observedAt: "Live observation"
+            observedAt: "Recently"
           }));
           setItems(mapped);
           setActive(mapped[0].id);
@@ -93,19 +93,19 @@ export function SecondLookShowcase() {
 
   return <section id="second-look" className="border-y border-slate-200 bg-[#F5F6F7] px-5 py-20 sm:px-8 sm:py-28">
     <div className="mx-auto max-w-7xl">
-      <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.8fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">The find after the first no</p><h2 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-slate-950 sm:text-6xl">PerfectProperty remembers why you passed.</h2></div><div><p className="text-base leading-7 text-slate-600">Second Look watches the evidence behind your decision. When the published fact you cared about changes, the case comes back with the trigger attached. Your decision stays intact until you review it.</p><Link href="/research" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-slate-900 underline hover:text-slate-700">Open the research inbox <ArrowRight size={15} /></Link></div></div>
+      <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.8fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">Price drops</p><h2 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-slate-950 sm:text-6xl">A price can drop after a sale falls through.</h2></div><div><p className="text-base leading-7 text-slate-600">Prices can drop after a sale falls through. Members get an email when a saved listing's opening bid drops.</p><Link href="/account" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-slate-900 underline hover:text-slate-700">Become a member <ArrowRight size={15} /></Link></div></div>
       <div className="mt-12 overflow-hidden rounded-3xl border border-slate-300 bg-white shadow-[0_25px_80px_rgba(15,23,42,0.10)]">
         <div className="grid lg:grid-cols-[340px_1fr]">
           <div className="border-b border-slate-200 bg-slate-950 p-6 text-white lg:border-b-0 lg:border-r">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-emerald-400">
-              {isLive ? "Live workspace alerts" : "Demonstrated Reconsideration Triggers"}
+              {isLive ? "Recent price drops" : "Examples, not real listings"}
             </p>
             <h3 className="mt-3 text-2xl font-semibold">What changed?</h3>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              {isLive ? "Active price drops detected across your watched inventory." : "When court facts or opening upset amounts change, Second Look revives passed deals."}
+              {isLive ? "Opening bids that recently went down." : "These show how an opening bid can change after a failed sale."}
             </p>
             <div className="mt-6 space-y-2">
-              {items.length === 0 ? <p className="text-sm text-slate-300">No published opening-amount drop is on file.</p> : null}
+              {items.length === 0 ? <p className="text-sm text-slate-300">No price drops to show yet.</p> : null}
               {items.map((item) => (
                 <button
                   key={item.id}
@@ -126,72 +126,56 @@ export function SecondLookShowcase() {
             {selected ? <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-900">
-                  <RotateCcw size={12} /> Second Look
+                  <RotateCcw size={12} /> Price drop
                 </div>
                 <h3 className="mt-4 text-2xl font-semibold text-slate-950">
                   {selected.label}
                 </h3>
                 {selected.listingId ? (
                   <p className="mt-1 font-mono text-xs font-semibold text-slate-600">
-                    Verified record: {selected.listingId}
+                    Listing: {selected.listingId}
                   </p>
                 ) : null}
               </div>
-            </div> : <p className="text-sm text-slate-600">No published opening-amount drop is on file.</p>}
+            </div> : <p className="text-sm text-slate-600">No price drops to show yet.</p>}
             {selected ? <div className="mt-7 grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl bg-slate-50 p-4">
                 <GitCompareArrows size={17} className="text-slate-900" />
-                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Previous evidence</p>
+                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Before</p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">{selected.before}</p>
               </div>
               <div className="rounded-xl bg-slate-50 p-4">
                 <SearchCheck size={17} className="text-slate-900" />
-                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Current evidence</p>
+                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Now</p>
                 <p className="mt-1 text-lg font-semibold text-slate-950">{selected.after}</p>
               </div>
               <div className="rounded-xl bg-amber-50 p-4">
                 <Clock3 size={17} className="text-amber-700" />
-                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-amber-800">Observed</p>
+                <p className="mt-3 text-[10px] font-bold uppercase tracking-wider text-amber-800">When</p>
                 <p className="mt-1 text-lg font-semibold text-amber-950">{selected.observedAt || "—"}</p>
               </div>
             </div> : null}
             {selected ? <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
               <p className="flex items-center gap-2 text-sm font-bold text-slate-950">
-                <Check size={16} /> Why it returned
+                <Check size={16} /> What happened
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-700">{selected.reason}</p>
             </div> : null}
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-3 text-xs">
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 font-semibold">
-                  <FileCheck2 size={14} /> Evidence comparison
-                </span>
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 font-semibold">
-                  <Clock3 size={14} /> Observation history
-                </span>
-                {selected?.listingId ? (
-                  <Link href={`/research/${encodeURIComponent(selected.listingId)}/export`} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 font-semibold hover:bg-slate-200">
-                    <GitCompareArrows size={14} /> Reproducible packet
-                  </Link>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 font-semibold">
-                    <GitCompareArrows size={14} /> Reproducible packet
-                  </span>
-                )}
-              </div>
+              <span />
               {selected?.listingId ? (
                 <Link
                   href={`/listings/${encodeURIComponent(selected.listingId)}`}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 >
-                  Inspect property record <ExternalLink size={13} />
+                  View listing <ExternalLink size={13} />
                 </Link>
               ) : (
                 <Link
                   href="/listings"
                   className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
                 >
-                  Explore verified listings <ArrowRight size={13} />
+                  Browse listings <ArrowRight size={13} />
                 </Link>
               )}
             </div>

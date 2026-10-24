@@ -34,33 +34,33 @@ const PAGE_ICONS: Record<string, LucideIcon> = {
 
 const INFO_PAGES: Record<string, InfoPage> = {
   enterprise: {
-    eyebrow: "Enterprise",
-    title: "One shared operator workspace.",
-    intro: "PerfectProperty has individual member accounts with a monthly subscription, plus one shared operator credential for research and collection tools. There is no per-seat team plan, role list, or enterprise contract.",
+    eyebrow: "For teams",
+    title: "Using PerfectProperty with a team",
+    intro: "We sell individual memberships today. There is no team plan yet, with shared logins or different access levels for each person.",
     sections: [
-      { title: "What you can use", body: "The live listing feed, the source catalog, saved searches inside the operator workspace, and the contact form." },
-      { title: "What this build does not include", body: "There is no role-based access, no separate customer tenancy, and no published enterprise plan." },
-      { title: "Ask the operator", body: "Use the contact form. The server stores the message. Email leaves the server only when Resend is configured, or when a webhook is configured and Resend is not.", link: { label: "Open the contact form", href: "/contact" } },
+      { title: "What you can do now", body: "Anyone can browse listings, the map and the calendar for free. Each person on your team can become a member for hunts with email alerts, saved searches and a watchlist." },
+      { title: "What we don't have yet", body: "No team plan, no shared accounts, no separate access levels, and no team contract." },
+      { title: "Want one for your team?", body: "Tell us how many people you have and what you need. Your message is saved and read, though we can't promise a reply time.", link: { label: "Contact us", href: "/contact" } },
     ],
   },
   "case-studies": {
-    eyebrow: "Case studies",
-    title: "No published customer studies.",
-    intro: "This beta does not publish customer names, customer counts, or performance figures.",
+    eyebrow: "Examples",
+    title: "How buyers use PerfectProperty",
+    intro: "We don't have customer stories to share yet. These are examples of how a buyer might use the site, not real customers or results.",
     sections: [
-      { id: "sourcing", title: "What you can check yourself", body: "Open a live listing and see whether the source URL resolves, and whether the score stays empty when no observed value band is on the record." },
-      { id: "review", title: "What a listing review includes", body: "The decision path shows the published terms the collector stored, the title-rules check, and an assessor reading only for an enrolled county. It does not record a bid instruction." },
-      { id: "outcomes", title: "What is not claimed", body: "This page does not report closed sales, reserve-met outcomes, testimonials, or a customer logo as a partnership." },
+      { id: "sourcing", title: "Example: a small landlord looking for a duplex", body: "Search your county, filter to sheriff sales, and, as a member, set up a hunt for duplexes under your budget. You get an email when a new one fits." },
+      { id: "review", title: "Example: checking one listing before you bid", body: "Open the listing and read the catch: redemption period, liens, occupancy and deposit terms. Then follow the link to the original notice and check title yourself." },
+      { id: "outcomes", title: "What we don't claim", body: "We don't report sales results, savings or customer quotes. For the basics, see our buyer's guide.", link: { label: "Read the buyer's guide", href: "/resources" } },
     ],
   },
   security: {
-    eyebrow: "Trust",
+    eyebrow: "Security",
     title: "Security and responsible use",
-    intro: "The beta separates the public interface from the data API and validates untrusted notice text before it reaches downstream workflows.",
+    intro: "Here is what we do today to protect the site and your account. We don't hold any security certifications.",
     sections: [
-      { title: "Current controls", body: "The backend includes input validation, sanitization, rate limiting, bounded request bodies, AI prompt delimiters, and output validation tests. Scraper runs and workspace writes require the operator credential." },
-      { title: "What is not in this beta", body: "There is no separate disclosure program." },
-      { title: "Reporting", body: "Use the contact form. That is the security-reporting channel in this beta.", link: { label: "Open the contact form", href: "/contact" } },
+      { title: "What we do", body: "We check what you submit and limit repeated requests. Member sign-in uses a one-time email link, so there is no password to steal. Payments are handled by Stripe, so we never see your card number." },
+      { title: "What we don't have", body: "We don't hold security certifications, and we don't run a formal bug-reporting program." },
+      { title: "Report a problem", body: "Found a security problem? Use the contact form. It is the only channel we have right now.", link: { label: "Contact us", href: "/contact" } },
     ],
   },
 };
@@ -156,8 +156,8 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               <p className="flex items-start gap-2 text-sm leading-relaxed text-amber-900">
                 <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <span>
-                  <strong className="font-bold">Operator-authored.</strong>{" "}
-                  These pages are operator-authored beta terms, not a counsel opinion.
+                  <strong className="font-bold">Plain-language summary.</strong>{" "}
+                  This page is a plain description, not legal advice.
                 </span>
               </p>
             </div>
@@ -169,7 +169,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               href="/listings"
               className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 text-sm font-bold text-white transition-colors hover:bg-[#1E293B]"
             >
-              Open the live feed
+              Browse listings
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>

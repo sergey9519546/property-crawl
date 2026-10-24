@@ -10,13 +10,14 @@ export function SeoSchema({ nonce }: { nonce?: string | null }) {
         "name": "PerfectProperty",
         "url": "https://perfectproperty.ai",
         "logo": "https://perfectproperty.ai/logo.svg",
-        "description": "Evidence-first research workspace for distressed and government-sold property. Source observations, seed inventory, and optional AI notice parsing — not a guaranteed national listing feed."
+        "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out."
       },
       {
         "@type": "WebSite",
         "@id": "https://perfectproperty.ai/#website",
         "url": "https://perfectproperty.ai",
         "name": "PerfectProperty",
+        "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out.",
         "publisher": { "@id": "https://perfectproperty.ai/#organization" }
       }
     ]

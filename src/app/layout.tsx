@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PerfectProperty — Find the opportunity that changed",
   description:
-    "A private property-research workspace that connects source observations, evidence conflicts, saved criteria, Second Look reconsideration, and reproducible decision packets.",
+    "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out and a Deal Score on each listing.",
   keywords: [
     "PerfectProperty",
     "distressed property",
@@ -60,7 +60,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "PerfectProperty — Find the opportunity that changed",
     description:
-      "Follow source evidence, understand what changed, and bring passed properties back when the facts meet your rules.",
+      "Search auctions and government-sold homes, see the catch before you bid, and get an email when a new one fits.",
     siteName: "PerfectProperty",
     type: "website",
   },
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "PerfectProperty — Find the opportunity that changed",
     description:
-      "Follow source evidence, understand what changed, and bring passed properties back when the facts meet your rules.",
+      "Search auctions and government-sold homes, see the catch before you bid, and get an email when a new one fits.",
   },
 };
 

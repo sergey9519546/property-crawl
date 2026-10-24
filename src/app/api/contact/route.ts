@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       delivery: result.delivery,
       message: result.delivery === "sent" || result.delivery === "forwarded"
         ? "Message accepted."
-        : "Message saved for the operator. Outbound delivery is not configured yet.",
+        : "Thanks, your message is saved. We can't send an email confirmation right now, so a reply may take a while.",
     },
     { status: 202, headers: responseHeaders }
   );

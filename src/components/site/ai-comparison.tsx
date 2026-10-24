@@ -18,31 +18,31 @@ const COLS: Col[] = [
     name: "Free",
     tag: "No account needed",
     features: [
-      { label: "Market and source filters, map, calendar", ok: true },
-      { label: "Listing pages with Deal Score and the catch", ok: true },
+      { label: "Search, map and sale calendar", ok: true },
+      { label: "Deal Score (where county data allows) and the catch on listing pages", ok: true },
       { label: "Watchlist saved on this device", ok: true },
       { label: "Hunts and email alerts", ok: false },
     ],
   },
   {
     name: "Member",
-    tag: "Monthly subscription",
+    tag: "Membership",
     highlight: true,
     cta: true,
     features: [
-      { label: "Hunts that re-run after every collection", ok: true },
-      { label: "Email alerts on new matches and changes", ok: true },
+      { label: "Hunts that re-check for new listings", ok: true },
+      { label: "Email when a new listing fits, or one changes", ok: true },
       { label: "Saved searches with match alerts", ok: true },
-      { label: "Account watchlist, portfolio, and price drops", ok: true },
+      { label: "Account watchlist, portfolio and price-drop tracking", ok: true },
     ],
   },
   {
-    name: "Not connected yet",
-    tag: "These are not active services",
+    name: "Not offered",
+    tag: "What we do not do",
     features: [
-      { label: "Guaranteed complete national coverage", ok: false },
-      { label: "Verified title reports and live comps", ok: false },
-      { label: "Title and valuation still need verification", ok: false },
+      { label: "Every sale in every county", ok: false },
+      { label: "Title reports or live comps", ok: false },
+      { label: "Replacing your title search or inspection", ok: false },
     ],
   },
 ];
@@ -72,12 +72,11 @@ export function AiComparison() {
       <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
         <GsapReveal className="mx-auto max-w-[760px] text-center">
           <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            Know what is ready. Know what needs review.
+            Browse free. Become a member for hunts and email alerts.
           </h2>
           <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
-            Browsing is free. A membership adds hunts that watch the inventory for
-            you and email you when something changes. Unfinished services are
-            listed as unfinished.
+            Searching, the map and listing pages are free. Members get an email when a
+            new listing fits what they want, or when a saved one changes.
           </p>
         </GsapReveal>
 

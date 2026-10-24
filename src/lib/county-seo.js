@@ -236,9 +236,9 @@ function buildCountyItemList({ state, county, listings = [], baseUrl = DEFAULT_B
   const elements = (Array.isArray(listings) ? listings : []).slice(0, 50).map((item, index) => {
     const id = encodeURIComponent(String(item.id || index + 1));
     const name = String(item.address || `Distressed Property ${item.id || ''}`).trim();
-    const bid = item.openingBid != null ? `$${Math.round(Number(item.openingBid)).toLocaleString('en-US')}` : 'Unpublished bid';
+    const bid = item.openingBid != null ? `Opening bid: $${Math.round(Number(item.openingBid)).toLocaleString('en-US')}.` : 'Opening bid not published yet.';
     const score = item.dealScore != null ? ` Deal Score: ${item.dealScore}/99.` : '';
-    const desc = `${item.propType || 'Distressed property'} in ${countyFormatted}, ${st}. Opening bid: ${bid}.${score}`;
+    const desc = `${item.propType || 'Property for sale'} in ${countyFormatted}, ${st}. ${bid}${score}`;
 
     return {
       '@type': 'ListItem',

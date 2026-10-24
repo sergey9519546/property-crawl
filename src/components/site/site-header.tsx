@@ -62,15 +62,12 @@ const GROUPS: MenuGroup[] = [
     label: "Product",
     columns: [
       [
-        { label: "Listing workspace", desc: "Search grid, map, and deal detail", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
-        { label: "Source Radar", desc: "Coverage, trust status, and collector health", icon: Plug, href: "/sources", tint: "#E2E8F0" },
-        { label: "Saved Hunts", desc: "Explain matches and track evidence changes", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
-        { label: "Portfolio", desc: "Tracked deals, price drops, and calendar", icon: PieChart, href: "/portfolio", tint: "#FEF3C7" },
+        { label: "Search listings", desc: "Search listings on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
+        { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
+        { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#FEF3C7" },
       ],
       [
-        { label: "Second Look", desc: "Research cases and reconsideration queue", icon: Eye, href: "/research", tint: "#E9D5FF" },
-        { label: "Collection activity", desc: "Jobs, runs, and ingestion health", icon: History, href: "/activity", tint: "#e7faef" },
-        { label: "What's in beta", desc: "Shipped vs roadmap capability matrix", icon: Gauge, href: "/#pricing", tint: "#E2E8F0" },
+        { label: "Free vs member", desc: "What you get for free and what members get", icon: Gauge, href: "/#pricing", tint: "#E2E8F0" },
       ],
     ],
   },
@@ -79,12 +76,10 @@ const GROUPS: MenuGroup[] = [
     label: "Solutions",
     columns: [
       [
-        { label: "Acquisitions", desc: "Triage from source record to research case", icon: Target, href: "/listings?view=grid&sort=score", tint: "#e7faef" },
-        { label: "Disposition", desc: "Evidence-backed deal notes (beta)", icon: Send, href: "/research", tint: "#FFD6C8" },
+        { label: "Acquisitions", desc: "Find and rank sales worth a closer look", icon: Target, href: "/listings?view=grid&sort=score", tint: "#e7faef" },
       ],
       [
-        { label: "Underwriting", desc: "Cash inputs, assumptions, and gaps", icon: Calculator, href: "/listings?hasDocuments=true&minQuality=50", tint: "#E2E8F0" },
-        { label: "Capital", desc: "Decision packets exported from research cases", icon: Landmark, href: "/research", tint: "#E9D5FF" },
+        { label: "Underwriting", desc: "Run your own numbers on a property", icon: Calculator, href: "/listings?hasDocuments=true&minQuality=50", tint: "#E2E8F0" },
       ],
     ],
   },
@@ -93,13 +88,13 @@ const GROUPS: MenuGroup[] = [
     label: "Resources",
     columns: [
       [
-        { label: "Knowledge base", desc: "How to use the beta workflow", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
-        { label: "County guides", desc: "States and counties named on live records", icon: Map, href: "/states", tint: "#FFD6C8" },
-        { label: "Changelog", desc: "What shipped in this build", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
+        { label: "Buyer's guide", desc: "How to search, judge and track a sale", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
+        { label: "County guides", desc: "States and counties with listings now", icon: Map, href: "/states", tint: "#FFD6C8" },
+        { label: "What's new", desc: "What is new on the site", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
       ],
       [
-        { label: "Scraper power report", desc: "Source coverage vs live inventory limits", icon: BarChart3, href: "/sources", tint: "#e7faef" },
-        { label: "Operator access", desc: "Shared-key private beta model", icon: KeyRound, href: "/sign-in", tint: "#E2E8F0" },
+        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#e7faef" },
+        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#E2E8F0" },
       ],
     ],
   },
@@ -246,15 +241,15 @@ export function SiteHeader() {
             onMouseEnter={() => setOpen(null)}
             className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#1E293B]"
           >
-            Open listings
+            Browse listings
           </Link>
           <Link
             href="/sign-in"
             onMouseEnter={() => setOpen(null)}
-            title="Shared operator key — private beta"
+            title="For the team that runs this site"
             className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-3 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-white"
           >
-            Operator key
+            Staff sign-in
           </Link>
         </div>
 
@@ -366,14 +361,14 @@ export function SiteHeader() {
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
               >
-                Open listings
+                Browse listings
               </Link>
               <Link
                 href="/sign-in"
                 onClick={() => setMobileOpen(false)}
                 className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-4 text-[14px] font-semibold text-[#374151]"
               >
-                Operator key
+                Staff sign-in
               </Link>
             </div>
           </SheetContent>

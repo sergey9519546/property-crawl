@@ -42,7 +42,7 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
     const mid = (low + high) / 2;
     notes.push(`Opens at ${money(bid)}, ${Math.round((bid / mid) * 100)}% of the stored ${money(low)}–${money(high)} value range.`);
   } else if (bid !== null && bid > 0) {
-    flags.push(`Opens at ${money(bid)}, but no value range was published, so there is no way to tell from this record whether that is a discount.`);
+    flags.push(`Opens at ${money(bid)}, but no value range was published, so the listing alone can't tell you whether that is a discount.`);
   } else {
     flags.push("No opening amount was published, so the price is unknown until the sale.");
   }

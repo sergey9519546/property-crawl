@@ -34,18 +34,18 @@ export default function ContactPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setStatus("success");
-        setResponseMsg(data.message || "Message accepted. Our team will review your inquiry.");
+        setResponseMsg(data.message || "Message received.");
         setName("");
         setEmail("");
         setCompany("");
         setMessage("");
       } else {
         setStatus("error");
-        setResponseMsg(data.error || "Failed to submit message. Please try again.");
+        setResponseMsg(data.error || "We couldn't send your message. Please try again.");
       }
     } catch {
       setStatus("error");
-      setResponseMsg("Network communication error. Please try again later.");
+      setResponseMsg("Connection problem. Please try again in a moment.");
     }
   }
 
@@ -61,13 +61,13 @@ export default function ContactPage() {
       </div>
 
       <div className="border-b border-slate-200 pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Inquiries & Support</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Get in touch</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
           Contact PerfectProperty
         </h1>
         <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-          Reach our engineering and data curation team regarding source integrations, data discrepancies,
-          institutional research case studies, or operator access inquiries.
+          Write to us about a listing that looks wrong, a county you want added, a question about membership, or
+          a team that wants to use PerfectProperty. Your message is saved and read. We can&apos;t promise a reply time.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export default function ContactPage() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h2 className="text-xl font-bold text-emerald-950">Inquiry Received</h2>
+            <h2 className="text-xl font-bold text-emerald-950">Message received</h2>
             <p className="text-sm text-emerald-800 max-w-md mx-auto">{responseMsg}</p>
             <div className="pt-2">
               <button
@@ -85,7 +85,7 @@ export default function ContactPage() {
                 onClick={() => setStatus("idle")}
                 className="rounded-xl bg-emerald-800 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-900 transition"
               >
-                Send Another Message
+                Send another message
               </button>
             </div>
           </div>
@@ -101,7 +101,7 @@ export default function ContactPage() {
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
                 <label htmlFor="contact-name" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  Full Name <span className="text-red-500">*</span>
+                  Your name <span className="text-red-500">*</span>
                 </label>
                 <div className="relative mt-2">
                   <User className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
@@ -120,7 +120,7 @@ export default function ContactPage() {
 
               <div>
                 <label htmlFor="contact-email" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  Email Address <span className="text-red-500">*</span>
+                  Your email <span className="text-red-500">*</span>
                 </label>
                 <div className="relative mt-2">
                   <Mail className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
@@ -140,7 +140,7 @@ export default function ContactPage() {
 
             <div>
               <label htmlFor="contact-company" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                Company or Fund <span className="text-xs font-normal text-slate-400">(Optional)</span>
+                Company (optional)
               </label>
               <div className="relative mt-2">
                 <Building className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
@@ -158,7 +158,7 @@ export default function ContactPage() {
 
             <div>
               <label htmlFor="contact-message" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                Message & Scope <span className="text-red-500">*</span>
+                Your message <span className="text-red-500">*</span>
               </label>
               <div className="relative mt-2">
                 <textarea
@@ -166,7 +166,7 @@ export default function ContactPage() {
                   required
                   rows={5}
                   maxLength={5000}
-                  placeholder="Detail your request, specific county coverage question, or data observation report..."
+                  placeholder="Tell us what you need: a county, a listing, or a question about membership."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -184,11 +184,11 @@ export default function ContactPage() {
             >
               {status === "submitting" ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Submitting Inquiry...
+                  <Loader2 className="h-4 w-4 animate-spin" /> Sending...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4" /> Send Inquiry
+                  <Send className="h-4 w-4" /> Send message
                 </>
               )}
             </button>

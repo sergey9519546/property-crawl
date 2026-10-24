@@ -7,11 +7,11 @@ import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { discoverySearchParams, readDiscoveryFilters } from "@/lib/discovery-query";
 
 export const metadata: Metadata = {
-  title: "Distressed Property Evidence Feed | PerfectProperty",
-  description: "Research source-observed and clearly labeled demonstration foreclosure, sheriff-sale, and government-property records. Unknown auction and title facts remain explicit.",
+  title: "Search Foreclosure and Auction Properties | PerfectProperty",
+  description: "Search foreclosure, sheriff-sale, tax-sale and government-sold properties by state, county or ZIP. See the sale date, opening bid and what to check before you bid.",
   openGraph: {
-    title: "Distressed Property Evidence Feed | PerfectProperty",
-    description: "A source-aware property research feed with exact-record links, evidence gaps, and explicit model provenance.",
+    title: "Search Foreclosure and Auction Properties | PerfectProperty",
+    description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
   }
 };
 
@@ -52,7 +52,7 @@ export default async function ListingsDirectoryPage({
     <WorkspaceShell>
     <main className="relative min-h-screen max-w-full overflow-x-hidden bg-[#F5F6F7] text-[#111827]">
       <DataModeBanner />
-      <Suspense fallback={<div className="grid min-h-[60vh] place-items-center text-sm text-slate-500">Loading discovery…</div>}>
+      <Suspense fallback={<div className="grid min-h-[60vh] place-items-center text-sm text-slate-500">Loading listings…</div>}>
         <DiscoveryWorkbench initialPayload={initialPayload} />
       </Suspense>
     </main>

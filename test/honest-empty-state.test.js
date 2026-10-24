@@ -71,7 +71,7 @@ test('the narrow-filter copy survives for a genuinely empty result', () => {
   assert.match(terminal, /No properties match these underwriting criteria/);
 });
 
-// --- 3. the runtime-mode warning must survive a failed health probe -----
+// --- 3. the listing-status warning must survive a failed health probe -----
 
 test('the data-mode banner distinguishes "not loaded" from "probe failed"', () => {
   assert.match(
@@ -86,8 +86,8 @@ test('the data-mode banner distinguishes "not loaded" from "probe failed"', () =
   );
 });
 
-test('a failed health probe still renders a runtime-mode warning', () => {
-  assert.match(dataModeBanner, /Runtime mode unverified/);
+test('a failed health probe still renders a listing-status warning', () => {
+  assert.match(dataModeBanner, /Listings may be out of date/);
 });
 
 // --- 4. server-side caps on unbounded request arrays -------------------

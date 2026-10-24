@@ -140,7 +140,7 @@ test('SEO schema and social proof do not overclaim partnerships or AI omniscienc
 test('contact page does not promise human replies without delivery', () => {
   const slug = fs.readFileSync(path.join(__dirname, '..', 'src/app/[slug]/page.tsx'), 'utf8');
   assert.doesNotMatch(slug, /Expect a response before public launch/);
-  assert.match(slug, /webhook is configured|webhook endpoint/i);
+  assert.match(slug, /can't promise a reply time/);
 });
 
 test('document-review API and Next proxies require operator identity', () => {

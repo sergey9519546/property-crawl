@@ -3,9 +3,9 @@ import Link from "next/link";
 import { ArrowLeft, BookOpen, History, CheckCircle2, ShieldAlert, Scale, Calculator, FileText } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Resources, Knowledge Base & Changelog | PerfectProperty",
+  title: "Buyer's Guide to Foreclosure and Auction Homes | PerfectProperty",
   description:
-    "Statutory foreclosure guide, cash-to-close breakdowns, lien priority rules, and release changelog for the PerfectProperty platform.",
+    "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
 };
 
 export default function ResourcesPage() {
@@ -21,12 +21,12 @@ export default function ResourcesPage() {
       </div>
 
       <div className="border-b border-slate-200 pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Documentation & Guides</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Buyer's guide</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-          Resources & Knowledge Base
+          Buyer's guide to auction and foreclosure homes
         </h1>
         <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-          Forensic guides to statutory auction types, lien priority hierarchy, cash-to-close rules, and our verified release history.
+          What each kind of sale means, how rules differ by state, and seven things to check before you bid. Rules change, so check your county's rules first.
         </p>
       </div>
 
@@ -35,30 +35,30 @@ export default function ResourcesPage() {
         <section id="knowledge-base" className="scroll-mt-12 space-y-8">
           <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
             <BookOpen className="h-6 w-6 text-indigo-600" />
-            <h2 className="text-2xl font-bold text-slate-950">Underwriting Knowledge Base</h2>
+            <h2 className="text-2xl font-bold text-slate-950">The basics</h2>
           </div>
 
           {/* Card 1: Sale Mechanisms */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
             <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
               <Scale className="h-4 w-4 text-slate-700" />
-              1. Judicial Foreclosure vs Non-Judicial Trustee Sales vs Tax Deeds
+              1. Three common ways a home is sold
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Distressed property dispositions follow state-specific statutory pathways:
+              Which one applies depends on your state:
             </p>
             <div className="grid gap-3 sm:grid-cols-3 text-xs">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <h4 className="font-bold text-slate-900">Judicial Sheriff Sales</h4>
-                <p className="mt-1 text-slate-600">Common in OH, NJ, FL, PA, IL, NY. Requires court final judgment of foreclosure. Supervised by the county sheriff with statutory upset pricing.</p>
+                <h4 className="font-bold text-slate-900">Sheriff sale (court-ordered)</h4>
+                <p className="mt-1 text-slate-600">The lender sues, a judge orders the sale, and the county sheriff runs it. Common in states like OH, NJ, FL, PA, IL and NY. This is a judicial foreclosure.</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <h4 className="font-bold text-slate-900">Non-Judicial Trustee Sales</h4>
-                <p className="mt-1 text-slate-600">Common in CA, TX, GA, NV, AZ, NC. Handled via Deed of Trust power-of-sale clause without court filings. Shorter notice timeline (21–90 days).</p>
+                <h4 className="font-bold text-slate-900">Trustee sale (no court)</h4>
+                <p className="mt-1 text-slate-600">A trustee sells the home under a clause in the loan, without going to court. Common in states like CA, TX, GA, NV, AZ and NC. Notice periods are often shorter.</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <h4 className="font-bold text-slate-900">Tax Lien & Deed Sales</h4>
-                <p className="mt-1 text-slate-600">Conducted by county tax collectors for delinquent real estate property taxes. Some states sell lien certificates; others sell the underlying deed directly.</p>
+                <h4 className="font-bold text-slate-900">Tax sale</h4>
+                <p className="mt-1 text-slate-600">The county sells a home or a claim on it because property taxes went unpaid. Some states sell the debt (a lien certificate); others sell the property itself.</p>
               </div>
             </div>
           </div>
@@ -68,25 +68,25 @@ export default function ResourcesPage() {
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
                 <Calculator className="h-4 w-4 text-blue-600" />
-                2. Top-10 State Foreclosure Statutory Comparison Matrix
+                2. How the rules differ in ten states
               </h3>
               <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                Audited Legal Presets
+                Summary only
               </span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Every jurisdiction enforces strict statutory rules governing certified knockdown deposits, confirmation stays, post-sale upset periods, and transfer taxes. Underwriting bids without verifying these parameters leads to forfeited deposits or unexpected statutory carrying costs:
+              Each state sets its own deposit, waiting period after the sale, and fees. A redemption period is a window after the sale when the old owner may buy the home back. This table is a summary, not legal advice.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-200">
                 <thead className="bg-slate-50 font-bold text-slate-900">
                   <tr>
                     <th className="p-3">State</th>
-                    <th className="p-3">Primary Mechanism</th>
-                    <th className="p-3">Knockdown Deposit</th>
-                    <th className="p-3">Confirmation / Upset</th>
-                    <th className="p-3">Statutory Redemption</th>
-                    <th className="p-3">Statutory Fees / Taxes</th>
+                    <th className="p-3">Type of sale</th>
+                    <th className="p-3">Deposit</th>
+                    <th className="p-3">Court confirmation or upset-bid window</th>
+                    <th className="p-3">Redemption period</th>
+                    <th className="p-3">Fees and taxes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -180,56 +180,56 @@ export default function ResourcesPage() {
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-950 flex items-center gap-2">
                 <ShieldAlert className="h-4 w-4 text-amber-600" />
-                3. The 7 Deal-Killer Due Diligence Checklist
+                3. Seven things to check before you bid
               </h3>
               <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full">
-                Forensic Protocol
+                Checklist
               </span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Every auction bidder must audit seven statutory failure modes before tendering funds. Missing even one can result in complete capital loss:
+              Missing one of these can cost you your deposit or more. Check each one for the specific property.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 text-xs">
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">1. Senior Lien Priority &amp; 1st Mortgage Survival</h4>
+                <h4 className="font-bold text-slate-950">1. An older mortgage can stay with the property</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  A junior mortgage or HOA lien foreclosure never wipes out a recorded senior 1st mortgage. The purchaser takes title subject to the full unpaid principal and default interest of the senior lien.
+                  Foreclosing on a second mortgage or an HOA lien does not wipe out a recorded first mortgage. You take the property owing the full unpaid balance and default interest on it.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">2. Municipal Super-Priority Ad Valorem Taxes</h4>
+                <h4 className="font-bold text-slate-950">2. Unpaid property taxes and city charges</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  County real property taxes, municipal water/sewer assessments, and demolition liens carry absolute statutory super-priority over all private mortgages and must be paid in full by the auction buyer.
+                  County property taxes, city water and sewer charges, and demolition liens are paid before the mortgage (super-priority). They usually stay with the property, so the buyer pays them.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">3. IRS § 7425(d) 120-Day Federal Redemption</h4>
+                <h4 className="font-bold text-slate-950">3. IRS § 7425(d): 120 days to buy it back</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  Recorded federal tax liens give the United States Department of the Treasury a 120-day right of redemption from the sale date to take the property back at the auction purchase price.
+                  If a recorded federal tax lien is involved, the U.S. Treasury has 120 days from the sale date to take the property back at the price you paid.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">4. State Statutory Redemption &amp; Confirmation Stays</h4>
+                <h4 className="font-bold text-slate-950">4. State redemption periods and sale reviews</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  States like Alabama (180 days), Tennessee (2 years), or North Carolina (10-day rolling upset bids) permit prior owners or third parties to redeem or overturn auction sales post-gavel fall.
+                  States like Alabama (180 days), Tennessee (2 years), or North Carolina (10-day rolling upset bids) let the former owner or others buy the property back or challenge the sale after the auction. A redemption period is the time the former owner can buy it back.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">5. Bankruptcy Automatic Stay (11 U.S.C. § 362)</h4>
+                <h4 className="font-bold text-slate-950">5. Bankruptcy (11 U.S.C. § 362)</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  A bankruptcy petition filed minutes before the sale triggers an immediate statutory stay. Any auction conducted in violation of the stay is void ab initio under federal bankruptcy law.
+                  A bankruptcy filing, even minutes before the sale, usually pauses the sale right away. A sale held anyway can be cancelled as if it never happened.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                <h4 className="font-bold text-slate-950">6. Certified Funds Deposit &amp; Tender Deadlines</h4>
+                <h4 className="font-bold text-slate-950">6. Deposit and payment deadlines</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  Sheriff departments and referees strictly enforce certified check or wire deadlines (e.g. 24 hours in FL, 30 days in NJ/PA). Failure to tender timely results in default forfeiture of the deposit.
+                  Sheriffs and referees strictly enforce deadlines for certified checks or wires (for example 24 hours in FL, 30 days in NJ/PA). If you pay late, you can lose your deposit.
                 </p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:col-span-2">
-                <h4 className="font-bold text-slate-950">7. Occupancy &amp; Protecting Tenants at Foreclosure Act (12 U.S.C. § 5220)</h4>
+                <h4 className="font-bold text-slate-950">7. Who lives there (Protecting Tenants at Foreclosure Act, 12 U.S.C. § 5220)</h4>
                 <p className="mt-1 text-slate-600 leading-relaxed">
-                  Foreclosure deeds do not grant immediate physical possession. Under federal PTFA and state tenant protection laws, bona fide residential tenants must be provided with a mandatory 90-day written notice to vacate before eviction proceedings may begin.
+                  Winning the sale does not give you the keys right away. Under this federal law and state tenant laws, genuine tenants must get at least 90 days' written notice to leave before eviction can begin.
                 </p>
               </div>
             </div>
@@ -240,40 +240,34 @@ export default function ResourcesPage() {
         <section id="changelog" className="scroll-mt-12 space-y-8 border-t border-slate-200 pt-12">
           <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
             <History className="h-6 w-6 text-indigo-600" />
-            <h2 className="text-2xl font-bold text-slate-950">Platform Changelog</h2>
+            <h2 className="text-2xl font-bold text-slate-950">What's new</h2>
           </div>
 
           <div className="space-y-6">
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
-                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">v2.0.0 Stable</span>
-                <span className="text-xs text-slate-500">October 2026</span>
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">October 2026</span>
+                <span className="text-xs text-slate-500">&nbsp;</span>
               </div>
               <h3 className="text-base font-bold text-slate-950">
-                Next.js 16 App Router Migration & Scrapling Anti-Detect Spider Engine
+                Clearer listings
               </h3>
               <ul className="list-disc pl-5 space-y-1.5 text-xs text-slate-600 leading-relaxed">
-                <li>Production migration to Next.js 16 (App Router) on port 3001 with plain Node.js HTTP API proxying on port 3000.</li>
-                <li>Integrated stateless streaming Scrapling spider engine (<code>scripts/crawlers/scrapling_spider.py</code>) with publisher session boundaries (<code>pub:&#123;source&#125;:&#123;scope&#125;</code>).</li>
-                <li>Fail-closed legal non-negotiables: robots.txt exclusion emits <code>ACCESS_POLICY_VIOLATION</code> rather than silent drops.</li>
-                <li>Comprehensive Adversarial Security Gauntlet (M1 Challenger): route unshadowing, SQLi/XSS boundaries, and 50 parallel requests concurrency tests.</li>
-                <li>PostgreSQL 16 + PostGIS 3.6 durability with 27 forward migrations and zero data-mode fabrication.</li>
-                <li>Decision Packet dossiers (JSON + Markdown export) with Second Look reconsideration triggers.</li>
+                <li>Listings that don&apos;t publish a value no longer get a made-up one.</li>
               </ul>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800">v1.8.0</span>
-                <span className="text-xs text-slate-500">September 2026</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800">September 2026</span>
+                <span className="text-xs text-slate-500">&nbsp;</span>
               </div>
               <h3 className="text-base font-bold text-slate-950">
-                Source Radar & IMAP Email-as-API Legal Ingestion
+                Public legal notices and risk checks
               </h3>
               <ul className="list-disc pl-5 space-y-1 text-xs text-slate-600 leading-relaxed">
-                <li>Automated IMAP inbox parsing for Florida, Illinois, Texas, and Ohio public legal notice publications.</li>
-                <li>Source Radar dashboard tracking live scraper freshness, circuit breaker trips, and catalog admission statuses.</li>
-                <li>Title Risk engine arbitrating senior mortgage survivals and municipal code enforcement liens.</li>
+                <li>Added public legal notices from several states as a source.</li>
+                <li>Added a check for senior mortgages and city liens that can stay with the property.</li>
               </ul>
             </div>
           </div>
@@ -285,13 +279,13 @@ export default function ResourcesPage() {
           href="/listings"
           className="rounded-xl bg-[#0F172A] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] transition"
         >
-          Open Listing Workspace
+          Browse listings
         </Link>
         <Link
           href="/contact"
           className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 transition"
         >
-          Submit Research Feedback
+          Send us feedback
         </Link>
       </div>
     </main>
