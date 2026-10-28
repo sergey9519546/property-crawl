@@ -41,6 +41,54 @@ async function crawlJitter(options = {}) {
   return delayMs;
 }
 
+function abortError() {
+  const error = new Error('The operation was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+// Bound work that does not honor AbortSignal. Undici can return response
+// headers and then leave response.text() pending after the signal fires, which
+// pins the first collectors for the life of the process.
+function raceAbort(work, signal) {
+  const promise = Promise.resolve(work);
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortError());
+  let onAbort;
+  const aborted = new Promise((_, reject) => {
+    onAbort = () => reject(abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return Promise.race([promise, aborted]).finally(() => {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  });
+}
+
+function cancelResponseBody(response, reason) {
+  const body = response && response.body;
+  if (!body || typeof body.cancel !== 'function') return;
+  Promise.resolve(body.cancel(reason)).catch(() => {});
+}
+
+async function readResponseText(response, signal) {
+  if (!response || typeof response.text !== 'function') {
+    throw new TypeError('Response text() is required');
+  }
+  const onAbort = () => cancelResponseBody(response, signal && signal.reason);
+  if (signal) {
+    if (signal.aborted) {
+      onAbort();
+      throw abortError();
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
+  try {
+    return await raceAbort(response.text(), signal);
+  } finally {
+    if (signal) signal.removeEventListener('abort', onAbort);
+  }
+}
+
 async function mapWithConcurrency(items, concurrency, worker) {
   const list = Array.isArray(items) ? items : [];
   const parsedConcurrency = Number(concurrency);
@@ -102,11 +150,14 @@ async function fetchTextWithPolicy(url, options = {}) {
       await autoThrottle(url, { minIntervalMs: options.minIntervalMs });
     }
     const requestStart = Date.now();
-    const response = await fetchImpl(url, { ...requestOptions, signal: controller.signal });
+    const response = await raceAbort(
+      fetchImpl(url, { ...requestOptions, signal: controller.signal }),
+      controller.signal
+    );
     recordHostLatency(url, Date.now() - requestStart);
     const retryAfter = response.headers?.get?.('retry-after') ?? null;
     if (retryAfter) noteRetryAfter(url, retryAfter);
-    const body = await response.text();
+    const body = await readResponseText(response, controller.signal);
     const validation = circuitBreaker.validateResponse({
       status: response.status,
       body,
@@ -166,6 +217,7 @@ module.exports = {
   crawlJitter,
   fetchJsonWithPolicy,
   fetchTextWithPolicy,
+  readResponseText,
   safeTransportDetails,
   mapWithConcurrency,
   normalizeRequestTimeout,

@@ -75,6 +75,41 @@ function validListing(overrides = {}) {
   };
 }
 
+test('a stalled response body rejects within the request timeout', { timeout: 2000 }, async () => {
+  const started = Date.now();
+  let cancelled = false;
+  await assert.rejects(
+    fetchTextWithPolicy('https://upstream.example/stall', {
+      timeoutMs: 50,
+      autoThrottle: false,
+      circuitBreaker: new ScraperCircuitBreaker({ failureThreshold: 10 }),
+      fetchImpl: async () => ({
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        text: () => new Promise(() => {}),
+        body: { cancel() { cancelled = true; return Promise.resolve(); } },
+      }),
+    }),
+    (error) => error instanceof ScraperResponseError && error.code === 'UPSTREAM_TIMEOUT'
+  );
+  assert.equal(cancelled, true);
+  assert.ok(Date.now() - started < 1000, `stalled body held the caller for ${Date.now() - started}ms`);
+});
+
+test('a fetch that ignores abort still rejects within the request timeout', { timeout: 2000 }, async () => {
+  const started = Date.now();
+  await assert.rejects(
+    fetchTextWithPolicy('https://upstream.example/ignore-abort', {
+      timeoutMs: 50,
+      autoThrottle: false,
+      circuitBreaker: new ScraperCircuitBreaker({ failureThreshold: 10 }),
+      fetchImpl: () => new Promise(() => {}),
+    }),
+    (error) => error instanceof ScraperResponseError && error.code === 'UPSTREAM_TIMEOUT'
+  );
+  assert.ok(Date.now() - started < 1000, `ignored abort held the caller for ${Date.now() - started}ms`);
+});
+
 test('request timeout is centrally capped at 30 seconds', () => {
   assert.equal(normalizeRequestTimeout(undefined), DEFAULT_REQUEST_TIMEOUT_MS);
   assert.equal(normalizeRequestTimeout(60_000), DEFAULT_REQUEST_TIMEOUT_MS);

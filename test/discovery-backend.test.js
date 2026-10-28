@@ -27,4 +27,87 @@ test('discovery migrations target the embedded engine when it is requested',()=>
   assert.equal(migrationTarget({DATABASE_URL:'postgres://localhost/db',PROPERTY_DB:'embedded'}),'embedded');
   assert.equal(migrationTarget({PROPERTY_PG_DATA_DIR:'.cache/pgdata'}),'embedded');
 });
+test('DATABASE_URL is fully functional only with PostgreSQL 14+, the four extensions, public privileges, and the migrated columns', async () => {
+  const { probeDatabaseCapabilities, requiredRelationNames, REQUIRED_EXTENSIONS, REQUIRED_COLUMNS } = require('../server/db/database-capabilities');
+  const extensions = Object.fromEntries(REQUIRED_EXTENSIONS.map((name) => [name, '1']));
+  const tables = requiredRelationNames();
+  const columns = REQUIRED_COLUMNS.map(([table, column]) => `${table}.${column}`);
+  const ready = {
+    version_num: 160000,
+    version: '16.4',
+    extensions,
+    tables,
+    columns,
+    public_visible: true,
+    schema_usage: true,
+    schema_create: true,
+    database_create: true,
+    listings_select: true,
+    listings_insert: true,
+    listings_update: true,
+    listings_delete: true,
+    geography: true,
+    uuid_generate_v4: true,
+    st_dwithin: true,
+    digest: true,
+    gin_trgm_ops: true,
+  };
+  const full = await probeDatabaseCapabilities({
+    query: async (sql) => {
+      if (sql.includes('postgis_version')) return { rows: [{ v: '3.4.0' }] };
+      return { rows: [{ ...ready, extensions: JSON.stringify(extensions), tables: JSON.stringify(tables), columns: JSON.stringify(columns) }] };
+    },
+  });
+  assert.equal(full.functional, true);
+  assert.equal(full.postgisVersion, '3.4.0');
+  const bare = await probeDatabaseCapabilities({
+    query: async () => ({ rows: [{ version_num: 160000, version: '16.4', extensions: {}, tables: [], columns: [] }] }),
+  });
+  assert.equal(bare.functional, false);
+  assert.ok(bare.missing.includes('extension:postgis'));
+  assert.ok(bare.missing.includes('extension:pg_trgm'));
+  assert.ok(bare.missing.includes('search_path:public'));
+  assert.ok(bare.missing.includes('privilege:database:create'));
+  assert.ok(bare.missing.includes('function:st_dwithin'));
+  assert.ok(bare.missing.includes('table:listings'));
+  assert.ok(bare.missing.includes('table:discovery_jobs'));
+  assert.ok(bare.missing.includes('table:source_observations'));
+  assert.ok(bare.missing.includes('table:mv_neighborhood_stats'));
+  assert.ok(bare.missing.includes('column:listings.triage_priority'));
+  assert.ok(bare.missing.includes('column:discovery_jobs.lease_expires_at'));
+  const drifted = await probeDatabaseCapabilities({
+    query: async (sql) => {
+      if (sql.includes('postgis_version')) return { rows: [{ v: '3.4.0' }] };
+      return { rows: [{ ...ready, columns: columns.filter((name) => name !== 'listings.triage_priority') }] };
+    },
+  });
+  assert.equal(drifted.functional, false);
+  assert.deepEqual(drifted.missing, ['column:listings.triage_priority']);
+  const old = await probeDatabaseCapabilities({
+    query: async () => ({ rows: [{ ...ready, version_num: 120000, version: '12.20' }] }),
+  });
+  assert.equal(old.functional, false);
+  assert.match(old.missing[0], /postgresql>=14/);
+});
+test('Render uses DATABASE_URL when PROPERTY_DB=embedded is also set', async () => {
+  const { migrationTarget } = require('../scripts/discovery-migrate');
+  const { databaseTargetReason } = require('../server/db/database-target');
+  const env = {
+    DISCOVERY_MODE: 'advanced',
+    PROPERTY_DB: 'embedded',
+    PROPERTY_PG_DATA_DIR: '.cache/pgdata',
+    DATABASE_URL: 'postgres://localhost:5432/live',
+    RENDER: 'true',
+    NODE_ENV: 'test',
+  };
+  assert.equal(migrationTarget(env), 'tcp');
+  assert.match(databaseTargetReason(env), /external database is used/);
+  const db = new DatabaseClient({ env });
+  try {
+    assert.ok(db.pool);
+    assert.equal(db.isPg, false);
+  } finally {
+    if (db.pool) await db.pool.end();
+  }
+});
 test('PostgreSQL discovery filters and paginates in SQL without loading inventory',async()=>{const calls=[];const database={isPg:true,listingSelect:'id, source_key AS "source", state, address, updated_at AS "fetchedAt"',pool:{query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes('discovery_listing_revision'))return{rows:[{revision:'7'}]};if(sql.includes('count(*)::int'))return{rows:[{count:1}]};return{rows:[{id:'pg1',source:'hud',state:'CA',address:'1 SQL Way',cursorValue:7}]};}}};const result=await query.search(database,query.queryFromUrl(url('state=CA&program=tps&limit=25')));assert.equal(result.total,1);assert.equal(result.listings[0].id,'pg1');assert.match(calls[1].sql,/lower\(state\)=\$1/);assert.match(calls[1].sql,/lower\(nullif\(coalesce\(auction_program,[^,]*auctionProgram'\),''\)\)=\$2/);assert.match(calls[1].sql,/ORDER BY/);});

@@ -276,8 +276,21 @@ async function handleRequest(req, res) {
         dataMode: db.dataMode(),
         postgresConfigured: Boolean(process.env.DATABASE_URL),
         postgresReachable: db.postgresReachable === true,
+        ...(db.databaseCapabilities
+          ? {
+              databaseFunctional: db.databaseCapabilities.functional === true,
+              ...(db.databaseCapabilities.missing && db.databaseCapabilities.missing.length
+                ? { databaseMissing: db.databaseCapabilities.missing }
+                : {}),
+            }
+          : {}),
         ...(db.postgresEngine ? { postgresEngine: db.postgresEngine } : {}),
         ...(db.postgresError ? { postgresError: db.postgresError } : {}),
+        // Why this process is or is not collecting. DISCOVERY_MODE=advanced
+        // turns the in-process scraper off even when SCRAPER_BACKGROUND_ENABLED=1.
+        // running plus startedAt distinguishes that switch from a cycle still
+        // inside the first collectors. No secrets.
+        collection: scheduler.collectionRuntimeStatus(scheduler, process.env),
         // The one thing a caller needs when dataMode is 'unavailable': why.
         // 'ok' above describes the process, not the inventory, and the two must
         // not be read as the same claim.
@@ -382,20 +395,19 @@ server.keepAliveTimeout = 5_000;
  * this machine, and the alternative used to be serving seeded in-memory
  * inventory - which is not inventory.
  *
- * It wins over DATABASE_URL only when asked for explicitly, and says so in the
- * log when it does. An unset PROPERTY_DB with a set DATABASE_URL always uses
- * the external server: silently swapping a configured production database for
- * an embedded one would be the exact class of surprise this change exists to
- * remove. A DATABASE_URL that is set but unreachable is reported as an outage,
- * never quietly replaced.
+ * Off Render it wins over DATABASE_URL only when asked for explicitly, and says
+ * so in the log when it does. An unset PROPERTY_DB with a set DATABASE_URL
+ * always uses the external server. On Render, DATABASE_URL wins even if
+ * PROPERTY_DB=embedded is also set: the live inventory is external Postgres,
+ * and a blueprint that sets PROPERTY_DB must not hide it. A DATABASE_URL that
+ * is set but unreachable is reported as an outage, never quietly replaced.
  */
 async function attachEmbeddedDatabaseIfRequested() {
-  const explicitlyEmbedded = process.env.PROPERTY_DB === 'embedded';
-  const dataDirGiven = Boolean(process.env.PROPERTY_PG_DATA_DIR);
-  if (!explicitlyEmbedded && !dataDirGiven) return null;
-  if (process.env.DATABASE_URL) {
-    console.log('[Server] PROPERTY_DB/PROPERTY_PG_DATA_DIR is set, so the embedded engine is used and DATABASE_URL is ignored for this process.');
-  }
+  const { resolveDatabaseTarget, databaseTargetReason } = require('./db/database-target');
+  const target = resolveDatabaseTarget(process.env);
+  const reason = databaseTargetReason(process.env);
+  if (reason) console.log(`[Server] ${reason}`);
+  if (target !== 'embedded') return null;
 
   const { startEmbeddedPostgres } = require('./db/pglite-pool');
   const started = await startEmbeddedPostgres({ log: console.log });
@@ -418,6 +430,25 @@ async function startServer() {
         console.log('[Server] discovery migrations verified and applied to database');
       } catch (migErr) {
         console.warn('[Server] auto-migration warning:', migErr.message);
+      }
+    }
+    if (db.postgresReachable === true && db.pool) {
+      try {
+        const { probeDatabaseCapabilities } = require('./db/database-capabilities');
+        db.databaseCapabilities = await probeDatabaseCapabilities(db.pool);
+        if (db.databaseCapabilities.functional) {
+          console.log(`[DB] DATABASE_URL is fully functional (${db.databaseCapabilities.version}, PostGIS ${db.databaseCapabilities.postgisVersion})`);
+        } else {
+          console.warn(`[DB] DATABASE_URL is connected but not fully functional: ${db.databaseCapabilities.missing.join(', ')}`);
+        }
+      } catch (probeErr) {
+        db.databaseCapabilities = {
+          functional: false,
+          missing: [String(probeErr && probeErr.message ? probeErr.message : probeErr).slice(0, 200)],
+          version: null,
+          postgisVersion: null,
+        };
+        console.warn('[DB] DATABASE_URL capability probe failed:', db.databaseCapabilities.missing[0]);
       }
     }
   }

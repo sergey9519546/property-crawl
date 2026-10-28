@@ -9,6 +9,7 @@ const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 // catalog source is discovery evidence, never an actionable sale listing.
 // The catalog is the single source of truth; import the gate, never re-derive it.
 const { servesListings, listingServingSourceSqlList } = require('../sources/catalog');
+const { resolveDatabaseTarget } = require('./database-target');
 
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -530,13 +531,15 @@ class DatabaseClient {
   init() {
     if (this.externalPool) return;
     // Embedded Postgres starts asynchronously and attachPostgres() replaces
-    // this pool. Dialing DATABASE_URL as well would open the dead TCP server
-    // this process is required to ignore.
-    const embeddedRequested = this.env.PROPERTY_DB === 'embedded' || Boolean(this.env.PROPERTY_PG_DATA_DIR);
-    if (this.env.DISCOVERY_MODE === 'advanced' && !this.env.DATABASE_URL && !embeddedRequested) {
+    // this pool. Off Render, an explicit embedded request must not also dial
+    // DATABASE_URL: local env names a localhost server that is not running.
+    // On Render the external URL is the live inventory, so it wins. See
+    // database-target.js.
+    const target = resolveDatabaseTarget(this.env);
+    if (this.env.DISCOVERY_MODE === 'advanced' && target === 'missing') {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
-    if (this.env.DATABASE_URL && !embeddedRequested) {
+    if (target === 'tcp') {
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({

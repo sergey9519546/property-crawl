@@ -40,17 +40,15 @@ async function migrate(pool) {
   } finally { await client.query('SELECT pg_advisory_unlock(72463198)'); client.release(); }
 }
 function migrationTarget(env = process.env) {
-  if (env.PROPERTY_DB === 'embedded' || Boolean(env.PROPERTY_PG_DATA_DIR)) return 'embedded';
-  if (env.DATABASE_URL) return 'tcp';
-  return 'missing';
+  return require('../server/db/database-target').resolveDatabaseTarget(env);
 }
 
 async function openConfiguredPool(env = process.env) {
+  const { databaseTargetReason } = require('../server/db/database-target');
   const target = migrationTarget(env);
+  const reason = databaseTargetReason(env);
+  if (reason) console.log(reason);
   if (target === 'embedded') {
-    if (env.DATABASE_URL) {
-      console.log('PROPERTY_DB/PROPERTY_PG_DATA_DIR is set, so the embedded engine is used and DATABASE_URL is not opened.');
-    }
     const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
     const started = await startEmbeddedPostgres({ log: console.log });
     return started.pool;

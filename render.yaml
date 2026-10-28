@@ -17,10 +17,16 @@ services:
         value: "3000"
       - key: AUTO_MIGRATE
         value: "1"
-      # Default to embedded PGlite PostGIS 3.6 for $0 persistence without paid external DB.
-      - key: PROPERTY_DB
-        value: embedded
-      # Optional: set DATABASE_URL to override embedded DB with external PostgreSQL + PostGIS.
+      # Live inventory is external PostgreSQL. Do not set PROPERTY_DB.
+      # DATABASE_URL must name an existing database on PostgreSQL 16
+      # (14+ can boot; postgis/postgis:16-3.4 is the server this schema runs on).
+      # The role needs CONNECT, CREATE on the database, and USAGE plus CREATE
+      # on schema public, which must be on search_path. It also needs
+      # SELECT, INSERT, UPDATE, and DELETE. AUTO_MIGRATE installs postgis,
+      # uuid-ossp, pg_trgm, and pgcrypto, then applies schema.sql and
+      # migrations 003-029 into public. Use the Render internal hostname.
+      # An external hostname also needs ?sslmode=require.
+      # sync: false keeps the live value.
       - key: DATABASE_URL
         sync: false
       # Code reads SCRAPER_ADMIN_TOKEN; PROPERTY_OPERATOR_SECRET is accepted

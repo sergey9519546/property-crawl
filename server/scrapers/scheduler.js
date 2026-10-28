@@ -106,12 +106,37 @@ function shouldAllowRealScrapers(env = process.env) {
   return true;
 }
 
-function backgroundCollectionEnabled(env = process.env) {
-  if (!shouldAllowRealScrapers(env)) return false;
-  if (env.DISCOVERY_MODE === 'advanced') return false;
+function backgroundCollectionReason(env = process.env) {
+  if (!shouldAllowRealScrapers(env)) {
+    if (env.RUN_REAL_SCRAPERS === '0') return 'run_real_scrapers_off';
+    if (env.NODE_ENV === 'test') return 'node_env_test';
+    if (/^test(?::|$)/.test(env.npm_lifecycle_event || '')) return 'npm_test_lifecycle';
+    return 'scrapers_disallowed';
+  }
+  if (env.DISCOVERY_MODE === 'advanced') return 'discovery_mode_advanced';
   const flag = env.SCRAPER_BACKGROUND_ENABLED;
-  if (flag == null || flag === '' || flag === '1') return true;
-  return false;
+  if (flag == null || flag === '' || flag === '1') return 'enabled';
+  return 'scraper_background_disabled';
+}
+
+function backgroundCollectionEnabled(env = process.env) {
+  return backgroundCollectionReason(env) === 'enabled';
+}
+
+function collectionRuntimeStatus(target, env = process.env) {
+  const report = target && target.telemetry && typeof target.telemetry.getHealthReport === 'function'
+    ? target.telemetry.getHealthReport()
+    : null;
+  return {
+    enabled: backgroundCollectionEnabled(env),
+    reason: backgroundCollectionReason(env),
+    running: Boolean(target && target.isRunning),
+    startedAt: (target && target.cycleStartedAt) || null,
+    lastFinishedAt: (target && target.lastCycleFinishedAt) || null,
+    scraperStatus: report ? report.systemStatus : 'idle',
+    scrapersSeen: report ? report.totalScrapers : 0,
+    scrapersInFault: report ? report.scrapersInFault : 0,
+  };
 }
 
 class IngestionScheduler {
@@ -167,6 +192,8 @@ class IngestionScheduler {
     // Logged once per scheduler construction.
     this.listingServingScrapers = admitListingsScrapers(this.realScrapers);
     this.isRunning = false;
+    this.cycleStartedAt = null;
+    this.lastCycleFinishedAt = null;
   }
 
   async runAll(options = {}) {
@@ -197,6 +224,12 @@ class IngestionScheduler {
     };
     const completeCycle = !requested && scrapers.length === this.listingServingScrapers.length;
     this.isRunning = true;
+    this.cycleStartedAt = new Date().toISOString();
+    const stopCycle = () => {
+      this.isRunning = false;
+      this.cycleStartedAt = null;
+      this.lastCycleFinishedAt = new Date().toISOString();
+    };
     let cycleContext = null;
     try {
       cycleContext = await this.onCycleStart({
@@ -208,7 +241,7 @@ class IngestionScheduler {
     } catch (error) {
       console.error('[Scheduler] Could not initialize collection job:', error.message);
       if (this.discoveryStore?.requiresJobFence || error?.code === 'DISCOVERY_JOB_LEASE_LOST') {
-        this.isRunning = false;
+        stopCycle();
         throw error;
       }
     }
@@ -217,13 +250,13 @@ class IngestionScheduler {
     if (this.discoveryStore?.requiresJobFence && (!ownership.jobId || !ownership.owner || typeof leaseGuard !== 'function')) {
       const error = new Error('Durable collection requires an owned live job claim');
       error.code = 'DISCOVERY_JOB_LEASE_LOST';
-      this.isRunning = false;
+      stopCycle();
       throw error;
     }
     try {
       await assertLease('Collection job lease was lost before cycle execution');
     } catch (error) {
-      this.isRunning = false;
+      stopCycle();
       throw error;
     }
     console.log(`[Scheduler] Starting automated ingestion cycle with concurrency ${this.concurrency}...`);
@@ -409,7 +442,7 @@ class IngestionScheduler {
       }
       return result;
     } finally {
-      this.isRunning = false;
+      stopCycle();
     }
   }
 }
@@ -567,4 +600,6 @@ module.exports.normalizeConcurrency = normalizeConcurrency;
 module.exports.parseScrapeIntervalHours = parseScrapeIntervalHours;
 module.exports.shouldAllowRealScrapers = shouldAllowRealScrapers;
 module.exports.backgroundCollectionEnabled = backgroundCollectionEnabled;
+module.exports.backgroundCollectionReason = backgroundCollectionReason;
+module.exports.collectionRuntimeStatus = collectionRuntimeStatus;
 module.exports.sourcesForWave = sourcesForWave;

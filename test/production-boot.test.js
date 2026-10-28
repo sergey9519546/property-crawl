@@ -128,6 +128,14 @@ test('legacy index.html does not load third-party puter/tailwind CDNs', () => {
   assert.doesNotMatch(html, /<script[^>]+src=["'][^"']*tailwindcss/i);
 });
 
+test('render.yaml does not pin PROPERTY_DB=embedded over the live DATABASE_URL', () => {
+  const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
+  assert.doesNotMatch(render, /key:\s*PROPERTY_DB\b/);
+  assert.match(render, /key:\s*DATABASE_URL/);
+  assert.match(render, /key:\s*AUTO_MIGRATE[\s\S]*?value:\s*"1"/);
+  assert.doesNotMatch(render, /override embedded/i);
+});
+
 test('render.yaml does not independently generate divergent operator aliases', () => {
   const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
   assert.match(render, /key: SCRAPER_ADMIN_TOKEN\s*\n\s*generateValue: true/);
@@ -246,5 +254,6 @@ test('UI surfaces honest data-mode banner and schema has document_reviews', () =
   const server = fs.readFileSync(path.join(__dirname, '..', 'server/server.js'), 'utf8');
   assert.match(server, /dataMode/);
   assert.match(server, /documentReviewStore/);
+  assert.match(server, /collectionRuntimeStatus/);
 });
 

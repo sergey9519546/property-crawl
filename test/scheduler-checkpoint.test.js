@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { IngestionScheduler, backgroundCollectionEnabled } = require('../server/scrapers/scheduler');
+const { IngestionScheduler, backgroundCollectionEnabled, backgroundCollectionReason, collectionRuntimeStatus } = require('../server/scrapers/scheduler');
 const { hash } = require('../server/discovery/store');
 
 const SERVICE_LINK_SCOPE = { endpoint: '/search-service/search/listings', filters: {} };
@@ -129,4 +129,55 @@ test('background collection is on for a real server when the flag is unset or 1,
   assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production' }), true);
   assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '' }), true);
   assert.equal(backgroundCollectionEnabled({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '1' }), true);
+  assert.equal(backgroundCollectionReason({ NODE_ENV: 'test' }), 'node_env_test');
+  assert.equal(backgroundCollectionReason({ RUN_REAL_SCRAPERS: '0', NODE_ENV: 'production' }), 'run_real_scrapers_off');
+  assert.equal(backgroundCollectionReason({ npm_lifecycle_event: 'test:ui', NODE_ENV: 'production' }), 'npm_test_lifecycle');
+  assert.equal(backgroundCollectionReason({ NODE_ENV: 'production', DISCOVERY_MODE: 'advanced', SCRAPER_BACKGROUND_ENABLED: '1' }), 'discovery_mode_advanced');
+  assert.equal(backgroundCollectionReason({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '0' }), 'scraper_background_disabled');
+  assert.equal(backgroundCollectionReason({ NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '1' }), 'enabled');
+});
+
+test('a running cycle publishes its start and clears it when the cycle finishes', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let seen = null;
+  const source = {
+    name: 'Gate',
+    sourceKey: 'servicelink',
+    async scrapeFeed() {
+      seen = { running: subject.isRunning, startedAt: subject.cycleStartedAt };
+      await gate;
+      return [];
+    },
+  };
+  const subject = new IngestionScheduler({
+    realScrapers: [source],
+    discoveryStore: null,
+    telemetry: { recordRun() {}, getHealthReport() { return { systemStatus: 'idle', totalScrapers: 0, scrapersInFault: 0 }; } },
+    database: { async createListing() {} },
+    networkEnabled: true,
+    concurrency: 1,
+  });
+  const pending = subject.runAll();
+  const deadline = Date.now() + 1000;
+  while (!seen && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(seen, 'scrapeFeed did not start');
+  assert.equal(seen.running, true);
+  assert.equal(typeof seen.startedAt, 'string');
+  const during = collectionRuntimeStatus(subject, { NODE_ENV: 'production', SCRAPER_BACKGROUND_ENABLED: '1' });
+  assert.equal(during.enabled, true);
+  assert.equal(during.reason, 'enabled');
+  assert.equal(during.running, true);
+  assert.equal(during.startedAt, seen.startedAt);
+  release();
+  await pending;
+  assert.equal(subject.isRunning, false);
+  assert.equal(subject.cycleStartedAt, null);
+  assert.equal(typeof subject.lastCycleFinishedAt, 'string');
+  const after = collectionRuntimeStatus(subject, { NODE_ENV: 'production', DISCOVERY_MODE: 'advanced', SCRAPER_BACKGROUND_ENABLED: '1' });
+  assert.equal(after.enabled, false);
+  assert.equal(after.reason, 'discovery_mode_advanced');
+  assert.equal(after.running, false);
+  assert.equal(after.startedAt, null);
+  assert.equal(after.lastFinishedAt, subject.lastCycleFinishedAt);
 });

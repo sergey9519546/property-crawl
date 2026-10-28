@@ -17,6 +17,7 @@
 
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
+const { readResponseText } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
@@ -525,7 +526,7 @@ class CivilViewScraper extends BaseScraper {
         redirect: 'follow',
         signal: controller.signal,
       });
-      const body = await response.text();
+      const body = await readResponseText(response, controller.signal);
       const validation = this.circuitBreaker.validateResponse({
         status: response.status,
         body,

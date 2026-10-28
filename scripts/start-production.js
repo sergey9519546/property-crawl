@@ -109,6 +109,8 @@ async function boot() {
   console.log(`[Production] Bootstrapping Property-Crawl production runtime...`);
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
+  // Embedded only when nothing else is configured. Never inject it over
+  // DATABASE_URL: on Render that hid the live Postgres inventory.
   const defaultDbEnv =
     !hasDatabase &&
     !bootEnv.PROPERTY_DB &&

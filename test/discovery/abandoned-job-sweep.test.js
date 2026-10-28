@@ -168,6 +168,10 @@ test('the expired-lease signal only ever escalates degraded', () => {
   assert.equal(collectionDegraded('healthy', { expiredRunning: 1 }), true);
   assert.equal(collectionDegraded('healthy', { expiredRunning: 0 }), false);
   assert.equal(collectionDegraded('stale', { expiredRunning: 0 }), true);
+  assert.equal(collectionDegraded('not_started', { expiredRunning: 0 }), false);
+  assert.equal(collectionDegraded('disabled', { expiredRunning: 0 }), false);
+  assert.equal(collectionDegraded('not_started', { expiredRunning: 1 }), true);
+  assert.equal(collectionDegraded('lease_lost', { expiredRunning: 0 }), true);
 
   // 'disabled' means there is no worker to be degraded about, and a demo
   // deployment must keep reporting degraded:false.

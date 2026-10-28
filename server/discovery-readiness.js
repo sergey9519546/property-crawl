@@ -1,5 +1,5 @@
 'use strict';
-const { workerHealthStatus, withExpiredJobSignal } = require('./discovery/worker-health');
+const { workerHealthStatus, withExpiredJobSignal, collectionDegraded } = require('./discovery/worker-health');
 const { inspectCollectionStorage } = require('./discovery/storage-health');
 const REQUIRED_TABLES=['listings','discovery_source_runs','discovery_snapshots','discovery_observations','discovery_checkpoints','discovery_jobs','discovery_leases','discovery_source_rollouts','discovery_hunts','discovery_hunt_baselines','discovery_hunt_events','discovery_listing_revision','discovery_media_references','discovery_media_assets','discovery_media_links','discovery_atlas_sources','discovery_public_record_research','discovery_worker_health'];
 async function probeDiscoveryDatabase(pool) {
@@ -17,7 +17,8 @@ async function probeDiscoveryDatabase(pool) {
     pool.query("SELECT count(*) FILTER(WHERE status='queued')::int queued,count(*) FILTER(WHERE status='running' AND lease_expires_at<NOW())::int expired FROM discovery_jobs")
   ]);
   const health=worker.rows[0],status=workerHealthStatus(health);
-  return {...row,collectionHealth:{status,degraded:status!=='healthy',lastSeenAt:health?.last_seen_at||null,lastLoopStatus:health?.last_loop_status||null,currentJobId:health?.current_job_id||null,backlog:{queued:backlog.rows[0].queued||0,expiredRunning:backlog.rows[0].expired||0}}};
+  const backlogCounts={queued:backlog.rows[0].queued||0,expiredRunning:backlog.rows[0].expired||0};
+  return {...row,collectionHealth:{status,degraded:collectionDegraded(status,backlogCounts),lastSeenAt:health?.last_seen_at||null,lastLoopStatus:health?.last_loop_status||null,currentJobId:health?.current_job_id||null,backlog:backlogCounts}};
 }
 
 /**
@@ -49,7 +50,7 @@ async function discoveryReadiness(options = {}) {
   try {
     const details = await options.databaseProbe();
     result.checks.database = { ready: true, ...(details && typeof details === 'object' ? details : {}) };
-    result.collectionHealth=withExpiredJobSignal(details?.collectionHealth||{status:'not_started',degraded:true,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}});
+    result.collectionHealth=withExpiredJobSignal(details?.collectionHealth||{status:'not_started',degraded:false,lastSeenAt:null,lastLoopStatus:null,currentJobId:null,backlog:{queued:0,expiredRunning:0}});
     const requiredTables = ['listings', 'discovery_source_runs', 'discovery_snapshots', 'discovery_checkpoints', 'discovery_jobs', 'discovery_leases'];
     const missing = requiredTables.filter((name) => details?.tables && !details.tables.includes(name));
     if (missing.length) throw new Error(`required discovery tables are missing: ${missing.join(', ')}`);
@@ -65,4 +66,4 @@ async function discoveryReadiness(options = {}) {
   return result;
 }
 
-module.exports = { discoveryReadiness, probeDiscoveryDatabase };
+module.exports = { discoveryReadiness, probeDiscoveryDatabase, REQUIRED_TABLES };

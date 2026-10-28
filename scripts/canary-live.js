@@ -170,7 +170,7 @@ function writeReport(payload) {
 }
 
 function embeddedDatabaseRequested(env = process.env) {
-  return env.PROPERTY_DB === 'embedded' || Boolean(env.PROPERTY_PG_DATA_DIR);
+  return require('../server/db/database-target').embeddedDatabaseRequested(env);
 }
 
 function hasLiveDatabase(env = process.env) {
@@ -179,7 +179,8 @@ function hasLiveDatabase(env = process.env) {
 
 async function ensureLivePool(db) {
   const { migrate, openConfiguredPool } = require('./discovery-migrate');
-  if (embeddedDatabaseRequested()) {
+  const { resolveDatabaseTarget } = require('../server/db/database-target');
+  if (resolveDatabaseTarget() === 'embedded') {
     const pool = await openConfiguredPool();
     try {
       await migrate(pool);

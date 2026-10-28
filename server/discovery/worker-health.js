@@ -25,11 +25,13 @@ function expiredJobBacklogDegraded(backlog) {
   return Number(backlog?.expiredRunning || 0) > 0;
 }
 
-// Same rule as the historical `status !== 'healthy'`, plus the expired-lease
-// signal. Exported so every producer of a collection-health payload applies one
-// policy instead of re-deriving (and re-forgetting) it.
+// not_started and disabled mean no discovery worker is expected. They are not
+// a wedge. stale and lease_lost are. An expired running job is a wedge even
+// when the worker row itself is healthy, missing, or disabled.
 function collectionDegraded(status, backlog) {
-  return status !== 'healthy' || expiredJobBacklogDegraded(backlog);
+  if (expiredJobBacklogDegraded(backlog)) return true;
+  if (status === 'not_started' || status === 'disabled') return false;
+  return status !== 'healthy';
 }
 
 // Escalate-only normaliser for an already-assembled payload. Deliberately
