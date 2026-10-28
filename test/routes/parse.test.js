@@ -348,3 +348,13 @@ test('calculateConfidence: caps at 1 even if every weighted field has a value', 
     defendant: 'Doe'
   }), 1);
 });
+
+test('getCostTracker & resetCostTracker: expose and reset the runtime AI budget tracker', () => {
+  const parseRoute = require('../../server/routes/parse');
+  parseRoute.resetCostTracker(2.50);
+  const tracker = parseRoute.getCostTracker();
+  assert.equal(tracker.budgetLimitUsd, 2.50);
+  assert.equal(tracker.totalCost, 0);
+  assert.equal(tracker.isOverBudget, false);
+  parseRoute.resetCostTracker(5.00);
+});

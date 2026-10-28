@@ -183,6 +183,9 @@ function calculateCompleteCashToClose(params = {}) {
     settlementWindowHours: schedule.settlementWindowHours,
     statutoryNotes: schedule.notes,
     isMarketplace,
+    computedAt: typeof params.computedAt === 'string' && params.computedAt.trim()
+      ? params.computedAt.trim()
+      : new Date().toISOString(),
   };
 }
 

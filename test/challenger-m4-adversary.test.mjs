@@ -576,4 +576,11 @@ test('Statutory preset flags unsupported states instead of implying a modeled sc
   assert.equal(un.supported, false);
   assert.match(un.notice, /unavailable for state WY/);
   assert.equal(computeStatutoryFeePreset({ purchasePrice: 100000, state: 'OH' }).supported, true);
+
+  const ctc = calculateCompleteCashToClose({ winningBid: 100000, state: 'OH', computedAt: '2026-10-28T12:00:00.000Z' });
+  assert.equal(ctc.computedAt, '2026-10-28T12:00:00.000Z');
+  assert.equal(ctc.supported, true);
+
+  const carry = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'OH', purchasePrice: 100000, computedAt: '2026-10-28T12:00:00.000Z' });
+  assert.equal(carry.computedAt, '2026-10-28T12:00:00.000Z');
 });

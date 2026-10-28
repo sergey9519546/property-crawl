@@ -170,6 +170,16 @@ test('POST /api/document-review archives documentContent in DocumentVault and bi
     const storedDoc = await vault.getDocument(`reviews/${encodeURIComponent(res.body.id)}.txt`);
     assert.ok(storedDoc);
     assert.equal(storedDoc.data.toString('utf8'), noticeProse);
+
+    const getReq = makeReq({ method: 'GET', url: `/api/document-review/${res.body.id}` });
+    const getRes = makeRes();
+    await route.handleDocumentReview(getReq, getRes, { database: emptyDb(), vault });
+    assert.equal(getRes.statusCode, 200);
+    assert.equal(getRes.body.contentHash, expectedSha);
+    assert.equal(getRes.body.documentContent, noticeProse);
+    assert.ok(getRes.body.vaultDocument);
+    assert.equal(getRes.body.vaultDocument.sha256, expectedSha);
+    assert.equal(getRes.body.vaultDocument.verified, true);
   } finally {
     fs.rmSync(tmpVaultDir, { recursive: true, force: true });
   }

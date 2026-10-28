@@ -4,7 +4,8 @@ const SecuritySanitizer = require('../security/sanitizer');
 const Validator = require('../security/validation');
 const AiCache = require('../ai/cache');
 const ModelRouter = require('../ai/model_router');
-const { CostTracker } = require('../ai/cost_tracker');
+const { CostRecord, CostTracker } = require('../ai/cost_tracker');
+let runtimeCostTracker = new CostTracker({ budgetLimitUsd: Number(process.env.AI_BUDGET_LIMIT_USD) || 5.00 });
 const { normalizeOcrText, neutralizePromptInjection } = require('../ai/notice-parser');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
 
@@ -349,12 +350,13 @@ async function handleParse(req, res) {
   let cost = 0;
   let unverifiedCandidates = {};
 
-  if ((confidence < 0.75 || forceLlm === true) && process.env.OPENAI_API_KEY) {
+  if ((confidence < 0.75 || forceLlm === true) && process.env.OPENAI_API_KEY && !runtimeCostTracker.isOverBudget) {
     const llmResult = await callLlmExtraction(cleanNotice, model);
     if (llmResult?.data) {
       unverifiedCandidates = sanitizeLlmCandidates(llmResult.data, cleanNotice);
       if (Object.keys(unverifiedCandidates).length > 0) strategy = 'deterministic_with_unverified_llm_candidates';
       cost = CostTracker.calculateCost(model, llmResult.inputTokens, llmResult.outputTokens);
+      runtimeCostTracker = runtimeCostTracker.add(new CostRecord({ model, inputTokens: llmResult.inputTokens, outputTokens: llmResult.outputTokens, costUsd: cost }));
     }
   }
 
@@ -389,3 +391,5 @@ module.exports.explicitStatutoryFraction = explicitStatutoryFraction;
 module.exports.extractObservedNotice = extractObservedNotice;
 module.exports.extractTextFromPdf = extractTextFromPdf;
 module.exports.sanitizeLlmCandidates = sanitizeLlmCandidates;
+module.exports.getCostTracker = () => runtimeCostTracker;
+module.exports.resetCostTracker = (budgetLimitUsd = 5.00) => { runtimeCostTracker = new CostTracker({ budgetLimitUsd }); };

@@ -820,6 +820,7 @@ export interface StatutoryDeadlinesAndCarry {
   effectiveLockupDays: number;
   estimatedCarryCost: number | null;
   annualCostOfCapitalPct: number;
+  computedAt?: string;
 }
 
 function addDaysIso(baseDateStr: string | null | undefined, days: number): string | null {
@@ -836,6 +837,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   redemptionDays?: number | null;
   hasIrsLien?: boolean;
   annualCostOfCapitalPct?: number;
+  computedAt?: string;
 }): StatutoryDeadlinesAndCarry {
   const st = (params.state || "").trim().toUpperCase();
   const saleDateIso = params.saleDate && Number.isFinite(Date.parse(String(params.saleDate).slice(0, 10)))
@@ -888,6 +890,7 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     effectiveLockupDays,
     estimatedCarryCost,
     annualCostOfCapitalPct,
+    ...(params.computedAt ? { computedAt: params.computedAt } : {}),
   };
 }
 

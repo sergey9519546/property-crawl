@@ -389,6 +389,22 @@ async function handleDocumentReview(req, res, dependencies = {}) {
     if (!tail) return badRequest(res, 'document id is required');
     if (!store.map.has(tail)) return res.status(404).json({ error: 'review not found' });
     const record = store.map.get(tail);
+    const vault = dependencies.vault || defaultVault;
+    let vaultDocument = null;
+    try {
+      const archived = await vault.getDocument(`reviews/${encodeURIComponent(tail)}.txt`);
+      if (archived) {
+        const expectedHash = record.contentHash || null;
+        vaultDocument = {
+          key: archived.key,
+          content: archived.data.toString('utf8'),
+          sha256: archived.sha256,
+          size: archived.size,
+          storedAt: archived.storedAt,
+          verified: expectedHash ? archived.sha256 === expectedHash : true,
+        };
+      }
+    } catch (_) {}
     return res.json({
       id: tail,
       listingId: record.listingId || tail.split('~')[0],
@@ -396,6 +412,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       documentUrl: record.documentUrl || null,
       review: normalizeReview(record),
       contentHash: record.contentHash || null,
+      ...(vaultDocument ? { vaultDocument, documentContent: vaultDocument.content } : {}),
       hydration: 'store',
     });
   }
