@@ -1,7 +1,8 @@
 "use client";
 
-import { GsapReveal, GsapStaggerGroup } from "./gsap-reveal";
-import { Check, X, Sparkles } from "lucide-react";
+import { GsapStaggerGroup } from "./gsap-reveal";
+import { SectionHeading } from "./section-heading";
+import { Check, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -19,9 +20,9 @@ const COLS: Col[] = [
     tag: "No account needed",
     features: [
       { label: "Search, map and sale calendar", ok: true },
-      { label: "Deal Score (where county data allows) and the catch on listing pages", ok: true },
+      { label: "The catch on every listing page", ok: true },
+      { label: "Deal Score where a value range is published", ok: true },
       { label: "Watchlist saved on this device", ok: true },
-      { label: "Hunts and email alerts", ok: false },
     ],
   },
   {
@@ -30,19 +31,11 @@ const COLS: Col[] = [
     highlight: true,
     cta: true,
     features: [
+      { label: "Everything in Free", ok: true },
       { label: "Hunts that re-check for new listings", ok: true },
-      { label: "Email when a new listing fits, or one changes", ok: true },
-      { label: "Saved searches with match alerts", ok: true },
-      { label: "Account watchlist, portfolio and price-drop tracking", ok: true },
-    ],
-  },
-  {
-    name: "Not offered",
-    tag: "What we do not do",
-    features: [
-      { label: "Every sale in every county", ok: false },
-      { label: "Title reports or live comps", ok: false },
-      { label: "Replacing your title search or inspection", ok: false },
+      { label: "Email when a new listing fits, or a saved one changes", ok: true },
+      { label: "Price-drop alerts on saved listings", ok: true },
+      { label: "Account watchlist and portfolio on any device", ok: true },
     ],
   },
 ];
@@ -68,71 +61,61 @@ function useMemberPrice() {
 export function AiComparison() {
   const memberPrice = useMemberPrice();
   return (
-    <section id="pricing" className="pt-24 pb-28 sm:pt-24 sm:pb-28">
-      <div className="mx-auto max-w-[1080px] px-5 lg:px-8">
-        <GsapReveal className="mx-auto max-w-[760px] text-center">
-          <h2 className="text-[26px] font-medium leading-[1.17] tracking-[-0.015em] text-[#111827] sm:text-[32px] lg:text-[36px]">
-            Browse free. Become a member for hunts and email alerts.
-          </h2>
-          <p className="mx-auto mt-4 max-w-[600px] text-[16px] leading-[1.6] text-[#5B6472] sm:text-[18px]">
-            Searching, the map and listing pages are free. Members get an email when a
-            new listing fits what they want, or when a saved one changes.
-          </p>
-        </GsapReveal>
+    <section id="pricing" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
+      <div className="mx-auto max-w-[880px]">
+        <SectionHeading eyebrow="Pricing" title="Browse free. Pay when you want us to watch for you.">
+          Everything you need to find a sale and see its catch is free. Members get an email the moment a new
+          listing fits their hunt, or a saved one changes.
+        </SectionHeading>
 
-        <GsapStaggerGroup
-          className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-3"
-          stagger={0.15}
-        >
+        <GsapStaggerGroup className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2" stagger={0.15}>
           {COLS.map((col) => (
             <div
               key={col.name}
               data-stagger-item
-              className={`rounded-2xl border p-6 transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              className={`flex flex-col rounded-3xl border p-7 ${
                 col.highlight
-                  ? "border-[#0F172A] bg-white shadow-[0_0_0_1px_#0F172A,0_12px_32px_rgba(15,23,42,0.10)]"
-                  : "border-[#E5E7EB] bg-white"
+                  ? "border-ink bg-white shadow-[0_0_0_1px_#0F172A,0_18px_48px_rgba(15,23,42,0.12)]"
+                  : "border-line bg-white/70"
               }`}
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-[18px] font-semibold text-[#111827]">{col.name}</h3>
+                <h3 className="text-[18px] font-semibold text-ink">{col.name}</h3>
                 {col.highlight && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                    <Sparkles className="h-3 w-3" /> Best
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                    <Sparkles className="h-3 w-3" /> Alerts
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-[13px] font-medium text-[#5B6472]">{col.cta && memberPrice ? memberPrice : col.tag}</p>
-              <ul className="mt-5 space-y-3">
+              <p className="mt-3 text-[28px] font-semibold tracking-[-0.02em] text-ink">
+                {col.cta ? memberPrice ?? "Membership" : "$0"}
+              </p>
+              <p className="text-[13px] font-medium text-ink-3">{col.cta ? "Cancel any time from your account" : col.tag}</p>
+              <ul className="mt-6 flex-1 space-y-3">
                 {col.features.map((f) => (
-                  <li key={f.label} className="flex items-center gap-2.5">
-                    {f.ok ? (
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0F172A]/10">
-                        <Check className="h-3 w-3 text-[#0F172A]" />
-                      </span>
-                    ) : (
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#F3F4F6]">
-                        <X className="h-3 w-3 text-[#5B6472]" />
-                      </span>
-                    )}
-                    <span
-                      className={`text-[14px] ${
-                        f.ok ? "text-[#111827]" : "text-[#5B6472]"
-                      }`}
-                    >
-                      {f.label}
+                  <li key={f.label} className="flex items-start gap-2.5">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
+                      <Check className="h-3 w-3 text-emerald-700" />
                     </span>
+                    <span className="text-[14px] leading-6 text-ink">{f.label}</span>
                   </li>
                 ))}
               </ul>
-              {col.cta && (
-                <Link href="/account" className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-[#0F172A] text-sm font-semibold text-white hover:bg-[#1E293B]">
+              {col.cta ? (
+                <Link href="/account" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl bg-ink text-sm font-semibold text-white hover:bg-ink-2">
                   Become a member
+                </Link>
+              ) : (
+                <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl border border-line-strong text-sm font-semibold text-ink hover:bg-white">
+                  Start searching
                 </Link>
               )}
             </div>
           ))}
         </GsapStaggerGroup>
+        <p className="mt-6 text-center text-[13px] text-ink-3">
+          Not included in either plan: title reports, comps, or a sale in every county. <a href="#faq" className="font-semibold text-ink underline underline-offset-4">Why?</a>
+        </p>
       </div>
     </section>
   );

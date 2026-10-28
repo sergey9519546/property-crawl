@@ -491,7 +491,7 @@ class HudHomeScraper extends BaseScraper {
       defendant: null,
       occupancy: null,
       deposit: null,
-      sourceUrl: sourceUrl || `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
+      sourceUrl: `${this.baseUrl}/Property/PropertyDetails?caseNumber=${encodeURIComponent(caseNum)}`,
       raw: `caseNumber=${caseNum};address=${address};currentBid=${openingBid}`,
       provenance: {
         origin: 'live',

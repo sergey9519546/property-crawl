@@ -262,13 +262,33 @@ test('UnderwriteScenario persists custom valuation assumption across sessions', 
     rehabBudget: 25000,
     targetMargin: 30,
     customValuation: '185000',
+    customOpeningBid: '95000',
   });
 
   const restored = readUnderwriteScenario('TEST-LISTING-001');
   assert.ok(restored !== null);
   assert.equal(restored.customValuation, '185000');
+  assert.equal(restored.customOpeningBid, '95000');
   assert.equal(restored.rehabBudget, 25000);
   delete globalThis.sessionStorage;
+});
+
+test('buyer-supplied target opening bid unlocks cash-to-close when publisher opening bid is absent', () => {
+  const absentPublished = computeCashToClose({
+    openingBid: null,
+    purchasePrice: 95_000,
+    registrationFunds: 5_000,
+    creditedDeposit: 5_000,
+    buyersPremium: 0,
+    sheriffPoundage: 0,
+    transferTax: 500,
+    delinquentTaxes: 0,
+    settlementCosts: 500,
+  });
+  assert.equal(absentPublished.totalAcquisitionCost, 96_000);
+  assert.equal(absentPublished.cashDueAtSettlement, 91_000);
+  assert.equal(absentPublished.basis.openingBid, null);
+  assert.equal(absentPublished.basis.purchasePrice, 'assumption');
 });
 
 test('computeLienWaterfall calculates debt extinguishment, surplus distribution, and surviving priority liens', () => {
@@ -377,4 +397,3 @@ test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and I
   assert.equal(priority.explicitlySubjectToSeniorMortgage, true);
   delete globalThis.sessionStorage;
 });
-

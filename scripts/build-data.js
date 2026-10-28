@@ -39,7 +39,7 @@ const DATA_JS_PATH = path.join(PROJECT_ROOT, 'data.js');
 // Mirrors src/components/terminal/property-data.ts (test/sync.test.js enforces).
 const SOURCES = {
   servicelink: { key: 'servicelink', label: 'Public Auction Network', tier: 'B', color: '#0369a1', note: 'Public auction listings; sale status and terms require confirmation', websiteUrl: 'https://www.servicelinkauction.com' },
-  sheriff:   { key: "sheriff",   label: "Sheriff Sale",         tier: "B", color: "#0f766e", note: "Foreclosure sale notice published under state law",        websiteUrl: "https://www.cuyahogasheriff.org" },
+  sheriff:   { key: "sheriff",   label: "Sheriff Sale",         tier: "B", color: "#0f766e", note: "Foreclosure sale notice published under state law",        websiteUrl: "https://cuyahoga.sheriffsaleauction.ohio.gov" },
   trustee:   { key: "trustee",   label: "Trustee's Sale",       tier: "B", color: "#0ea5e9", note: "Non-judicial foreclosure auction",                          websiteUrl: "https://www.clarkcountynv.gov" },
   hud:       { key: "hud",       label: "HUD Home",             tier: "A", color: "#1d4ed8", note: "hudhomestore.gov — owner-occupant window applies",         websiteUrl: "https://www.hudhomestore.gov" },
   fannie:    { key: "fannie",    label: "Fannie Mae REO",       tier: "A", color: "#2563eb", note: "HomePath by Fannie Mae — First Look window",               websiteUrl: "https://www.homepath.fanniemae.com" },
@@ -51,7 +51,7 @@ const SOURCES = {
   marshals:   { key: "marshals",   label: "US Marshals",          tier: "A", color: "#a16207", note: "RealLook.com / Gaston & Sheehan",                          websiteUrl: "https://www.usmarshals.gov" },
   gsa:        { key: "gsa",        label: "GSA Surplus",          tier: "A", color: "#92400e", note: "realestatesales.gov",                                     websiteUrl: "https://realestatesales.gov" },
   landbank:   { key: "landbank",   label: "Land Bank",            tier: "B", color: "#059669", note: "landbanksearch.com — 70+ county land bank aggregator",      websiteUrl: "https://www.landbanksearch.com" },
-  fdic:       { key: "fdic",       label: "FDIC REO",             tier: "A", color: "#1e3a8a", note: "sales.fdic.gov — Closed sales & receivership assets",      websiteUrl: "https://sales.fdic.gov" },
+  fdic:       { key: "fdic",       label: "FDIC REO",             tier: "A", color: "#1e3a8a", note: "sales.fdic.gov — Closed sales & receivership assets",      websiteUrl: "https://sales.fdic.gov/closedrealestate/" },
   civilview:  { key: "civilview",  label: "CivilView Sheriff",    tier: "B", color: "#0f766e", note: "salesweb.civilview.com — Tyler Technologies docket",       websiteUrl: "https://salesweb.civilview.com" },
   bid4assets: { key: "bid4assets", label: "Bid4Assets",           tier: "B", color: "#7c3aed", note: "bid4assets.com — County sheriff & tax auctions",          websiteUrl: "https://www.bid4assets.com" },
 };

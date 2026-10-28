@@ -57,6 +57,51 @@ const JURISDICTION_FEE_SCHEDULES = Object.freeze({
     settlementWindowHours: 0, // 100% cashier checks tendered immediately at auction gavel
     notes: 'Cal. Rev. & Tax. Code § 11911 documentary transfer tax. 100% certified funds required at gavel.',
   },
+  NC: {
+    state: 'NC',
+    name: 'North Carolina',
+    docStampRatePerThousand: 2.00, // $1.00 per $500 ($2 per $1k) excise tax (N.C.G.S. § 105-228.30)
+    defaultSheriffPoundagePercent: 0.05, // 5% statutory commissioner/trustee cap (N.C.G.S. § 45-21.15)
+    defaultRecordingFee: 64.00,
+    settlementWindowHours: 240, // 10 days rolling upset bid window (N.C.G.S. § 45-21.27)
+    notes: 'N.C.G.S. § 45-21.27 10-day upset-bid period. 5% deposit floor ($750 min).',
+  },
+  TX: {
+    state: 'TX',
+    name: 'Texas',
+    docStampRatePerThousand: 0.00, // $0 transfer tax (Texas Const. art. VIII § 29)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 50.00,
+    settlementWindowHours: 4, // Immediate cashier checks at first Tuesday sale
+    notes: 'Texas Const. art. VIII § 29 $0 state transfer tax. 100% certified funds due at sale.',
+  },
+  GA: {
+    state: 'GA',
+    name: 'Georgia',
+    docStampRatePerThousand: 1.00, // $1.00 per $1k transfer tax (O.C.G.A. § 48-6-1)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 25.00,
+    settlementWindowHours: 4, // Immediate cashier checks at first Tuesday non-judicial auction
+    notes: 'O.C.G.A. § 44-14-162 non-judicial foreclosure under power of sale. First Tuesday auction; immediate payment.',
+  },
+  IL: {
+    state: 'IL',
+    name: 'Illinois',
+    docStampRatePerThousand: 1.50, // $1 state + $0.50 county transfer stamps (35 ILCS 200/31-10)
+    defaultSheriffPoundagePercent: 0.01, // 1% sheriff fee
+    defaultRecordingFee: 100.00,
+    settlementWindowHours: 720, // 30 days; balance due upon judicial confirmation
+    notes: '735 ILCS 5/15-1507 judicial foreclosure. Balance due upon judicial confirmation of sale.',
+  },
+  NY: {
+    state: 'NY',
+    name: 'New York',
+    docStampRatePerThousand: 4.00, // $2.00 per $500 ($4 per $1k) NY State Real Estate Transfer Tax
+    defaultSheriffPoundagePercent: 0.01, // Referee compensation cap
+    defaultRecordingFee: 150.00,
+    settlementWindowHours: 720, // 30 days to close with referee
+    notes: 'RPAPL § 1354 referee deed sale. 10% deposit at auction; 30 days to close with referee.',
+  },
 });
 
 const DEFAULT_SCHEDULE = Object.freeze({

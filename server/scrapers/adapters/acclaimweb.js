@@ -76,12 +76,13 @@ function parseAcclaimRecordRow(rowHtml = '', jurisdiction = 'clark') {
     distressStage = 'SOLD_POST_SALE';
   }
 
+  const instNum = instMatch ? instMatch[1].trim() : null;
   return {
     source: 'recorder',
     platform: 'acclaimweb',
     county: config.county,
     state: config.state,
-    instrumentNumber: instMatch ? instMatch[1].trim() : null,
+    instrumentNumber: instNum,
     recordedDate: dateMatch ? dateMatch[1].trim() : null,
     docType: rawDocType,
     distressStage,
@@ -89,7 +90,7 @@ function parseAcclaimRecordRow(rowHtml = '', jurisdiction = 'clark') {
     grantee: granteeMatch ? granteeMatch[1].trim() : null,
     apn: apnMatch ? apnMatch[1].trim() : null,
     legalDescription: descMatch ? descMatch[1].trim() : null,
-    sourceUrl: `${config.portalUrl}/search`,
+    sourceUrl: instNum ? `${config.portalUrl}/details?id=${encodeURIComponent(instNum)}` : `${config.portalUrl}/search`,
   };
 }
 

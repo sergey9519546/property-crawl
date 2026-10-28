@@ -228,6 +228,7 @@ test('HUD mapScraplingCard surfaces the observed source URL as a parcel document
   assert.equal(docs.length, 1);
   assert.equal(docs[0].kind, 'parcel');
   assert.equal(docs[0].url, observedUrl);
+  assert.equal(listing.sourceUrl, 'https://www.hudhomestore.gov/Property/PropertyDetails?caseNumber=123-456789');
   assert.equal(listing.provenance.sourceFacts.hasDocuments, true);
 });
 

@@ -18,7 +18,9 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { GsapReveal } from "./gsap-reveal";
+import { SectionHeading } from "./section-heading";
+import { Fact, YoursTag, type FactFormat } from "@/components/evidence/fact";
+import { factText } from "@/lib/evidence";
 
 /**
  * The atlas is a MapLibre GL canvas — around 1 MB of JavaScript, shipped as one
@@ -122,7 +124,7 @@ const STAGES: StageDefinition[] = [
     key: "verify",
     step: "02",
     label: "Verify",
-    summary: "Read the fine print",
+    summary: "Check the catch",
     eyebrow: "Step 2",
     headline: "See the catch before you bid.",
     description:
@@ -272,17 +274,9 @@ export function Storyteller() {
       />
 
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">
-        <GsapReveal className="mx-auto max-w-[820px] text-center">
-          <p className="text-[12px] font-extrabold uppercase tracking-[0.16em] text-slate-900">
-            One property, four steps
-          </p>
-          <h2 className="mt-4 text-[36px] font-semibold leading-[1.12] tracking-[-0.025em] text-[#111827] sm:text-[48px]">
-            From first look to bid day.
-          </h2>
-          <p className="mx-auto mt-5 max-w-[650px] text-[16px] leading-[1.65] text-[#5B6472] sm:text-[17px]">
-            Find a sale, read the catch, work out your top bid, and keep track of the ones you want.
-          </p>
-        </GsapReveal>
+        <SectionHeading eyebrow="How it works" title="Four steps from first look to bid day.">
+          The same order an experienced bidder follows. Click through them with a real listing.
+        </SectionHeading>
 
         <div className="mt-14 overflow-hidden rounded-[28px] border border-white/90 bg-white/88 shadow-[0_30px_100px_rgba(15,23,42,0.14)] backdrop-blur-xl">
             <div className="flex flex-col gap-3 border-b border-[#E8EDF3] bg-white/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
@@ -290,7 +284,7 @@ export function Storyteller() {
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
                   Property decision workflow
                 </p>
-                <p className="mt-1 text-[16px] font-semibold text-[#111827]">
+                <p className="mt-1 text-[16px] font-semibold text-ink">
                   {headline}
                   {place ? <span className="ml-2 font-medium text-[#5B6472]">{place}</span> : null}
                 </p>
@@ -323,20 +317,20 @@ export function Storyteller() {
                     onClick={() => setStage(item.key)}
                     onKeyDown={(event) => selectFromKeyboard(event, index)}
                     className={`group relative min-h-[82px] bg-white px-3 py-4 text-left transition-colors sm:min-h-[94px] sm:px-5 ${
-                      selected ? "text-[#111827]" : "text-[#5B6472] hover:bg-[#F8FAFC]"
+                      selected ? "text-ink" : "text-[#5B6472] hover:bg-[#F8FAFC]"
                     }`}
                   >
                     <span
                       aria-hidden
                       className={`absolute inset-x-0 top-0 h-[3px] transition-colors ${
-                        selected ? "bg-[#0F172A]" : "bg-transparent"
+                        selected ? "bg-ink" : "bg-transparent"
                       }`}
                     />
                     <span className="flex items-start gap-2 sm:gap-3">
                       <span
                         className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[10px] font-extrabold transition-colors sm:h-9 sm:w-9 sm:rounded-xl sm:text-[11px] ${
                           selected
-                            ? "bg-[#0F172A] text-white"
+                            ? "bg-ink text-white"
                             // #64748b on #F1F5F9 measured 4.34:1 against a 4.5:1
                             // requirement - the step number was flagged as
                             // insufficient contrast. #475569 lands near 6.3:1 and
@@ -372,7 +366,7 @@ export function Storyteller() {
                   <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
                     {activeStage.step} · {activeStage.eyebrow}
                   </p>
-                  <h3 className="mt-1 text-[23px] font-bold tracking-[-0.02em] text-[#111827]">
+                  <h3 className="mt-1 text-[23px] font-bold tracking-[-0.02em] text-ink">
                     {activeStage.headline}
                   </h3>
                   <p className="mt-1.5 max-w-[720px] text-[13px] font-medium leading-[1.55] text-[#5B6472] sm:text-[14px]">
@@ -383,7 +377,7 @@ export function Storyteller() {
                   <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">
                     Output
                   </p>
-                  <p className="mt-1 text-[13px] font-bold text-[#0F172A]">
+                  <p className="mt-1 text-[13px] font-bold text-ink">
                     {activeStage.output}
                   </p>
                 </div>
@@ -396,7 +390,7 @@ export function Storyteller() {
 
             <div className="flex items-center justify-between gap-3 border-t border-[#E8EDF3] bg-white px-5 py-4 sm:px-7">
               <div className="hidden items-center gap-2 text-[11px] font-semibold text-[#5B6472] sm:flex">
-                <span className="text-[#0F172A]">{activeIndex + 1} of {STAGES.length}</span>
+                <span className="text-ink">{activeIndex + 1} of {STAGES.length}</span>
                 <span aria-hidden>·</span>
                 <span>The same property in every step</span>
               </div>
@@ -414,7 +408,7 @@ export function Storyteller() {
                   <button
                     type="button"
                     onClick={() => setStage(STAGES[activeIndex + 1].key)}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
                   >
                     Next: {STAGES[activeIndex + 1].label}
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -422,7 +416,7 @@ export function Storyteller() {
                 ) : (
                   <a
                     href="/listings"
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
                   >
                     Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </a>
@@ -454,7 +448,7 @@ function VerificationPanel() {
 
   return (
     <div data-testid="storyteller-verify" className="grid min-h-[480px] gap-5 lg:grid-cols-[0.88fr_1.12fr]">
-      <article className="relative overflow-hidden rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
+      <article className="relative overflow-hidden on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-slate-500/20 blur-3xl" />
         <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-300">
           Latest listing
@@ -463,10 +457,10 @@ function VerificationPanel() {
         <p className="relative mt-1 text-[13px] font-medium text-slate-300">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Details from the listing"}</p>
 
         <dl className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
-          <EvidenceFact label="Source" value={listing?.source || "Not listed"} />
-          <EvidenceFact label="Opening" value={moneyText(listing?.openingBid)} />
-          <EvidenceFact label="Sale date" value={listing?.saleDate || "Not listed"} />
-          <EvidenceFact label="Deposit" value={moneyText(listing?.deposit)} />
+          <EvidenceFact label="Source" value={listing?.source} />
+          <EvidenceFact label="Opening" value={listing?.openingBid} format="money" />
+          <EvidenceFact label="Sale date" value={listing?.saleDate} format="date" />
+          <EvidenceFact label="Deposit" value={listing?.deposit} />
         </dl>
 
         <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
@@ -483,7 +477,7 @@ function VerificationPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">Quick check</p>
-            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">What we know, and what is missing</h4>
+            <h4 className="mt-1 text-[20px] font-bold text-ink">What we know, and what is missing</h4>
           </div>
           <ShieldCheck className="h-7 w-7 text-emerald-600" aria-hidden />
         </div>
@@ -494,7 +488,7 @@ function VerificationPanel() {
                 <check.icon className="h-4 w-4" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-bold text-[#111827]">{check.label}</span>
+                <span className="block text-[13px] font-bold text-ink">{check.label}</span>
                 <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#5B6472]">{check.detail}</span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
@@ -512,11 +506,11 @@ function VerificationPanel() {
   );
 }
 
-function EvidenceFact({ label, value }: { label: string; value: string }) {
+function EvidenceFact({ label, value, format }: { label: string; value: unknown; format?: FactFormat }) {
   return (
     <div className="bg-white/[0.06] p-4">
       <dt className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">{label}</dt>
-      <dd className="mt-1 text-[13px] font-bold text-white">{value}</dd>
+      <dd className="mt-1 text-[13px] font-bold text-white"><Fact value={value} format={format} /></dd>
     </div>
   );
 }
@@ -602,7 +596,7 @@ function UnderwritePanel() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your numbers</p>
-            <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-[#111827]">Work out your top bid</h4>
+            <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-ink">Work out your top bid</h4>
             <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Change any number. These are your estimates, not ours.</p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-900">
@@ -615,7 +609,7 @@ function UnderwritePanel() {
             <div key={item.label}>
               <div className="flex items-center justify-between text-[12px] font-bold">
                 <span className="text-[#475569]">{item.label}</span>
-                <span className="tabular-nums text-[#111827]">{item.value}</span>
+                <span className="tabular-nums text-ink">{item.value}</span>
               </div>
               {item.onChange ? (
                 <input
@@ -638,21 +632,22 @@ function UnderwritePanel() {
         </div>
 
         <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-[#F8FAFC] p-2">
-          <ModelStat label="Opening bid" value={opening === null ? "Not listed" : dollars(opening)} />
-          <ModelStat label="Top bid" value={ceiling === null ? "—" : dollars(ceiling)} emphasis />
-          <ModelStat label="Offer room" value={offerRoom === null ? "—" : dollars(offerRoom)} />
+          <ModelStat label="Opening bid" value={<Fact value={opening} format="money" />} />
+          <ModelStat label="Top bid" value={ceiling === null ? "—" : <Fact value={ceiling} format="money" origin="yours" />} emphasis />
+          <ModelStat label="Offer room" value={offerRoom === null ? "—" : <Fact value={offerRoom} format="money" origin="yours" />} />
         </div>
       </article>
 
-      <article className="flex flex-col rounded-[24px] bg-[#0F172A] p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
+      <article className="flex flex-col on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
-        <p className="mt-3 text-[13px] font-semibold text-slate-300">Your top bid</p>
-        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "—" : dollars(ceiling)}</p>
+        <p className="mt-3 text-[13px] font-semibold text-slate-300">Your top bid <YoursTag /></p>
+        <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "Enter your numbers" : <Fact value={ceiling} format="money" origin="yours" />}</p>
+        <p className="mt-1 text-[12px] text-slate-400">Built from the numbers you entered, so it is only as good as they are.</p>
         <div className="mt-5 h-px bg-white/10" />
         <div className="mt-5 space-y-4">
-          <DecisionLine icon={DollarSign} label="Your top bid (from your numbers)" value={ceiling === null ? "—" : dollars(ceiling)} />
-          <DecisionLine icon={AlertTriangle} label="Deposit" value={moneyText(listing?.deposit)} />
-          <DecisionLine icon={Calendar} label="Sale date" value={listing?.saleDate || "Not listed"} />
+          <DecisionLine icon={DollarSign} label="Opening bid" value={<Fact value={opening} format="money" />} />
+          <DecisionLine icon={AlertTriangle} label="Deposit" value={<Fact value={listing?.deposit} />} />
+          <DecisionLine icon={Calendar} label="Sale date" value={<Fact value={listing?.saleDate} format="date" />} />
         </div>
         <div className="mt-auto rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
           <p className="text-[11px] font-bold text-amber-200">Occupancy</p>
@@ -665,16 +660,16 @@ function UnderwritePanel() {
   );
 }
 
-function ModelStat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+function ModelStat({ label, value, emphasis }: { label: string; value: React.ReactNode; emphasis?: boolean }) {
   return (
-    <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "bg-[#0F172A] text-white" : "bg-white text-[#111827]"}`}>
+    <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "on-ink bg-ink text-white" : "bg-white text-ink"}`}>
       <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#5B6472]"}`}>{label}</p>
       <p className="mt-1 text-[18px] font-extrabold tabular-nums">{value}</p>
     </div>
   );
 }
 
-function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: string }) {
+function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-slate-300">
@@ -706,7 +701,7 @@ function ActionPanel() {
   return (
     <div data-testid="storyteller-act" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.05fr_0.95fr]">
       <article className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white shadow-sm">
-        <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-[#0F172A] px-6 py-5 text-white">
+        <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-ink px-6 py-5 text-white">
           <div>
             <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Listing</p>
             <h4 className="mt-1 text-[21px] font-bold">{listing?.address || "No listing to show yet"}</h4>
@@ -742,7 +737,7 @@ function ActionPanel() {
               <ul className="mt-3 space-y-2">
                 {[
                   listing?.occupancy ? `Occupancy: ${listing.occupancy}` : "Occupancy not listed",
-                  moneyText(listing?.deposit) === "Not listed" ? "Deposit not listed" : `Deposit ${moneyText(listing?.deposit)}`,
+                  factText(listing?.deposit) === null ? "Deposit not in the notice" : `Deposit ${factText(listing?.deposit)}`,
                   "Title still needs checking",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
@@ -759,7 +754,7 @@ function ActionPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your to-do list</p>
-            <h4 className="mt-1 text-[20px] font-bold text-[#111827]">Before the sale date</h4>
+            <h4 className="mt-1 text-[20px] font-bold text-ink">Before the sale date</h4>
           </div>
           <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">
             {completedCount} of {actions.length} done
@@ -779,14 +774,14 @@ function ActionPanel() {
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[13px] font-bold text-[#111827]">{action.label}</span>
+                <span className="block text-[13px] font-bold text-ink">{action.label}</span>
                 <span className="mt-0.5 block text-[11px] font-medium text-[#5B6472]">{action.detail}</span>
               </span>
               <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#5B6472]">{action.owner}</span>
             </button>
           ))}
         </div>
-        <a href={listing?.id ? `/listings/${encodeURIComponent(listing.id)}` : "/listings"} className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white">
+        <a href={listing?.id ? `/listings/${encodeURIComponent(listing.id)}` : "/listings"} className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white">
           Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
       </article>
@@ -798,7 +793,7 @@ function MemoMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-[#F1F5F9] px-3 py-4 text-center">
       <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#5B6472]">{label}</p>
-      <p className="mt-1 text-[19px] font-extrabold tabular-nums text-[#111827]">{value}</p>
+      <p className="mt-1 text-[19px] font-extrabold tabular-nums text-ink">{value}</p>
     </div>
   );
 }

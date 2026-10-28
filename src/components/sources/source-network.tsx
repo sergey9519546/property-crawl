@@ -821,7 +821,7 @@ export function SourceNetwork() {
                     Observed {date(signal.observedAt)}
                   </p>
                   <a
-                    href={signal.evidence[1]?.sourceUrl}
+                    href={signal.evidence[1]?.sourceUrl || signal.evidence[0]?.sourceUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="mt-4 inline-flex items-center gap-1 text-xs font-semibold underline"
@@ -1493,7 +1493,8 @@ export function SourceNetwork() {
                               {sourceDisplayText(item.sourceId)} ·{" "}
                               {item.review?.decision || "Needs review"}
                             </p>
-                            <a
+                            {item.sourceUrl ? (
+                              <a
                               href={item.sourceUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -1501,6 +1502,7 @@ export function SourceNetwork() {
                             >
                               Open source record
                             </a>
+                            ) : null}
                             <p className="mt-2 text-xs text-[#5B6472]">
                               Captured {date(item.capturedAt)}
                             </p>

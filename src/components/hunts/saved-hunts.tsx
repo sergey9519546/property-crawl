@@ -1015,14 +1015,16 @@ export function SavedHunts() {
                               >
                                 Open evidence dossier <ArrowRight size={12} />
                               </Link>
-                              <a
-                                href={result.sourceUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-xs underline"
-                              >
-                                Publisher record <ExternalLink size={12} />
-                              </a>
+                              {result.sourceUrl ? (
+                                <a
+                                  href={result.sourceUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs underline"
+                                >
+                                  Publisher record <ExternalLink size={12} />
+                                </a>
+                              ) : null}
                             </div>
                           </article>
                         ))}

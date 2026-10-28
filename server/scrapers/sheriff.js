@@ -223,6 +223,13 @@ class SheriffSaleScraper extends BaseScraper {
       const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ''), 10) : null;
       const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
       const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
+      let sourceUrl = `${baseUrl}#case-${encodeURIComponent(caseNum)}`;
+      try {
+        const u = new URL(baseUrl);
+        u.searchParams.set('case', caseNum);
+        u.hash = `case-${encodeURIComponent(caseNum)}`;
+        sourceUrl = u.toString();
+      } catch (_) {}
       listings.push({
         id,
         state: county.state,
@@ -241,7 +248,7 @@ class SheriffSaleScraper extends BaseScraper {
         attorney: null,
         occupancy: null,
         deposit: null,
-        sourceUrl: `${baseUrl}#case-${encodeURIComponent(caseNum)}`,
+        sourceUrl,
         raw: line.slice(0, 2000),
         sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
         provenance: { origin: 'live', observed: true, publisher: `${county.name} County Sheriff`, recordId: caseNum, scraplingProfile: 'table-extract' },

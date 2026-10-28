@@ -5,80 +5,60 @@ import { SiteHeader } from "@/components/site/site-header";
 import { Hero } from "@/components/site/hero";
 import { AuroraDivider } from "@/components/site/aurora-divider";
 import { SocialProof } from "@/components/site/social-proof";
+import { CatchReveal } from "@/components/site/catch-reveal";
 import { Storyteller } from "@/components/site/storyteller";
+import { SectionHeading } from "@/components/site/section-heading";
 import { InteractiveTerminal } from "@/components/terminal/interactive-terminal";
 import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { SecondLookShowcase } from "@/components/site/second-look-showcase";
 import { AiComparison } from "@/components/site/ai-comparison";
-import { Testimonial } from "@/components/site/testimonial";
-import { AiKnows } from "@/components/site/ai-knows";
-import { FastestWay } from "@/components/site/fastest-way";
-import { Gtm } from "@/components/site/gtm";
-import { Integrations } from "@/components/site/integrations";
-import { CaseStudies } from "@/components/site/case-studies";
+import { Faq } from "@/components/site/faq";
 import { FinalCta } from "@/components/site/final-cta";
 import { SiteFooter } from "@/components/site/site-footer";
 
+/**
+ * The page reads as one story:
+ *   promise (hero) -> proof it's real (sources, live counts) -> the signature
+ *   (the catch, on a real listing) -> how to use it (four steps) -> try it
+ *   (live search) -> why members pay (price drops, pricing) -> doubts (FAQ) -> go.
+ */
 export default function PerfectPropertyPage() {
   return (
-    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-[#F5F6F7] text-[#111827]">
-      {/* Global Grain Overlay */}
+    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
       <GrainOverlay />
-
-      {/* Floating Two-Layer Capsule Header */}
       <SiteHeader />
 
-      {/* Hero with Unicorn Studio Shader */}
       <Hero />
-
-      {/* Rotating Aurora Dividers */}
-      <AuroraDivider index={0} />
       <SocialProof />
+
+      <AuroraDivider index={0} />
+      <CatchReveal />
 
       <AuroraDivider index={1} />
       <Storyteller />
 
-      {/* Live Interactive Property Triage Terminal */}
       <AuroraDivider index={2} />
-      {/* The honesty banner sits directly above the feed. This page renders the
-          same live inventory as /listings, and a visitor meeting deals here for
-          the first time is exactly the person who must be told that part of the
-          inventory is past its source's refresh cadence. */}
+      <section id="live-search" className="scroll-mt-24 px-5 pt-20 pb-4 lg:px-8">
+        <SectionHeading eyebrow="Try it" title="Search every live listing.">
+          Filter by state, sale type and price. Open any listing to see its catch.
+        </SectionHeading>
+      </section>
+      {/* The honesty banner sits directly above the feed. A visitor meeting deals
+          here for the first time must be told if part of the inventory is past
+          its source's refresh cadence. */}
       <DataModeBanner />
       <InteractiveTerminal />
 
-      {/* Product workflow preview */}
       <AuroraDivider index={3} />
       <SecondLookShowcase />
 
-      <AuroraDivider index={3} />
       <AiComparison />
 
       <AuroraDivider index={4} />
-      <Testimonial />
+      <Faq />
 
-      <AuroraDivider index={0} />
-      <AiKnows />
-
-      <AuroraDivider index={1} />
-      <FastestWay />
-
-      <AuroraDivider index={2} />
-      <Gtm />
-
-      <AuroraDivider index={3} />
-      <Integrations />
-
-      <AuroraDivider index={4} />
-      <CaseStudies />
-
-      <AuroraDivider index={0} />
       <FinalCta />
-
-      {/* Footer */}
       <SiteFooter />
-
-      {/* Bottom Progressive Backdrop Blur */}
       <BottomBlur />
     </main>
   );

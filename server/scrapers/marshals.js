@@ -185,6 +185,10 @@ class UsMarshalsScraper extends BaseScraper {
       const recordId = recordMatch?.[1];
       if (!address || !state || !recordId) continue;
       const cleanId = String(recordId).replace(/^USMS-/i, '').replace(/[^a-zA-Z0-9-]/g, '');
+      const baseClean = String(baseUrl || '').replace(/\/+$/, '');
+      const sourceUrl = baseClean
+        ? `${baseClean}/${encodeURIComponent(cleanId)}`
+        : `https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property/${encodeURIComponent(cleanId)}`;
       listings.push({
         id: `USMS-${cleanId}`,
         state,
@@ -201,7 +205,7 @@ class UsMarshalsScraper extends BaseScraper {
         defendant: null,
         occupancy: null,
         deposit: null,
-        sourceUrl: `${baseUrl}#asset-${encodeURIComponent(cleanId)}`,
+        sourceUrl,
         raw: line.slice(0, 2000),
         provenance: { origin: 'live', observed: true, publisher: 'U.S. Marshals Service', recordId: String(recordId), scraplingProfile: 'table-extract' },
       });

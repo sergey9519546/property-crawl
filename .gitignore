@@ -50,6 +50,7 @@ $RECYCLE.BIN/
 
 # --- Editor / IDE ---
 .vscode/
+.claude/
 .idea/
 *.swp
 *.swo

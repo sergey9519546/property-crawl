@@ -168,7 +168,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
 
         {/* Page Header */}
         <div className="border-b border-slate-200 pb-8">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/70 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-700">
+          <div className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wider text-ink-2">
             <Gavel className="h-3.5 w-3.5" /> Foreclosure and auction listings
           </div>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
@@ -181,8 +181,8 @@ export default async function CountyDocketPage({ params }: PageProps) {
             {" "}Always confirm the date and terms with the county before you bid.
           </p>
           <div className="mt-5 flex flex-wrap gap-3 text-sm font-semibold">
-            <Link href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`} className="text-blue-600 underline hover:text-blue-800">Browse these listings</Link>
-            <Link href="/hunts" className="text-blue-600 underline hover:text-blue-800">Start a hunt for this county</Link>
+            <Link href={`/listings?state=${encodeURIComponent(state)}&county=${encodeURIComponent(countyName)}`} className="rounded-xl bg-ink px-5 py-3 text-white transition hover:bg-ink-2">Browse these listings</Link>
+            <Link href="/hunts" className="self-center text-slate-900 underline hover:text-slate-700">Get email alerts for this county (members)</Link>
           </div>
         </div>
 
@@ -222,12 +222,12 @@ export default async function CountyDocketPage({ params }: PageProps) {
         </div>
 
         {/* Statutory Redemption Overview Banner */}
-        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/70 p-5 text-amber-950 shadow-sm">
+        <div className="mt-6 rounded-2xl border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5 text-[var(--catch-ink)] shadow-sm">
           <div className="flex items-start gap-3">
             <Scale className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
             <div>
-              <div className="text-sm font-semibold text-amber-900">
-                {state} redemption rule: {redemption.days !== null ? `${redemption.days} days` : "set by the court"}
+              <div className="text-sm font-semibold text-[var(--catch-ink)]">
+                The catch in {state}: redemption rule, {redemption.days !== null ? `${redemption.days} days` : "set by the court"}
               </div>
               <p className="mt-1 text-xs leading-relaxed text-amber-800">
                 {redemption.label}. Where a redemption period applies, the previous owner can reclaim the property after the sale,
@@ -300,15 +300,15 @@ export default async function CountyDocketPage({ params }: PageProps) {
         )}
 
         {/* 7 Deal-Killer Due Diligence Checklist for County */}
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mt-8 rounded-3xl border border-line bg-white p-6 shadow-sm">
           <div className="flex items-center gap-2 border-b border-slate-200 pb-4">
-            <CheckSquare className="h-5 w-5 text-indigo-600" />
+            <CheckSquare className="h-5 w-5 text-amber-600" />
             <div>
               <h2 className="text-base font-bold text-slate-950">
                 7 things to check before you bid in {formalCounty}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Ask the county clerk and the sheriff&apos;s office about each one. This does not replace a title search.
+                Ask the county clerk and the sheriff&apos;s office about each one. We do not provide title reports, so this list does not replace a title search.
               </p>
             </div>
           </div>

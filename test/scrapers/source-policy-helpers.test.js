@@ -148,6 +148,33 @@ test('hasSourceRecordShape: HUD property-details requires caseNumber query', () 
   assert.equal(hasSourceRecordShape('hud', url('https://www.hudhomestore.com/property/propertydetails')), false, 'missing caseNumber');
 });
 
+// --- hasSourceRecordShape: sheriff & marshals ------------------------
+
+test('hasSourceRecordShape: sheriff requires record query or stable path token', () => {
+  assert.equal(hasSourceRecordShape('sheriff', url('https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=104921')), true);
+  assert.equal(hasSourceRecordShape('sheriff', url('https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&case=CV-24-991201')), true);
+  assert.equal(hasSourceRecordShape('sheriff', url('https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW')), false, 'generic preview with no record query is rejected');
+  assert.equal(hasSourceRecordShape('sheriff', url('https://cuyahoga.sheriffsaleauction.ohio.gov/search')), false, 'bare search path is rejected');
+});
+
+test('inspectSourceRecordUrl: sheriff accepts Ohio and Florida RealAuction record URLs', () => {
+  const ohio = inspectSourceRecordUrl('sheriff', 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=104921');
+  assert.equal(ohio.isValid, true);
+  const fl = inspectSourceRecordUrl('sheriff', 'https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=777');
+  assert.equal(fl.isValid, true);
+  const badDomain = inspectSourceRecordUrl('sheriff', 'https://unauthorized-domain.com/index.cfm?aid=123');
+  assert.equal(badDomain.isValid, false);
+});
+
+test('inspectSourceRecordUrl: marshals accepts exact detail path and rejects bare hash fragment', () => {
+  const usmsDetail = inspectSourceRecordUrl('marshals', 'https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property/USMS-12345');
+  assert.equal(usmsDetail.isValid, true);
+  const reallookDetail = inspectSourceRecordUrl('marshals', 'https://www.reallook.com/usms-inventory/98765');
+  assert.equal(reallookDetail.isValid, true);
+  const hashOnly = inspectSourceRecordUrl('marshals', 'https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property#asset-12345');
+  assert.equal(hashOnly.isValid, false, 'bare hash on index URL must be rejected');
+});
+
 // --- inspectSourceRecordUrl ------------------------------------------
 
 test('inspectSourceRecordUrl: returns isValid=true + cleaned url for a known shape', () => {

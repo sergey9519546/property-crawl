@@ -471,8 +471,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             # effectively untested. The property under test is unchanged: each
             # desktop menu opens and reveals a real feature link.
             "Product": "Search listings",
-            "Solutions": "Acquisitions",
-            "Resources": "Buyer's guide",
+            "Learn": "Buyer's guide",
         }
         for menu_name, link_name in menu_expectations.items():
             with self.subTest(menu=menu_name):
@@ -480,7 +479,7 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 panel = self.page.get_by_test_id("desktop-mega-menu")
                 panel.get_by_role("link", name=re.compile(f"^{re.escape(link_name)}")).wait_for(state="visible")
                 self.assertTrue(panel.get_by_role("link", name=re.compile(f"^{re.escape(link_name)}")).is_visible())
-        self.page.get_by_role("button", name="Resources").press("Escape")
+        self.page.get_by_role("button", name="Learn").press("Escape")
         self.page.get_by_test_id("desktop-mega-menu").wait_for(state="hidden")
 
     def test_navigation_avoids_brand_overlap_at_compact_breakpoints(self):
@@ -497,13 +496,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                     self.assertLessEqual(brand["x"] + brand["width"], menu["x"])
                 else:
                     nav = header.locator("nav").bounding_box()
-                    # The desktop header's trailing control is the staff sign-in
-                    # link, not "Sign in" - there is no Sign in link in this
-                    # header, so asserting one could never pass and the 1280px
-                    # and 1440px subtests never actually ran. The property under
-                    # test is the one that matters: brand, nav and the trailing
-                    # control must each end before the next one begins.
-                    trailing = header.get_by_role("link", name="Staff sign-in", exact=True).bounding_box()
+                    # The desktop header's trailing control is the member "Sign in"
+                    # link (staff sign-in lives in the Learn menu). Brand, nav and
+                    # the trailing control must each end before the next begins.
+                    trailing = header.get_by_role("link", name="Sign in", exact=True).bounding_box()
                     self.assertIsNotNone(nav)
                     self.assertIsNotNone(trailing)
                     self.assertLessEqual(brand["x"] + brand["width"], nav["x"])
@@ -991,10 +987,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.set_viewport_size({"width": 2322, "height": 1272})
         header = self.page.locator("header").first
         brand = self.page.get_by_role("link", name="PerfectProperty home").first
-        # The header's right-hand control is "Staff sign-in"; "Operator access"
-        # is a CTA further down the page. Assert the header's own control sits
-        # hard right - a page-wide .first was measuring the CTA's position.
-        signup = header.get_by_role("link", name="Staff sign-in", exact=True)
+        # The header's right-hand control is the member "Sign in" link. Assert
+        # the header's own control sits hard right - a page-wide .first would
+        # measure a CTA further down the page instead.
+        signup = header.get_by_role("link", name="Sign in", exact=True)
         navigation = header.locator("nav")
         header_box = header.bounding_box()
         brand_box = brand.bounding_box()
@@ -1371,13 +1367,16 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
             "storyteller-tab-verify",
         )
 
-    def test_team_tabs_render_each_feature_state(self):
-
-        self.page.locator("#solutions").evaluate("element => element.scrollIntoView({block: 'center'})")
-        for team in ["Marketing", "Acquisitions", "Disposition", "Underwriting"]:
-            with self.subTest(team=team):
-                self.page.get_by_role("button", name=team).click()
-                self.page.get_by_text(f"PerfectProperty for {team}").wait_for(state="visible")
+    def test_catch_reveal_shows_a_real_listing_and_its_catch(self):
+        section = self.page.locator("#the-catch")
+        section.evaluate("element => element.scrollIntoView({block: 'center'})")
+        reveal = section.get_by_role("button", name="Show the catch")
+        expect(reveal).to_be_enabled(timeout=20_000)
+        reveal.click()
+        expect(section.get_by_text("Title, liens and condition still need your own check.")).to_be_visible()
+        # The listing link must point at a real listing page, not a sample.
+        href = section.get_by_role("link", name="Open the full listing").get_attribute("href")
+        self.assertTrue(href.startswith("/listings/"))
 
     def test_footer_uses_open_layout_without_divider_lines(self):
         footer = self.page.locator("footer#resources")
@@ -1741,15 +1740,12 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         self.page.get_by_role("button", name="Reset all filters", exact=True).click()
         self.wait_for_live_feed()
 
-    def test_preview_opens_as_an_accessible_escape_closeable_dialog(self):
-        play = self.page.get_by_role("button", name="Play preview")
-        play.scroll_into_view_if_needed()
-        play.click()
-
-        dialog = self.page.get_by_role("dialog", name="Sample listing")
-        dialog.wait_for(state="visible")
-        self.page.keyboard.press("Escape")
-        self.assertEqual(dialog.count(), 0)
+    def test_faq_answers_open_from_the_keyboard(self):
+        question = self.page.locator("#faq summary", has_text="Is it free?")
+        question.scroll_into_view_if_needed()
+        question.focus()
+        self.page.keyboard.press("Enter")
+        expect(self.page.locator("#faq").get_by_text("Members pay for hunts", exact=False)).to_be_visible()
 
     def test_property_drawer_moves_focus_in_and_holds_it_there(self):
             """A dialog that claims aria-modal must behave like one.

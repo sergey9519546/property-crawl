@@ -517,6 +517,17 @@ test('marshals parsePartnerCards: skips cards without a 2-letter state', () => {
   assert.equal(s.parsePartnerCards(html).length, 0);
 });
 
+test('marshals parseExtractedTableRows: generates exact detail path without bare fragment', () => {
+  const s = new UsMarshalsScraper({ useScrapling: false, extractImpl: null });
+  const rows = [
+    ['123 Main St, Austin, TX 78701', '$250,000', 'Asset ID: USMS-99001'],
+  ];
+  const out = s.parseExtractedTableRows(rows, 'https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'USMS-99001');
+  assert.equal(out[0].sourceUrl, 'https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property/99001');
+});
+
 // --- Sheriff sales ------------------------------------------------------
 
 const { SheriffSaleScraper, DEFAULT_OH_COUNTIES, parseExtraCounties } = require('../../server/scrapers/sheriff');
@@ -590,6 +601,17 @@ test('sheriff DEFAULT_OH_COUNTIES contains the documented 20 Ohio counties', () 
   assert.equal(DEFAULT_OH_COUNTIES.length, 20);
   assert.equal(DEFAULT_OH_COUNTIES[0].name, 'Cuyahoga');
   assert.equal(DEFAULT_OH_COUNTIES.every((c) => c.state === 'OH'), true);
+});
+
+test('sheriff parseExtractedTableRows: generates exact query with case parameter', () => {
+  const s = new SheriffSaleScraper({ counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }] });
+  const rows = [
+    ['Case #: CV-24-991201', '4928 Broadview Rd, Cleveland, OH 44109', 'Opening Bid: $65,000', 'Appraised: $115,000', 'Sale Date: 11/04/2026'],
+  ];
+  const out = s.parseExtractedTableRows(rows, { name: 'Cuyahoga', state: 'OH' }, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'SHERIFF-OH-CUY-CV-24-991201');
+  assert.equal(out[0].sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&case=CV-24-991201#case-CV-24-991201');
 });
 
 // --- Treasury -----------------------------------------------------------

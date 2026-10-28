@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { countyToSlug } from "@/lib/county-seo";
+import { countyToSlug, getStatutoryRedemption } from "@/lib/county-seo";
 
 export const dynamic = "force-dynamic";
 
@@ -61,28 +61,37 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   }
 
   const { total, counties, error } = await loadStateCounties(state);
+  const redemption = getStatutoryRedemption(state);
+  const hasRule = !redemption.label.startsWith("Statutory redemption details require");
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Browse by state</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Foreclosure and government property auctions in {state}</h1>
-      <p className="mt-4 text-sm leading-6 text-slate-600">
+    <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
+      <p className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+        Browse by state
+      </p>
+      <h1 className="mt-5 text-balance text-[34px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink sm:text-[42px]">Foreclosure and government property auctions in {state}</h1>
+      <p className="mt-4 max-w-[620px] text-[16px] leading-[1.65] text-ink-2">
         Pick a county to see its upcoming sales and listings. Under each county name you can see where the sale notices come from.
       </p>
-      <p className="mt-4 text-sm">
-        <Link href="/states" className="font-semibold text-slate-950 underline">All states</Link>
+      <div className="mt-6 flex flex-wrap items-center gap-4 text-sm">
         {total > 0 ? (
-          <>
-            <span className="text-slate-400"> · </span>
-            <Link href={`/listings?state=${state}`} className="font-semibold text-slate-950 underline">Browse all {total} {state} listings</Link>
-          </>
+          <Link href={`/listings?state=${state}`} className="rounded-xl bg-ink px-5 py-3 font-semibold text-white transition hover:bg-ink-2">Browse all {total} {state} listings</Link>
         ) : null}
-      </p>
+        <Link href="/states" className="font-semibold text-slate-950 underline">All states</Link>
+      </div>
+      {hasRule ? (
+        <div className="mt-6 rounded-2xl border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5 text-[var(--catch-ink)]">
+          <p className="text-[12px] font-semibold uppercase tracking-[0.12em]">The catch to check in {state}</p>
+          <p className="mt-2 text-sm leading-relaxed">{redemption.label}</p>
+          <p className="mt-2 text-xs"><Link href="/resources" className="font-semibold underline">More catches in the buyer&apos;s guide</Link></p>
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{error}</p>
       ) : counties.length === 0 ? (
         <p className="mt-6 text-sm text-slate-600">No listings in {state} show a county yet. Browse all {state} listings above.</p>
       ) : (
-        <ul className="mt-6 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
+        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white">
           {counties.map((row) => (
             <li key={row.county}>
               <Link

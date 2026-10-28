@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
 
 const {
   NJ_COUNTY_MAP,
@@ -129,6 +130,18 @@ test('RealAuction parses preview docket card into canonical format', () => {
   assert.equal(parsed.saleDate, '11/04/2026');
   assert.match(parsed.address, /4928 Broadview Rd/);
   assert.equal(parsed.zip, '44109');
+  assert.equal(parsed.sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=104921');
+  assert.equal(inspectSourceRecordUrl('sheriff', parsed.sourceUrl).isValid, true);
+
+  const cardWithCaseOnly = '<div class="AUCTION_ITEM">Case #: CV-24-991201<br>Property Address: 4928 Broadview Rd, Cleveland, OH 44109</div>';
+  const parsedCaseOnly = parseRealAuctionCard(cardWithCaseOnly, 'cuyahoga', 'OH');
+  assert.equal(parsedCaseOnly.sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&case=CV-24-991201');
+  assert.equal(inspectSourceRecordUrl('sheriff', parsedCaseOnly.sourceUrl).isValid, true);
+
+  const flCard = '<div class="AUCTION_ITEM">Item: 777<br>Property Address: 10 Biscayne Blvd, Miami, FL 33132</div>';
+  const parsedFl = parseRealAuctionCard(flCard, 'miamidade', 'FL');
+  assert.equal(parsedFl.sourceUrl, 'https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=777');
+  assert.equal(inspectSourceRecordUrl('sheriff', parsedFl.sourceUrl).isValid, true);
 });
 
 test('RealAuction parses complete multi-property preview page', () => {
@@ -195,6 +208,7 @@ test('AcclaimWeb parses recorder search result row', () => {
   assert.equal(parsed.grantor, 'Martinez, David');
   assert.equal(parsed.grantee, 'Quality Loan Service Corp');
   assert.equal(parsed.apn, '162-23-410-008');
+  assert.equal(parsed.sourceUrl, 'https://recorder.clarkcountynv.gov/AcclaimWeb/details?id=20261008%3A009412');
 });
 
 test('AcclaimWeb parses full search results container', () => {

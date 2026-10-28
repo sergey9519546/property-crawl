@@ -46,7 +46,7 @@ const SOURCE_HOSTS = Object.freeze({
   irs: ['irsauctions.gov'],
   landbank: ['landbanksearch.com'],
   marshals: ['usmarshals.gov', 'reallook.com'],
-  sheriff: ['sheriffsaleauction.ohio.gov', 'publicnoticesohio.com'],
+  sheriff: ['sheriffsaleauction.ohio.gov', 'realforeclose.com', 'publicnoticesohio.com'],
   servicelink: ['www.servicelinkauction.com'],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
   usda: ['resales.usda.gov'],

@@ -23,6 +23,7 @@ export interface UnderwriteScenario {
   rehabBudget: number;
   targetMargin: number;
   customValuation?: string;
+  customOpeningBid?: string;
 }
 
 function blankScenario(): UnderwriteScenario {
@@ -37,6 +38,7 @@ function blankScenario(): UnderwriteScenario {
     rehabBudget: 25_000,
     targetMargin: 30,
     customValuation: "",
+    customOpeningBid: "",
   };
 }
 
@@ -56,6 +58,9 @@ export function readUnderwriteScenario(listingId: string): UnderwriteScenario | 
     for (const field of underwriteFields) scenario[field] = amountText(source[field]);
     if (typeof source.customValuation === "string") {
       scenario.customValuation = amountText(source.customValuation);
+    }
+    if (typeof source.customOpeningBid === "string") {
+      scenario.customOpeningBid = amountText(source.customOpeningBid);
     }
     const rehab = Number(source.rehabBudget);
     const margin = Number(source.targetMargin);

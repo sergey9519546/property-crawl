@@ -20,14 +20,21 @@ const REALAUCTION_FLORIDA_COUNTIES = Object.freeze([
   'pinellas', 'duval', 'lee', 'polk', 'brevard', 'volusia', 'pasco',
 ]);
 
-function getRealAuctionUrl(county = 'cuyahoga', state = 'OH') {
+function getRealAuctionUrl(county = 'cuyahoga', state = 'OH', options = {}) {
   const cleanCounty = String(county || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const st = String(state || 'OH').toUpperCase();
-
-  if (st === 'OH') {
-    return `https://${cleanCounty}.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`;
+  const domain = st === 'OH'
+    ? `${cleanCounty}.sheriffsaleauction.ohio.gov`
+    : `${cleanCounty}.realforeclose.com`;
+  let url = `https://${domain}/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`;
+  if (options && typeof options === 'object') {
+    if (options.auctionId) {
+      url += `&aid=${encodeURIComponent(options.auctionId)}`;
+    } else if (options.caseNumber) {
+      url += `&case=${encodeURIComponent(options.caseNumber)}`;
+    }
   }
-  return `https://${cleanCounty}.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`;
+  return url;
 }
 
 function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') {
@@ -80,7 +87,10 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') 
     judgment,
     assessed,
     saleDate: dateMatch ? dateMatch[1] : null,
-    sourceUrl: getRealAuctionUrl(county, state),
+    sourceUrl: getRealAuctionUrl(county, state, {
+      auctionId: auctionIdMatch ? auctionIdMatch[1] : null,
+      caseNumber: caseMatch ? caseMatch[1] : null,
+    }),
   };
 }
 

@@ -36,6 +36,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     registrationFunds: "", creditedDeposit: "", buyersPremium: "", sheriffPoundage: "", transferTax: "", delinquentTaxes: "", settlementCosts: "",
   });
   const [customValuation, setCustomValuation] = useState<string>("");
+  const [customOpeningBid, setCustomOpeningBid] = useState<string>("");
   const [isImportingAssessor, setIsImportingAssessor] = useState(false);
   const [assessorError, setAssessorError] = useState<string | null>(null);
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
@@ -59,6 +60,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (stored.customValuation) {
       setCustomValuation(stored.customValuation);
     }
+    if (stored.customOpeningBid) {
+      setCustomOpeningBid(stored.customOpeningBid);
+    }
   }, [listing.id]);
 
   const persistScenario = (
@@ -66,16 +70,21 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     rehab = rehabBudget,
     margin = targetMargin,
     customVal = customValuation,
+    customBid = customOpeningBid,
   ) => {
     writeUnderwriteScenario(listing.id, {
       ...next,
       rehabBudget: rehab,
       targetMargin: margin,
       customValuation: customVal,
+      customOpeningBid: customBid,
     });
   };
 
-  const openingBid = positiveNumber(listing.openingBid);
+  const publishedOpeningBid = positiveNumber(listing.openingBid);
+  const customOpeningBidNum = enteredAmount(customOpeningBid);
+  const openingBid = publishedOpeningBid ?? customOpeningBidNum;
+  const isCustomOpeningBid = publishedOpeningBid === null && customOpeningBidNum !== null;
   const publisherValuation = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
   const customValuationNum = enteredAmount(customValuation);
   const estimatedValue = customValuationNum ?? publisherValuation;
@@ -97,9 +106,31 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 shadow-sm">
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div>
+          <div className="flex-1">
             <h3 className="text-sm font-bold">Price scenario unavailable</h3>
             <p className="mt-1 text-xs leading-relaxed text-amber-900/80">This record carries no published opening amount, so no bid scenario can be modeled. Nothing is inferred from the address or the county.</p>
+            <div className="mt-3 border-t border-amber-200/70 pt-3">
+              <label htmlFor="custom-opening-bid-input" className="block text-xs font-semibold text-amber-950">
+                Model scenario with your target or assumed opening bid:
+              </label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <div className="flex items-center rounded-lg border border-amber-300 bg-white px-3 focus-within:border-slate-800">
+                  <span className="text-xs font-bold text-slate-500">$</span>
+                  <input
+                    id="custom-opening-bid-input"
+                    inputMode="decimal"
+                    value={customOpeningBid}
+                    onChange={(event) => updateCustomOpeningBid(event.target.value)}
+                    placeholder="e.g. 85000"
+                    aria-label="Target bid or assumed opening amount"
+                    className="w-32 bg-transparent px-2 py-1.5 text-xs font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+              </div>
+              <p className="mt-1.5 text-[10px] text-amber-900/70">
+                Entering an assumed opening bid enables cash-to-close and statutory fee modeling for this session as an investor assumption.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -117,14 +148,21 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
     const next = { ...scenario, [field]: value };
     setScenario(next);
-    persistScenario(next, rehabBudget, targetMargin, customValuation);
+    persistScenario(next, rehabBudget, targetMargin, customValuation, customOpeningBid);
     setAiStrategy(null);
   };
 
   const updateCustomValuation = (val: string) => {
     if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
     setCustomValuation(val);
-    persistScenario(scenario, rehabBudget, targetMargin, val);
+    persistScenario(scenario, rehabBudget, targetMargin, val, customOpeningBid);
+    setAiStrategy(null);
+  };
+
+  const updateCustomOpeningBid = (val: string) => {
+    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
+    setCustomOpeningBid(val);
+    persistScenario(scenario, rehabBudget, targetMargin, customValuation, val);
     setAiStrategy(null);
   };
 
@@ -234,6 +272,24 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               : "No fee is inferred from the source or state. Enter a published amount or your own assumption; enter 0 only when zero is your deliberate assumption."}</p>
           </div>
         </div>
+
+        {isCustomOpeningBid && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-950">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                <span>Modeled from assumed target bid: <strong>{displayMoney(openingBid)}</strong> (investor assumption — opening bid unpublished)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateCustomOpeningBid("")}
+                className="text-[11px] font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900"
+              >
+                Reset bid
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {Object.entries(fieldLabels).map(([field, label]) => (

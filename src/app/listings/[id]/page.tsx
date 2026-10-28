@@ -8,6 +8,8 @@ import { displayDate, safeImageUrl } from "@/lib/listing-display";
 import { combineStatusTones, listingOfferAvailability, listingStatusClass, listingStatusTone } from "@/lib/listing-status";
 import { serializeJsonLd } from "@/lib/json-ld";
 import { redemptionLabel } from "@/lib/underwriting";
+import { Fact } from "@/components/evidence/fact";
+import { GapLedger } from "@/components/evidence/gap-ledger";
 import { DocketAgent } from "@/components/terminal/docket-agent";
 import { BiddingSimulator } from "@/components/terminal/bidding-simulator";
 import { Parcel3DVisualizer } from "@/components/terminal/parcel-3d-visualizer";
@@ -247,10 +249,10 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const addressParts = listing.address.split(",").map((part) => part.trim());
   const headlineAddress = citySuffix && addressParts.length >= 3 && addressParts[1]?.toLowerCase() === citySuffix.toLowerCase() ? addressParts[0] : listing.address;
   const propertyFacts = [
-    ["Property type", publishedText(listing.propType)],
-    ["Occupancy", publishedText(listing.occupancy)],
-    ["County", publishedText(listing.county)],
-  ] as [string, string][];
+    ["Property type", <Fact key="propType" value={listing.propType} />],
+    ["Occupancy", <Fact key="occupancy" value={listing.occupancy} />],
+    ["County", <Fact key="county" value={listing.county} />],
+  ] as [string, React.ReactNode][];
   const optionalPropertyFacts: [string, string | null][] = [
     ["Bedrooms", positiveNumber(listing.beds)?.toLocaleString() ?? null],
     ["Bathrooms", positiveNumber(listing.baths)?.toLocaleString() ?? null],
@@ -259,7 +261,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
     ["Assessed value", positiveNumber(listing.assessed) !== null ? formatMoney(positiveNumber(listing.assessed)) : null],
   ];
   const missingOptionalPropertyFacts = optionalPropertyFacts.filter(([, value]) => value === null).map(([label]) => label.toLowerCase());
-  propertyFacts.push(...optionalPropertyFacts.filter((fact): fact is [string, string] => fact[1] !== null));
+  propertyFacts.push(...optionalPropertyFacts.filter((fact): fact is [string, string] => fact[1] !== null).map(([label, value]): [string, React.ReactNode] => [label, <Fact key={label} value={value} />]));
   const titleRules = /^[A-Za-z]{2}$/.test(listing.state || "")
     ? arbitrateTitleRisk({
         plaintiff: listing.plaintiff || "",
@@ -334,13 +336,14 @@ export default async function ListingPage({ params, searchParams }: Props) {
               )}
               <span className="text-xs text-slate-600">{scoreBand ? scoreBand.desc : "Needs a published opening amount and value range."} {DEAL_SCORE_MEANING}</span>
             </div>
-            <h2 className="mt-4 text-base font-bold text-slate-950">{catchSummary.flags.length ? `The catch: ${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check before bidding` : "No published red flags. Still verify at the source."}</h2>
+            <h2 className="mt-4 text-base font-bold text-slate-950">{catchSummary.flags.length ? `The catch: ${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check before bidding` : "Nothing flagged in what this listing publishes. Title, liens and condition are still unchecked."}</h2>
             <p className="mt-2 text-sm leading-relaxed text-slate-800">{[...catchSummary.notes, ...catchSummary.flags].join(" ")}</p>
           </section>
+          <GapLedger className="mt-4" listing={{ id: listing.id, occupancy: listing.occupancy, seniorLienRisk: listing.seniorLienRisk, deposit: listing.deposit, redemptionDays: listing.redemptionDays, redemptionWarning: listing.redemptionWarning, openingBid: listing.openingBid, saleDate: listing.saleDate, sourceUrl: exactSourceUrl }} />
           {(openingBid !== null || optionalPublishedText(listing.saleDate) || saleTime) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 pt-3 text-sm lg:hidden">
               {openingBid !== null ? <p><span className="text-slate-600">Opening amount </span><strong className="text-slate-950">{formatMoney(openingBid)}</strong></p> : null}
-              {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-slate-600">Reported sale </span><strong className="text-slate-950">{reportedSaleSchedule}</strong></p> : null}
+              {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-slate-600">Reported sale </span><strong className="text-slate-950"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</strong></p> : null}
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
             </div>
           )}
@@ -372,7 +375,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-sm lg:hidden">
             <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
             <p className="mt-4 text-3xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
-            <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Reported sale</dt><dd className="text-right font-semibold">{reportedSaleSchedule}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Opening amount</dt><dd className="font-semibold text-slate-700">Not published</dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-slate-600">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
+            <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Reported sale</dt><dd className="text-right font-semibold"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-slate-600">Opening amount</dt><dd className="font-semibold"><Fact value={openingBid} format="money" /></dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-slate-600">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
             {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B]">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-slate-600"><strong className="text-slate-900">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
@@ -471,6 +474,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
               {occupancy ? <p className="mt-2">Occupancy published as {occupancy}.</p> : null}
               {optionalPublishedText(listing.deposit) ? <p className="mt-2">Deposit terms published as {optionalPublishedText(listing.deposit)}.</p> : null}
               {titleRules ? (
+                <>
                 <ul className="mt-3 space-y-2">
                   <li>Classifier: {titleRules.plaintiffType}. Risk label: {titleRules.riskLevel}.</li>
                   {(titleRules.instrumentPriority?.instrumentNumber || titleRules.instrumentPriority?.bookPage || titleRules.instrumentPriority?.recordedDate) ? (
@@ -482,8 +486,19 @@ export default async function ListingPage({ params, searchParams }: Props) {
                       ].filter(Boolean).join(" · ")}.
                     </li>
                   ) : null}
+                  {titleRules.hoaSuperPriority?.isSuperPriorityState ? (
+                    <li className="font-medium text-amber-900">
+                      HOA Super-Priority Assessment Rule: {titleRules.hoaSuperPriority.statute} ({titleRules.hoaSuperPriority.monthsProtected} months protected baseline).
+                    </li>
+                  ) : null}
                   {titleRules.titleWarnings.filter((warning): warning is string => typeof warning === "string" && warning.length > 0).map((warning) => <li key={warning}>{warning}</li>)}
                 </ul>
+                {titleRules.firstMortgageSurvives && (
+                  <div className="mt-3 rounded-lg border border-rose-300 bg-rose-50 p-3 font-bold text-rose-950">
+                    CRITICAL TITLE DEFECT: Foreclosing party is a junior lienholder. Senior 1st mortgage survives this auction!
+                  </div>
+                )}
+              </>
               ) : <p className="mt-2">State was not published, so the statute table was not applied.</p>}
             </div>
           </div>
@@ -590,9 +605,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </div>
             <p className="mt-5 text-4xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-slate-600">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-slate-200 border-y border-slate-200 py-1 space-y-0">
-              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-4"><dt className="flex shrink-0 items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold">{reportedSaleSchedule}</dd></div> : <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Opening amount</dt><dd className="text-sm font-semibold text-slate-700">Not published</dd></div>}
+              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-4"><dt className="flex shrink-0 items-center gap-2 text-slate-600"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Opening amount</dt><dd className="text-sm font-semibold"><Fact value={openingBid} format="money" /></dd></div>}
               {saleLocation ? <div className="py-4"><dt className="flex items-center gap-2 text-slate-600"><MapPin className="h-4 w-4" /> Sale location</dt><dd className="mt-2 text-sm font-semibold leading-relaxed">{saleLocation}</dd></div> : null}
-              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold">{publishedText(listing.deposit)}</dd></div>
+              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-slate-600">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold"><Fact value={listing.deposit} /></dd></div>
             </dl>
             <p className="mt-5 text-xs leading-relaxed text-slate-500">Confirm current sale terms with the publisher.</p>
             {exactSourceUrl ? (

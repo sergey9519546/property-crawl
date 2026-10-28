@@ -10,8 +10,10 @@
 // provides no protection at all. This test makes that state loud instead.
 //
 // Rules:
-//   - every *.test.js / *.test.mjs / *.test.py under test/ must appear in
-//     some package.json script command
+//   - every *.test.js / *.test.mjs / *.test.py under test/ must appear as an
+//     exact whitespace-delimited token in some package.json script command
+//   - every test/ token in a runner command must exist on disk (catches
+//     concatenated tokens like a.test.jstest/b.test.js or path typos)
 //   - the only permitted exceptions are files listed in ALLOW_UNWIRED, each
 //     with a written reason. Adding to that list is a deliberate act.
 //
@@ -57,7 +59,11 @@ function runnerCommands() {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   return Object.entries(pkg.scripts)
     .filter(([name]) => name.startsWith('test') || name === 'verify:gate')
-    .map(([name, command]) => ({ name, command }));
+    .map(([name, command]) => ({
+      name,
+      command,
+      tokens: new Set(String(command || '').trim().split(/\s+/).filter(Boolean)),
+    }));
 }
 
 test('every test file is reachable from a runner, or has a written exemption', () => {
@@ -68,7 +74,7 @@ test('every test file is reachable from a runner, or has a written exemption', (
   assert.ok(runners.length > 0, 'expected test scripts in package.json');
 
   const unwired = files.filter(
-    (file) => !runners.some(({ command }) => command.includes(file)),
+    (file) => !runners.some(({ tokens }) => tokens.has(file)),
   );
   const unjustified = unwired.filter((file) => !ALLOW_UNWIRED.has(file));
 
@@ -81,6 +87,23 @@ test('every test file is reachable from a runner, or has a written exemption', (
   );
 });
 
+test('every test/ token in runner commands exists on disk (no typos or concatenated paths)', () => {
+  const runners = runnerCommands();
+  const missing = [];
+  for (const { name, tokens } of runners) {
+    for (const token of tokens) {
+      if (token.startsWith('test/') && !fs.existsSync(path.join(ROOT, token))) {
+        missing.push(`${name}: ${token}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    'these runner tokens reference non-existent test paths (check for missing spaces or typos)',
+  );
+});
+
 test('ALLOW_UNWIRED entries still exist and are not wired (no stale exemptions)', () => {
   const files = new Set(collectTestFiles(path.join(ROOT, 'test')));
   const runners = runnerCommands();
@@ -88,7 +111,7 @@ test('ALLOW_UNWIRED entries still exist and are not wired (no stale exemptions)'
   for (const [file, reason] of ALLOW_UNWIRED) {
     assert.ok(files.has(file), `ALLOW_UNWIRED lists ${file}, which no longer exists`);
     assert.ok(reason && reason.length > 10, `${file} needs a substantive reason`);
-    const wired = runners.some(({ command }) => command.includes(file));
+    const wired = runners.some(({ tokens }) => tokens.has(file));
     assert.equal(
       wired,
       false,

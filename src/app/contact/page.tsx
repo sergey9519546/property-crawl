@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { SiteHeader } from "@/components/site/site-header";
+import { SiteFooter } from "@/components/site/site-footer";
 import { ArrowLeft, Send, CheckCircle2, AlertCircle, Loader2, Mail, Building, User, MessageSquare } from "lucide-react";
 
 export default function ContactPage() {
@@ -50,30 +52,36 @@ export default function ContactPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16 text-slate-900 sm:px-8">
-      <div className="mb-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to home
-        </Link>
-      </div>
+    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
+      <SiteHeader />
 
-      <div className="border-b border-slate-200 pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Get in touch</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
-          Contact PerfectProperty
-        </h1>
-        <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-          Write to us about a listing that looks wrong, a county you want added, a question about membership, or
-          a team that wants to use PerfectProperty. Your message is saved and read. We can&apos;t promise a reply time.
-        </p>
-      </div>
+      <section className="px-5 pt-40 pb-10 sm:pt-48 sm:pb-12">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-3 transition-colors hover:text-ink"
+          >
+            <ArrowLeft className="h-4 w-4" /> Back to PerfectProperty
+          </Link>
+          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Get in touch
+          </p>
+          <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
+            Contact PerfectProperty
+          </h1>
+          <p className="mt-5 max-w-[620px] text-pretty text-lg leading-8 text-ink-2">
+            Tell us about a listing that looks wrong, a county you want added, a question about membership, or a team
+            that wants to use PerfectProperty. Your message is saved and read. We can&apos;t promise a reply time.
+          </p>
+        </div>
+      </section>
 
-      <div className="mt-8">
+      <section className="px-5 pb-20 sm:pb-28">
+        <div className="mx-auto max-w-3xl">
+      <div>
         {status === "success" ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center space-y-4">
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-8 text-center space-y-4">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
               <CheckCircle2 className="h-6 w-6" />
             </div>
@@ -83,14 +91,14 @@ export default function ContactPage() {
               <button
                 type="button"
                 onClick={() => setStatus("idle")}
-                className="rounded-xl bg-emerald-800 px-5 py-2.5 text-xs font-semibold text-white hover:bg-emerald-900 transition"
+                className="rounded-xl bg-emerald-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 transition"
               >
                 Send another message
               </button>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-line bg-white p-6 sm:p-8 shadow-sm">
             {status === "error" && (
               <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-900">
                 <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
@@ -110,7 +118,7 @@ export default function ContactPage() {
                     type="text"
                     required
                     maxLength={200}
-                    placeholder="Sarah Jenkins"
+                    placeholder="Your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -129,7 +137,7 @@ export default function ContactPage() {
                     type="email"
                     required
                     maxLength={320}
-                    placeholder="sarah@capitalinvestments.com"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -148,7 +156,7 @@ export default function ContactPage() {
                   id="contact-company"
                   type="text"
                   maxLength={200}
-                  placeholder="Apex Acquisitions Fund"
+                  placeholder="Your company or team"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -180,7 +188,7 @@ export default function ContactPage() {
             <button
               type="submit"
               disabled={status === "submitting"}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0F172A] px-6 py-3.5 text-sm font-semibold text-white shadow hover:bg-[#1E293B] disabled:opacity-50 transition"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-ink px-6 py-3.5 text-sm font-semibold text-white shadow hover:bg-ink-2 disabled:opacity-50 transition"
             >
               {status === "submitting" ? (
                 <>
@@ -195,6 +203,10 @@ export default function ContactPage() {
           </form>
         )}
       </div>
+        </div>
+      </section>
+
+      <SiteFooter />
     </main>
   );
 }

@@ -19,7 +19,7 @@ window.SOURCES = {
     "tier": "B",
     "color": "#0f766e",
     "note": "Foreclosure sale notice published under state law",
-    "websiteUrl": "https://www.cuyahogasheriff.org"
+    "websiteUrl": "https://cuyahoga.sheriffsaleauction.ohio.gov"
   },
   "trustee": {
     "key": "trustee",
@@ -115,7 +115,7 @@ window.SOURCES = {
     "tier": "A",
     "color": "#1e3a8a",
     "note": "sales.fdic.gov — Closed sales & receivership assets",
-    "websiteUrl": "https://sales.fdic.gov"
+    "websiteUrl": "https://sales.fdic.gov/closedrealestate/"
   },
   "civilview": {
     "key": "civilview",

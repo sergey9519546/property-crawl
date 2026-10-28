@@ -62,37 +62,27 @@ const GROUPS: MenuGroup[] = [
     label: "Product",
     columns: [
       [
-        { label: "Search listings", desc: "Search listings on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
+        { label: "Search listings", desc: "Upcoming sales on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
+        { label: "The catch", desc: "What could cost you, on every listing", icon: Target, href: "/#the-catch", tint: "#fffaea" },
+        { label: "Run your numbers", desc: "Work out your top bid from your own estimates", icon: Calculator, href: "/#product", tint: "#E2E8F0" },
+      ],
+      [
         { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
         { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#FEF3C7" },
       ],
-      [
-        { label: "Free vs member", desc: "What you get for free and what members get", icon: Gauge, href: "/#pricing", tint: "#E2E8F0" },
-      ],
     ],
   },
   {
-    key: "solutions",
-    label: "Solutions",
+    key: "learn",
+    label: "Learn",
     columns: [
       [
-        { label: "Acquisitions", desc: "Find and rank sales worth a closer look", icon: Target, href: "/listings?view=grid&sort=score", tint: "#e7faef" },
+        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
+        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#e7faef" },
+        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#FFD6C8" },
       ],
       [
-        { label: "Underwriting", desc: "Run your own numbers on a property", icon: Calculator, href: "/listings?hasDocuments=true&minQuality=50", tint: "#E2E8F0" },
-      ],
-    ],
-  },
-  {
-    key: "resources",
-    label: "Resources",
-    columns: [
-      [
-        { label: "Buyer's guide", desc: "How to search, judge and track a sale", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
-        { label: "County guides", desc: "States and counties with listings now", icon: Map, href: "/states", tint: "#FFD6C8" },
-        { label: "What's new", desc: "What is new on the site", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
-      ],
-      [
+        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
         { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#e7faef" },
         { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#E2E8F0" },
       ],
@@ -109,7 +99,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
             <Link
               key={l.label}
               href={l.href}
-              className="rounded-lg px-3 py-2 text-[14px] font-medium text-[#111827] hover:bg-[#F3F4F6]"
+              className="rounded-lg px-3 py-2 text-[14px] font-medium text-ink hover:bg-paper"
             >
               {l.label}
             </Link>
@@ -127,19 +117,19 @@ function MegaPanel({ group }: { group: MenuGroup }) {
               <Link
                 key={l.label}
                 href={l.href}
-                className="group flex items-start gap-3 rounded-xl p-2.5 hover:bg-[#F3F4F6]"
+                className="group flex items-start gap-3 rounded-xl p-2.5 hover:bg-paper"
               >
                 <span
                   className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
                   style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
                 >
-                  <l.icon className="h-[18px] w-[18px] text-[#111827]" />
+                  <l.icon className="h-[18px] w-[18px] text-ink" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[14px] font-semibold text-[#111827]">
+                  <span className="block text-[14px] font-semibold text-ink">
                     {l.label}
                   </span>
-                  <span className="block text-[13px] leading-snug text-[#5B6472]">
+                  <span className="block text-[13px] leading-snug text-ink-3">
                     {l.desc}
                   </span>
                 </span>
@@ -212,23 +202,15 @@ export function SiteHeader() {
                 onClick={() => setOpen(g.key)}
                 aria-haspopup="menu"
                 aria-expanded={open === g.key}
-                className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
+                className="inline-flex h-10 items-center text-[14px] font-semibold text-ink-2 transition-colors hover:text-ink"
               >
                 {g.label}
               </button>
             ))}
-            {/* Arcade: Enterprise is a plain link (not dropdown) */}
-            <Link
-              href="/enterprise"
-              onMouseEnter={() => setOpen(null)}
-              className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
-            >
-              Enterprise
-            </Link>
             <Link
               href="/#pricing"
               onMouseEnter={() => setOpen(null)}
-              className="inline-flex h-10 items-center text-[14px] font-semibold text-[#374151] transition-colors hover:text-[#111827]"
+              className="inline-flex h-10 items-center text-[14px] font-semibold text-ink-2 transition-colors hover:text-ink"
             >
               Pricing
             </Link>
@@ -239,23 +221,23 @@ export function SiteHeader() {
           <Link
             href="/listings"
             onMouseEnter={() => setOpen(null)}
-            className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#1E293B]"
+            className="inline-flex h-10 items-center justify-center rounded-[12px] bg-ink px-4 text-[14px] font-bold text-white transition-colors hover:bg-ink-2"
           >
             Browse listings
           </Link>
           <Link
-            href="/sign-in"
+            href="/account"
             onMouseEnter={() => setOpen(null)}
-            title="For the team that runs this site"
-            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-3 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-white"
+            title="Members sign in with a one-time email link"
+            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-white"
           >
-            Staff sign-in
+            Sign in
           </Link>
         </div>
 
         {/* Mobile trigger */}
         <button
-          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[#111827] hover:bg-[#F3F4F6]"
+          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink hover:bg-paper"
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
         >
@@ -278,7 +260,7 @@ export function SiteHeader() {
             onMouseLeave={() => setOpen(null)}
           >
             <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
-              <div className="mt-2 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
                 {GROUPS.filter((g) => g.key === open).map((g) => (
                   <MegaPanel key={g.key} group={g} />
                 ))}
@@ -295,7 +277,7 @@ export function SiteHeader() {
             <SheetDescription className="sr-only">
               PerfectProperty navigation menu
             </SheetDescription>
-            <SheetHeader className="flex flex-row items-center border-b border-[#F3F4F6] px-5 py-4 pr-12">
+            <SheetHeader className="flex flex-row items-center border-b border-paper px-5 py-4 pr-12">
               <SheetTitle asChild>
                 <span className="flex items-center">
                   <Logo className="text-[16px]" />
@@ -305,7 +287,7 @@ export function SiteHeader() {
             <Accordion type="multiple" className="px-2 py-2">
               {GROUPS.map((g) => (
                 <AccordionItem key={g.key} value={g.key} className="border-b-0">
-                  <AccordionTrigger className="px-3 text-[15px] font-semibold text-[#111827] hover:no-underline">
+                  <AccordionTrigger className="px-3 text-[15px] font-semibold text-ink hover:no-underline">
                     {g.label}
                   </AccordionTrigger>
                   <AccordionContent className="px-1 pb-2">
@@ -316,7 +298,7 @@ export function SiteHeader() {
                               key={l.label}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
-                              className="rounded-lg px-3 py-2 text-[14px] text-[#4B5563] hover:bg-[#F3F4F6]"
+                              className="rounded-lg px-3 py-2 text-[14px] text-ink-2 hover:bg-paper"
                             >
                               {l.label}
                             </Link>
@@ -326,19 +308,19 @@ export function SiteHeader() {
                               key={l.label}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
-                              className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-[#F3F4F6]"
+                              className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-paper"
                             >
                               <span
                                 className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg"
                                 style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
                               >
-                                <l.icon className="h-4 w-4 text-[#111827]" />
+                                <l.icon className="h-4 w-4 text-ink" />
                               </span>
                               <span>
-                                <span className="block text-[14px] font-semibold text-[#111827]">
+                                <span className="block text-[14px] font-semibold text-ink">
                                   {l.label}
                                 </span>
-                                <span className="block text-[12px] text-[#5B6472]">
+                                <span className="block text-[12px] text-ink-3">
                                   {l.desc}
                                 </span>
                               </span>
@@ -348,27 +330,24 @@ export function SiteHeader() {
                   </AccordionContent>
                 </AccordionItem>
               ))}
-              <Link href="/enterprise" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
-                Enterprise
-              </Link>
-              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-[#111827] hover:bg-[#F3F4F6]">
+              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-ink hover:bg-paper">
                 Pricing
               </Link>
             </Accordion>
-            <div className="mt-2 grid gap-2 border-t border-[#F3F4F6] px-5 py-4">
+            <div className="mt-2 grid gap-2 border-t border-paper px-5 py-4">
               <Link
                 href="/listings"
                 onClick={() => setMobileOpen(false)}
-                className="inline-flex h-10 items-center justify-center rounded-[12px] bg-[#0F172A] px-4 text-[14px] font-semibold text-white"
+                className="inline-flex h-10 items-center justify-center rounded-[12px] bg-ink px-4 text-[14px] font-semibold text-white"
               >
                 Browse listings
               </Link>
               <Link
-                href="/sign-in"
+                href="/account"
                 onClick={() => setMobileOpen(false)}
-                className="inline-flex h-10 items-center justify-center rounded-[12px] border border-[#D1D5DB] px-4 text-[14px] font-semibold text-[#374151]"
+                className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-4 text-[14px] font-semibold text-ink-2"
               >
-                Staff sign-in
+                Sign in
               </Link>
             </div>
           </SheetContent>

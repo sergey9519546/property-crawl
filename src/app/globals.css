@@ -6,17 +6,17 @@
 /* PERFECTPROPERTY exact design tokens */
 :root {
   /* Primary text */
-  --dark: #111827;
+  --dark: #181529;
   --body-text: #6B7280;
   --muted-text: #9CA3AF;
   --nav-text: #374151;
 
   /* Dark accent (NOT blue — used for all buttons/CTAs) */
-  --accent: #0F172A;
-  --accent-hover: #1E293B;
+  --accent: #181529;
+  --accent-hover: #2a2640;
 
   /* Backgrounds */
-  --page-bg: #F5F6F7;
+  --page-bg: #F8F4EC;
   --card-bg-white: #FFFFFF;
   --card-bg-green: #e7faef;
   --card-bg-blue: #F1F5F9;
@@ -34,6 +34,11 @@
   --green-bright: #16A34A;
   --red: #B91C1C;
   --gold: #fdbc15;
+
+  /* "The catch" — the brand's signature mark. Amber means "check this first". */
+  --catch-bg: #fff0e9;
+  --catch-border: #ffc4b2;
+  --catch-ink: #a92e14;
 
   /* Primary scale */
   --primary-500: #1E293B;
@@ -62,6 +67,61 @@
   --duration-state: 180ms;
   --duration-camera: 500ms;
   --duration-market-scan: 1000ms;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PerfectProperty system scale. Use these instead of raw hex / px values.
+   Ink + paper carry the page; colour is spent only on evidence (see the
+   Evidence section below). Generates Tailwind classes such as text-ink,
+   bg-paper, border-line, rounded-card, text-title.
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Ink: one near-black family (slate). #111827/#0F172A both map to ink. */
+  --color-ink: #181529;   /* midnight ink */
+  --color-ink-2: #3d3a4f;   /* body copy, 10.4:1 on paper */
+  --color-ink-3: #5f5c6e;   /* meta text, 5.9:1 on paper (AA) */
+  --color-paper: #f8f4ec;  /* warm cream */   /* page */
+  --color-card: #fffef9;    /* raised surface */
+  --color-line: #ebe4d6;    /* hairlines */
+  --color-line-strong: #d8cfbd;
+
+  /* Brand green: actions and "live" only. Never used to mean "good deal"
+     or "verified" — green reads as safe, and nothing here is safe by default. */
+  --color-go: #0b7a56;     /* celadon mint, text-safe; fill #12B981 */
+  --color-go-fill: #12b981;
+  --color-go-wash: #e7f8f0;
+
+  /* Evidence colours: what a value IS, not how good it is. */
+  --color-catch: #ff5533;        /* persimmon coral: the catch / unknown (fills) */
+  --color-catch-ink: #a92e14;    /* persimmon, text-safe on cream */
+  --color-catch-wash: #fff0e9;
+  --color-yours: #3651e0;        /* periwinkle iris, text-safe; fill #4F6BF6 */
+  --color-yours-wash: #eef1ff;
+
+  /* Signature: sunlit butter. Highlights and brand moments, never data. */
+  --color-signature: #ffe24a;
+
+  /* Shape: three radii, each with a job. */
+  --radius-control: 12px;   /* buttons, inputs */
+  --radius-card: 24px;      /* cards, panels */
+  /* chips and pills use rounded-full */
+
+  /* Type: six steps replace 36 sizes. */
+  --text-display: clamp(2rem, 1.4rem + 2.6vw, 3rem);
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.025em;
+  --text-title: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  --text-title--line-height: 1.15;
+  --text-title--letter-spacing: -0.02em;
+  --text-lead: 1.125rem;
+  --text-lead--line-height: 1.65;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-meta: 0.875rem;
+  --text-meta--line-height: 1.45;
+  --text-label: 0.75rem;
+  --text-label--line-height: 1.2;
+  --text-label--letter-spacing: 0.1em;
 }
 
 @theme inline {
@@ -938,3 +998,61 @@
 button[class*="nextjs"] {
   display: none !important;
 }
+
+/* The catch reveal: each item settles in, one after another. */
+@keyframes catch-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.catch-item { animation: catch-in 320ms var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) {
+  .catch-item { animation: none; }
+}
+
+/* FAQ disclosure marker */
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item[open] .faq-icon { transform: rotate(45deg); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Evidence ink. Every value is drawn in one of three materials:
+     printed  — published by the source. Plain ink. No decoration.
+     yours    — a number the buyer typed. Indigo, dashed "pencil" underline.
+     unknown  — nobody has published it. Amber hatch, same footprint as a
+                value, never collapsed, never quieter than a real fact.
+   Rendered by <Fact> (src/components/evidence/fact.tsx).
+   ───────────────────────────────────────────────────────────────────────── */
+.ev-printed { color: var(--color-ink); }
+.ev-yours {
+  color: var(--color-yours);
+  text-decoration: underline dashed 1.5px;
+  text-underline-offset: 4px;
+}
+.ev-unknown {
+  color: var(--color-catch-ink);
+  background-color: var(--color-catch-wash);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 85, 51, 0.2) 0 1px,
+    transparent 1px 7px
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 85, 51, 0.35);
+  border-radius: 6px;
+  padding: 0.1em 0.5em;
+}
+@media (forced-colors: active) {
+  .ev-unknown { border: 1px dashed CanvasText; background-image: none; }
+  .ev-yours { text-decoration-color: CanvasText; }
+}
+
+/* Evidence ink on dark (ink) surfaces: same meaning, lighter pigments for contrast. */
+.on-ink .ev-printed { color: inherit; }
+.on-ink .ev-yours { color: #a9b8ff; text-decoration-thickness: 2px; }
+.on-ink .ev-unknown {
+  color: #ffb59f;
+  background-color: rgba(255, 85, 51, 0.1);
+  background-image: repeating-linear-gradient(-45deg, rgba(255, 140, 110, 0.3) 0 1px, transparent 1px 7px);
+  box-shadow: inset 0 0 0 1px rgba(255, 140, 110, 0.45);
+}
+
+::selection { background: var(--color-signature); color: var(--color-ink); }
+body { background-color: var(--color-paper); }

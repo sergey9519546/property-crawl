@@ -706,7 +706,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               && payload.listings.length > 0
               ? "No listing on this page has a Deal Score yet, so this order isn't ranking by score. A Deal Score needs a published opening bid and a value range."
               : payload?.listings
-                ? "Sorted by Deal Score, highest first."
+                ? (filters.sort === "triage" ? "Sorted by triage priority (Check first)." : filters.sort && filters.sort !== "score" ? `Sorted by ${filters.sort}.` : "Sorted by Deal Score, highest first.")
                 : "Checking which listings have a Deal Score…"}
           </p>
         </div>

@@ -3,11 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight, Bookmark, FileText, Loader2 } from "lucide-react";
+import { Fact } from "@/components/evidence/fact";
 import { ListingThumbnail } from "@/components/listings/listing-thumbnail";
 import { TriageChips } from "@/components/listings/triage-chips";
 import { CaseAction } from "@/components/research/case-action";
 import { SOURCES, type PropertyListing } from "@/components/terminal/property-data";
-import { displayDate, displayMoney, knownNumber } from "@/lib/listing-display";
+import { displayDate, knownNumber } from "@/lib/listing-display";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
 
@@ -72,7 +73,6 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const program = listing.program || listing.auctionProgram;
   const lifecycle = listing.lifecycle || listing.lifecycleStatus;
   const stale = listing.sourceFreshness?.status === "stale";
-  const amount = knownNumber(listing.openingBid);
   const facts = [
     knownNumber(listing.beds) !== null ? `${listing.beds} bed` : null,
     knownNumber(listing.baths) !== null ? `${listing.baths} bath` : null,
@@ -172,8 +172,8 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-slate-600">{facts.join(" · ")}</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3">
-        <div><dt className="text-xs text-slate-500">Opening amount</dt><dd className={`mt-1 ${amount === null ? "text-sm font-medium text-slate-500" : "text-xl font-semibold tracking-tight text-slate-950"}`}>{displayMoney(listing.openingBid)}</dd></div>
-        <div><dt className="text-xs text-slate-500">Sale date</dt><dd className={`mt-1 text-sm ${listing.saleDate ? "font-semibold text-slate-950" : "font-medium text-slate-500"}`}>{displayDate(listing.saleDate)}</dd></div>
+        <div><dt className="text-xs text-slate-500">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-slate-950"><Fact value={listing.openingBid} format="money" /></dd></div>
+        <div><dt className="text-xs text-slate-500">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-slate-950"><Fact value={listing.saleDate} format="date" /></dd></div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500">
         <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-amber-800" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
@@ -187,7 +187,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
             </span>
           );
         })() : null}
-        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}</span> : null}
+        {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}/100</span> : null}
       </div>
       <div className="mt-auto grid gap-2 pt-4">
         <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-50">

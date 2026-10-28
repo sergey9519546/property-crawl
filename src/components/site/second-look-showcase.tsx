@@ -15,32 +15,31 @@ type ChangeItem = {
   observedAt?: string | null;
 };
 
+// Sample figures only. They link to search, never to a real listing, so a
+// made-up price can't be read as that listing's history.
 const DEMO_ITEMS: ChangeItem[] = [
   {
-    id: "demo-cuyahoga-drop",
-    label: "Example: opening bid dropped 33%",
+    id: "sample-sheriff",
+    label: "Sheriff sale, second try",
     before: "$148,000",
     after: "$98,667",
-    reason: "Example: the opening bid was lowered after a failed sale.",
-    listingId: "HUD-412-652610",
+    reason: "No one bid at the first sale, so the next one opened at two-thirds of the old amount.",
     observedAt: "Second sale",
   },
   {
-    id: "demo-orange-clerk",
-    label: "Example: tax deed bid lowered 34%",
+    id: "sample-tax",
+    label: "Tax deed, re-listed",
     before: "$62,500",
     after: "$41,200",
-    reason: "Example: the opening bid was lowered after a failed sale.",
-    listingId: "TRSY-27-66-110",
+    reason: "The county re-listed the property after it didn't sell and lowered the opening bid.",
     observedAt: "County update",
   },
   {
-    id: "demo-dallas-trustee",
-    label: "Example: lender bid lowered 17%",
+    id: "sample-trustee",
+    label: "Trustee sale, re-posted",
     before: "$210,000",
     after: "$175,000",
-    reason: "Example: the opening bid was lowered after a failed sale.",
-    listingId: "TRSY-26-66-189",
+    reason: "The lender lowered its opening bid when it re-posted the sale.",
     observedAt: "Sale re-posted",
   },
 ];
@@ -91,18 +90,18 @@ export function SecondLookShowcase() {
 
   const selected = items.find((item) => item.id === active) || items[0] || null;
 
-  return <section id="second-look" className="border-y border-slate-200 bg-[#F5F6F7] px-5 py-20 sm:px-8 sm:py-28">
+  return <section id="second-look" className="border-y border-slate-200 bg-paper px-5 py-20 sm:px-8 sm:py-28">
     <div className="mx-auto max-w-7xl">
-      <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.8fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">Price drops</p><h2 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-slate-950 sm:text-6xl">A price can drop after a sale falls through.</h2></div><div><p className="text-base leading-7 text-slate-600">Prices can drop after a sale falls through. Members get an email when a saved listing's opening bid drops.</p><Link href="/account" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-slate-900 underline hover:text-slate-700">Become a member <ArrowRight size={15} /></Link></div></div>
+      <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.8fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">Second chances</p><h2 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-slate-950 sm:text-6xl">No one bid? The price often comes down.</h2></div><div><p className="text-base leading-7 text-slate-600">Properties that don&apos;t sell often come back with a lower opening bid. Members get an email when a saved listing drops, so they can take a second look before the next sale.</p><Link href="/account" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-slate-900 underline hover:text-slate-700">Become a member <ArrowRight size={15} /></Link></div></div>
       <div className="mt-12 overflow-hidden rounded-3xl border border-slate-300 bg-white shadow-[0_25px_80px_rgba(15,23,42,0.10)]">
         <div className="grid lg:grid-cols-[340px_1fr]">
           <div className="border-b border-slate-200 bg-slate-950 p-6 text-white lg:border-b-0 lg:border-r">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-emerald-400">
-              {isLive ? "Recent price drops" : "Examples, not real listings"}
+              {isLive ? "Recent price drops" : "Sample figures"}
             </p>
             <h3 className="mt-3 text-2xl font-semibold">What changed?</h3>
             <p className="mt-2 text-sm leading-6 text-slate-300">
-              {isLive ? "Opening bids that recently went down." : "These show how an opening bid can change after a failed sale."}
+              {isLive ? "Opening bids that recently went down." : "How a drop looks. Members see their own saved listings here."}
             </p>
             <div className="mt-6 space-y-2">
               {items.length === 0 ? <p className="text-sm text-slate-300">No price drops to show yet.</p> : null}
@@ -112,7 +111,7 @@ export function SecondLookShowcase() {
                   type="button"
                   aria-pressed={active === item.id}
                   onClick={() => setActive(item.id)}
-                  className={`w-full rounded-xl border p-4 text-left transition ${active === item.id ? "border-emerald-500 bg-[#0F172A] text-white" : "border-white/15 bg-white/5 hover:bg-white/10"}`}
+                  className={`w-full rounded-xl border p-4 text-left transition ${active === item.id ? "border-emerald-500 bg-ink text-white" : "border-white/15 bg-white/5 hover:bg-white/10"}`}
                 >
                   <span className="block text-xs font-bold">{item.label}</span>
                   <span className={`mt-1 block text-[11px] ${active === item.id ? "text-emerald-300" : "text-slate-400"}`}>

@@ -148,7 +148,35 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
           </div>
           </details>
         )}
-        <details className="border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">What still needs checking · {dossier.gaps.length}</summary><div className="mt-4 space-y-4">{dossier.gaps.map((gap) => <div key={gap.id}><div className="flex flex-wrap items-center gap-2"><h4 className="text-sm font-semibold">{gap.title}</h4>{typeof gap.potentialPointsGain === 'number' && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 border border-emerald-200">+{gap.potentialPointsGain} priority pts if verified</span>}</div><p className="mt-1 text-sm leading-6 text-slate-600">{gap.reason}</p><p className="mt-1 text-sm leading-6 text-emerald-800">Next: {gap.nextAction}</p></div>)}</div></details>
+        <details className="border-t border-slate-200 pt-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-700">What still needs checking · {dossier.gaps.length}</summary>
+          <div className="mt-4 space-y-4">
+            {dossier.gaps.map((gap) => (
+              <div key={gap.id}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-sm font-semibold">{gap.title}</h4>
+                  {gap.priorityTier === 'critical_risk' && (
+                    <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-800">
+                      Critical Risk
+                    </span>
+                  )}
+                  {gap.priorityTier === 'high_leverage' && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                      High Leverage
+                    </span>
+                  )}
+                  {typeof gap.potentialPointsGain === 'number' && (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                      +{gap.potentialPointsGain} priority pts if verified
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-sm leading-6 text-slate-600">{gap.reason}</p>
+                <p className="mt-1 text-sm leading-6 text-emerald-800">Next: {gap.nextAction}</p>
+              </div>
+            ))}
+          </div>
+        </details>
       </>}
     </div>
   </section>;

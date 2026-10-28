@@ -79,8 +79,8 @@ test('marketing nav points at shipped routes, not phantom product names', () => 
 
 test('homepage marketing does not ship phantom product names or accuracy guarantees', () => {
   for (const rel of [
-    'src/components/site/gtm.tsx',
-    'src/components/site/ai-knows.tsx',
+    'src/components/site/catch-reveal.tsx',
+    'src/components/site/faq.tsx',
     'src/components/site/site-footer.tsx',
   ]) {
     const text = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
@@ -89,9 +89,16 @@ test('homepage marketing does not ship phantom product names or accuracy guarant
     assert.doesNotMatch(text, /Prophecy/);
     assert.doesNotMatch(text, /accuracy report/i);
   }
-  const aiKnows = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/ai-knows.tsx'), 'utf8');
-  assert.match(aiKnows, /Evidence first/i);
-  assert.match(aiKnows, /optional/i);
+  // The catch section shows a real listing, never a sample, and says what it
+  // can't vouch for: it is built from published fields only.
+  const catchReveal = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/catch-reveal.tsx'), 'utf8');
+  assert.match(catchReveal, /fetch\("\/api\/listings/);
+  assert.match(catchReveal, /listingCatch\(/);
+  assert.match(catchReveal, /still need your own check/i);
+  assert.doesNotMatch(catchReveal, /DEMO|SAMPLE_LISTING|example listing/i);
+  const faq = fs.readFileSync(path.join(__dirname, '..', 'src/components/site/faq.tsx'), 'utf8');
+  assert.match(faq, /not an appraisal/i);
+  assert.match(faq, /title search/i);
 });
 
 test('/workspace index redirects to the private review queue', () => {

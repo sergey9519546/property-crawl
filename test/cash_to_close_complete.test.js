@@ -94,6 +94,53 @@ test('adds 5% buyer premium on online marketplace auctions (Bid4Assets / Service
   assert.equal(smallBidResult.buyersPremium, 2500); // Enforces minimum $2,500 floor
 });
 
+test('calculates complete Texas non-judicial foreclosure cash-to-close schedule ($0 transfer tax)', () => {
+  const result = calculateCompleteCashToClose({
+    winningBid: 150000,
+    state: 'TX',
+    creditedDeposit: 15000,
+  });
+
+  assert.equal(result.state, 'TX');
+  assert.equal(result.transferTax, 0); // $0 transfer tax in Texas
+  assert.equal(result.sheriffPoundage, 0);
+  assert.equal(result.recordingFees, 50);
+  assert.equal(result.totalAcquisitionCost, 150050);
+  assert.equal(result.netCashDueAtSettlement, 135050);
+  assert.equal(result.settlementWindowHours, 4);
+});
+
+test('calculates complete North Carolina upset bid cash-to-close schedule', () => {
+  const result = calculateCompleteCashToClose({
+    winningBid: 100000,
+    state: 'NC',
+    creditedDeposit: 5000,
+  });
+
+  assert.equal(result.state, 'NC');
+  assert.equal(result.transferTax, 200); // $2.00 per $1,000 (N.C.G.S. § 105-228.30)
+  assert.equal(result.sheriffPoundage, 5000); // 5% statutory commission cap
+  assert.equal(result.recordingFees, 64);
+  assert.equal(result.totalAcquisitionCost, 105264);
+  assert.equal(result.netCashDueAtSettlement, 100264);
+  assert.equal(result.settlementWindowHours, 240); // 10 days upset bid period
+});
+
+test('calculates complete New York referee sale cash-to-close schedule', () => {
+  const result = calculateCompleteCashToClose({
+    winningBid: 250000,
+    state: 'NY',
+    creditedDeposit: 25000,
+  });
+
+  assert.equal(result.state, 'NY');
+  assert.equal(result.transferTax, 1000); // $4.00 per $1,000
+  assert.equal(result.sheriffPoundage, 2500); // 1% referee compensation
+  assert.equal(result.recordingFees, 150);
+  assert.equal(result.totalAcquisitionCost, 253650);
+  assert.equal(result.netCashDueAtSettlement, 228650);
+});
+
 test('deposit crediting never produces negative settlement obligation', () => {
   const overCredited = calculateCompleteCashToClose({
     winningBid: 50000,
