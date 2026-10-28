@@ -640,6 +640,8 @@ export interface StatutoryFeePreset {
   creditedDeposit: number;
   registrationFunds: number;
   citations: string[];
+  supported?: boolean;
+  notice?: string | null;
 }
 
 function parsePublishedDepositAmount(depositText: string | null | undefined, price: number): number | null {
@@ -668,6 +670,8 @@ export function computeStatutoryFeePreset(params: {
   const st = (params.state || "").trim().toUpperCase();
   const src = (params.source || "").trim().toLowerCase();
   const citations: string[] = [];
+  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY"].includes(st);
+  const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
 
   let buyersPremium = 0;
   if (src === "bid4assets" || src === "servicelink") {
@@ -780,7 +784,8 @@ export function computeStatutoryFeePreset(params: {
     );
   } else {
     transferTax = Math.round(price * 0.005);
-    citations.push("Baseline state recording/transfer assumption (0.5% of price); verify county fee schedule.");
+    scheduleLabel = `${st || "State"} Statutory Baseline (Not Yet Modeled)`;
+    citations.push(`Statutory fee preset unavailable for state ${st || "unknown"}. Baseline state recording/transfer assumption (0.5% of price); verify county fee schedule.`);
   }
 
   const parsedDeposit = parsePublishedDepositAmount(params.depositText, price);
@@ -798,6 +803,8 @@ export function computeStatutoryFeePreset(params: {
     creditedDeposit,
     registrationFunds: creditedDeposit,
     citations,
+    supported: isSupported,
+    notice: supportedNotice,
   };
 }
 

@@ -55,6 +55,7 @@ function createFileBackend(filePath = process.env.PROPERTY_ACCOUNTS_PATH || DEFA
     if (store?.version !== 1 || !Array.isArray(store.accounts) || !Array.isArray(store.loginTokens)) {
       throw new Error('Invalid account store; existing data was preserved');
     }
+    if (!Array.isArray(store.webhookEvents)) store.webhookEvents = [];
     return store;
   };
   // ponytail: whole-file lock, fine for a beta's account volume; Postgres when it grows.
@@ -115,6 +116,24 @@ function createFileBackend(filePath = process.env.PROPERTY_ACCOUNTS_PATH || DEFA
         return token.email;
       });
     },
+    async hasWebhookEvent(eventId) {
+      if (!eventId) return false;
+      const store = load();
+      return Array.isArray(store.webhookEvents) && store.webhookEvents.some((e) => e.id === eventId);
+    },
+    async recordWebhookEvent(eventId, eventType) {
+      if (!eventId) return { duplicate: false };
+      return mutate((store) => {
+        if (!Array.isArray(store.webhookEvents)) store.webhookEvents = [];
+        const existing = store.webhookEvents.find((e) => e.id === eventId);
+        if (existing) return { duplicate: true };
+        store.webhookEvents.push({ id: eventId, type: eventType || 'unknown', receivedAt: now() });
+        if (store.webhookEvents.length > 2000) {
+          store.webhookEvents = store.webhookEvents.slice(-2000);
+        }
+        return { duplicate: false };
+      });
+    },
   };
 }
 
@@ -150,6 +169,21 @@ function createPgBackend(pool) {
       await ensure();
       const r = await pool.query('UPDATE account_login_tokens SET used_at=NOW() WHERE token_hash=$1 AND used_at IS NULL AND expires_at > NOW() RETURNING email', [tokenHash]);
       return r.rows[0]?.email || null;
+    },
+    async hasWebhookEvent(eventId) {
+      if (!eventId) return false;
+      await ensure();
+      const r = await pool.query('SELECT 1 FROM stripe_webhook_events WHERE id=$1', [eventId]);
+      return (r.rowCount || 0) > 0;
+    },
+    async recordWebhookEvent(eventId, eventType) {
+      if (!eventId) return { duplicate: false };
+      await ensure();
+      const r = await pool.query(
+        'INSERT INTO stripe_webhook_events(id, event_type) VALUES($1, $2) ON CONFLICT(id) DO NOTHING RETURNING id',
+        [eventId, eventType || 'unknown']
+      );
+      return { duplicate: (r.rowCount || 0) === 0 };
     },
   };
 }
@@ -193,6 +227,12 @@ function createAccountService({ backend, now = () => Date.now() } = {}) {
         subscriptionStatus: typeof status === 'string' ? status.slice(0, 40) : null,
         currentPeriodEnd: periodEnd,
       }), now());
+    },
+    async hasWebhookEvent(eventId) {
+      return backend.hasWebhookEvent ? backend.hasWebhookEvent(eventId) : false;
+    },
+    async recordWebhookEvent(eventId, eventType) {
+      return backend.recordWebhookEvent ? backend.recordWebhookEvent(eventId, eventType) : { duplicate: false };
     },
   };
 }

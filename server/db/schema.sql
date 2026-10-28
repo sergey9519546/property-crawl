@@ -332,12 +332,41 @@ CREATE TABLE IF NOT EXISTS document_reviews (
   revision INTEGER NOT NULL DEFAULT 1,
   prior_status TEXT,
   extracted_at TIMESTAMPTZ,
+  content_hash TEXT,
   payload JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_document_reviews_listing ON document_reviews(listing_id);
 CREATE INDEX IF NOT EXISTS idx_document_reviews_status ON document_reviews(status);
+
+-- ==========================================================
+-- Member accounts and Stripe webhook idempotency
+-- ==========================================================
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE CHECK (char_length(email) <= 254),
+  stripe_customer_id TEXT UNIQUE,
+  subscription_id TEXT,
+  subscription_status TEXT,
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS account_login_tokens (
+  token_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 -- ==========================================================
 -- Materialized Views (Scale Aggregations)

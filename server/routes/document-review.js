@@ -258,6 +258,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       listingId: record.listingId || id.split('~')[0],
       documentIndex: Number.isInteger(record.documentIndex) ? record.documentIndex : null,
       documentUrl: record.documentUrl || null,
+      contentHash: record.contentHash || null,
       hydration: 'store',
     }));
 
@@ -296,6 +297,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
           documentUrl: entry.documentUrl ?? null,
           label: entry.label || null,
           review,
+          contentHash: entry.contentHash || null,
           ...(entry.hydration ? { hydration: entry.hydration } : {}),
         };
       }),
@@ -327,6 +329,11 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       const code = result.errors.find(e => e.startsWith('shape:')) ? 400 : 422;
       return badRequest(res, result.errors.join('; '), code);
     }
+    const contentHash = typeof body.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(body.contentHash.trim())
+      ? body.contentHash.trim().toLowerCase()
+      : (typeof body.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(body.sha256.trim())
+        ? body.sha256.trim().toLowerCase()
+        : null);
     store.map.set(id, {
       ...result,
       listingId,
@@ -334,6 +341,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       documentUrl: typeof body.documentUrl === 'string' && body.documentUrl.trim()
         ? body.documentUrl.trim().slice(0, MAX_DOCUMENT_ID_LENGTH)
         : null,
+      contentHash: contentHash || previousRaw?.contentHash || null,
     });
     const persisted = typeof store.persistAsync === 'function'
       ? await store.persistAsync()
@@ -347,7 +355,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
         error: 'Document review could not be persisted',
         id,
         listingId,
-        review: result,
+        contentHash: contentHash || previousRaw?.contentHash || null,
+      review: result,
         persisted: false,
         requiredConfiguration: 'writable document-review store (PostgreSQL or .cache)',
       });
@@ -357,6 +366,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       listingId,
       documentIndex: body.documentIndex,
       documentUrl: body.documentUrl || null,
+      contentHash: contentHash || previousRaw?.contentHash || null,
       review: result,
       persisted,
     });
@@ -373,6 +383,7 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       documentIndex: Number.isInteger(record.documentIndex) ? record.documentIndex : null,
       documentUrl: record.documentUrl || null,
       review: normalizeReview(record),
+      contentHash: record.contentHash || null,
       hydration: 'store',
     });
   }

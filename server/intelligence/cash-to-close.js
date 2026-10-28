@@ -120,6 +120,7 @@ const DEFAULT_SCHEDULE = Object.freeze({
 function calculateCompleteCashToClose(params = {}) {
   const winningBid = Math.max(0, Number(params.winningBid || params.purchasePrice || params.openingBid || 0));
   const state = String(params.state || 'OH').toUpperCase();
+  const isSupported = Boolean(JURISDICTION_FEE_SCHEDULES[state]);
   const schedule = JURISDICTION_FEE_SCHEDULES[state] || DEFAULT_SCHEDULE;
 
   const isMarketplace = Boolean(params.isMarketplace || params.source === 'bid4assets' || params.source === 'servicelink');
@@ -168,6 +169,8 @@ function calculateCompleteCashToClose(params = {}) {
   return {
     state,
     jurisdictionName: schedule.name,
+    supported: isSupported,
+    notice: isSupported ? null : `Statutory fee preset unavailable for state ${state}`,
     winningBid,
     buyersPremium,
     sheriffPoundage,

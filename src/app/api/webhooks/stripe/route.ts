@@ -61,6 +61,19 @@ export async function POST(request: Request) {
   // entitlement: the API checks it before serving hunts, saved searches,
   // portfolio and alerts, and before sending any member alert.
   const event = result.event;
+  const eventId = typeof event?.id === "string" ? event.id : null;
+  const eventType = typeof event?.type === "string" ? event.type : null;
+
+  if (eventId) {
+    const existing = await accountsApi<{ recorded?: boolean }>(`/webhook-event/${encodeURIComponent(eventId)}`, { method: "GET" });
+    if (existing.ok && existing.data?.recorded) {
+      return Response.json(
+        { received: true, id: eventId, type: eventType, duplicate: true, applied: false },
+        { status: 200, headers: responseHeaders }
+      );
+    }
+  }
+
   const object = event?.data?.object || {};
   let state: ReturnType<typeof subscriptionState> = null;
   if (event?.type === "checkout.session.completed" && object.mode === "subscription") {
@@ -74,16 +87,28 @@ export async function POST(request: Request) {
     // Events can arrive out of order; the live subscription is the truth.
     state = subscriptionState((await getSubscription(object.id)) || object);
   }
+
   if (!state) {
+    if (eventId) {
+      await accountsApi("/webhook-event", { method: "POST", body: { id: eventId, type: eventType } });
+    }
     return Response.json({ received: true, id: event?.id, type: event?.type, applied: false }, { status: 200, headers: responseHeaders });
   }
+
   const applied = await accountsApi("/subscription", { method: "POST", body: state });
   if (applied.status === 404) {
     console.warn(`[Stripe Webhook] ${event?.id}: no account for customer ${state.customerId}`);
+    if (eventId) {
+      await accountsApi("/webhook-event", { method: "POST", body: { id: eventId, type: eventType } });
+    }
     return Response.json({ received: true, id: event?.id, applied: false }, { status: 200, headers: responseHeaders });
   }
   if (!applied.ok) {
     return Response.json({ error: "Account update failed" }, { status: 503, headers: responseHeaders });
+  }
+
+  if (eventId) {
+    await accountsApi("/webhook-event", { method: "POST", body: { id: eventId, type: eventType } });
   }
   return Response.json({ received: true, id: event?.id, type: event?.type, applied: true }, { status: 200, headers: responseHeaders });
 }

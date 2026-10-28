@@ -149,3 +149,21 @@ test('subscription state reads the period end from either Stripe API shape', () 
   assert.equal(subscriptionState({ id: 'sub_1', customer: 'cus_1', status: 'active', current_period_end: 100 }).currentPeriodEnd, 100);
   assert.equal(subscriptionState({ id: 'sub_1', customer: { id: 'cus_1' }, status: 'active', items: { data: [{ current_period_end: 200 }] } }).currentPeriodEnd, 200);
 });
+
+test('webhook events are deduplicated via idempotency ledger', async () => {
+  const checkInitial = await call('GET', '/api/accounts/webhook-event/evt_test_123');
+  assert.equal(checkInitial.status, 200);
+  assert.equal(checkInitial.body.recorded, false);
+
+  const recordFirst = await call('POST', '/api/accounts/webhook-event', { body: { id: 'evt_test_123', type: 'customer.subscription.updated' } });
+  assert.equal(recordFirst.status, 200);
+  assert.equal(recordFirst.body.duplicate, false);
+
+  const checkAfter = await call('GET', '/api/accounts/webhook-event/evt_test_123');
+  assert.equal(checkAfter.status, 200);
+  assert.equal(checkAfter.body.recorded, true);
+
+  const recordDuplicate = await call('POST', '/api/accounts/webhook-event', { body: { id: 'evt_test_123', type: 'customer.subscription.updated' } });
+  assert.equal(recordDuplicate.status, 200);
+  assert.equal(recordDuplicate.body.duplicate, true);
+});

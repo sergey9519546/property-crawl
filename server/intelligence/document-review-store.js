@@ -71,9 +71,11 @@ function createDocumentReviewStore(options = {}) {
         revision INTEGER NOT NULL DEFAULT 1,
         prior_status TEXT,
         extracted_at TIMESTAMPTZ,
+        content_hash TEXT,
         payload JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
+      await pool.query('ALTER TABLE IF EXISTS document_reviews ADD COLUMN IF NOT EXISTS content_hash TEXT;');
       pgReady = true;
     } catch {
       pgReady = false;
@@ -156,11 +158,14 @@ function createDocumentReviewStore(options = {}) {
     if (!pool) return reviews;
     await ensurePgTable();
     try {
-      const result = await pool.query('SELECT id, payload FROM document_reviews');
+      const result = await pool.query('SELECT id, payload, content_hash FROM document_reviews');
       reviews.clear();
       for (const row of result.rows || []) {
         const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-        if (payload && typeof payload === 'object') reviews.set(row.id, payload);
+        if (payload && typeof payload === 'object') {
+          if (row.content_hash && !payload.contentHash) payload.contentHash = row.content_hash;
+          reviews.set(row.id, payload);
+        }
       }
       return reviews;
     } catch (err) {
@@ -219,8 +224,8 @@ function createDocumentReviewStore(options = {}) {
         await pool.query(
           `INSERT INTO document_reviews
             (id, listing_id, document_index, document_url, status, notes, reviewer,
-             reviewed_at, revision, prior_status, extracted_at, payload, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+             reviewed_at, revision, prior_status, extracted_at, content_hash, payload, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
            ON CONFLICT (id) DO UPDATE SET
              listing_id = EXCLUDED.listing_id,
              document_index = EXCLUDED.document_index,
@@ -232,6 +237,7 @@ function createDocumentReviewStore(options = {}) {
              revision = EXCLUDED.revision,
              prior_status = EXCLUDED.prior_status,
              extracted_at = EXCLUDED.extracted_at,
+             content_hash = EXCLUDED.content_hash,
              payload = EXCLUDED.payload,
              updated_at = NOW()`,
           [
@@ -246,6 +252,7 @@ function createDocumentReviewStore(options = {}) {
             record.revision || 1,
             record.priorStatus || null,
             record.extractedAt || null,
+            record.contentHash || null,
             JSON.stringify(record),
           ]
         );

@@ -120,6 +120,31 @@ test('POST /api/document-review with valid approval returns the new review', asy
   assert.equal(res.body.persisted, true);
 });
 
+test('POST /api/document-review preserves cryptographic contentHash / sha256 receipt', async () => {
+  const hash = 'a1b2c3d4e5f60123456789abcdef0123456789abcdef0123456789abcdef0123';
+  const req = makeReq({
+    method: 'POST',
+    body: {
+      listingId: 'CIV-NJ-HASH',
+      documentIndex: 0,
+      contentHash: hash,
+      status: 'approved',
+      reviewer: 'op-hash',
+      notes: 'verified hash',
+    },
+  });
+  const res = makeRes();
+  await handle(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.contentHash, hash);
+
+  const getReq = makeReq({ method: 'GET', url: `/api/document-review/${res.body.id}` });
+  const getRes = makeRes();
+  await handle(getReq, getRes);
+  assert.equal(getRes.statusCode, 200);
+  assert.equal(getRes.body.contentHash, hash);
+});
+
 test('POST /api/document-review advances from pending to approved and increments revision', async () => {
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();

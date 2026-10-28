@@ -16,5 +16,11 @@ CREATE TABLE IF NOT EXISTS account_login_tokens (
   used_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE IF EXISTS discovery_hunts
   ADD COLUMN IF NOT EXISTS owner TEXT;
