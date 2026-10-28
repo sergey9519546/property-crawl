@@ -306,10 +306,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <button type="button" onClick={affirmZeroCosts} className="text-xs font-bold text-slate-700 underline underline-offset-2">Explicitly set all acquisition-cost fields to $0</button>
           {statutoryPreset && (
             <button type="button" onClick={applyStatutoryPreset} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-900 transition hover:bg-slate-100">
-              Apply {statutoryPreset.state} statutory schedule preset
+              {statutoryPreset.supported === false ? `Apply generic baseline (${statutoryPreset.state} not modeled)` : `Apply ${statutoryPreset.state} statutory schedule preset`}
             </button>
           )}
         </div>
+        {statutoryPreset?.supported === false && statutoryPreset.notice && <p role="note" data-testid="statutory-unsupported-notice" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-950">{statutoryPreset.notice}</p>}
         {appliedPresetCitations && (
           <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 text-[11px] leading-relaxed text-sky-950">
             <p className="font-bold">Applied statutory schedule assumption ({appliedPresetCitations[0]}):</p>

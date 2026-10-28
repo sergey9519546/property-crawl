@@ -570,3 +570,10 @@ test('Statutory Carry: adversarial date & capital inputs handle gracefully witho
   });
   assert.equal(zeroCapital.estimatedCarryCost, 0);
 });
+
+test('Statutory preset flags unsupported states instead of implying a modeled schedule', () => {
+  const un = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'WY' });
+  assert.equal(un.supported, false);
+  assert.match(un.notice, /unavailable for state WY/);
+  assert.equal(computeStatutoryFeePreset({ purchasePrice: 100000, state: 'OH' }).supported, true);
+});
