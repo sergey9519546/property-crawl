@@ -35,6 +35,9 @@ function createAccountsHandler(dependencies = {}) {
       if (req.method === 'POST' && url.pathname === '/api/accounts/webhook-event') {
         return res.json(await accounts.recordWebhookEvent(body.id, body.type));
       }
+      if (req.method === 'DELETE' && url.pathname.startsWith('/api/accounts/webhook-event/')) {
+        return res.json(await accounts.releaseWebhookEvent(decodeURIComponent(url.pathname.slice('/api/accounts/webhook-event/'.length))));
+      }
       if (req.method === 'GET' && url.pathname.startsWith('/api/accounts/webhook-event/')) {
         const eventId = decodeURIComponent(url.pathname.slice('/api/accounts/webhook-event/'.length));
         return res.json({ recorded: await accounts.hasWebhookEvent(eventId) });

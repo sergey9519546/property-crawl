@@ -145,6 +145,36 @@ test('POST /api/document-review preserves cryptographic contentHash / sha256 rec
   assert.equal(getRes.body.contentHash, hash);
 });
 
+test('POST /api/document-review archives documentContent in DocumentVault and binds SHA-256 receipt automatically', async () => {
+  const { DocumentVault } = require('../server/storage/document-vault');
+  const tmpVaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-review-vault-'));
+  try {
+    const vault = new DocumentVault({ vaultDir: tmpVaultDir });
+    const noticeProse = 'SHERIFF SALE NOTICE: Case #2026-CV-8821, Judgment $142,500';
+    const expectedSha = require('node:crypto').createHash('sha256').update(Buffer.from(noticeProse, 'utf8')).digest('hex');
+    const req = makeReq({
+      method: 'POST',
+      body: {
+        listingId: 'CIV-NJ-VAULT',
+        documentIndex: 0,
+        documentContent: noticeProse,
+        status: 'approved',
+        reviewer: 'op-vault',
+        notes: 'archived in vault',
+      },
+    });
+    const res = makeRes();
+    await route.handleDocumentReview(req, res, { database: emptyDb(), vault });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.contentHash, expectedSha);
+    const storedDoc = await vault.getDocument(`reviews/${encodeURIComponent(res.body.id)}.txt`);
+    assert.ok(storedDoc);
+    assert.equal(storedDoc.data.toString('utf8'), noticeProse);
+  } finally {
+    fs.rmSync(tmpVaultDir, { recursive: true, force: true });
+  }
+});
+
 test('POST /api/document-review advances from pending to approved and increments revision', async () => {
   const req1 = makeReq({ method: 'POST', body: { listingId: 'CIV-NJ-1', status: 'approved', reviewer: 'op-7', notes: 'ok' } });
   const res1 = makeRes();

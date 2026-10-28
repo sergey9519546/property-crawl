@@ -23,6 +23,7 @@ const {
   summarizeReviews,
 } = require('../intelligence/document-review');
 const { createDocumentReviewStore } = require('../intelligence/document-review-store');
+const { defaultVault } = require('../storage/document-vault');
 const { scanAllListings } = require('../db/listings-scan');
 const { resolveOperatorToken } = require('../security/operator-token');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
@@ -329,11 +330,22 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       const code = result.errors.find(e => e.startsWith('shape:')) ? 400 : 422;
       return badRequest(res, result.errors.join('; '), code);
     }
-    const contentHash = typeof body.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(body.contentHash.trim())
+    let contentHash = typeof body.contentHash === 'string' && /^[a-f0-9]{64}$/i.test(body.contentHash.trim())
       ? body.contentHash.trim().toLowerCase()
       : (typeof body.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(body.sha256.trim())
         ? body.sha256.trim().toLowerCase()
         : null);
+    const rawContent = typeof body.documentContent === 'string' && body.documentContent.trim()
+      ? body.documentContent
+      : (typeof body.rawText === 'string' && body.rawText.trim() ? body.rawText : null);
+    if (rawContent) {
+      const vault = dependencies.vault || defaultVault;
+      const receipt = await vault.putDocument(`reviews/${encodeURIComponent(id)}.txt`, rawContent, {
+        contentType: 'text/plain',
+        metadata: { listingId, documentId: id },
+      });
+      if (!contentHash && receipt?.sha256) contentHash = receipt.sha256;
+    }
     store.map.set(id, {
       ...result,
       listingId,

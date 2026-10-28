@@ -121,6 +121,14 @@ function createFileBackend(filePath = process.env.PROPERTY_ACCOUNTS_PATH || DEFA
       const store = load();
       return Array.isArray(store.webhookEvents) && store.webhookEvents.some((e) => e.id === eventId);
     },
+    async releaseWebhookEvent(eventId) {
+      if (!eventId) return { released: false };
+      return mutate((store) => {
+        const before = (store.webhookEvents || []).length;
+        store.webhookEvents = (store.webhookEvents || []).filter((e) => e.id !== eventId);
+        return { released: store.webhookEvents.length < before };
+      });
+    },
     async recordWebhookEvent(eventId, eventType) {
       if (!eventId) return { duplicate: false };
       return mutate((store) => {
@@ -176,6 +184,12 @@ function createPgBackend(pool) {
       const r = await pool.query('SELECT 1 FROM stripe_webhook_events WHERE id=$1', [eventId]);
       return (r.rowCount || 0) > 0;
     },
+    async releaseWebhookEvent(eventId) {
+      if (!eventId) return { released: false };
+      await ensure();
+      const r = await pool.query('DELETE FROM stripe_webhook_events WHERE id=$1', [eventId]);
+      return { released: (r.rowCount || 0) > 0 };
+    },
     async recordWebhookEvent(eventId, eventType) {
       if (!eventId) return { duplicate: false };
       await ensure();
@@ -230,6 +244,9 @@ function createAccountService({ backend, now = () => Date.now() } = {}) {
     },
     async hasWebhookEvent(eventId) {
       return backend.hasWebhookEvent ? backend.hasWebhookEvent(eventId) : false;
+    },
+    async releaseWebhookEvent(eventId) {
+      return backend.releaseWebhookEvent ? backend.releaseWebhookEvent(eventId) : { released: false };
     },
     async recordWebhookEvent(eventId, eventType) {
       return backend.recordWebhookEvent ? backend.recordWebhookEvent(eventId, eventType) : { duplicate: false };

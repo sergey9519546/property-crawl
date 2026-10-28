@@ -166,4 +166,10 @@ test('webhook events are deduplicated via idempotency ledger', async () => {
   const recordDuplicate = await call('POST', '/api/accounts/webhook-event', { body: { id: 'evt_test_123', type: 'customer.subscription.updated' } });
   assert.equal(recordDuplicate.status, 200);
   assert.equal(recordDuplicate.body.duplicate, true);
+
+  const released = await call('DELETE', '/api/accounts/webhook-event/evt_test_123');
+  assert.equal(released.status, 200);
+  assert.equal(released.body.released, true);
+  assert.equal((await call('GET', '/api/accounts/webhook-event/evt_test_123')).body.recorded, false);
+  assert.equal((await call('POST', '/api/accounts/webhook-event', { body: { id: 'evt_test_123', type: 'customer.subscription.updated' } })).body.duplicate, false, 'a released event can be claimed again');
 });
