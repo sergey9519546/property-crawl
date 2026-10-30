@@ -9,7 +9,8 @@ function cleanText(value, placeholders = []) {
   const text = String(value).replace(/\s+/g, ' ').trim();
   if (!text) return null;
   const lowered = text.toLowerCase();
-  if (placeholders.some((placeholder) => lowered === placeholder.toLowerCase())) return null;
+  const list = Array.isArray(placeholders) ? placeholders : (placeholders ? [placeholders] : []);
+  if (list.some((placeholder) => typeof placeholder === 'string' && lowered === placeholder.toLowerCase())) return null;
   return text;
 }
 

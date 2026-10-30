@@ -13,6 +13,7 @@ const {
   CIVILVIEW_NATIONWIDE_ENTRY,
   SHERIFF_REALEAUCTION_MULTI_STATE,
 } = require('./nationwide-us-catalog');
+const { TRANCHI_CATALOG_ENTRIES } = require('./tranchi-catalog');
 
 const SCHEDULED_ADAPTER_KEYS = Object.freeze([
   'treasury', 'gsa', 'irs', 'usda', 'landbank', 'civilview', 'bid4assets',
@@ -123,6 +124,9 @@ const SOURCE_STATUS_BY_ID = Object.freeze({
   'mls-licensed-feed': 'DISCOVERY_ONLY',
   ...Object.fromEntries(
     NATIONWIDE_US_ENTRIES.map((entry) => [entry.id, entry.status || 'LOCAL_ROUTE'])
+  ),
+  ...Object.fromEntries(
+    TRANCHI_CATALOG_ENTRIES.map((entry) => [entry.id, entry.status || 'LOCAL_ROUTE'])
   ),
 });
 
@@ -323,6 +327,7 @@ const SOURCE_CATALOG = Object.freeze([
   source(CIVILVIEW_NATIONWIDE_ENTRY),
   source(SHERIFF_REALEAUCTION_MULTI_STATE),
   ...NATIONWIDE_US_ENTRIES.map((entry) => source(entry)),
+  ...TRANCHI_CATALOG_ENTRIES.map((entry) => source(entry)),
 ]);
 
 function getSource(id) {

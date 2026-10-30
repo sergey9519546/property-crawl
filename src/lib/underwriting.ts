@@ -1046,3 +1046,388 @@ export function computeLienWaterfall(params: {
     summary,
   };
 }
+
+
+// ============================================================================
+// CONSTITUTIONAL SURPLUS ENGINE (Tyler v. Hennepin / Pung v. Isabella)
+// ============================================================================
+
+export interface ConstitutionalSurplusResult {
+  bidAmount: number | null;
+  taxDebtAmount: number | null;
+  estimatedSurplus: number | null;
+  effectiveSurplusRatio: number | null;
+  doctrine: "Tyler_v_Hennepin_2023_Pung_v_Isabella_2026";
+  status: "surplus_likely" | "no_surplus_underwater" | "indeterminate_inputs";
+  statutoryDisclaimer: string;
+  explanation: string;
+}
+
+export function computeConstitutionalSurplus(params: {
+  openingBid?: number | string | null;
+  judgmentDebt?: number | string | null;
+  adminFeeRatePct?: number | string | null;
+  state?: string | null;
+} = {}): ConstitutionalSurplusResult {
+  const bidAmount = positiveNumber(params.openingBid);
+  const taxDebtAmount = positiveNumber(params.judgmentDebt);
+  const adminFeeRate = nonNegativeNumber(params.adminFeeRatePct) ?? 10;
+
+  const statutoryDisclaimer =
+    "Per Tyler v. Hennepin County (2023) and Pung v. Isabella County (2026), excess auction proceeds above delinquent tax debt, interest, and statutory administrative costs belong to the prior owner. Taxing jurisdictions cannot retain surplus equity. Claim procedures and response windows vary by state.";
+
+  if (bidAmount === null || taxDebtAmount === null) {
+    return {
+      bidAmount,
+      taxDebtAmount,
+      estimatedSurplus: null,
+      effectiveSurplusRatio: null,
+      doctrine: "Tyler_v_Hennepin_2023_Pung_v_Isabella_2026",
+      status: "indeterminate_inputs",
+      statutoryDisclaimer,
+      explanation: "Surplus proceeds cannot be determined without both a verified bid/sale price and the explicit delinquent debt amount.",
+    };
+  }
+
+  if (bidAmount <= taxDebtAmount) {
+    return {
+      bidAmount,
+      taxDebtAmount,
+      estimatedSurplus: 0,
+      effectiveSurplusRatio: 0,
+      doctrine: "Tyler_v_Hennepin_2023_Pung_v_Isabella_2026",
+      status: "no_surplus_underwater",
+      statutoryDisclaimer,
+      explanation: `Bid ($${bidAmount.toLocaleString()}) does not exceed delinquent tax debt ($${taxDebtAmount.toLocaleString()}). No surplus proceeds are generated.`,
+    };
+  }
+
+  const rawDifference = bidAmount - taxDebtAmount;
+  const allowableFee = Math.round((rawDifference * adminFeeRate) / 100);
+  const estimatedSurplus = Math.max(0, rawDifference - allowableFee);
+  const effectiveSurplusRatio = Number((estimatedSurplus / bidAmount).toFixed(4));
+
+  return {
+    bidAmount,
+    taxDebtAmount,
+    estimatedSurplus,
+    effectiveSurplusRatio,
+    doctrine: "Tyler_v_Hennepin_2023_Pung_v_Isabella_2026",
+    status: "surplus_likely",
+    statutoryDisclaimer,
+    explanation: `Estimated constitutional surplus of $${estimatedSurplus.toLocaleString()} (after ${adminFeeRate}% administrative cost allowance of $${allowableFee.toLocaleString()}) payable to former owner.`,
+  };
+}
+
+// ============================================================================
+// STATE-SPECIFIC PROPERTY TAX REASSESSMENT SHOCK ENGINE
+// ============================================================================
+
+export interface StateReassessmentRule {
+  state: string;
+  ruleName: string;
+  effectiveTaxRatePct: number;
+  annualCapPct: number | null;
+  resetsOnSale: boolean;
+  supplementalBillExpected: boolean;
+  statutoryReference: string;
+}
+
+export const STATE_REASSESSMENT_RULES: Record<string, StateReassessmentRule> = Object.freeze({
+  CA: {
+    state: "CA",
+    ruleName: "CA_PROP_13",
+    effectiveTaxRatePct: 1.25,
+    annualCapPct: 2,
+    resetsOnSale: true,
+    supplementalBillExpected: true,
+    statutoryReference: "CA BOE Prop 13 (Article XIIIA); calstatepayer 2026",
+  },
+  TX: {
+    state: "TX",
+    ruleName: "TX_MARKET_RESET",
+    effectiveTaxRatePct: 1.70,
+    annualCapPct: 20,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "TX Comptroller Property Tax Assistance; Tax Code §23.231",
+  },
+  FL: {
+    state: "FL",
+    ruleName: "FL_PURCHASE_RESET",
+    effectiveTaxRatePct: 0.89,
+    annualCapPct: 10,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "FL Dept. of Revenue; §193.1554 non-homestead cap",
+  },
+  NJ: {
+    state: "NJ",
+    ruleName: "NJ_RESET",
+    effectiveTaxRatePct: 2.23,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: true,
+    statutoryReference: "NJ Treasury Division of Taxation; municipal revaluation cycles",
+  },
+  NY: {
+    state: "NY",
+    ruleName: "NY_RESET",
+    effectiveTaxRatePct: 1.40,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "NY ORPTS; STAR exemption owner-occupied only",
+  },
+  IL: {
+    state: "IL",
+    ruleName: "IL_RESET",
+    effectiveTaxRatePct: 2.10,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "IL Dept. of Revenue; fair market value reassessment on sale",
+  },
+  DEFAULT: {
+    state: "US",
+    ruleName: "NATIONAL_MEDIAN_TRANSFER",
+    effectiveTaxRatePct: 1.15,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "U.S. Census Bureau ACS 5-Year National Median Real Estate Tax Rate",
+  },
+});
+
+export interface ReassessmentShockResult {
+  purchasePrice: number | null;
+  state: string;
+  priorAnnualTax: number | null;
+  reassessedAnnualTax: number | null;
+  annualTaxShock: number | null;
+  monthlyTaxShock: number | null;
+  supplementalBillEstimate: number | null;
+  rule: StateReassessmentRule;
+  explanation: string;
+}
+
+export function computeReassessmentShock(params: {
+  purchasePrice?: number | string | null;
+  state?: string | null;
+  priorAnnualTax?: number | string | null;
+  overrideTaxRatePct?: number | string | null;
+} = {}): ReassessmentShockResult {
+  const purchasePrice = positiveNumber(params.purchasePrice);
+  const stateCode = (params.state || "").trim().toUpperCase();
+  const rule = STATE_REASSESSMENT_RULES[stateCode] || STATE_REASSESSMENT_RULES.DEFAULT;
+  const priorAnnualTax = nonNegativeNumber(params.priorAnnualTax);
+  const effectiveRate = positiveNumber(params.overrideTaxRatePct) ?? rule.effectiveTaxRatePct;
+
+  if (purchasePrice === null) {
+    return {
+      purchasePrice: null,
+      state: stateCode || "US",
+      priorAnnualTax,
+      reassessedAnnualTax: null,
+      annualTaxShock: null,
+      monthlyTaxShock: null,
+      supplementalBillEstimate: null,
+      rule,
+      explanation: "Reassessment tax shock requires an explicit purchase price or winning bid assumption.",
+    };
+  }
+
+  const reassessedAnnualTax = Math.round((purchasePrice * effectiveRate) / 100);
+  const annualTaxShock = priorAnnualTax !== null ? reassessedAnnualTax - priorAnnualTax : null;
+  const monthlyTaxShock = annualTaxShock !== null ? Math.round(annualTaxShock / 12) : null;
+  const supplementalBillEstimate = rule.supplementalBillExpected && annualTaxShock !== null && annualTaxShock > 0
+    ? Math.round((annualTaxShock / 12) * 6)
+    : null;
+
+  let explanation = `${rule.ruleName}: Purchase price ($${purchasePrice.toLocaleString()}) establishes new tax basis at ~${effectiveRate}% effective rate ($${reassessedAnnualTax.toLocaleString()}/year).`;
+  if (priorAnnualTax !== null) {
+    if (annualTaxShock! > 0) {
+      explanation += ` Tax shock increase of +$${annualTaxShock!.toLocaleString()}/year (+$${monthlyTaxShock!.toLocaleString()}/mo) over prior owner bill ($${priorAnnualTax.toLocaleString()}/yr).`;
+      if (supplementalBillEstimate !== null) {
+        explanation += ` Estimated supplemental bill of ~$${supplementalBillEstimate.toLocaleString()} expected 3-9 months post-closing.`;
+      }
+    } else {
+      explanation += ` Reassessed bill ($${reassessedAnnualTax.toLocaleString()}/yr) is at or below prior bill ($${priorAnnualTax.toLocaleString()}/yr).`;
+    }
+  }
+
+  return {
+    purchasePrice,
+    state: stateCode || "US",
+    priorAnnualTax,
+    reassessedAnnualTax,
+    annualTaxShock,
+    monthlyTaxShock,
+    supplementalBillEstimate,
+    rule,
+    explanation,
+  };
+}
+
+// ============================================================================
+// DSCR FINANCING & DEBT SERVICE COVERAGE ENGINE
+// ============================================================================
+
+export interface DscrCoverageResult {
+  monthlyGrossRent: number | null;
+  monthlyPitia: number | null;
+  dscrRatio: number | null;
+  minDscrTarget: number;
+  meetsMinDscr: boolean;
+  excessCashFlowMonthly: number | null;
+  maxPitiaAllowedAtTarget: number | null;
+  status: "qualified" | "stressed" | "deficient" | "insufficient_inputs";
+  explanation: string;
+}
+
+export function computeDscrCoverage(params: {
+  monthlyGrossRent?: number | string | null;
+  monthlyPrincipalInterest?: number | string | null;
+  monthlyReassessedTax?: number | string | null;
+  monthlyInsurance?: number | string | null;
+  monthlyHoa?: number | string | null;
+  minDscrTarget?: number | string | null;
+} = {}): DscrCoverageResult {
+  const rent = positiveNumber(params.monthlyGrossRent);
+  const pi = nonNegativeNumber(params.monthlyPrincipalInterest);
+  const tax = nonNegativeNumber(params.monthlyReassessedTax);
+  const ins = nonNegativeNumber(params.monthlyInsurance);
+  const hoa = nonNegativeNumber(params.monthlyHoa) ?? 0;
+  const minTarget = positiveNumber(params.minDscrTarget) ?? 1.20;
+
+  if (rent === null || pi === null || tax === null || ins === null) {
+    return {
+      monthlyGrossRent: rent,
+      monthlyPitia: null,
+      dscrRatio: null,
+      minDscrTarget: minTarget,
+      meetsMinDscr: false,
+      excessCashFlowMonthly: null,
+      maxPitiaAllowedAtTarget: null,
+      status: "insufficient_inputs",
+      explanation: "DSCR calculation requires explicit qualifying rent, debt service (P&I), reassessed tax, and insurance.",
+    };
+  }
+
+  const monthlyPitia = Math.round(pi + tax + ins + hoa);
+  if (monthlyPitia <= 0) {
+    return {
+      monthlyGrossRent: rent,
+      monthlyPitia: 0,
+      dscrRatio: null,
+      minDscrTarget: minTarget,
+      meetsMinDscr: false,
+      excessCashFlowMonthly: rent,
+      maxPitiaAllowedAtTarget: Math.round(rent / minTarget),
+      status: "insufficient_inputs",
+      explanation: "PITIA must be greater than zero to compute DSCR.",
+    };
+  }
+
+  const dscrRatio = Number((rent / monthlyPitia).toFixed(3));
+  const meetsMinDscr = dscrRatio >= minTarget;
+  const excessCashFlowMonthly = Math.round(rent - monthlyPitia);
+  const maxPitiaAllowedAtTarget = Math.round(rent / minTarget);
+
+  let status: DscrCoverageResult["status"];
+  let explanation: string;
+
+  if (dscrRatio >= minTarget) {
+    status = "qualified";
+    explanation = `DSCR of ${dscrRatio.toFixed(2)}x exceeds the ${minTarget.toFixed(2)}x requirement with positive monthly cash flow of $${excessCashFlowMonthly.toLocaleString()}/mo.`;
+  } else if (dscrRatio >= 1.0) {
+    status = "stressed";
+    explanation = `DSCR of ${dscrRatio.toFixed(2)}x covers debt service but falls short of the ${minTarget.toFixed(2)}x investor guideline. Maximum permitted PITIA is $${maxPitiaAllowedAtTarget.toLocaleString()}/mo.`;
+  } else {
+    status = "deficient";
+    explanation = `DSCR of ${dscrRatio.toFixed(2)}x is underwater (negative cash flow of $${Math.abs(excessCashFlowMonthly).toLocaleString()}/mo). PITIA exceeds gross rent.`;
+  }
+
+  return {
+    monthlyGrossRent: rent,
+    monthlyPitia,
+    dscrRatio,
+    minDscrTarget: minTarget,
+    meetsMinDscr,
+    excessCashFlowMonthly,
+    maxPitiaAllowedAtTarget,
+    status,
+    explanation,
+  };
+}
+
+// ============================================================================
+// STRATEGY CLASSIFICATION ENGINE
+// ============================================================================
+
+export type StrategyTag = "wholesale" | "owner_occupy" | "brrrr" | "rental" | "flip";
+
+export interface StrategyClassificationResult {
+  strategies: StrategyTag[];
+  equitySpreadDollars: number | null;
+  equitySpreadPct: number | null;
+  criteriaNotes: string[];
+}
+
+export function classifyInvestmentStrategies(params: {
+  purchasePrice?: number | string | null;
+  estimatedValueLow?: number | string | null;
+  hasSaleDate?: boolean;
+  dscrRatio?: number | null;
+} = {}): StrategyClassificationResult {
+  const price = positiveNumber(params.purchasePrice);
+  const valLow = positiveNumber(params.estimatedValueLow);
+  const hasSaleDate = Boolean(params.hasSaleDate);
+  const dscr = finiteNumber(params.dscrRatio);
+
+  if (price === null || valLow === null || valLow <= 0) {
+    return {
+      strategies: [],
+      equitySpreadDollars: null,
+      equitySpreadPct: null,
+      criteriaNotes: ["Requires both purchase price and conservative valuation estimate to classify investment exit strategies."],
+    };
+  }
+
+  const spreadDollars = Math.max(0, valLow - price);
+  const spreadPct = Number((spreadDollars / valLow).toFixed(4));
+  const strategies: StrategyTag[] = [];
+  const notes: string[] = [];
+
+  if (price <= 400000 && spreadPct >= 0.10) {
+    strategies.push("owner_occupy");
+    notes.push(`Owner-occupy viable: price $${price.toLocaleString()} is within affordable loan bounds with ${(spreadPct * 100).toFixed(1)}% equity spread.`);
+  }
+
+  if (spreadPct >= 0.30) {
+    strategies.push("brrrr");
+    notes.push(`BRRRR candidate: ${(spreadPct * 100).toFixed(1)}% discount provides substantial margin for rehab and cash-out refinancing.`);
+  }
+
+  if ((dscr !== null && dscr >= 1.20) || spreadPct >= 0.20) {
+    strategies.push("rental");
+    notes.push(`Rental cash-flow candidate: ${(spreadPct * 100).toFixed(1)}% equity spread${dscr ? ` and ${dscr}x DSCR` : ""}.`);
+  }
+
+  if (spreadPct >= 0.20) {
+    strategies.push("wholesale");
+    notes.push(`Wholesale viable: $${spreadDollars.toLocaleString()} gross spread gives ample room for assignment fee.`);
+  }
+
+  if (spreadPct >= 0.25 && hasSaleDate) {
+    strategies.push("flip");
+    notes.push(`Fix-and-flip viable: ${(spreadPct * 100).toFixed(1)}% equity spread with fixed auction sale date for timeline planning.`);
+  }
+
+  return {
+    strategies,
+    equitySpreadDollars: spreadDollars,
+    equitySpreadPct: spreadPct,
+    criteriaNotes: notes,
+  };
+}

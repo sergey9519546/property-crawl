@@ -11,6 +11,10 @@ import {
   redemptionLabel,
   computeStatutoryFeePreset,
   computeStatutoryDeadlinesAndCarry,
+  computeConstitutionalSurplus,
+  computeReassessmentShock,
+  computeDscrCoverage,
+  classifyInvestmentStrategies,
   computeLienWaterfall,
 } from '../src/lib/underwriting.ts';
 
@@ -396,4 +400,107 @@ test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and I
   assert.equal(priority.recordedDate, '04/12/2019');
   assert.equal(priority.explicitlySubjectToSeniorMortgage, true);
   delete globalThis.sessionStorage;
+});
+
+
+test('computeConstitutionalSurplus enforces Tyler v. Hennepin and Pung doctrine', () => {
+  const incomplete = computeConstitutionalSurplus({ openingBid: 150_000 });
+  assert.equal(incomplete.status, 'indeterminate_inputs');
+  assert.equal(incomplete.estimatedSurplus, null);
+
+  const underwater = computeConstitutionalSurplus({ openingBid: 80_000, judgmentDebt: 95_000 });
+  assert.equal(underwater.status, 'no_surplus_underwater');
+  assert.equal(underwater.estimatedSurplus, 0);
+  assert.equal(underwater.effectiveSurplusRatio, 0);
+
+  const surplus = computeConstitutionalSurplus({ openingBid: 150_000, judgmentDebt: 100_000 });
+  assert.equal(surplus.status, 'surplus_likely');
+  assert.equal(surplus.estimatedSurplus, 45_000);
+  assert.equal(surplus.effectiveSurplusRatio, 0.3);
+  assert.equal(surplus.doctrine, 'Tyler_v_Hennepin_2023_Pung_v_Isabella_2026');
+  assert.match(surplus.statutoryDisclaimer, /Tyler v\. Hennepin County/);
+});
+
+test('computeReassessmentShock models state-specific property tax reset upon transfer', () => {
+  const unresolved = computeReassessmentShock({ state: 'CA' });
+  assert.equal(unresolved.reassessedAnnualTax, null);
+
+  const ca = computeReassessmentShock({ purchasePrice: 1_000_000, state: 'CA', priorAnnualTax: 4_000 });
+  assert.equal(ca.rule.ruleName, 'CA_PROP_13');
+  assert.equal(ca.reassessedAnnualTax, 12_500);
+  assert.equal(ca.annualTaxShock, 8_500);
+  assert.equal(ca.monthlyTaxShock, 708);
+  assert.equal(ca.supplementalBillEstimate, 4_250);
+  assert.match(ca.explanation, /CA_PROP_13/);
+
+  const tx = computeReassessmentShock({ purchasePrice: 500_000, state: 'TX', priorAnnualTax: 5_000 });
+  assert.equal(tx.rule.ruleName, 'TX_MARKET_RESET');
+  assert.equal(tx.reassessedAnnualTax, 8_500);
+  assert.equal(tx.annualTaxShock, 3_500);
+  assert.match(tx.rule.statutoryReference, /Tax Code §23\.231/);
+
+  const fl = computeReassessmentShock({ purchasePrice: 400_000, state: 'FL', priorAnnualTax: 2_500 });
+  assert.equal(fl.rule.ruleName, 'FL_PURCHASE_RESET');
+  assert.equal(fl.reassessedAnnualTax, 3_560);
+  assert.equal(fl.annualTaxShock, 1_060);
+  assert.match(fl.rule.statutoryReference, /§193\.1554 non-homestead cap/);
+});
+
+test('computeDscrCoverage evaluates debt service coverage with reassessed tax components', () => {
+  const incomplete = computeDscrCoverage({ monthlyGrossRent: 3000, monthlyPrincipalInterest: 1500 });
+  assert.equal(incomplete.status, 'insufficient_inputs');
+  assert.equal(incomplete.dscrRatio, null);
+
+  const qualified = computeDscrCoverage({
+    monthlyGrossRent: 3000,
+    monthlyPrincipalInterest: 1400,
+    monthlyReassessedTax: 400,
+    monthlyInsurance: 200,
+    minDscrTarget: 1.20,
+  });
+  assert.equal(qualified.monthlyPitia, 2000);
+  assert.equal(qualified.dscrRatio, 1.5);
+  assert.equal(qualified.meetsMinDscr, true);
+  assert.equal(qualified.excessCashFlowMonthly, 1000);
+  assert.equal(qualified.status, 'qualified');
+
+  const stressed = computeDscrCoverage({
+    monthlyGrossRent: 2200,
+    monthlyPrincipalInterest: 1400,
+    monthlyReassessedTax: 400,
+    monthlyInsurance: 200,
+    minDscrTarget: 1.20,
+  });
+  assert.equal(stressed.dscrRatio, 1.1);
+  assert.equal(stressed.meetsMinDscr, false);
+  assert.equal(stressed.status, 'stressed');
+
+  const deficient = computeDscrCoverage({
+    monthlyGrossRent: 1800,
+    monthlyPrincipalInterest: 1400,
+    monthlyReassessedTax: 400,
+    monthlyInsurance: 200,
+  });
+  assert.equal(deficient.dscrRatio, 0.9);
+  assert.equal(deficient.meetsMinDscr, false);
+  assert.equal(deficient.status, 'deficient');
+});
+
+test('classifyInvestmentStrategies categorizes exit strategies based on conservative equity spread', () => {
+  const unmodeled = classifyInvestmentStrategies({ purchasePrice: 150_000 });
+  assert.deepEqual(unmodeled.strategies, []);
+
+  const fullStrategy = classifyInvestmentStrategies({
+    purchasePrice: 150_000,
+    estimatedValueLow: 250_000,
+    hasSaleDate: true,
+    dscrRatio: 1.35,
+  });
+  assert.equal(fullStrategy.equitySpreadDollars, 100_000);
+  assert.equal(fullStrategy.equitySpreadPct, 0.4);
+  assert.ok(fullStrategy.strategies.includes('owner_occupy'));
+  assert.ok(fullStrategy.strategies.includes('brrrr'));
+  assert.ok(fullStrategy.strategies.includes('rental'));
+  assert.ok(fullStrategy.strategies.includes('wholesale'));
+  assert.ok(fullStrategy.strategies.includes('flip'));
 });

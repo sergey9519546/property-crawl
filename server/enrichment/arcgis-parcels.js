@@ -1,5 +1,7 @@
 'use strict';
 
+const { queryLocalParcelIndex } = require('./local-parcel-index');
+
 /**
  * Statewide ArcGIS REST FeatureServer / MapServer Registry
  * Official state-published composite parcel services with verified valuation fields.
@@ -1149,6 +1151,10 @@ function selectBestFeature(features, lat, lng) {
 async function queryArcgisParcel(params = {}, init = {}) {
   const options = (typeof params === 'object' && params !== null) ? params : {};
   const { lat, lng, apn, state, county, fetchFn = globalThis.fetch } = options;
+  if (apn) {
+    const localHit = queryLocalParcelIndex({ apn, state, county });
+    if (localHit) return localHit;
+  }
   const signal = (options && options.signal) || (init && init.signal) || AbortSignal.timeout(8000);
   const resolved = resolveCountyEndpoint(state, county);
   if (!resolved) {
