@@ -21,6 +21,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { queryArcgisParcel, resolveCountyKey } = require('./arcgis-parcels');
+const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
 const DEFAULT_CACHE_LIMIT = 5000;
@@ -42,8 +43,14 @@ const DEFAULT_HARVEST_LIMIT = 100;
 // outside 1900-2100 is rejected.
 const TAX_YEAR_FIELDS = ['taxYear', 'TAX_YEAR', 'tax_yr', 'TAX_YR', 'assessYr', 'ASSESS_YR', 'rollYear', 'ROLL_YEAR', 'assessmentYear', 'YEAR_ASSESSED', 'ASMNT_YR'];
 
-function cacheKeyFor(countyKey, lat, lng) {
-  return `${countyKey}:${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
+function cacheKeyFor(countyKey, lat, lng, cleanApn) {
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return `${countyKey}:${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}`;
+  }
+  if (cleanApn) {
+    return `${countyKey}:apn:${cleanApn}`;
+  }
+  return `${countyKey}:unknown`;
 }
 
 function loadCache(cachePath) {
@@ -82,21 +89,31 @@ function candidateListing(listing) {
   if (!listing || typeof listing !== 'object') return null;
   if (!listing.provenance || listing.provenance.origin !== 'live') return null;
   if (listing.assessorParcel || listing.provenance.derivedFields?.assessorRoll) return null;
-  // Strict numeric check: Number(null) is 0, and a null coordinate is absent,
-  // not "on the equator near this county".
-  if (typeof listing.lat !== 'number' || typeof listing.lng !== 'number') return null;
-  const lat = listing.lat;
-  const lng = listing.lng;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+
+  const hasCoords = typeof listing.lat === 'number' && typeof listing.lng === 'number' && Number.isFinite(listing.lat) && Number.isFinite(listing.lng) && !(listing.lat === 0 && listing.lng === 0);
+  const rawApn = extractRawApn(listing);
+  const cleanApn = normalizeApn(rawApn);
+
+  if (!hasCoords && !cleanApn) return null;
+
   const countyKey = resolveCountyKey(listing.state, listing.county);
-  return countyKey ? { listing, lat, lng, countyKey } : null;
+  if (!countyKey) return null;
+
+  return {
+    listing,
+    lat: hasCoords ? listing.lat : undefined,
+    lng: hasCoords ? listing.lng : undefined,
+    apn: rawApn || undefined,
+    cleanApn: cleanApn || null,
+    countyKey,
+  };
 }
 
 function applyHarvest(candidate, parcel, observedAt) {
   const { listing } = candidate;
   listing.assessorParcel = parcel;
   listing.provenance.derivedFields = listing.provenance.derivedFields || {};
-  const assessmentYear = taxYearFromRawAttributes(parcel.rawAttributes);
+  const assessmentYear = taxYearFromRawAttributes(parcel.rawAttributes) || (Number.isInteger(Number(parcel.taxYear)) && Number(parcel.taxYear) >= 1900 && Number(parcel.taxYear) <= 2100 ? Number(parcel.taxYear) : null);
   // Durable copy for the provenance JSONB: everything the evaluator and the
   // county conversion need, without rawAttributes (large, and only the tax
   // year was read from it — captured explicitly below).
@@ -108,14 +125,18 @@ function applyHarvest(candidate, parcel, observedAt) {
     canonicalApn: parcel.canonicalApn,
     landUse: parcel.landUse,
     legalDescription: parcel.legalDescription,
-    assessedValue: parcel.assessedValue,
+    assessedValue: parcel.assessedValue || {
+      total: parcel.assessedTotal ?? null,
+      land: parcel.assessedLand ?? null,
+      improvements: parcel.assessedImprv ?? null,
+    },
   };
   listing.provenance.derivedFields.assessorRoll = {
     parcel: durableParcel,
     countyKey: candidate.countyKey,
-    apn: parcel.canonicalApn || null,
+    apn: parcel.canonicalApn || candidate.cleanApn || null,
     observedAt,
-    basis: 'ARCGIS_REST_PARCEL',
+    basis: parcel.source === 'local_cadastral_offline_index' ? 'LOCAL_CADASTRAL_OFFLINE' : 'ARCGIS_REST_PARCEL',
     assessmentYear,
     note: 'County assessor roll figure harvested at ingest; the market comparison applies the county conversion rule, never the raw figure where none is configured.',
   };
@@ -123,7 +144,7 @@ function applyHarvest(candidate, parcel, observedAt) {
     listing.parcelKey = parcel.countyFips ? `${parcel.countyFips}-${parcel.canonicalApn}` : parcel.canonicalApn;
     listing.provenance.derivedFields.parcelKey = true;
   }
-  const total = Number(parcel.assessedValue?.total);
+  const total = Number(parcel.assessedValue?.total ?? parcel.assessedTotal);
   if (Number.isFinite(total) && total > 0) {
     if (!(Number(listing.assessed) > 0)) listing.assessed = total;
     if (assessmentYear && !listing.assessmentYear) listing.assessmentYear = assessmentYear;
@@ -132,6 +153,7 @@ function applyHarvest(candidate, parcel, observedAt) {
 
 async function harvestAssessorRolls(listings, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
+  const queryFn = options.queryFn || queryArcgisParcel;
   const limit = resolveHarvestLimit(options);
   const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : DEFAULT_CACHE_TTL_MS;
@@ -148,7 +170,7 @@ async function harvestAssessorRolls(listings, options = {}) {
   for (const candidate of candidates) {
     if (results.considered >= limit) break;
     results.considered += 1;
-    const key = cacheKeyFor(candidate.countyKey, candidate.lat, candidate.lng);
+    const key = cacheKeyFor(candidate.countyKey, candidate.lat, candidate.lng, candidate.cleanApn);
     if (!cacheLoaded) {
       cache = loadCache(cachePath);
       cacheLoaded = true;
@@ -162,9 +184,10 @@ async function harvestAssessorRolls(listings, options = {}) {
     }
     let parcel = null;
     try {
-      parcel = await queryArcgisParcel({
+      parcel = await queryFn({
         lat: candidate.lat,
         lng: candidate.lng,
+        apn: candidate.apn,
         state: candidate.listing.state,
         county: candidate.listing.county,
         fetchFn,
@@ -195,6 +218,7 @@ module.exports = {
   DEFAULT_CACHE_TTL_MS,
   DEFAULT_HARVEST_LIMIT,
   cacheKeyFor,
+  candidateListing,
   harvestAssessorRolls,
   resolveHarvestLimit,
   taxYearFromRawAttributes,

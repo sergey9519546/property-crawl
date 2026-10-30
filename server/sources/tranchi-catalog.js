@@ -1897,7 +1897,7 @@ const TRANCHI_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Miami-Dade FL — Foreclosure Auction (RealForeclose) (county, FL). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Miami-Dade FL — Foreclosure Auction (RealForeclose) for civil foreclosure sale notices and scheduled auctions.",

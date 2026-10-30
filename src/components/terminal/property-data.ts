@@ -51,6 +51,18 @@ export interface PropertyListing {
   cashToCloseDetails?: Record<string, unknown> | null;
   price?: number | null;
   listingDate?: string | null;
+  /** HUD FY2025 Small Area Fair Market Rent (SAFMR) statutory benchmark. */
+  hudSafmr?: {
+    zip: string;
+    bedrooms: number;
+    fairMarketRent: number;
+    paymentStandard90Pct: number;
+    paymentStandard110Pct: number;
+    hudAreaName: string;
+    bedroomRents?: readonly number[];
+    source?: string;
+    asOfFiscalYear?: string;
+  } | null;
   apn?: string;
   status?: string | null;
   /** Publisher-observed sale mechanism. Absence means it was not captured. */

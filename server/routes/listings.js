@@ -12,6 +12,7 @@ const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-pa
 // so its records answer the same 404 an absent record answers.
 const { servesListings } = require('../sources/catalog');
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 
 function mediaEntries() {
   try { return readMediaStore(); }
@@ -42,6 +43,8 @@ function presentListing(listing) {
   // Triage + parcel identity are presentation-layer fields: they are computed
   // here so both the in-memory and Postgres listing paths emit the same shape.
   presented.triage = computeTriage({ ...listing, ...presented });
+  const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
+  if (hudSafmr) presented.hudSafmr = hudSafmr;
   if (presented.parcelKey == null) {
     const sourceFacts = listing.provenance?.sourceFacts || {};
     presented.parcelKey = buildParcelKey({

@@ -1151,12 +1151,15 @@ function selectBestFeature(features, lat, lng) {
 async function queryArcgisParcel(params = {}, init = {}) {
   const options = (typeof params === 'object' && params !== null) ? params : {};
   const { lat, lng, apn, state, county, fetchFn = globalThis.fetch } = options;
+
+  const resolved = resolveCountyEndpoint(state, county);
+  const countyFips = options.countyFips || (resolved && resolved.fips) || null;
   if (apn) {
-    const localHit = queryLocalParcelIndex({ apn, state, county });
+    const localHit = queryLocalParcelIndex({ apn, countyFips, state, county });
     if (localHit) return localHit;
   }
   const signal = (options && options.signal) || (init && init.signal) || AbortSignal.timeout(8000);
-  const resolved = resolveCountyEndpoint(state, county);
+
   if (!resolved) {
     return null; // County and state not yet mapped in registry
   }

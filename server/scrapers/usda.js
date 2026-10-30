@@ -121,7 +121,25 @@ class UsdaResalesScraper extends BaseScraper {
           : { enabled: false },
       };
       console.log(`[${this.name}] Scraped ${listings.length} USDA properties`);
-      return listings.map(item => this.standardizeListing(item));
+      const standardized = [];
+      for (const item of listings) {
+        try {
+          standardized.push(this.standardizeListing(item));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            if (this.lastRunReport) {
+              this.lastRunReport.recordsRejected = (this.lastRunReport.recordsRejected || 0) + 1;
+            }
+            console.warn(`[${this.name}] Dropped schema-invalid USDA listing: ${err.message}`);
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (this.lastRunReport) {
+        this.lastRunReport.recordsEmitted = standardized.length;
+      }
+      return standardized;
     });
   }
 

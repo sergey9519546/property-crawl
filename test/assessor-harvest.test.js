@@ -171,4 +171,62 @@ test('taxYearFromRawAttributes accepts common roll-year spellings and rejects no
 
 test('cacheKeyFor is stable for a county and rounded coordinates', () => {
   assert.equal(cacheKeyFor('OH-CUYAHOGA', 41.482512, -81.601239), 'OH-CUYAHOGA:41.48251,-81.60124');
+  assert.equal(cacheKeyFor('OH-CUYAHOGA', null, null, '10101001'), 'OH-CUYAHOGA:apn:10101001');
+});
+
+test('harvest attaches assessor parcel via APN lookup when coordinates are null', async () => {
+  const cachePath = temporaryCachePath();
+  const listing = liveListing({
+    id: 'OH-CUY-APN-ONLY',
+    lat: null,
+    lng: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'CivilView',
+      recordId: 'apn-only-1',
+      sourceFacts: {
+        parcelNumber: '101-01-001',
+      },
+    },
+  });
+  const fetchCalls = [];
+  const results = await harvestAssessorRolls([listing], {
+    cachePath,
+    fetchFn: async (url) => {
+      fetchCalls.push(url);
+      return arcgisFetchReturning(CUYAHOGA_ATTRIBUTES)();
+    },
+    now: Date.parse('2026-10-21T00:00:00.000Z'),
+  });
+
+  assert.equal(results.harvested, 1);
+  assert.equal(results.fetched, 1);
+  assert.equal(fetchCalls.length, 1);
+  assert.ok(fetchCalls[0].includes('UPPER%28PARCELPIN%29+LIKE'));
+  assert.ok(listing.assessorParcel);
+  assert.equal(listing.assessorParcel.canonicalApn, '10101001');
+  assert.equal(listing.assessed, 70000);
+  assert.equal(listing.parcelKey, '39035-10101001');
+
+  // Verify cached under countyKey:apn:cleanApn
+  const rawCache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  assert.ok(rawCache['OH-CUYAHOGA:apn:10101001']);
+  assert.equal(rawCache['OH-CUYAHOGA:apn:10101001'].parcel.canonicalApn, '10101001');
+
+  // Verify second run hits cache without fetching
+  const secondListing = liveListing({
+    id: 'OH-CUY-APN-ONLY-2',
+    lat: null,
+    lng: null,
+    apn: '10101001',
+  });
+  const cachedResults = await harvestAssessorRolls([secondListing], {
+    cachePath,
+    fetchFn: async () => { throw new Error('must not refetch'); },
+    now: Date.parse('2026-10-21T00:00:00.000Z'),
+  });
+  assert.equal(cachedResults.harvested, 1);
+  assert.equal(cachedResults.cacheHits, 1);
+  assert.equal(secondListing.assessed, 70000);
 });

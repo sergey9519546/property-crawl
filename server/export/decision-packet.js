@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
 const { computeCashToClose } = require('../ai/legal-rules');
 const { analyzeMunicipalViolations } = require('../intelligence/municipal-liens');
+const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 
 const CASH_FIELDS = [
   'registrationFunds',
@@ -170,12 +171,14 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
     : null;
   const maxAllowableOffer = explicitPositive(operatorInput.maxAllowableOffer);
   const packetTimestamp = new Date().toISOString();
+  const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
 
   const packet = {
     packetId: `DP-${listing.id || 'ANON'}-${Date.now()}`,
     schemaVersion: 'decision-packet/v1',
     createdAt: packetTimestamp,
     integrityChecksum,
+    ...(hudSafmr ? { hudSafmr } : {}),
     property: {
       id: listing.id,
       address,

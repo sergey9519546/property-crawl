@@ -1,6 +1,7 @@
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { evaluateOpportunitySignals } = require('./signals');
 const { buildDocumentEvidence } = require('./document-evidence');
+const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
@@ -85,6 +86,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   return {
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
+    hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),
     opportunitySignals: opportunityEvaluation.signals,
     trajectory: opportunityEvaluation.trajectory,
     triagePriority: opportunityEvaluation.triagePriority,

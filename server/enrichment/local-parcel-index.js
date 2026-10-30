@@ -3,7 +3,10 @@
 const path = require('node:path');
 const fs = require('node:fs');
 
+const DEFAULT_LOCAL_PARCEL_DB_PATH = path.resolve(__dirname, '../../.cache/local-parcels.db');
+
 let dbInstance = null;
+let currentDbPath = null;
 let DatabaseSyncClass = null;
 
 try {
@@ -15,18 +18,34 @@ try {
 
 /**
  * Returns a handle to the local cadastral SQLite index if configured.
- * Configured via process.env.PROPERTY_LOCAL_PARCEL_DB or fallback path.
+ * Configured via process.env.PROPERTY_LOCAL_PARCEL_DB, PROPERTY_OFFLINE_PARCEL_DB,
+ * or default cache path.
  */
 function getLocalParcelDb() {
-  const dbPath = process.env.PROPERTY_LOCAL_PARCEL_DB || process.env.PROPERTY_OFFLINE_PARCEL_DB;
+  const dbPath = process.env.PROPERTY_LOCAL_PARCEL_DB || process.env.PROPERTY_OFFLINE_PARCEL_DB || DEFAULT_LOCAL_PARCEL_DB_PATH;
   if (!dbPath || !fs.existsSync(dbPath) || !DatabaseSyncClass) {
+    if (dbInstance) {
+      try { dbInstance.close(); } catch {}
+      dbInstance = null;
+      currentDbPath = null;
+    }
     return null;
   }
-  if (dbInstance) return dbInstance;
+  if (dbInstance && currentDbPath === dbPath) return dbInstance;
+  if (dbInstance) {
+    try {
+      dbInstance.close();
+    } catch {}
+    dbInstance = null;
+    currentDbPath = null;
+  }
   try {
     dbInstance = new DatabaseSyncClass(dbPath, { readOnly: true });
+    currentDbPath = dbPath;
     return dbInstance;
   } catch {
+    dbInstance = null;
+    currentDbPath = null;
     return null;
   }
 }
@@ -61,14 +80,24 @@ function queryLocalParcelIndex({ apn, countyFips, state, county } = {}) {
 
     if (!row) return null;
 
+    const total = Number.isFinite(row.assessed_total) ? Number(row.assessed_total) : null;
+    const land = Number.isFinite(row.assessed_land) ? Number(row.assessed_land) : null;
+    const improvements = Number.isFinite(row.assessed_imprv) ? Number(row.assessed_imprv) : null;
+
     return {
       rawApn: row.raw_apn || apn,
       canonicalApn: row.clean_apn || cleanApn,
       countyFips: row.county_fips || countyFips || null,
+      countyName: county || null,
       situsAddress: row.situs_address || null,
-      assessedTotal: Number.isFinite(row.assessed_total) ? Number(row.assessed_total) : null,
-      assessedLand: Number.isFinite(row.assessed_land) ? Number(row.assessed_land) : null,
-      assessedImprv: Number.isFinite(row.assessed_imprv) ? Number(row.assessed_imprv) : null,
+      assessedTotal: total,
+      assessedLand: land,
+      assessedImprv: improvements,
+      assessedValue: {
+        total,
+        land,
+        improvements
+      },
       landUse: row.land_use || null,
       legalDescription: row.legal_description || null,
       taxYear: row.tax_year ? Number(row.tax_year) : null,
@@ -86,10 +115,12 @@ function closeLocalParcelDb() {
       dbInstance.close();
     } catch {}
     dbInstance = null;
+    currentDbPath = null;
   }
 }
 
 module.exports = {
+  DEFAULT_LOCAL_PARCEL_DB_PATH,
   getLocalParcelDb,
   queryLocalParcelIndex,
   closeLocalParcelDb

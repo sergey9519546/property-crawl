@@ -743,3 +743,112 @@ test('landbanksearch passesFilter: rejects shape and address-length violations',
   assert.equal(landbanksearch.passesFilter({ id: 'LB-1', state: 'OHIO', address: '12 ELM STREET' }), false);
   assert.equal(landbanksearch.passesFilter({ id: 'LB-1', state: 'OH', address: 'short' }), false);
 });
+
+test('sheriff parseRealauctionHtml: extracts preview cards with AUCTION_ITEM markup', () => {
+  const s = new SheriffSaleScraper({ counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }] });
+  const html = `<div class="AUCTION_ITEM" id="Auction_104921">
+    <div class="item_row">Auction ID: 104921</div>
+    <div class="item_row">Case #: CV-24-991201</div>
+    <div class="item_row">Property Address: 4928 Broadview Rd, Cleveland, OH 44109</div>
+    <div class="item_row">Opening Bid: $65,000.00</div>
+    <div class="item_row">Appraised Value: $115,000.00</div>
+    <div class="item_row">Auction Date: 11/04/2026</div>
+  </div>`;
+  const out = s.parseRealauctionHtml(html, { name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 'SHERIFF-OH-CUY-CV-24-991201');
+  assert.equal(out[0].state, 'OH');
+  assert.equal(out[0].county, 'Cuyahoga');
+  assert.equal(out[0].address, '4928 Broadview Rd, Cleveland, OH 44109');
+  assert.equal(out[0].openingBid, 65000);
+  assert.equal(out[0].assessed, 115000);
+  assert.equal(out[0].saleDate, '2026-11-04');
+  assert.equal(out[0].sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=104921');
+});
+
+test('sheriff scrapeFeed: skips schema-invalid rows without failing the feed', async () => {
+  const s = new SheriffSaleScraper({
+    counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }],
+  });
+  s.fetchCountyRealauction = async () => [
+    {
+      id: 'SHERIFF-OH-CUY-VALID-1',
+      state: 'OH',
+      county: 'Cuyahoga',
+      address: '100 Valid St, Cleveland, OH 44101',
+      openingBid: 50000,
+      sourceUrl: 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=VALID1',
+      raw: 'valid row',
+      provenance: { origin: 'live', observed: true, publisher: 'Cuyahoga County Sheriff', recordId: 'VALID1' },
+    },
+    {
+      id: '',
+      state: 'OH',
+      county: 'Cuyahoga',
+      address: '200 Invalid St, Cleveland, OH 44101',
+      openingBid: 60000,
+      sourceUrl: 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=INVALID1',
+      raw: 'invalid row',
+      provenance: { origin: 'live', observed: true, publisher: 'Cuyahoga County Sheriff', recordId: 'INVALID1' },
+    },
+  ];
+  const results = await s.scrapeFeed();
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, 'SHERIFF-OH-CUY-VALID-1');
+  assert.equal(s.lastRunReport.recordsEmitted, 1);
+  assert.equal(s.lastRunReport.recordsRejected, 1);
+});
+
+test('usda scrapeFeed: skips schema-invalid rows and updates lastRunReport', async () => {
+  const s = new UsdaResalesScraper({
+    useScrapling: false,
+    fetchImpl: async () => {},
+  });
+  s.fetchText = async () => '<select id="stateCode"><option value="1">Ohio</option></select>';
+  s.searchState = async () => [
+    {
+      id: 'USDA-OH-VALID-1',
+      state: 'OH',
+      county: 'Franklin',
+      address: '100 Farm Rd, Columbus, OH 43215',
+      openingBid: 120000,
+      sourceUrl: 'https://www.resales.usda.gov/detail/1',
+      raw: 'valid row',
+      provenance: { origin: 'live', observed: true, publisher: 'USDA Rural Development', recordId: '1' },
+    },
+    {
+      id: '',
+      state: 'OH',
+      county: 'Franklin',
+      address: '200 Bad Rd, Columbus, OH 43215',
+      openingBid: 130000,
+      sourceUrl: 'https://www.resales.usda.gov/detail/2',
+      raw: 'bad row',
+      provenance: { origin: 'live', observed: true, publisher: 'USDA Rural Development', recordId: '2' },
+    },
+  ];
+  s.rowToListing = (row) => row;
+  s.crawlJitter = async () => {};
+  const results = await s.scrapeFeed();
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, 'USDA-OH-VALID-1');
+  assert.equal(s.lastRunReport.recordsEmitted, 1);
+  assert.equal(s.lastRunReport.recordsRejected, 1);
+});
+
+test('treasury parseAddress: handles District of Columbia and ZIP+4 formats', () => {
+  const s = new TreasuryForfeitureScraper({ useScrapling: false, extractImpl: null });
+  const dc = s.parseAddress('1600 Pennsylvania Ave NW, Washington, District of Columbia 20500-0001');
+  assert.equal(dc.state, 'DC');
+  assert.equal(dc.zip, '20500');
+  assert.equal(dc.city, 'Washington');
+
+  const dcPlain = s.parseAddress('1600 Pennsylvania Ave NW, Washington, District of Columbia 20500');
+  assert.equal(dcPlain.state, 'DC');
+  assert.equal(dcPlain.zip, '20500');
+
+  const zip4 = s.parseAddress('915 E Stewart Ave, Las Vegas, NV 89101-1234');
+  assert.equal(zip4.state, 'NV');
+  assert.equal(zip4.zip, '89101');
+  assert.equal(zip4.city, 'Las Vegas');
+});

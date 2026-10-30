@@ -89,10 +89,22 @@ class SheriffSaleScraper extends BaseScraper {
         if (result.status === 'fulfilled' && Array.isArray(result.value)) allListings.push(...result.value);
       }
 
-      const standardized = allListings
-        .filter(l => this.passesFilter(l))
-        .map(l => this.standardizeListing(l));
-      finalizeRunReport(report, { emitted: standardized.length });
+      const standardized = [];
+      let schemaRejected = 0;
+      for (const l of allListings) {
+        if (!this.passesFilter(l)) continue;
+        try {
+          standardized.push(this.standardizeListing(l));
+        } catch (err) {
+          if (err && err.code === "LISTING_SCHEMA_INVALID") {
+            schemaRejected += 1;
+            console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`);
+            continue;
+          }
+          throw err;
+        }
+      }
+      finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
       report.scrapling = this.useScrapling
         ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }
         : { enabled: false };
@@ -127,9 +139,9 @@ class SheriffSaleScraper extends BaseScraper {
           this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
         }
       }
-      return listings.length > 0 ? listings : this.fetchCountyPublicNotices(county);
+      return listings;
     } catch (err) {
-      return this.fetchCountyPublicNotices(county);
+      throw err;
     }
   }
 
@@ -187,6 +199,72 @@ class SheriffSaleScraper extends BaseScraper {
           sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
           provenance: { origin: 'live', observed: true, publisher: `${county.name} County Sheriff`, recordId: caseNum },
         });
+      }
+    }
+
+    if (listings.length === 0) {
+      // Realauction native preview card markup (AUCTION_ITEM)
+      const rawCards = (html || "").split(/<div\b(?=[^>]*\bclass="[^"]*AUCTION_ITEM)/i);
+      for (let i = 1; i < rawCards.length; i++) {
+        const card = "<div " + rawCards[i];
+        const aidMatch = card.match(/\baid=["']?([^"'\s>]+)["']?/i) ||
+          card.match(/(?:Auction\s*ID|Item\s*#?):?\s*([0-9]+)/i) ||
+          card.match(/\bid=["']?Auction_([0-9]+)["']?/i);
+        const aid = aidMatch ? aidMatch[1] : null;
+
+        const caseMatch = card.match(/(?:Case\s*(?:#|No\.?):?)\s*([0-9A-Za-z\-_]+)/i) ||
+          card.match(/CV-[0-9-]+/i) ||
+          card.match(/\b(\d{2,4}[A-Z]{0,2}-\d{2,6})\b/i);
+        const caseNum = caseMatch ? (caseMatch[1] || caseMatch[0]) : null;
+
+        const addressMatch = card.match(/(?:Property\s*Address|Address):?\s*([^<\n\r]+)/i) ||
+          card.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
+        const fallbackAddr = card.match(/>(\d{1,6}\s+[NSEW]?\s*[A-Za-z0-9 .'-]{4,80}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Way|Place|Pl)\.?[^<]*)</i);
+
+        const refId = caseNum || aid;
+        const addrRaw = addressMatch ? addressMatch[1] : (fallbackAddr ? fallbackAddr[1] : null);
+
+        if (refId && addrRaw) {
+          const address = addrRaw.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+          const bidMatch = card.match(/(?:Opening|Upset|Minimum|Starting)\s*Bid\s*:?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i) ||
+            card.match(/bid\s*:?\s*\$([0-9,]+)/i);
+          const appraisalMatch = card.match(/(?:Apprais(?:al|ed(?:\s*Value)?)|Assessed\s*Value):?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+          const judgmentMatch = card.match(/(?:Final\s*Judgment|Judgment\s*Amount):?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+          const saleDateMatch = card.match(/(?:Auction\s*Date|Sale\s*Date):?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
+
+          const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ""), 10) : null;
+          const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ""), 10) : null;
+          const judgment = judgmentMatch ? parseInt(judgmentMatch[1].replace(/,/g, ""), 10) : null;
+          const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
+          const zipMatch = address.match(/\b\d{5}\b/);
+
+          const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, "")}`;
+          const sourceUrl = `https://${county.domain}/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=${encodeURIComponent(aid || caseNum)}`;
+
+          listings.push({
+            id,
+            state: county.state,
+            county: county.name,
+            city: null,
+            zip: zipMatch ? zipMatch[0] : null,
+            address,
+            openingBid,
+            estLow: null,
+            estHigh: null,
+            assessed: appraisal,
+            saleDate,
+            plaintiff: null,
+            defendant: null,
+            judgment,
+            attorney: null,
+            occupancy: null,
+            deposit: null,
+            sourceUrl,
+            raw: card.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000),
+            sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
+            provenance: { origin: "live", observed: true, publisher: `${county.name} County Sheriff`, recordId: String(refId) },
+          });
+        }
       }
     }
 

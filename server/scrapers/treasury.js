@@ -241,17 +241,21 @@ class TreasuryForfeitureScraper extends BaseScraper {
     if (parts.length < 3) return { state: 'US', zip: '00000', city: '', county: '' };
     const last = parts[parts.length - 1];
 
-    // Try state code (e.g. "NV 89101")
-    let m = last.match(/^([A-Z]{2})\s+(\d{5})$/);
+    // Try state code (e.g. "NV 89101" or "NV 89101-1234")
+    let m = last.match(/^([A-Z]{2})\s+(\d{5})(?:-\d{4})?$/);
     if (m) {
       return { state: m[1], zip: m[2], city: parts[parts.length - 2], county: '' };
     }
-    // Try full state name (e.g. "Oregon 97302")
-    m = last.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(\d{5})$/);
+    // Try full state name (e.g. "Oregon 97302" or "District of Columbia 20001-1234")
+    m = last.match(/^([A-Za-z\s]+?)\s+(\d{5})(?:-\d{4})?$/);
     if (m) {
-      const code = STATE_NAME_TO_CODE[m[1]];
-      if (code) {
-        return { state: code, zip: m[2], city: parts[parts.length - 2], county: '' };
+      const stateNameCandidate = m[1].trim();
+      const zip = m[2];
+      const matchEntry = Object.entries(STATE_NAME_TO_CODE).find(
+        ([name]) => name.toLowerCase() === stateNameCandidate.toLowerCase()
+      );
+      if (matchEntry) {
+        return { state: matchEntry[1], zip, city: parts[parts.length - 2], county: '' };
       }
     }
     return { state: 'US', zip: '00000', city: parts[parts.length - 2] || '', county: '' };

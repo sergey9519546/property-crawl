@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
-import { AlertTriangle, Calculator, CheckCircle2, Sparkles } from "lucide-react";
-import { computeCashToClose, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
+import { AlertTriangle, Calculator, CheckCircle2, Scale, ShieldCheck, Sparkles } from "lucide-react";
+import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 
@@ -22,6 +22,14 @@ const fieldLabels: Record<ScenarioField, string> = {
 };
 
 const acquisitionFields: ScenarioField[] = ["buyersPremium", "sheriffPoundage", "transferTax", "delinquentTaxes", "settlementCosts"];
+
+const strategyLabels: Record<string, { label: string; desc: string }> = {
+  wholesale: { label: "Wholesale", desc: "Equity spread supports assignment" },
+  owner_occupy: { label: "Owner-Occupy", desc: "Under conforming limit with equity margin" },
+  brrrr: { label: "BRRRR", desc: ">=30% spread allows refinance extraction" },
+  rental: { label: "Long-Term Rental", desc: "Rent floor & equity support cash flow" },
+  flip: { label: "Fix & Flip", desc: ">=25% discount with scheduled auction date" },
+};
 
 function enteredAmount(value: string): number | null {
   if (!value.trim()) return null;
@@ -212,6 +220,32 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
     hasIrsLien: hasIrsNoticeFlag,
   });
+  const reassessmentShock = computeReassessmentShock({ purchasePrice: openingBid, state: listing.state });
+  const surplusAnalysis = typeof listing.judgment === "number" && listing.judgment > 0
+    ? computeConstitutionalSurplus({ openingBid, judgmentDebt: listing.judgment })
+    : null;
+  const hudSafmr = listing.hudSafmr;
+  const modeledDscr = hudSafmr && openingBid !== null ? (() => {
+    const loanAmount = openingBid * 0.8;
+    const r = 0.0725 / 12;
+    const monthlyPrincipalInterest = Math.round((loanAmount * (r * Math.pow(1 + r, 360))) / (Math.pow(1 + r, 360) - 1));
+    const monthlyReassessedTax = Math.round((reassessmentShock.reassessedAnnualTax ?? 0) / 12);
+    const monthlyInsurance = 125;
+    return computeDscrCoverage({
+      monthlyGrossRent: hudSafmr.fairMarketRent,
+      monthlyPrincipalInterest,
+      monthlyReassessedTax,
+      monthlyInsurance,
+      minDscrTarget: 1.20,
+    });
+  })() : null;
+  const strategyClassification = estimatedValue !== null ? classifyInvestmentStrategies({
+    purchasePrice: openingBid,
+    estimatedValueLow: estimatedValue,
+    hasSaleDate: Boolean(listing.saleDate),
+    dscrRatio: modeledDscr?.dscrRatio ?? null,
+  }) : null;
+
   const affirmZeroCosts = () => {
     const next = { ...scenario, buyersPremium: "0", sheriffPoundage: "0", transferTax: "0", delinquentTaxes: "0", settlementCosts: "0" };
     setScenario(next);
@@ -453,6 +487,122 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <p>{reverseScenario.priceReductionNeeded > 0 ? <>The opening amount is {displayMoney(reverseScenario.priceReductionNeeded)} above the price that meets this scenario&apos;s target.</> : <>The opening amount meets this scenario&apos;s target with {displayMoney(reverseScenario.maxPurchasePrice - openingBid)} of price headroom.</>}</p>
         </div>
       )}
+
+      {/* Statutory Tax Reset, Surplus & Rental Coverage */}
+      <div className="space-y-4 rounded-2xl border border-line bg-card p-5 shadow-sm">
+        <div className="flex items-start gap-2">
+          <Scale className="mt-0.5 h-5 w-5 text-ink" />
+          <div>
+            <h4 className="text-sm font-bold text-ink">Statutory Tax Reset, Surplus &amp; Rental Coverage</h4>
+            <p className="mt-0.5 text-xs text-ink-3">
+              Post-sale tax reassessment shock, constitutional surplus equity recovery, and HUD SAFMR statutory rent floors.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Post-Sale Tax Reassessment */}
+          <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">Post-Sale Tax Reassessment</span>
+              <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">{reassessmentShock.rule.ruleName}</span>
+            </div>
+            <p className="text-lg font-extrabold text-yours">
+              {reassessmentShock.reassessedAnnualTax !== null ? `${displayMoney(reassessmentShock.reassessedAnnualTax)}/yr` : "Unresolved"}
+            </p>
+            <p className="text-xs text-ink-2">
+              Reassessed annual tax ({reassessmentShock.reassessedAnnualTax !== null ? displayMoney(reassessmentShock.reassessedAnnualTax) : "Unresolved"}/yr at {reassessmentShock.rule.effectiveTaxRatePct}% statutory basis on {displayMoney(openingBid)} purchase price).
+            </p>
+            <p className="text-[10px] text-ink-3 leading-tight">
+              Citation: {reassessmentShock.rule.statutoryReference}
+            </p>
+          </div>
+
+          {/* HUD FY2025 SAFMR Rent Floor */}
+          {hudSafmr ? (
+            <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+                <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">{hudSafmr.bedrooms}BR • ZIP {hudSafmr.zip}</span>
+              </div>
+              <p className="text-lg font-extrabold text-yours">
+                {displayMoney(hudSafmr.fairMarketRent)}/mo
+              </p>
+              <p className="text-xs text-ink-2">
+                Published Section 8 Fair Market Rent ({displayMoney(hudSafmr.fairMarketRent)}/mo for {hudSafmr.bedrooms}BR in ZIP {hudSafmr.zip}, 90%–110% payment standard {displayMoney(hudSafmr.paymentStandard90Pct)}–{displayMoney(hudSafmr.paymentStandard110Pct)}/mo).
+              </p>
+              {modeledDscr && (
+                <div className="mt-1 pt-1.5 border-t border-line text-[11px]">
+                  <div className="flex items-center justify-between gap-1 text-ink">
+                    <span className="font-semibold">Modeled DSCR Scenario (80% LTV, 7.25% 30-yr P&amp;I + {displayMoney(Math.round((reassessmentShock.reassessedAnnualTax ?? 0) / 12))}/mo tax + $125/mo insurance):</span>
+                    <span className={`font-bold ${modeledDscr.status === "qualified" ? "text-yours" : modeledDscr.status === "stressed" ? "text-amber-600 dark:text-amber-400" : "text-catch-ink"}`}>
+                      {modeledDscr.dscrRatio ? `${modeledDscr.dscrRatio}x` : "N/A"} ({modeledDscr.status})
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-ink-3 leading-tight mt-0.5">
+                    {modeledDscr.explanation}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+              <p className="text-xs text-ink-3">
+                No statutory HUD SAFMR benchmark record published for ZIP {listing.zip || "unrecorded"}. Section 8 payment standards must be verified through the local housing authority.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Constitutional Surplus (Tyler v. Hennepin) */}
+        {surplusAnalysis && (
+          <div className="rounded-xl border border-line-strong bg-paper p-3.5 space-y-1 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-bold text-ink">
+                <ShieldCheck className="h-4 w-4 text-yours shrink-0" />
+                <span>Constitutional Surplus Analysis (Tyler v. Hennepin / Pung Doctrine)</span>
+              </div>
+              {surplusAnalysis.estimatedSurplus !== null && (
+                <span className="text-sm font-extrabold text-yours">
+                  {displayMoney(surplusAnalysis.estimatedSurplus)}
+                </span>
+              )}
+            </div>
+            <p className="text-ink-2 leading-relaxed">
+              Estimated surplus: {surplusAnalysis.estimatedSurplus !== null ? displayMoney(surplusAnalysis.estimatedSurplus) : "None"}. {surplusAnalysis.explanation}
+            </p>
+            <p className="text-[10px] text-ink-3 leading-tight">
+              {surplusAnalysis.statutoryDisclaimer}
+            </p>
+          </div>
+        )}
+
+        {/* Strategy Classification Badges */}
+        {estimatedValue !== null && strategyClassification && (
+          <div className="border-t border-line pt-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-ink">Modeled Investment Exit Strategies:</span>
+              <span className="text-[11px] text-ink-3">Based on conservative equity spread &amp; DSCR</span>
+            </div>
+            {strategyClassification.strategies.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {strategyClassification.strategies.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-yours/40 bg-yours-wash px-2.5 py-1 text-xs font-semibold text-ink"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-yours" />
+                    <span>{strategyLabels[tag]?.label ?? tag}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-3">No strategies qualified under conservative hurdle rates (requires &gt;=10% discount to ARV).</p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="space-y-2.5 rounded-xl border border-line bg-paper p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">

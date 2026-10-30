@@ -49,8 +49,10 @@ test('tranchi catalog contains high-trust official distress sources satisfying a
     const url = new URL(entry.discoveryUrl);
     assert.equal(url.protocol, 'https:', `${entry.id}: discoveryUrl must be https protocol`);
 
-    // Ingestion constraints: unscheduled adapterKey
-    assert.equal(entry.adapterKey, null, `${entry.id}: adapterKey must be null for discovery-only / local-route catalogs`);
+    // Ingestion constraints: linked platform adapter or null
+    if (entry.adapterKey !== null) {
+      assert.ok(['sheriff', 'civilview'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, or null`);
+    }
 
     // Workflow specification
     assert.ok(entry.workflow, `${entry.id}: workflow must exist`);

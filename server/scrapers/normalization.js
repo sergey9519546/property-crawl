@@ -50,7 +50,7 @@ function httpsUrlOrNull(value) {
 
 /** Strip non-alphanumeric characters and uppercase an APN/parcel number. */
 function normalizeApn(rawApn) {
-  if (rawApn === null || rawApn === undefined || typeof rawApn === 'symbol') return null;
+  if (rawApn === null || rawApn === undefined || typeof rawApn === 'object' || typeof rawApn === 'symbol') return null;
   const stripped = String(rawApn).replace(/[^0-9A-Za-z]/g, '').toUpperCase();
   return stripped || null;
 }

@@ -464,6 +464,15 @@ const scheduler = new IngestionScheduler({
         const harvest = await harvestAssessorRolls(run.listings);
         if (harvest.harvested > 0) {
           console.log(`[Scheduler] Harvested ${harvest.harvested} assessor roll(s) for ${sourceId}`);
+          for (const listing of run.listings) {
+            if (listing?.provenance?.derivedFields?.assessorRoll) {
+              try {
+                await db.createListing(listing);
+              } catch (persistError) {
+                console.warn('[Scheduler] Could not persist harvested assessor roll to DB (non-fatal):', persistError.message);
+              }
+            }
+          }
         }
       } catch (error) {
         console.warn('[Scheduler] Assessor roll harvest failed (non-fatal):', error.message);
