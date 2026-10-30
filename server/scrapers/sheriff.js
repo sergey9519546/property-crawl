@@ -12,6 +12,7 @@ const { mapWithConcurrency } = require('./http');
 const {
   REALAUCTION_FLORIDA_COUNTIES,
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
+  decodeRealAuctionMacros,
   parseRealAuctionDocketHtml,
 } = require('./adapters/realauction');
 
@@ -27,6 +28,23 @@ const DEFAULT_FL_COUNTIES = [
     state: 'FL',
   })),
 ];
+
+const TOP_FL_COUNTIES = Object.freeze([
+  { name: 'Hillsborough', domain: 'hillsborough.realforeclose.com', state: 'FL' },
+  { name: 'Hillsborough', domain: 'hillsborough.realtaxdeed.com', state: 'FL' },
+  { name: 'Orange', domain: 'orange.realforeclose.com', state: 'FL' },
+  { name: 'Orange', domain: 'orange.realtaxdeed.com', state: 'FL' },
+  { name: 'PalmBeach', domain: 'palmbeach.realforeclose.com', state: 'FL' },
+  { name: 'PalmBeach', domain: 'palmbeach.realtaxdeed.com', state: 'FL' },
+  { name: 'Broward', domain: 'broward.realforeclose.com', state: 'FL' },
+  { name: 'Broward', domain: 'broward.realtaxdeed.com', state: 'FL' },
+  { name: 'Miami-Dade', domain: 'miamidade.realforeclose.com', state: 'FL' },
+  { name: 'Miami-Dade', domain: 'miamidade.realtaxdeed.com', state: 'FL' },
+  { name: 'Duval', domain: 'duval.realforeclose.com', state: 'FL' },
+  { name: 'Duval', domain: 'duval.realtaxdeed.com', state: 'FL' },
+  { name: 'Pinellas', domain: 'pinellas.realforeclose.com', state: 'FL' },
+  { name: 'Pinellas', domain: 'pinellas.realtaxdeed.com', state: 'FL' },
+]);
 
 // Expanded default Ohio Realauction jurisdictions (10x collection footprint).
 // SHERIFF_EXTRA_COUNTIES still accepts Name:domain:ST enrollment.
@@ -69,10 +87,13 @@ function parseExtraCounties(raw) {
 class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff' });
+    const flCounties = (options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1')
+      ? DEFAULT_FL_COUNTIES
+      : (process.env.SHERIFF_INCLUDE_FL === '0' ? [] : TOP_FL_COUNTIES);
     this.counties = options.counties
       || [
         ...DEFAULT_OH_COUNTIES,
-        ...((options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1') ? DEFAULT_FL_COUNTIES : []),
+        ...flCounties,
         ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES),
       ];
     this.timeoutMs = 30000;
@@ -140,16 +161,76 @@ class SheriffSaleScraper extends BaseScraper {
   }
 
   async fetchCountyRealauction(county) {
-    const url = `https://${county.domain}/index.cfm?zaction=AUCTION&zmethod=PREVIEW`;
+    const isTaxDeed = String(county.domain || '').toLowerCase().includes('realtaxdeed.com');
+    const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    const baseUrl = `https://${county.domain}`;
+    const url = `${baseUrl}/index.cfm?zaction=AUCTION&zmethod=PREVIEW`;
     try {
       const html = await this.requestText(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'User-Agent': ua,
           Accept: 'text/html,application/xhtml+xml',
         }
       });
       if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
       let listings = this.parseRealauctionHtml(html, county);
+
+      // If initial page has no parseable rows, execute ColdFusion session + AJAX load protocol
+      if (listings.length === 0 && !html.includes('nonstandard skin') && !html.includes('<div id="root">')) {
+        try {
+          const fetcher = this.fetchImpl || globalThis.fetch;
+          const res1 = await fetcher(url, {
+            headers: {
+              'User-Agent': ua,
+              Accept: 'text/html,application/xhtml+xml',
+            },
+          });
+          const rawCookies = res1?.headers?.getSetCookie ? res1.headers.getSetCookie() : [res1?.headers?.get?.('set-cookie')];
+          const cookieHeader = (rawCookies || []).filter(Boolean).map((c) => c.split(';')[0]).join('; ');
+
+          const nextMatch = html.match(/class="BLHeaderNext[^"]*"[\s\S]*?AuctionDate=([0-9\/]+)/i);
+          const todayMatch = html.match(/class="BLHeaderToday[^"]*"[\s\S]*?AuctionDate=([0-9\/]+)/i);
+          const allDates = [...html.matchAll(/AuctionDate=([0-9\/]+)/gi)].map((m) => m[1]);
+          const candidateDates = [...new Set([todayMatch?.[1], nextMatch?.[1], ...allDates].filter(Boolean))];
+
+          const datesToTry = candidateDates.length > 0 ? candidateDates.slice(0, 2) : [null];
+
+          for (const targetDate of datesToTry) {
+            if (targetDate) {
+              try {
+                await fetcher(`${url}&AuctionDate=${encodeURIComponent(targetDate)}`, {
+                  headers: { 'User-Agent': ua, Cookie: cookieHeader },
+                });
+              } catch (_) {}
+            }
+
+            const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=0&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
+            const res2 = await fetcher(ajaxUrl, {
+              headers: {
+                'User-Agent': ua,
+                Cookie: cookieHeader,
+                'X-Requested-With': 'XMLHttpRequest',
+              },
+            });
+            if (res2 && res2.ok) {
+              const rawJson = (await res2.text()).trim();
+              let json = null;
+              try { json = JSON.parse(rawJson); } catch (_) {}
+              if (json && json.retHTML) {
+                const decoded = decodeRealAuctionMacros(json.retHTML);
+                if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(decoded);
+                const ajaxListings = this.parseRealauctionHtml(decoded, county, { saleDate: targetDate });
+                if (ajaxListings.length > 0) {
+                  return ajaxListings;
+                }
+              }
+            }
+          }
+        } catch (_) {
+          // ColdFusion AJAX failed or mock rejected; fall through to Scrapling
+        }
+      }
+
       if (!listings.length && this.useScrapling && typeof this.extract === 'function') {
         try {
           const extracted = await this.extract('table-extract', { html, url });
@@ -167,7 +248,7 @@ class SheriffSaleScraper extends BaseScraper {
     }
   }
 
-  parseRealauctionHtml(html, county) {
+  parseRealauctionHtml(html, county, options = {}) {
     const listings = [];
     const isTaxDeed = String(county.domain || '').toLowerCase().includes('realtaxdeed.com');
 
@@ -233,104 +314,10 @@ class SheriffSaleScraper extends BaseScraper {
     }
 
     if (listings.length === 0) {
-      // Realauction native preview card markup (AUCTION_ITEM)
-      const rawCards = (html || "").split(/<div\b(?=[^>]*\bclass="[^"]*AUCTION_ITEM)/i);
-      for (let i = 1; i < rawCards.length; i++) {
-        const card = "<div " + rawCards[i];
-        const aidMatch = card.match(/\baid=["']?([^"'\s>]+)["']?/i) ||
-          card.match(/(?:Auction\s*ID|Item\s*#?):?\s*([0-9]+)/i) ||
-          card.match(/\bid=["']?Auction_([0-9]+)["']?/i);
-        const aid = aidMatch ? aidMatch[1] : null;
-
-        const caseMatch = card.match(/(?:Case\s*(?:#|No\.?):?)\s*([0-9A-Za-z\-_]+)/i) ||
-          card.match(/CV-[0-9-]+/i) ||
-          card.match(/\b(\d{2,4}[A-Z]{0,2}-\d{2,6})\b/i);
-        const caseNum = caseMatch ? (caseMatch[1] || caseMatch[0]) : null;
-
-        const certMatch = card.match(/Certificate\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i) ||
-          card.match(/(?:Tax\s*Cert(?:ificate)?|Cert)\s*#?:?\s*([0-9A-Za-z\-_]+)/i);
-        const certNum = certMatch ? certMatch[1] : null;
-
-        const parcelMatch = card.match(/(?:Parcel\s*(?:ID|#?)|APN):?\s*([0-9A-Za-z\-_.]+)/i);
-        const apn = parcelMatch ? parcelMatch[1] : null;
-
-        let homestead = null;
-        if (/Homestead(?:\s*Exemption)?\s*:\s*(?:Yes|True|Y)\b/i.test(card)) {
-          homestead = true;
-        } else if (/Homestead(?:\s*Exemption)?\s*:\s*(?:No|False|N)\b/i.test(card)) {
-          homestead = false;
-        }
-
-        const addressMatch = card.match(/(?:Property\s*Address|Address):?\s*([^<\n\r]+)/i) ||
-          card.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
-        const fallbackAddr = card.match(/>(\d{1,6}\s+[NSEW]?\s*[A-Za-z0-9 .'-]{4,80}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Way|Place|Pl)\.?[^<]*)</i);
-
-        const refId = caseNum || certNum || aid;
-        const addrRaw = addressMatch ? addressMatch[1] : (fallbackAddr ? fallbackAddr[1] : null);
-
-        if (refId && addrRaw) {
-          const address = addrRaw.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
-          const bidMatch = card.match(/(?:Opening|Upset|Minimum|Starting)\s*Bid\s*:?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i) ||
-            card.match(/bid\s*:?\s*\$([0-9,]+)/i);
-          const appraisalMatch = card.match(/(?:Apprais(?:al|ed(?:\s*Value)?)|Assessed\s*Value):?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
-          const judgmentMatch = card.match(/(?:Final\s*Judgment|Judgment\s*Amount):?\s*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
-          const saleDateMatch = card.match(/(?:Auction\s*Date|Sale\s*Date):?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
-
-          const openingBid = bidMatch ? parseInt(bidMatch[1].replace(/,/g, ""), 10) : null;
-          const appraisal = appraisalMatch ? parseInt(appraisalMatch[1].replace(/,/g, ""), 10) : null;
-          const judgment = judgmentMatch ? parseInt(judgmentMatch[1].replace(/,/g, ""), 10) : null;
-          const saleDate = saleDateMatch ? this.normalizeSaleDate(saleDateMatch[1]) : null;
-          const zipMatch = address.match(/\b\d{5}\b/);
-
-          const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, "")}`;
-          const sourceUrl = `https://${county.domain}/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=${encodeURIComponent(aid || refId)}`;
-
-          let sourceFacts = null;
-          if (appraisal != null || certNum || homestead != null) {
-            sourceFacts = {};
-            if (appraisal != null) sourceFacts.appraisedValue = appraisal;
-            if (certNum) sourceFacts.certificateNumber = certNum;
-            if (homestead != null) sourceFacts.homestead = homestead;
-          }
-
-          listings.push({
-            id,
-            state: county.state,
-            county: county.name,
-            city: null,
-            zip: zipMatch ? zipMatch[0] : null,
-            address,
-            apn,
-            openingBid,
-            estLow: null,
-            estHigh: null,
-            assessed: appraisal,
-            saleDate,
-            plaintiff: null,
-            defendant: null,
-            judgment,
-            attorney: null,
-            occupancy: null,
-            deposit: null,
-            sourceUrl,
-            raw: card.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000),
-            sourceFacts,
-            provenance: {
-              origin: "live",
-              observed: true,
-              publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
-              recordId: String(refId),
-              platform: isTaxDeed ? 'realtaxdeed' : 'realauction',
-            },
-          });
-        }
-      }
-    }
-
-    if (listings.length === 0) {
       const docketCards = parseRealAuctionDocketHtml(html, county.name, county.state, {
         domain: county.domain,
         mode: isTaxDeed ? 'taxdeed' : 'foreclosure',
+        saleDate: options && options.saleDate ? options.saleDate : null,
       });
       for (const parsed of docketCards) {
         const refId = parsed.caseNumber || parsed.certificateNumber || parsed.auctionId;
@@ -408,9 +395,12 @@ class SheriffSaleScraper extends BaseScraper {
   normalizeSaleDate(raw) {
     if (!raw) return null;
     const text = String(raw).trim();
-    let m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    let m = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
     if (m) {
-      const [, mo, dy, yr] = m;
+      let [, mo, dy, yr] = m;
+      if (yr.length === 2) {
+        yr = '20' + yr;
+      }
       return `${yr}-${String(mo).padStart(2, '0')}-${String(dy).padStart(2, '0')}`;
     }
     m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);

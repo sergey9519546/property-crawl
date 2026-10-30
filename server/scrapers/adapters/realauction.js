@@ -35,6 +35,63 @@ const REALAUCTION_FLORIDA_TAXDEED_COUNTIES = Object.freeze([
   'stjohns', 'stlucie', 'volusia',
 ]);
 
+/**
+ * RealAuction ColdFusion retHTML macro decompression dictionary.
+ * RealAuction encodes repetitive HTML fragments with @A through @L macros.
+ */
+function decodeRealAuctionMacros(raw = '') {
+  if (!raw) return '';
+  return String(raw)
+    .replace(/@A/g, '<div class="')
+    .replace(/@B/g, '</div>')
+    .replace(/@C/g, 'class="')
+    .replace(/@D/g, '<div>')
+    .replace(/@E/g, 'AUCTION')
+    .replace(/@F/g, '</td><td')
+    .replace(/@G/g, '</td></tr>')
+    .replace(/@H/g, '<tr><td ')
+    .replace(/@I/g, 'table')
+    .replace(/@J/g, 'p_back="NextCheck=')
+    .replace(/@K/g, 'style="Display:none"')
+    .replace(/@L/g, '/index.cfm?zaction=auction&zmethod=details&AID=');
+}
+
+/**
+ * Parses key-value pairs from RealAuction ad_tab tables.
+ * Handles multiline address continuations where label cell is blank.
+ */
+function parseAdTabTable(tableHtml = '') {
+  const fields = {};
+  let lastKey = null;
+  const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let rowMatch;
+  while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+    const row = rowMatch[1];
+    const lblMatch = row.match(/<(?:th|td)[^>]*class="[^"]*AD_LBL[^"]*"[^>]*>([\s\S]*?)<\/(?:th|td)>/i);
+    const dtaMatch = row.match(/<td[^>]*class="[^"]*AD_DTA[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+    if (!dtaMatch) continue;
+    const rawVal = dtaMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    if (!rawVal) continue;
+    const rawKey = lblMatch ? lblMatch[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/:$/, '').trim() : '';
+    if (rawKey) {
+      const k = rawKey.toLowerCase();
+      fields[k] = rawVal;
+      lastKey = k;
+    } else if (lastKey === 'property address' || lastKey === 'address') {
+      fields[lastKey] = (fields[lastKey] + ', ' + rawVal).replace(/\s+,/g, ',');
+    }
+  }
+  return fields;
+}
+
+function parseCurrency(str) {
+  if (!str) return null;
+  const match = String(str).match(/([0-9,]+(?:\.[0-9]{2})?)/);
+  if (!match) return null;
+  const n = parseFloat(match[1].replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 function getRealAuctionUrl(county = 'cuyahoga', state = 'OH', options = {}) {
   const cleanCounty = String(county || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const st = String(state || 'OH').toUpperCase();
@@ -66,71 +123,126 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
   const text = String(cardHtml || '');
   if (!text) return null;
 
-  // Case Number: e.g. "Case #: CV-24-991201"
-  const caseMatch = text.match(/Case\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i);
-  // Florida Tax Certificate Number: e.g. "Certificate #: 2023-10492" or "Tax Cert #: 2023-10492"
-  const certMatch = text.match(/Certificate\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i) ||
-    text.match(/(?:Tax\s*Cert(?:ificate)?|Cert)\s*#?:?\s*([0-9A-Za-z\-_]+)/i);
-  // Auction ID: e.g. "Auction ID: 104921" or "Item: 48"
-  const auctionIdMatch = text.match(/(?:Auction\s*ID|Item\s*#?):?\s*([0-9]+)/i);
-  // Homestead Exemption: detect if card text mentions /Homestead(?:\s*Exemption)?\s*:\s*(?:Yes|True|Y)\b/i
+  const auctionIdMatch = text.match(/(?:Auction\s*ID|Item\s*#?):?\s*([0-9]+)/i) ||
+    text.match(/\baid=["']?([0-9]+)["']?/i) ||
+    text.match(/\bid=["']?(?:AITEM_|Auction_)([0-9]+)["']?/i);
+  let auctionId = auctionIdMatch ? auctionIdMatch[1] : null;
+
+  let caseNumber = null;
+  let certificateNumber = null;
+  let parcelId = null;
+  let cleanAddress = null;
+  let openingBid = null;
+  let judgment = null;
+  let assessed = null;
+  let saleDate = options && options.saleDate ? options.saleDate : null;
   let homestead = null;
+
+  // 1. Structured table extraction (ColdFusion ad_tab markup)
+  if (text.includes('ad_tab') || text.includes('AD_LBL') || text.includes('AD_DTA')) {
+    const fields = parseAdTabTable(text);
+
+    const caseRaw = fields['case #'] || fields['case number'] || fields['case no.'] || fields['case'];
+    if (caseRaw) {
+      caseNumber = caseRaw.replace(/\s*\([0-9]+\)$/, '').trim();
+    }
+    certificateNumber = fields['certificate #'] || fields['tax cert #'] || fields['tax cert'] || fields['cert #'] || null;
+
+    const parcelRaw = fields['parcel id'] || fields['apn'] || fields['parcel #'] || fields['folio'];
+    if (parcelRaw && !/property\s*appraiser/i.test(parcelRaw)) {
+      parcelId = parcelRaw;
+    } else {
+      const parcelUrlMatch = text.match(/ParcelID=([0-9A-Za-z\-_.]+)/i);
+      if (parcelUrlMatch) parcelId = parcelUrlMatch[1];
+    }
+
+    let addrRaw = fields['property address'] || fields['address'];
+    if (addrRaw) {
+      addrRaw = addrRaw.replace(/\b(\d{5})0000\b/, '$1');
+      cleanAddress = normalizeOcrText(addrRaw).replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
+    }
+
+    openingBid = parseCurrency(fields['opening bid'] || fields['minimum bid'] || fields['starting bid'] || fields['upset bid']);
+    assessed = parseCurrency(fields['appraised value'] || fields['assessed value']);
+    judgment = parseCurrency(fields['final judgment amount'] || fields['final judgment'] || fields['judgment amount']);
+    if (fields['auction date'] || fields['sale date']) {
+      saleDate = fields['auction date'] || fields['sale date'];
+    }
+  }
+
+  // 2. Regex fallback for fields not populated via table
+  if (!caseNumber) {
+    const caseMatch = text.match(/Case\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i);
+    if (caseMatch) caseNumber = caseMatch[1];
+  }
+  if (!certificateNumber) {
+    const certMatch = text.match(/Certificate\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i) ||
+      text.match(/(?:Tax\s*Cert(?:ificate)?|Cert)\s*#?:?\s*([0-9A-Za-z\-_]+)/i);
+    if (certMatch) certificateNumber = certMatch[1];
+  }
+  if (!parcelId) {
+    const parcelMatch = text.match(/(?:Parcel\s*(?:ID|#?)|APN):?\s*([0-9A-Za-z\-_.]+)/i);
+    if (parcelMatch && !/^(?:ID|APN)$/i.test(parcelMatch[1])) parcelId = parcelMatch[1];
+  }
+  if (!cleanAddress) {
+    const addrMatch = text.match(/(?:Property\s*Address|Address):?\s*([^<\n\r]+)/i);
+    if (addrMatch) {
+      const rawAddr = addrMatch[1].replace(/<[^>]+>/g, '').trim();
+      cleanAddress = normalizeOcrText(rawAddr).replace(/\s+/g, ' ').trim();
+    }
+  }
+  if (openingBid == null) {
+    const bidMatch = text.match(/(?:Opening\s*Bid|Minimum\s*Bid|Starting\s*Bid|Upset\s*Bid):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (bidMatch) openingBid = parseFloat(bidMatch[1].replace(/,/g, ''));
+  }
+  if (judgment == null) {
+    const judgmentMatch = text.match(/(?:Final\s*Judgment|Judgment\s*Amount):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (judgmentMatch) judgment = parseFloat(judgmentMatch[1].replace(/,/g, ''));
+  }
+  if (assessed == null) {
+    const assessedMatch = text.match(/(?:Appraised\s*Value|Assessed\s*Value):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (assessedMatch) assessed = parseFloat(assessedMatch[1].replace(/,/g, ''));
+  }
+  if (!saleDate) {
+    const dateMatch = text.match(/(?:Auction\s*Date|Sale\s*Date):?\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i);
+    if (dateMatch) saleDate = dateMatch[1];
+  }
+
+  // Homestead Exemption
   if (/Homestead(?:\s*Exemption)?\s*:\s*(?:Yes|True|Y)\b/i.test(text)) {
     homestead = true;
   } else if (/Homestead(?:\s*Exemption)?\s*:\s*(?:No|False|N)\b/i.test(text)) {
     homestead = false;
   }
-  // Opening bid / Minimum bid / Starting bid / Upset bid
-  const bidMatch = text.match(/(?:Opening\s*Bid|Minimum\s*Bid|Starting\s*Bid|Upset\s*Bid):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
-  // Final Judgment amount
-  const judgmentMatch = text.match(/(?:Final\s*Judgment|Judgment\s*Amount):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
-  // Assessed value / Appraised value
-  const assessedMatch = text.match(/(?:Appraised\s*Value|Assessed\s*Value):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
-  // Address: e.g. "Property Address: 4928 Broadview Rd, Cleveland, OH 44109"
-  const addrMatch = text.match(/(?:Property\s*Address|Address):?\s*([^<\n\r]+)/i);
-  // Parcel ID / APN: e.g. "Parcel ID: 012-34-567" or "APN: 123-456"
-  const parcelMatch = text.match(/(?:Parcel\s*(?:ID|#?)|APN):?\s*([0-9A-Za-z\-_.]+)/i);
-  // Auction Date: e.g. "Auction Date: 11/04/2026"
-  const dateMatch = text.match(/(?:Auction\s*Date|Sale\s*Date):?\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i);
 
-  if (!caseMatch && !certMatch && !auctionIdMatch && !addrMatch) {
+  if (!caseNumber && !certificateNumber && !auctionId && !cleanAddress) {
     return null;
   }
 
-  const openingBid = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : null;
-  const judgment = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : null;
-  const assessed = assessedMatch ? parseFloat(assessedMatch[1].replace(/,/g, '')) : null;
-
-  const rawAddr = addrMatch ? addrMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-  const cleanAddress = normalizeOcrText(rawAddr).replace(/\s+/g, ' ').trim();
-  const zipMatch = cleanAddress.match(/\b\d{5}\b/);
-
+  const zipMatch = cleanAddress ? cleanAddress.match(/\b\d{5}\b/) : null;
   const countyCapitalized = county.charAt(0).toUpperCase() + county.slice(1).toLowerCase();
   const cleanState = state.toUpperCase();
-
-  const caseNumber = caseMatch ? caseMatch[1] : null;
-  const certificateNumber = certMatch ? certMatch[1] : null;
 
   return {
     source: 'sheriff',
     platform: options && options.mode === 'taxdeed' ? 'realtaxdeed' : 'realauction',
     county: countyCapitalized,
     state: cleanState,
-    auctionId: auctionIdMatch ? auctionIdMatch[1] : null,
+    auctionId,
     caseNumber,
     certificateNumber,
     homestead,
-    parcelId: parcelMatch ? parcelMatch[1] : null,
+    parcelId,
     address: cleanAddress,
     zip: zipMatch ? zipMatch[0] : null,
     openingBid,
     judgment,
     assessed,
-    saleDate: dateMatch ? dateMatch[1] : null,
+    saleDate,
     cardHtml: text,
     sourceUrl: getRealAuctionUrl(county, state, {
       ...options,
-      auctionId: auctionIdMatch ? auctionIdMatch[1] : null,
+      auctionId,
       caseNumber,
       certificateNumber,
     }),
@@ -141,22 +253,42 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
  * Parses full RealAuction preview HTML docket
  */
 function parseRealAuctionDocketHtml(html = '', county = 'cuyahoga', state = 'OH', options = {}) {
-  const text = String(html || '');
+  let text = String(html || '');
+  if (!text) return [];
+
+  // Decode RealAuction ColdFusion macro compression if present
+  if (/@(?:[A-L]|E_ITEM|E_STATS|E_DETAILS)/.test(text)) {
+    text = decodeRealAuctionMacros(text);
+  }
+
   const listings = [];
 
-  // Cards are structured inside table rows or auction card containers
-  const cardRegex = /<(?:div|table)\b[^>]*(?:class="[^"]*(?:Auction_W|tbl_list_data|AUCTION_ITEM)[^"]*"|id="[^"]*Auction_[0-9]+")[^>]*>([\s\S]*?)<\/(?:div|table)>/gi;
-  let match;
-
-  while ((match = cardRegex.exec(text)) !== null) {
-    const cardHtml = match[1];
-    const parsed = parseRealAuctionCard(cardHtml, county, state, options);
-    if (parsed && (parsed.caseNumber || parsed.certificateNumber || parsed.auctionId || parsed.address)) {
-      listings.push(parsed);
+  // 1. Match AUCTION_ITEM cards or containers
+  if (text.includes('AUCTION_ITEM')) {
+    const parts = text.split(/<div\b(?=[^>]*\bclass="[^"]*AUCTION_ITEM)/i);
+    for (let i = 1; i < parts.length; i++) {
+      const cardHtml = '<div ' + parts[i];
+      const parsed = parseRealAuctionCard(cardHtml, county, state, options);
+      if (parsed && (parsed.caseNumber || parsed.certificateNumber || parsed.auctionId || parsed.address)) {
+        listings.push(parsed);
+      }
     }
   }
 
-  // Fallback: If container regex yielded nothing, split on AUCTION_ITEM or Case markers
+  // 2. Container regex for table-based dockets
+  if (listings.length === 0) {
+    const cardRegex = /<(?:div|table)\b[^>]*(?:class="[^"]*(?:Auction_W|tbl_list_data|AUCTION_ITEM)[^"]*"|id="[^"]*Auction_[0-9]+")[^>]*>([\s\S]*?)<\/(?:div|table)>/gi;
+    let match;
+    while ((match = cardRegex.exec(text)) !== null) {
+      const cardHtml = match[1];
+      const parsed = parseRealAuctionCard(cardHtml, county, state, options);
+      if (parsed && (parsed.caseNumber || parsed.certificateNumber || parsed.auctionId || parsed.address)) {
+        listings.push(parsed);
+      }
+    }
+  }
+
+  // 3. Fallback: Split on Case or Tax Cert markers
   if (listings.length === 0 && /(?:Case\s*#|(?:Tax\s*Cert(?:ificate)?|Certificate|Cert)\s*#|Auction\s*ID)/i.test(text)) {
     const blocks = text.split(/(?=(?:Case\s*(?:#|No\.)|(?:Tax\s*Cert(?:ificate)?|Certificate|Cert)\s*(?:#|No\.)|Auction\s*ID):?)/i);
     for (const block of blocks) {
@@ -174,6 +306,8 @@ module.exports = {
   REALAUCTION_OHIO_COUNTIES,
   REALAUCTION_FLORIDA_COUNTIES,
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
+  decodeRealAuctionMacros,
+  parseAdTabTable,
   getRealAuctionUrl,
   parseRealAuctionCard,
   parseRealAuctionDocketHtml,

@@ -763,7 +763,7 @@ test('sheriff parseRealauctionHtml: extracts preview cards with AUCTION_ITEM mar
   assert.equal(out[0].openingBid, 65000);
   assert.equal(out[0].assessed, 115000);
   assert.equal(out[0].saleDate, '2026-11-04');
-  assert.equal(out[0].sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=104921');
+  assert.equal(out[0].sourceUrl, 'https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=104921');
 });
 
 test('sheriff scrapeFeed: skips schema-invalid rows without failing the feed', async () => {

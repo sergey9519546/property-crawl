@@ -192,12 +192,21 @@ class ScraperTelemetry {
       systemStatus: total === 0 ? 'idle' : 'healthy',
       totalScrapers: total,
       scrapersInFault: 0,
+      scrapersChallengeGated: 0,
       scrapersWithDrift: 0,
       details: {}
     };
 
     for (const [sourceName, state] of Object.entries(this.history)) {
-      if (state.circuitBreakerTripped) report.scrapersInFault += 1;
+      const isChallengeGated = Boolean(
+        state.lastErrorCode === 'UPSTREAM_BOT_CHALLENGE' ||
+        /bot\s*challenge|turnstile|captcha|waf/i.test(state.circuitBreakerReason || '')
+      );
+      if (isChallengeGated) {
+        report.scrapersChallengeGated += 1;
+      } else if (state.circuitBreakerTripped) {
+        report.scrapersInFault += 1;
+      }
       if (state.driftDetected) report.scrapersWithDrift += 1;
       
       report.details[sourceName] = {
@@ -213,8 +222,10 @@ class ScraperTelemetry {
       };
     }
 
-    if (report.scrapersInFault > 0 || report.scrapersWithDrift > 0) {
+    if (report.scrapersInFault > 0) {
       report.systemStatus = 'degraded';
+    } else if (report.scrapersChallengeGated > 0 || report.scrapersWithDrift > 0) {
+      report.systemStatus = 'nominal_gated';
     }
 
     return report;
