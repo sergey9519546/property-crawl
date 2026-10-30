@@ -25,6 +25,7 @@ test('discovery migrations target the embedded engine when it is requested',()=>
   assert.equal(migrationTarget({}),'missing');
   assert.equal(migrationTarget({DATABASE_URL:'postgres://localhost/db'}),'tcp');
   assert.equal(migrationTarget({DATABASE_URL:'postgres://localhost/db',PROPERTY_DB:'embedded'}),'embedded');
+  assert.equal(migrationTarget({DATABASE_URL:'postgres://localhost/db',PROPERTY_DB:'embedded',NODE_ENV:'production'}),'tcp');
   assert.equal(migrationTarget({PROPERTY_PG_DATA_DIR:'.cache/pgdata'}),'embedded');
 });
 test('DATABASE_URL is fully functional only with PostgreSQL 14+, the four extensions, public privileges, and the migrated columns', async () => {
