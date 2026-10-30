@@ -171,6 +171,10 @@ test('inspectSourceRecordUrl: trustee accepts official county recorder document 
   assert.equal(clark.isValid, true);
   const washoe = inspectSourceRecordUrl('trustee', 'https://recorder.washoecounty.gov/AcclaimWeb/details?id=DOC-88899');
   assert.equal(washoe.isValid, true);
+  const clarkLive = inspectSourceRecordUrl('trustee', 'https://recorderecomm.clarkcountynv.gov/AcclaimWeb/details?id=20261009001482');
+  assert.equal(clarkLive.isValid, true);
+  const washoeLive = inspectSourceRecordUrl('trustee', 'https://icris.washoecounty.us/details?id=DOC-88899');
+  assert.equal(washoeLive.isValid, true);
   const badHost = inspectSourceRecordUrl('trustee', 'https://random-recorder.com/details?id=123');
   assert.equal(badHost.isValid, false);
 });

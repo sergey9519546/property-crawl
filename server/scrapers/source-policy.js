@@ -49,7 +49,7 @@ const SOURCE_HOSTS = Object.freeze({
   sheriff: ['sheriffsaleauction.ohio.gov', 'realforeclose.com', 'realtaxdeed.com', 'publicnoticesohio.com'],
   servicelink: ['www.servicelinkauction.com'],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
-  trustee: ['recorder.clarkcountynv.gov', 'recorder.washoecounty.gov'],
+  trustee: ['recorder.clarkcountynv.gov', 'recorderecomm.clarkcountynv.gov', 'recorder.washoecounty.gov', 'icris.washoecounty.us'],
   usda: ['resales.usda.gov'],
   va: ['vrmproperties.com'],
 });

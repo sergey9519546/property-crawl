@@ -19,7 +19,8 @@ const DEFAULT_JURISDICTIONS = Object.freeze({
   clark: {
     county: 'Clark',
     state: 'NV',
-    portalUrl: 'https://recorder.clarkcountynv.gov/AcclaimWeb',
+    portalUrl: process.env.CLARK_ACCLAIM_URL || 'https://recorder.clarkcountynv.gov/AcclaimWeb',
+    livePortalUrl: 'https://recorderecomm.clarkcountynv.gov/AcclaimWeb',
     docTypeCodes: {
       LIS_PENDENS: 'LP',
       NOTICE_OF_DEFAULT: 'NOD',
@@ -29,7 +30,8 @@ const DEFAULT_JURISDICTIONS = Object.freeze({
   washoe: {
     county: 'Washoe',
     state: 'NV',
-    portalUrl: 'https://recorder.washoecounty.gov/AcclaimWeb',
+    portalUrl: process.env.WASHOE_RECORDER_URL || 'https://recorder.washoecounty.gov/AcclaimWeb',
+    livePortalUrl: 'https://icris.washoecounty.us/ssrecorder/user/disclaimer',
     docTypeCodes: {
       LIS_PENDENS: 'LP',
       NOTICE_OF_DEFAULT: 'NOD',

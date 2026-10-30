@@ -184,6 +184,51 @@ const SEED_PARCELS = [
     landUse: 'SINGLE_FAMILY',
     legalDescription: 'NCB 4123 BLK 5 LOT 10 SAN ANTONIO',
     taxYear: 2026
+  },
+  // Illinois - Cook County (FIPS 17031)
+  {
+    cleanApn: '16212040190000',
+    rawApn: '16-21-204-019-0000',
+    countyFips: '17031',
+    state: 'IL',
+    county: 'COOK',
+    situsAddress: '1422 S 50TH AVE',
+    assessedTotal: 210000,
+    assessedLand: 45000,
+    assessedImprv: 165000,
+    landUse: 'SINGLE_FAMILY',
+    legalDescription: 'LOT 19 BLOCK 2 IN CICERO SUBDIVISION',
+    taxYear: 2026
+  },
+  // Florida - Orange County Notice (FIPS 12095)
+  {
+    cleanApn: '292230584002140',
+    rawApn: '29-22-30-5840-02-140',
+    countyFips: '12095',
+    state: 'FL',
+    county: 'ORANGE',
+    situsAddress: '4208 LAKE UNDERHILL RD',
+    assessedTotal: 275000,
+    assessedLand: 65000,
+    assessedImprv: 210000,
+    landUse: 'SINGLE_FAMILY',
+    legalDescription: 'LOT 140 BLOCK 2 LAKE UNDERHILL PARK',
+    taxYear: 2026
+  },
+  // Texas - Bexar County Notice (FIPS 48029)
+  {
+    cleanApn: '042181040120',
+    rawApn: '04218-104-0120',
+    countyFips: '48029',
+    state: 'TX',
+    county: 'BEXAR',
+    situsAddress: '7714 TIMBERCREEK DR',
+    assessedTotal: 195000,
+    assessedLand: 40000,
+    assessedImprv: 155000,
+    landUse: 'SINGLE_FAMILY',
+    legalDescription: 'LOT 12 BLOCK 104 TIMBER RIDGE SEC 2',
+    taxYear: 2026
   }
 ];
 
