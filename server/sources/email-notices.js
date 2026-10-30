@@ -9,8 +9,6 @@
  *
  * Implements clean IMAP alert intake protocol:
  * - Queries for unread legal notices from press association domains
- *   (floridapublicnotices.com, publicnoticeillinois.com, texaspublicnotices.com,
- *    publicnoticesohio.com, publicnoticepa.com, georgiapublicnotice.com).
  * - Supports dependency-injected IMAP client or mock transport for unit testing.
  * - Parses legal notice bodies using server/ai/notice-parser.js (parseLegalNotice / deterministicParse).
  * - Standardizes output into canonical listing objects with full provenance
@@ -30,18 +28,18 @@ const {
   deterministicParse,
   parseLegalNotice,
 } = require('../ai/notice-parser');
+const { detectNoticeState } = require('./email-notice-collector');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const defaultDb = require('../db/client');
 
 const FEED_CONFIG = emailFeeds.feeds || {};
 
 const PRESS_ASSOCIATION_DOMAINS = Object.freeze([
-  'floridapublicnotices.com',
-  'publicnoticeillinois.com',
-  'texaspublicnotices.com',
-  'publicnoticesohio.com',
-  'publicnoticepa.com',
-  'georgiapublicnotice.com',
+  ...new Set(
+    Object.values(FEED_CONFIG).flatMap((feed) =>
+      (feed.senderDomains || []).map((d) => d.split('/')[0].trim().toLowerCase())
+    )
+  ),
 ]);
 
 class ImapCredentialsUnsetError extends Error {
@@ -54,31 +52,6 @@ class ImapCredentialsUnsetError extends Error {
 
 function hashNotice(content) {
   return crypto.createHash('sha256').update(String(content || ''), 'utf8').digest('hex');
-}
-
-/**
- * Detect state from email metadata (sender domain, subject, or body statute cues)
- */
-function detectNoticeState(email = {}) {
-  const from = String(email.from || '').toLowerCase();
-  const subject = String(email.subject || '').toUpperCase();
-  const body = String(email.body || '').toUpperCase();
-
-  for (const [st, config] of Object.entries(FEED_CONFIG)) {
-    for (const domain of config.senderDomains || []) {
-      if (from.includes(domain.toLowerCase())) return st;
-    }
-  }
-
-  for (const st of Object.keys(FEED_CONFIG)) {
-    if (new RegExp(`\\b${st}\\b`, 'i').test(subject)) return st;
-  }
-
-  for (const [st, config] of Object.entries(FEED_CONFIG)) {
-    if (config.statute && body.includes(config.statute.toUpperCase())) return st;
-  }
-
-  return 'UNKNOWN';
 }
 
 function isFromPressAssociation(from = '', allowedDomains = PRESS_ASSOCIATION_DOMAINS) {

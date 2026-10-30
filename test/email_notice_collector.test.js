@@ -11,12 +11,20 @@ const {
   routeNoticeResult,
 } = require('../server/sources/email-notice-collector');
 
-test('FEED_CONFIG loads all 6 core press association states', () => {
+test('FEED_CONFIG loads all 14 statutory press association states', () => {
   const states = Object.keys(FEED_CONFIG).sort();
-  assert.deepEqual(states, ['FL', 'GA', 'IL', 'OH', 'PA', 'TX']);
+  assert.deepEqual(states, ['AZ', 'CA', 'CO', 'FL', 'GA', 'IL', 'IN', 'MI', 'NC', 'NJ', 'NY', 'OH', 'PA', 'TX']);
   assert.equal(FEED_CONFIG.IL.statute, '735 ILCS 5/15-1507');
   assert.equal(FEED_CONFIG.TX.statute, 'Tex. Prop. Code § 51.002');
   assert.equal(FEED_CONFIG.FL.statute, 'Fla. Stat. § 50.011');
+  assert.equal(FEED_CONFIG.CA.statute, 'Cal. Civ. Code § 2924f');
+  assert.equal(FEED_CONFIG.NY.statute, 'RPAPL § 231');
+  assert.equal(FEED_CONFIG.NJ.statute, 'N.J. Stat. § 2A:61-1');
+  assert.equal(FEED_CONFIG.MI.statute, 'Mich. Comp. Laws § 600.3208');
+  assert.equal(FEED_CONFIG.NC.statute, 'N.C. Gen. Stat. § 45-21.17');
+  assert.equal(FEED_CONFIG.AZ.statute, 'Ariz. Rev. Stat. § 33-808');
+  assert.equal(FEED_CONFIG.CO.statute, 'Colo. Rev. Stat. § 38-38-101');
+  assert.equal(FEED_CONFIG.IN.statute, 'Ind. Code § 32-29-7-3');
 });
 
 test('state detection accurately resolves from sender domain and subject', () => {
@@ -26,7 +34,27 @@ test('state detection accurately resolves from sender domain and subject', () =>
   assert.equal(detectNoticeState({ from: 'alerts@ohionews.org', subject: 'Cuyahoga Sheriff Sale' }), 'OH');
   assert.equal(detectNoticeState({ from: 'press@panewsmedia.org', subject: 'Allegheny County Notice' }), 'PA');
   assert.equal(detectNoticeState({ from: 'feed@georgiapublicnotice.com', subject: 'Fulton County' }), 'GA');
+  assert.equal(detectNoticeState({ from: 'alerts@capublicnotice.com', subject: 'Orange County Notice' }), 'CA');
+  assert.equal(detectNoticeState({ from: 'bulletin@cnpa.com', subject: 'Trustee Sale' }), 'CA');
+  assert.equal(detectNoticeState({ from: 'notices@nypublicnotices.com', subject: 'Kings County Sale' }), 'NY');
+  assert.equal(detectNoticeState({ from: 'alerts@nyspa.org', subject: 'Foreclosure Notice' }), 'NY');
+  assert.equal(detectNoticeState({ from: 'alerts@njpublicnotices.com', subject: 'Essex County Sale' }), 'NJ');
+  assert.equal(detectNoticeState({ from: 'press@njpa.org', subject: 'Sheriff Sale' }), 'NJ');
+  assert.equal(detectNoticeState({ from: 'alerts@michiganpublicnotices.com', subject: 'Oakland County' }), 'MI');
+  assert.equal(detectNoticeState({ from: 'bulletin@michiganpress.org', subject: 'Foreclosure' }), 'MI');
+  assert.equal(detectNoticeState({ from: 'alerts@ncpublicnotices.com', subject: 'Mecklenburg Notice' }), 'NC');
+  assert.equal(detectNoticeState({ from: 'legal@ncpress.com', subject: 'Special Proceeding' }), 'NC');
+  assert.equal(detectNoticeState({ from: 'alerts@publicnoticeads.com', subject: 'Maricopa Sale' }), 'AZ');
+  assert.equal(detectNoticeState({ from: 'notices@ananews.com', subject: 'Trustee Sale' }), 'AZ');
+  assert.equal(detectNoticeState({ from: 'alerts@publicnoticecolorado.com', subject: 'Denver Sale' }), 'CO');
+  assert.equal(detectNoticeState({ from: 'feed@coloradopressassociation.com', subject: 'Public Trustee' }), 'CO');
+  assert.equal(detectNoticeState({ from: 'alerts@indianapublicnotices.com', subject: 'Marion County' }), 'IN');
+  assert.equal(detectNoticeState({ from: 'press@hspa.com', subject: 'Order of Sale' }), 'IN');
   assert.equal(detectNoticeState({ from: 'unknown@example.com', subject: 'Notice in TX County' }), 'TX');
+  assert.equal(detectNoticeState({ from: 'unknown@example.com', subject: 'Notice in CA County' }), 'CA');
+  assert.equal(detectNoticeState({ from: 'unknown@example.com', subject: 'Notice in NY County' }), 'NY');
+  assert.equal(detectNoticeState({ from: 'unknown@example.com', subject: 'Indiana Sheriff Sale Alert' }), 'IN');
+  assert.equal(detectNoticeState({ from: 'unknown@example.com', subject: 'Sheriff Sale in Lake County, IN' }), 'IN');
 });
 
 test('parses Ohio statutory sheriff sale notice with OCR repair', () => {
@@ -188,6 +216,83 @@ test('parses Georgia non-judicial sale under power notice', () => {
   const record = parsed.records[0];
   assert.equal(record.parsed.case_number, 'GA-2026-5510');
   assert.match(record.parsed.property_address, /1050 Peachtree St NE/);
+});
+
+test('parses California non-judicial trustee sale notice under Cal. Civ. Code § 2924f', () => {
+  const rawEmail = {
+    id: 'eml-ca-01',
+    from: 'alerts@capublicnotice.com',
+    subject: 'San Diego County Trustee Sale Alert',
+    date: '2026-10-10T14:00:00Z',
+    body: `
+      NOTICE OF TRUSTEE'S SALE
+      Pursuant to Cal. Civ. Code § 2924f
+      County of San Diego, State of California.
+      Western Progressive LLC as Trustee for Bank of America, N.A. vs. Carlos Gutierrez
+      Case No. TS-2026-CA-004128
+      On Sale Date: November 19, 2026, the trustee will sell at public auction:
+      5410 University Ave, San Diego, CA 92105
+      Estimated debt: $420,000.00
+      Opening bid: $285,000.00
+      Deposit required: 10% in cashier's check at auction.
+    `,
+  };
+
+  const parsed = parseNoticeEmail(rawEmail);
+  assert.equal(parsed.state, 'CA');
+  assert.equal(parsed.totalRecords, 1);
+
+  const record = parsed.records[0];
+  assert.equal(record.feedState, 'CA');
+  assert.equal(record.feedName, 'California Public Notice');
+  assert.equal(record.statutoryAuthority, 'Cal. Civ. Code § 2924f');
+  assert.equal(record.parsed.case_number, 'TS-2026-CA-004128');
+  assert.match(record.parsed.property_address, /5410 University Ave/);
+  assert.equal(record.parsed.opening_bid, 285000);
+  assert.equal(record.parsed.judgment_amount, 420000);
+  assert.equal(record.parsed.sale_date, 'November 19, 2026');
+  assert.equal(record.parsed.redemption_days, 0);
+  assert.equal(record.reviewStatus, 'AUTO_ACCEPTED');
+  assert.equal(record.reviewRequired, false);
+});
+
+test('parses New York statutory foreclosure referee sale notice under RPAPL § 231', () => {
+  const rawEmail = {
+    id: 'eml-ny-01',
+    from: 'alerts@nypublicnotices.com',
+    subject: 'Kings County Foreclosure Sale Alert',
+    date: '2026-10-11T15:00:00Z',
+    body: `
+      NOTICE OF SALE IN FORECLOSURE
+      Pursuant to RPAPL § 231
+      SUPREME COURT OF THE STATE OF NEW YORK, COUNTY OF KINGS.
+      Case No. 501234/2025
+      The Bank of New York Mellon vs. David Goldberg, et al.
+      Pursuant to a Judgment of Foreclosure and Sale duly entered,
+      the Referee will sell at public auction on Sale Date: December 08, 2026:
+      850 Flatbush Ave, Brooklyn, NY 11226
+      Judgment amount: $620,000.00
+      Minimum bid: $390,000.00
+      Terms of sale: 10% cash or certified funds.
+    `,
+  };
+
+  const parsed = parseNoticeEmail(rawEmail);
+  assert.equal(parsed.state, 'NY');
+  assert.equal(parsed.totalRecords, 1);
+
+  const record = parsed.records[0];
+  assert.equal(record.feedState, 'NY');
+  assert.equal(record.feedName, 'New York Public Notices');
+  assert.equal(record.statutoryAuthority, 'RPAPL § 231');
+  assert.equal(record.parsed.case_number, '501234/2025');
+  assert.match(record.parsed.property_address, /850 Flatbush Ave/);
+  assert.equal(record.parsed.opening_bid, 390000);
+  assert.equal(record.parsed.judgment_amount, 620000);
+  assert.equal(record.parsed.sale_date, 'December 08, 2026');
+  assert.equal(record.parsed.redemption_days, 0);
+  assert.equal(record.reviewStatus, 'AUTO_ACCEPTED');
+  assert.equal(record.reviewRequired, false);
 });
 
 test('disambiguates multi-parcel legal notice into discrete records', () => {

@@ -14,6 +14,7 @@
       "portalUrl": "https://www.floridapublicnotices.com",
       "senderDomains": ["floridapublicnotices.com", "flpress.com"],
       "statute": "Fla. Stat. § 50.011",
+      "statutes": ["Fla. Stat. § 50.011", "Fla. Stat. § 45.0315"],
       "standardKeywords": ["foreclosure sale", "sheriff sale", "final judgment of foreclosure", "certificate of sale"],
       "defaultRedemptionDays": 0,
       "redemptionRule": "Terminates upon issuance of certificate of sale (Fla. Stat. § 45.0315)"
@@ -25,6 +26,7 @@
       "portalUrl": "https://www.publicnoticeillinois.com",
       "senderDomains": ["publicnoticeillinois.com", "illinoispress.org"],
       "statute": "735 ILCS 5/15-1507",
+      "statutes": ["735 ILCS 5/15-1507", "735 ILCS 5/15-1603"],
       "standardKeywords": ["notice of sale", "mortgage foreclosure", "judicial sales corporation"],
       "defaultRedemptionDays": 210,
       "redemptionRule": "7 months from service or 3 months from judgment (735 ILCS 5/15-1603)"
@@ -36,6 +38,7 @@
       "portalUrl": "https://www.texaspublicnotices.com",
       "senderDomains": ["texaspublicnotices.com", "texaspress.com"],
       "statute": "Tex. Prop. Code § 51.002",
+      "statutes": ["Tex. Prop. Code § 51.002", "Tex. Prop. Code § 51.003"],
       "standardKeywords": ["notice of trustee's sale", "substitute trustee", "foreclosure auction"],
       "defaultRedemptionDays": 0,
       "redemptionRule": "No statutory redemption after deed of trust foreclosure (Tex. Prop. Code § 51.003)"
@@ -47,6 +50,7 @@
       "portalUrl": "https://www.publicnoticesohio.com",
       "senderDomains": ["publicnoticesohio.com", "ohionews.org"],
       "statute": "Ohio Rev. Code § 2329.26",
+      "statutes": ["Ohio Rev. Code § 2329.26", "R.C. 2329.26", "R.C. 2329.33", "Ohio Rev. Code § 2329.33"],
       "standardKeywords": ["sheriff's sale", "order of sale", "in foreclosure"],
       "defaultRedemptionDays": 0,
       "redemptionRule": "Terminates upon confirmation of sale (R.C. 2329.33)"
@@ -58,6 +62,7 @@
       "portalUrl": "https://www.publicnoticepa.com",
       "senderDomains": ["publicnoticepa.com", "panewsmedia.org"],
       "statute": "Pa. R. Civ. P. 3129.2",
+      "statutes": ["Pa. R. Civ. P. 3129.2", "Pa. R.C.P. 3129.2", "53 P.S. § 7293"],
       "standardKeywords": ["sheriff's sale of real estate", "writ of execution", "civil division"],
       "defaultRedemptionDays": 0,
       "redemptionRule": "Terminates upon delivery and recording of sheriff deed"
@@ -69,9 +74,106 @@
       "portalUrl": "https://www.georgiapublicnotice.com",
       "senderDomains": ["georgiapublicnotice.com", "gapress.org"],
       "statute": "O.C.G.A. § 44-14-162",
+      "statutes": ["O.C.G.A. § 44-14-162", "OCGA § 44-14-162", "O.C.G.A. § 48-4-40"],
       "standardKeywords": ["notice of sale under power", "non-judicial foreclosure", "security deed"],
       "defaultRedemptionDays": 0,
       "redemptionRule": "No statutory redemption following non-judicial sale under power"
+    },
+    "CA": {
+      "state": "CA",
+      "name": "California Public Notice",
+      "operator": "California News Publishers Association",
+      "portalUrl": "https://www.capublicnotice.com",
+      "senderDomains": ["capublicnotice.com", "cnpa.com"],
+      "statute": "Cal. Civ. Code § 2924f",
+      "statutes": ["Cal. Gov. Code § 6000", "Cal. Civ. Code § 2924f", "Cal. Civ. Code § 2924m"],
+      "standardKeywords": ["notice of trustee's sale", "notice of default", "substitute trustee", "foreclosure auction", "tax-defaulted property"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Non-judicial trustee foreclosure: 0 days post-sale redemption, Cal. Civ. Code § 2924m 45-day eligible bidder window"
+    },
+    "NY": {
+      "state": "NY",
+      "name": "New York Public Notices",
+      "operator": "New York Press Association",
+      "portalUrl": "https://www.nypublicnotices.com",
+      "senderDomains": ["nypublicnotices.com", "nyspa.org"],
+      "statute": "RPAPL § 231",
+      "statutes": ["N.Y. Real Prop. Acts. Law § 231", "RPAPL § 231", "RPAPL § 1352", "RPAPL 231", "RPAPL 1352"],
+      "standardKeywords": ["notice of sale", "referee's sale", "judgment of foreclosure and sale", "tax foreclosure"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Judicial foreclosure, 0 days post-confirmation; equity of redemption terminates upon sale gavel drop (RPAPL § 1352)"
+    },
+    "NJ": {
+      "state": "NJ",
+      "name": "New Jersey Public Notices",
+      "operator": "New Jersey Press Association",
+      "portalUrl": "https://www.njpublicnotices.com",
+      "senderDomains": ["njpublicnotices.com", "njpa.org"],
+      "statute": "N.J. Stat. § 2A:61-1",
+      "statutes": ["N.J. Stat. § 2A:61-1", "N.J. Stat. § 2A:50-5", "N.J. Ct. R. 4:65-5"],
+      "standardKeywords": ["sheriff's sale", "writ of execution", "foreclosure sale", "chancery division"],
+      "defaultRedemptionDays": 10,
+      "redemptionRule": "10-day statutory objection period / redemption before sheriff deed delivery (N.J. Stat. § 2A:50-5)"
+    },
+    "MI": {
+      "state": "MI",
+      "name": "Michigan Public Notices",
+      "operator": "Michigan Press Association",
+      "portalUrl": "https://www.michiganpublicnotices.com",
+      "senderDomains": ["michiganpublicnotices.com", "michiganpress.org"],
+      "statute": "Mich. Comp. Laws § 600.3208",
+      "statutes": ["Mich. Comp. Laws § 600.3208", "MCL § 600.3208", "MCL § 600.3240", "MCL 600.3208", "MCL 600.3240"],
+      "standardKeywords": ["notice of foreclosure", "foreclosure by advertisement", "sheriff's deed", "redemption period"],
+      "defaultRedemptionDays": 180,
+      "redemptionRule": "6-month to 12-month post-sale statutory redemption, or 30 days if abandoned (MCL § 600.3240)"
+    },
+    "NC": {
+      "state": "NC",
+      "name": "North Carolina Public Notices",
+      "operator": "North Carolina Press Association",
+      "portalUrl": "https://www.ncpublicnotices.com",
+      "senderDomains": ["ncpublicnotices.com", "ncpress.com"],
+      "statute": "N.C. Gen. Stat. § 45-21.17",
+      "statutes": ["N.C. Gen. Stat. § 45-21.17", "N.C.G.S. § 45-21.27", "NCGS § 45-21.17", "NCGS § 45-21.27"],
+      "standardKeywords": ["notice of sale of real property", "substitute trustee's sale", "upset bid", "special proceeding"],
+      "defaultRedemptionDays": 10,
+      "redemptionRule": "10-day statutory upset bid period (N.C.G.S. § 45-21.27)"
+    },
+    "AZ": {
+      "state": "AZ",
+      "name": "Arizona Public Notices",
+      "operator": "Arizona Newspapers Association",
+      "portalUrl": "https://www.publicnoticeads.com/az",
+      "senderDomains": ["publicnoticeads.com", "ananews.com"],
+      "statute": "Ariz. Rev. Stat. § 33-808",
+      "statutes": ["Ariz. Rev. Stat. § 33-808", "A.R.S. § 33-808", "A.R.S. § 12-1282", "ARS § 33-808"],
+      "standardKeywords": ["notice of trustee's sale", "substitute trustee", "foreclosure sale", "treasurer's tax lien sale"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Deed of trust non-judicial: 0 days post-sale redemption (Ariz. Rev. Stat. § 33-808)"
+    },
+    "CO": {
+      "state": "CO",
+      "name": "Colorado Public Notices",
+      "operator": "Colorado Press Association",
+      "portalUrl": "https://www.publicnoticecolorado.com",
+      "senderDomains": ["publicnoticecolorado.com", "coloradopressassociation.com"],
+      "statute": "Colo. Rev. Stat. § 38-38-101",
+      "statutes": ["Colo. Rev. Stat. § 38-38-101", "C.R.S. § 38-38-101", "C.R.S. § 38-38-302", "C.R.S. § 38-38-501", "CRS § 38-38-101"],
+      "standardKeywords": ["public trustee's sale", "notice of election and demand", "foreclosure sale", "treasurer's deed"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Pre-sale cure, 0 days post-sale borrower redemption (C.R.S. § 38-38-302)"
+    },
+    "IN": {
+      "state": "IN",
+      "name": "Indiana Public Notices",
+      "operator": "Hoosier State Press Association",
+      "portalUrl": "https://www.indianapublicnotices.com",
+      "senderDomains": ["indianapublicnotices.com", "hspa.com"],
+      "statute": "Ind. Code § 32-29-7-3",
+      "statutes": ["Ind. Code § 32-29-7-3", "Ind. Code § 32-29-7-7", "IC 32-29-7-3", "IC 32-29-7-7"],
+      "standardKeywords": ["sheriff's sale", "order of sale", "cause no.", "foreclosure decree"],
+      "defaultRedemptionDays": 0,
+      "redemptionRule": "Judicial foreclosure, 0 days post-sale redemption (Ind. Code § 32-29-7-7)"
     }
   }
 }

@@ -107,3 +107,62 @@ test('assessor reading withholds a score when the county is not enrolled or the 
   assert.equal(noBid.dealScore, null);
   assert.match(noBid.withheldReason, /Opening amount/);
 });
+
+test('assessor reading converts Florida counties 1:1 with Fla. Stat. § 193.011 citation', () => {
+  for (const countyKey of ['FL-BROWARD', 'FL-PALMBEACH', 'FL-MIAMI-DADE', 'FL-HILLSBOROUGH', 'FL-MIAMI DADE']) {
+    const reading = interpretAssessorParcel({ countyKey, parcel: parcel(200000), openingBid: 80000 });
+    assert.equal(reading.enrolled, true);
+    assert.equal(reading.found, true);
+    assert.equal(reading.rawFigure, 200000);
+    assert.equal(reading.marketComparison, 200000);
+    assert.equal(reading.ratio, 0.4);
+    assert.equal(reading.dealScore, 78);
+    assert.match(reading.citation, /Fla\. Stat\. § 193\.011/);
+  }
+});
+
+test('assessor reading handles Ohio market comparisons for Montgomery and Summit', () => {
+  const montgomery = interpretAssessorParcel({ countyKey: 'OH-MONTGOMERY', parcel: parcel(150000), openingBid: 60000 });
+  assert.equal(montgomery.enrolled, true);
+  assert.equal(montgomery.marketComparison, 150000);
+  assert.equal(montgomery.ratio, 0.4);
+  assert.equal(montgomery.dealScore, 78);
+  assert.match(montgomery.citation, /5715\.01/);
+
+  const summit = interpretAssessorParcel({ countyKey: 'OH-SUMMIT', parcel: parcel(120000), openingBid: 60000 });
+  assert.equal(summit.enrolled, true);
+  assert.equal(summit.marketComparison, 120000);
+  assert.equal(summit.ratio, 0.5);
+  assert.equal(summit.dealScore, 65);
+  assert.match(summit.citation, /cntmarval/);
+});
+
+test('zero-fabrication invariant: missing openingBid or missing parcel yields null dealScore', () => {
+  const missingBid = interpretAssessorParcel({ countyKey: 'FL-BROWARD', parcel: parcel(250000), openingBid: null });
+  assert.equal(missingBid.marketComparison, 250000);
+  assert.equal(missingBid.ratio, null);
+  assert.equal(missingBid.dealScore, null);
+  assert.match(missingBid.withheldReason, /Opening amount is not published/);
+
+  const missingParcel = interpretAssessorParcel({ countyKey: 'FL-BROWARD', parcel: null, openingBid: 100000 });
+  assert.equal(missingParcel.found, false);
+  assert.equal(missingParcel.rawFigure, null);
+  assert.equal(missingParcel.marketComparison, null);
+  assert.equal(missingParcel.ratio, null);
+  assert.equal(missingParcel.dealScore, null);
+  assert.match(missingParcel.withheldReason, /No parcel matched/);
+});
+
+test('statewide endpoint resolution resolves Florida listings with null or unmapped county to FL-STATEWIDE', () => {
+  const { resolveCountyEndpoint, resolveCountyKey } = require('../server/enrichment/arcgis-parcels');
+  const endpointNull = resolveCountyEndpoint('FL', null);
+  const countyKeyNull = endpointNull?.key || resolveCountyKey('FL', null);
+  assert.equal(countyKeyNull, 'FL-STATEWIDE');
+
+  const reading = interpretAssessorParcel({ countyKey: countyKeyNull, parcel: parcel(300000), openingBid: 120000 });
+  assert.equal(reading.enrolled, true);
+  assert.equal(reading.marketComparison, 300000);
+  assert.equal(reading.ratio, 0.4);
+  assert.equal(reading.dealScore, 78);
+  assert.match(reading.citation, /Fla\. Stat\. § 193\.011/);
+});

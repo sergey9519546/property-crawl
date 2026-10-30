@@ -476,6 +476,20 @@ const AR_COUNTY_ENTRIES = buildStatewideCountyEntries('AR', STATEWIDE_ARCGIS_REG
 const COUNTY_ARCGIS_REGISTRY = {
   ...NJ_COUNTY_ENTRIES,
   ...FL_STATEWIDE_COUNTY_ENTRIES,
+  'FL-STATEWIDE': {
+    name: STATEWIDE_ARCGIS_REGISTRY.FL.name,
+    fips: null,
+    endpoint: STATEWIDE_ARCGIS_REGISTRY.FL.endpoint,
+    apnField: STATEWIDE_ARCGIS_REGISTRY.FL.apnField,
+    landUseField: STATEWIDE_ARCGIS_REGISTRY.FL.landUseField,
+    assessedTotalField: STATEWIDE_ARCGIS_REGISTRY.FL.assessedTotalField,
+    assessedLandField: STATEWIDE_ARCGIS_REGISTRY.FL.assessedLandField,
+    assessedImprvField: STATEWIDE_ARCGIS_REGISTRY.FL.assessedImprvField,
+    legalDescField: STATEWIDE_ARCGIS_REGISTRY.FL.legalDescField,
+    situsAddressField: STATEWIDE_ARCGIS_REGISTRY.FL.situsAddressField,
+    spatialFallback: 'envelope',
+    statewideService: 'FL'
+  },
   ...CO_COUNTY_ENTRIES,
   ...NC_COUNTY_ENTRIES,
   ...NY_COUNTY_ENTRIES,
@@ -708,6 +722,18 @@ const COUNTY_ARCGIS_REGISTRY = {
     legalDescField: 'LEGAL_DESCRIPTION',
     situsAddressField: 'SITE_ADDRESS'
   },
+  'OH-MONTGOMERY': {
+    name: 'Montgomery County Auditor (Dayton)',
+    fips: '39113',
+    endpoint: 'https://gis.mcohio.org/arcgis/rest/services/AUDGIS/AUDGIS_Advance/MapServer/0/query',
+    apnField: 'PARCELID',
+    landUseField: 'LUC_DESC',
+    assessedTotalField: 'MKT_TOTAL_VAL',
+    assessedLandField: 'MKT_LAND_VAL',
+    assessedImprvField: 'MKT_BLDG_VAL',
+    legalDescField: 'LEGAL_DESC',
+    situsAddressField: 'SITUS_ADDRESS'
+  },
   'OH-LAKE': {
     name: 'Lake County Auditor (Painesville)',
     fips: '39085',
@@ -719,6 +745,18 @@ const COUNTY_ARCGIS_REGISTRY = {
     assessedImprvField: 'A_VAL_BLDG',
     legalDescField: 'A_LEGAL_DESC',
     situsAddressField: 'G_FULLADDRESS'
+  },
+  'FL-PALMBEACH': {
+    name: 'Palm Beach County Property Appraiser (PAPA)',
+    fips: '12099',
+    endpoint: 'https://services1.arcgis.com/ZWOoUZbtaYePLlPw/arcgis/rest/services/Parcels_and_Property_Details_WebMercator/FeatureServer/0/query',
+    apnField: 'PARCEL_NUMBER',
+    landUseField: 'PROPERTY_USE',
+    assessedTotalField: 'TOTAL_MARKET',
+    assessedLandField: 'LAND_MARKET',
+    assessedImprvField: 'IMPRV_MRKT',
+    legalDescField: 'LEGAL1',
+    situsAddressField: 'SITE_ADDR_STR'
   },
   'FL-PALM BEACH': {
     name: 'Palm Beach County Property Appraiser (PAPA)',

@@ -6,7 +6,7 @@ const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
-const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+const { resolveCountyKey, resolveCountyEndpoint, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
 const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing,
@@ -269,7 +269,8 @@ async function handleAssessorLookup(encodedId, res) {
   catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
   if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
-  const countyKey = resolveCountyKey(listing.state, listing.county);
+  const endpoint = resolveCountyEndpoint(listing.state, listing.county);
+  const countyKey = endpoint?.key || resolveCountyKey(listing.state, listing.county);
   if (!countyKey) {
     return res.json({
       listingId: listing.id,
