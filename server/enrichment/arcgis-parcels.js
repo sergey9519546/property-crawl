@@ -553,8 +553,8 @@ const COUNTY_ARCGIS_REGISTRY = {
     apnField: 'parcel',
     landUseField: 'flucode',
     assessedTotalField: 'justvalue',
-    assessedLandField: 'justvalue',
-    assessedImprvField: 'justvalue',
+    assessedLandField: null,
+    assessedImprvField: null,
     legalDescField: 'zonelink'
   },
   'TX-HARRIS': {
@@ -1029,10 +1029,11 @@ function getAttributeCaseInsensitive(attributes, fieldName) {
  */
 function parseNumericAttribute(rawVal) {
   if (rawVal === null || rawVal === undefined || rawVal === '') return NaN;
-  if (typeof rawVal === 'number') return rawVal;
+  if (typeof rawVal === 'number') return Number.isFinite(rawVal) && rawVal >= 0 ? rawVal : NaN;
   const cleaned = String(rawVal).replace(/[$,\s]/g, '').trim();
   if (!cleaned) return NaN;
-  return Number(cleaned);
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n >= 0 ? n : NaN;
 }
 
 /**
@@ -1077,8 +1078,10 @@ function normalizeArcgisAttributes(attributes, config) {
   let total = Number.isFinite(rawTotal) ? rawTotal : null;
 
   if ((total === null || total <= 0) && config.sumLandAndImprvForTotal) {
-    if (land !== null && improvements !== null && (land > 0 || improvements > 0)) {
-      total = land + improvements;
+    const l = (land !== null && land >= 0) ? land : 0;
+    const imp = (improvements !== null && improvements >= 0) ? improvements : 0;
+    if (l > 0 || imp > 0) {
+      total = l + imp;
     }
   }
 
@@ -1143,7 +1146,10 @@ function selectBestFeature(features, lat, lng) {
  * @param {Function} [params.fetchFn] - Custom fetch for testing
  * @returns {Promise<Object|null>}
  */
-async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globalThis.fetch }) {
+async function queryArcgisParcel(params = {}, init = {}) {
+  const options = (typeof params === 'object' && params !== null) ? params : {};
+  const { lat, lng, apn, state, county, fetchFn = globalThis.fetch } = options;
+  const signal = (options && options.signal) || (init && init.signal) || AbortSignal.timeout(8000);
   const resolved = resolveCountyEndpoint(state, county);
   if (!resolved) {
     return null; // County and state not yet mapped in registry
@@ -1162,6 +1168,7 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
     queryParams.set('geometryType', 'esriGeometryPoint');
     queryParams.set('spatialRel', 'esriSpatialRelIntersects');
     queryParams.set('inSR', '4326');
+    queryParams.set('returnGeometry', 'true');
   } else if (apn) {
     // APN attribute search
     const clean = normalizeApn(apn);
@@ -1172,7 +1179,10 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
         .trim()
         .toUpperCase()
         .replace(/\s+(COUNTY|PARISH)$/i, '')
-        .replace(/[^A-Z0-9 .'-]/g, '');
+        .replace(/['’]/g, '')
+        .replace(/--+/g, '')
+        .replace(/[^A-Z0-9 .]/g, '')
+        .trim();
       if (cleanCounty) {
         whereClause = `UPPER(${config.countyFilterField}) LIKE '%${cleanCounty}%' AND (${whereClause})`;
       }
@@ -1185,7 +1195,7 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
   const url = `${config.endpoint}?${queryParams.toString()}`;
 
   try {
-    const res = await fetchFn(url, {
+    const res = await fetchFn(url, { signal,
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -1207,7 +1217,8 @@ async function queryArcgisParcel({ lat, lng, apn, state, county, fetchFn = globa
       const delta = 0.0004;
       queryParams.set('geometry', `${lng - delta},${lat - delta},${lng + delta},${lat + delta}`);
       queryParams.set('geometryType', 'esriGeometryEnvelope');
-      const retry = await fetchFn(`${config.endpoint}?${queryParams.toString()}`, {
+      queryParams.set('returnGeometry', 'true');
+      const retry = await fetchFn(`${config.endpoint}?${queryParams.toString()}`, { signal,
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -1273,6 +1284,8 @@ module.exports = {
   normalizeApn,
   normalizeArcgisAttributes,
   normalizeParcelAttributes,
+  selectBestFeature,
+  parseNumericAttribute,
   queryArcgisParcel,
   queryCountyParcel,
   resolveCadastralParcelIdentity

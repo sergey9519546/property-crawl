@@ -23,6 +23,8 @@ const {
   normalizeParcelAttributes,
   queryArcgisParcel,
   queryCountyParcel,
+  selectBestFeature,
+  parseNumericAttribute,
   resolveCadastralParcelIdentity
 } = require('../server/enrichment/arcgis-parcels');
 
@@ -458,4 +460,185 @@ test('ArcGIS Resolver: resolveCadastralParcelIdentity resolves countyFips, canon
   assert.equal(apnIdentity.canonicalApn, '0182507112004');
   assert.equal(apnIdentity.parcelKey, '08001-0182507112004');
   assert.equal(apnIdentity.matchBasis, 'cadastral_apn_lookup');
+});
+
+test('ArcGIS Resolver: FL-ALACHUA enforces Zero-Fabrication Underwriting', () => {
+  const alachuaConfig = COUNTY_ARCGIS_REGISTRY['FL-ALACHUA'];
+  assert.ok(alachuaConfig);
+  assert.equal(alachuaConfig.assessedTotalField, 'justvalue');
+  assert.equal(alachuaConfig.assessedLandField, null);
+  assert.equal(alachuaConfig.assessedImprvField, null);
+
+  const attributes = {
+    parcel: '01234-000-000',
+    flucode: 'SFR',
+    justvalue: 285000,
+    zonelink: 'RSF-2'
+  };
+
+  const normalized = normalizeArcgisAttributes(attributes, alachuaConfig);
+  assert.ok(normalized);
+  assert.equal(normalized.rawApn, '01234-000-000');
+  assert.equal(normalized.canonicalApn, '01234000000');
+  assert.equal(normalized.assessedValue.total, 285000);
+  assert.equal(normalized.assessedValue.land, null, 'FL-ALACHUA must not map justvalue to land');
+  assert.equal(normalized.assessedValue.improvements, null, 'FL-ALACHUA must not map justvalue to improvements');
+});
+
+test('ArcGIS Resolver: sanitizes county names with apostrophes and prevents SQL comment injection', async () => {
+  const capturedUrls = [];
+  const mockFetch = async (url) => {
+    capturedUrls.push(String(url));
+    return {
+      ok: true,
+      json: async () => ({ features: [] })
+    };
+  };
+
+  // Test 1: Apostrophe in county name ("Prince George's") on a statewide service with countyFilterField (NC)
+  await queryArcgisParcel({
+    state: 'NC',
+    county: "Prince George's County",
+    apn: '12345',
+    fetchFn: mockFetch
+  });
+
+  // Test 2: Curly apostrophe ("Queen Anne’s")
+  await queryArcgisParcel({
+    state: 'NC',
+    county: 'Queen Anne\u2019s Parish',
+    apn: '67890',
+    fetchFn: mockFetch
+  });
+
+  // Test 3: SQL comment injection attempt ("Wake' -- injection")
+  await queryArcgisParcel({
+    state: 'NC',
+    county: "Wake' -- injection",
+    apn: '99999',
+    fetchFn: mockFetch
+  });
+
+  assert.equal(capturedUrls.length, 3);
+
+  const url1 = decodeURIComponent(capturedUrls[0]);
+  assert.match(url1, /UPPER\(cntyname\)\+LIKE\+'%PRINCE\+GEORGES%'/);
+  assert.doesNotMatch(url1, /PRINCE.*'.*GEORGES/, 'Must strip apostrophe from county name');
+
+  const url2 = decodeURIComponent(capturedUrls[1]);
+  assert.match(url2, /UPPER\(cntyname\)\+LIKE\+'%QUEEN\+ANNES%'/);
+  assert.doesNotMatch(url2, /\u2019/, 'Must strip curly apostrophe from county name');
+
+  const url3 = decodeURIComponent(capturedUrls[2]);
+  assert.match(url3, /UPPER\(cntyname\)\+LIKE\+'%WAKE\+\+INJECTION%'/);
+  assert.doesNotMatch(url3, /--/, 'Must strip SQL comment dashes');
+});
+
+test('ArcGIS Resolver: calculates total for vacant lot when improvements is null and sumLandAndImprvForTotal is true', () => {
+  const sbConfig = COUNTY_ARCGIS_REGISTRY['CA-SAN BERNARDINO'];
+  assert.ok(sbConfig.sumLandAndImprvForTotal);
+
+  // Vacant lot: land is positive, improvements is null
+  const vacantLot = normalizeArcgisAttributes({
+    ParcelNumber: '3104-611-99',
+    AssessClass: 'VACANT LAND',
+    LandValue: '65,000',
+    ImprovementValue: null,
+    ZoningDescription: 'Residential Vacant'
+  }, sbConfig);
+
+  assert.ok(vacantLot);
+  assert.equal(vacantLot.canonicalApn, '310461199');
+  assert.equal(vacantLot.assessedValue.land, 65000);
+  assert.equal(vacantLot.assessedValue.improvements, null);
+  assert.equal(vacantLot.assessedValue.total, 65000, 'Vacant lot with null improvements must have total equal to land value');
+
+  // Vacant lot: improvements is 0
+  const vacantLotZero = normalizeArcgisAttributes({
+    ParcelNumber: '3104-611-98',
+    AssessClass: 'VACANT LAND',
+    LandValue: 42000,
+    ImprovementValue: 0
+  }, sbConfig);
+
+  assert.equal(vacantLotZero.assessedValue.land, 42000);
+  assert.equal(vacantLotZero.assessedValue.improvements, 0);
+  assert.equal(vacantLotZero.assessedValue.total, 42000);
+});
+
+test('ArcGIS Resolver: rejects negative valuation sentinels as null', () => {
+  assert.ok(Number.isNaN(parseNumericAttribute('-100')));
+  assert.ok(Number.isNaN(parseNumericAttribute(-50)));
+  assert.ok(Number.isNaN(parseNumericAttribute('-$250')));
+  assert.equal(parseNumericAttribute('0'), 0);
+  assert.equal(parseNumericAttribute(0), 0);
+  assert.equal(parseNumericAttribute('150000'), 150000);
+
+  const config = COUNTY_ARCGIS_REGISTRY['TX-BEXAR'];
+  const attributesWithSentinels = {
+    PROP_ID: '99999-000-0000',
+    STATE_CD: 'A1',
+    APPRAISED_VAL: '-100',
+    LAND_VAL: -50,
+    IMPRV_VAL: '-999',
+    LEGAL_DESC: 'TEST SENTINEL'
+  };
+
+  const normalized = normalizeArcgisAttributes(attributesWithSentinels, config);
+  assert.ok(normalized);
+  assert.equal(normalized.assessedValue.total, null, 'Negative sentinel total must become null');
+  assert.equal(normalized.assessedValue.land, null, 'Negative sentinel land must become null');
+  assert.equal(normalized.assessedValue.improvements, null, 'Negative sentinel improvements must become null');
+});
+
+test('ArcGIS Resolver: selects closest feature using returned geometry coordinates and verifies returnGeometry parameter', async () => {
+  const centerLat = 39.1029;
+  const centerLng = -84.5150;
+
+  // Feature 1 is ~200m away, Feature 2 is ~10m away
+  const features = [
+    {
+      attributes: { PARCELID: 'FAR_PARCEL', MKT_TOTAL_VAL: 100000 },
+      geometry: { x: -84.5130, y: 39.1045 } // Farther
+    },
+    {
+      attributes: { PARCELID: 'CLOSE_PARCEL', MKT_TOTAL_VAL: 250000 },
+      geometry: { x: -84.5151, y: 39.1029 } // Closer
+    }
+  ];
+
+  const best = selectBestFeature(features, centerLat, centerLng);
+  assert.ok(best);
+  assert.equal(best.attributes.PARCELID, 'CLOSE_PARCEL');
+
+  // Verify queryArcgisParcel passes returnGeometry=true for spatial point queries and includes timeout signal
+  let capturedUrl = null;
+  let capturedInit = null;
+  const mockFetch = async (url, init) => {
+    capturedUrl = String(url);
+    capturedInit = init;
+    return {
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            attributes: { PARCELID: '050002130146', MKT_TOTAL_VAL: 282790 },
+            geometry: { x: -84.5150, y: 39.1029 }
+          }
+        ]
+      })
+    };
+  };
+
+  await queryArcgisParcel({
+    lat: centerLat,
+    lng: centerLng,
+    state: 'OH',
+    county: 'Hamilton',
+    fetchFn: mockFetch
+  });
+
+  assert.ok(capturedUrl);
+  assert.match(capturedUrl, /returnGeometry=true/, 'Spatial query must set returnGeometry=true');
+  assert.ok(capturedInit && capturedInit.signal, 'fetchFn must receive an abort signal');
 });

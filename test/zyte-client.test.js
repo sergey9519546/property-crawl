@@ -183,6 +183,61 @@ test('zyteFetch: extracts dynamic HTML (browserHtml) when browser: true', async 
   assert.equal(dispatchedBody.httpResponseBody, undefined);
 });
 
+test('validatePublicHttpsUrl: blocks 6to4 encapsulation and multiple trailing dot SSRF bypasses', async () => {
+  const ssrfTargets = [
+    'https://[2002:a9fe:a9fe::]/',
+    'https://[2002:7f00:1::]/',
+    'https://localhost../',
+    'https://127.0.0.1../',
+  ];
+
+  for (const target of ssrfTargets) {
+    const check = validatePublicHttpsUrl(target);
+    assert.equal(check.valid, false, `validatePublicHttpsUrl must reject ${target}`);
+    assert.equal(check.error, 'SSRF_BLOCKED_HOST', `validatePublicHttpsUrl must return SSRF_BLOCKED_HOST for ${target}`);
+
+    let networkCalled = false;
+    const fetchRes = await zyteFetch(target, {
+      env: { ZYTE_API_KEY: 'test-key' },
+      fetchImpl: async () => {
+        networkCalled = true;
+        return { ok: true, status: 200, json: async () => ({}) };
+      },
+    });
+    assert.equal(fetchRes.ok, false, `zyteFetch must block ${target}`);
+    assert.equal(fetchRes.status, 400);
+    assert.equal(fetchRes.error, 'SSRF_BLOCKED_HOST');
+    assert.equal(networkCalled, false, `zyteFetch must not dispatch network call for ${target}`);
+  }
+});
+
+test('zyteFetch: returns ok: false and downstream target HTTP status code when httpResponseStatusCode >= 400', async () => {
+  const cases = [
+    { targetStatus: 404, expectedError: 'TARGET_HTTP_404', responsePayload: { httpResponseStatusCode: 404 } },
+    { targetStatus: 403, expectedError: 'TARGET_HTTP_403', responsePayload: { statusCode: 403 } },
+    { targetStatus: 500, expectedError: 'TARGET_HTTP_500', responsePayload: { httpResponseStatusCode: 500 } },
+    { targetStatus: 502, expectedError: 'TARGET_HTTP_502', responsePayload: { statusCode: 502 } },
+  ];
+
+  for (const tc of cases) {
+    const mockFetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => tc.responsePayload,
+    });
+
+    const res = await zyteFetch('https://county-auctions.gov/not-found', {
+      env: { ZYTE_API_KEY: 'secret-key-xyz' },
+      fetchImpl: mockFetch,
+    });
+
+    assert.equal(res.ok, false);
+    assert.equal(res.status, tc.targetStatus);
+    assert.equal(res.error, tc.expectedError);
+    assert.equal(res.html, '');
+  }
+});
+
 test('zyteFetchLike: returns fetch-compatible response shape', async () => {
   const mockJson = { count: 42, county: 'Orange' };
   const base64Json = Buffer.from(JSON.stringify(mockJson), 'utf8').toString('base64');

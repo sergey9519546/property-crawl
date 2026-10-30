@@ -3,6 +3,8 @@ const { servesListings } = require('../sources/catalog');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { resolveLiveStorePath, mergeLiveRecords } = require('../db/live-record-store');
 
+const MAX_ITEMS_PER_BATCH = 500;
+
 const SUPPORTED_RECIPES = Object.freeze([
   'foreclosure',
   'probate',
@@ -70,6 +72,13 @@ function validateScrapyPayload(payload) {
 
   if (!Array.isArray(items)) {
     return { valid: false, error: 'Field "items" must be an array' };
+  }
+
+  if (items.length > MAX_ITEMS_PER_BATCH) {
+    return {
+      valid: false,
+      error: `Batch exceeds maximum allowed items (${MAX_ITEMS_PER_BATCH}).`,
+    };
   }
 
   return {
@@ -227,17 +236,30 @@ async function ingestScrapyItems(items, options = {}) {
       if (options.isPostgres === undefined) {
         isPostgres = Boolean(db.isPg || (typeof db.dataMode === 'function' ? db.dataMode() === 'postgres' : false));
       }
-      if (isPostgres && admissibleItems.length > 0 && typeof db.createListing === 'function') {
-        for (const validListing of admissibleItems) {
-          try {
-            await db.createListing(validListing);
-            pgAccepted++;
-          } catch (createErr) {
-            pgFailed++;
-            logger.error?.(
-              `[Scrapy Ingest] PostgreSQL createListing failed for ${validListing.id}:`,
-              createErr?.message
-            );
+      if (admissibleItems.length > 0 && typeof db.createListing === 'function') {
+        if (isPostgres) {
+          for (const validListing of admissibleItems) {
+            try {
+              await db.createListing(validListing);
+              pgAccepted++;
+            } catch (createErr) {
+              pgFailed++;
+              logger.error?.(
+                `[Scrapy Ingest] PostgreSQL createListing failed for ${validListing.id}:`,
+                createErr?.message
+              );
+            }
+          }
+        } else {
+          for (const validListing of admissibleItems) {
+            try {
+              await db.createListing(validListing);
+            } catch (memErr) {
+              logger.error?.(
+                `[Scrapy Ingest] In-memory createListing failed for ${validListing.id}:`,
+                memErr?.message
+              );
+            }
           }
         }
       }
@@ -264,6 +286,7 @@ async function ingestScrapyItems(items, options = {}) {
 }
 
 module.exports = {
+  MAX_ITEMS_PER_BATCH,
   SUPPORTED_RECIPES,
   verifyScrapySignature,
   validateScrapyPayload,

@@ -49,20 +49,76 @@ class ScraperCircuitBreaker {
    * @param {object} options
    * @param {number} [options.minPayloadBytes=1]
    * @param {number} [options.failureThreshold=3]
+   * @param {number} [options.cooldownMs]
    */
   constructor(options = {}) {
     this.minPayloadBytes = options.minPayloadBytes ?? 1;
     this.failureThreshold = options.failureThreshold ?? 3;
+    const envCooldown = Number(process.env.SCRAPER_CIRCUIT_BREAKER_COOLDOWN_MS);
+    const envOrFallback = Number.isFinite(envCooldown) && envCooldown > 0 ? envCooldown : 3600000;
+    this.cooldownMs = options.cooldownMs !== undefined ? options.cooldownMs : envOrFallback;
     this.consecutiveFailures = 0;
     this.failureVersion = 0;
-    this.state = 'CLOSED'; // 'CLOSED' (healthy), 'OPEN' (tripped), 'HALF-OPEN'
+    this._state = options.state || 'CLOSED'; // 'CLOSED' (healthy), 'OPEN' (tripped), 'HALF-OPEN'
     this.lastFailureReason = null;
     this.lastFailureAt = null;
+    this.lastTrippedAt = null;
+  }
+
+  getLastTrippedTime() {
+    const raw = this.lastTrippedAt || this.lastFailureAt || 0;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+      const num = Number(raw);
+      if (Number.isFinite(num) && num > 0) return num;
+      const parsed = Date.parse(raw);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    if (raw instanceof Date) return raw.getTime();
+    return 0;
+  }
+
+  get state() {
+    if (this._state === 'OPEN') {
+      const lastTripped = this.getLastTrippedTime();
+      if (Date.now() - lastTripped > this.cooldownMs) {
+        this._state = 'HALF-OPEN';
+      }
+    }
+    return this._state;
+  }
+
+  set state(value) {
+    this._state = value;
+    if (value === 'OPEN' && !this.lastTrippedAt) {
+      this.lastTrippedAt = Date.now();
+    }
+  }
+
+  isOpen() {
+    return this.state === 'OPEN';
+  }
+
+  isHalfOpen() {
+    return this.state === 'HALF-OPEN';
+  }
+
+  isClosed() {
+    return this.state === 'CLOSED';
+  }
+
+  recordSuccess() {
+    this.reset();
+  }
+
+  recordFailure(reason, options = {}) {
+    this.trip(reason, options);
   }
 
   /**
    * Validates raw HTTP response payload.
    * @param {object} response - { status: number, body: string, headers: object }
+   * @param {object} [context={}]
    * @returns {object} { isValid: boolean, error: string|null }
    */
   validateResponse(response = {}, context = {}) {
@@ -139,7 +195,7 @@ class ScraperCircuitBreaker {
       };
     }
     if (requestGeneration === undefined || requestGeneration === this.failureVersion) {
-      this.reset();
+      this.recordSuccess();
     }
     return {
       isValid: true,
@@ -152,8 +208,9 @@ class ScraperCircuitBreaker {
     this.lastFailureAt = new Date().toISOString();
     this.consecutiveFailures++;
     this.failureVersion++;
-    if (options.immediate || this.consecutiveFailures >= this.failureThreshold) {
+    if (options.immediate || this.consecutiveFailures >= this.failureThreshold || this._state === 'HALF-OPEN') {
       this.state = 'OPEN';
+      this.lastTrippedAt = Date.now();
     }
   }
 
@@ -162,10 +219,18 @@ class ScraperCircuitBreaker {
     this.state = 'CLOSED';
     this.lastFailureReason = null;
     this.lastFailureAt = null;
+    this.lastTrippedAt = null;
   }
 
-  isOpen() {
-    return this.state === 'OPEN';
+  toJSON() {
+    return {
+      state: this.state,
+      consecutiveFailures: this.consecutiveFailures,
+      lastFailureReason: this.lastFailureReason,
+      lastFailureAt: this.lastFailureAt,
+      lastTrippedAt: this.lastTrippedAt,
+      cooldownMs: this.cooldownMs
+    };
   }
 }
 

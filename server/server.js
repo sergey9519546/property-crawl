@@ -39,6 +39,10 @@ const { handleDecisionPacket } = require('./routes/decision-packet');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Server] Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+
 const PORT = process.env.PORT || 3000;
 const configuredApiLimit = Number(process.env.PROPERTY_API_RATE_LIMIT);
 const apiLimiter = createApiRatePolicy({

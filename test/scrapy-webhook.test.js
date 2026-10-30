@@ -11,6 +11,7 @@ const {
   gateScrapyItemForIngestion,
   ingestScrapyItems,
   SUPPORTED_RECIPES,
+  MAX_ITEMS_PER_BATCH,
 } = require('../server/ingest/scrapy-webhook');
 
 function signPayload(body, secret) {
@@ -84,7 +85,7 @@ test('verifyScrapySignature: accepts valid HMAC-SHA256 signature', () => {
   assert.equal(result.valid, true);
 });
 
-test('validateScrapyPayload: enforces recipe schema and items array', () => {
+test('validateScrapyPayload: enforces recipe schema, items array, and MAX_ITEMS_PER_BATCH (500)', () => {
   // Non-object
   assert.equal(validateScrapyPayload(null).valid, false);
   assert.equal(validateScrapyPayload('string').valid, false);
@@ -107,6 +108,23 @@ test('validateScrapyPayload: enforces recipe schema and items array', () => {
     assert.equal(valid.recipe, recipe);
     assert.equal(valid.items.length, 1);
   }
+
+  // Batch cap: exactly 500 items is valid
+  assert.equal(MAX_ITEMS_PER_BATCH, 500);
+  const atCap = validateScrapyPayload({
+    recipe: 'foreclosure',
+    items: new Array(500).fill({ id: 'FC-1' }),
+  });
+  assert.equal(atCap.valid, true);
+  assert.equal(atCap.items.length, 500);
+
+  // Batch cap: 501 items is rejected with 400 error message
+  const overCap = validateScrapyPayload({
+    recipe: 'foreclosure',
+    items: new Array(501).fill({ id: 'FC-1' }),
+  });
+  assert.equal(overCap.valid, false);
+  assert.match(overCap.error, /Batch exceeds maximum allowed items \(500\)/);
 });
 
 test('gateScrapyItemForIngestion: blocks DISCOVERY_ONLY and invalid items while admitting valid serving records', () => {
@@ -151,6 +169,58 @@ test('gateScrapyItemForIngestion: blocks DISCOVERY_ONLY and invalid items while 
   const blockedFixture = gateScrapyItemForIngestion(fixtureItem);
   assert.equal(blockedFixture.isValid, false);
   assert.ok(blockedFixture.errors.includes('fixture_record_not_ingestible'));
+});
+
+test('gateScrapyItemForIngestion: rejects candidate items with trailing dots in sourceUrl', () => {
+  // Single trailing dot in hostname
+  const singleDot = buildValidCivilviewItem({
+    id: 'CIV-NJ-007-DOT1',
+    sourceUrl: 'https://salesweb.civilview.com./Sales/SaleDetails?PropertyId=1001',
+  });
+  const res1 = gateScrapyItemForIngestion(singleDot);
+  assert.equal(res1.isValid, false);
+  assert.ok(res1.errors.includes('source_host_mismatch') || res1.errors.includes('unsupported_source_policy'));
+
+  // Multiple trailing dots in hostname
+  const multiDot = buildValidCivilviewItem({
+    id: 'CIV-NJ-007-DOT2',
+    sourceUrl: 'https://salesweb.civilview.com../Sales/SaleDetails?PropertyId=1001',
+  });
+  const res2 = gateScrapyItemForIngestion(multiDot);
+  assert.equal(res2.isValid, false);
+  assert.ok(res2.errors.includes('source_host_mismatch') || res2.errors.includes('unsupported_source_policy'));
+});
+
+test('ingestScrapyItems: invokes db.createListing in memory mode (!isPostgres) when available', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-mem-test-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-MEM-1', propertyId: '3001001' });
+    const persistedToMemory = [];
+    const mockMemDb = {
+      isPg: false,
+      dataMode: () => 'memory',
+      createListing: async (listing) => {
+        persistedToMemory.push(listing);
+      },
+    };
+
+    const quietLogger = { warn: () => {}, error: () => {} };
+    const result = await ingestScrapyItems([valid], {
+      db: mockMemDb,
+      isPostgres: false,
+      liveStorePath,
+      logger: quietLogger,
+    });
+
+    assert.equal(result.isPostgres, false);
+    assert.equal(result.accepted, 1);
+    assert.equal(persistedToMemory.length, 1);
+    assert.equal(persistedToMemory[0].id, 'CIV-NJ-007-MEM-1');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 test('ingestScrapyItems: enforces servesListings + validateListingForIngestion before Postgres createListing and reports accurate Postgres accounting', async () => {
@@ -213,7 +283,7 @@ test('ingestScrapyItems: enforces servesListings + validateListingForIngestion b
   }
 });
 
-test('scrapy webhook route handler declares GET and POST with HMAC verification and Postgres validation gate', () => {
+test('scrapy webhook route handler declares GET and POST with HMAC verification, batch size cap, and non-200 on postgres failures', () => {
   const routePath = path.join(__dirname, '../src/app/api/public/scrapy-ingest/route.ts');
   assert.ok(fs.existsSync(routePath), 'scrapy-ingest route.ts must exist');
 
@@ -228,5 +298,8 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification 
   assert.match(source, /x-signature/);
   assert.match(source, /verifyConnection/);
   assert.match(source, /dataMode\(\) === "postgres"/);
+  assert.match(source, /MAX_ITEMS_PER_BATCH/);
+  assert.match(source, /Batch exceeds maximum allowed items \(500\)/);
+  assert.match(source, /hasPostgresFailures\s*\?\s*207\s*:\s*200/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN/);
 });

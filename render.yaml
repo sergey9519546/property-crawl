@@ -17,6 +17,8 @@ services:
         value: "3000"
       - key: AUTO_MIGRATE
         value: "1"
+      - key: DISCOVERY_MODE
+        value: "advanced"
       # Live inventory is external PostgreSQL. Do not set PROPERTY_DB.
       # DATABASE_URL must name an existing database on PostgreSQL 16
       # (14+ can boot; postgis/postgis:16-3.4 is the server this schema runs on).
@@ -66,4 +68,3 @@ services:
       # Zyte / Scrapy Cloud Webhook Ingest Secret
       - key: SCRAPY_INGEST_SECRET
         sync: false
-

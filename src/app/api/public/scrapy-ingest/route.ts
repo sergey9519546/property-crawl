@@ -3,12 +3,14 @@ import {
   validateScrapyPayload,
   ingestScrapyItems,
   SUPPORTED_RECIPES,
+  MAX_ITEMS_PER_BATCH as SCRAPY_MAX_ITEMS_PER_BATCH,
 } from "@server/ingest/scrapy-webhook";
 import { resolveLiveStorePath, mergeLiveRecords } from "@server/db/live-record-store";
 import { servesListings } from "@server/sources/catalog";
 import { validateListingForIngestion } from "@server/scrapers/validation";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_ITEMS_PER_BATCH = SCRAPY_MAX_ITEMS_PER_BATCH || 500;
 
 const responseHeaders = {
   "Cache-Control": "no-store",
@@ -81,6 +83,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (validated.items.length > MAX_ITEMS_PER_BATCH) {
+    return Response.json(
+      { error: "Batch exceeds maximum allowed items (500)." },
+      { status: 400, headers: responseHeaders }
+    );
+  }
+
   const db = require("@server/db/client");
   if (typeof db.verifyConnection === "function" && !db.postgresReachable && db.pool) {
     await db.verifyConnection().catch(() => {});
@@ -99,10 +108,15 @@ export async function POST(request: Request) {
     validateListingImpl: validateListingForIngestion,
   });
 
+  const hasPostgresFailures = Boolean(
+    ingestResult.isPostgres && (ingestResult.postgresFailed ?? 0) > 0
+  );
+  const responseStatus = hasPostgresFailures ? 207 : 200;
+
   return Response.json(
     {
-      ok: true,
-      success: true,
+      ok: !hasPostgresFailures,
+      success: !hasPostgresFailures,
       recipe: validated.recipe,
       spider: validated.spider || null,
       source: validated.source || null,
@@ -119,6 +133,6 @@ export async function POST(request: Request) {
           }
         : {}),
     },
-    { status: 200, headers: responseHeaders }
+    { status: responseStatus, headers: responseHeaders }
   );
 }

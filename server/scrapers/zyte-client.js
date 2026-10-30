@@ -69,7 +69,7 @@ function extractEmbeddedIpv4FromIpv6(host) {
 }
 
 function isBlockedSsrfHost(rawHostname) {
-  const host = String(rawHostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  const host = String(rawHostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
   if (!host) return true;
 
   if (
@@ -108,7 +108,10 @@ function isBlockedSsrfHost(rawHostname) {
     host.startsWith('fd') ||
     host.startsWith('ff') ||
     host.startsWith('2001:db8:') ||
-    host.startsWith('64:ff9b:')
+    host.startsWith('64:ff9b:') ||
+    host.startsWith('2002:') ||
+    host === '2002::' ||
+    /^2001:(?:0{1,4}:|:)/.test(host)
   ) {
     return true;
   }
@@ -192,6 +195,11 @@ async function zyteFetch(url, { browser = false, timeoutMs = 15000, env = proces
     }
 
     const data = await response.json().catch(() => ({}));
+
+    const targetStatusCode = Number(data.httpResponseStatusCode || data.statusCode || 0);
+    if (targetStatusCode >= 400) {
+      return { ok: false, status: targetStatusCode, error: `TARGET_HTTP_${targetStatusCode}`, html: '' };
+    }
 
     let html = '';
     if (browser && typeof data.browserHtml === 'string') {
