@@ -41,6 +41,8 @@ class TreasuryForfeitureScraper extends BaseScraper {
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('treasury');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.useSpiderBatch = Boolean(options.useSpiderBatch || String(process.env.SCRAPLING_SPIDER_SOURCES || '').toLowerCase().split(',').map((s) => s.trim()).includes('treasury'));
+    this._spiderDetailCache = new Map();
   }
 
   async scrapeFeed() {
@@ -57,6 +59,25 @@ class TreasuryForfeitureScraper extends BaseScraper {
       console.log(`[${this.name}] Found ${slugs.length} property links on listing page`);
 
       const targetSlugs = slugs;
+      if (this.useSpiderBatch && targetSlugs.length > 0 && typeof this.runSpiderBatch === 'function') {
+        try {
+          const urls = targetSlugs.map((slug) => `${this.baseUrl}/${slug}`);
+          const batchResult = await this.runSpiderBatch({
+            urls,
+            profile: 'treasury-detail',
+            scope: 'federal',
+          });
+          if (batchResult && Array.isArray(batchResult.items)) {
+            for (const item of batchResult.items) {
+              if (item && item.url && item.data && item.data.property) {
+                this._spiderDetailCache.set(item.url, item.data.property);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`[${this.name}] Spider batch prefetch fallback: ${err.message}`);
+        }
+      }
       const detailResults = await mapWithConcurrency(
         targetSlugs,
         this.detailConcurrency,
@@ -118,8 +139,8 @@ class TreasuryForfeitureScraper extends BaseScraper {
     // When Scrapling is enabled, delegate the labeled-field extraction to
     // the Python venv and use the structured record instead of the regex
     // body scan below. The Python profile returns { property: {...} }.
-    let scraplingRecord = null;
-    if (this.useScrapling) {
+    let scraplingRecord = (this._spiderDetailCache && this._spiderDetailCache.get(detailUrl)) || null;
+    if (!scraplingRecord && this.useScrapling) {
       try {
         const evidence = await this.extract('treasury-detail', { html: detailHtml, url: detailUrl });
         const p = evidence && evidence.property ? evidence.property : null;
@@ -188,7 +209,23 @@ class TreasuryForfeitureScraper extends BaseScraper {
 
     const addrParts = this.parseAddress(fullAddress);
     const baseName = slug.replace('.shtml', '');
-    const saleDate = this.parseSaleDate(saleDateRaw);
+    let saleDate = this.parseSaleDate(saleDateRaw);
+    let resolvedOpeningBid = openingBid;
+    if ((resolvedOpeningBid == null || saleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
+      const adaptive = this.extractWithAdaptiveFallback(detailHtml, {
+        caseNumber: { selector: 'title', extractor: () => saleNumber || baseName },
+        openingBid: { selector: '.starting-bid', extractor: () => (resolvedOpeningBid != null ? String(resolvedOpeningBid) : null) },
+        saleDateText: { selector: '.auction-date', extractor: () => saleDate },
+      }, { persistSelectors: false });
+      if (adaptive && adaptive.identityPassed) {
+        if (resolvedOpeningBid == null && adaptive.fields.openingBid) {
+          resolvedOpeningBid = this.parseMoney(adaptive.fields.openingBid);
+        }
+        if (saleDate == null && adaptive.fields.saleDateText) {
+          saleDate = this.parseSaleDate(adaptive.fields.saleDateText);
+        }
+      }
+    }
     const gallery = extractDetailImages({ source: 'treasury', html: detailHtml, sourceUrl: detailUrl, address: fullAddress });
 
     return {
@@ -205,7 +242,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
       sqft: sqft || landSqft || null,
       year: year || null,
       propType: this.classifyPropertyType(body),
-      openingBid: openingBid || null,
+      openingBid: resolvedOpeningBid || null,
       estLow: null,
       estHigh: null,
       assessed: null,

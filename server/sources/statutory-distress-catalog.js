@@ -21,7 +21,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Miami-Dade County FL — Tax Deed Auction (RealForeclose) (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Miami-Dade County FL — Tax Deed Auction (RealForeclose) for delinquent tax property records and scheduled auctions.",
@@ -49,7 +49,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Broward County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://broward.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Broward County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
@@ -77,7 +77,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Palm Beach County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://palmbeach.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Palm Beach County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
@@ -105,7 +105,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Orange County FL (Orlando) — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://orange.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Orange County FL (Orlando) — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
@@ -133,7 +133,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Hillsborough County FL (Tampa) — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://hillsborough.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Hillsborough County FL (Tampa) — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
@@ -161,7 +161,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Lee County FL (Fort Myers) — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.lee.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Lee County FL (Fort Myers) — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
@@ -189,7 +189,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Pinellas County FL (St. Petersburg) — Tax Deed (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://pinellas.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Pinellas County FL (St. Petersburg) — Tax Deed for delinquent tax property records and scheduled auctions.",
@@ -217,7 +217,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Duval County FL (Jacksonville) — Tax Deed (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://duval.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Duval County FL (Jacksonville) — Tax Deed for delinquent tax property records and scheduled auctions.",
@@ -245,7 +245,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Polk County FL — Tax Deed (county, FL). Official statutory source for tax deed.",
     "discoveryUrl": "https://polk.realtaxdeed.com",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Polk County FL — Tax Deed for delinquent tax property records and scheduled auctions.",

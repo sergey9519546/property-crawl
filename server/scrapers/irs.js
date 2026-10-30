@@ -281,6 +281,20 @@ class IrsSeizedScraper extends BaseScraper {
 
     // --- Defendant / taxpayer: "...seized ... due from Albert W Sperry." ---
     const defMatch = html.match(/due from ([^.]+?)\./i);
+    let resolvedOpeningBid = openingBid;
+    let resolvedSaleDate = saleDate;
+    if ((resolvedOpeningBid == null || resolvedSaleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
+      const adaptive = this.extractWithAdaptiveFallback(html, {
+        caseNumber: { selector: 'address', extractor: () => slug },
+        openingBid: { selector: '.minimum-bid', extractor: () => (resolvedOpeningBid != null ? String(resolvedOpeningBid) : null) },
+        saleDateText: { selector: 'time', extractor: () => resolvedSaleDate },
+      }, { persistSelectors: false });
+      if (adaptive && adaptive.identityPassed) {
+        if (resolvedOpeningBid == null && adaptive.fields.openingBid) {
+          resolvedOpeningBid = this.parseMoney(adaptive.fields.openingBid);
+        }
+      }
+    }
     const defendant = defMatch ? defMatch[1].trim() : null;
 
     const id = `IRS-${state}-${slug.toUpperCase().slice(0, 18)}`;
@@ -301,7 +315,7 @@ class IrsSeizedScraper extends BaseScraper {
       sqft: sqft || null,
       year,
       propType: this.classifyPropertyType(`${publisherTitle} ${desc}`),
-      openingBid,
+      openingBid: resolvedOpeningBid,
       estLow: null,
       estHigh: null,
       assessed: null,

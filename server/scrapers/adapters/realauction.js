@@ -3,9 +3,11 @@
 /**
  * server/scrapers/adapters/realauction.js
  *
- * RealAuction Multi-County Foreclosure Platform Adapter.
- * Powers online foreclosure auctions in Ohio ({county}.sheriffsaleauction.ohio.gov)
- * and Florida ({county}.realforeclose.com).
+ * RealAuction Multi-County Foreclosure & Tax-Deed Platform Adapter.
+ * Powers online foreclosure & tax-deed auctions in:
+ * - Ohio ({county}.sheriffsaleauction.ohio.gov)
+ * - Florida Foreclosure ({county}.realforeclose.com)
+ * - Florida Tax Deed ({county}.realtaxdeed.com)
  */
 
 const { normalizeOcrText } = require('../../ai/notice-parser');
@@ -20,12 +22,25 @@ const REALAUCTION_FLORIDA_COUNTIES = Object.freeze([
   'pinellas', 'duval', 'lee', 'polk', 'brevard', 'volusia', 'pasco',
 ]);
 
+const REALAUCTION_FLORIDA_TAXDEED_COUNTIES = Object.freeze([
+  'broward', 'palmbeach', 'orange', 'hillsborough',
+  'lee', 'pinellas', 'duval', 'polk',
+]);
+
 function getRealAuctionUrl(county = 'cuyahoga', state = 'OH', options = {}) {
   const cleanCounty = String(county || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const st = String(state || 'OH').toUpperCase();
-  const domain = st === 'OH'
-    ? `${cleanCounty}.sheriffsaleauction.ohio.gov`
-    : `${cleanCounty}.realforeclose.com`;
+  const mode = options && options.mode === 'taxdeed' ? 'taxdeed' : 'foreclosure';
+  let domain;
+  if (options && typeof options.domain === 'string' && options.domain.trim()) {
+    domain = options.domain.trim().replace(/^https?:\/\//i, '');
+  } else if (st === 'OH') {
+    domain = `${cleanCounty}.sheriffsaleauction.ohio.gov`;
+  } else if (mode === 'taxdeed') {
+    domain = `${cleanCounty}.realtaxdeed.com`;
+  } else {
+    domain = `${cleanCounty}.realforeclose.com`;
+  }
   let url = `https://${domain}/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`;
   if (options && typeof options === 'object') {
     if (options.auctionId) {
@@ -37,16 +52,16 @@ function getRealAuctionUrl(county = 'cuyahoga', state = 'OH', options = {}) {
   return url;
 }
 
-function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') {
+function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', options = {}) {
   const text = String(cardHtml || '');
   if (!text) return null;
 
-  // Case Number: e.g. "Case #: CV-24-991201"
-  const caseMatch = text.match(/(?:Case\s*(?:#|No\.?):?)\s*([0-9A-Za-z\-_]+)/i);
+  // Case Number or Tax Certificate Number: e.g. "Case #: CV-24-991201" or "Certificate #: 2023-10492"
+  const caseMatch = text.match(/(?:Case\s*(?:#|No\.?)|Certificate\s*(?:#|No\.?)):?\s*([0-9A-Za-z\-_]+)/i);
   // Auction ID: e.g. "Auction ID: 104921" or "Item: 48"
   const auctionIdMatch = text.match(/(?:Auction\s*ID|Item\s*#?):?\s*([0-9]+)/i);
-  // Opening bid / Minimum bid
-  const bidMatch = text.match(/(?:Opening\s*Bid|Minimum\s*Bid|Starting\s*Bid):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
+  // Opening bid / Minimum bid / Upset bid
+  const bidMatch = text.match(/(?:Opening\s*Bid|Minimum\s*Bid|Starting\s*Bid|Upset\s*Bid):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
   // Final Judgment amount
   const judgmentMatch = text.match(/(?:Final\s*Judgment|Judgment\s*Amount):?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
   // Assessed value / Appraised value
@@ -75,7 +90,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') 
 
   return {
     source: 'sheriff',
-    platform: 'realauction',
+    platform: options && options.mode === 'taxdeed' ? 'realtaxdeed' : 'realauction',
     county: countyCapitalized,
     state: cleanState,
     auctionId: auctionIdMatch ? auctionIdMatch[1] : null,
@@ -88,6 +103,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') 
     assessed,
     saleDate: dateMatch ? dateMatch[1] : null,
     sourceUrl: getRealAuctionUrl(county, state, {
+      ...options,
       auctionId: auctionIdMatch ? auctionIdMatch[1] : null,
       caseNumber: caseMatch ? caseMatch[1] : null,
     }),
@@ -97,7 +113,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH') 
 /**
  * Parses full RealAuction preview HTML docket
  */
-function parseRealAuctionDocketHtml(html = '', county = 'cuyahoga', state = 'OH') {
+function parseRealAuctionDocketHtml(html = '', county = 'cuyahoga', state = 'OH', options = {}) {
   const text = String(html || '');
   const listings = [];
 
@@ -107,17 +123,17 @@ function parseRealAuctionDocketHtml(html = '', county = 'cuyahoga', state = 'OH'
 
   while ((match = cardRegex.exec(text)) !== null) {
     const cardHtml = match[1];
-    const parsed = parseRealAuctionCard(cardHtml, county, state);
+    const parsed = parseRealAuctionCard(cardHtml, county, state, options);
     if (parsed && (parsed.caseNumber || parsed.auctionId || parsed.address)) {
       listings.push(parsed);
     }
   }
 
   // Fallback: If container regex yielded nothing, split on AUCTION_ITEM or Case markers
-  if (listings.length === 0 && /(?:Case\s*#|Auction\s*ID)/i.test(text)) {
-    const blocks = text.split(/(?=(?:Case\s*(?:#|No\.)|Auction\s*ID):)/i);
+  if (listings.length === 0 && /(?:Case\s*#|Certificate\s*#|Auction\s*ID)/i.test(text)) {
+    const blocks = text.split(/(?=(?:Case\s*(?:#|No\.)|Certificate\s*(?:#|No\.)|Auction\s*ID):)/i);
     for (const block of blocks) {
-      const parsed = parseRealAuctionCard(block, county, state);
+      const parsed = parseRealAuctionCard(block, county, state, options);
       if (parsed && parsed.address) {
         listings.push(parsed);
       }
@@ -130,6 +146,7 @@ function parseRealAuctionDocketHtml(html = '', county = 'cuyahoga', state = 'OH'
 module.exports = {
   REALAUCTION_OHIO_COUNTIES,
   REALAUCTION_FLORIDA_COUNTIES,
+  REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
   getRealAuctionUrl,
   parseRealAuctionCard,
   parseRealAuctionDocketHtml,

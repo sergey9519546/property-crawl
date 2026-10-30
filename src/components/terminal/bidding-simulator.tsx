@@ -135,7 +135,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                   />
                 </div>
               </div>
-              <p className="mt-1.5 text-[10px] text-ink-3">
+              <p className="mt-1.5 text-xs text-ink-3">
                 Entering an assumed opening bid enables cash-to-close and statutory fee modeling for this session as an investor assumption.
               </p>
             </div>
@@ -441,10 +441,10 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                   {isImportingAssessor ? "Reading assessor…" : "Import Assessor Figure"}
                 </button>
                 {assessorError && (
-                  <span className="text-[11px] text-catch-ink">{assessorError}</span>
+                  <span className="text-xs text-catch-ink">{assessorError}</span>
                 )}
               </div>
-              <p className="mt-1.5 text-[10px] text-ink-3">
+              <p className="mt-1.5 text-xs text-ink-3">
                 Entering an assumption enables MAO modeling for this session. It will be labeled as an investor assumption, not a publisher appraisal.
               </p>
             </div>
@@ -504,8 +504,8 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           {/* Post-Sale Tax Reassessment */}
           <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">Post-Sale Tax Reassessment</span>
-              <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">{reassessmentShock.rule.ruleName}</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-ink-3">Post-Sale Tax Reassessment</span>
+              <span className="rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-ink-2">{reassessmentShock.rule.ruleName}</span>
             </div>
             <p className="text-lg font-extrabold text-yours">
               {reassessmentShock.reassessedAnnualTax !== null ? `${displayMoney(reassessmentShock.reassessedAnnualTax)}/yr` : "Unresolved"}
@@ -513,7 +513,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <p className="text-xs text-ink-2">
               Reassessed annual tax ({reassessmentShock.reassessedAnnualTax !== null ? displayMoney(reassessmentShock.reassessedAnnualTax) : "Unresolved"}/yr at {reassessmentShock.rule.effectiveTaxRatePct}% statutory basis on {displayMoney(openingBid)} purchase price).
             </p>
-            <p className="text-[10px] text-ink-3 leading-tight">
+            <p className="text-xs text-ink-3 leading-tight">
               Citation: {reassessmentShock.rule.statutoryReference}
             </p>
           </div>
@@ -522,8 +522,8 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           {hudSafmr ? (
             <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
-                <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink-2">{hudSafmr.bedrooms}BR • ZIP {hudSafmr.zip}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+                <span className="rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-ink-2">{hudSafmr.bedrooms}BR • ZIP {hudSafmr.zip}</span>
               </div>
               <p className="text-lg font-extrabold text-yours">
                 {displayMoney(hudSafmr.fairMarketRent)}/mo
@@ -532,14 +532,14 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 Published Section 8 Fair Market Rent ({displayMoney(hudSafmr.fairMarketRent)}/mo for {hudSafmr.bedrooms}BR in ZIP {hudSafmr.zip}, 90%–110% payment standard {displayMoney(hudSafmr.paymentStandard90Pct)}–{displayMoney(hudSafmr.paymentStandard110Pct)}/mo).
               </p>
               {modeledDscr && (
-                <div className="mt-1 pt-1.5 border-t border-line text-[11px]">
+                <div className="mt-1 pt-1.5 border-t border-line text-xs">
                   <div className="flex items-center justify-between gap-1 text-ink">
                     <span className="font-semibold">Modeled DSCR Scenario (80% LTV, 7.25% 30-yr P&amp;I + {displayMoney(Math.round((reassessmentShock.reassessedAnnualTax ?? 0) / 12))}/mo tax + $125/mo insurance):</span>
-                    <span className={`font-bold ${modeledDscr.status === "qualified" ? "text-yours" : modeledDscr.status === "stressed" ? "text-amber-600 dark:text-amber-400" : "text-catch-ink"}`}>
+                    <span className={`font-bold ${modeledDscr.status === "qualified" ? "text-yours" : modeledDscr.status === "stressed" ? "text-catch-ink" : "text-catch-ink"}`}>
                       {modeledDscr.dscrRatio ? `${modeledDscr.dscrRatio}x` : "N/A"} ({modeledDscr.status})
                     </span>
                   </div>
-                  <p className="text-[10px] text-ink-3 leading-tight mt-0.5">
+                  <p className="text-xs text-ink-3 leading-tight mt-0.5">
                     {modeledDscr.explanation}
                   </p>
                 </div>
@@ -547,7 +547,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </div>
           ) : (
             <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
               <p className="text-xs text-ink-3">
                 No statutory HUD SAFMR benchmark record published for ZIP {listing.zip || "unrecorded"}. Section 8 payment standards must be verified through the local housing authority.
               </p>
@@ -572,7 +572,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <p className="text-ink-2 leading-relaxed">
               Estimated surplus: {surplusAnalysis.estimatedSurplus !== null ? displayMoney(surplusAnalysis.estimatedSurplus) : "None"}. {surplusAnalysis.explanation}
             </p>
-            <p className="text-[10px] text-ink-3 leading-tight">
+            <p className="text-xs text-ink-3 leading-tight">
               {surplusAnalysis.statutoryDisclaimer}
             </p>
           </div>
@@ -583,7 +583,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <div className="border-t border-line pt-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-ink">Modeled Investment Exit Strategies:</span>
-              <span className="text-[11px] text-ink-3">Based on conservative equity spread &amp; DSCR</span>
+              <span className="text-xs text-ink-3">Based on conservative equity spread &amp; DSCR</span>
             </div>
             {strategyClassification.strategies.length > 0 ? (
               <div className="flex flex-wrap gap-2">
@@ -607,7 +607,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       <div className="space-y-2.5 rounded-xl border border-line bg-paper p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-ink"><Sparkles className="h-3.5 w-3.5 fill-ink-3 text-ink-3" /><span>Explain this scenario</span></div>
-          <button disabled={openingBid === null || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-ink px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Re-run explanation" : "Explain scenario & risks"}</button>
+          <button disabled={openingBid === null || loadingStrategy} onClick={handleRunAiStrategy} className="rounded-lg bg-ink px-2.5 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40">{aiStrategy ? "Re-run explanation" : "Explain scenario & risks"}</button>
         </div>
         {loadingStrategy && <p className="animate-pulse text-xs text-ink-3">Checking the entered scenario...</p>}
         {aiStrategy && <div className="whitespace-pre-line border-t border-line pt-2 text-xs leading-relaxed text-ink-2">{aiStrategy}</div>}

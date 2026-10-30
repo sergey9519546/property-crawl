@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-22T11:38:47.287Z",
+  "generatedAt": "2026-10-30T08:17:38.634Z",
   "guarantee": {
-    "catalogSources": 163,
+    "catalogSources": 267,
     "scheduledAdapters": 21,
-    "scraplingEnabledAdapters": 14,
+    "scraplingEnabledAdapters": 25,
     "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
@@ -23,17 +23,16 @@
     ]
   },
   "tiers": {
-    "P0_CATALOG_ONLY": 140,
-    "P3_LIVE_ADAPTER": 1,
-    "P4_LIVE_STRONG": 9,
+    "P0_CATALOG_ONLY": 234,
+    "P4_LIVE_STRONG": 20,
     "P2_DISCOVERY_ADAPTER": 11,
     "P2_BLOCKED_PUBLISHER": 2
   },
   "categories": {
     "tax_sale": {
-      "total": 58,
-      "scheduled": 1,
-      "strong": 0
+      "total": 111,
+      "scheduled": 10,
+      "strong": 9
     },
     "parcel_evidence": {
       "total": 6,
@@ -41,9 +40,9 @@
       "strong": 0
     },
     "foreclosure_auction": {
-      "total": 7,
-      "scheduled": 6,
-      "strong": 4
+      "total": 25,
+      "scheduled": 7,
+      "strong": 6
     },
     "government_reo": {
       "total": 7,
@@ -66,7 +65,7 @@
       "strong": 0
     },
     "land_bank": {
-      "total": 2,
+      "total": 12,
       "scheduled": 1,
       "strong": 0
     },
@@ -81,7 +80,7 @@
       "strong": 0
     },
     "court_record": {
-      "total": 3,
+      "total": 20,
       "scheduled": 1,
       "strong": 0
     },
@@ -111,7 +110,7 @@
       "strong": 0
     },
     "marketplace": {
-      "total": 4,
+      "total": 10,
       "scheduled": 0,
       "strong": 0
     }
@@ -241,10 +240,10 @@
       "key": "foreclosure_auction",
       "label": "Foreclosure/sheriff/trustee auction",
       "required": true,
-      "catalogEntries": 7,
-      "scheduledAdapters": 6,
-      "strongAdapters": 4,
-      "opportunityScheduled": 6,
+      "catalogEntries": 25,
+      "scheduledAdapters": 7,
+      "strongAdapters": 6,
+      "opportunityScheduled": 7,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
@@ -254,17 +253,35 @@
         "ohio-sheriff-sale*",
         "county-trustee-sale",
         "civilview-nationwide*",
-        "realeauction-sheriff-multi-state*"
+        "realeauction-sheriff-multi-state*",
+        "sheriff-cook-il-civil-services",
+        "sheriff-cuyahoga-oh-cpdocket",
+        "sheriff-franklin-oh-real-estate",
+        "sheriff-cook-il-foreclosure-portal",
+        "sheriff-union-nj-sales-info",
+        "sheriff-middlesex-nj-foreclosures",
+        "sheriff-philadelphia-pa-foreclosures",
+        "sheriff-montgomery-pa-sales",
+        "sheriff-chester-pa-handbills",
+        "sheriff-delaware-pa-real-estate",
+        "sheriff-will-il-surplus-list",
+        "sheriff-fulton-ga-tax-sales",
+        "sheriff-clark-nv-civil-sales",
+        "sheriff-clark-nv-annual-sales",
+        "foreclosure-miamidade-realforeclose*",
+        "foreclosure-miamidade-lis-pendens",
+        "foreclosure-masslandrecords-suffolk",
+        "foreclosure-lasvegas-abandoned-registry"
       ]
     },
     {
       "key": "tax_sale",
       "label": "Tax lien/deed sale",
       "required": true,
-      "catalogEntries": 58,
-      "scheduledAdapters": 1,
-      "strongAdapters": 0,
-      "opportunityScheduled": 0,
+      "catalogEntries": 111,
+      "scheduledAdapters": 10,
+      "strongAdapters": 9,
+      "opportunityScheduled": 9,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
@@ -325,14 +342,67 @@
         "state-tax-sale-wv",
         "state-tax-sale-wi",
         "state-tax-sale-wy",
-        "state-tax-sale-dc"
+        "state-tax-sale-dc",
+        "tax-miamidade-realforeclose*",
+        "tax-broward-realtaxdeed*",
+        "tax-palmbeach-realtaxdeed*",
+        "tax-orange-realtaxdeed*",
+        "tax-hillsborough-realtaxdeed*",
+        "tax-lee-realtaxdeed*",
+        "tax-pinellas-realtaxdeed*",
+        "tax-duval-realtaxdeed*",
+        "tax-polk-realtaxdeed*",
+        "tax-dallas-tx-pubworks",
+        "tax-bexar-tx-resale",
+        "tax-tarrant-tx-constable",
+        "tax-travis-tx-constable",
+        "tax-fulton-ga-sheriff",
+        "tax-dekalb-ga-publicaccess",
+        "tax-cobb-ga-tax",
+        "tax-clayton-ga-publicaccess",
+        "tax-cuyahoga-oh-cpdocket",
+        "tax-franklin-oh-sheriff",
+        "tax-jackson-mo-16thcircuit",
+        "tax-princegeorges-md-portal",
+        "tax-baltimore-city-md-taxlien",
+        "tax-baltimore-county-md-ad",
+        "tax-maricopa-az-unsold-inventory",
+        "tax-arapahoe-co-treasurer",
+        "tax-denver-co-delinquent",
+        "tax-clark-nv-treasurer",
+        "tax-cook-il-scavenger-sale",
+        "tax-wayne-mi-foreclosed-auction",
+        "tax-oakland-mi-treasurer",
+        "tax-macomb-mi-treasurer",
+        "tax-genesee-mi-treasurer",
+        "tax-allen-in-treasurer",
+        "tax-grant-in-delinquent-listing",
+        "tax-mecklenburg-nc-foreclosure",
+        "tax-mecklenburg-nc-delinquent",
+        "tax-durham-nc-foreclosure",
+        "tax-wake-nc-foreclosure",
+        "tax-durham-nc-arcgis-delinquent",
+        "tax-shelby-tn-county-sale",
+        "tax-shelby-tn-trustee-sale",
+        "tax-knox-tn-trustee-sale",
+        "tax-nashville-davidson-chancery-clerk",
+        "tax-knox-tn-kgis-taxmap",
+        "tax-orange-ca-treasurer-auction",
+        "tax-ca-state-controller-auctions",
+        "tax-king-wa-treasury-foreclosure",
+        "tax-pierce-wa-foreclosure-purchase",
+        "tax-snohomish-wa-foreclosure-details",
+        "tax-worcester-ma-foreclosure-auctions",
+        "tax-nyc-dof-in-rem-foreclosure",
+        "tax-indiana-pa-claim-bureau",
+        "tax-dc-otr-annual-tax-sale"
       ]
     },
     {
       "key": "land_bank",
       "label": "Land bank inventory",
       "required": true,
-      "catalogEntries": 2,
+      "catalogEntries": 12,
       "scheduledAdapters": 1,
       "strongAdapters": 0,
       "opportunityScheduled": 1,
@@ -340,7 +410,17 @@
       "honestGap": null,
       "memberIds": [
         "landbanksearch*",
-        "cuyahoga-land-bank"
+        "cuyahoga-land-bank",
+        "landbank-detroit-dlba",
+        "landbank-detroit-sidelots",
+        "landbank-detroit-opendata-dataset",
+        "landbank-cuyahoga-available-properties",
+        "landbank-cuyahoga-sideyard-properties",
+        "landbank-cuyahoga-homes",
+        "landbank-cook-county-inventory",
+        "landbank-cook-county-government",
+        "landbank-cleveland-program",
+        "landbank-community-progress-national-map"
       ]
     },
     {
@@ -361,7 +441,7 @@
       "key": "marketplace",
       "label": "Commercial marketplaces (issuer-preserving)",
       "required": false,
-      "catalogEntries": 4,
+      "catalogEntries": 10,
       "scheduledAdapters": 0,
       "strongAdapters": 0,
       "opportunityScheduled": 0,
@@ -371,7 +451,13 @@
         "auction-dot-com",
         "hubzu",
         "xome",
-        "mls-licensed-feed"
+        "mls-licensed-feed",
+        "bankreo-bank-of-america-foreclosures",
+        "bankreo-boa-real-estate-center",
+        "bankreo-wells-fargo-listings",
+        "bankreo-us-bank-residential",
+        "bankreo-regions-bank-properties",
+        "bankreo-hud-gov-homes-for-sale"
       ]
     },
     {
@@ -394,7 +480,7 @@
       "key": "court_record",
       "label": "Court/PACER dockets",
       "required": false,
-      "catalogEntries": 3,
+      "catalogEntries": 20,
       "scheduledAdapters": 1,
       "strongAdapters": 0,
       "opportunityScheduled": 0,
@@ -403,7 +489,24 @@
       "memberIds": [
         "pacer-bankruptcy",
         "state-court-dockets",
-        "courtlistener*"
+        "courtlistener*",
+        "probate-nyc-websurrogates-case-search",
+        "probate-kings-ny-surrogates-court",
+        "probate-newyork-ny-surrogates-court",
+        "probate-cook-il-probate-division",
+        "probate-cuyahoga-oh-court-search",
+        "probate-harris-tx-court-search",
+        "probate-dallas-tx-court-search",
+        "probate-losangeles-ca-superior-court",
+        "probate-sandiego-ca-case-search",
+        "probate-fulton-ga-court-search",
+        "probate-wayne-mi-third-circuit",
+        "probate-essex-nj-surrogates-court",
+        "probate-philadelphia-pa-register-of-wills",
+        "probate-pima-az-superior-court",
+        "probate-maricopa-az-superior-court",
+        "probate-king-wa-superior-court",
+        "probate-miamidade-fl-civil-probate"
       ]
     },
     {
@@ -578,12 +681,15 @@
       "access": "public",
       "discoveryUrl": "https://www.servicelinkauction.com/",
       "power": {
-        "tier": "P3_LIVE_ADAPTER",
-        "score": 4,
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
         "inScheduler": true,
-        "scrapling": null,
+        "scrapling": [
+          "table-extract"
+        ],
         "flags": [
           "scheduled",
+          "scrapling:table-extract",
           "lastRunReport"
         ]
       },
@@ -1033,7 +1139,7 @@
       "status": "LOCAL_ROUTE",
       "adapterKey": "sheriff",
       "access": "jurisdiction",
-      "discoveryUrl": "https://sheriffsaleauction.ohio.gov/",
+      "discoveryUrl": "https://cuyahoga.sheriffsaleauction.ohio.gov/",
       "power": {
         "tier": "P4_LIVE_STRONG",
         "score": 5,
@@ -1167,7 +1273,7 @@
       "status": "DISCOVERY_ONLY",
       "adapterKey": "government-land",
       "access": "jurisdiction",
-      "discoveryUrl": "https://www.usa.gov/state-government",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
       "power": {
         "tier": "P2_DISCOVERY_ADAPTER",
         "score": 3,
@@ -1190,7 +1296,7 @@
       "status": "LOCAL_ROUTE",
       "adapterKey": null,
       "access": "jurisdiction",
-      "discoveryUrl": "https://www.usa.gov/state-government",
+      "discoveryUrl": "https://www.usa.gov/state-governments",
       "power": {
         "tier": "P0_CATALOG_ONLY",
         "score": 1,
@@ -1297,7 +1403,7 @@
       "status": "LOCAL_ROUTE",
       "adapterKey": null,
       "access": "jurisdiction",
-      "discoveryUrl": "https://www.ncsc.org/information-and-resources/browse-by-state/state-court-websites",
+      "discoveryUrl": "https://www.ncsc.org/",
       "power": {
         "tier": "P0_CATALOG_ONLY",
         "score": 1,
@@ -4028,6 +4134,2250 @@
       "adapterKey": null,
       "access": "jurisdiction",
       "discoveryUrl": "https://www.usa.gov/state-governments",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-miamidade-realforeclose",
+      "label": "Miami-Dade County FL — Tax Deed Auction (RealForeclose)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-broward-realtaxdeed",
+      "label": "Broward County FL — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://broward.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-palmbeach-realtaxdeed",
+      "label": "Palm Beach County FL — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://palmbeach.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-orange-realtaxdeed",
+      "label": "Orange County FL (Orlando) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://orange.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-hillsborough-realtaxdeed",
+      "label": "Hillsborough County FL (Tampa) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://hillsborough.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-lee-realtaxdeed",
+      "label": "Lee County FL (Fort Myers) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://www.lee.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-pinellas-realtaxdeed",
+      "label": "Pinellas County FL (St. Petersburg) — Tax Deed",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://pinellas.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-duval-realtaxdeed",
+      "label": "Duval County FL (Jacksonville) — Tax Deed",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://duval.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-polk-realtaxdeed",
+      "label": "Polk County FL — Tax Deed",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://polk.realtaxdeed.com",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-dallas-tx-pubworks",
+      "label": "Dallas County TX — Tax Sale Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.dallascounty.org/departments/pubworks/property-division.php",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-bexar-tx-resale",
+      "label": "Bexar County TX (San Antonio) — Resale Properties List",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.bexar.org/DocumentCenter/View/41852/Bexar-County-Resale-Properties-Distribution-List?bidId=",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-tarrant-tx-constable",
+      "label": "Tarrant County TX (Fort Worth) — Delinquent Tax Sales",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.tarrantcountytx.gov/en/constables/constable-3/delinquent-tax-sales.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-travis-tx-constable",
+      "label": "Travis County TX (Austin) — Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.traviscountytx.gov/departments/constable/precinct-3/tax-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-fulton-ga-sheriff",
+      "label": "Fulton County GA (Atlanta) — Tax Sale (Sheriff)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://fultoncountyga.gov/inside-fulton-county/fulton-county-departments/sheriff/tax-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-dekalb-ga-publicaccess",
+      "label": "DeKalb County GA — Tax Sale Listing Search",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://publicaccess.dekalbtax.org/forms/htmlframe.aspx?mode=content/search/tax_sale_listing.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-cobb-ga-tax",
+      "label": "Cobb County GA — Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.cobbtax.gov/property/tax_sale/index.php",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-clayton-ga-publicaccess",
+      "label": "Clayton County GA — Tax Sale List (PDF)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://publicaccess.claytoncountyga.gov/content/PDF/AUGUST%202025%20TAX%20SALE%20LISTING.pdf",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-cuyahoga-oh-cpdocket",
+      "label": "Cuyahoga County OH (Cleveland) — Sheriff Foreclosure Sales",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://cpdocket.cp.cuyahogacounty.gov/SheriffSearch/printresults.aspx?q=searchType%3Ddate_range%26searchString%3D%26foreclosureType%3D%26dateFrom%3D%26dateTo%3D",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-franklin-oh-sheriff",
+      "label": "Franklin County OH (Columbus) — Sheriff Real Estate Sales",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://sheriff.franklincountyohio.gov/real-estate-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-jackson-mo-16thcircuit",
+      "label": "Jackson County MO — Delinquent Land Tax Sale (16th Circuit)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.16thcircuit.org/delinquent-land-tax",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-princegeorges-md-portal",
+      "label": "Prince George's County MD — Tax Sale Site",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://taxsale.princegeorgescountymd.gov",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-baltimore-city-md-taxlien",
+      "label": "Baltimore City MD — Tax Lien Certificate Sale Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://data.baltimorecity.gov/maps/baltimore::tax-lien-certificate-sale-properties-2",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-baltimore-county-md-ad",
+      "label": "Baltimore County MD — Tax Sale Properties PDF",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.baltimorecountymd.gov/files/departments/budget-and-finance/documents/tax-sale-third-ad-2025.pdf",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-maricopa-az-unsold-inventory",
+      "label": "Maricopa County AZ — Unsold Tax-Deeded Land PDF",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.maricopa.gov/DocumentCenter/View/2241/Listing-of-Previously-Offered-Tax-Deeded-Land---NOT-SOLD-PDF",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-arapahoe-co-treasurer",
+      "label": "Arapahoe County CO — Tax Lien Sale Files",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.arapahoeco.gov/your_county/county_departments/treasurer/tax_lien_sale/tax_lien_sale_files/index.php",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-denver-co-delinquent",
+      "label": "Denver County CO — Tax Lien Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Department-of-Finance/Our-Divisions/Treasury/Property-Taxes/Real-Estate-Delinquent-Taxes-and-Tax-Lien-Sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-clark-nv-treasurer",
+      "label": "Clark County NV (Las Vegas) — Tax Auction Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://treasurer.clarkcountynv.gov/auction/Auction/AuctionList",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-cook-il-scavenger-sale",
+      "label": "Cook County IL (Chicago) — Scavenger Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.cookcountytreasurer.com/scavengersale.aspx",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-wayne-mi-foreclosed-auction",
+      "label": "Wayne County MI (Detroit) — Foreclosed Property Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.waynecountymi.gov/Government/Elected-Officials/Treasurer/Claims-Auctions",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-oakland-mi-treasurer",
+      "label": "Oakland County MI — Tax-Foreclosed Property Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.oakgov.com/government/oakland-county-treasurer-s-office/property-taxes/property-tax-foreclosure-surplus-claims",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-macomb-mi-treasurer",
+      "label": "Macomb County MI — Tax Foreclosure Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.macombgov.org/departments/treasurers-office/tax-foreclosure/auction-and-claims",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-genesee-mi-treasurer",
+      "label": "Genesee County MI (Flint) — Tax Sale Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.geneseecountymi.gov/departments/treasurer/index.php",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-allen-in-treasurer",
+      "label": "Allen County IN (Fort Wayne) — Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.allencounty.in.gov/270/Tax-Sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-grant-in-delinquent-listing",
+      "label": "Grant County IN — Delinquent Property Listing",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.in.gov/counties/grant/files/DelinquentPropertyListing2022.pdf",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-mecklenburg-nc-foreclosure",
+      "label": "Mecklenburg County NC (Charlotte) — Tax Foreclosure Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://tax.mecknc.gov/tax-foreclosure-properties",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-mecklenburg-nc-delinquent",
+      "label": "Mecklenburg County NC — Delinquent Taxpayer Lists",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://tax.mecknc.gov/Delinquent-Taxpayer-Lists",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-durham-nc-foreclosure",
+      "label": "Durham County NC — Tax Foreclosure Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://dconc.gov/Tax-Administration/Payment-Options-and-Collections/Foreclosure",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-wake-nc-foreclosure",
+      "label": "Wake County NC (Raleigh) — Tax Foreclosures",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.wake.gov/departments-government/tax-administration/real-estate/foreclosures",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-durham-nc-arcgis-delinquent",
+      "label": "Durham County NC — Tax Delinquent Properties Map (ArcGIS)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://experience.arcgis.com/experience/640b8534655c4397b75f1d5a9cbad201",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-shelby-tn-county-sale",
+      "label": "Shelby County TN (Memphis) — Tax Sale Information",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.shelbycountytn.gov/330/Tax-Sale-Information",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-shelby-tn-trustee-sale",
+      "label": "Shelby County TN — Trustee Tax Sale Properties",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.shelbycountytrustee.com/108/Tax-Sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-knox-tn-trustee-sale",
+      "label": "Knox County TN (Knoxville) — Trustee Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://trustee.knoxcounty.org/services/tax-sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-nashville-davidson-chancery-clerk",
+      "label": "Nashville/Davidson County TN — Tax Sale Schedule",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://chanceryclerkandmaster.nashville.gov/fees/property-tax-schedule",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-knox-tn-kgis-taxmap",
+      "label": "Knox County TN — Tax Sale Properties Map (KGIS)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.kgis.org/portal/AboutUs/PolicyBoard/TabId/93/ArtMID/497/ArticleID/5040/Property-Tax-Sale-Maps.aspx",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-orange-ca-treasurer-auction",
+      "label": "Orange County CA — Tax-Defaulted Property Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.octreasurer.gov/taxauction",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-ca-state-controller-auctions",
+      "label": "California State Controller — Tax-Defaulted Public Auctions Directory",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.sco.ca.gov/ardtax_public_auction.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-king-wa-treasury-foreclosure",
+      "label": "King County WA (Seattle) — Tax Foreclosure Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://kingcounty.gov/en/dept/executive-services/buildings-property/treasury-operations/tax-foreclosures/auctions",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-pierce-wa-foreclosure-purchase",
+      "label": "Pierce County WA (Tacoma) — Foreclosure Property Purchase",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.piercecountywa.gov/718/Purchasing-Foreclosure-Property",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-snohomish-wa-foreclosure-details",
+      "label": "Snohomish County WA — Tax Foreclosure Sale Details",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://snohomishcountywa.gov/2755/Tax-Foreclosure-Sale-Details",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-worcester-ma-foreclosure-auctions",
+      "label": "Worcester MA — Tax Foreclosure Public Auctions",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.worcesterma.gov/finance/liens-auctions/public-auctions",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-nyc-dof-in-rem-foreclosure",
+      "label": "NYC Department of Finance — In Rem Foreclosure",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.nyc.gov/site/finance/property/in-rem-foreclosure.page",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-indiana-pa-claim-bureau",
+      "label": "Indiana County PA — Tax Claim Bureau Sale Listing (PDF)",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.indianacountypa.gov/wp-content/uploads/Website-Public-Listing.pdf",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "tax-dc-otr-annual-tax-sale",
+      "label": "DC OTR — Annual Tax Sale",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://taxsale.dc.gov",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-cook-il-civil-services",
+      "label": "Cook County IL Sheriff — Foreclosure Property Sale",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://cookcountysheriffil.gov/departments/courts/civil-services/foreclosure-property-sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-cuyahoga-oh-cpdocket",
+      "label": "Cuyahoga County OH — Sheriff Foreclosure Sales Search",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://cpdocket.cp.cuyahogacounty.gov/SheriffSearch/printresults.aspx?q=searchType%3Ddate_range%26searchString%3D%26foreclosureType%3D%26dateFrom%3D%26dateTo%3D",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-franklin-oh-real-estate",
+      "label": "Franklin County OH — Sheriff Real Estate Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://sheriff.franklincountyohio.gov/real-estate-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-cook-il-foreclosure-portal",
+      "label": "Cook County IL — Foreclosure Auction Site",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://foreclosure.ccsheriff.org",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-union-nj-sales-info",
+      "label": "Union County NJ — Sheriff Sale Information",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://ucnj.org/sheriff/functions/sheriffs-sale-information",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-middlesex-nj-foreclosures",
+      "label": "Middlesex County NJ — Sheriff Foreclosure Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.middlesexcountynj.gov/government/municipalities/foreclosures",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-philadelphia-pa-foreclosures",
+      "label": "Philadelphia PA — Sheriff Sale Properties",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.phila.gov/services/property-lots-housing/foreclosure-sheriff-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-montgomery-pa-sales",
+      "label": "Montgomery County PA — Sheriff Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.montgomerycountypa.gov/departments/sheriffs-office/sheriff-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-chester-pa-handbills",
+      "label": "Chester County PA — Sheriff Sales (Handbills)",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.chesco.org/3262/Sheriff-Sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-delaware-pa-real-estate",
+      "label": "Delaware County PA — Sheriff Real Estate Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.delcopa.gov/sheriff/real-estate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-will-il-surplus-list",
+      "label": "Will County IL — Sheriff Foreclosure Surplus List",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.willcosheriff.org/civil-court/foreclosures/surplus-list",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-fulton-ga-tax-sales",
+      "label": "Fulton County GA — Sheriff Tax Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://fultoncountyga.gov/inside-fulton-county/fulton-county-departments/sheriff/tax-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-clark-nv-civil-sales",
+      "label": "Clark County NV (Las Vegas) — Sheriff Sales",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.clarkcountynv.gov/government/departments/sheriff_civil/sheriff_s_sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "sheriff-clark-nv-annual-sales",
+      "label": "Clark County NV — 2025 Sheriff Sales List",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.clarkcountynv.gov/government/departments/sheriff_civil/sheriff_s_sales/2025-sales",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "foreclosure-miamidade-realforeclose",
+      "label": "Miami-Dade FL — Foreclosure Auction (RealForeclose)",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
+      "power": {
+        "tier": "P4_LIVE_STRONG",
+        "score": 5,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "foreclosure-miamidade-lis-pendens",
+      "label": "Miami-Dade FL — Lis Pendens Search",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.miamidadeclerk.gov/clerk/search-public-records",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "foreclosure-masslandrecords-suffolk",
+      "label": "Suffolk County MA — MassLandRecords",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.masslandrecords.com/suffolk",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "foreclosure-lasvegas-abandoned-registry",
+      "label": "City of Las Vegas — Abandoned Property Registry",
+      "category": "foreclosure_auction",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.lasvegasnevada.gov/Business/Planning-Zoning/Code-Enforcement/Abandoned-Property-Registry",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-detroit-dlba",
+      "label": "Detroit Land Bank Authority — Available Properties",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://buildingdetroit.org/properties",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-detroit-sidelots",
+      "label": "Detroit Land Bank — Side Lots ($250)",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://buildingdetroit.org/properties/?category=3",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-detroit-opendata-dataset",
+      "label": "Detroit Open Data — DLBA Owned Properties Dataset",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://data.detroitmi.gov/datasets/848bc665295f4ca9b1e25068ffa88ab0_0/about",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cuyahoga-available-properties",
+      "label": "Cuyahoga Land Bank — All Available Properties",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cuyahogalandbank.org/all-available-properties",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cuyahoga-sideyard-properties",
+      "label": "Cuyahoga Land Bank — Available Side Yard Properties",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cuyahogalandbank.org/available-side-yard-properties",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cuyahoga-homes",
+      "label": "Cuyahoga Land Bank — Land Bank Homes",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cuyahogalandbank.org/land-bank-homes",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cook-county-inventory",
+      "label": "Cook County Land Bank — Property Inventory",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://cookcountylandbank.org/what-are-you-looking-for",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cook-county-government",
+      "label": "Cook County IL — Buy Land Bank Property",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.cookcountyil.gov/service/buy-land-bank-property",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-cleveland-program",
+      "label": "City of Cleveland — Land Bank Program",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.clevelandohio.gov/city-hall/departments/community-development/programs-services/cleveland-land-bank",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "landbank-community-progress-national-map",
+      "label": "Center for Community Progress — National Land Bank Map",
+      "category": "land_bank",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://communityprogress.org/resources/land-banks/national-land-bank-map",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-bank-of-america-foreclosures",
+      "label": "Bank of America REO — Property Search",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://foreclosures.bankofamerica.com/search",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-boa-real-estate-center",
+      "label": "BoA Real Estate Center — Bank-Owned Search",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://realestatecenter.bankofamerica.com",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-wells-fargo-listings",
+      "label": "Wells Fargo REO — Property Listings",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://wellsfargoforeclosures.com",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-us-bank-residential",
+      "label": "US Bank REO — Property Listings",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.usbank.com/splash/real-estate/bank-owned-residential-real-estate-for-sale.html",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-regions-bank-properties",
+      "label": "Regions Bank — Real Estate Properties",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.regions.com/real-estate-properties",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "bankreo-hud-gov-homes-for-sale",
+      "label": "HUD.gov — Homes for Sale",
+      "category": "marketplace",
+      "role": "opportunity",
+      "status": "DISCOVERY_ONLY",
+      "adapterKey": null,
+      "access": "public",
+      "discoveryUrl": "https://www.hud.gov/helping-americans/homes-for-sale",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-nyc-websurrogates-case-search",
+      "label": "NYC Surrogate's Court — WebSurrogate Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://websurrogates.nycourts.gov",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-kings-ny-surrogates-court",
+      "label": "Kings County NY (Brooklyn) Surrogate's Court",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.nycourts.gov/courts/2jd/surrogates/kings",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-newyork-ny-surrogates-court",
+      "label": "New York County (Manhattan) Surrogate's Court",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.nycourts.gov/courts/1st-judicial-district/new-york-county-surrogates-court",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-cook-il-probate-division",
+      "label": "Cook County IL — Probate Division Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.cookcountycourt.org/ABOUT-THE-COURT/County-Departments/Probate-Division",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-cuyahoga-oh-court-search",
+      "label": "Cuyahoga County OH — Probate Court Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://probate.cuyahogacounty.us",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-harris-tx-court-search",
+      "label": "Harris County TX — Probate Court Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.harriscountytx.gov/Departments/Courts/Probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-dallas-tx-court-search",
+      "label": "Dallas County TX — Probate Court Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.dallascounty.org/government/courts/county-courts-at-law/probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-losangeles-ca-superior-court",
+      "label": "Los Angeles County CA — Superior Court Probate",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.lacourt.org/division/probate/probate.aspx",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-sandiego-ca-case-search",
+      "label": "San Diego County CA — Probate Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.sdcourt.ca.gov/sdcourt/civil/probate2",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-fulton-ga-court-search",
+      "label": "Fulton County GA — Probate Court Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://probate.fultoncountyga.gov",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-wayne-mi-third-circuit",
+      "label": "Wayne County MI — Probate Court Case Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.3rdcc.org/divisions/probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-essex-nj-surrogates-court",
+      "label": "Essex County NJ — Surrogate's Court",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.essexcountynj.org/essex-county-surrogate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-philadelphia-pa-register-of-wills",
+      "label": "Philadelphia PA — Register of Wills",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://secure.phila.gov/PROBATE",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-pima-az-superior-court",
+      "label": "Pima County AZ (Tucson) — Superior Court Probate",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.sc.pima.gov/calendar-departments/probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-maricopa-az-superior-court",
+      "label": "Maricopa County AZ (Phoenix) — Superior Court Probate",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.superiorcourt.maricopa.gov/llrc/probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-king-wa-superior-court",
+      "label": "King County WA (Seattle) — Superior Court Probate",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.kingcounty.gov/courts/superior-court/probate",
+      "power": {
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
+        "flags": [
+          "lastRunReport"
+        ]
+      },
+      "weakness": null,
+      "seedListings": 0
+    },
+    {
+      "id": "probate-miamidade-fl-civil-probate",
+      "label": "Miami-Dade FL — Probate Division Search",
+      "category": "court_record",
+      "role": "evidence",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": null,
+      "access": "jurisdiction",
+      "discoveryUrl": "https://www.miamidadeclerk.gov/clerk/civil-family-probate-divisions.page",
       "power": {
         "tier": "P0_CATALOG_ONLY",
         "score": 1,

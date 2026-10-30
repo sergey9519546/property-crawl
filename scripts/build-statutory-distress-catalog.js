@@ -267,7 +267,11 @@ function buildEntry(rawId, newId) {
     coverage,
     discoveryUrl,
     access,
-    adapterKey: null,
+    adapterKey: (status !== 'DISCOVERY_ONLY' && /(?:realforeclose\.com|realtaxdeed\.com|sheriffsaleauction\.ohio\.gov)/i.test(discoveryUrl))
+      ? 'sheriff'
+      : (status !== 'DISCOVERY_ONLY' && /salesweb\.civilview\.com/i.test(discoveryUrl))
+        ? 'civilview'
+        : null,
     status,
     workflow,
     requiredEvidence,

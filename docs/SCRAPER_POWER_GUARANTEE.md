@@ -1,15 +1,15 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-22T11:38:47.287Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-30T08:17:38.634Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
 
 | Metric | Value |
 |---|---:|
-| Catalog sources (all ends) | **163** |
+| Catalog sources (all ends) | **267** |
 | Scheduled production adapters | **21** |
-| Adapters with Scrapling profiles | **14** |
+| Adapters with Scrapling profiles | **25** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -21,13 +21,13 @@
 | Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
-| Foreclosure/sheriff/trustee auction | 7 | 6 | 4 | yes | ✅ adapter |
-| Tax lien/deed sale | 58 | 1 | 0 | yes | ✅ adapter |
-| Land bank inventory | 2 | 1 | 0 | yes | ✅ adapter |
+| Foreclosure/sheriff/trustee auction | 25 | 7 | 6 | yes | ✅ adapter |
+| Tax lien/deed sale | 111 | 10 | 9 | yes | ✅ adapter |
+| Land bank inventory | 12 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
-| Commercial marketplaces (issuer-preserving) | 4 | 0 | 0 | no | catalog only |
+| Commercial marketplaces (issuer-preserving) | 10 | 0 | 0 | no | catalog only |
 | Public notices / early signal | 3 | 1 | 0 | yes | ✅ adapter |
-| Court/PACER dockets | 3 | 1 | 0 | no | catalog only |
+| Court/PACER dockets | 20 | 1 | 0 | no | catalog only |
 | Parcel/assessor evidence | 6 | 1 | 0 | yes | ✅ adapter |
 | Title/recorder evidence | 3 | 0 | 0 | no | catalog only |
 | Area/market context | 3 | 0 | 0 | no | catalog only |
@@ -39,11 +39,10 @@
 
 | Tier | Meaning | Count |
 |---|---|---:|
-| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 9 |
-| P3_LIVE_ADAPTER | Scheduled production adapter with run reports | 1 |
+| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 20 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 11 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
-| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 140 |
+| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 234 |
 
 ## Scheduled adapters (power scorecard)
 
@@ -54,11 +53,21 @@
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 41 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
 | `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 1 | — |
+| `servicelink` (Public Auction Network) | P4_LIVE_STRONG | table-extract | 25 | — |
 | `sheriff` (Ohio Sheriff Sale Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Miami-Dade County FL — Tax Deed Auction (RealForeclose)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Broward County FL — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Palm Beach County FL — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Orange County FL (Orlando) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Hillsborough County FL (Tampa) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Lee County FL (Fort Myers) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Pinellas County FL (St. Petersburg) — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Duval County FL (Jacksonville) — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Polk County FL — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 16 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
-| `servicelink` (Public Auction Network) | P3_LIVE_ADAPTER | — | 25 | — |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `courtlistener` (CourtListener / RECAP) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; enrichment only — never invents bid/sale |

@@ -237,3 +237,48 @@ test('AcclaimWeb parses full search results container', () => {
   assert.equal(filings[0].distressStage, 'PRE_FORECLOSURE');
   assert.equal(filings[1].instrumentNumber, '20261007:002222');
 });
+
+
+test('RealAuction tax-deed mode (.realtaxdeed.com) and SheriffSaleScraper docket bridge', () => {
+  const { REALAUCTION_FLORIDA_TAXDEED_COUNTIES } = require('../server/scrapers/adapters/realauction');
+  const { SheriffSaleScraper, DEFAULT_FL_COUNTIES } = require('../server/scrapers/sheriff');
+
+  assert.ok(REALAUCTION_FLORIDA_TAXDEED_COUNTIES.includes('broward'));
+  assert.ok(DEFAULT_FL_COUNTIES.some((c) => c.domain === 'broward.realtaxdeed.com'));
+
+  const taxDeedUrl = getRealAuctionUrl('broward', 'FL', { mode: 'taxdeed', auctionId: '99812' });
+  assert.equal(taxDeedUrl, 'https://broward.realtaxdeed.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=99812');
+  assert.equal(inspectSourceRecordUrl('sheriff', taxDeedUrl).isValid, true);
+
+  const scraper = new SheriffSaleScraper({ includeFlorida: true });
+  assert.ok(scraper.counties.some((c) => c.domain === 'broward.realtaxdeed.com'));
+
+  const docketHtml = `
+    <div class="Auction_W">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Auction ID: 99812</td>
+          <td>Certificate #: 2023-4410</td>
+          <td>Parcel ID: 4942-10-01-0020</td>
+          <td>Property Address: 500 E Broward Blvd, Fort Lauderdale, FL 33301</td>
+          <td>Opening Bid: $18,450.00</td>
+          <td>Assessed Value: $210,000.00</td>
+          <td>Auction Date: 11/18/2026</td>
+        </tr>
+      </table>
+    </div>
+  `;
+  const parsed = scraper.parseRealauctionHtml(docketHtml, {
+    name: 'Broward',
+    domain: 'broward.realtaxdeed.com',
+    state: 'FL',
+  });
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].id, 'SHERIFF-FL-BRO-2023-4410');
+  assert.equal(parsed[0].openingBid, 18450);
+  assert.equal(parsed[0].assessed, 210000);
+  assert.equal(parsed[0].apn, '4942-10-01-0020');
+  assert.equal(parsed[0].saleDate, '2026-11-18');
+  assert.equal(parsed[0].provenance.platform, 'realtaxdeed');
+  assert.equal(inspectSourceRecordUrl('sheriff', parsed[0].sourceUrl).isValid, true);
+});

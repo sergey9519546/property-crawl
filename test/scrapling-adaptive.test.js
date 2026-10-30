@@ -138,5 +138,35 @@ test('waterfall fetch handles disabled SPA XHR gracefully', async () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.tier, 'fail-closed');
+  assert.equal(result.tier, 'fail-closed');
   assert.equal(result.error, 'FETCH_WATERFALL_EXHAUSTED');
+});
+
+test('BaseScraper exposes extractWithAdaptiveFallback, runSpiderBatch, and requestTextWithWaterfall', async () => {
+  const BaseScraper = require('../server/scrapers/base');
+  const scraper = new BaseScraper({
+    name: 'TestAdaptiveScraper',
+    sourceKey: 'sheriff',
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: new Map([['content-type', 'text/html']]),
+      text: async () => '<html><body><div class="case">CV-2026-100</div><div>Opening Bid: $88,000</div></body></html>',
+    }),
+  });
+
+  assert.equal(typeof scraper.extractWithAdaptiveFallback, 'function');
+  assert.equal(typeof scraper.runSpiderBatch, 'function');
+  assert.equal(typeof scraper.requestTextWithWaterfall, 'function');
+
+  const wf = await scraper.requestTextWithWaterfall('https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&zmethod=PREVIEW');
+  assert.equal(wf.ok, true);
+  assert.equal(wf.tier, 'native');
+
+  const adaptive = scraper.extractWithAdaptiveFallback(wf.html, {
+    caseNumber: { selector: '.case', extractor: () => 'CV-2026-100' },
+    openingBid: { selector: '.missing-bid', extractor: () => null },
+  }, { persistSelectors: false });
+  assert.equal(adaptive.identityPassed, true);
+  assert.equal(adaptive.fields.openingBid, '88000');
 });

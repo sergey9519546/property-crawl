@@ -28,6 +28,7 @@ const SCRAPLING_PROFILES = {
   'ca-controller-tax-sale': ['table-extract'],
   usda: ['usda-table'],
   civilview: ['civilview-sales'],
+  servicelink: ['table-extract'],
   sheriff: ['table-extract'],
   marshals: ['table-extract'],
   fannie: ['table-extract'],

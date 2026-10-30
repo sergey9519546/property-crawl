@@ -8,6 +8,10 @@ const {
 } = require('./http');
 const { standardizeListingRecord } = require('./normalization');
 const { validateListingShape } = require('./listing-schema');
+const { waterfallFetch, impersonationEnabled } = require('./fetch-strategy');
+const { spaXhrEnabled } = require('./spa-xhr');
+const { runSpiderBatch, allocateSessionId } = require('./scrapling-spider');
+const { extractWithAdaptiveFallback } = require('./scrapling-runner');
 
 class BaseScraper {
   constructor({
@@ -69,7 +73,70 @@ class BaseScraper {
     throw lastError;
   }
 
+  async runSpiderBatch(batchOptions = {}) {
+    const scope = batchOptions.scope || 'default';
+    return runSpiderBatch({
+      sourceKey: this.sourceKey,
+      sid: batchOptions.sid || allocateSessionId(this.sourceKey, scope),
+      ...batchOptions,
+    });
+  }
+
+  extractWithAdaptiveFallback(html, fieldConfigs, options = {}) {
+    return extractWithAdaptiveFallback(html, this.sourceKey, fieldConfigs, options);
+  }
+
+  async requestTextWithWaterfall(url, options = {}) {
+    const env = options.env || process.env;
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
+    return waterfallFetch({
+      url,
+      sourceKey: this.sourceKey,
+      timeoutMs,
+      env,
+      enableSpaXhr: Boolean(options.enableSpaXhr),
+      nativeFetch: (targetUrl) => fetchTextWithPolicy(targetUrl, {
+        ...options,
+        timeoutMs,
+        circuitBreaker: this.circuitBreaker,
+        fetchImpl: options.fetchImpl || this.fetchImpl
+      }),
+    });
+  }
+
   async requestText(url, options = {}) {
+    const env = options.env || process.env;
+    const canEscalate = Boolean(
+      options.useWaterfall
+      || impersonationEnabled(this.sourceKey, env)
+      || spaXhrEnabled(this.sourceKey, env)
+    );
+    try {
+      return await fetchTextWithPolicy(url, {
+        ...options,
+        timeoutMs: options.timeoutMs ?? this.timeoutMs,
+        circuitBreaker: this.circuitBreaker,
+        fetchImpl: options.fetchImpl || this.fetchImpl
+      });
+    } catch (primaryErr) {
+      if (!canEscalate) throw primaryErr;
+      const wf = await waterfallFetch({
+        url,
+        sourceKey: this.sourceKey,
+        nativeFetch: null,
+        timeoutMs: options.timeoutMs ?? this.timeoutMs,
+        env,
+        enableSpaXhr: Boolean(options.enableSpaXhr),
+      });
+      if (wf && wf.ok && typeof wf.html === 'string' && wf.html.trim()) {
+        this._lastWaterfallTier = wf.tier;
+        return wf.html;
+      }
+      throw primaryErr;
+    }
+  }
+
+  async _legacyRequestText(url, options = {}) {
     return fetchTextWithPolicy(url, {
       ...options,
       timeoutMs: options.timeoutMs ?? this.timeoutMs,

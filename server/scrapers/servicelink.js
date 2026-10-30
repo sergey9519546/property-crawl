@@ -12,6 +12,7 @@ const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
 const { inspectImageUrl } = require('./media-policy');
 const { inspectSourceRecordUrl, hostnameMatches } = require('./source-policy');
+const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 
 const SOURCE_KEY = 'servicelink';
 const PUBLISHER = 'ServiceLink Auction';
@@ -257,6 +258,8 @@ class ServiceLinkScraper extends BaseScraper {
     this.sweepStartedAt = null;
     this.pagesCommitted = 0;
     this.lastRunReport = null;
+    this.useScrapling = options.useScrapling ?? isScraplingEnabled(SOURCE_KEY);
+    this.extract = options.extractImpl || extractWithScrapling;
     const hasRestartArg = Array.isArray(process.argv) && process.argv.includes('--restart');
     const hasRestartEnv = process.env.SERVICELINK_RESTART === '1' || process.env.SERVICELINK_RESTART === 'true';
     this.restart = Boolean(options.restart || hasRestartArg || hasRestartEnv);

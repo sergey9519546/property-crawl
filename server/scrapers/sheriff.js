@@ -9,6 +9,24 @@ const BaseScraper = require('./base');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport, applyEmptyInventoryHonesty } = require('./run-report');
 const { mapWithConcurrency } = require('./http');
+const {
+  REALAUCTION_FLORIDA_COUNTIES,
+  REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
+  parseRealAuctionDocketHtml,
+} = require('./adapters/realauction');
+
+const DEFAULT_FL_COUNTIES = [
+  ...REALAUCTION_FLORIDA_COUNTIES.map((c) => ({
+    name: c.charAt(0).toUpperCase() + c.slice(1),
+    domain: `${c}.realforeclose.com`,
+    state: 'FL',
+  })),
+  ...REALAUCTION_FLORIDA_TAXDEED_COUNTIES.map((c) => ({
+    name: c.charAt(0).toUpperCase() + c.slice(1),
+    domain: `${c}.realtaxdeed.com`,
+    state: 'FL',
+  })),
+];
 
 // Expanded default Ohio Realauction jurisdictions (10x collection footprint).
 // SHERIFF_EXTRA_COUNTIES still accepts Name:domain:ST enrollment.
@@ -52,7 +70,11 @@ class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff' });
     this.counties = options.counties
-      || [...DEFAULT_OH_COUNTIES, ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES)];
+      || [
+        ...DEFAULT_OH_COUNTIES,
+        ...((options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1') ? DEFAULT_FL_COUNTIES : []),
+        ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES),
+      ];
     this.timeoutMs = 30000;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
@@ -268,6 +290,67 @@ class SheriffSaleScraper extends BaseScraper {
       }
     }
 
+    if (listings.length === 0) {
+      const isTaxDeed = String(county.domain || '').toLowerCase().includes('realtaxdeed.com');
+      const docketCards = parseRealAuctionDocketHtml(html, county.name, county.state, {
+        domain: county.domain,
+        mode: isTaxDeed ? 'taxdeed' : 'foreclosure',
+      });
+      for (const parsed of docketCards) {
+        const refId = parsed.caseNumber || parsed.auctionId;
+        if (!refId || !parsed.address) continue;
+        let openingBid = parsed.openingBid;
+        let saleDate = parsed.saleDate ? this.normalizeSaleDate(parsed.saleDate) : null;
+        if ((openingBid == null || saleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
+          const adaptive = this.extractWithAdaptiveFallback(html, {
+            caseNumber: { selector: '.case-id', extractor: () => String(refId) },
+            openingBid: { selector: '.opening-bid', extractor: () => (openingBid != null ? String(openingBid) : null) },
+            saleDateText: { selector: '.sale-date', extractor: () => saleDate },
+          }, { persistSelectors: false });
+          if (adaptive && adaptive.identityPassed) {
+            if (openingBid == null && adaptive.fields.openingBid) {
+              const num = parseFloat(String(adaptive.fields.openingBid).replace(/,/g, ''));
+              if (Number.isFinite(num) && num > 0) openingBid = Math.round(num);
+            }
+            if (saleDate == null && adaptive.fields.saleDateText) {
+              saleDate = this.normalizeSaleDate(adaptive.fields.saleDateText);
+            }
+          }
+        }
+        const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, '')}`;
+        listings.push({
+          id,
+          state: county.state,
+          county: county.name,
+          city: null,
+          zip: parsed.zip || null,
+          address: parsed.address,
+          apn: parsed.parcelId || null,
+          openingBid: openingBid != null ? Math.round(openingBid) : null,
+          estLow: null,
+          estHigh: null,
+          assessed: parsed.assessed != null ? Math.round(parsed.assessed) : null,
+          saleDate,
+          plaintiff: null,
+          defendant: null,
+          judgment: parsed.judgment != null ? Math.round(parsed.judgment) : null,
+          attorney: null,
+          occupancy: null,
+          deposit: null,
+          sourceUrl: parsed.sourceUrl,
+          raw: JSON.stringify(parsed).slice(0, 2000),
+          sourceFacts: parsed.assessed == null ? null : { appraisedValue: Math.round(parsed.assessed) },
+          provenance: {
+            origin: 'live',
+            observed: true,
+            publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
+            recordId: String(refId),
+            platform: parsed.platform,
+          },
+        });
+      }
+    }
+
     return listings;
   }
 
@@ -423,4 +506,5 @@ class SheriffSaleScraper extends BaseScraper {
 module.exports = new SheriffSaleScraper();
 module.exports.SheriffSaleScraper = SheriffSaleScraper;
 module.exports.DEFAULT_OH_COUNTIES = DEFAULT_OH_COUNTIES;
+module.exports.DEFAULT_FL_COUNTIES = DEFAULT_FL_COUNTIES;
 module.exports.parseExtraCounties = parseExtraCounties;

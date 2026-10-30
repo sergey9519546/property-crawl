@@ -20,6 +20,7 @@ const { ScraperResponseError } = require('./circuit-breaker');
 const { readResponseText } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
+const { ALL_COUNTY_MAP } = require('./adapters/civilview');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -681,7 +682,16 @@ class CivilViewScraper extends BaseScraper {
         ? 'CivilView Minimum Bid'
         : null;
     const judgment = parseExecutionAmount(description);
-    const occupancy = this.parseOccupancy(propertyNote);
+    let occupancy = this.parseOccupancy(propertyNote);
+    if (!occupancy && typeof this.extractWithAdaptiveFallback === 'function') {
+      const adaptive = this.extractWithAdaptiveFallback(html, {
+        caseNumber: { selector: '.sale-detail-value', extractor: () => sheriffNumber || null },
+        occupancyStatus: { selector: '.occupancy', extractor: () => occupancy || null },
+      }, { persistSelectors: false });
+      if (adaptive && adaptive.identityPassed && adaptive.fields.occupancyStatus) {
+        occupancy = adaptive.fields.occupancyStatus.toUpperCase();
+      }
+    }
     const statusHistory = parseStatusHistory(html);
     const propertyId = summary.propertyId || new URL(summary.detailUrl).searchParams.get('PropertyId');
     const sourceObservedAt = new Date(this.now()).toISOString();
@@ -823,3 +833,4 @@ module.exports = civilView;
 module.exports.CivilViewScraper = CivilViewScraper;
 module.exports.orderCounties = orderCounties;
 module.exports.rotateCounties = rotateCounties;
+module.exports.ALL_COUNTY_MAP = ALL_COUNTY_MAP;

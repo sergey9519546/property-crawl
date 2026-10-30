@@ -136,7 +136,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
           <div className="rounded-xl border border-line bg-paper p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-ink">HUD Fair Market Rent Floor · ZIP {dossier.hudSafmr.zip}</h3>
-              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-2">
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
                 FY2025 SAFMR
               </span>
             </div>
@@ -146,11 +146,11 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => (
                 <div key={br} className="rounded-lg border border-line/60 bg-surface/50 p-2 text-center">
-                  <span className="text-[10px] font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
+                  <span className="text-xs font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
                   <p className="mt-0.5 text-sm font-bold text-ink">
                     ${(dossier.hudSafmr?.rents?.[br] ?? 0).toLocaleString()}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-ink-3">
+                  <p className="mt-0.5 text-xs text-ink-3">
                     ${(dossier.hudSafmr?.paymentStandard90?.[br] ?? 0).toLocaleString()} – ${(dossier.hudSafmr?.paymentStandard110?.[br] ?? 0).toLocaleString()}
                   </p>
                 </div>
