@@ -24,11 +24,33 @@ test('validatePublicHttpsUrl: enforces public HTTPS only and rejects private/loo
   const rejected = [
     'http://public-site.com',
     'https://localhost/api',
+    'https://sub.localhost/api',
+    'https://printer.local/api',
+    'https://metadata.internal/api',
+    'https://0.0.0.0/api',
     'https://127.0.0.1/meta',
     'https://10.0.0.1/test',
     'https://192.168.1.1/data',
     'https://172.16.0.1/data',
+    'https://100.64.0.1/cgnat',
     'https://169.254.169.254/latest/meta-data/',
+    'https://[::1]/',
+    'https://[::]/',
+    'https://[::ffff:127.0.0.1]/',
+    'https://[::ffff:7f00:1]/',
+    'https://[::ffff:10.0.0.1]/',
+    'https://[::ffff:a00:1]/',
+    'https://[::ffff:192.168.1.1]/',
+    'https://[::ffff:c0a8:101]/',
+    'https://[::ffff:169.254.169.254]/',
+    'https://[::ffff:a9fe:a9fe]/',
+    'https://[::ffff:172.16.0.1]/',
+    'https://[::ffff:0.0.0.0]/',
+    'https://[0:0:0:0:0:ffff:127.0.0.1]/',
+    'https://[fe80::1]/',
+    'https://[fd00::1]/',
+    'https://[fc00::1]/',
+    'https://[64:ff9b::127.0.0.1]/',
     'https://user:pass@goodsite.com/path',
     'not-a-url',
   ];
@@ -41,6 +63,44 @@ test('validatePublicHttpsUrl: enforces public HTTPS only and rejects private/loo
   const valid = validatePublicHttpsUrl('https://county.gov/foreclosures/sales.html');
   assert.equal(valid.valid, true);
   assert.equal(valid.parsed.hostname, 'county.gov');
+});
+
+test('validatePublicHttpsUrl: returns SSRF_BLOCKED_HOST for IPv6-mapped IPv4 and IPv6 local literals', async () => {
+  const ipv6SsrfTargets = [
+    'https://[::ffff:127.0.0.1]/',
+    'https://[::ffff:7f00:1]/',
+    'https://[::ffff:169.254.169.254]/',
+    'https://[::ffff:a9fe:a9fe]/',
+    'https://[::ffff:10.0.0.1]/',
+    'https://[::ffff:a00:1]/',
+    'https://[::ffff:192.168.1.1]/',
+    'https://[::ffff:c0a8:101]/',
+    'https://[::ffff:172.16.0.1]/',
+    'https://[::ffff:0.0.0.0]/',
+    'https://[fe80::1]/',
+    'https://[fd00::1]/',
+    'https://[::1]/',
+    'https://[::]/',
+  ];
+
+  for (const target of ipv6SsrfTargets) {
+    const check = validatePublicHttpsUrl(target);
+    assert.equal(check.valid, false, `validatePublicHttpsUrl must reject ${target}`);
+    assert.equal(check.error, 'SSRF_BLOCKED_HOST', `validatePublicHttpsUrl must return SSRF_BLOCKED_HOST for ${target}`);
+
+    let networkCalled = false;
+    const fetchRes = await zyteFetch(target, {
+      env: { ZYTE_API_KEY: 'test-key' },
+      fetchImpl: async () => {
+        networkCalled = true;
+        return { ok: true, status: 200, json: async () => ({}) };
+      },
+    });
+    assert.equal(fetchRes.ok, false, `zyteFetch must block ${target}`);
+    assert.equal(fetchRes.status, 400);
+    assert.equal(fetchRes.error, 'SSRF_BLOCKED_HOST');
+    assert.equal(networkCalled, false, `zyteFetch must not dispatch network call for ${target}`);
+  }
 });
 
 test('zyteFetch: fails closed with 503 when ZYTE_API_KEY is not configured', async () => {

@@ -1,5 +1,12 @@
-import { verifyScrapySignature, validateScrapyPayload, SUPPORTED_RECIPES } from "@server/ingest/scrapy-webhook";
+import {
+  verifyScrapySignature,
+  validateScrapyPayload,
+  ingestScrapyItems,
+  SUPPORTED_RECIPES,
+} from "@server/ingest/scrapy-webhook";
 import { resolveLiveStorePath, mergeLiveRecords } from "@server/db/live-record-store";
+import { servesListings } from "@server/sources/catalog";
+import { validateListingForIngestion } from "@server/scrapers/validation";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -74,42 +81,43 @@ export async function POST(request: Request) {
     );
   }
 
-  let accepted = 0;
-  if (validated.items.length > 0) {
-    try {
-      const merged = mergeLiveRecords(resolveLiveStorePath(), validated.items);
-      accepted = merged.accepted || 0;
-    } catch (err) {
-      console.error("[Scrapy Ingest] Live record store merge failed:", (err as Error)?.message);
-    }
-
-    try {
-      // In PostgreSQL mode, live record store is bypassed; persist directly to primary database
-      const db = require("@server/db/client");
-      if (typeof db.verifyConnection === "function" && !db.postgresReachable && db.pool) {
-        await db.verifyConnection().catch(() => {});
-      }
-      const isPostgres = Boolean(db.isPg || (typeof db.dataMode === "function" ? db.dataMode() === "postgres" : false));
-      if (isPostgres) {
-        for (const item of validated.items) {
-          try {
-            await db.createListing(item);
-          } catch (createErr) {
-            console.error(`[Scrapy Ingest] PostgreSQL createListing failed for ${item.id}:`, (createErr as Error)?.message);
-          }
-        }
-      }
-    } catch (dbErr) {
-      console.error("[Scrapy Ingest] Database persistence failed:", (dbErr as Error)?.message);
-    }
+  const db = require("@server/db/client");
+  if (typeof db.verifyConnection === "function" && !db.postgresReachable && db.pool) {
+    await db.verifyConnection().catch(() => {});
   }
+  const isPostgres = Boolean(
+    db.isPg || (typeof db.dataMode === "function" ? db.dataMode() === "postgres" : false)
+  );
+
+  const ingestResult = await ingestScrapyItems(validated.items, {
+    sourceKey: validated.source || undefined,
+    db,
+    isPostgres,
+    liveStorePath: resolveLiveStorePath(),
+    mergeLiveRecordsImpl: mergeLiveRecords,
+    servesListingsImpl: servesListings,
+    validateListingImpl: validateListingForIngestion,
+  });
 
   return Response.json(
     {
+      ok: true,
       success: true,
-      count: validated.items.length,
-      accepted,
       recipe: validated.recipe,
+      spider: validated.spider || null,
+      source: validated.source || null,
+      count: validated.items.length,
+      received: ingestResult.received,
+      accepted: ingestResult.accepted,
+      rejected: ingestResult.rejected,
+      totalLive: ingestResult.totalLive,
+      ...(ingestResult.isPostgres
+        ? {
+            postgresAccepted: ingestResult.postgresAccepted,
+            postgresRejected: ingestResult.postgresRejected,
+            postgresFailed: ingestResult.postgresFailed,
+          }
+        : {}),
     },
     { status: 200, headers: responseHeaders }
   );

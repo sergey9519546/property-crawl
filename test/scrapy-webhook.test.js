@@ -1,15 +1,47 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const {
   verifyScrapySignature,
   validateScrapyPayload,
+  gateScrapyItemForIngestion,
+  ingestScrapyItems,
   SUPPORTED_RECIPES,
 } = require('../server/ingest/scrapy-webhook');
 
 function signPayload(body, secret) {
   return crypto.createHmac('sha256', secret).update(body).digest('hex');
+}
+
+function buildValidCivilviewItem(overrides = {}) {
+  const id = overrides.id || 'CIV-NJ-007-1001';
+  const propertyId = overrides.propertyId || '1001001';
+  return {
+    id,
+    source: 'civilview',
+    state: 'NJ',
+    county: 'Essex',
+    city: 'Newark',
+    address: '125 Market St, Newark, NJ 07102',
+    openingBid: 145000,
+    saleDate: '2026-11-18',
+    sourceUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${propertyId}`,
+    sourceObservedAt: '2026-10-25T12:00:00.000Z',
+    raw: 'SHERIFF SALE NOTICE Essex County Docket F-001001-25 125 Market St Newark NJ 07102',
+    provenance: {
+      observed: true,
+      origin: 'live',
+      recordKind: 'source_record',
+      publisher: 'CivilView Essex County Sheriff',
+      recordId: propertyId,
+      observedAt: '2026-10-25T12:00:00.000Z',
+    },
+    ...overrides,
+  };
 }
 
 test('verifyScrapySignature: fails closed when secret is unset', () => {
@@ -21,7 +53,7 @@ test('verifyScrapySignature: fails closed when secret is unset', () => {
 
 test('verifyScrapySignature: rejects missing or invalid format signatures', () => {
   const secret = 'test-secret-key-12345';
-  
+
   // Missing header
   const missing = verifyScrapySignature('{"test":1}', null, secret);
   assert.equal(missing.valid, false);
@@ -77,9 +109,111 @@ test('validateScrapyPayload: enforces recipe schema and items array', () => {
   }
 });
 
-test('scrapy webhook route handler declares GET and POST with HMAC verification', () => {
-  const fs = require('fs');
-  const path = require('path');
+test('gateScrapyItemForIngestion: blocks DISCOVERY_ONLY and invalid items while admitting valid serving records', () => {
+  const validItem = buildValidCivilviewItem();
+  const allowed = gateScrapyItemForIngestion(validItem);
+  assert.equal(allowed.isValid, true);
+  assert.equal(allowed.listing.id, 'CIV-NJ-007-1001');
+  assert.equal(allowed.listing.provenance.origin, 'live');
+  assert.equal(allowed.listing.provenance.recordKind, 'source_record');
+
+  // DISCOVERY_ONLY catalog source (courtlistener) must be blocked by servesListings
+  const discoveryOnlyItem = buildValidCivilviewItem({
+    id: 'CL-DOCKET-9991',
+    source: 'courtlistener',
+    sourceUrl: 'https://www.courtlistener.com/docket/123456/test-case/',
+  });
+  const blockedDiscovery = gateScrapyItemForIngestion(discoveryOnlyItem);
+  assert.equal(blockedDiscovery.isValid, false);
+  assert.ok(blockedDiscovery.errors.includes('source_not_serving_listings'));
+
+  // Uncataloged source must be blocked
+  const unknownSourceItem = buildValidCivilviewItem({
+    id: 'UNK-1001',
+    source: 'not-a-catalog-source',
+  });
+  const blockedUnknown = gateScrapyItemForIngestion(unknownSourceItem);
+  assert.equal(blockedUnknown.isValid, false);
+  assert.ok(blockedUnknown.errors.includes('source_not_serving_listings'));
+
+  // Fixture / non-observed provenance must be blocked by validateListingForIngestion
+  const fixtureItem = buildValidCivilviewItem({
+    id: 'CIV-NJ-007-FIXTURE',
+    provenance: {
+      observed: false,
+      fixture: true,
+      origin: 'fixture',
+      publisher: 'Fixture',
+      recordId: '999',
+      observedAt: '2026-10-25T12:00:00.000Z',
+    },
+  });
+  const blockedFixture = gateScrapyItemForIngestion(fixtureItem);
+  assert.equal(blockedFixture.isValid, false);
+  assert.ok(blockedFixture.errors.includes('fixture_record_not_ingestible'));
+});
+
+test('ingestScrapyItems: enforces servesListings + validateListingForIngestion before Postgres createListing and reports accurate Postgres accounting', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-test-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid1 = buildValidCivilviewItem({ id: 'CIV-NJ-007-2001', propertyId: '2001001' });
+    const valid2 = buildValidCivilviewItem({ id: 'CIV-NJ-007-2002', propertyId: '2002002' });
+    const discoveryOnly = buildValidCivilviewItem({
+      id: 'CL-DOCKET-2003',
+      source: 'courtlistener',
+      sourceUrl: 'https://www.courtlistener.com/docket/2003003/foreclosure/',
+    });
+    const invalidSchema = buildValidCivilviewItem({
+      id: 'CIV-NJ-007-2004',
+      address: 'short',
+      sourceUrl: 'https://example.com/not-civilview',
+    });
+
+    const persistedToPostgres = [];
+    const mockPgDb = {
+      isPg: true,
+      postgresReachable: true,
+      dataMode: () => 'postgres',
+      createListing: async (listing) => {
+        if (listing.id === 'CIV-NJ-007-2002') {
+          throw new Error('simulated postgres constraint failure');
+        }
+        persistedToPostgres.push(listing);
+      },
+    };
+
+    const quietLogger = { warn: () => {}, error: () => {} };
+    const result = await ingestScrapyItems(
+      [valid1, valid2, discoveryOnly, invalidSchema],
+      {
+        db: mockPgDb,
+        liveStorePath,
+        logger: quietLogger,
+      }
+    );
+
+    // Only valid1 and valid2 were allowed to attempt db.createListing; discoveryOnly and invalidSchema were blocked at gate
+    assert.equal(persistedToPostgres.length, 1);
+    assert.equal(persistedToPostgres[0].id, 'CIV-NJ-007-2001');
+
+    // Even though mergeLiveRecords accepted both valid1 and valid2 into file cache (liveAccepted = 2),
+    // Postgres mode must report accepted = pgAccepted (1) and rejected = gateRejected (2) + pgFailed (1) = 3.
+    assert.equal(result.isPostgres, true);
+    assert.equal(result.received, 4);
+    assert.equal(result.liveAccepted, 2);
+    assert.equal(result.postgresAccepted, 1);
+    assert.equal(result.postgresRejected, 2);
+    assert.equal(result.postgresFailed, 1);
+    assert.equal(result.accepted, 1);
+    assert.equal(result.rejected, 3);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('scrapy webhook route handler declares GET and POST with HMAC verification and Postgres validation gate', () => {
   const routePath = path.join(__dirname, '../src/app/api/public/scrapy-ingest/route.ts');
   assert.ok(fs.existsSync(routePath), 'scrapy-ingest route.ts must exist');
 
@@ -88,9 +222,11 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification'
   assert.match(source, /export async function POST/);
   assert.match(source, /verifyScrapySignature/);
   assert.match(source, /validateScrapyPayload/);
+  assert.match(source, /ingestScrapyItems/);
+  assert.match(source, /servesListings/);
+  assert.match(source, /validateListingForIngestion/);
   assert.match(source, /x-signature/);
   assert.match(source, /verifyConnection/);
   assert.match(source, /dataMode\(\) === "postgres"/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN/);
 });
-

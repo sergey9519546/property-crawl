@@ -11,6 +11,8 @@
  * - Enforce SSRF protection on every target URL before network dispatch.
  */
 
+const net = require('node:net');
+
 const DEFAULT_PROJECT_ID = '870105';
 const ZYTE_EXTRACT_API_URL = 'https://api.zyte.com/v1/extract';
 const SCRAPY_CLOUD_API_URL = 'https://app.zyte.com/api';
@@ -24,8 +26,109 @@ function getBasicAuthHeader(apiKey) {
 }
 
 /**
+ * Returns true if a dotted-quad IPv4 string falls within private, loopback,
+ * link-local, CGNAT, multicast, broadcast, or reserved IETF ranges.
+ */
+function isNonPublicIpv4(ip) {
+  if (!net.isIPv4(ip)) return true;
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+  const [a, b, c] = parts;
+  if (a === 0) return true;                                  // 0.0.0.0/8
+  if (a === 10) return true;                                 // 10.0.0.0/8
+  if (a === 100 && b >= 64 && b <= 127) return true;         // 100.64.0.0/10 (CGNAT)
+  if (a === 127) return true;                                // 127.0.0.0/8 (loopback)
+  if (a === 169 && b === 254) return true;                   // 169.254.0.0/16 (link-local / IMDS)
+  if (a === 172 && b >= 16 && b <= 31) return true;          // 172.16.0.0/12
+  if (a === 192 && b === 0 && c === 0) return true;          // 192.0.0.0/24
+  if (a === 192 && b === 0 && c === 2) return true;          // 192.0.2.0/24 (TEST-NET-1)
+  if (a === 192 && b === 168) return true;                   // 192.168.0.0/16
+  if (a === 198 && (b === 18 || b === 19)) return true;      // 198.18.0.0/15 (benchmarking)
+  if (a === 198 && b === 51 && c === 100) return true;       // 198.51.100.0/24 (TEST-NET-2)
+  if (a === 203 && b === 0 && c === 113) return true;        // 203.0.113.0/24 (TEST-NET-3)
+  if (a >= 224) return true;                                 // 224.0.0.0/4 multicast & 240.0.0.0/4 reserved
+  return false;
+}
+
+/**
+ * Extracts an embedded IPv4 address from an IPv6 literal (e.g. ::ffff:127.0.0.1,
+ * ::ffff:7f00:1, 0:0:0:0:0:ffff:a9fe:a9fe, or ::127.0.0.1), or returns null.
+ */
+function extractEmbeddedIpv4FromIpv6(host) {
+  const mappedDotted = host.match(/^(?:::ffff:|(?:0+:){5}ffff:|::|(?:0+:){6})(\d{1,3}(?:\.\d{1,3}){3})$/);
+  if (mappedDotted) {
+    return mappedDotted[1];
+  }
+  const mappedHex = host.match(/^(?:::ffff:|(?:0+:){5}ffff:|::|(?:0+:){6})([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16);
+    const lo = parseInt(mappedHex[2], 16);
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  return null;
+}
+
+function isBlockedSsrfHost(rawHostname) {
+  const host = String(rawHostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (!host) return true;
+
+  if (
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    host.endsWith('.arpa') ||
+    host === '0.0.0.0' ||
+    host === '0'
+  ) {
+    return true;
+  }
+
+  if (net.isIPv4(host)) {
+    return isNonPublicIpv4(host);
+  }
+
+  // IPv6 unspecified (::) and loopback (::1) in canonical or expanded forms
+  if (
+    host === '::' ||
+    host === '::1' ||
+    /^0+(?::0+)*$/.test(host) ||
+    /^0+(?::0+)*:0*1$/.test(host)
+  ) {
+    return true;
+  }
+
+  // IPv6 link-local (fe80::/10), site-local (fec0::/10), unique-local (fc00::/7),
+  // multicast (ff00::/8), documentation (2001:db8::/32), NAT64 (64:ff9b::/96)
+  if (
+    host.startsWith('fe80:') ||
+    /^fe[89ab][0-9a-f]:/.test(host) ||
+    /^fe[c-f][0-9a-f]:/.test(host) ||
+    host.startsWith('fc') ||
+    host.startsWith('fd') ||
+    host.startsWith('ff') ||
+    host.startsWith('2001:db8:') ||
+    host.startsWith('64:ff9b:')
+  ) {
+    return true;
+  }
+
+  // IPv6-mapped IPv4 literals (dotted-quad or normalized hex pairs)
+  const embeddedIpv4 = extractEmbeddedIpv4FromIpv6(host);
+  if (embeddedIpv4 !== null) {
+    return isNonPublicIpv4(embeddedIpv4);
+  }
+  if (host.startsWith('::ffff:') || /^(?:0+:){5}ffff:/.test(host)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Validate URL strictly against SSRF attacks.
- * Rejects non-HTTPS, credentials, loopback, link-local, private subnets.
+ * Rejects non-HTTPS, credentials, loopback, link-local, private subnets,
+ * and IPv6-mapped IPv4 loopback/private/link-local literals.
  */
 function validatePublicHttpsUrl(targetUrl) {
   let parsed;
@@ -39,23 +142,7 @@ function validatePublicHttpsUrl(targetUrl) {
     return { valid: false, error: 'UNSAFE_PROTOCOL_OR_CREDENTIALS' };
   }
 
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  const isPrivate =
-    host === 'localhost' ||
-    host.endsWith('.localhost') ||
-    /^127\./.test(host) ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
-    host === '0.0.0.0' ||
-    host === '::1' ||
-    host.startsWith('fe80:') ||
-    host.startsWith('fc') ||
-    host.startsWith('fd') ||
-    host === '169.254.169.254' ||
-    host.endsWith('.internal');
-
-  if (isPrivate) {
+  if (isBlockedSsrfHost(parsed.hostname)) {
     return { valid: false, error: 'SSRF_BLOCKED_HOST' };
   }
 
