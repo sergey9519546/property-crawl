@@ -270,7 +270,7 @@ export function Storyteller() {
     <section id="product" className="relative isolate overflow-hidden py-24 sm:py-28">
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[620px] w-[min(1320px,96vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(216,207,189,0.45),rgba(235,228,214,0.3)_46%,transparent_73%)] blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[620px] w-[min(1320px,96vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(209,213,219,0.45),rgba(229,231,235,0.3)_46%,transparent_73%)] blur-3xl"
       />
 
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">

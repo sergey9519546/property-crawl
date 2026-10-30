@@ -77,14 +77,14 @@ const GROUPS: MenuGroup[] = [
     label: "Learn",
     columns: [
       [
-        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#ebe4d6" },
-        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#ebe4d6" },
-        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#ebe4d6" },
+        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#e5e7eb" },
+        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#e5e7eb" },
+        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#e5e7eb" },
       ],
       [
-        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#ebe4d6" },
-        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#ebe4d6" },
-        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#ebe4d6" },
+        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#e5e7eb" },
+        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
+        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
       ],
     ],
   },

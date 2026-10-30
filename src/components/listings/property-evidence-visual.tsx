@@ -7,10 +7,10 @@ type PropertyEvidenceVisualProps = {
 };
 
 const palettes = [
-  { ink: "#181529", field: "#f8f4ec", parcel: "#ebe4d6", accent: "#ff5533", line: "#5f5c6e" },
-  { ink: "#181529", field: "#f8f4ec", parcel: "#d8cfbd", accent: "#ff5533", line: "#5f5c6e" },
-  { ink: "#181529", field: "#fffef9", parcel: "#ebe4d6", accent: "#ff5533", line: "#5f5c6e" },
-  { ink: "#181529", field: "#fffef9", parcel: "#d8cfbd", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#f5f6f7", parcel: "#e5e7eb", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#f5f6f7", parcel: "#d1d5db", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#ffffff", parcel: "#e5e7eb", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#ffffff", parcel: "#d1d5db", accent: "#ff5533", line: "#5f5c6e" },
 ] as const;
 
 function stableHash(value: string) {
@@ -99,7 +99,7 @@ export function PropertyEvidenceVisual({ listingId, address, compact = false, cl
           <path d={`M -80 ${422 + take(seed, 12, 30)} C 170 302, 366 510, 642 394 S 1002 292, 1270 390`} />
         </g>
 
-        <path d="M -90 566 L 1250 410 L 1270 498 L -70 654 Z" fill="#f8f4ec" opacity="0.16" />
+        <path d="M -90 566 L 1250 410 L 1270 498 L -70 654 Z" fill="#f5f6f7" opacity="0.16" />
         <path d="M -90 601 L 1250 445" fill="none" stroke={palette.field} strokeDasharray="20 18" strokeWidth="4" opacity="0.42" />
 
         <polygon points={parcelPolygon} fill={palette.parcel} fillOpacity="0.16" stroke={palette.accent} strokeWidth="5" strokeLinejoin="round" />

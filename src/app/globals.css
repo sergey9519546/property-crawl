@@ -32,10 +32,10 @@
   --color-ink: #181529;   /* midnight ink */
   --color-ink-2: #3d3a4f;   /* body copy, 10:1 on paper */
   --color-ink-3: #5f5c6e;   /* meta text, 5.9:1 on paper (AA) */
-  --color-paper: #f8f4ec;  /* warm cream */   /* page */
-  --color-card: #fffef9;    /* raised surface */
-  --color-line: #ebe4d6;    /* hairlines */
-  --color-line-strong: #d8cfbd;
+  --color-paper: #f5f6f7;  /* cool white-gray */ /* page */
+  --color-card: #ffffff;    /* raised surface */
+  --color-line: #e5e7eb;    /* hairlines */
+  --color-line-strong: #d1d5db;
 
   /* Brand green: actions and "live" only. Never used to mean "good deal"
      or "verified" — green reads as safe, and nothing here is safe by default. */
@@ -120,9 +120,9 @@
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: #181529; /* ink */
-  /* @theme inline maps --color-card to this var, so it must hold the palette
-     card (#fffef9), or every bg-card renders pure white. */
-  --card: #fffef9;
+  /* @theme inline maps --color-card to this var, so keep it equal to the
+     palette's --color-card above, or bg-card silently drifts from the token. */
+  --card: #ffffff;
   --card-foreground: #181529;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
@@ -135,7 +135,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: #ebe4d6; /* palette "line" */
+  --border: #e5e7eb; /* palette "line" */
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);

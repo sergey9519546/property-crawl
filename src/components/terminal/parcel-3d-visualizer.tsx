@@ -174,7 +174,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                 </filter>
               </defs>
               <rect width="640" height="280" fill="url(#parcel-grid)" />
-              <polygon points={points} fill="#f8f4ec" fillOpacity="0.14" stroke="#f8f4ec" strokeWidth="2.5" filter="url(#parcel-glow)" />
+              <polygon points={points} fill="#f5f6f7" fillOpacity="0.14" stroke="#f5f6f7" strokeWidth="2.5" filter="url(#parcel-glow)" />
             </svg>
             <div className="pointer-events-none absolute inset-x-3 top-3 flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/60 px-3 py-2 text-xs font-semibold backdrop-blur-md">

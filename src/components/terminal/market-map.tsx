@@ -369,7 +369,7 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
       </div>
 
       <div className="relative h-[520px] overflow-hidden bg-line sm:h-[600px] lg:h-[660px]" data-map-center={mapView.center} data-map-zoom={mapView.zoom} data-map-motion={shouldReduceMotion ? "reduced" : "full"}>
-        <div className="absolute inset-0 z-0 grid place-items-center bg-[radial-gradient(circle_at_50%_45%,#f8f4ec,#ebe4d6)] text-center"><div className="max-w-sm px-6 text-ink-3"><MapPin className="mx-auto h-7 w-7" aria-hidden /><p className="mt-2 text-xs font-semibold">Loading the geographic listing layer…</p></div></div>
+        <div className="absolute inset-0 z-0 grid place-items-center bg-[radial-gradient(circle_at_50%_45%,#f5f6f7,#e5e7eb)] text-center"><div className="max-w-sm px-6 text-ink-3"><MapPin className="mx-auto h-7 w-7" aria-hidden /><p className="mt-2 text-xs font-semibold">Loading the geographic listing layer…</p></div></div>
         <div ref={mapContainerRef} data-testid="live-market-maplibre" aria-label="Interactive street map of filtered listings" className="live-market-maplibre absolute inset-0 z-[1]" />
 
         {mapUnavailable ? (
