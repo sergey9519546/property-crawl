@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { TRANCHI_CATALOG_ENTRIES } = require('../server/sources/tranchi-catalog');
+const { STATUTORY_DISTRESS_CATALOG_ENTRIES } = require('../server/sources/statutory-distress-catalog');
 const {
   SOURCE_CATALOG,
   SOURCE_STATUSES,
@@ -11,9 +11,9 @@ const {
   getSource,
 } = require('../server/sources/catalog');
 
-test('tranchi catalog contains high-trust official distress sources satisfying all catalog invariants', () => {
-  assert.ok(Array.isArray(TRANCHI_CATALOG_ENTRIES), 'TRANCHI_CATALOG_ENTRIES must be an array');
-  assert.ok(TRANCHI_CATALOG_ENTRIES.length >= 80, `Expected at least 80 entries, got ${TRANCHI_CATALOG_ENTRIES.length}`);
+test('statutory distress catalog contains high-trust official distress sources satisfying all catalog invariants', () => {
+  assert.ok(Array.isArray(STATUTORY_DISTRESS_CATALOG_ENTRIES), 'STATUTORY_DISTRESS_CATALOG_ENTRIES must be an array');
+  assert.ok(STATUTORY_DISTRESS_CATALOG_ENTRIES.length >= 80, `Expected at least 80 entries, got ${STATUTORY_DISTRESS_CATALOG_ENTRIES.length}`);
 
   const validStatuses = new Set(Object.keys(SOURCE_STATUSES));
   const validRoles = new Set(['opportunity', 'evidence', 'discovery']);
@@ -28,7 +28,7 @@ test('tranchi catalog contains high-trust official distress sources satisfying a
 
   const seenIds = new Set();
 
-  for (const entry of TRANCHI_CATALOG_ENTRIES) {
+  for (const entry of STATUTORY_DISTRESS_CATALOG_ENTRIES) {
     // ID invariant: lowercase alphanumeric and hyphens only
     assert.match(entry.id, /^[a-z0-9-]+$/, `Entry id ${entry.id} must match /^[a-z0-9-]+$/`);
     assert.ok(!seenIds.has(entry.id), `Duplicate entry id ${entry.id}`);
@@ -73,9 +73,9 @@ test('tranchi catalog contains high-trust official distress sources satisfying a
   }
 });
 
-test('tranchi catalog covers the 5 major official distress pillars', () => {
+test('statutory distress catalog covers the 5 major official distress pillars', () => {
   const byCat = {};
-  for (const entry of TRANCHI_CATALOG_ENTRIES) {
+  for (const entry of STATUTORY_DISTRESS_CATALOG_ENTRIES) {
     byCat[entry.category] = (byCat[entry.category] || 0) + 1;
   }
 

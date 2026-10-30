@@ -3,8 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const RAW_DATA_PATH = 'C:/Users/serge/Videos/tranchi-44-agents-deal-sources-master-list-v2.json';
-const OUTPUT_PATH = path.resolve(__dirname, '../server/sources/tranchi-catalog.js');
+const RAW_DATA_PATH = process.env.STATUTORY_SOURCES_RAW_PATH || 'C:/Users/serge/Videos/statutory-distress-deal-sources-master-list-v2.json';
+const OUTPUT_PATH = path.resolve(__dirname, '../server/sources/statutory-distress-catalog.js');
 
 const rawData = JSON.parse(fs.readFileSync(RAW_DATA_PATH, 'utf8'));
 const rawMap = new Map(rawData.sources.map((s) => [s.id, s]));
@@ -281,7 +281,7 @@ const fileContent = `'use strict';
 
 /**
  * High-trust official distress deal sources extracted from
- * Tranchi Deal Sources Master List v2 (C:/Users/serge/Videos/tranchi-44-agents-deal-sources-master-list-v2.json).
+ * Curated statutory distress sources master catalog.
  *
  * Covers:
  * - Official county tax deed auction platforms (RealForeclose, RealTaxDeed) & county tax collectors
@@ -291,10 +291,10 @@ const fileContent = `'use strict';
  * - Official county surrogate and probate court case records
  */
 
-const TRANCHI_CATALOG_ENTRIES = Object.freeze(${JSON.stringify(entries, null, 2)});
+const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze(${JSON.stringify(entries, null, 2)});
 
 module.exports = {
-  TRANCHI_CATALOG_ENTRIES
+  STATUTORY_DISTRESS_CATALOG_ENTRIES
 };
 `;
 

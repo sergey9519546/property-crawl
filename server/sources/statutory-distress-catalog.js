@@ -2,7 +2,7 @@
 
 /**
  * High-trust official distress deal sources extracted from
- * Tranchi Deal Sources Master List v2 (C:/Users/serge/Videos/tranchi-44-agents-deal-sources-master-list-v2.json).
+ * Curated statutory distress sources master catalog.
  *
  * Covers:
  * - Official county tax deed auction platforms (RealForeclose, RealTaxDeed) & county tax collectors
@@ -12,7 +12,7 @@
  * - Official county surrogate and probate court case records
  */
 
-const TRANCHI_CATALOG_ENTRIES = Object.freeze([
+const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
   {
     "id": "tax-miamidade-realforeclose",
     "label": "Miami-Dade County FL — Tax Deed Auction (RealForeclose)",
@@ -2895,5 +2895,5 @@ const TRANCHI_CATALOG_ENTRIES = Object.freeze([
 ]);
 
 module.exports = {
-  TRANCHI_CATALOG_ENTRIES
+  STATUTORY_DISTRESS_CATALOG_ENTRIES
 };
