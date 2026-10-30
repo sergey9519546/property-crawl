@@ -124,7 +124,7 @@ function deterministicParse(rawNotice = '') {
   // Extract Opening Bid: e.g. "Opening bid: $50,000" or "Minimum bid: $50,000"
   const bidMatch = clean.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i);
   // Extract Plaintiff: e.g. "Wells Fargo Bank, N.A. vs."
-  const vsMatch = clean.match(/([A-Za-z0-9\s,\.\(\)]+?)\s+(?:vs\.?|v\.|against)\s+([A-Za-z0-9\s,\.\(\)]+?)(?:,|\.|\n|case)/i);
+  const vsMatch = clean.match(/(?:(?:case\s*(?:no\.?|#)|docket\s*#?)\s*[:\s]*[A-Za-z0-9\-\/]+[\s,]+)?([A-Z][A-Za-z0-9\s,\.\(\)&]+?)\s+(?:vs\.?|v\.|against)\s+([A-Z][A-Za-z0-9\s,\.\(\)&]+?)(?:,|\.|\n|\bNOTICE\b|\bWHEREAS\b|\bORDER\b|\bPURSUANT\b|$)/i);
   // Extract Sale Date: e.g. "Sale Date: October 14, 2026" or "2026-10-14"
   const dateMatch = clean.match(/(?:sale\s+date|auction\s+date|to\s+be\s+sold\s+on)\s*(?:is|:)?\s*([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{4}-\d{2}-\d{2})/i);
   // Extract Labeled APN / Parcel ID: e.g. "APN: 123-45-678" or "Parcel ID: 010-234567"
@@ -146,7 +146,7 @@ function deterministicParse(rawNotice = '') {
   const apn = apnMatch ? apnMatch[1].trim() : '';
 
   const seniorLienInfo = detectSeniorLienSurvival(plaintiff, clean);
-  const redemptionInfo = getRedemptionRule(state);
+  const redemptionInfo = getRedemptionRule(state, { noticeText: clean });
   const statusInfo = detectBankruptcyOrAdjournment(clean);
 
   const rawText = String(rawNotice || '');

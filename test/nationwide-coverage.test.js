@@ -37,3 +37,41 @@ test('market enrollment defaults to nationwide CivilView participating set', () 
   assert.ok(MARKET_ENROLLMENT.civilview.targetStates.length >= 15);
   assert.ok(MARKET_ENROLLMENT.civilview.registryCountyCount >= 60);
 });
+
+test('state tax sale entries have explicit statutory regimes, citations, and ingestion methods', () => {
+  const taxEntries = SOURCE_CATALOG.filter((s) => /^state-tax-sale-[a-z]{2}$/.test(s.id));
+  assert.equal(taxEntries.length, 51);
+
+  const allowedRegimes = new Set(['tax_deed', 'tax_lien', 'hybrid_redeemable_deed']);
+  for (const entry of taxEntries) {
+    assert.ok(allowedRegimes.has(entry.regime), `${entry.id}: regime ${entry.regime} must be valid enum`);
+    assert.ok(typeof entry.legalRef === 'string' && entry.legalRef.length > 0, `${entry.id}: legalRef required`);
+    assert.ok(typeof entry.ingestionMethod === 'string' && entry.ingestionMethod.length > 0, `${entry.id}: ingestionMethod required`);
+    assert.match(entry.notes, new RegExp(entry.regime), `${entry.id}: notes must mention statutory regime`);
+  }
+
+  // Key exemplar states
+  const fl = taxEntries.find((s) => s.id === 'state-tax-sale-fl');
+  assert.equal(fl.regime, 'tax_deed');
+  assert.match(fl.legalRef, /197\.542/);
+
+  const ca = taxEntries.find((s) => s.id === 'state-tax-sale-ca');
+  assert.equal(ca.regime, 'tax_deed');
+  assert.match(ca.legalRef, /3691/);
+
+  const tx = taxEntries.find((s) => s.id === 'state-tax-sale-tx');
+  assert.equal(tx.regime, 'hybrid_redeemable_deed');
+  assert.match(tx.legalRef, /34\.21/);
+
+  const ga = taxEntries.find((s) => s.id === 'state-tax-sale-ga');
+  assert.equal(ga.regime, 'hybrid_redeemable_deed');
+  assert.match(ga.legalRef, /48-4-1/);
+
+  const az = taxEntries.find((s) => s.id === 'state-tax-sale-az');
+  assert.equal(az.regime, 'tax_lien');
+  assert.match(az.legalRef, /42-18101/);
+
+  const pa = taxEntries.find((s) => s.id === 'state-tax-sale-pa');
+  assert.equal(pa.regime, 'hybrid_redeemable_deed');
+  assert.match(pa.legalRef, /5860\.601|1701/);
+});

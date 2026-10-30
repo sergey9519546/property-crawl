@@ -124,3 +124,26 @@ test('key anchor sources are present and correctly classified', () => {
   assert.equal(cookSheriff.category, 'foreclosure_auction');
   assert.equal(cookSheriff.role, 'opportunity');
 });
+
+test('Florida RealTaxDeed county sources are mapped to sheriff adapter and have valid discovery URLs', () => {
+  const flRealTaxDeedCounties = [
+    'broward', 'palmbeach', 'orange', 'hillsborough', 'lee', 'pinellas', 'duval', 'polk',
+    'brevard', 'volusia', 'sarasota', 'manatee', 'collier', 'pasco', 'marion', 'lake',
+    'osceola', 'seminole', 'stlucie', 'escambia', 'charlotte', 'clay', 'citrus', 'hernando',
+    'martin', 'okaloosa', 'santarosa', 'stjohns', 'bay'
+  ];
+
+  for (const county of flRealTaxDeedCounties) {
+    const id = `tax-${county}-realtaxdeed`;
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.category, 'tax_sale', `${id} must be category tax_sale`);
+    assert.equal(entry.role, 'opportunity', `${id} must be role opportunity`);
+    assert.equal(entry.access, 'public', `${id} must be access public`);
+    assert.equal(entry.adapterKey, 'sheriff', `${id} must have adapterKey sheriff`);
+    assert.equal(entry.status, 'LOCAL_ROUTE', `${id} must have status LOCAL_ROUTE`);
+    assert.match(entry.discoveryUrl, new RegExp(`^https://(www\\.)?${county}\\.realtaxdeed\\.com`));
+    assert.ok(entry.workflow && entry.workflow.primary);
+    assert.ok(Array.isArray(entry.requiredEvidence) && entry.requiredEvidence.length >= 2);
+  }
+});

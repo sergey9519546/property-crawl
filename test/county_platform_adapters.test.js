@@ -14,6 +14,7 @@ const {
 const {
   REALAUCTION_OHIO_COUNTIES,
   REALAUCTION_FLORIDA_COUNTIES,
+  REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
   getRealAuctionUrl,
   parseRealAuctionCard,
   parseRealAuctionDocketHtml,
@@ -280,7 +281,111 @@ test('RealAuction tax-deed mode (.realtaxdeed.com) and SheriffSaleScraper docket
   assert.equal(parsed[0].apn, '4942-10-01-0020');
   assert.equal(parsed[0].saleDate, '2026-11-18');
   assert.equal(parsed[0].provenance.platform, 'realtaxdeed');
+  assert.equal(parsed[0].provenance.publisher, 'Broward County Tax Deed');
+  assert.deepEqual(parsed[0].sourceFacts, {
+    appraisedValue: 210000,
+    certificateNumber: '2023-4410',
+  });
   assert.equal(inspectSourceRecordUrl('sheriff', parsed[0].sourceUrl).isValid, true);
+});
+
+test('RealAuction URL generation comprehensively covers all 32 Florida tax deed counties', () => {
+  const expectedCounties = [
+    'alachua', 'bay', 'brevard', 'broward', 'charlotte', 'citrus', 'clay', 'collier',
+    'duval', 'escambia', 'hernando', 'hillsborough', 'indianriver', 'lake', 'lee',
+    'manatee', 'marion', 'martin', 'miamidade', 'okaloosa', 'orange', 'osceola',
+    'palmbeach', 'pasco', 'pinellas', 'polk', 'santarosa', 'sarasota', 'seminole',
+    'stjohns', 'stlucie', 'volusia',
+  ];
+
+  assert.equal(REALAUCTION_FLORIDA_TAXDEED_COUNTIES.length, 32);
+  assert.equal(REALAUCTION_FLORIDA_COUNTIES.length, 32);
+
+  for (const county of expectedCounties) {
+    assert.ok(REALAUCTION_FLORIDA_TAXDEED_COUNTIES.includes(county), `Missing tax deed county: ${county}`);
+    assert.ok(REALAUCTION_FLORIDA_COUNTIES.includes(county), `Missing foreclosure county: ${county}`);
+
+    // Verify tax deed preview URL generation
+    const tdUrl = getRealAuctionUrl(county, 'FL', { mode: 'taxdeed' });
+    assert.equal(tdUrl, `https://${county}.realtaxdeed.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`);
+
+    // Verify foreclosure preview URL generation
+    const fcUrl = getRealAuctionUrl(county, 'FL', { mode: 'foreclosure' });
+    assert.equal(fcUrl, `https://${county}.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW`);
+  }
+
+  // Verify DEFAULT_FL_COUNTIES maps all 32 counties for both foreclosure and tax deed domains (64 total)
+  const { DEFAULT_FL_COUNTIES } = require('../server/scrapers/sheriff');
+  assert.equal(DEFAULT_FL_COUNTIES.length, 64);
+  for (const county of expectedCounties) {
+    assert.ok(
+      DEFAULT_FL_COUNTIES.some((c) => c.domain === `${county}.realtaxdeed.com`),
+      `DEFAULT_FL_COUNTIES missing tax deed domain for ${county}`
+    );
+    assert.ok(
+      DEFAULT_FL_COUNTIES.some((c) => c.domain === `${county}.realforeclose.com`),
+      `DEFAULT_FL_COUNTIES missing foreclosure domain for ${county}`
+    );
+  }
+});
+
+test('RealAuction parses Florida tax deed docket card with certificate number, homestead, APN, and valuations', () => {
+  const cardHtml = `
+    <div class="AUCTION_ITEM" id="Auction_88201">
+      <div class="item_row">Item: 42</div>
+      <div class="item_row">Tax Cert #: 2024-8891</div>
+      <div class="item_row">Parcel ID: 01-23-45-678-000</div>
+      <div class="item_row">Property Address: 742 Evergreen Terr, Orlando, FL 32801</div>
+      <div class="item_row">Opening Bid: $24,500.00</div>
+      <div class="item_row">Assessed Value: $195,000.00</div>
+      <div class="item_row">Homestead Exemption: Yes</div>
+      <div class="item_row">Auction Date: 12/15/2026</div>
+    </div>
+  `;
+
+  const parsed = parseRealAuctionCard(cardHtml, 'orange', 'FL', { mode: 'taxdeed' });
+  assert.ok(parsed);
+  assert.equal(parsed.source, 'sheriff');
+  assert.equal(parsed.platform, 'realtaxdeed');
+  assert.equal(parsed.county, 'Orange');
+  assert.equal(parsed.state, 'FL');
+  assert.equal(parsed.auctionId, '42');
+  assert.equal(parsed.caseNumber, null, 'Case number is omitted and must be strictly null');
+  assert.equal(parsed.certificateNumber, '2024-8891');
+  assert.equal(parsed.homestead, true);
+  assert.equal(parsed.parcelId, '01-23-45-678-000');
+  assert.equal(parsed.openingBid, 24500);
+  assert.equal(parsed.assessed, 195000);
+  assert.equal(parsed.saleDate, '12/15/2026');
+  assert.match(parsed.address, /742 Evergreen Terr/);
+  assert.equal(parsed.zip, '32801');
+  assert.equal(
+    parsed.sourceUrl,
+    'https://orange.realtaxdeed.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=42'
+  );
+  assert.equal(inspectSourceRecordUrl('sheriff', parsed.sourceUrl).isValid, true);
+
+  // Test integration with SheriffSaleScraper.parseRealauctionHtml
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper();
+  const listings = scraper.parseRealauctionHtml(cardHtml, {
+    name: 'Orange',
+    domain: 'orange.realtaxdeed.com',
+    state: 'FL',
+  });
+  assert.equal(listings.length, 1);
+  const l = listings[0];
+  assert.equal(l.id, 'SHERIFF-FL-ORA-2024-8891');
+  assert.equal(l.apn, '01-23-45-678-000');
+  assert.equal(l.openingBid, 24500);
+  assert.equal(l.assessed, 195000);
+  assert.equal(l.provenance.publisher, 'Orange County Tax Deed');
+  assert.equal(l.provenance.platform, 'realtaxdeed');
+  assert.deepEqual(l.sourceFacts, {
+    appraisedValue: 195000,
+    certificateNumber: '2024-8891',
+    homestead: true,
+  });
 });
 
 test('Zero-fabrication invariant: multi-item RealAuction docket does not bleed bids across cards', () => {
@@ -319,6 +424,83 @@ test('Zero-fabrication invariant: multi-item RealAuction docket does not bleed b
   assert.equal(results.length, 2);
   assert.equal(results[0].openingBid, 50000, 'Card 1 must have its own opening bid');
   assert.equal(results[1].openingBid, null, 'Card 2 without opening bid must remain strictly null (zero bleed)');
+});
+
+test('Zero-fabrication invariant: multi-item Florida tax deed docket does not bleed values and sets omitted fields to null', () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper();
+
+  const multiDocketHtml = `
+    <div class="Auction_W" id="Auction_2001">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Certificate #: 2024-001</td>
+          <td>Parcel ID: 10-20-30-001</td>
+          <td>Property Address: 100 Palm Way, Tampa, FL 33601</td>
+          <td>Opening Bid: $35,000.00</td>
+          <td>Assessed Value: $180,000.00</td>
+          <td>Homestead: Yes</td>
+          <td>Auction Date: 12/01/2026</td>
+        </tr>
+      </table>
+    </div>
+    <div class="Auction_W" id="Auction_2002">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Certificate #: 2024-002</td>
+          <td>Parcel ID: 10-20-30-002</td>
+          <td>Property Address: 200 Bay St, Tampa, FL 33601</td>
+          <td>Auction Date: 12/01/2026</td>
+        </tr>
+      </table>
+    </div>
+    <div class="Auction_W" id="Auction_2003">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Certificate #: 2024-003</td>
+          <td>Property Address: 300 Gulf Blvd, Tampa, FL 33601</td>
+          <td>Opening Bid: $42,000.00</td>
+          <td>Homestead Exemption: False</td>
+          <td>Auction Date: 12/01/2026</td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  const results = scraper.parseRealauctionHtml(multiDocketHtml, {
+    name: 'Hillsborough',
+    domain: 'hillsborough.realtaxdeed.com',
+    state: 'FL',
+  });
+
+  assert.equal(results.length, 3);
+
+  // Card 1: All values populated
+  assert.equal(results[0].openingBid, 35000);
+  assert.equal(results[0].assessed, 180000);
+  assert.equal(results[0].apn, '10-20-30-001');
+  assert.deepEqual(results[0].sourceFacts, {
+    appraisedValue: 180000,
+    certificateNumber: '2024-001',
+    homestead: true,
+  });
+
+  // Card 2: Opening bid, assessed value, homestead omitted -> strictly null, no bleed from Card 1
+  assert.equal(results[1].openingBid, null, 'Card 2 opening bid must be strictly null (no bleed from Card 1)');
+  assert.equal(results[1].assessed, null, 'Card 2 assessed value must be strictly null (no bleed from Card 1)');
+  assert.equal(results[1].apn, '10-20-30-002');
+  assert.deepEqual(results[1].sourceFacts, {
+    certificateNumber: '2024-002',
+  }, 'Card 2 sourceFacts must only contain certificateNumber; omitted fields not present');
+
+  // Card 3: Opening bid populated, assessed omitted -> null; APN omitted -> null; homestead false
+  assert.equal(results[2].openingBid, 42000);
+  assert.equal(results[2].assessed, null, 'Card 3 assessed value must be strictly null');
+  assert.equal(results[2].apn, null, 'Card 3 APN omitted must be strictly null');
+  assert.deepEqual(results[2].sourceFacts, {
+    certificateNumber: '2024-003',
+    homestead: false,
+  });
 });
 
 test('TrusteeSaleScraper AcclaimWeb recorder bridge parses non-judicial trustee notices', async () => {

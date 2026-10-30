@@ -169,6 +169,8 @@ class SheriffSaleScraper extends BaseScraper {
 
   parseRealauctionHtml(html, county) {
     const listings = [];
+    const isTaxDeed = String(county.domain || '').toLowerCase().includes('realtaxdeed.com');
+
     // Broader row matcher: Realauction markup varies by county skin.
     const itemRegex = /<tr[^>]*class="[^"]*(?:table-row|auction-row|sale-row|DataRow)[^"]*"[^>]*>([\s\S]*?)<\/tr>/gi;
     let match;
@@ -219,7 +221,13 @@ class SheriffSaleScraper extends BaseScraper {
           sourceUrl,
           raw: row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
           sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
-          provenance: { origin: 'live', observed: true, publisher: `${county.name} County Sheriff`, recordId: caseNum },
+          provenance: {
+            origin: 'live',
+            observed: true,
+            publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
+            recordId: caseNum,
+            platform: isTaxDeed ? 'realtaxdeed' : 'realauction',
+          },
         });
       }
     }
@@ -239,11 +247,25 @@ class SheriffSaleScraper extends BaseScraper {
           card.match(/\b(\d{2,4}[A-Z]{0,2}-\d{2,6})\b/i);
         const caseNum = caseMatch ? (caseMatch[1] || caseMatch[0]) : null;
 
+        const certMatch = card.match(/Certificate\s*(?:#|No\.?):?\s*([0-9A-Za-z\-_]+)/i) ||
+          card.match(/(?:Tax\s*Cert(?:ificate)?|Cert)\s*#?:?\s*([0-9A-Za-z\-_]+)/i);
+        const certNum = certMatch ? certMatch[1] : null;
+
+        const parcelMatch = card.match(/(?:Parcel\s*(?:ID|#?)|APN):?\s*([0-9A-Za-z\-_.]+)/i);
+        const apn = parcelMatch ? parcelMatch[1] : null;
+
+        let homestead = null;
+        if (/Homestead(?:\s*Exemption)?\s*:\s*(?:Yes|True|Y)\b/i.test(card)) {
+          homestead = true;
+        } else if (/Homestead(?:\s*Exemption)?\s*:\s*(?:No|False|N)\b/i.test(card)) {
+          homestead = false;
+        }
+
         const addressMatch = card.match(/(?:Property\s*Address|Address):?\s*([^<\n\r]+)/i) ||
           card.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)<\//i);
         const fallbackAddr = card.match(/>(\d{1,6}\s+[NSEW]?\s*[A-Za-z0-9 .'-]{4,80}(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Court|Ct|Way|Place|Pl)\.?[^<]*)</i);
 
-        const refId = caseNum || aid;
+        const refId = caseNum || certNum || aid;
         const addrRaw = addressMatch ? addressMatch[1] : (fallbackAddr ? fallbackAddr[1] : null);
 
         if (refId && addrRaw) {
@@ -261,7 +283,15 @@ class SheriffSaleScraper extends BaseScraper {
           const zipMatch = address.match(/\b\d{5}\b/);
 
           const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, "")}`;
-          const sourceUrl = `https://${county.domain}/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=${encodeURIComponent(aid || caseNum)}`;
+          const sourceUrl = `https://${county.domain}/index.cfm?zaction=AUCTION&zmethod=PREVIEW&aid=${encodeURIComponent(aid || refId)}`;
+
+          let sourceFacts = null;
+          if (appraisal != null || certNum || homestead != null) {
+            sourceFacts = {};
+            if (appraisal != null) sourceFacts.appraisedValue = appraisal;
+            if (certNum) sourceFacts.certificateNumber = certNum;
+            if (homestead != null) sourceFacts.homestead = homestead;
+          }
 
           listings.push({
             id,
@@ -270,6 +300,7 @@ class SheriffSaleScraper extends BaseScraper {
             city: null,
             zip: zipMatch ? zipMatch[0] : null,
             address,
+            apn,
             openingBid,
             estLow: null,
             estHigh: null,
@@ -283,21 +314,26 @@ class SheriffSaleScraper extends BaseScraper {
             deposit: null,
             sourceUrl,
             raw: card.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2000),
-            sourceFacts: appraisal == null ? null : { appraisedValue: appraisal },
-            provenance: { origin: "live", observed: true, publisher: `${county.name} County Sheriff`, recordId: String(refId) },
+            sourceFacts,
+            provenance: {
+              origin: "live",
+              observed: true,
+              publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
+              recordId: String(refId),
+              platform: isTaxDeed ? 'realtaxdeed' : 'realauction',
+            },
           });
         }
       }
     }
 
     if (listings.length === 0) {
-      const isTaxDeed = String(county.domain || '').toLowerCase().includes('realtaxdeed.com');
       const docketCards = parseRealAuctionDocketHtml(html, county.name, county.state, {
         domain: county.domain,
         mode: isTaxDeed ? 'taxdeed' : 'foreclosure',
       });
       for (const parsed of docketCards) {
-        const refId = parsed.caseNumber || parsed.auctionId;
+        const refId = parsed.caseNumber || parsed.certificateNumber || parsed.auctionId;
         if (!refId || !parsed.address) continue;
         let openingBid = parsed.openingBid;
         let saleDate = parsed.saleDate ? this.normalizeSaleDate(parsed.saleDate) : null;
@@ -318,6 +354,21 @@ class SheriffSaleScraper extends BaseScraper {
           }
         }
         const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, '')}`;
+
+        let sourceFacts = null;
+        if (parsed.assessed != null || parsed.certificateNumber || parsed.homestead != null) {
+          sourceFacts = {};
+          if (parsed.assessed != null) {
+            sourceFacts.appraisedValue = Math.round(parsed.assessed);
+          }
+          if (parsed.certificateNumber) {
+            sourceFacts.certificateNumber = parsed.certificateNumber;
+          }
+          if (parsed.homestead != null) {
+            sourceFacts.homestead = parsed.homestead;
+          }
+        }
+
         listings.push({
           id,
           state: county.state,
@@ -339,13 +390,13 @@ class SheriffSaleScraper extends BaseScraper {
           deposit: null,
           sourceUrl: parsed.sourceUrl,
           raw: JSON.stringify(parsed).slice(0, 2000),
-          sourceFacts: parsed.assessed == null ? null : { appraisedValue: Math.round(parsed.assessed) },
+          sourceFacts,
           provenance: {
             origin: 'live',
             observed: true,
             publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
             recordId: String(refId),
-            platform: parsed.platform,
+            platform: isTaxDeed ? 'realtaxdeed' : (parsed.platform || 'realauction'),
           },
         });
       }
@@ -455,7 +506,7 @@ class SheriffSaleScraper extends BaseScraper {
     while ((match = noticeRegex.exec(html)) !== null) {
       const block = match[1];
       const caseMatch = block.match(/CASE\s*NO\.?\s*([A-Z0-9-]+)/i);
-      const addressMatch = block.match(/(\d+\s+[A-Za-z0-9\s,]+(?:Ave|St|Rd|Blvd|Dr|Ln|Way|Ct|Pl)[A-Za-z0-9\s,]*)/i);
+      const addressMatch = block.match(/(\d+\s+[A-Za-z0-9\s,]+(?:Ave|St|Rd|Blvd|Dr|Lane|Ln|Way|Ct|Pl)[A-Za-z0-9\s,]*)/i);
       const bidMatch = block.match(/(?:Minimum bid|Opening bid|Appraised at)\s*\$([0-9,]+)/i);
       const linkMatch = block.match(/href=["']([^"']+)["']/i);
 

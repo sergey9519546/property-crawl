@@ -130,8 +130,14 @@ function getRedemptionRule(state, options = {}) {
   }
 
   const hasFederalTaxLien = Boolean(options?.hasFederalTaxLien);
-  const days = hasFederalTaxLien ? Math.max(rule.days, 120) : rule.days;
-  let warning = rule.days > 0 ? `${st}: ${rule.days}-Day Statutory Right of Redemption Applies as a State-Level Baseline; Sale Type and Current Official Terms Require Verification` : null;
+  let baselineDays = rule.days;
+  let baselineLabel = rule.label;
+  if (st === 'TX' && (options?.saleType === 'trustee' || /deed\s+of\s+trust|substitute\s+trustee|power\s+of\s+sale/i.test(options?.noticeText || ''))) {
+    baselineDays = 0;
+    baselineLabel = 'No post-sale redemption for non-judicial deed of trust (Tex. Prop. Code § 51.003)';
+  }
+  const days = hasFederalTaxLien ? Math.max(baselineDays, 120) : baselineDays;
+  let warning = baselineDays > 0 ? `${st}: ${baselineDays}-Day Statutory Right of Redemption Applies as a State-Level Baseline; Sale Type and Current Official Terms Require Verification` : null;
   if (hasFederalTaxLien) {
     warning = `26 U.S.C. § 7425(d): 120-Day Federal Statutory Right of Redemption Applies Due to Junior Federal Tax Lien (or State Baseline ${rule.days} Days, Whichever Is Longer); Sale Type and Current Official Terms Require Verification`;
   }
@@ -139,7 +145,7 @@ function getRedemptionRule(state, options = {}) {
   return {
     state: st,
     days,
-    label: rule.label,
+    label: baselineLabel,
     warning,
     basis: hasFederalTaxLien ? 'federal-statute-overlay' : 'state-level-baseline',
     hasFederalTaxLien,

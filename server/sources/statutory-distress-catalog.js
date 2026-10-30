@@ -266,6 +266,594 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "notes": "Florida tax deed law. Tech: Grant Street platform. Extraction method: html_scrape. Cost: free. API: no."
   },
   {
+    "id": "tax-brevard-realtaxdeed",
+    "label": "Brevard County FL (Titusville/Melbourne) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Brevard County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://brevard.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Brevard County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-volusia-realtaxdeed",
+    "label": "Volusia County FL (DeLand/Daytona Beach) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Volusia County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://volusia.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Volusia County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-sarasota-realtaxdeed",
+    "label": "Sarasota County FL (Sarasota) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Sarasota County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://sarasota.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Sarasota County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-manatee-realtaxdeed",
+    "label": "Manatee County FL (Bradenton) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Manatee County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://manatee.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Manatee County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-collier-realtaxdeed",
+    "label": "Collier County FL (Naples) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Collier County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://collier.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Collier County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-pasco-realtaxdeed",
+    "label": "Pasco County FL (Dade City/New Port Richey) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Pasco County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://pasco.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Pasco County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-marion-realtaxdeed",
+    "label": "Marion County FL (Ocala) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Marion County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://marion.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Marion County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-lake-realtaxdeed",
+    "label": "Lake County FL (Tavares) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Lake County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://lake.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Lake County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-osceola-realtaxdeed",
+    "label": "Osceola County FL (Kissimmee) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Osceola County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://osceola.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Osceola County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-seminole-realtaxdeed",
+    "label": "Seminole County FL (Sanford) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Seminole County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://seminole.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Seminole County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-stlucie-realtaxdeed",
+    "label": "St. Lucie County FL (Fort Pierce) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "St. Lucie County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://stlucie.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect St. Lucie County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-escambia-realtaxdeed",
+    "label": "Escambia County FL (Pensacola) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Escambia County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://escambia.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Escambia County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-charlotte-realtaxdeed",
+    "label": "Charlotte County FL (Punta Gorda) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Charlotte County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://charlotte.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Charlotte County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-clay-realtaxdeed",
+    "label": "Clay County FL (Green Cove Springs) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Clay County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://clay.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Clay County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-citrus-realtaxdeed",
+    "label": "Citrus County FL (Inverness) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Citrus County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://citrus.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Citrus County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-hernando-realtaxdeed",
+    "label": "Hernando County FL (Brooksville) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Hernando County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://hernando.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Hernando County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-martin-realtaxdeed",
+    "label": "Martin County FL (Stuart) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Martin County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://martin.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Martin County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-okaloosa-realtaxdeed",
+    "label": "Okaloosa County FL (Crestview/Fort Walton Beach) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Okaloosa County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://okaloosa.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Okaloosa County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-santarosa-realtaxdeed",
+    "label": "Santa Rosa County FL (Milton) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Santa Rosa County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://santarosa.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Santa Rosa County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-stjohns-realtaxdeed",
+    "label": "St. Johns County FL (St. Augustine) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "St. Johns County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://stjohns.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect St. Johns County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
+    "id": "tax-bay-realtaxdeed",
+    "label": "Bay County FL (Panama City) — Tax Deed Auction",
+    "category": "tax_sale",
+    "role": "opportunity",
+    "coverage": "Bay County FL — Tax Deed Auction (county, FL). Official statutory source for tax deed.",
+    "discoveryUrl": "https://bay.realtaxdeed.com",
+    "access": "public",
+    "adapterKey": "sheriff",
+    "status": "LOCAL_ROUTE",
+    "workflow": {
+      "primary": "Inspect Bay County FL — Tax Deed Auction for delinquent tax property records and scheduled auctions.",
+      "fallback": "Verify tax-default status and statutory redemption terms with the local tax collector or treasurer.",
+      "cadenceHours": 168,
+      "steps": [
+        "Review published delinquent tax roll or scheduled tax-deed auction notices.",
+        "Verify parcel APN, opening bid amount, redemption period, and cash-deposit terms.",
+        "Preserve exact publisher record URL, auction ID, and source-observed timestamp."
+      ]
+    },
+    "requiredEvidence": [
+      "official county tax-sale notice or auction parcel ID",
+      "APN or legal description",
+      "opening bid or delinquent amount",
+      "source-observed timestamp"
+    ],
+    "notes": "Florida tax deed sale per Fla. Stat. § 197.542. Tech: RealAuction RealTaxDeed platform. Active auction listings publicly viewable. Extraction method: html_scrape. Cost: free. API: no."
+  },
+  {
     "id": "tax-dallas-tx-pubworks",
     "label": "Dallas County TX — Tax Sale Properties",
     "category": "tax_sale",

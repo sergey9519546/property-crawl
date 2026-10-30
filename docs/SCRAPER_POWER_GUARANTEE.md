@@ -1,15 +1,15 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-30T22:14:59.595Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-30T22:39:59.001Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
 
 | Metric | Value |
 |---|---:|
-| Catalog sources (all ends) | **267** |
+| Catalog sources (all ends) | **288** |
 | Scheduled production adapters | **21** |
-| Adapters with Scrapling profiles | **25** |
+| Adapters with Scrapling profiles | **46** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -22,7 +22,7 @@
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
 | Foreclosure/sheriff/trustee auction | 25 | 7 | 1 | yes | ✅ adapter |
-| Tax lien/deed sale | 111 | 10 | 0 | yes | ✅ adapter |
+| Tax lien/deed sale | 132 | 31 | 0 | yes | ✅ adapter |
 | Land bank inventory | 12 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
 | Commercial marketplaces (issuer-preserving) | 10 | 0 | 0 | no | catalog only |
@@ -79,6 +79,27 @@
 | `sheriff` (Pinellas County FL (St. Petersburg) — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Duval County FL (Jacksonville) — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Polk County FL — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Brevard County FL (Titusville/Melbourne) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Volusia County FL (DeLand/Daytona Beach) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Sarasota County FL (Sarasota) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Manatee County FL (Bradenton) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Collier County FL (Naples) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Pasco County FL (Dade City/New Port Richey) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Marion County FL (Ocala) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Lake County FL (Tavares) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Osceola County FL (Kissimmee) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Seminole County FL (Sanford) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (St. Lucie County FL (Fort Pierce) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Escambia County FL (Pensacola) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Charlotte County FL (Punta Gorda) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Clay County FL (Green Cove Springs) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Citrus County FL (Inverness) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Hernando County FL (Brooksville) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Martin County FL (Stuart) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Okaloosa County FL (Crestview/Fort Walton Beach) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Santa Rosa County FL (Milton) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (St. Johns County FL (St. Augustine) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Bay County FL (Panama City) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
 

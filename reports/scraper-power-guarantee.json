@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-30T22:14:59.595Z",
+  "generatedAt": "2026-10-30T22:39:59.001Z",
   "guarantee": {
-    "catalogSources": 267,
+    "catalogSources": 288,
     "scheduledAdapters": 21,
-    "scraplingEnabledAdapters": 25,
+    "scraplingEnabledAdapters": 46,
     "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
@@ -28,12 +28,12 @@
     "P3_SCOPE_LIMITED": 3,
     "P2_DISCOVERY_ADAPTER": 11,
     "P2_BLOCKED_PUBLISHER": 2,
-    "P2_LOCAL_ROUTE": 12
+    "P2_LOCAL_ROUTE": 33
   },
   "categories": {
     "tax_sale": {
-      "total": 111,
-      "scheduled": 10,
+      "total": 132,
+      "scheduled": 31,
       "strong": 0
     },
     "parcel_evidence": {
@@ -280,10 +280,10 @@
       "key": "tax_sale",
       "label": "Tax lien/deed sale",
       "required": true,
-      "catalogEntries": 111,
-      "scheduledAdapters": 10,
+      "catalogEntries": 132,
+      "scheduledAdapters": 31,
       "strongAdapters": 0,
-      "opportunityScheduled": 9,
+      "opportunityScheduled": 30,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
@@ -354,6 +354,27 @@
         "tax-pinellas-realtaxdeed*",
         "tax-duval-realtaxdeed*",
         "tax-polk-realtaxdeed*",
+        "tax-brevard-realtaxdeed*",
+        "tax-volusia-realtaxdeed*",
+        "tax-sarasota-realtaxdeed*",
+        "tax-manatee-realtaxdeed*",
+        "tax-collier-realtaxdeed*",
+        "tax-pasco-realtaxdeed*",
+        "tax-marion-realtaxdeed*",
+        "tax-lake-realtaxdeed*",
+        "tax-osceola-realtaxdeed*",
+        "tax-seminole-realtaxdeed*",
+        "tax-stlucie-realtaxdeed*",
+        "tax-escambia-realtaxdeed*",
+        "tax-charlotte-realtaxdeed*",
+        "tax-clay-realtaxdeed*",
+        "tax-citrus-realtaxdeed*",
+        "tax-hernando-realtaxdeed*",
+        "tax-martin-realtaxdeed*",
+        "tax-okaloosa-realtaxdeed*",
+        "tax-santarosa-realtaxdeed*",
+        "tax-stjohns-realtaxdeed*",
+        "tax-bay-realtaxdeed*",
         "tax-dallas-tx-pubworks",
         "tax-bexar-tx-resale",
         "tax-tarrant-tx-constable",
@@ -4373,6 +4394,573 @@
       "adapterKey": "sheriff",
       "access": "public",
       "discoveryUrl": "https://polk.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-brevard-realtaxdeed",
+      "label": "Brevard County FL (Titusville/Melbourne) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://brevard.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-volusia-realtaxdeed",
+      "label": "Volusia County FL (DeLand/Daytona Beach) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://volusia.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-sarasota-realtaxdeed",
+      "label": "Sarasota County FL (Sarasota) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://sarasota.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-manatee-realtaxdeed",
+      "label": "Manatee County FL (Bradenton) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://manatee.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-collier-realtaxdeed",
+      "label": "Collier County FL (Naples) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://collier.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-pasco-realtaxdeed",
+      "label": "Pasco County FL (Dade City/New Port Richey) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://pasco.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-marion-realtaxdeed",
+      "label": "Marion County FL (Ocala) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://marion.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-lake-realtaxdeed",
+      "label": "Lake County FL (Tavares) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://lake.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-osceola-realtaxdeed",
+      "label": "Osceola County FL (Kissimmee) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://osceola.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-seminole-realtaxdeed",
+      "label": "Seminole County FL (Sanford) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://seminole.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-stlucie-realtaxdeed",
+      "label": "St. Lucie County FL (Fort Pierce) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://stlucie.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-escambia-realtaxdeed",
+      "label": "Escambia County FL (Pensacola) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://escambia.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-charlotte-realtaxdeed",
+      "label": "Charlotte County FL (Punta Gorda) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://charlotte.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-clay-realtaxdeed",
+      "label": "Clay County FL (Green Cove Springs) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://clay.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-citrus-realtaxdeed",
+      "label": "Citrus County FL (Inverness) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://citrus.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-hernando-realtaxdeed",
+      "label": "Hernando County FL (Brooksville) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://hernando.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-martin-realtaxdeed",
+      "label": "Martin County FL (Stuart) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://martin.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-okaloosa-realtaxdeed",
+      "label": "Okaloosa County FL (Crestview/Fort Walton Beach) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://okaloosa.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-santarosa-realtaxdeed",
+      "label": "Santa Rosa County FL (Milton) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://santarosa.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-stjohns-realtaxdeed",
+      "label": "St. Johns County FL (St. Augustine) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://stjohns.realtaxdeed.com",
+      "power": {
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
+        "inScheduler": true,
+        "scrapling": [
+          "table-extract"
+        ],
+        "flags": [
+          "scheduled",
+          "scrapling:table-extract",
+          "lastRunReport",
+          "fail-closed-upstream",
+          "limitation"
+        ]
+      },
+      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "seedListings": 0
+    },
+    {
+      "id": "tax-bay-realtaxdeed",
+      "label": "Bay County FL (Panama City) — Tax Deed Auction",
+      "category": "tax_sale",
+      "role": "opportunity",
+      "status": "LOCAL_ROUTE",
+      "adapterKey": "sheriff",
+      "access": "public",
+      "discoveryUrl": "https://bay.realtaxdeed.com",
       "power": {
         "tier": "P2_LOCAL_ROUTE",
         "score": 3,
