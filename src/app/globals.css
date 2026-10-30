@@ -58,6 +58,11 @@
   --radius-card: 24px;      /* cards, panels */
   /* chips and pills use rounded-full */
 
+  /* Elevation: three levels, all cast in ink, never pure black. */
+  --shadow-card: 0 1px 2px rgba(24, 21, 41, 0.04), 0 8px 24px rgba(24, 21, 41, 0.05);    /* resting cards */
+  --shadow-raised: 0 1px 2px rgba(24, 21, 41, 0.05), 0 18px 48px rgba(24, 21, 41, 0.1); /* featured card, menus */
+  --shadow-overlay: 0 24px 60px rgba(24, 21, 41, 0.22);                                  /* drawers, dialogs */
+
   /* Type: six steps replace 36 sizes. */
   --text-display: clamp(2rem, 1.4rem + 2.6vw, 3rem);
   --text-display--line-height: 1.08;
@@ -117,40 +122,44 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: #181529; /* ink */
+  /* shadcn/ui semantic variables, mapped onto the evidence-ink palette so every
+     primitive in src/components/ui speaks it. Literal hexes on purpose: the
+     palette tokens are inlined by Tailwind and not always emitted as vars.
+     Guarded by test/design-tokens.test.mjs. */
+  --radius: 0.75rem;          /* rounded-lg = 12px = the control radius */
+  --background: #ffffff;
+  --foreground: #181529;      /* ink */
   /* @theme inline maps --color-card to this var, so keep it equal to the
-     palette's --color-card above, or bg-card silently drifts from the token. */
+     palette card above, or bg-card silently drifts from the token. */
   --card: #ffffff;
   --card-foreground: #181529;
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: #e5e7eb; /* palette "line" */
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover: #ffffff;
+  --popover-foreground: #181529;
+  --primary: #181529;         /* ink: the one primary action colour */
+  --primary-foreground: #ffffff;
+  --secondary: #f5f6f7;       /* paper */
+  --secondary-foreground: #181529;
+  --muted: #f5f6f7;
+  --muted-foreground: #5f5c6e; /* ink-3 */
+  --accent: #e5e7eb;          /* line: hover fills */
+  --accent-foreground: #181529;
+  --destructive: #a92e14;     /* catch-ink: errors borrow the catch */
+  --border: #e5e7eb;          /* line */
+  --input: #d1d5db;           /* line-strong */
+  --ring: #4f6bf6;            /* periwinkle: fields are where the buyer writes */
+  --chart-1: #181529;
+  --chart-2: #4f6bf6;
+  --chart-3: #5f5c6e;
+  --chart-4: #ff5533;
+  --chart-5: #12b981;
+  --sidebar: #f5f6f7;
+  --sidebar-foreground: #181529;
+  --sidebar-primary: #181529;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5e7eb;
+  --sidebar-accent-foreground: #181529;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #4f6bf6;
 }
 
 .dark {

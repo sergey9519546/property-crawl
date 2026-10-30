@@ -75,7 +75,7 @@ export function AiComparison() {
               data-stagger-item
               className={`flex flex-col rounded-3xl border p-7 ${
                 col.highlight
-                  ? "border-ink bg-card shadow-[0_0_0_1px_#181529,0_18px_48px_rgba(24,21,41,0.12)]"
+                  ? "border-ink bg-card ring-1 ring-ink shadow-raised"
                   : "border-line bg-card/70"
               }`}
             >

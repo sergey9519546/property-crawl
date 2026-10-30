@@ -11,6 +11,12 @@ const alertVariants = cva(
         default: "bg-card text-card-foreground",
         destructive:
           "text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90",
+        // Evidence notices (docs/DESIGN_SYSTEM.md section 4).
+        // catch: the listing's risk, an unknown, or an error. go: the user's own
+        // action worked. neutral: system or legal notices, never listing evidence.
+        catch: "border-catch/30 bg-catch-wash text-catch-ink *:data-[slot=alert-description]:text-ink-2",
+        go: "border-go/20 bg-go-wash text-go *:data-[slot=alert-description]:text-ink-2",
+        neutral: "border-line-strong bg-paper text-ink *:data-[slot=alert-description]:text-ink-2 [&>svg]:text-ink-3",
       },
     },
     defaultVariants: {
@@ -27,7 +33,9 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="alert"
+      // Only an error interrupts a screen reader. A static notice is page
+      // content; pass role="alert" or role="status" when one appears live.
+      role={variant === "destructive" ? "alert" : undefined}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />

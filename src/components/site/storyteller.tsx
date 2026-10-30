@@ -278,7 +278,7 @@ export function Storyteller() {
           The same order an experienced bidder follows. Click through them with a real listing.
         </SectionHeading>
 
-        <div className="mt-14 overflow-hidden rounded-[28px] border border-card/90 bg-card/90 shadow-[0_30px_100px_rgba(24,21,41,0.14)] backdrop-blur-xl">
+        <div className="mt-14 overflow-hidden rounded-[28px] border border-card/90 bg-card/90 shadow-raised backdrop-blur-xl">
             <div className="flex flex-col gap-3 border-b border-line bg-card/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-ink">
@@ -448,7 +448,7 @@ function VerificationPanel() {
 
   return (
     <div data-testid="storyteller-verify" className="grid min-h-[480px] gap-5 lg:grid-cols-[0.88fr_1.12fr]">
-      <article className="relative overflow-hidden on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(24,21,41,0.2)] sm:p-8">
+      <article className="relative overflow-hidden on-ink rounded-card bg-ink p-6 text-white shadow-overlay sm:p-8">
         <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
         <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/75">
           Next sale
@@ -627,7 +627,7 @@ function UnderwritePanel() {
         </div>
       </article>
 
-      <article className="flex flex-col on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(24,21,41,0.2)] sm:p-8">
+      <article className="flex flex-col on-ink rounded-card bg-ink p-6 text-white shadow-overlay sm:p-8">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/75">Decision</p>
         <p className="mt-3 text-[13px] font-semibold text-white/75">Your top bid <YoursTag /></p>
         <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "Enter your numbers" : <Fact value={ceiling} format="money" origin="yours" />}</p>

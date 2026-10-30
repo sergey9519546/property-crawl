@@ -90,7 +90,7 @@ export function CatchReveal() {
 
         <div className="relative mt-12 grid gap-4 lg:grid-cols-2">
           {/* Left: what the sale posts */}
-          <article className="overflow-hidden rounded-3xl border border-line bg-card shadow-[0_1px_2px_rgba(24,21,41,0.04),0_18px_48px_rgba(24,21,41,0.06)]">
+          <article className="overflow-hidden rounded-3xl border border-line bg-card shadow-raised">
             <div className="relative h-44 bg-[linear-gradient(135deg,#f5f6f7,#e5e7eb)]">
               <House aria-hidden className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-ink-3/40" />
               {photo ? (

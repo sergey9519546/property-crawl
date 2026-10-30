@@ -93,7 +93,7 @@ export function SecondLookShowcase() {
   return <section id="second-look" className="border-y border-line bg-paper px-5 py-20 sm:px-8 sm:py-28">
     <div className="mx-auto max-w-7xl">
       <div className="grid items-end gap-8 lg:grid-cols-[1fr_0.8fr]"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-ink-3">Second chances</p><h2 className="mt-4 max-w-4xl text-4xl font-semibold leading-[1.05] tracking-tight text-ink sm:text-6xl">No one bid? The price can come down.</h2></div><div><p className="text-base leading-7 text-ink-3">Properties that don&apos;t sell can come back with a lower opening bid. Members see price drops on saved listings in their portfolio, so they can take a second look before the next sale.</p><Link href="/account" className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-ink underline hover:text-ink-2">Become a member <ArrowRight size={15} /></Link></div></div>
-      <div className="mt-12 overflow-hidden rounded-3xl border border-line-strong bg-card shadow-[0_25px_80px_rgba(24,21,41,0.10)]">
+      <div className="mt-12 overflow-hidden rounded-3xl border border-line-strong bg-card shadow-raised">
         <div className="grid lg:grid-cols-[340px_1fr]">
           <div className="border-b border-line bg-ink p-6 text-white lg:border-b-0 lg:border-r">
             <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-white/60">
