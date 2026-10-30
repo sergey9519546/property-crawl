@@ -320,3 +320,47 @@ test('Zero-fabrication invariant: multi-item RealAuction docket does not bleed b
   assert.equal(results[0].openingBid, 50000, 'Card 1 must have its own opening bid');
   assert.equal(results[1].openingBid, null, 'Card 2 without opening bid must remain strictly null (zero bleed)');
 });
+
+test('TrusteeSaleScraper AcclaimWeb recorder bridge parses non-judicial trustee notices', async () => {
+  const trustee = require('../server/scrapers/trustee');
+  const acclaimHtml = `
+    <table id="searchResults">
+      <tr class="search-row">
+        <td>Doc #: 20261015-000492</td>
+        <td>Recorded: 10/15/2026</td>
+        <td>Type: NOTICE OF TRUSTEE SALE</td>
+        <td>Grantor: Johnathan Doe</td>
+        <td>Grantee: Quality Loan Service Corp</td>
+        <td>APN: 162-23-410-001</td>
+        <td>Address: 4820 Boulder Hwy, Las Vegas, NV 89121</td>
+      </tr>
+    </table>
+  `;
+
+  const searchUrl = trustee.getAcclaimSearchUrl('clark', 'NOTICE OF TRUSTEE SALE');
+  assert.ok(searchUrl.includes('recorder.clarkcountynv.gov'));
+
+  const rows = trustee.parseAcclaimSearchHtml(acclaimHtml, 'clark');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].instrumentNumber, '20261015-000492');
+  assert.equal(rows[0].distressStage, 'SCHEDULED_AUCTION');
+
+  const originalFetchText = trustee.fetchText;
+  try {
+    trustee.fetchText = async () => acclaimHtml;
+    const listings = await trustee.scrapeFeed({ jurisdiction: 'clark' });
+    assert.equal(listings.length, 1);
+    assert.equal(listings[0].id, 'TRUSTEE-NV-CLA-20261015-000492');
+    assert.equal(listings[0].county, 'Clark');
+    assert.equal(listings[0].state, 'NV');
+    assert.equal(listings[0].openingBid, null, 'Statutory notice carries debt or none, openingBid must be null');
+    assert.equal(listings[0].provenance.sourceFacts.apn, '162-23-410-001');
+    assert.ok(listings[0].parcelKey, 'Parcel key should be attached from APN');
+    assert.equal(listings[0].plaintiff, 'Quality Loan Service Corp');
+    assert.equal(listings[0].defendant, 'Johnathan Doe');
+    assert.equal(listings[0].provenance.platform, 'acclaimweb');
+    assert.equal(inspectSourceRecordUrl('trustee', listings[0].sourceUrl).isValid, true);
+  } finally {
+    trustee.fetchText = originalFetchText;
+  }
+});

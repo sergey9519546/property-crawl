@@ -166,6 +166,15 @@ test('inspectSourceRecordUrl: sheriff accepts Ohio and Florida RealAuction recor
   assert.equal(badDomain.isValid, false);
 });
 
+test('inspectSourceRecordUrl: trustee accepts official county recorder document URLs', () => {
+  const clark = inspectSourceRecordUrl('trustee', 'https://recorder.clarkcountynv.gov/AcclaimWeb/details?id=20261009001482');
+  assert.equal(clark.isValid, true);
+  const washoe = inspectSourceRecordUrl('trustee', 'https://recorder.washoecounty.gov/AcclaimWeb/details?id=DOC-88899');
+  assert.equal(washoe.isValid, true);
+  const badHost = inspectSourceRecordUrl('trustee', 'https://random-recorder.com/details?id=123');
+  assert.equal(badHost.isValid, false);
+});
+
 test('inspectSourceRecordUrl: marshals accepts exact detail path and rejects bare hash fragment', () => {
   const usmsDetail = inspectSourceRecordUrl('marshals', 'https://www.usmarshals.gov/what-we-do/asset-forfeiture/real-property/USMS-12345');
   assert.equal(usmsDetail.isValid, true);

@@ -49,6 +49,7 @@ const SOURCE_HOSTS = Object.freeze({
   sheriff: ['sheriffsaleauction.ohio.gov', 'realforeclose.com', 'realtaxdeed.com', 'publicnoticesohio.com'],
   servicelink: ['www.servicelinkauction.com'],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
+  trustee: ['recorder.clarkcountynv.gov', 'recorder.washoecounty.gov'],
   usda: ['resales.usda.gov'],
   va: ['vrmproperties.com'],
 });
@@ -204,6 +205,8 @@ function hasSourceRecordShape(source, url) {
       const last = path.split('/').at(-1) || '';
       return (hasRecordQuery(url) || (/\.s?html?$/.test(last) && last !== 'realprop.shtml'));
     }
+    case 'trustee':
+      return path.includes('/details') && (url.searchParams.has('id') || hasStablePathToken(url));
     case 'usda':
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');
     case 'email-notices':
