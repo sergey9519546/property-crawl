@@ -14,7 +14,7 @@ function fakePool(existing = []) {
     queries,
     async query(sql, params) {
       queries.push({ sql, params });
-      if (/SELECT id, payload FROM document_reviews/i.test(sql)) {
+      if (/SELECT id, payload(?:, content_hash)? FROM document_reviews/i.test(sql)) {
         return {
           rows: existing.map((r) => ({
             id: r.id,
