@@ -6,7 +6,7 @@ const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
-const { resolveCountyKey, queryArcgisParcel, resolveCadastralParcelIdentity } = require('../enrichment/arcgis-parcels');
+const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
 const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing,
@@ -24,6 +24,21 @@ function neutralCustomerText(value) {
   return typeof value === 'string'
     ? value.replace(/servicelink(?:[\s_-]*auction)?/gi, 'Public Auction Network')
     : value;
+}
+
+const parcelLookupCache = new Map();
+
+function cachedLocalParcelLookup(params) {
+  if (!params || !params.apn) return null;
+  const key = `${params.countyFips || ''}:${params.state || ''}:${params.county || ''}:${params.apn}`;
+  if (parcelLookupCache.has(key)) return parcelLookupCache.get(key);
+  const result = queryLocalParcelIndex(params);
+  if (parcelLookupCache.size >= 500) {
+    const firstKey = parcelLookupCache.keys().next().value;
+    parcelLookupCache.delete(firstKey);
+  }
+  parcelLookupCache.set(key, result);
+  return result;
 }
 
 function isLegalDescriptionAddress(address) {
@@ -68,9 +83,9 @@ function presentListing(listing) {
       countyFips
     });
   }
-  if (apn && (countyFips || (presented.state && presented.county))) {
+  if (apn && isLegalDescriptionAddress(presented.address) && (countyFips || (presented.state && presented.county))) {
     try {
-      const localParcel = queryLocalParcelIndex({
+      const localParcel = cachedLocalParcelLookup({
         apn,
         countyFips,
         state: presented.state,
@@ -502,5 +517,7 @@ async function handleListings(req, res) {
 module.exports = handleListings;
 module.exports.presentListing = presentListing;
 module.exports.isLegalDescriptionAddress = isLegalDescriptionAddress;
+module.exports.cachedLocalParcelLookup = cachedLocalParcelLookup;
+module.exports.parcelLookupCache = parcelLookupCache;
 module.exports.applyIntelligenceView = applyIntelligenceView;
 module.exports.intelligenceScope = intelligenceScope;

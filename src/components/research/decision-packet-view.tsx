@@ -92,7 +92,7 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const deadlines = u.statutoryDeadlinesAndCarry || computeStatutoryDeadlinesAndCarry({
     saleDate: p.saleDate,
     state: p.state,
-    purchasePrice: p.openingBid,
+    purchasePrice: typeof d.maxAllowableOffer === 'number' ? d.maxAllowableOffer : null,
     redemptionDays: t.statutoryRedemptionDays,
     hasIrsLien: Boolean(t.hasIrsTaxLien)
   });

@@ -288,7 +288,7 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
   const statutoryDeadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
     saleDate: listing.saleDate || null,
     state,
-    purchasePrice: maxAllowableOffer || openingBid,
+    purchasePrice: maxAllowableOffer || null,
     redemptionDays: publishedRedemptionDays(listing),
     hasIrsLien: Boolean(titleRisk.irsTaxLienRedemption?.hasIrsLien || titleRisk.irsTaxLienRedemption?.hasLien)
   });
@@ -368,7 +368,7 @@ function formatDecisionPacketMarkdown(packet) {
   const s = u.statutoryDeadlinesAndCarry || computeStatutoryDeadlinesAndCarry({
     saleDate: p.saleDate,
     state: p.state,
-    purchasePrice: p.openingBid,
+    purchasePrice: d.maxAllowableOffer || null,
     redemptionDays: t.statutoryRedemptionDays,
     hasIrsLien: Boolean(t.hasIrsTaxLien)
   });
@@ -492,5 +492,9 @@ ${packet.hudSafmr ? `
 module.exports = {
   buildDecisionPacket,
   formatDecisionPacketMarkdown,
-  computeStatutoryDeadlinesAndCarry
+  computeStatutoryDeadlinesAndCarry,
+  EFFECTIVE_TAX_RATE_BY_STATE,
+  INSURANCE_BASE_RATE_PER_1000,
+  DEFAULT_NATIONAL_TAX_RATE,
+  DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000
 };

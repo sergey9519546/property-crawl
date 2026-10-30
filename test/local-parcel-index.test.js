@@ -192,6 +192,23 @@ test('presentListing bridges unparsed legal description to official cadastral si
     assert.equal(presented.cadastralMatch.parcelKey, '12095-292215000000012');
     assert.equal(presented.provenance.addressResolution.resolvedFrom, 'cadastral_apn_lookup');
     assert.equal(presented.provenance.addressResolution.originalAddress, 'LOT 12 BLOCK 3 PARADISE VALLEY');
+
+    // Standard street address is preserved and not replaced
+    const regularListing = {
+      id: 'REG-1',
+      address: '123 Main St',
+      city: 'Orlando',
+      state: 'FL',
+      county: 'Orange',
+      countyFips: '12095',
+      apn: '29-22-15-0000-00-012',
+      openingBid: 45000,
+      source: 'sheriff'
+    };
+    const presentedRegular = presentListing(regularListing);
+    assert.equal(presentedRegular.address, '123 Main St');
+    assert.equal(presentedRegular.situsAddress, undefined);
+    assert.equal(presentedRegular.legalDescription, undefined);
   } finally {
     closeLocalParcelDb();
     delete process.env.PROPERTY_LOCAL_PARCEL_DB;

@@ -131,3 +131,45 @@ test('Local Parcel Indexer: streams and indexes records from jsonl file', async 
 
   delete process.env.PROPERTY_LOCAL_PARCEL_DB;
 });
+
+
+test('Local Parcel Indexer: seedLocalParcels builds database with verified benchmarks', (t) => {
+  if (!DatabaseSync) {
+    t.skip('node:sqlite is not supported in this environment');
+    return;
+  }
+
+  const { seedLocalParcels, SEED_PARCELS } = require('../scripts/seed-local-parcels');
+  const tmpDbPath = path.join(os.tmpdir(), `test-seed-${Date.now()}.db`);
+  t.after(() => {
+    closeLocalParcelDb();
+    if (fs.existsSync(tmpDbPath)) {
+      try { fs.unlinkSync(tmpDbPath); } catch {}
+    }
+  });
+
+  const res = seedLocalParcels({ dbPath: tmpDbPath });
+  assert.ok(res.totalSeeded >= SEED_PARCELS.length);
+
+  process.env.PROPERTY_LOCAL_PARCEL_DB = tmpDbPath;
+  closeLocalParcelDb();
+
+  // Test Orange County FL lookup
+  const orange = queryLocalParcelIndex({ apn: '29-22-15-0000-00-012', state: 'FL', county: 'ORANGE' });
+  assert.ok(orange);
+  assert.equal(orange.situsAddress, '7420 UNIVERSAL BLVD');
+  assert.equal(orange.countyFips, '12095');
+
+  // Test Cuyahoga County OH lookup
+  const cuyahoga = queryLocalParcelIndex({ apn: '003-25-014', state: 'OH', county: 'CUYAHOGA' });
+  assert.ok(cuyahoga);
+  assert.equal(cuyahoga.situsAddress, '1420 W 28TH ST');
+  assert.equal(cuyahoga.countyFips, '39035');
+
+  // Test Bergen County NJ lookup
+  const bergen = queryLocalParcelIndex({ apn: 'LOT 7, BLOCK 1203', state: 'NJ', county: 'BERGEN' });
+  assert.ok(bergen);
+  assert.equal(bergen.situsAddress, '19 WEST PARK AVENUE');
+
+  delete process.env.PROPERTY_LOCAL_PARCEL_DB;
+});

@@ -71,11 +71,11 @@ function queryLocalParcelIndex({ apn, countyFips, state, county } = {}) {
 
     let row = null;
     if (countyFips) {
-      const stmt = db.prepare('SELECT * FROM parcels WHERE county_fips = ? AND clean_apn = ? LIMIT 1');
-      row = stmt.get(String(countyFips), cleanApn);
+      const stmt = db.prepare('SELECT * FROM parcels WHERE county_fips = ? AND (clean_apn = ? OR UPPER(raw_apn) = ?) LIMIT 1');
+      row = stmt.get(String(countyFips), cleanApn, String(apn).trim().toUpperCase());
     } else if (state && county) {
-      const stmt = db.prepare('SELECT * FROM parcels WHERE state = ? AND UPPER(county) = ? AND clean_apn = ? LIMIT 1');
-      row = stmt.get(String(state).toUpperCase(), String(county).toUpperCase(), cleanApn);
+      const stmt = db.prepare('SELECT * FROM parcels WHERE state = ? AND UPPER(county) = ? AND (clean_apn = ? OR UPPER(raw_apn) = ?) LIMIT 1');
+      row = stmt.get(String(state).toUpperCase(), String(county).toUpperCase(), cleanApn, String(apn).trim().toUpperCase());
     }
 
     if (!row) return null;

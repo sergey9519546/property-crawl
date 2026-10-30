@@ -40,6 +40,7 @@
     "observations:import:dry": "node scripts/import-observation-store.js --dry-run",
     "operator:status": "node scripts/operator-status.js",
     "operator:sync": "node scripts/sync-render-env.js",
+    "parcels:seed": "node scripts/seed-local-parcels.js",
     "pre-push": "npm run release:gate",
     "probe:retired": "node scripts/probe-retired-records.js",
     "promotion:gate": "node scripts/promotion-gate-check.js",

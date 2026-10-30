@@ -265,12 +265,40 @@ test('Decision Packet: attaches statutoryDeadlinesAndCarry and renders holding c
   assert.equal(s.objectionOrConfirmationDays, 10);
   assert.equal(s.objectionLabel, 'NC 10-day rolling upset-bid window (N.C.G.S. § 45-21.27)');
   assert.equal(s.effectiveLockupDays, 10);
-  assert.equal(typeof s.totalHoldingCostCarry, 'number');
-  assert.ok(s.totalHoldingCostCarry > 0);
+  // Zero-fabrication underwriting: without buyer-supplied price assumption, dollar carry is withheld
+  assert.equal(s.totalHoldingCostCarry, null);
+  const mdNoOffer = formatDecisionPacketMarkdown(packet);
+  assert.match(mdNoOffer, /Buyer-supplied purchase price assumption required/);
 
-  const md = formatDecisionPacketMarkdown(packet);
+  // With explicit buyer-supplied MAO, carry is computed
+  const packetWithOffer = buildDecisionPacket(listing, { maxAllowableOffer: 250000 });
+  const s2 = packetWithOffer.underwriting.statutoryDeadlinesAndCarry;
+  assert.ok(s2);
+  assert.equal(typeof s2.totalHoldingCostCarry, 'number');
+  assert.ok(s2.totalHoldingCostCarry > 0);
+
+  const md = formatDecisionPacketMarkdown(packetWithOffer);
   assert.match(md, /### Statutory Post-Sale Deadlines & Holding Cost Carry/);
   assert.match(md, /NC 10-day rolling upset-bid window \(N\.C\.G\.S\. § 45-21\.27\)/);
   assert.match(md, /Effective Capital Lockup Window\*\*: 10 days/);
   assert.match(md, /Total Estimated Holding Carry/);
+});
+
+test('Decision Packet: 50-state tax and insurance tables match src/lib/underwriting byte-for-byte', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const underwritingSrc = fs.readFileSync(path.join(__dirname, '../src/lib/underwriting.ts'), 'utf8');
+  const {
+    EFFECTIVE_TAX_RATE_BY_STATE,
+    INSURANCE_BASE_RATE_PER_1000
+  } = require('../server/export/decision-packet');
+
+  const allStates = Object.keys(EFFECTIVE_TAX_RATE_BY_STATE);
+  assert.ok(allStates.length >= 50);
+  for (const st of allStates) {
+    const taxRate = EFFECTIVE_TAX_RATE_BY_STATE[st];
+    assert.match(underwritingSrc, new RegExp(`${st}:\\s*${taxRate.toFixed(4)}`));
+    const insRate = INSURANCE_BASE_RATE_PER_1000[st];
+    assert.match(underwritingSrc, new RegExp(`${st}:\\s*${insRate.toFixed(2)}`));
+  }
 });
