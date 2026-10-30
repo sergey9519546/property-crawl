@@ -1231,11 +1231,12 @@ async function queryArcgisParcel(params = {}, init = {}) {
       }
     }
 
-    if (!features.length) {
+    const validFeatures = features.filter((f) => f && typeof f === 'object' && f.attributes);
+    if (!validFeatures.length) {
       return null;
     }
 
-    const feature = selectBestFeature(features, lat, lng);
+    const feature = selectBestFeature(validFeatures, lat, lng);
     return normalizeArcgisAttributes(feature.attributes, config);
   } catch (err) {
     return null;
@@ -1249,7 +1250,8 @@ const queryCountyParcel = queryArcgisParcel;
  * via county cadastral point-in-polygon or APN lookup when an ArcGIS parcel
  * layer is available for the listing's county.
  */
-async function resolveCadastralParcelIdentity(listing = {}, options = {}) {
+async function resolveCadastralParcelIdentity(rawListing = {}, options = {}) {
+  const listing = rawListing && typeof rawListing === 'object' ? rawListing : {};
   const existingApn = listing.apn || listing.parcelNumber || listing.parcelId || listing.provenance?.parcelNumber || null;
   const parcel = await queryArcgisParcel({
     lat: listing.lat !== null && listing.lat !== undefined && listing.lat !== '' ? Number(listing.lat) : NaN,

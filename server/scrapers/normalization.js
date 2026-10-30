@@ -15,6 +15,7 @@ function cleanText(value, placeholders = []) {
 
 function numberOrNull(value, options = {}) {
   if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   const min = options.min ?? -Infinity;
@@ -49,6 +50,7 @@ function httpsUrlOrNull(value) {
 /** Strip non-alphanumeric characters and uppercase an APN/parcel number. */
 function normalizeApn(rawApn) {
   if (rawApn === null || rawApn === undefined) return null;
+  if (typeof rawApn !== 'string' && typeof rawApn !== 'number') return null;
   const stripped = String(rawApn).replace(/[^0-9A-Za-z]/g, '').toUpperCase();
   return stripped || null;
 }
@@ -73,6 +75,7 @@ function buildParcelKey({ apn, countyFips, stateFips } = {}) {
 }
 
 function extractCountyFips(listing) {
+  if (!listing || typeof listing !== 'object') return null;
   const candidates = [
     listing.countyFips,
     listing.provenance?.countyFips,
@@ -100,6 +103,7 @@ function extractCountyFips(listing) {
 }
 
 function extractRawApn(listing) {
+  if (!listing || typeof listing !== 'object') return null;
   const sourceFacts = asPlainObject(listing.provenance?.sourceFacts);
   const candidates = [
     listing.apn,
@@ -138,7 +142,7 @@ const SCHEDULED_SOURCES = new Set(['trustee', 'county-trustee-sale', 'bid4assets
 const SALE_PROXIMITY_SOURCES = new Set(['sheriff', 'civilview', 'ohio-sheriff-sale']);
 
 function mapDistressStage(source, saleDate) {
-  const key = (source || '').toLowerCase();
+  const key = typeof source === 'string' ? source.trim().toLowerCase() : '';
   if (REO_SOURCES.has(key)) return 'reo';
   if (SCHEDULED_SOURCES.has(key)) return 'scheduled';
   if (SALE_PROXIMITY_SOURCES.has(key)) {

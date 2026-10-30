@@ -121,12 +121,15 @@ function applyIntelligenceView(presentedListings, filters) {
   const sort = String(filters.sort || '');
   if (INTELLIGENCE_SORTS.has(sort)) {
     view = [...view].sort((a, b) => {
-      const av = sort === 'quality'
-        ? (a.researchQuality?.score ?? -1)
-        : (a.opportunity?.rank ?? -1);
-      const bv = sort === 'quality'
-        ? (b.researchQuality?.score ?? -1)
-        : (b.opportunity?.rank ?? -1);
+      const aVal = sort === 'quality' ? a.researchQuality?.score : a.opportunity?.rank;
+      const bVal = sort === 'quality' ? b.researchQuality?.score : b.opportunity?.rank;
+      const av = Number.isFinite(aVal) ? aVal : -1;
+      const bv = Number.isFinite(bVal) ? bVal : -1;
+
+
+
+
+
       return bv - av || String(a.id).localeCompare(String(b.id));
     });
   }
@@ -289,15 +292,26 @@ async function handleListings(req, res) {
     // lat / lng / radiusKm are passed through to the geo filter unchanged;
     // they were already guarded by the underlying db.getListings and are not
     // part of the P0/P2 attack surface.
-    filters.lat = url.searchParams.get('lat') ? parseFloat(url.searchParams.get('lat')) : undefined;
-    filters.lng = url.searchParams.get('lng') ? parseFloat(url.searchParams.get('lng')) : undefined;
-    filters.radiusKm = url.searchParams.get('radiusKm') ? parseFloat(url.searchParams.get('radiusKm')) : 100;
+    const rawLat = url.searchParams.get('lat');
+    const rawLng = url.searchParams.get('lng');
+    const rawRadius = url.searchParams.get('radiusKm');
+    const parsedLat = rawLat !== null && rawLat !== '' ? parseFloat(rawLat) : undefined;
+    const parsedLng = rawLng !== null && rawLng !== '' ? parseFloat(rawLng) : undefined;
+    const parsedRadius = rawRadius !== null && rawRadius !== '' ? parseFloat(rawRadius) : 100;
+    filters.lat = Number.isFinite(parsedLat) ? parsedLat : undefined;
+    filters.lng = Number.isFinite(parsedLng) ? parsedLng : undefined;
+    filters.radiusKm = Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : 100;
+
+
 
     // Delta-sync: ?since=<ISO 8601> filters to records observed after that time.
     const sinceRaw = url.searchParams.get('since');
     let sinceMs = null;
     let sinceIso = null;
     if (sinceRaw != null && sinceRaw !== '') {
+      if (typeof sinceRaw !== 'string' || sinceRaw.length > 64) {
+        return res.status(400).json({ error: 'Invalid since parameter length' });
+      }
       sinceMs = Date.parse(sinceRaw);
       if (!Number.isFinite(sinceMs)) {
         return res.status(400).json({ error: 'Invalid since parameter. Use ISO 8601 date.' });

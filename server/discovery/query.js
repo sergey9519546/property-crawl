@@ -21,7 +21,11 @@ function cursorEncode(v) {
 }
 function cursorDecode(v) {
   try {
-    return JSON.parse(Buffer.from(v, "base64url").toString("utf8"));
+    const parsed = JSON.parse(Buffer.from(v, "base64url").toString("utf8"));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error("Not an object");
+    }
+    return parsed;
   } catch {
     throw new DiscoveryQueryError(400, "Invalid cursor");
   }
@@ -110,16 +114,16 @@ function queryFromUrl(url) {
     );
   if (!Number.isInteger(offset) || offset < 0 || offset > 100000)
     throw new DiscoveryQueryError(400, "offset must be an integer from 0 to 100000");
-  const maxBid = get("maxBid") == null ? null : Number(get("maxBid"));
+  const maxBid = !get("maxBid") ? null : Number(get("maxBid"));
   if (maxBid !== null && (!Number.isFinite(maxBid) || maxBid < 0))
     throw new DiscoveryQueryError(400, "Invalid maxBid");
-  const minScore = get("minScore") == null ? null : Number(get("minScore"));
-  const minEquity = get("minEquity") == null ? null : Number(get("minEquity"));
+  const minScore = !get("minScore") ? null : Number(get("minScore"));
+  const minEquity = !get("minEquity") ? null : Number(get("minEquity"));
   if (minScore !== null && (!Number.isFinite(minScore) || minScore < 0 || minScore > 100)) throw new DiscoveryQueryError(400, "Invalid minScore");
   if (minEquity !== null && (!Number.isFinite(minEquity) || minEquity < 0)) throw new DiscoveryQueryError(400, "Invalid minEquity");
-  const lat = get("lat") == null ? null : Number(get("lat"));
-  const lng = get("lng") == null ? null : Number(get("lng"));
-  const radiusKm = get("radiusKm") == null ? 100 : Number(get("radiusKm"));
+  const lat = !get("lat") ? null : Number(get("lat"));
+  const lng = !get("lng") ? null : Number(get("lng"));
+  const radiusKm = !get("radiusKm") ? 100 : Number(get("radiusKm"));
   if ((lat === null) !== (lng === null) || (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)))
     throw new DiscoveryQueryError(400, "lat and lng must be valid coordinates supplied together");
   if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 20000)
@@ -590,7 +594,8 @@ async function pgSearch(database, f) {
       throw new DiscoveryQueryError(409, "Cursor is stale; restart the search");
     if (c.binding !== binding)
       throw new DiscoveryQueryError(400, "Cursor does not match this query");
-    params.push(c.value, c.id);
+    if (!Number.isFinite(Number(c.value)) || !c.id) throw new DiscoveryQueryError(400, "Invalid cursor payload");
+    params.push(Number(c.value), String(c.id));
     cursorClause = `${where.sql ? " AND" : " WHERE"} (${sort.expr},id) ${sort.dir === "ASC" ? ">" : "<"} ($${params.length - 1},$${params.length})`;
   }
   params.push(f.limit + 1, f.offset || 0);
@@ -755,6 +760,7 @@ async function search(database, f) {
       throw new DiscoveryQueryError(409, "Cursor is stale; restart the search");
     if (c.binding !== binding)
       throw new DiscoveryQueryError(400, "Cursor does not match this query");
+    if (!c.id || typeof c.id !== 'string') throw new DiscoveryQueryError(400, "Invalid cursor payload");
     after = c.id;
   }
   // compare() carries the id tie-break, direction-aware, so paging matches

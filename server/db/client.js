@@ -203,7 +203,11 @@ function normalizeTimestamp(value) {
 
 function normalizeDate(value) {
   if (value === null || value === undefined || value === '') return null;
-  const timestamp = Date.parse(String(value));
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return Number.isNaN(Date.parse(str)) ? null : str;
+  }
+  const timestamp = Date.parse(str);
   return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString().slice(0, 10);
 }
 
@@ -1942,7 +1946,7 @@ class DatabaseClient {
         sql += ` AND equity_spread >= $${paramIdx++}`;
         params.push(Number(minEquity));
       }
-      if (maxBid) {
+      if (maxBid !== undefined && maxBid !== null && maxBid !== '') {
         sql += ` AND opening_bid <= $${paramIdx++}`;
         params.push(Number(maxBid));
       }
@@ -1968,7 +1972,7 @@ class DatabaseClient {
       if (filters.hasDocuments) {
         sql += ` AND has_documents = TRUE`;
       }
-      if (lat != null && lng != null) {
+      if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
         sql += ` AND ST_DWithin(geog, ST_SetSRID(ST_MakePoint($${paramIdx++}, $${paramIdx++}), 4326)::geography, $${paramIdx++})`;
         params.push(lng, lat, radiusKm * 1000);
       }
@@ -2017,7 +2021,7 @@ class DatabaseClient {
       const publishedRedemptionKnown = Number.isFinite(publishedRedemption) ? publishedRedemption : null;
       if (redemption === 'immediate' && publishedRedemptionKnown !== 0) return false;
       if (redemption === 'redemption_active' && !(publishedRedemptionKnown > 0)) return false;
-      if (lat != null && lng != null) {
+      if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);
         if (dist === null || dist > Number(radiusKm)) return false;
       }

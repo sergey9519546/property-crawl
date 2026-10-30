@@ -642,3 +642,41 @@ test('ArcGIS Resolver: selects closest feature using returned geometry coordinat
   assert.match(capturedUrl, /returnGeometry=true/, 'Spatial query must set returnGeometry=true');
   assert.ok(capturedInit && capturedInit.signal, 'fetchFn must receive an abort signal');
 });
+
+test('Adversarial robustness: null, primitive, and corrupt object resilience', async () => {
+  const { extractCountyFips, extractRawApn, mapDistressStage, numberOrNull, normalizeApn: normApn } = require('../server/scrapers/normalization');
+
+  // Null inputs to parcel identity and extractors
+  assert.equal(await resolveCadastralParcelIdentity(null), null);
+  assert.equal(await resolveCadastralParcelIdentity(undefined), null);
+  assert.equal(extractCountyFips(null), null);
+  assert.equal(extractCountyFips(undefined), null);
+  assert.equal(extractRawApn(null), null);
+  assert.equal(extractRawApn(undefined), null);
+
+  // Non-primitive input to normalization
+  assert.equal(normApn({}), null);
+  assert.equal(normApn([]), null);
+  assert.equal(normalizeApn({}), '');
+  assert.equal(numberOrNull([]), null);
+  assert.equal(numberOrNull({}), null);
+
+  // Non-string source to distress stage
+  assert.equal(mapDistressStage(123), 'unknown');
+  assert.equal(mapDistressStage(null), 'unknown');
+  assert.equal(mapDistressStage({}), 'unknown');
+
+  // Corrupt feature list with null or attributes-free elements in queryArcgisParcel
+  const mockFetchCorrupt = async () => ({
+    ok: true,
+    json: async () => ({ features: [null, {}, { geometry: {} }] })
+  });
+  const res = await queryArcgisParcel({
+    lat: 39.1,
+    lng: -84.5,
+    state: 'OH',
+    county: 'Hamilton',
+    fetchFn: mockFetchCorrupt
+  });
+  assert.equal(res, null);
+});

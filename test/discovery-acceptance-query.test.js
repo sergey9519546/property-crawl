@@ -61,3 +61,24 @@ test('search filters and facet counts use the same filtered inventory', async ()
   assert.equal(result.listings[0].id, 'ca-1');
   assert.deepEqual(result.facets.state, [{ value: 'CA', count: 1 }]);
 });
+
+test('cursorDecode rejects non-object payloads with 400', async () => {
+  const nullCursor = Buffer.from('null').toString('base64url');
+  const arrCursor = Buffer.from('["abc"]').toString('base64url');
+  const numCursor = Buffer.from('12345').toString('base64url');
+  const rows = [row('a'), row('b')];
+  const filters = { q: '', state: '', county: '', source: '', type: '', program: '', lifecycle: '', occupancy: '', freshness: '', saleFrom: null, saleTo: null, maxBid: null, hasDocuments: null, bbox: null, sort: 'score', limit: 10, facets: [] };
+  await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: nullCursor }), (err) => err.status === 400);
+  await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: arrCursor }), (err) => err.status === 400);
+  await assert.rejects(() => discovery.search(database(rows), { ...filters, cursor: numCursor }), (err) => err.status === 400);
+});
+
+test('queryFromUrl treats empty coordinate and numeric strings as null', () => {
+  const q = discovery.queryFromUrl(new URL('http://localhost/api/listings?lat=&lng=&maxBid=&minScore=&minEquity=&radiusKm='));
+  assert.equal(q.lat, null);
+  assert.equal(q.lng, null);
+  assert.equal(q.maxBid, null);
+  assert.equal(q.minScore, null);
+  assert.equal(q.minEquity, null);
+  assert.equal(q.radiusKm, 100);
+});
