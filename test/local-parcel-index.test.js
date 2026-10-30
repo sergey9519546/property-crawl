@@ -139,3 +139,62 @@ test('local parcel index switches db when PROPERTY_LOCAL_PARCEL_DB changes', () 
     if (fs.existsSync(tmpDb2)) fs.unlinkSync(tmpDb2);
   }
 });
+
+
+test('presentListing bridges unparsed legal description to official cadastral situsAddress via APN', () => {
+  const { presentListing, isLegalDescriptionAddress } = require('../server/routes/listings');
+  const { resolveCadastralParcelIdentity } = require('../server/enrichment/arcgis-parcels');
+
+  assert.equal(isLegalDescriptionAddress('LOT 12 BLOCK 3 PARADISE VALLEY'), true);
+  assert.equal(isLegalDescriptionAddress('PARCEL 4 SUBD OAK GROVE'), true);
+  assert.equal(isLegalDescriptionAddress('SEC 14 TWP 2N RNG 3E'), true);
+  assert.equal(isLegalDescriptionAddress('123 Main St'), false);
+  assert.equal(isLegalDescriptionAddress('88 Market Street'), false);
+
+  const tmpDb = path.resolve(__dirname, 'temp_bridge_test.db');
+  if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+
+  const db = new DatabaseSync(tmpDb);
+  db.exec(`
+    CREATE TABLE parcels (county_fips TEXT, clean_apn TEXT, raw_apn TEXT, state TEXT, county TEXT, situs_address TEXT, assessed_total REAL, assessed_land REAL, assessed_imprv REAL, land_use TEXT, legal_description TEXT, tax_year INTEGER);
+    INSERT INTO parcels VALUES ('12095', '292215000000012', '29-22-15-0000-00-012', 'FL', 'ORANGE', '7420 UNIVERSAL BLVD', 320000, 80000, 240000, 'SINGLE_FAMILY', 'LOT 12 BLK 3 PARADISE VALLEY', 2026);
+  `);
+  db.close();
+
+  try {
+    process.env.PROPERTY_LOCAL_PARCEL_DB = tmpDb;
+    closeLocalParcelDb();
+
+    const rawListing = {
+      id: 'FL-TAX-2026-991',
+      address: 'LOT 12 BLOCK 3 PARADISE VALLEY',
+      city: 'Orlando',
+      state: 'FL',
+      county: 'Orange',
+      countyFips: '12095',
+      apn: '29-22-15-0000-00-012',
+      openingBid: 45000,
+      source: 'countytaxsale',
+      provenance: {
+        origin: 'live',
+        sourceFacts: {
+          apn: '29-22-15-0000-00-012'
+        }
+      }
+    };
+
+    const presented = presentListing(rawListing);
+    assert.equal(presented.address, '7420 UNIVERSAL BLVD');
+    assert.equal(presented.situsAddress, '7420 UNIVERSAL BLVD');
+    assert.equal(presented.legalDescription, 'LOT 12 BLOCK 3 PARADISE VALLEY');
+    assert.ok(presented.cadastralMatch);
+    assert.equal(presented.cadastralMatch.matchBasis, 'cadastral_apn_lookup');
+    assert.equal(presented.cadastralMatch.parcelKey, '12095-292215000000012');
+    assert.equal(presented.provenance.addressResolution.resolvedFrom, 'cadastral_apn_lookup');
+    assert.equal(presented.provenance.addressResolution.originalAddress, 'LOT 12 BLOCK 3 PARADISE VALLEY');
+  } finally {
+    closeLocalParcelDb();
+    delete process.env.PROPERTY_LOCAL_PARCEL_DB;
+    if (fs.existsSync(tmpDb)) fs.unlinkSync(tmpDb);
+  }
+});

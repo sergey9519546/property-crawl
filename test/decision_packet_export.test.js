@@ -234,3 +234,43 @@ test('Decision Packet View: component declares lien priority & debt extinguishme
   assert.match(viewSrc, /computeLienWaterfall/);
   assert.match(viewSrc, /Lien Priority & Debt Extinguishment Waterfall/);
 });
+
+test('Decision Packet View: component renders HUD SAFMR voucher table and statutory deadlines & carry schedule', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const viewSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/decision-packet-view.tsx'), 'utf8');
+  assert.match(viewSrc, /data-testid="hud-safmr-card"/);
+  assert.match(viewSrc, /HUD Statutory Fair Market Rent \(SAFMR\) Floor/);
+  assert.match(viewSrc, /data-testid="statutory-deadlines-carry"/);
+  assert.match(viewSrc, /Statutory Deadlines & Capital Holding Carry/);
+  assert.match(viewSrc, /computeStatutoryDeadlinesAndCarry/);
+});
+
+test('Decision Packet: attaches statutoryDeadlinesAndCarry and renders holding carry schedule in markdown', () => {
+  const listing = {
+    id: 'SHERIFF-NC-WAKE-101',
+    address: '100 Fayetteville St',
+    city: 'Raleigh',
+    state: 'NC',
+    county: 'Wake',
+    zip: '27601',
+    openingBid: 250000,
+    saleDate: '2026-11-20',
+    source: 'sheriff'
+  };
+
+  const packet = buildDecisionPacket(listing);
+  const s = packet.underwriting.statutoryDeadlinesAndCarry;
+  assert.ok(s);
+  assert.equal(s.objectionOrConfirmationDays, 10);
+  assert.equal(s.objectionLabel, 'NC 10-day rolling upset-bid window (N.C.G.S. § 45-21.27)');
+  assert.equal(s.effectiveLockupDays, 10);
+  assert.equal(typeof s.totalHoldingCostCarry, 'number');
+  assert.ok(s.totalHoldingCostCarry > 0);
+
+  const md = formatDecisionPacketMarkdown(packet);
+  assert.match(md, /### Statutory Post-Sale Deadlines & Holding Cost Carry/);
+  assert.match(md, /NC 10-day rolling upset-bid window \(N\.C\.G\.S\. § 45-21\.27\)/);
+  assert.match(md, /Effective Capital Lockup Window\*\*: 10 days/);
+  assert.match(md, /Total Estimated Holding Carry/);
+});

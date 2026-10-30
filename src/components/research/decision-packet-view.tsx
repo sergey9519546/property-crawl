@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Printer, ShieldAlert, CheckCircle2, DollarSign, Scale, FileText } from 'lucide-react';
-import { computeCashToClose, computeLienWaterfall } from '@/lib/underwriting';
+import { Download, Printer, ShieldAlert, CheckCircle2, DollarSign, Scale, FileText, Clock, Calendar, Building } from 'lucide-react';
+import { computeCashToClose, computeLienWaterfall, computeStatutoryDeadlinesAndCarry } from '@/lib/underwriting';
 import { readUnderwriteScenario, scenarioCashInput } from '@/lib/underwrite-scenario';
 
 interface DecisionPacketViewProps {
@@ -88,6 +88,14 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
         state: p.state,
       })
     : null;
+
+  const deadlines = u.statutoryDeadlinesAndCarry || computeStatutoryDeadlinesAndCarry({
+    saleDate: p.saleDate,
+    state: p.state,
+    purchasePrice: p.openingBid,
+    redemptionDays: t.statutoryRedemptionDays,
+    hasIrsLien: Boolean(t.hasIrsTaxLien)
+  });
 
   const handleDownloadJson = () => {
     setDownloading(true);
@@ -237,6 +245,74 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
         </div>
       </div>
 
+      {/* Statutory Deadlines & Capital Holding Carry */}
+      {deadlines && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3" data-testid="statutory-deadlines-carry">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600" />
+              <h3 className="font-bold text-sm text-slate-900">Statutory Deadlines & Capital Holding Carry</h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+              Lockup: {deadlines.effectiveLockupDays} Days
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div className="space-y-2">
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Objection / Confirmation:</span>
+                <span className="font-semibold text-right max-w-[240px]">
+                  {deadlines.objectionLabel || `${deadlines.objectionOrConfirmationDays} days`}
+                  {deadlines.objectionDeadline ? ` (${deadlines.objectionDeadline})` : ''}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">IRS 120-Day Right (26 U.S.C. § 7425):</span>
+                <span className="font-semibold">
+                  {deadlines.irsRedemptionDays > 0
+                    ? `${deadlines.irsRedemptionDays} days (${deadlines.irsRedemptionDeadline || 'pending'})`
+                    : 'None (no IRS lien)'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">State Statutory Redemption:</span>
+                <span className="font-semibold">
+                  {deadlines.stateRedemptionDays > 0
+                    ? `${deadlines.stateRedemptionDays} days (${deadlines.stateRedemptionDeadline || 'pending'})`
+                    : (t.statutoryRedemptionDays === null ? 'Not published' : '0 days')}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500 font-medium">Effective Capital Lockup:</span>
+                <span className="font-bold text-indigo-900">{deadlines.effectiveLockupDays} days</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Cost of Capital Rate:</span>
+                <span className="font-semibold">{deadlines.annualCostOfCapitalPct}% annual</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Monthly Holding Carry:</span>
+                <span className="font-semibold">{moneyOrBlank(deadlines.monthlyHoldingCost, 'Requires buyer-supplied price')}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Property Tax Carry ({deadlines.effectiveTaxRatePct}%):</span>
+                <span className="font-semibold">{moneyOrBlank(deadlines.estimatedPropertyTaxCarry, 'Requires buyer-supplied price')}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-50">
+                <span className="text-slate-500">Insurance Carry:</span>
+                <span className="font-semibold">{moneyOrBlank(deadlines.estimatedInsuranceCarry, 'Requires buyer-supplied price')}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-slate-200 font-bold">
+                <span className="text-slate-900">Total Holding Cost Carry:</span>
+                <span className="text-indigo-950 font-black">{moneyOrBlank(deadlines.totalHoldingCostCarry, 'Requires buyer-supplied price')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lien Priority & Waterfall Schedule */}
       {seniorBalanceUnknown && bidAmount > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900" data-testid="lien-waterfall-unknown">
@@ -307,6 +383,60 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
             </table>
           </div>
           <p className="text-[11px] text-slate-600 leading-snug">{waterfall.summary}</p>
+        </div>
+      )}
+
+      {/* HUD Small Area FMR & Section 8 Voucher Floor */}
+      {livePacket.hudSafmr && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3" data-testid="hud-safmr-card">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Building className="w-4 h-4 text-sky-600" />
+              <h3 className="font-bold text-sm text-slate-900">HUD Statutory Fair Market Rent (SAFMR) Floor</h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+              ZIP {livePacket.hudSafmr.zip} · FY2025 Revised Section 8 FMR
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 leading-snug">
+            Small Area FMR statutory voucher payment standards under 24 CFR § 888.113. Establishes the non-credit tenant rent floor for Section 8 Housing Choice Vouchers (90% payment floor to 110% payment ceiling).
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="py-1.5 pr-2 font-semibold">Unit Size</th>
+                  <th className="py-1.5 pr-2 text-right font-semibold">Baseline FMR</th>
+                  <th className="py-1.5 pr-2 text-right font-semibold">90% Voucher Floor</th>
+                  <th className="py-1.5 text-right font-semibold">110% Voucher Ceiling</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                {[
+                  { label: '0 Bedroom (Efficiency)', key: '0br' },
+                  { label: '1 Bedroom', key: '1br' },
+                  { label: '2 Bedroom', key: '2br' },
+                  { label: '3 Bedroom', key: '3br' },
+                  { label: '4 Bedroom', key: '4br' },
+                ].map(({ label, key }) => {
+                  const base = livePacket.hudSafmr.rents?.[key];
+                  const floor90 = livePacket.hudSafmr.paymentStandard90?.[key];
+                  const ceil110 = livePacket.hudSafmr.paymentStandard110?.[key];
+                  return (
+                    <tr key={key}>
+                      <td className="py-1.5 pr-2 font-semibold text-slate-900">{label}</td>
+                      <td className="py-1.5 pr-2 text-right">{typeof base === 'number' ? `$${base.toLocaleString()}` : '—'}</td>
+                      <td className="py-1.5 pr-2 text-right text-emerald-700 font-semibold">{typeof floor90 === 'number' ? `$${floor90.toLocaleString()}` : '—'}</td>
+                      <td className="py-1.5 text-right font-semibold">{typeof ceil110 === 'number' ? `$${ceil110.toLocaleString()}` : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-slate-400 italic">
+            Statutory Citation: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.
+          </p>
         </div>
       )}
 

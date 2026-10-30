@@ -6,7 +6,8 @@ const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
 const { applyCrossSourceBakeOff } = db;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
-const { resolveCountyKey, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+const { resolveCountyKey, queryArcgisParcel, resolveCadastralParcelIdentity } = require('../enrichment/arcgis-parcels');
+const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
 // Listing-admission gate (server/sources/catalog.js): a DISCOVERY_ONLY
 // catalog source is discovery evidence, never an actionable sale listing,
 // so its records answer the same 404 an absent record answers.
@@ -23,6 +24,19 @@ function neutralCustomerText(value) {
   return typeof value === 'string'
     ? value.replace(/servicelink(?:[\s_-]*auction)?/gi, 'Public Auction Network')
     : value;
+}
+
+function isLegalDescriptionAddress(address) {
+  if (!address || typeof address !== 'string') return true;
+  const trimmed = address.trim();
+  if (trimmed.length === 0) return true;
+  if (/^(?:LOT\b|PARCEL\b|UNIT\b|BLOCK\b|SEC(?:TION)?\b|TWP\b|SUBD(?:IVISION)?\b|TRACT\b|LEGAL\b|PB\b|UNASSIGNED\b|VACANT\b)/i.test(trimmed)) {
+    return true;
+  }
+  if (!/^\d+\s+[A-Za-z]/.test(trimmed) && /(?:LOT|BLOCK|SUBD|TRACT|PLAT|RANGE|SEC|TWP)/i.test(trimmed)) {
+    return true;
+  }
+  return false;
 }
 
 function presentListing(listing) {
@@ -45,13 +59,51 @@ function presentListing(listing) {
   presented.triage = computeTriage({ ...listing, ...presented });
   const hudSafmr = listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null);
   if (hudSafmr) presented.hudSafmr = hudSafmr;
+  const apn = extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
+    ?? listing.provenance?.sourceFacts?.apn ?? listing.provenance?.sourceFacts?.parcelNumber ?? listing.provenance?.sourceFacts?.parcelId;
+  const countyFips = extractCountyFips(listing) ?? listing.countyFips ?? listing.provenance?.countyFips ?? listing.provenance?.sourceFacts?.countyFips;
   if (presented.parcelKey == null) {
-    const sourceFacts = listing.provenance?.sourceFacts || {};
     presented.parcelKey = buildParcelKey({
-      apn: extractRawApn(listing) ?? listing.apn ?? listing.parcelNumber ?? listing.parcelId
-        ?? sourceFacts.apn ?? sourceFacts.parcelNumber ?? sourceFacts.parcelId,
-      countyFips: extractCountyFips(listing) ?? listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
+      apn,
+      countyFips
     });
+  }
+  if (apn && (countyFips || (presented.state && presented.county))) {
+    try {
+      const localParcel = queryLocalParcelIndex({
+        apn,
+        countyFips,
+        state: presented.state,
+        county: presented.county
+      });
+      if (localParcel && localParcel.situsAddress) {
+        presented.situsAddress = localParcel.situsAddress;
+        presented.cadastralMatch = {
+          matchBasis: "cadastral_apn_lookup",
+          parcelKey: localParcel.canonicalApn
+            ? (localParcel.countyFips ? (localParcel.countyFips + "-" + localParcel.canonicalApn) : localParcel.canonicalApn)
+            : presented.parcelKey,
+          situsAddress: localParcel.situsAddress,
+          countyFips: localParcel.countyFips || countyFips || null
+        };
+        if (isLegalDescriptionAddress(presented.address)) {
+          presented.legalDescription = presented.address;
+          presented.address = localParcel.situsAddress;
+          if (presented.provenance && typeof presented.provenance === "object") {
+            presented.provenance = {
+              ...presented.provenance,
+              addressResolution: {
+                resolvedFrom: "cadastral_apn_lookup",
+                originalAddress: listing.address,
+                situsAddress: localParcel.situsAddress
+              }
+            };
+          }
+        }
+      }
+    } catch {
+      // Local parcel query fallback fail-safe
+    }
   }
   for (const field of ['raw', 'plaintiff', 'defendant', 'attorney', 'deposit', 'description', 'notes', 'photoProvider']) {
     if (typeof presented[field] === 'string') presented[field] = neutralCustomerText(presented[field]);
@@ -230,6 +282,7 @@ async function handleAssessorLookup(encodedId, res) {
   return res.json({
     listingId: listing.id,
     lookedUpAt: new Date().toISOString(),
+    ...(parcel?.situsAddress ? { situsAddress: parcel.situsAddress } : {}),
     ...interpretAssessorParcel({ countyKey, parcel, openingBid: listing.openingBid }),
   });
 }
@@ -448,5 +501,6 @@ async function handleListings(req, res) {
 
 module.exports = handleListings;
 module.exports.presentListing = presentListing;
+module.exports.isLegalDescriptionAddress = isLegalDescriptionAddress;
 module.exports.applyIntelligenceView = applyIntelligenceView;
 module.exports.intelligenceScope = intelligenceScope;

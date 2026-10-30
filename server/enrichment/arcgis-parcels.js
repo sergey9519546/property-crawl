@@ -1279,6 +1279,7 @@ async function resolveCadastralParcelIdentity(rawListing = {}, options = {}) {
     rawApn: parcel.rawApn,
     canonicalApn: parcel.canonicalApn,
     parcelKey,
+    situsAddress: parcel.situsAddress || null,
     matchBasis: listing.lat !== null && listing.lat !== undefined && listing.lat !== '' && Number.isFinite(Number(listing.lat)) && listing.lng !== null && listing.lng !== undefined && listing.lng !== '' && Number.isFinite(Number(listing.lng))
       ? 'cadastral_point_in_polygon'
       : 'cadastral_apn_lookup',
