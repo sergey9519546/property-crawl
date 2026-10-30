@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Building2, MapPin, ExternalLink, Loader2, Compass } from "lucide-react";
 import { getWatchlistComps, type WatchlistCompsResponse, type WatchlistCompItem } from "@/lib/intelligence-client";
 import { sourceDisplayText } from "@/lib/source-display";
+import { bandForScore } from "@/lib/score-bands";
 
 interface NearbyCompsProps {
   listingId: string;
@@ -52,10 +53,10 @@ export function NearbyComps({
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-line bg-card p-6 shadow-sm">
         <div className="flex items-center gap-3">
-          <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-          <p className="text-xs font-medium text-slate-500">Searching active comps within 8 km...</p>
+          <Loader2 className="h-4 w-4 animate-spin text-ink-3" />
+          <p className="text-xs font-medium text-ink-3">Searching active comps within 8 km...</p>
         </div>
       </div>
     );
@@ -68,24 +69,24 @@ export function NearbyComps({
   const comps = Array.isArray(data.comps) ? data.comps : [];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+    <div className="rounded-2xl border border-line bg-card p-6 shadow-sm sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
         <div>
-          <h2 className="text-base font-bold text-slate-950 flex items-center gap-2">
-            <Compass className="h-4 w-4 text-indigo-600" />
+          <h2 className="text-base font-bold text-ink flex items-center gap-2">
+            <Compass className="h-4 w-4 text-ink-3" />
             Nearby Comparable Auctions & Filings
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-ink-3">
             Active distressed listings within 8 km with ±30% interior area matching {targetAddress || "this subject"}.
           </p>
         </div>
         {comps.length > 0 && (
           <div className="flex items-center gap-2 text-xs">
-            <span className="rounded-lg bg-indigo-50 px-2.5 py-1 font-bold text-indigo-900 border border-indigo-100">
+            <span className="rounded-lg bg-paper px-2.5 py-1 font-bold text-ink border border-line">
               {comps.length} {comps.length === 1 ? "comp" : "comps"} found
             </span>
             {data.stats.medianOpeningBid !== null && (
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
+              <span className="rounded-lg bg-line px-2.5 py-1 font-medium text-ink-2">
                 Median: {formatMoney(data.stats.medianOpeningBid)}
               </span>
             )}
@@ -94,11 +95,11 @@ export function NearbyComps({
       </div>
 
       {comps.length === 0 ? (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
-          <p className="text-xs text-slate-600">
+        <div className="mt-4 rounded-xl border border-dashed border-line bg-paper p-6 text-center">
+          <p className="text-xs text-ink-3">
             No active distressed comparables observed within an 8 km radius matching the size profile.
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[11px] text-ink-3">
             Comps update continuously as county sheriff and foreclosure dockets are ingested.
           </p>
         </div>
@@ -120,37 +121,37 @@ export function NearbyComps({
               <Link
                 key={id}
                 href={`/listings/${encodeURIComponent(id)}`}
-                className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-300 hover:bg-white hover:shadow-md"
+                className="group flex flex-col justify-between rounded-xl border border-line bg-paper p-4 transition hover:border-line-strong hover:bg-card hover:shadow-md"
               >
                 <div>
-                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                  <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
                     <span className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-slate-400" />
+                      <MapPin className="h-3 w-3 text-ink-3" />
                       {distance ? `${distance} away` : "Nearby"}
                     </span>
                     {dealScore != null && (
-                      <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
+                      <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink" style={{ color: bandForScore(dealScore)?.color }}>
                         Score {Math.round(dealScore)}
                       </span>
                     )}
                   </div>
-                  <h3 className="mt-2 text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-2">
+                  <h3 className="mt-2 text-xs font-bold text-ink group-hover:text-ink-2 transition-colors line-clamp-2">
                     {address}
                   </h3>
                   {city && state && (
-                    <p className="text-[11px] text-slate-500 mt-0.5">{city}, {state}</p>
+                    <p className="text-[11px] text-ink-3 mt-0.5">{city}, {state}</p>
                   )}
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-slate-200/60 pt-3 text-xs">
+                <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs">
                   <div>
-                    <span className="block text-[10px] text-slate-400 uppercase font-medium">Opening Amount</span>
-                    <span className="font-bold text-slate-900">{formatMoney(openingBid)}</span>
+                    <span className="block text-[10px] text-ink-3 uppercase font-medium">Opening Amount</span>
+                    <span className="font-bold text-ink">{formatMoney(openingBid)}</span>
                   </div>
                   {sqft != null && sqft > 0 && (
                     <div className="text-right">
-                      <span className="block text-[10px] text-slate-400 uppercase font-medium">Area</span>
-                      <span className="font-semibold text-slate-700">{sqft.toLocaleString()} sq ft</span>
+                      <span className="block text-[10px] text-ink-3 uppercase font-medium">Area</span>
+                      <span className="font-semibold text-ink-2">{sqft.toLocaleString()} sq ft</span>
                     </div>
                   )}
                 </div>

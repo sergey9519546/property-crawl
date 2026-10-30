@@ -1,11 +1,11 @@
 export type ListingStatusTone = "open" | "held" | "sold" | "finished" | "neutral";
 
 const TONE_CLASS: Record<ListingStatusTone, string> = {
-  open: "bg-emerald-50 text-emerald-800",
-  held: "bg-amber-100 text-amber-900",
-  sold: "bg-rose-50 text-rose-800",
-  finished: "bg-slate-200 text-slate-800",
-  neutral: "bg-slate-100 text-slate-700",
+  open: "bg-go-wash text-go",
+  held: "bg-catch-wash text-catch-ink",
+  sold: "bg-line text-ink-2",
+  finished: "bg-line text-ink-3",
+  neutral: "bg-paper text-ink-3",
 };
 
 /**

@@ -141,9 +141,9 @@ export function confidenceBandLabel(band: ConfidenceBand | undefined): string {
 
 export function confidenceBandColor(band: ConfidenceBand | undefined): string {
   switch (band) {
-    case 'high': return 'bg-emerald-100 text-emerald-900';
-    case 'medium': return 'bg-amber-100 text-amber-900';
-    case 'low': return 'bg-rose-100 text-rose-900';
-    default: return 'bg-stone-100 text-stone-600';
+    case 'high': return 'bg-line text-ink';
+    case 'medium': return 'bg-line text-ink-2';
+    case 'low': return 'bg-catch-wash text-catch-ink';
+    default: return 'bg-line text-ink-3';
   }
 }

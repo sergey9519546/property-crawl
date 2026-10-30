@@ -20,10 +20,10 @@ export type TriageChipDescriptor = {
 };
 
 const CHIP_TONE_CLASSES: Record<TriageChipTone, string> = {
-  green: "bg-emerald-50 text-emerald-800",
-  amber: "bg-amber-50 text-amber-800",
-  blue: "bg-blue-50 text-blue-800",
-  slate: "bg-slate-100 text-slate-700",
+  green: "bg-go-wash text-go",
+  amber: "bg-paper text-ink",
+  blue: "bg-paper text-ink-2",
+  slate: "bg-paper text-ink-3",
 };
 
 export function chipToneClasses(tone: TriageChipTone): string {

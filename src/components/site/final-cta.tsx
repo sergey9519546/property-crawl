@@ -29,7 +29,7 @@ export function FinalCta() {
           </a>
           <a
             href="/account"
-            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-4 text-[14px] font-semibold text-ink-2 transition-colors hover:bg-white"
+            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-4 text-[14px] font-semibold text-ink-2 transition-colors hover:bg-card"
           >
             Become a member
           </a>

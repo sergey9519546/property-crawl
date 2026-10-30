@@ -54,10 +54,10 @@ export function AssessorReading({ listingId }: { listingId: string }) {
   }, [listingId]);
 
   if (status === "loading") {
-    return <p className="mt-4 text-sm text-slate-600">Reading the county assessor layer…</p>;
+    return <p className="mt-4 text-sm text-ink-3">Reading the county assessor layer…</p>;
   }
   if (status === "error" || !reading) {
-    return <p className="mt-4 text-sm text-slate-700">Assessor lookup failed.</p>;
+    return <p className="mt-4 text-sm text-ink-2">Assessor lookup failed.</p>;
   }
 
   const host = (() => {
@@ -71,23 +71,23 @@ export function AssessorReading({ listingId }: { listingId: string }) {
   return (
     <div data-testid="assessor-reading" className="mt-5">
       <dl className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">County figure{reading.field ? ` · ${reading.field}` : ""}</dt>
-          <dd className="mt-1 text-lg font-bold text-slate-950">{money(reading.rawFigure)}</dd>
+        <div className="rounded-2xl bg-paper p-4">
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">County figure{reading.field ? ` · ${reading.field}` : ""}</dt>
+          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.rawFigure)}</dd>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Market comparison</dt>
-          <dd className="mt-1 text-lg font-bold text-slate-950">{money(reading.marketComparison)}</dd>
+        <div className="rounded-2xl bg-paper p-4">
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Market comparison</dt>
+          <dd className="mt-1 text-lg font-bold text-ink">{money(reading.marketComparison)}</dd>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">Opening ÷ comparison</dt>
-          <dd className="mt-1 text-lg font-bold text-slate-950">
+        <div className="rounded-2xl bg-paper p-4">
+          <dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Opening ÷ comparison</dt>
+          <dd className="mt-1 text-lg font-bold text-ink">
             {reading.dealScore != null ? reading.dealScore : "—"}
-            {reading.ratio != null ? <span className="ml-2 text-sm font-semibold text-slate-600">{reading.ratio.toFixed(2)}</span> : null}
+            {reading.ratio != null ? <span className="ml-2 text-sm font-semibold text-ink-3">{reading.ratio.toFixed(2)}</span> : null}
           </dd>
         </div>
       </dl>
-      <p className="mt-3 text-xs leading-relaxed text-slate-600">
+      <p className="mt-3 text-xs leading-relaxed text-ink-3">
         {reading.countyName ? `${reading.countyName}. ` : ""}
         {reading.citation || reading.withheldReason}
         {reading.apn ? ` APN ${reading.apn}.` : ""}

@@ -86,7 +86,7 @@ export function DiscoveryMap({
           const blocked = compareFullRef.current && !selected;
           const compareBtn = document.createElement("button");
           compareBtn.type = "button";
-          compareBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-900";
+          compareBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink";
           compareBtn.setAttribute("aria-pressed", selected ? "true" : "false");
           compareBtn.disabled = blocked;
           compareBtn.textContent = selected ? "In compare" : blocked ? "Compare is full" : "Compare";
@@ -100,7 +100,7 @@ export function DiscoveryMap({
           };
           const openBtn = document.createElement("button");
           openBtn.type = "button";
-          openBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white";
+          openBtn.className = "inline-flex min-h-11 items-center justify-center rounded-lg bg-ink px-3 text-xs font-semibold text-white";
           openBtn.textContent = "Open listing";
           openBtn.onclick = (click) => {
             click.stopPropagation();
@@ -139,9 +139,9 @@ export function DiscoveryMap({
   }, []);
 
   React.useEffect(() => { if (mapRef.current) void load(); }, [load]);
-  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Map results">
-    <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 text-xs"><span className="flex items-center gap-2 font-semibold"><MapPin size={15} />Viewport-based source records</span><span className="text-slate-500">{notice}</span></div>
-    {error && <p role="alert" className="m-4 flex gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-950"><AlertTriangle size={15} />{error}</p>}
-    <div ref={ref} className="h-[560px] bg-slate-100" />
+  return <section className="overflow-hidden rounded-2xl border border-line bg-card shadow-sm" aria-label="Map results">
+    <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-xs"><span className="flex items-center gap-2 font-semibold"><MapPin size={15} />Viewport-based source records</span><span className="text-ink-3">{notice}</span></div>
+    {error && <p role="alert" className="m-4 flex gap-2 rounded-lg bg-catch-wash p-3 text-xs text-catch-ink"><AlertTriangle size={15} />{error}</p>}
+    <div ref={ref} className="h-[560px] bg-paper" />
   </section>;
 }

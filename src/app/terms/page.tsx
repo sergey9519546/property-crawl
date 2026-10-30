@@ -10,31 +10,31 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <main className="mx-auto max-w-4xl px-6 py-16 text-slate-900 sm:px-8">
+    <main className="mx-auto max-w-4xl px-6 py-16 text-ink sm:px-8">
       <div className="mb-8">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-ink-3 hover:text-ink transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to home
         </Link>
       </div>
 
-      <div className="border-b border-slate-200 pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Legal & Compliance</p>
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl">
+      <div className="border-b border-line pb-8">
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Legal & Compliance</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           Terms of Service
         </h1>
-        <p className="mt-3 text-sm text-slate-500">
+        <p className="mt-3 text-sm text-ink-3">
           Last revised: October 22, 2026 · Effective immediately for all beta participants
         </p>
       </div>
 
-      <div className="mt-8 space-y-10 text-sm leading-7 text-slate-700">
+      <div className="mt-8 space-y-10 text-sm leading-7 text-ink-2">
         {/* Section 1 */}
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-950 flex items-center gap-2">
-            <Scale className="h-5 w-5 text-slate-800" />
+          <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+            <Scale className="h-5 w-5 text-ink-2" />
             1. Nature of the Service & Non-Brokerage Disclosure
           </h2>
           <p>
@@ -52,17 +52,17 @@ export default function TermsPage() {
         </section>
 
         {/* Section 2 */}
-        <section className="rounded-2xl border border-red-200 bg-red-50/50 p-6 space-y-3 text-red-950">
-          <h2 className="text-lg font-bold flex items-center gap-2 text-red-900">
-            <ShieldAlert className="h-5 w-5 text-red-700" />
-            2. Anti-Predatory Outreach & Statutory Non-Negotiables ($0 Liability Moat)
+        <section className="rounded-2xl border border-line-strong bg-paper p-6 space-y-3 text-ink">
+          <h2 className="text-lg font-bold flex items-center gap-2 text-ink">
+            <ShieldAlert className="h-5 w-5 text-ink-3" />
+            2. No outreach to owners, and the laws we follow
           </h2>
-          <p className="text-red-900 leading-relaxed">
+          <p className="text-ink-2 leading-relaxed">
             Users are <strong>strictly prohibited</strong> from utilizing any record, parcel identifier, defendant name,
             or case docket surfaced by PerfectProperty to engage in unsolicited telemarketing, automated robocalls,
             direct text messaging, or predatory homeowner outreach.
           </p>
-          <ul className="list-disc pl-5 space-y-1 text-xs text-red-900/90">
+          <ul className="list-disc pl-5 space-y-1 text-xs text-ink-2">
             <li>
               <strong>Telephone Consumer Protection Act (47 U.S.C. § 227):</strong> Unsolicited automated calls and texts
               to homeowners carry statutory penalties of $500 to $1,500 per incident. PerfectProperty does not publish
@@ -79,7 +79,7 @@ export default function TermsPage() {
 
         {/* Section 3 */}
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-950">
+          <h2 className="text-lg font-bold text-ink">
             3. Zero-Fabrication Valuation & Appraisal Disclaimer
           </h2>
           <p>
@@ -97,7 +97,7 @@ export default function TermsPage() {
 
         {/* Section 4 */}
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-950">
+          <h2 className="text-lg font-bold text-ink">
             4. Public Record Discrepancies, Postponements & Bankruptcy Stays
           </h2>
           <p>
@@ -114,7 +114,7 @@ export default function TermsPage() {
 
         {/* Section 5 */}
         <section className="space-y-3">
-          <h2 className="text-lg font-bold text-slate-950">
+          <h2 className="text-lg font-bold text-ink">
             5. Operator Access & Beta Credentials
           </h2>
           <p>
@@ -125,8 +125,8 @@ export default function TermsPage() {
         </section>
 
         {/* Section 6 */}
-        <section className="space-y-3 border-t border-slate-200 pt-6">
-          <h2 className="text-lg font-bold text-slate-950">
+        <section className="space-y-3 border-t border-line pt-6">
+          <h2 className="text-lg font-bold text-ink">
             6. Limitation of Liability
           </h2>
           <p>
@@ -138,14 +138,14 @@ export default function TermsPage() {
         </section>
       </div>
 
-      <div className="mt-12 rounded-2xl border border-slate-200 bg-slate-50 p-6 flex items-center justify-between">
+      <div className="mt-12 rounded-2xl border border-line bg-paper p-6 flex items-center justify-between">
         <div>
-          <h3 className="font-semibold text-slate-900">Questions regarding these terms?</h3>
-          <p className="text-xs text-slate-600 mt-1">Our compliance team reviews inquiries regarding public data and terms.</p>
+          <h3 className="font-semibold text-ink">Questions regarding these terms?</h3>
+          <p className="text-xs text-ink-3 mt-1">Our compliance team reviews inquiries regarding public data and terms.</p>
         </div>
         <Link
           href="/contact"
-          className="rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 transition"
+          className="rounded-lg bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
         >
           Contact Legal
         </Link>

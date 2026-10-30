@@ -219,42 +219,42 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   }), [authenticated, member, configured, expiresAt, loading, refresh, openUnlock]);
 
   return <SessionContext.Provider value={context}>
-    <div className="workspace-shell min-h-screen bg-[#F5F6F7] text-[#111827]">
-      <header className="sticky top-0 z-40 border-b border-[#E5E7EB] bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
+    <div className="workspace-shell min-h-screen bg-paper text-ink">
+      <header className="sticky top-0 z-40 border-b border-line bg-card/95 px-4 py-3 shadow-sm backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-[1480px] flex-wrap items-center gap-3">
           <Link href="/" className="mr-2 flex items-center" aria-label="PerfectProperty home"><Logo className="text-[16px]" /></Link>
           <nav aria-label="Research workspace" className="order-3 flex w-full flex-nowrap overflow-x-auto gap-1 sm:order-none sm:w-auto sm:flex-1">
             {navigation.map((item) => {
               const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const Icon = item.icon;
-              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-[#0F172A] text-white" : "text-[#374151] hover:bg-[#F3F4F6] hover:text-[#111827]")}><Icon size={14} />{item.label}</Link>;
+              return <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={cn("shrink-0 inline-flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] font-semibold transition sm:shrink-0 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-xs", active ? "bg-ink text-white" : "text-ink-2 hover:bg-line hover:text-ink")}><Icon size={14} />{item.label}</Link>;
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/" className="hidden items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-[#5B6472] hover:bg-[#F3F4F6] md:flex"><Home size={14} />Site</Link>
-            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-xl border border-[#E5E7EB] px-3 py-2 text-xs font-semibold text-[#111827] hover:bg-[#F3F4F6]"><UserRound size={14} />{member ? (member.entitled ? "Account" : "Subscribe") : "Sign in"}</Link>
-            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? "Locking…" : "Lock"}</button>
-              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1E293B]"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
+            <Link href="/" className="hidden items-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-ink-3 hover:bg-line md:flex"><Home size={14} />Site</Link>
+            <Link href={member ? "/account" : "/sign-in"} className="inline-flex items-center gap-1 rounded-xl border border-line-strong px-3 py-2 text-xs font-semibold text-ink hover:bg-line"><UserRound size={14} />{member ? (member.entitled ? "Account" : "Subscribe") : "Sign in"}</Link>
+            {authenticated ? <button type="button" disabled={submitting} onClick={() => void logout()} className="inline-flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3 py-2 text-xs font-semibold disabled:opacity-50"><LogOut size={14} />{submitting ? "Locking…" : "Lock"}</button>
+              : <button type="button" onClick={openUnlock} className="inline-flex items-center gap-1.5 rounded-xl bg-ink px-3 py-2 text-xs font-semibold text-white hover:bg-ink-2"><LockKeyhole size={14} />{loading ? "Checking…" : "Unlock"}</button>}
           </div>
         </div>
       </header>
       {authenticated && expiresAt && <p className="sr-only">Private operator session expires {new Date(expiresAt).toLocaleString()}.</p>}
-      {shellError ? <p role="alert" className="mx-auto my-3 max-w-[1440px] rounded-xl bg-amber-50 px-5 py-3 text-sm text-amber-950">{shellError}</p> : null}
+      {shellError ? <p role="alert" className="mx-auto my-3 max-w-[1440px] rounded-xl bg-catch-wash px-5 py-3 text-sm text-catch-ink">{shellError}</p> : null}
       {children}
     </div>
     <Dialog open={unlockOpen} onOpenChange={(value) => { if (!submitting) { setUnlockOpen(value); if (!value) setCredential(""); } }}>
-      <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); (unlockOpener.current || document.body).focus(); }} className="z-[100] gap-0 rounded-2xl bg-white p-6 text-slate-950 sm:max-w-md">
-        <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-900">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-slate-100"><X size={18} /></button></div>
-        <DialogDescription className="mt-3 text-sm leading-6 text-slate-600">Subscribers use hunts, alerts, the watchlist, and the portfolio with their own account.</DialogDescription>
-        <Link href={member && !member.entitled ? "/account" : "/sign-in"} onClick={() => setUnlockOpen(false)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-900 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"><UserRound size={16} />{member && !member.entitled ? "Your subscription is inactive. Manage it" : "Sign in with email"}</Link>
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Operator key</p>
-        <p className="mt-1 text-xs leading-5 text-slate-600">The shared operator key also opens research, sources, reviews, and collection controls.</p>
+      <DialogContent showCloseButton={false} onCloseAutoFocus={(event) => { event.preventDefault(); (unlockOpener.current || document.body).focus(); }} className="z-[100] gap-0 rounded-2xl bg-card p-6 text-ink sm:max-w-md">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ink">Operator access</p><DialogTitle className="mt-2 text-2xl font-semibold">Unlock operator tools</DialogTitle></div><button type="button" disabled={submitting} aria-label="Close unlock dialog" onClick={() => { setUnlockOpen(false); setCredential(""); }} className="rounded-xl p-2 hover:bg-line"><X size={18} /></button></div>
+        <DialogDescription className="mt-3 text-sm leading-6 text-ink-3">Subscribers use hunts, alerts, the watchlist, and the portfolio with their own account.</DialogDescription>
+        <Link href={member && !member.entitled ? "/account" : "/sign-in"} onClick={() => setUnlockOpen(false)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-ink px-4 py-3 text-sm font-semibold text-ink hover:bg-paper"><UserRound size={16} />{member && !member.entitled ? "Your subscription is inactive. Manage it" : "Sign in with email"}</Link>
+        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-ink-3">Operator key</p>
+        <p className="mt-1 text-xs leading-5 text-ink-3">The shared operator key also opens research, sources, reviews, and collection controls.</p>
         <form onSubmit={unlock} className="mt-5">
           <label htmlFor="workspace-credential" className="text-xs font-semibold">Operator key <span className="sr-only">(Workspace access key)</span></label>
-          <div className="mt-2 flex items-center gap-2 rounded-xl border border-slate-300 px-3"><KeyRound size={16} className="text-slate-400" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></div>
-          {!configured && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">Enter the operator key configured for this deployment.</p>}
-          {error && <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">{error}</p>}
-          <button disabled={submitting || !configured} className="mt-4 w-full rounded-xl bg-[#0F172A] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1E293B] disabled:opacity-50">{submitting ? "Unlocking…" : "Unlock workspace"}</button>
+          <div className="mt-2 flex items-center gap-2 rounded-xl border border-line-strong px-3"><KeyRound size={16} className="text-ink-3" /><input id="workspace-credential" autoFocus required disabled={submitting} type="password" autoComplete="current-password" value={credential} onChange={(event) => setCredential(event.target.value)} className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none" /></div>
+          {!configured && <p className="mt-3 rounded-lg bg-paper p-3 text-xs leading-5 text-ink-2">Enter the operator key configured for this deployment.</p>}
+          {error && <p role="alert" className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink">{error}</p>}
+          <button disabled={submitting || !configured} className="mt-4 w-full rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-50">{submitting ? "Unlocking…" : "Unlock workspace"}</button>
         </form>
       </DialogContent>
     </Dialog>
@@ -277,7 +277,7 @@ export function PrivateWorkspaceGate({ title = "Unlock your research workspace",
   // branch never renders. It is why the accessibility audit asserts h1 presence
   // in the live DOM.
   const Heading = `h${headingLevel}` as 'h1' | 'h2' | 'h3';
-  if (session.loading) return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 text-sm text-[#5B6472] shadow-sm"><Heading className="text-xl font-semibold text-[#111827]">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
+  if (session.loading) return <section className="rounded-2xl border border-line bg-card p-7 text-sm text-ink-3 shadow-sm"><Heading className="text-xl font-semibold text-ink">Checking the private workspace</Heading><p className="mt-2">Confirming your operator session…</p></section>;
   if (session.authenticated) return <>{children}</>;
-  return <section className="rounded-2xl border border-[#E5E7EB] bg-white p-7 shadow-sm"><LockKeyhole className="text-slate-900" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-[#5B6472]">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-[#0F172A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1E293B]">Unlock workspace</button></section>;
+  return <section className="rounded-2xl border border-line bg-card p-7 shadow-sm"><LockKeyhole className="text-ink" /><Heading className="mt-4 text-xl font-semibold">{title}</Heading><p className="mt-2 max-w-xl text-sm leading-6 text-ink-3">Cases and decision history are private. Unlock once to use every research and collection tool in this workspace.</p><button type="button" onClick={session.requestUnlock} className="mt-5 rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white hover:bg-ink-2">Unlock workspace</button></section>;
 }

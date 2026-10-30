@@ -7,10 +7,10 @@ type PropertyEvidenceVisualProps = {
 };
 
 const palettes = [
-  { ink: "#0f172a", field: "#f1f5f9", parcel: "#e2e8f0", accent: "#fbbf24", line: "#475569" },
-  { ink: "#14283a", field: "#dce8ec", parcel: "#bad6d9", accent: "#fbbf24", line: "#3c6172" },
-  { ink: "#0f172a", field: "#f8fafc", parcel: "#e2e8f0", accent: "#f59e0b", line: "#64748b" },
-  { ink: "#172b3d", field: "#f1f5f9", parcel: "#cbd5e1", accent: "#f2b35c", line: "#475569" },
+  { ink: "#181529", field: "#f8f4ec", parcel: "#ebe4d6", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#f8f4ec", parcel: "#d8cfbd", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#fffef9", parcel: "#ebe4d6", accent: "#ff5533", line: "#5f5c6e" },
+  { ink: "#181529", field: "#fffef9", parcel: "#d8cfbd", accent: "#ff5533", line: "#5f5c6e" },
 ] as const;
 
 function stableHash(value: string) {
@@ -99,7 +99,7 @@ export function PropertyEvidenceVisual({ listingId, address, compact = false, cl
           <path d={`M -80 ${422 + take(seed, 12, 30)} C 170 302, 366 510, 642 394 S 1002 292, 1270 390`} />
         </g>
 
-        <path d="M -90 566 L 1250 410 L 1270 498 L -70 654 Z" fill="#f5f1e7" opacity="0.16" />
+        <path d="M -90 566 L 1250 410 L 1270 498 L -70 654 Z" fill="#f8f4ec" opacity="0.16" />
         <path d="M -90 601 L 1250 445" fill="none" stroke={palette.field} strokeDasharray="20 18" strokeWidth="4" opacity="0.42" />
 
         <polygon points={parcelPolygon} fill={palette.parcel} fillOpacity="0.16" stroke={palette.accent} strokeWidth="5" strokeLinejoin="round" />
@@ -138,7 +138,7 @@ export function PropertyEvidenceVisual({ listingId, address, compact = false, cl
           <rect width="1200" height="180" fill={palette.ink} opacity="0.94" />
           <line x1="64" y1="0" x2="1136" y2="0" stroke={palette.field} strokeWidth="2" opacity="0.22" />
           <circle cx="82" cy="42" r="7" fill={palette.accent} />
-          <text x="104" y="48" fill={palette.accent} fontSize="18" fontWeight="800" letterSpacing="2">VERIFIED PHOTO PENDING</text>
+          <text x="104" y="48" fill={palette.field} fontSize="18" fontWeight="800" letterSpacing="2">VERIFIED PHOTO PENDING</text>
           <text x="1136" y="48" textAnchor="end" fill={palette.field} opacity="0.76" fontSize="14" fontWeight="700" letterSpacing="1.5">EVIDENCE CANVAS / {statusLabel?.toUpperCase() || "SOURCE MEDIA OPEN"}</text>
           <text x="64" y={lines.length > 1 ? 90 : 104} fill="#ffffff" fontSize={compact ? "25" : "29"} fontWeight="750" letterSpacing="-0.4">
             {lines.map((line, index) => <tspan key={line} x="64" dy={index === 0 ? 0 : 34}>{line}</tspan>)}

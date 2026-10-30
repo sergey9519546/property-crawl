@@ -9,7 +9,7 @@ export const metadata: Metadata = {
     "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
 };
 
-const card = "rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8";
+const card = "rounded-3xl border border-line bg-card p-6 shadow-sm sm:p-8";
 const catchCard = "rounded-2xl border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5";
 
 const steps = [
@@ -55,7 +55,7 @@ export default function ResourcesPage() {
 
       <header className="mt-8 border-b border-line pb-10">
         <p className="inline-flex items-center gap-2 rounded-full border border-[var(--catch-border)] bg-[var(--catch-bg)] px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--catch-ink)]">
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-catch" />
           Buyer&apos;s guide
         </p>
         <h1 className="mt-5 text-balance text-[34px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink sm:text-[46px]">
@@ -135,9 +135,9 @@ export default function ResourcesPage() {
                     <th className={th}>Fees and taxes</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                <tbody className="divide-y divide-line bg-card text-ink-2">
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">California (CA)</td>
+                    <td className="p-3 font-semibold text-ink">California (CA)</td>
                     <td className="p-3">Non-Judicial Trustee</td>
                     <td className="p-3">100% Cashier's Check</td>
                     <td className="p-3">45-Day SB 1079 Window</td>
@@ -145,7 +145,7 @@ export default function ResourcesPage() {
                     <td className="p-3">$1.10 per $1,000 transfer tax</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Florida (FL)</td>
+                    <td className="p-3 font-semibold text-ink">Florida (FL)</td>
                     <td className="p-3">Judicial Foreclosure</td>
                     <td className="p-3">5% Electronic Tender</td>
                     <td className="p-3">10-Day Certificate of Title</td>
@@ -153,7 +153,7 @@ export default function ResourcesPage() {
                     <td className="p-3">Fla. Stat. § 201.02 ($0.70 / $100 doc stamps) + 1.5% registry</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Georgia (GA)</td>
+                    <td className="p-3 font-semibold text-ink">Georgia (GA)</td>
                     <td className="p-3">Non-Judicial Deed of Trust</td>
                     <td className="p-3">10% Certified Deposit</td>
                     <td className="p-3">Immediate (First Tuesday)</td>
@@ -161,7 +161,7 @@ export default function ResourcesPage() {
                     <td className="p-3">$1.00 per $1,000 transfer tax</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Illinois (IL)</td>
+                    <td className="p-3 font-semibold text-ink">Illinois (IL)</td>
                     <td className="p-3">Judicial Foreclosure</td>
                     <td className="p-3">10% Certified Funds</td>
                     <td className="p-3">30-Day Confirmation Motion</td>
@@ -169,7 +169,7 @@ export default function ResourcesPage() {
                     <td className="p-3">$1.50 per $1,000 combined stamps</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">New Jersey (NJ)</td>
+                    <td className="p-3 font-semibold text-ink">New Jersey (NJ)</td>
                     <td className="p-3">Judicial Sheriff Sale</td>
                     <td className="p-3">20% Certified Knockdown</td>
                     <td className="p-3">10-Day Objection / Redemption</td>
@@ -177,7 +177,7 @@ export default function ResourcesPage() {
                     <td className="p-3">Tiered commission (2-6%) + ~1% transfer fee</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">New York (NY)</td>
+                    <td className="p-3 font-semibold text-ink">New York (NY)</td>
                     <td className="p-3">Judicial Referee Sale</td>
                     <td className="p-3">10% Certified Check</td>
                     <td className="p-3">30-Day Referee Report</td>
@@ -185,7 +185,7 @@ export default function ResourcesPage() {
                     <td className="p-3">$4.00 per $1,000 state transfer tax</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">North Carolina (NC)</td>
+                    <td className="p-3 font-semibold text-ink">North Carolina (NC)</td>
                     <td className="p-3">Non-Judicial Trustee</td>
                     <td className="p-3">5% Minimum ($750 floor)</td>
                     <td className="p-3">10-Day Rolling Upset Bid</td>
@@ -193,7 +193,7 @@ export default function ResourcesPage() {
                     <td className="p-3">$2.00 per $1,000 excise tax</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Ohio (OH)</td>
+                    <td className="p-3 font-semibold text-ink">Ohio (OH)</td>
                     <td className="p-3">Judicial Sheriff Sale</td>
                     <td className="p-3">10% Certified Deposit</td>
                     <td className="p-3">30-Day Confirmation Entry</td>
@@ -201,7 +201,7 @@ export default function ResourcesPage() {
                     <td className="p-3">1.5% sheriff poundage + $4/k conveyance</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Pennsylvania (PA)</td>
+                    <td className="p-3 font-semibold text-ink">Pennsylvania (PA)</td>
                     <td className="p-3">Judicial Sheriff Sale</td>
                     <td className="p-3">10% Day-of Certified</td>
                     <td className="p-3">30-Day Schedule of Distribution</td>
@@ -209,7 +209,7 @@ export default function ResourcesPage() {
                     <td className="p-3">2% realty transfer tax + 2% poundage</td>
                   </tr>
                   <tr>
-                    <td className="p-3 font-semibold text-slate-950">Texas (TX)</td>
+                    <td className="p-3 font-semibold text-ink">Texas (TX)</td>
                     <td className="p-3">Non-Judicial Trustee / Tax</td>
                     <td className="p-3">100% Cash / Cashier's Check</td>
                     <td className="p-3">Immediate (First Tuesday)</td>
@@ -250,7 +250,7 @@ export default function ResourcesPage() {
             <ul className={`${card} space-y-3`}>
               {checklist.map((item) => (
                 <li key={item} className="flex gap-3 text-sm leading-relaxed text-ink-2">
-                  <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-line-strong bg-white" />
+                  <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-line-strong bg-card" />
                   {item}
                 </li>
               ))}
@@ -259,13 +259,13 @@ export default function ResourcesPage() {
 
           {/* 5. Next step */}
           <div className="rounded-3xl bg-ink p-8 text-white sm:p-10">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-emerald-300">Step 5</p>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/60">Step 5</p>
             <h2 className="mt-3 text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[34px]">Find a sale and read its catch</h2>
-            <p className="mt-3 max-w-[560px] text-[16px] leading-relaxed text-slate-300">
+            <p className="mt-3 max-w-[560px] text-[16px] leading-relaxed text-white/75">
               Search is free. Every listing shows the catch first. Members can add hunts with email alerts.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/listings" className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-ink transition hover:bg-slate-100">
+              <Link href="/listings" className="rounded-xl bg-card px-5 py-3 text-sm font-semibold text-ink transition hover:bg-paper">
                 Search listings
               </Link>
               <Link href="/states" className="rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
@@ -280,17 +280,16 @@ export default function ResourcesPage() {
           <SectionHeading eyebrow="Changelog" title="What's new" align="left" />
           <div className="space-y-4">
             <div className={`${card} space-y-3`}>
-              <span className="inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-800">October 2026</span>
+              <span className="inline-block rounded-full bg-line px-3 py-1 text-xs font-bold text-ink-2">October 2026</span>
               <h3 className="text-base font-semibold text-ink">Clearer listings</h3>
               <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2">
                 <li>Listings that don&apos;t publish a value no longer get a made-up one.</li>
               </ul>
             </div>
             <div className={`${card} space-y-3`}>
-              <span className="inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800">September 2026</span>
-              <h3 className="text-base font-semibold text-ink">Public legal notices and risk checks</h3>
+              <span className="inline-block rounded-full bg-line px-3 py-1 text-xs font-bold text-ink-2">September 2026</span>
+              <h3 className="text-base font-semibold text-ink">Risk checks</h3>
               <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-ink-2">
-                <li>Added public legal notices from several states as a source.</li>
                 <li>Added a check for senior mortgages and city liens that can stay with the property.</li>
               </ul>
             </div>
@@ -302,7 +301,7 @@ export default function ResourcesPage() {
         <Link href="/listings" className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink-2">
           Browse listings
         </Link>
-        <Link href="/contact" className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
+        <Link href="/contact" className="rounded-xl border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 transition hover:bg-paper">
           Send us feedback
         </Link>
       </div>

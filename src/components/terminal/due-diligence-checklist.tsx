@@ -102,9 +102,9 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       statutoryRule: "Common law lien priority: Foreclosure of a junior deed (2nd mortgage, HELOC, or HOA) leaves senior 1st mortgage in full effect against purchaser.",
       detectedFinding: isSeniorLienRisk
         ? `FLAGGED: Junior lien signals detected (${listing.seniorLienWarning || "Possible subordinate mortgage"}). Senior mortgage may survive!`
-        : "Standard First Mortgage Foreclosure: Noticed senior mortgage foreclosure extinguishes subordinate liens.",
+        : "No junior-lien wording found in the notice. That alone does not prove this sale wipes out other liens.",
       actionRequired: "Examine County Recorder grantor/grantee index and Title Commitment Schedule B to verify deed recording date and priority position.",
-      defaultStatus: isSeniorLienRisk ? "flagged" : "verified",
+      defaultStatus: isSeniorLienRisk ? "flagged" : "pending",
     },
     {
       id: "check-2-ad-valorem-taxes",
@@ -122,9 +122,9 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       statutoryRule: "26 U.S.C. § 7425(d): If a federal tax lien is divested by foreclosure, the United States holds a 120-day post-sale right of redemption.",
       detectedFinding: hasIrsNoticeFlag
         ? `IRS FEDERAL TAX LIEN DETECTED: 120-day redemption window locks title until ${deadlines.irsRedemptionDeadline || "120 days post-sale"}. Modeled carry: ${displayMoney(deadlines.estimatedCarryCost)}.`
-        : "No IRS Notice Phrase: No federal tax lien citations identified in published legal notice.",
+        : "No federal tax lien is mentioned in the published notice. A recorded lien can still exist.",
       actionRequired: "Check County Recorder judgment docket for recorded Federal Tax Liens against the defendant/borrower.",
-      defaultStatus: hasIrsNoticeFlag ? "flagged" : "verified",
+      defaultStatus: hasIrsNoticeFlag ? "flagged" : "pending",
     },
     {
       id: "check-4-statutory-redemption",
@@ -133,7 +133,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       statutoryRule: `${deadlines.objectionLabel || "State confirmation/objection window"}. Debtor statutory redemption or upset bid rights prevent immediate title vesting.`,
       detectedFinding: `${deadlines.effectiveLockupDays}-day statutory holding lockup. Capital is frozen during this period. Modeled capital carry: ${displayMoney(deadlines.estimatedCarryCost)}.`,
       actionRequired: "Confirm with clerk of court whether debtor has filed an objection, bankruptcy, or intent to upset bid.",
-      defaultStatus: deadlines.effectiveLockupDays > 0 ? "flagged" : "verified",
+      defaultStatus: deadlines.effectiveLockupDays > 0 ? "flagged" : "pending",
     },
     {
       id: "check-5-bankruptcy-stay",
@@ -218,27 +218,27 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   return (
     <section
       id="due-diligence-binder"
-      className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 print:border-none print:p-0 print:shadow-none ${className}`}
+      className={`rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-6 print:border-none print:p-0 print:shadow-none ${className}`}
       aria-labelledby="due-diligence-heading"
     >
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-5">
         <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-slate-900 p-2 text-white">
+          <div className="rounded-xl bg-ink p-2 text-white">
             <Scale className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded bg-sky-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-700 border border-sky-200">
+              <span className="rounded bg-paper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-2 border border-line">
                 Courthouse Underwriting Binder
               </span>
-              <span className="text-xs text-slate-400">·</span>
-              <span className="text-xs text-slate-500 font-medium">7 Deal-Killer Audit Matrix</span>
+              <span className="text-xs text-ink-3">·</span>
+              <span className="text-xs text-ink-3 font-medium">7 Deal-Killer Audit Matrix</span>
             </div>
-            <h2 id="due-diligence-heading" className="mt-1 text-xl font-bold tracking-tight text-slate-950">
+            <h2 id="due-diligence-heading" className="mt-1 text-xl font-bold tracking-tight text-ink">
               Statutory Due Diligence & Lien Waterfall
             </h2>
-            <p className="mt-0.5 text-xs text-slate-600">
+            <p className="mt-0.5 text-xs text-ink-3">
               Automated legal risk elimination before tendering cashier&apos;s checks at courthouse auction.
             </p>
           </div>
@@ -248,9 +248,9 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
           <button
             onClick={() => window.print()}
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-950"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper hover:text-ink"
           >
-            <Printer className="h-3.5 w-3.5 text-slate-600" />
+            <Printer className="h-3.5 w-3.5 text-ink-3" />
             Print Bidding Binder
           </button>
         </div>
@@ -258,27 +258,27 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
       {/* Triage Status Pills */}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs sm:gap-4">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
-          <span className="text-[11px] font-semibold text-emerald-800">Clear / Verified</span>
-          <p className="mt-0.5 text-lg font-black text-emerald-950">{verifiedCount} of 7</p>
+        <div className="rounded-xl border border-go/30 bg-go-wash p-3">
+          <span className="text-[11px] font-semibold text-go">Clear / Verified</span>
+          <p className="mt-0.5 text-lg font-black text-ink">{verifiedCount} of 7</p>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-          <span className="text-[11px] font-semibold text-amber-800">Flagged Risk Items</span>
-          <p className="mt-0.5 text-lg font-black text-amber-950">{flaggedCount}</p>
+        <div className="rounded-xl border border-catch/30 bg-catch-wash p-3">
+          <span className="text-[11px] font-semibold text-catch-ink">Flagged Risk Items</span>
+          <p className="mt-0.5 text-lg font-black text-ink">{flaggedCount}</p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <span className="text-[11px] font-semibold text-slate-600">Pending Verification</span>
-          <p className="mt-0.5 text-lg font-black text-slate-950">{pendingCount}</p>
+        <div className="rounded-xl border border-line bg-paper p-3">
+          <span className="text-[11px] font-semibold text-ink-3">Pending Verification</span>
+          <p className="mt-0.5 text-lg font-black text-ink">{pendingCount}</p>
         </div>
       </div>
 
       {/* Critical Foreclosure Trap Banner */}
       {isSeniorLienRisk && (
-        <div className="mt-5 rounded-xl border border-rose-300 bg-rose-50 p-4 text-rose-950">
+        <div className="mt-5 rounded-xl border border-catch/30 bg-catch-wash p-4 text-ink">
           <div className="flex items-start gap-3">
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" />
             <div className="space-y-1 text-xs">
-              <h3 className="font-bold text-sm text-rose-900">
+              <h3 className="font-bold text-sm text-catch-ink">
                 CRITICAL WARNING: Junior Mortgage / HOA Foreclosure Signal
               </h3>
               <p className="leading-relaxed">
@@ -286,7 +286,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 {listing.seniorLienWarning || "junior deed or assessment"}). Under state foreclosure law, the senior first mortgage
                 does NOT wipe out; it survives against the auction winner!
               </p>
-              <p className="font-semibold text-rose-950">
+              <p className="font-semibold text-ink">
                 Do not bid based on opening bid alone. Simulate the surviving senior mortgage below.
               </p>
             </div>
@@ -296,29 +296,29 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
       {/* 7 Deal-Killer Checklist */}
       <div className="mt-6 space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3">
           The 7 Statutory Deal-Killer Checkpoints
         </h3>
-        <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white shadow-xs">
+        <div className="divide-y divide-line rounded-xl border border-line bg-card shadow-xs">
           {initialItems.map((item) => {
             const status = itemStatuses[item.id] || item.defaultStatus;
             return (
-              <div key={item.id} className="p-4 transition hover:bg-slate-50/50">
+              <div key={item.id} className="p-4 transition hover:bg-paper/50">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1 flex-1 min-w-[240px]">
                     <div className="flex items-center gap-2">
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                      <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink-3">
                         {item.category}
                       </span>
-                      <h4 className="text-sm font-bold text-slate-950">{item.title}</h4>
+                      <h4 className="text-sm font-bold text-ink">{item.title}</h4>
                     </div>
-                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                    <p className="text-xs text-ink-3 leading-relaxed font-medium">
                       {item.detectedFinding}
                     </p>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                    <p className="text-[11px] text-ink-3 leading-relaxed">
                       <strong>Statutory Basis:</strong> {item.statutoryRule}
                     </p>
-                    <p className="text-[11px] text-sky-900 font-semibold leading-relaxed">
+                    <p className="text-[11px] text-ink font-semibold leading-relaxed">
                       <strong>Action:</strong> {item.actionRequired}
                     </p>
                   </div>
@@ -330,8 +330,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                       onClick={() => setStatus(item.id, "verified")}
                       className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                         status === "verified"
-                          ? "bg-emerald-600 text-white shadow-xs"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-emerald-50 hover:text-emerald-800"
+                          ? "bg-go text-white shadow-xs"
+                          : "border border-line bg-card text-ink-3 hover:bg-go-wash hover:text-go"
                       }`}
                     >
                       ✓ Verified
@@ -341,8 +341,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                       onClick={() => setStatus(item.id, "flagged")}
                       className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                         status === "flagged"
-                          ? "bg-amber-600 text-white shadow-xs"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-amber-50 hover:text-amber-800"
+                          ? "bg-catch text-ink shadow-xs"
+                          : "border border-line bg-card text-ink-3 hover:bg-catch-wash hover:text-catch-ink"
                       }`}
                     >
                       ⚠ Risk Flag
@@ -352,8 +352,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                       onClick={() => setStatus(item.id, "pending")}
                       className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                         status === "pending"
-                          ? "bg-slate-700 text-white shadow-xs"
-                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                          ? "bg-ink-2 text-white shadow-xs"
+                          : "border border-line bg-card text-ink-3 hover:bg-paper"
                       }`}
                     >
                       Pending
@@ -372,18 +372,18 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
       </div>
 
       {/* Interactive Lien Waterfall & Surplus Simulator */}
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+      <div className="mt-8 rounded-2xl border border-line bg-paper p-5 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
           <div className="flex items-center gap-2">
-            <Landmark className="h-4 w-4 text-slate-800" />
-            <h3 className="text-sm font-bold text-slate-950">
+            <Landmark className="h-4 w-4 text-ink-2" />
+            <h3 className="text-sm font-bold text-ink">
               Interactive Lien Waterfall & Surplus Proceeds Simulator
             </h3>
           </div>
           <button
             type="button"
             onClick={() => setShowWaterfallDetails(!showWaterfallDetails)}
-            className="flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-950"
+            className="flex items-center gap-1 text-xs font-semibold text-ink-3 hover:text-ink"
           >
             {showWaterfallDetails ? "Collapse Controls" : "Adjust Lien Assumptions"}
             {showWaterfallDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -392,7 +392,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
         {/* Inputs */}
         {showWaterfallDetails && (
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs font-medium text-slate-700">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs font-medium text-ink-2">
             <label className="space-y-1">
               <span>Simulated Winning Bid ($)</span>
               <input
@@ -401,7 +401,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 step="1000"
                 value={waterfallBid}
                 onChange={(e) => setWaterfallBid(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
+                className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               />
             </label>
             <label className="space-y-1">
@@ -409,7 +409,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
               <select
                 value={waterfallLienType}
                 onChange={(e) => setWaterfallLienType(e.target.value as any)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
+                className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               >
                 <option value="first_mortgage">1st Mortgage (Senior Deed)</option>
                 <option value="second_mortgage">2nd Mortgage (Subordinate)</option>
@@ -427,7 +427,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 value={waterfallSeniorMtg}
                 onChange={(e) => setWaterfallSeniorMtg(e.target.value)}
                 placeholder="0 if 1st mtg foreclosing"
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
+                className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               />
             </label>
             <label className="space-y-1">
@@ -438,7 +438,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 step="500"
                 value={waterfallTaxes}
                 onChange={(e) => setWaterfallTaxes(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-950 shadow-xs focus:border-slate-900 focus:outline-hidden"
+                className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               />
             </label>
           </div>
@@ -446,36 +446,34 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
         {/* Waterfall Calculation Summary Cards */}
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500">Your Winning Bid</span>
-            <p className="mt-0.5 text-lg font-black text-slate-950">{hasBid ? displayMoney(bidAmount) : "Enter a bid"}</p>
-            <span className="text-[10px] text-slate-500">Knock-down price at auction</span>
+          <div className="rounded-xl border border-line bg-card p-3 shadow-xs">
+            <span className="text-[11px] font-semibold text-ink-3">Your Winning Bid</span>
+            <p className="mt-0.5 text-lg font-black text-yours">{hasBid ? displayMoney(bidAmount) : "Enter a bid"}</p>
+            <span className="text-[10px] text-ink-3">Knock-down price at auction</span>
           </div>
 
           <div
             className={`rounded-xl border p-3 shadow-xs ${
               waterfallResult.totalSurvivingDebtOnProperty > 0
-                ? "border-rose-200 bg-rose-50"
-                : "border-emerald-200 bg-emerald-50"
+                ? "border-catch/30 bg-catch-wash"
+                : "border-line bg-paper"
             }`}
           >
             <span
               className={`text-[11px] font-semibold ${
-                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-rose-800" : "text-emerald-800"
+                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-catch-ink" : "text-ink-3"
               }`}
             >
               Surviving Priority Debt
             </span>
             <p
-              className={`mt-0.5 text-lg font-black ${
-                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-rose-950" : "text-emerald-950"
-              }`}
+              className="mt-0.5 text-lg font-black text-yours"
             >
               {hasBid ? displayMoney(waterfallResult.totalSurvivingDebtOnProperty) : "—"}
             </p>
             <span
               className={`text-[10px] ${
-                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-rose-700" : "text-emerald-700"
+                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-catch-ink" : "text-ink-3"
               }`}
             >
               {!hasBid
@@ -486,12 +484,12 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
             </span>
           </div>
 
-          <div className="rounded-xl border border-slate-900 bg-slate-900 p-3 text-white shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-300">True Effective Cost</span>
-            <p className="mt-0.5 text-lg font-black text-emerald-400">
+          <div className="on-ink rounded-xl border border-ink bg-ink p-3 text-white shadow-xs">
+            <span className="text-[11px] font-semibold text-white/75">True Effective Cost</span>
+            <p className="mt-0.5 text-lg font-black ev-yours">
               {hasBid ? displayMoney(waterfallResult.totalEffectiveAcquisitionCost) : "—"}
             </p>
-            <span className="text-[10px] text-slate-400">Bid + surviving mortgages & taxes</span>
+            <span className="text-[10px] text-white/60">Bid + surviving mortgages & taxes</span>
           </div>
         </div>
 
@@ -499,7 +497,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-500">
+              <tr className="border-b border-line text-ink-3">
                 <th className="py-2 pr-3 font-semibold">Priority Tier</th>
                 <th className="py-2 pr-3 font-semibold">Lienholder / Instrument</th>
                 <th className="py-2 pr-3 font-semibold text-right">Lien Amount</th>
@@ -507,29 +505,29 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 <th className="py-2 font-semibold text-right">Surviving Debt</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-medium">
+            <tbody className="divide-y divide-line font-medium">
               {(hasBid ? waterfallResult.items : []).map((item) => (
-                <tr key={item.id} className="text-slate-800">
+                <tr key={item.id} className="text-ink-2">
                   <td className="py-2 pr-3">
-                    <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-800">
+                    <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">
                       #{item.seniority}
                     </span>
                   </td>
-                  <td className="py-2 pr-3 font-semibold text-slate-950">
+                  <td className="py-2 pr-3 font-semibold text-ink">
                     {item.name}
                     {item.isForeclosingLien && (
-                      <span className="ml-1.5 rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800">
+                      <span className="ml-1.5 rounded bg-yours-wash px-1 py-0.2 text-[9px] font-bold text-yours">
                         Foreclosing
                       </span>
                     )}
                   </td>
                   <td className="py-2 pr-3 text-right">{displayMoney(item.amount)}</td>
-                  <td className="py-2 pr-3 text-right font-semibold text-emerald-700">
+                  <td className="py-2 pr-3 text-right font-semibold text-yours">
                     {displayMoney(item.amountPaidFromProceeds)}
                   </td>
                   <td
                     className={`py-2 text-right font-bold ${
-                      item.remainingBalanceAgainstProperty > 0 ? "text-rose-600" : "text-slate-400"
+                      item.remainingBalanceAgainstProperty > 0 ? "text-catch-ink" : "text-ink-3"
                     }`}
                   >
                     {item.remainingBalanceAgainstProperty > 0
@@ -539,22 +537,22 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 </tr>
               ))}
               {hasBid && waterfallResult.surplusProceedsToBorrower > 0 && (
-                <tr className="bg-sky-50/60 font-semibold text-sky-950">
-                  <td className="py-2 pr-3 text-[10px] uppercase font-bold text-sky-800">Surplus</td>
+                <tr className="bg-card font-semibold text-ink">
+                  <td className="py-2 pr-3 text-[10px] uppercase font-bold text-ink-2">Surplus</td>
                   <td className="py-2 pr-3" colSpan={2}>
                     Debtor / Mortgagor Surplus Proceeds
                   </td>
-                  <td className="py-2 pr-3 text-right text-emerald-700">
+                  <td className="py-2 pr-3 text-right text-yours">
                     {displayMoney(waterfallResult.surplusProceedsToBorrower)}
                   </td>
-                  <td className="py-2 text-right text-slate-400">—</td>
+                  <td className="py-2 text-right text-ink-3">—</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
 
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-600 font-medium">
+        <p className="mt-3 text-[11px] leading-relaxed text-ink-3 font-medium">
           {hasBid ? waterfallResult.summary : "Enter a simulated winning bid and any lien amounts you have verified to run the waterfall."}
         </p>
       </div>

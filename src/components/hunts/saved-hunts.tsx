@@ -128,7 +128,7 @@ const discoveryFilterLabels: Record<string, string> = {
   seniorLien: "Senior lien", redemption: "Redemption",
 };
 const inputClass =
-  "w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2.5 text-sm outline-slate-900";
+  "w-full rounded-lg border border-line-strong bg-card px-3 py-2.5 text-sm outline-ink";
 const huntTemplates: {
   name: string;
   description: string;
@@ -309,9 +309,9 @@ export function SavedHunts() {
     ) || [];
 
   return (
-    <main className="min-h-screen bg-[#F5F6F7] text-[#0F172A]">
+    <main className="min-h-screen bg-paper text-ink">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-10">
-        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-3">
           <Crosshair size={17} /> Saved Hunts
         </p>
         <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight sm:text-6xl">
@@ -319,15 +319,15 @@ export function SavedHunts() {
           <br />
           The evidence that fits.
         </h1>
-        <p className="mt-5 max-w-2xl text-base leading-7 text-[#5B6472]">
+        <p className="mt-5 max-w-2xl text-base leading-7 text-ink-3">
           Save what you are looking for. Run it against collected property
           records. See why each property matches, what remains unknown, and what
           changed since your last run.
         </p>
-        <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-[#E5E7EB] bg-white p-5">
+        <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-line bg-card p-5">
           <div>
             <p className="text-sm font-semibold">{session.member?.entitled && !session.authenticated ? `Your hunts · ${session.member.email}` : "Hunts"}</p>
-            <p className="mt-1 text-xs leading-5 text-[#5B6472]">
+            <p className="mt-1 text-xs leading-5 text-ink-3">
               {session.memberTools
                 ? "Hunts re-run after every collection and email you when a match appears or changes."
                 : session.member
@@ -346,14 +346,14 @@ export function SavedHunts() {
                   setMessage("Saved hunts refreshed.");
                 })
               }
-              className="shrink-0 rounded-lg border border-[#E5E7EB] px-4 py-2 text-xs font-semibold"
+              className="shrink-0 rounded-lg border border-line-strong px-4 py-2 text-xs font-semibold"
             >
               Refresh hunts
             </button>
           ) : (
             <button
               onClick={session.requestUnlock}
-              className="shrink-0 rounded-lg bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white"
+              className="shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"
             >
               Unlock
             </button>
@@ -362,7 +362,7 @@ export function SavedHunts() {
         {error && (
           <p
             role="alert"
-            className="mt-5 rounded-xl bg-amber-100 p-4 text-sm text-amber-950"
+            className="mt-5 rounded-xl bg-catch-wash p-4 text-sm text-catch-ink"
           >
             {error}
           </p>
@@ -375,19 +375,19 @@ export function SavedHunts() {
         )}
         {connected && (
           <section
-            className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5"
+            className="mt-6 rounded-2xl border border-line bg-paper p-5"
             aria-label="Hunt change inbox"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-800">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-2">
                   Change inbox
                 </p>
                 <h2 className="mt-1 text-lg font-semibold">
                   Material changes from saved hunts
                 </h2>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-900">
+              <span className="rounded-full bg-card px-3 py-1 text-xs font-bold text-ink">
                 {inbox.length} events
               </span>
             </div>
@@ -397,23 +397,23 @@ export function SavedHunts() {
                   <Link
                     key={event.id}
                     href={`/listings/${encodeURIComponent(event.listingId)}`}
-                    className="rounded-xl border border-slate-200 bg-white p-3 text-sm hover:border-slate-400"
+                    className="rounded-xl border border-line bg-card p-3 text-sm hover:border-ink-3"
                   >
                     <strong className="block">
                       {sourceDisplayText(event.address || event.listingId)}
                     </strong>
-                    <span className="mt-1 block text-xs text-slate-500">
+                    <span className="mt-1 block text-xs text-ink-3">
                       {event.huntName} · {event.type.replaceAll("_", " ")} ·{" "}
                       {new Date(event.observedAt).toLocaleString()}
                     </span>
-                    <span className="mt-2 block text-xs text-slate-700">
+                    <span className="mt-2 block text-xs text-ink-2">
                       {sourceDisplayText(event.message)}
                     </span>
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-sm text-slate-600">
+              <p className="mt-3 text-sm text-ink-3">
                 No durable hunt events yet. A first run establishes a baseline;
                 later source observations can create explainable changes.
               </p>
@@ -421,13 +421,13 @@ export function SavedHunts() {
           </section>
         )}
         {connected && (
-          <section className="mt-7 rounded-2xl border border-[#E5E7EB] bg-white p-5">
+          <section className="mt-7 rounded-2xl border border-line bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">
                   Start with a hunt that has a job
                 </h2>
-                <p className="mt-1 text-xs leading-5 text-[#5B6472]">
+                <p className="mt-1 text-xs leading-5 text-ink-3">
                   Load a template into the same editable criteria builder used
                   by every saved hunt.
                 </p>
@@ -455,14 +455,14 @@ export function SavedHunts() {
                         : "No supported criteria were found. Review the missing data dependency.",
                     );
                   }}
-                  className="shrink-0 rounded-lg bg-[#0F172A] px-4 py-2 text-xs font-semibold text-white"
+                  className="shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-white"
                 >
                   Draft criteria
                 </button>
               </div>
             </div>
             {missingDependencies.length > 0 && (
-              <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+              <p className="mt-3 rounded-lg bg-catch-wash p-3 text-xs leading-5 text-catch-ink">
                 Missing data: {missingDependencies.join("; ")}. These requests
                 remain unsupported until that evidence is connected.
               </p>
@@ -481,12 +481,12 @@ export function SavedHunts() {
                       `${template.name} loaded. Edit the criteria, then save it.`,
                     );
                   }}
-                  className="rounded-xl border border-[#E5E7EB] p-3 text-left hover:border-slate-900"
+                  className="rounded-xl border border-line p-3 text-left hover:border-ink"
                 >
                   <span className="block text-xs font-semibold">
                     {template.name}
                   </span>
-                  <span className="mt-1 block text-[10px] leading-4 text-[#5B6472]">
+                  <span className="mt-1 block text-[10px] leading-4 text-ink-3">
                     {template.description}
                   </span>
                 </button>
@@ -498,7 +498,7 @@ export function SavedHunts() {
           <div className="mt-8 grid items-start gap-6 lg:grid-cols-[340px_1fr]">
             <aside className="space-y-6">
               <form
-                className="rounded-2xl border border-[#E5E7EB] bg-white p-5"
+                className="rounded-2xl border border-line bg-card p-5"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void run(async () => {
@@ -537,7 +537,7 @@ export function SavedHunts() {
                   />
                 </label>
                 <label className="mt-4 block text-xs font-semibold">
-                  Email alerts <span className="text-[10px] font-normal text-slate-500">(Sent when a later run finds a new match or a changed fact.)</span>
+                  Email alerts <span className="text-[10px] font-normal text-ink-3">(Sent when a later run finds a new match or a changed fact.)</span>
                   <input
                     type="email"
                     placeholder="you@example.com"
@@ -548,7 +548,7 @@ export function SavedHunts() {
                   />
                 </label>
                 <label className="mt-4 block text-xs font-semibold">
-                  Webhook URL <span className="text-[10px] font-normal text-slate-500">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
+                  Webhook URL <span className="text-[10px] font-normal text-ink-3">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
                   <input
                     type="url"
                     placeholder="https://example.com/api/webhooks/property-alerts"
@@ -579,7 +579,7 @@ export function SavedHunts() {
                     return (
                       <fieldset
                         key={index}
-                        className="space-y-2 rounded-xl border border-[#E5E7EB] p-3"
+                        className="space-y-2 rounded-xl border border-line p-3"
                       >
                         <legend className="px-1 text-[10px] font-semibold">
                           Criterion {index + 1}
@@ -675,13 +675,13 @@ export function SavedHunts() {
                 >
                   <Plus size={14} /> Add criterion
                 </button>
-                <p className="mt-4 text-xs leading-5 text-[#5B6472]">
+                <p className="mt-4 text-xs leading-5 text-ink-3">
                   Missing facts stay unknown. Only source-observed records enter
                   the hunt; a missing record never means sold.
                 </p>
                 <button
                   disabled={busy}
-                  className="mt-5 w-full rounded-lg bg-[#0F172A] px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
+                  className="mt-5 w-full rounded-lg bg-ink px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   Save hunt
                 </button>
@@ -696,19 +696,19 @@ export function SavedHunts() {
                       key={hunt.id}
                       disabled={busy}
                       onClick={() => void run(() => openHunt(hunt))}
-                      className={`w-full rounded-xl border p-4 text-left ${selected?.id === hunt.id ? "border-[#0F172A] bg-slate-100" : "border-[#E5E7EB] bg-white"}`}
+                      className={`w-full rounded-xl border p-4 text-left ${selected?.id === hunt.id ? "border-ink bg-paper" : "border-line bg-card"}`}
                     >
                       <span className="block text-sm font-semibold">
                         {hunt.name}
                       </span>
-                      <span className="mt-1 block text-xs text-[#5B6472]">
+                      <span className="mt-1 block text-xs text-ink-3">
                         Version {hunt.version} ·{" "}
                         {hunt.enabled ? "Enabled" : "Paused"}
                       </span>
                     </button>
                   ))}
                   {!hunts.length && (
-                    <p className="text-sm text-[#5B6472]">
+                    <p className="text-sm text-ink-3">
                       Your first hunt starts above.
                     </p>
                   )}
@@ -718,32 +718,32 @@ export function SavedHunts() {
             <section
               ref={selectedSectionRef}
               tabIndex={-1}
-              className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"
+              className="rounded-2xl border border-line bg-card p-5 sm:p-7"
               aria-label="Hunt evidence"
             >
               {selected ? (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-900">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-ink">
                         Evidence search · Version {selected.version}
                       </p>
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
                       </h2>
                       {selected.notifyEmail && (
-                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-emerald-700">
-                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-900">Email</span>
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-2">
+                          <span className="rounded bg-go-wash px-1.5 py-0.5 font-semibold text-go">Email</span>
                           <span className="truncate max-w-sm">{selected.notifyEmail}</span>
                         </p>
                       )}
                       {selected.webhookUrl && (
-                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-indigo-700">
-                          <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-semibold text-indigo-900">Webhook</span>
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-2">
+                          <span className="rounded bg-go-wash px-1.5 py-0.5 font-semibold text-go">Webhook</span>
                           <span className="truncate max-w-sm">{selected.webhookUrl}</span>
                         </p>
                       )}
-                      <p className="mt-2 text-xs text-[#5B6472]">
+                      <p className="mt-2 text-xs text-ink-3">
                         {"discoveryFilters" in selected.criteria
                           ? "Matches the filters saved from Discover."
                           : `${selected.criteria.mode === "all" ? "Every" : "Any"} criterion must match.`}
@@ -783,7 +783,7 @@ export function SavedHunts() {
                           setMessage(`${base}${delivery}${mailNote}`);
                         })
                       }
-                      className="flex items-center gap-2 rounded-lg bg-[#0F172A] px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
+                      className="flex items-center gap-2 rounded-lg bg-ink px-4 py-3 text-xs font-semibold text-white disabled:opacity-50"
                     >
                       {busy ? (
                         <Loader2 size={15} className="animate-spin" />
@@ -796,14 +796,14 @@ export function SavedHunts() {
                   <div className="mt-5 flex flex-wrap gap-2">
                     {"discoveryFilters" in selected.criteria
                       ? Object.entries(selected.criteria.discoveryFilters ?? {}).map(([key, value]) => (
-                        <span key={key} className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]">
+                        <span key={key} className="rounded-full bg-line px-3 py-1.5 text-[11px]">
                           {discoveryFilterLabels[key] || key.replaceAll("_", " ")}: {value === "unknown" ? "Unknown" : display(value)}
                         </span>
                       ))
                       : selected.criteria.rules.map((rule, index) => (
                       <span
                         key={index}
-                        className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]"
+                        className="rounded-full bg-line px-3 py-1.5 text-[11px]"
                       >
                         {label(rule.field)} {rule.operator.replaceAll("_", " ")}{" "}
                         {!["known", "unknown"].includes(rule.operator) &&
@@ -811,7 +811,7 @@ export function SavedHunts() {
                       </span>
                     ))}
                     {"discoveryFilters" in selected.criteria && !Object.keys(selected.criteria.discoveryFilters ?? {}).length && (
-                      <span className="rounded-full bg-[#F1F5F9] px-3 py-1.5 text-[11px]">All discovered properties</span>
+                      <span className="rounded-full bg-line px-3 py-1.5 text-[11px]">All discovered properties</span>
                     )}
                   </div>
                   <button
@@ -833,7 +833,7 @@ export function SavedHunts() {
                   >
                     {selected.enabled ? "Pause this hunt" : "Enable this hunt"}
                   </button>
-                  <p className="mt-3 text-xs leading-5 text-[#5B6472]">
+                  <p className="mt-3 text-xs leading-5 text-ink-3">
                     Enabled searches are also checked as new source collections finish.
                   </p>
                   {evaluation ? (
@@ -846,18 +846,18 @@ export function SavedHunts() {
                         ].map(([key, title]) => (
                           <div
                             key={key}
-                            className="rounded-xl bg-[#F5F6F7] p-4"
+                            className="rounded-xl bg-paper p-4"
                           >
                             <p className="text-2xl font-semibold">
                               {evaluation.counts[key] || 0}
                             </p>
-                            <p className="mt-1 text-[11px] text-[#5B6472]">
+                            <p className="mt-1 text-[11px] text-ink-3">
                               {title}
                             </p>
                           </div>
                         ))}
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-[#5B6472]">
+                      <p className="mt-3 text-xs leading-5 text-ink-3">
                         {evaluation.counts.accepted} validated records
                         evaluated. {evaluation.counts.rejected || 0} unverified
                         records excluded. {evaluation.counts.notObserved || 0}{" "}
@@ -865,7 +865,7 @@ export function SavedHunts() {
                         or disappearance is inferred.
                       </p>
                       {evaluation.rankingNote ? (
-                        <p className="mt-2 text-[11px] leading-5 text-[#5B6472]">
+                        <p className="mt-2 text-[11px] leading-5 text-ink-3">
                           {evaluation.rankingNote}
                         </p>
                       ) : null}
@@ -877,7 +877,7 @@ export function SavedHunts() {
                         <div
                           role="status"
                           data-testid="hunt-unsatisfiable-notice"
-                          className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-5 text-amber-950"
+                          className="mt-3 rounded-lg border border-catch/30 bg-catch-wash p-3 text-xs leading-5 text-catch-ink"
                         >
                           <p className="font-bold">This hunt cannot match as written.</p>
                           <p className="mt-1">
@@ -896,7 +896,7 @@ export function SavedHunts() {
                         Inspect results
                         <select
                           aria-label="Hunt result filter"
-                          className="rounded-lg border border-[#E5E7EB] px-3 py-2 text-xs font-normal"
+                          className="rounded-lg border border-line-strong px-3 py-2 text-xs font-normal"
                           value={filter}
                           onChange={(event) => setFilter(event.target.value)}
                         >
@@ -910,7 +910,7 @@ export function SavedHunts() {
                         {results.map((result) => (
                           <article
                             key={result.listingId}
-                            className="rounded-xl border border-[#E5E7EB] p-4"
+                            className="rounded-xl border border-line p-4"
                           >
                             <div className="flex flex-wrap justify-between gap-2">
                               <Link
@@ -927,28 +927,28 @@ export function SavedHunts() {
                                     title={result.relevance.note || "Evidence-backed triage rank for this hunt match."}
                                     className={`rounded px-2 py-1 text-[10px] font-semibold ${
                                       result.relevance.band === "high"
-                                        ? "bg-emerald-700 text-white"
+                                        ? "bg-ink text-white"
                                         : result.relevance.band === "medium"
-                                          ? "bg-emerald-100 text-emerald-900"
-                                          : "bg-slate-100 text-slate-700"
+                                          ? "bg-line text-ink"
+                                          : "bg-paper text-ink-2"
                                     }`}
                                   >
                                     Rank {result.relevance.rank}/100
                                   </span>
                                 ) : null}
                                 <span
-                                  className={`rounded px-2 py-1 text-[10px] font-semibold ${result.status === "match" ? "bg-emerald-100" : result.status === "unknown" ? "bg-amber-100 text-amber-900" : "bg-slate-100 text-slate-600"}`}
+                                  className={`rounded px-2 py-1 text-[10px] font-semibold ${result.status === "match" ? "bg-line" : result.status === "unknown" ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-3"}`}
                                 >
                                   {result.status.replaceAll("_", " ")}
                                 </span>
                               </div>
                             </div>
-                            <p className="mt-2 text-xs text-[#5B6472]">
+                            <p className="mt-2 text-xs text-ink-3">
                               {sourceDisplayText(result.sourceId)} · Observed{" "}
                               {new Date(result.observedAt).toLocaleString()}
                             </p>
                             {result.status === "match" && result.relevance ? (
-                              <p className="mt-2 text-[11px] leading-5 text-[#5B6472]">
+                              <p className="mt-2 text-[11px] leading-5 text-ink-3">
                                 Triage rank uses criterion closeness, evidence quality
                                 {result.relevance.researchQualityScore != null
                                   ? ` (${result.relevance.researchQualityScore}/100)`
@@ -968,18 +968,18 @@ export function SavedHunts() {
                               </summary>
                               <div className="mt-3 space-y-3">
                                 {result.relevance?.factors?.length ? (
-                                  <div className="rounded-lg bg-[#F5F6F7] p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">
+                                  <div className="rounded-lg bg-paper p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-3">
                                       Ranking factors
                                     </p>
                                     <ul className="mt-2 space-y-1.5">
                                       {result.relevance.factors.map((factor) => (
-                                        <li key={factor.factor} className="text-[11px] leading-4 text-[#374151]">
+                                        <li key={factor.factor} className="text-[11px] leading-4 text-ink-2">
                                           <span className="font-semibold">{factor.factor.replaceAll("_", " ")}</span>
                                           {" · "}
                                           {factor.detail}
                                           {" "}
-                                          <span className="text-[#5B6472]">({factor.weight})</span>
+                                          <span className="text-ink-3">({factor.weight})</span>
                                         </li>
                                       ))}
                                     </ul>
@@ -988,16 +988,16 @@ export function SavedHunts() {
                                 {result.clauseResults.map((clause, index) => (
                                   <div
                                     key={index}
-                                    className="border-l-2 border-slate-200 pl-3"
+                                    className="border-l-2 border-line pl-3"
                                   >
                                     <p className="text-xs font-semibold">
                                       {label(clause.field)} ·{" "}
                                       {clause.status.replaceAll("_", " ")}
                                     </p>
-                                    <p className="mt-1 text-xs leading-5 text-[#5B6472]">
+                                    <p className="mt-1 text-xs leading-5 text-ink-3">
                                       {sourceDisplayText(clause.reason)}
                                     </p>
-                                    <p className="mt-1 text-[10px] text-[#5B6472]">
+                                    <p className="mt-1 text-[10px] text-ink-3">
                                       Observed value: {display(clause.actual)} ·{" "}
                                       {clause.evidenceClass.replaceAll(
                                         "_",
@@ -1029,14 +1029,14 @@ export function SavedHunts() {
                           </article>
                         ))}
                         {!results.length && (
-                          <p className="rounded-xl bg-[#F5F6F7] p-5 text-sm leading-6 text-[#5B6472]">
+                          <p className="rounded-xl bg-paper p-5 text-sm leading-6 text-ink-3">
                             No returned results in this category. Try another
                             filter or collect more source evidence.
                           </p>
                         )}
                       </div>
                       {evaluation.resultsTruncated && (
-                        <p className="mt-3 text-xs text-amber-800">
+                        <p className="mt-3 text-xs text-ink-2">
                           The result display is bounded. Counts cover the full
                           accepted inventory; narrow this hunt to inspect more
                           of its matches.
@@ -1044,23 +1044,23 @@ export function SavedHunts() {
                       )}
                     </>
                   ) : (
-                    <div className="mt-6 rounded-xl bg-[#F5F6F7] p-6">
+                    <div className="mt-6 rounded-xl bg-paper p-6">
                       <h3 className="font-semibold">Start with a comparison</h3>
-                      <p className="mt-2 text-sm leading-6 text-[#5B6472]">
+                      <p className="mt-2 text-sm leading-6 text-ink-3">
                         Run this hunt to inspect the available evidence and save
                         a comparison point. Future runs separate newly matching
                         records, changed facts, and records that no longer fit.
                       </p>
                     </div>
                   )}
-                  <div className="mt-8 border-t border-[#E5E7EB] pt-6">
+                  <div className="mt-8 border-t border-line pt-6">
                     <h3 className="text-lg font-semibold">What changed</h3>
                     {events.length ? (
                       <div className="mt-4 space-y-3">
                         {events.slice(0, 30).map((event) => (
                           <div
                             key={event.id}
-                            className="rounded-xl bg-[#F5F6F7] p-4"
+                            className="rounded-xl bg-paper p-4"
                           >
                             <p className="text-xs font-semibold">
                               {event.type.replaceAll("_", " ")} ·{" "}
@@ -1068,20 +1068,20 @@ export function SavedHunts() {
                                 event.address || event.listingId,
                               )}
                             </p>
-                            <p className="mt-2 text-xs leading-6 text-[#5B6472]">
+                            <p className="mt-2 text-xs leading-6 text-ink-3">
                               {sourceDisplayText(event.message)}
                             </p>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm leading-6 text-[#5B6472]">
+                      <p className="mt-3 text-sm leading-6 text-ink-3">
                         No comparison events yet. A first run establishes the
                         baseline; later runs require changed evidence before
                         reporting a change.
                       </p>
                     )}
-                    <p className="mt-4 text-xs leading-5 text-[#5B6472]">
+                    <p className="mt-4 text-xs leading-5 text-ink-3">
                       Hunts run when you choose Run hunt. No email or text
                       notifications are sent.
                     </p>
@@ -1093,7 +1093,7 @@ export function SavedHunts() {
                   <h2 className="mt-4 text-2xl font-semibold">
                     Make the search yours.
                   </h2>
-                  <p className="mt-3 max-w-md text-sm leading-7 text-[#5B6472]">
+                  <p className="mt-3 max-w-md text-sm leading-7 text-ink-3">
                     Create a hunt or open a saved one. Every match will show the
                     source observation and a reason for each criterion.
                   </p>

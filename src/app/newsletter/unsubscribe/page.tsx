@@ -34,13 +34,13 @@ export default function UnsubscribePage() {
 
   return (
     <main className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16">
-      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Newsletter</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Remove a newsletter address</h1>
-      <p className="mt-4 text-sm leading-6 text-slate-600">
+      <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Newsletter</p>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Remove a newsletter address</h1>
+      <p className="mt-4 text-sm leading-6 text-ink-3">
         This removes an exact email from the newsletter list. Contact messages are not changed. Member accounts are not deleted here; ask through the contact form.
       </p>
-      <form onSubmit={submit} className="mt-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label htmlFor="unsubscribe-email" className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+      <form onSubmit={submit} className="mt-6 space-y-4 rounded-2xl border border-line bg-card p-6 shadow-sm">
+        <label htmlFor="unsubscribe-email" className="block text-xs font-bold uppercase tracking-wide text-ink-3">
           Email
         </label>
         <input
@@ -49,19 +49,19 @@ export default function UnsubscribePage() {
           required
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm"
+          className="h-12 w-full rounded-xl border border-line-strong bg-card px-4 text-sm"
         />
-        {error && <p role="alert" className="text-sm text-amber-900">{error}</p>}
-        {note && <p role="status" className="text-sm text-slate-700">{note}</p>}
+        {error && <p role="alert" className="text-sm text-catch-ink">{error}</p>}
+        {note && <p role="status" className="text-sm text-go">{note}</p>}
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex h-12 items-center rounded-xl bg-[#0F172A] px-5 text-sm font-semibold text-white disabled:opacity-60"
+          className="inline-flex h-12 items-center rounded-xl bg-ink px-5 text-sm font-semibold text-white disabled:opacity-60"
         >
           {pending ? "Removing…" : "Remove address"}
         </button>
       </form>
-      <Link href="/privacy" className="mt-6 text-sm font-semibold text-slate-900 underline">Privacy notice</Link>
+      <Link href="/privacy" className="mt-6 text-sm font-semibold text-ink underline">Privacy notice</Link>
     </main>
   );
 }

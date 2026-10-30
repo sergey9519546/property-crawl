@@ -161,9 +161,9 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
         onSearch(draft);
       }}
     >
-      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-300 px-3 focus-within:border-slate-500">
+      <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-line-strong px-3 focus-within:border-ink-3">
         <span className="sr-only">Search properties</span>
-        <Search size={17} className="text-slate-400" />
+        <Search size={17} className="text-ink-3" />
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -171,7 +171,7 @@ const DiscoverySearchField = React.memo(function DiscoverySearchField({
           className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none"
         />
       </label>
-      <button type="submit" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white">Search</button>
+      <button type="submit" className="rounded-xl bg-ink px-5 py-3 text-sm font-bold text-white">Search</button>
     </form>
   );
 });
@@ -517,14 +517,18 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
     const params = discoverySearchParams(filters, { format });
     window.location.assign(`/api/export?${params}`);
   };
+  // Same words as the sort menu below, never the raw URL key ("bid-asc").
+  // No "triage" entry: discovery-query.ts drops sort=triage and the discovery
+  // SQL rejects it, so offering it would sort by score while claiming triage.
+  const sortLabel = `Sorted by ${({ quality: "most complete listing", opportunity: "highest Deal Score", date: "sale date", "bid-asc": "opening bid, low to high" } as Record<string, string>)[filters.sort ?? ""] ?? "Deal Score, highest first"}.`;
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
       <header className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">Find properties</h1>
-        <p className="mt-1 text-sm text-slate-600">Search by address, parcel number, listing number, or keyword. Open any listing to see the catch before you bid.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Find properties</h1>
+        <p className="mt-1 text-sm text-ink-3">Search by address, parcel number, listing number, or keyword. Open any listing to see the catch before you bid.</p>
       </header>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-line bg-card p-4 shadow-sm">
         <DiscoverySearchField q={filters.q} onSearch={onSearch} />
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {(["state", "county", "type"] as const).map((field) => (
@@ -533,7 +537,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               aria-label={filterLabels[field]}
               value={filters[field] || "all"}
               onChange={(event) => selectValue(field, event.target.value)}
-              className={`min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm ${field === "type" ? "col-span-2 sm:col-span-1" : ""}`}
+              className={`min-h-10 w-full rounded-lg border border-line-strong bg-card px-3 py-2 text-sm ${field === "type" ? "col-span-2 sm:col-span-1" : ""}`}
             >
               <option value="all">{defaults[field]}</option>
               {facetOptions(field).map((facet) => (
@@ -544,18 +548,18 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             </select>
           ))}
         </div>
-        <button type="button" aria-expanded={moreFiltersOpen} onClick={() => setMoreFiltersOpen((open) => !open)} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold">
+        <button type="button" aria-expanded={moreFiltersOpen} onClick={() => setMoreFiltersOpen((open) => !open)} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-line-strong px-3 text-sm font-semibold">
           <SlidersHorizontal size={15} /> More filters
         </button>
         {moreFiltersOpen && (
-          <div className="mt-3 grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3 grid gap-3 rounded-xl bg-paper p-3 sm:grid-cols-2 lg:grid-cols-4">
             {(["source", "program", "lifecycle", "occupancy", "freshness"] as const).map((field) => (
-              <select key={field} aria-label={filterLabels[field]} value={filters[field] || "all"} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+              <select key={field} aria-label={filterLabels[field]} value={filters[field] || "all"} onChange={(event) => selectValue(field, event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
                 <option value="all">{defaults[field]}</option>
                 {facetOptions(field).map((facet) => <option key={facet.value} value={facet.value}>{facet.value === "unknown" ? "Unknown" : sourceDisplayText(facet.value).replace(/_/g, " ")}{facet.count !== null ? ` (${facet.count})` : ""}</option>)}
               </select>
             ))}
-            <select aria-label="Sale type" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+            <select aria-label="Sale type" value={filters.distressStage || "all"} onChange={(event) => selectValue("distressStage", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
               <option value="all">All sale types</option>
               <option value="reo">Bank-owned (REO)</option>
               <option value="pre_foreclosure">Pre-foreclosure</option>
@@ -563,19 +567,19 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               <option value="tax_sale">Tax sale</option>
               <option value="unknown">Not stated</option>
             </select>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <label className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
-            <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm">
+            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Sale from<input type="date" value={filters.saleFrom || ""} onChange={(event) => setFilters({ saleFrom: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Sale to<input type="date" value={filters.saleTo || ""} onChange={(event) => setFilters({ saleTo: event.target.value || undefined })} className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Max opening bid<input inputMode="numeric" value={filters.maxBid || ""} onChange={(event) => setFilters({ maxBid: event.target.value || undefined })} placeholder="$" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
+            <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
               <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
             </select>
           </div>
         )}
         {hasFilters && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            <Filter size={14} className="text-slate-500" />
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <Filter size={14} className="text-ink-3" />
             {Object.entries(filters)
               .filter(([key, value]) => key !== "view" && key !== "sort" && value)
               .map(([key, value]) => (
@@ -586,7 +590,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                       [key]: undefined,
                     } as Partial<DiscoveryFilters>)
                   }
-                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-900"
+                  className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-[11px] font-semibold text-ink"
                 >
                   {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
@@ -598,7 +602,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                 setCursorStack([]);
                 router.replace(pathname);
               }}
-              className="text-xs font-semibold text-slate-600 underline"
+              className="text-xs font-semibold text-ink-3 underline"
             >
               Clear all
             </button>
@@ -620,15 +624,15 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             onClick={() => setTriageFilters((prev) => ({ ...prev, [key]: !prev[key] }))}
             className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
               triageFilters[key]
-                ? "border-slate-900 bg-slate-900 text-white"
-                : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                ? "border-ink bg-ink text-white"
+                : "border-line bg-card text-ink-2 hover:border-ink-3"
             }`}
           >
             {chipLabel}
           </button>
         ))}
         {localFilterActive ? (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-ink-3">
             {filteredListings.length} of {pageLength.toLocaleString()} shown on this page
           </span>
         ) : null}
@@ -649,7 +653,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               cannot disappear while the browser request is in flight. The
               page-scoped qualifier stops a capped count from reading as the
               whole search. */}
-          <p className="text-xs font-semibold text-slate-600" data-testid="inventory-page-count">
+          <p className="text-xs font-semibold text-ink-3" data-testid="inventory-page-count">
             {payload
               ? `${pageLength.toLocaleString()} on this page${
                   typeof payload.total === "number"
@@ -669,7 +673,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               placeholder is honest -- it really is checking -- and occupies the
               same single line, so the block's height is stable from the first
               paint. */}
-          <p className="mt-1 text-xs text-slate-600" data-testid="inventory-honesty">
+          <p className="mt-1 text-xs text-ink-3" data-testid="inventory-honesty">
             {payload?.listings
               ? (() => {
                   const honesty = summarizeInventoryHonesty(payload.listings);
@@ -699,14 +703,14 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               single line at desktop width, so the height is now identical in
               both states -- which is the property the sibling line's guard
               already checks for the banner. */}
-          <p className="mt-1 text-xs text-slate-600" data-testid="score-sort-honesty">
+          <p className="mt-1 text-xs text-ink-3" data-testid="score-sort-honesty">
             {payload?.listings
               && (filters.sort || "score") === "score"
               && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
               && payload.listings.length > 0
               ? "No listing on this page has a Deal Score yet, so this order isn't ranking by score. A Deal Score needs a published opening bid and a value range."
               : payload?.listings
-                ? (filters.sort === "triage" ? "Sorted by triage priority (Check first)." : filters.sort && filters.sort !== "score" ? `Sorted by ${filters.sort}.` : "Sorted by Deal Score, highest first.")
+                ? sortLabel
                 : "Checking which listings have a Deal Score…"}
           </p>
         </div>
@@ -715,12 +719,11 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             aria-label="Sort results"
             value={filters.sort || "score"}
             onChange={(event) => setFilters({ sort: event.target.value })}
-            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
+            className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold"
           >
             <option value="score">Deal Score</option>
             <option value="quality">Most complete listing</option>
             <option value="opportunity">Highest Deal Score</option>
-            <option value="triage">Check first</option>
             <option value="date">Sale date</option>
             <option value="bid-asc">Opening bid, low to high</option>
           </select>
@@ -728,7 +731,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             aria-label="Minimum listing detail"
             value={filters.minQuality || ""}
             onChange={(event) => setFilters({ minQuality: event.target.value || undefined })}
-            className="min-h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold"
+            className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold"
           >
             <option value="">Any amount of detail</option>
             <option value="25">Some detail</option>
@@ -737,11 +740,11 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           </select>
           <SaveSearchButton filters={filters} />
           <details className="relative">
-            <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold">More</summary>
-            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-slate-50">Hunts and email alerts</Link>
-              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export spreadsheet (staff only)</button>
-              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-slate-50"><FileText size={14} /> Export data file (staff only)</button>
+            <summary className="flex min-h-10 cursor-pointer items-center rounded-lg border border-line-strong px-3 text-xs font-semibold">More</summary>
+            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-line bg-card p-2 shadow-lg">
+              <Link href="/hunts" className="block rounded-lg px-3 py-3 text-xs font-semibold hover:bg-paper">Hunts and email alerts</Link>
+              <button onClick={() => exportCurrent("csv")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export spreadsheet (staff only)</button>
+              <button onClick={() => exportCurrent("json")} className="inline-flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-xs font-semibold hover:bg-paper"><FileText size={14} /> Export data file (staff only)</button>
             </div>
           </details>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Result views">
@@ -749,15 +752,15 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             type="button"
             onClick={() => setShowSavedOnly((prev) => !prev)}
             aria-pressed={showSavedOnly}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:border-emerald-600 aria-pressed:bg-emerald-50 aria-pressed:text-emerald-950"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white"
           >
-            <Bookmark size={14} className={showSavedOnly ? "fill-emerald-700 text-emerald-700" : ""} />
+            <Bookmark size={14} className={showSavedOnly ? "fill-white text-white" : ""} />
             <span>Watchlist ({saved.size})</span>
           </button>
           <button
             onClick={() => setFilters({ view: "grid" })}
             aria-pressed={(filters.view || "grid") === "grid"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
           >
             <ListFilter size={14} />
             <span>Grid</span>
@@ -765,7 +768,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           <button
             onClick={() => setFilters({ view: "map" })}
             aria-pressed={filters.view === "map"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
           >
             <MapIcon size={14} />
             Map
@@ -773,7 +776,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           <button
             onClick={() => setFilters({ view: "calendar" })}
             aria-pressed={filters.view === "calendar"}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-slate-950 aria-pressed:text-white"
+            className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-semibold aria-pressed:bg-ink aria-pressed:text-white"
           >
             <CalendarDays size={14} />
             Calendar
@@ -791,7 +794,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       {error && (
         <div
           role="alert"
-          className="mt-5 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 p-4 text-sm text-amber-950"
+          className="mt-5 flex flex-wrap items-center gap-3 rounded-xl bg-catch-wash p-4 text-sm text-catch-ink"
         >
           <ShieldAlert size={18} />
           {error}
@@ -803,8 +806,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           </button>
         </div>
       )}
-      {error && payload ? <p role="status" className="mt-3 text-sm text-slate-600">Showing previously loaded results. Refresh to check for updates.</p> : null}
-      {watchlistError ? <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-950">{watchlistError}</p> : null}
+      {error && payload ? <p role="status" className="mt-3 text-sm text-ink-3">Showing previously loaded results. Refresh to check for updates.</p> : null}
+      {watchlistError ? <p role="alert" className="mt-3 rounded-xl bg-catch-wash p-3 text-sm text-catch-ink">{watchlistError}</p> : null}
       <CompareTray ids={compare.ids} labels={compareLabels} onRemove={compare.remove} onMakeTarget={compare.makeTarget} onClear={compare.clear} />
       {filters.view === "map" ? (
         <div className="mt-5">
@@ -821,7 +824,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       ) : (
         <>
           {!payload ? (
-            <div className="mt-5 grid min-h-screen place-items-center rounded-2xl border border-slate-200 bg-white p-16 text-sm text-slate-500">
+            <div className="mt-5 grid min-h-screen place-items-center rounded-2xl border border-line bg-card p-16 text-sm text-ink-3">
               {/* min-h-screen, not a fixed pixel value: this placeholder was 185px tall
                   while the grid that replaces it renders ~12,400px of cards, so the
                   filter row above and the pagination below both moved inside the
@@ -832,14 +835,14 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               Loading listings…
             </div>
           ) : !filteredListings.length ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-              <SlidersHorizontal className="mx-auto text-slate-400" />
+            <div className="mt-5 rounded-2xl border border-dashed border-line-strong bg-card p-12 text-center">
+              <SlidersHorizontal className="mx-auto text-ink-3" />
               {localFilterActive && pageLength > 0 ? (
                 <>
                   <h2 className="mt-4 text-lg font-bold">
                     No listings on this page match this filter.
                   </h2>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-ink-3">
                     The filter above is applied to this page only, not to the search.{" "}
                     {typeof payload.total === "number"
                       ? totalIsPageScoped
@@ -857,7 +860,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   </p>
                   <button
                     onClick={clearLocalFilters}
-                    className="mt-4 text-sm font-semibold text-slate-900 underline"
+                    className="mt-4 text-sm font-semibold text-ink underline"
                   >
                     Clear this filter
                   </button>
@@ -869,7 +872,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                       ? "Your watchlist is empty."
                       : "None of your saved properties match this search."}
                   </h2>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-ink-3">
                     {saved.size === 0
                       ? "Tap the bookmark on any listing to save it here."
                       : "Clear a filter or turn off the watchlist view to see everything."}
@@ -877,7 +880,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   <button
                     type="button"
                     onClick={() => setShowSavedOnly(false)}
-                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                    className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2"
                   >
                     Show all listings
                   </button>
@@ -887,7 +890,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   <h2 className="mt-4 text-lg font-bold">
                     No listings match your filters.
                   </h2>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm text-ink-3">
                     {/* Deal score and bid spread are derived, not published. A
                         minimum on either excludes every record that does not
                         carry one, so with none in the inventory the filter
@@ -900,7 +903,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   </p>
                   <Link
                     href="/sources"
-                    className="mt-4 inline-block text-sm font-semibold text-slate-900 underline"
+                    className="mt-4 inline-block text-sm font-semibold text-ink underline"
                   >
                     View source coverage
                   </Link>
@@ -924,7 +927,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               ))}
             </div>
           )}
-          <div className="mt-7 flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3">
+          <div className="mt-7 flex items-center justify-between rounded-xl border border-line bg-card p-3">
             <button
               type="button"
               aria-label="Previous page"
@@ -935,7 +938,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               <ChevronLeft size={15} />
               Previous
             </button>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-ink-3">
               Page {cursorStack.length + 1}
             </span>
             <button
@@ -943,7 +946,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               aria-label="Next page"
               disabled={!payload?.page?.hasMore || loading}
               onClick={next}
-              className="inline-flex items-center gap-1 rounded-lg bg-slate-950 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
             >
               Next
               <ChevronRight size={15} />
@@ -1014,29 +1017,29 @@ function DiscoveryCalendar({
   }
   return (
     <section
-      className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="mt-5 rounded-2xl border border-line bg-card p-5 shadow-sm"
       aria-label="Sale date calendar"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-3">
             Sale dates
           </p>
           <h2 className="mt-1 text-xl font-bold">Calendar view</h2>
         </div>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-ink-3">
           Only sales with a published date appear here.
         </span>
       </div>
 
       {/* Store-wide 60-day auction calendar & neighborhood market rollups */}
       <div className="mt-5 grid gap-4 lg:grid-cols-2" data-testid="calendar-market-rollups">
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-xl border border-line bg-paper/70 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-2">
               Auctions in the next 60 days
             </h3>
-            <span className="text-xs font-semibold text-slate-600">
+            <span className="text-xs font-semibold text-ink-3">
               {rollupLoading
                 ? "Loading…"
                 : calendarRollup
@@ -1049,17 +1052,17 @@ function DiscoveryCalendar({
               {calendarRollup.weeks.slice(0, 5).map((week) => (
                 <div
                   key={week.weekStart}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                  className="flex items-center justify-between rounded-lg border border-line bg-card px-3 py-2 text-xs"
                 >
                   <div>
-                    <span className="font-semibold text-slate-900">
+                    <span className="font-semibold text-ink">
                       {displayDate(week.weekStart)} – {displayDate(week.weekEnd)}
                     </span>
-                    <span className="ml-2 text-slate-500">
+                    <span className="ml-2 text-ink-3">
                       ({week.count.toLocaleString()} {week.count === 1 ? "sale" : "sales"})
                     </span>
                   </div>
-                  <span className="font-bold text-slate-800">
+                  <span className="font-bold text-ink-2">
                     Median:{" "}
                     {week.medianOpeningBid !== null
                       ? displayMoney(week.medianOpeningBid)
@@ -1069,18 +1072,18 @@ function DiscoveryCalendar({
               ))}
             </div>
           ) : !rollupLoading ? (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-ink-3">
               No dated auctions in the next 60 days for this search.
             </p>
           ) : null}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+        <div className="rounded-xl border border-line bg-paper/70 p-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-2">
               Typical prices by area
             </h3>
-            <span className="text-xs font-semibold text-slate-600">
+            <span className="text-xs font-semibold text-ink-3">
               {rollupLoading
                 ? "Loading…"
                 : neighborhoodRollup
@@ -1093,23 +1096,23 @@ function DiscoveryCalendar({
               {neighborhoodRollup.neighborhoods.slice(0, 5).map((bucket) => (
                 <div
                   key={bucket.key}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                  className="flex items-center justify-between rounded-lg border border-line bg-card px-3 py-2 text-xs"
                 >
                   <div className="min-w-0">
-                    <span className="font-semibold text-slate-900">{bucket.label}</span>
-                    <span className="ml-2 text-slate-500">
+                    <span className="font-semibold text-ink">{bucket.label}</span>
+                    <span className="ml-2 text-ink-3">
                       {bucket.count.toLocaleString()} active
                       {bucket.medianSqft !== null ? ` · ${bucket.medianSqft.toLocaleString()} sqft` : ""}
                     </span>
                   </div>
                   <div className="shrink-0 text-right">
-                    <span className="font-bold text-slate-800">
+                    <span className="font-bold text-ink-2">
                       {bucket.medianOpeningBid !== null
                         ? displayMoney(bucket.medianOpeningBid)
                         : "Opening bid not published"}
                     </span>
                     {bucket.medianDealScore !== null && (
-                      <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                      <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">
                         Score {bucket.medianDealScore}
                       </span>
                     )}
@@ -1118,7 +1121,7 @@ function DiscoveryCalendar({
               ))}
             </div>
           ) : !rollupLoading ? (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-ink-3">
               Not enough listings in this search to show area prices.
             </p>
           ) : null}
@@ -1127,7 +1130,7 @@ function DiscoveryCalendar({
 
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {truncated && (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 md:col-span-2 xl:col-span-3">
+          <p className="rounded-xl border border-line-strong bg-paper p-4 text-sm text-ink-2 md:col-span-2 xl:col-span-3">
             Too many sales match to show them all. Narrow the dates or add a filter to see more sales.
           </p>
         )}
@@ -1136,7 +1139,7 @@ function DiscoveryCalendar({
           .map(([date, items]) => (
             <article
               key={date}
-              className="rounded-xl border border-slate-200 p-4"
+              className="rounded-xl border border-line p-4"
             >
               <h3 className="flex items-center gap-2 font-semibold">
                 <CalendarDays size={15} />
@@ -1147,7 +1150,7 @@ function DiscoveryCalendar({
                   const selected = compareIds.includes(listing.id);
                   const compareFull = compareIds.length >= COMPARE_LIMIT && !selected;
                   return (
-                  <div key={listing.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                  <div key={listing.id} className="rounded-lg bg-paper p-3 text-sm">
                     <Link
                       href={`/listings/${encodeURIComponent(listing.id)}?returnTo=${encodeURIComponent(discoveryUrl(filters))}`}
                       prefetch={false}
@@ -1155,14 +1158,14 @@ function DiscoveryCalendar({
                     >
                       <strong className="block">{listing.address}</strong>
                       <TriageChips listing={listing} className="mt-1.5" />
-                      <span className="mt-1 block text-xs text-slate-500">
+                      <span className="mt-1 block text-xs text-ink-3">
                         {sourceDisplayText(
                           SOURCES[listing.source]?.label || listing.source,
                         )}{" "}
                         · {listing.discoveryStatus || "status not stated"}
                       </span>
                     </Link>
-                    <button type="button" aria-pressed={selected} aria-label={`${selected ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull} onClick={() => onCompare(listing.id)} className="mt-2 inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">
+                    <button type="button" aria-pressed={selected} aria-label={`${selected ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull} onClick={() => onCompare(listing.id)} className="mt-2 inline-flex min-h-11 items-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50">
                       {selected ? "In compare" : compareFull ? "Compare is full" : "Compare"}
                     </button>
                   </div>

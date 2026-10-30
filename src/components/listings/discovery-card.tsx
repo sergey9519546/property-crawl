@@ -14,10 +14,10 @@ import { bandForScore } from "@/lib/score-bands";
 
 // Distress stage → label + Tailwind classes for the badge.
 const DISTRESS_STAGE_BADGE: Record<string, { label: string; className: string }> = {
-  reo: { label: "REO", className: "bg-blue-50 text-blue-800" },
-  pre_foreclosure: { label: "Pre-FC", className: "bg-amber-50 text-amber-800" },
-  scheduled: { label: "Scheduled", className: "bg-orange-50 text-orange-800" },
-  tax_sale: { label: "Tax sale", className: "bg-purple-50 text-purple-800" },
+  reo: { label: "REO", className: "bg-paper text-ink-2" },
+  pre_foreclosure: { label: "Pre-FC", className: "bg-paper text-ink-2" },
+  scheduled: { label: "Scheduled", className: "bg-go-wash text-go" },
+  tax_sale: { label: "Tax sale", className: "bg-paper text-ink-2" },
 };
 
 // Format publisher capitalization for display only; the source address stays intact.
@@ -76,19 +76,19 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const facts = [
     knownNumber(listing.beds) !== null ? `${listing.beds} bed` : null,
     knownNumber(listing.baths) !== null ? `${listing.baths} bath` : null,
-    knownNumber(listing.sqft) !== null ? `${Number(listing.sqft).toLocaleString()} sq ft` : null,
+    knownNumber(listing.sqft) !== null ? `${Number(listing.sqft).toLocaleString("en-US")} sq ft` : null,
   ].filter(Boolean);
   const completeness = listing.evidenceCompleteness;
   const quality = listing.researchQuality;
   const opportunity = listing.opportunity;
   const qualityBadge = quality
     ? quality.band === 'strong'
-      ? { label: `Evidence ${quality.score}`, className: 'bg-emerald-50 text-emerald-800' }
+      ? { label: `Evidence ${quality.score}`, className: 'bg-paper text-ink' }
       : quality.band === 'usable'
-        ? { label: `Evidence ${quality.score}`, className: 'bg-sky-50 text-sky-800' }
+        ? { label: `Evidence ${quality.score}`, className: 'bg-paper text-ink-2' }
         : quality.band === 'thin'
-          ? { label: `Evidence ${quality.score}`, className: 'bg-amber-50 text-amber-900' }
-          : { label: `Evidence ${quality.score}`, className: 'bg-rose-50 text-rose-800' }
+          ? { label: `Evidence ${quality.score}`, className: 'bg-catch-wash text-catch-ink' }
+          : { label: `Evidence ${quality.score}`, className: 'bg-catch-wash text-catch-ink' }
     : null;
   const urgencyBadge = opportunity && ['imminent', 'near_term'].includes(opportunity.urgency)
     ? {
@@ -96,24 +96,24 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           ? `Sale ${opportunity.daysToSale}d`
           : `Sale ~${opportunity.daysToSale}d`,
         className: opportunity.urgency === 'imminent'
-          ? 'bg-rose-50 text-rose-800'
-          : 'bg-orange-50 text-orange-800',
+          ? 'bg-go-fill text-ink'
+          : 'bg-go-wash text-go',
       }
     : null;
 
-  return <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md" aria-label={listing.address}>
+  return <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-sm transition-shadow hover:shadow-md" aria-label={listing.address}>
     <div className="relative shrink-0">
       <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} observed={observed} layout="card" />
-      {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-md bg-white/95 px-2.5 py-1.5 text-xs font-semibold text-slate-800 shadow-sm">{sourceDisplayText(program)}</span> : null}
-      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">
-        {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-slate-900 text-slate-900" : ""} />}
+      {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
+      <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
+        {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-ink text-ink" : ""} />}
       </button>
     </div>
     <div className="flex flex-1 flex-col p-4 sm:p-5">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
-        <span className="font-medium text-slate-600">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
+        <span className="font-medium text-ink-3">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
         {lifecycle ? <><span aria-hidden>·</span><span>{sourceDisplayText(lifecycle.replace(/_/g, " "))}</span></> : null}
-        {!observed ? <span className="rounded bg-amber-50 px-1.5 py-0.5 text-amber-900">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
+        {!observed ? <span className="rounded bg-catch-wash px-1.5 py-0.5 text-catch-ink">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
         {(() => {
           // Prefer the server's verdict. It is cadence-aware per source, so a
           // record 11 hours old against a 6-hour cadence is stale, while a
@@ -133,7 +133,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
             ? `Publisher record last observed ${Math.round(ageHours)}h ago; ${SOURCES[listing.source]?.label || listing.source} refreshes every ${cadenceHours}h.`
             : "The publisher record is past its refresh cadence.";
           return (
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-semibold text-gray-600" title={explain}>
+            <span className="rounded bg-catch-wash px-1.5 py-0.5 text-xs font-semibold text-catch-ink" title={explain}>
               Stale
             </span>
           );
@@ -147,8 +147,8 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         })()}
         {listing.crossSourceMatches && listing.crossSourceMatches.length > 0 ? (
           <span
-            className="rounded bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold text-indigo-800"
-            title={listing.crossSourceMatches.map((m) => `${sourceDisplayText(m.source)}${m.openingBid != null ? ` ($${Number(m.openingBid).toLocaleString()})` : ""}`).join("\n")}
+            className="rounded bg-paper px-1.5 py-0.5 text-xs font-semibold text-ink"
+            title={listing.crossSourceMatches.map((m) => `${sourceDisplayText(m.source)}${m.openingBid != null ? ` ($${Number(m.openingBid).toLocaleString("en-US")})` : ""}`).join("\n")}
           >
             {listing.crossSourceMatches.length + 1} sources
           </span>
@@ -167,16 +167,16 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           </span>
         ) : null}
       </div>
-      <h2 className="text-lg font-semibold leading-6 tracking-tight text-slate-950"><Link href={href} prefetch={false} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">{street}</Link></h2>
-      {locality ? <p className="mt-1 text-sm text-slate-500">{locality}</p> : null}
+      <h2 className="text-lg font-semibold leading-6 tracking-tight text-ink"><Link href={href} prefetch={false} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3">{street}</Link></h2>
+      {locality ? <p className="mt-1 text-sm text-ink-3">{locality}</p> : null}
       <TriageChips listing={listing} className="mt-1.5" />
-      {facts.length ? <p className="mt-2 text-xs text-slate-600">{facts.join(" · ")}</p> : null}
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3">
-        <div><dt className="text-xs text-slate-500">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-slate-950"><Fact value={listing.openingBid} format="money" /></dd></div>
-        <div><dt className="text-xs text-slate-500">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-slate-950"><Fact value={listing.saleDate} format="date" /></dd></div>
+      {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
+      <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
+        <div><dt className="text-xs text-ink-3">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact value={listing.openingBid} format="money" /></dd></div>
+        <div><dt className="text-xs text-ink-3">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact value={listing.saleDate} format="date" /></dd></div>
       </dl>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-500">
-        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-amber-800" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-ink-3">
+        <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
         {knownNumber(listing.dealScore) !== null ? (() => {
@@ -190,12 +190,12 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}/100</span> : null}
       </div>
       <div className="mt-auto grid gap-2 pt-4">
-        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
           {compared ? "In compare" : compareFull ? "Compare is full" : "Compare"}
         </button>
         <div className="grid gap-2 sm:grid-cols-[1.2fr_1fr]">
-          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
-          <CaseAction listingId={listing.id} label="Research" className="h-11 border-slate-200 bg-white font-semibold text-slate-700 hover:border-slate-400 hover:bg-slate-50" />
+          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-3 text-xs font-semibold text-white transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
+          <CaseAction listingId={listing.id} label="Research" className="h-11 border-line bg-card font-semibold text-ink-2 hover:border-ink-3 hover:bg-paper" />
         </div>
       </div>
     </div>

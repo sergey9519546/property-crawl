@@ -36,8 +36,8 @@ export default async function StatesPage() {
   const { rows, error } = await loadStateCounts();
   return (
     <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
-      <p className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
         Browse by state
       </p>
       <h1 className="mt-5 text-balance text-[34px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink sm:text-[42px]">Foreclosure and government property auctions by state</h1>
@@ -48,16 +48,16 @@ export default async function StatesPage() {
         Every state has its own rules for deposits, buy-back periods and court review. <Link href="/resources" className="font-semibold underline">Read the buyer&apos;s guide</Link> before you bid.
       </p>
       {error ? (
-        <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{error}</p>
+        <p role="alert" className="mt-6 rounded-xl border border-catch/30 bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>
       ) : rows.length === 0 ? (
-        <p className="mt-6 text-sm text-slate-600">No states have listings right now. Check back soon.</p>
+        <p className="mt-6 text-sm text-ink-3">No states have listings right now. Check back soon.</p>
       ) : (
-        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white">
+        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-card">
           {rows.map((row) => (
             <li key={row.state}>
-              <Link href={`/states/${row.state}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-slate-50">
-                <span className="font-semibold text-slate-950">{row.state}</span>
-                <span className="tabular-nums text-slate-600">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
+              <Link href={`/states/${row.state}`} className="flex items-center justify-between px-4 py-3 text-sm hover:bg-paper">
+                <span className="font-semibold text-ink">{row.state}</span>
+                <span className="tabular-nums text-ink-3">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
               </Link>
             </li>
           ))}

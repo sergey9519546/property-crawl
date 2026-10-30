@@ -28,6 +28,20 @@ test("catch reports bid-to-range, redemption, occupied and stale source from fie
   assert.match(all, /4 days ago/);
 });
 
+test("title warnings lose their shouted label and never repeat redemption", () => {
+  const out = listingCatch({ state: "NM", redemptionDays: 270 }, [
+    "UNCONFIRMED LIEN PRIORITY: Title search required.",
+    "STATUTORY REDEMPTION ACTIVE: 9-Month statutory redemption",
+  ]);
+  const all = out.flags.join(" ");
+  assert.match(all, /up to 270 days/);
+  assert.ok(out.flags.includes("Title search required."));
+  assert.doesNotMatch(all, /STATUTORY|9-Month/);
+  // Without a redemption field, the title engine's redemption line is the only source, so it stays.
+  const bare = listingCatch({ state: "NM" }, ["STATUTORY REDEMPTION ACTIVE: 9-Month statutory redemption"]);
+  assert.ok(bare.flags.includes("9-Month statutory redemption"));
+});
+
 test("clean record yields no flags", () => {
   const out = listingCatch({ openingBid: 1, estLow: 10, estHigh: 20, occupancy: "Vacant", deposit: "$500", saleDate: "2026-11-01", seniorLienRisk: "low" });
   assert.deepEqual(out.flags, []);

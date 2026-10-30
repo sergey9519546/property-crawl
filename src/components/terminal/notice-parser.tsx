@@ -87,10 +87,10 @@ function moneyValue(value: number | null) {
 function ExtractedField({ label, value, evidence }: { label: string; value: string; evidence?: string | null }) {
   const missing = value === "Not found in notice";
   return (
-    <div className={`rounded-xl border p-3 ${missing ? "border-amber-200 bg-amber-50/60" : "border-slate-200 bg-white"}`}>
-      <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">{label}</span>
-      <strong className={`mt-1 block break-words text-xs ${missing ? "text-amber-800" : "text-slate-950"}`}>{value}</strong>
-      {evidence ? <span className="mt-1.5 block line-clamp-2 text-[10px] leading-4 text-slate-500">Evidence: “{evidence}”</span> : null}
+    <div className={`rounded-xl border p-3 ${missing ? "border-catch/30 bg-catch-wash" : "border-line bg-card"}`}>
+      <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</span>
+      <strong className={`mt-1 block break-words text-xs ${missing ? "text-catch-ink" : "text-ink"}`}>{value}</strong>
+      {evidence ? <span className="mt-1.5 block line-clamp-2 text-[10px] leading-4 text-ink-3">Evidence: “{evidence}”</span> : null}
     </div>
   );
 }
@@ -193,16 +193,16 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
   const llmCandidateCount = Object.keys(parseResponse?.unverifiedCandidates || {}).length;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-line bg-card p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-[#0F172A]" />
+          <FileText className="h-5 w-5 text-ink" />
           <div>
-            <h3 className="text-lg font-bold text-[#111827]">Legal Notice Evidence Extractor</h3>
-            <p className="text-xs text-slate-500">Extracts stated facts; it does not complete missing fields.</p>
+            <h3 className="text-lg font-bold text-ink">Legal Notice Evidence Extractor</h3>
+            <p className="text-xs text-ink-3">Extracts stated facts; it does not complete missing fields.</p>
           </div>
         </div>
-        <button type="button" onClick={() => { setRawText(SAMPLE); setParseResponse(null); setParseError(null); }} className="text-xs font-semibold text-[#0F172A] hover:underline">
+        <button type="button" onClick={() => { setRawText(SAMPLE); setParseResponse(null); setParseError(null); }} className="text-xs font-semibold text-ink hover:underline">
           Paste sample notice
         </button>
       </div>
@@ -212,33 +212,33 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         onChange={(event) => { setRawText(event.target.value); setParseResponse(null); setParseError(null); }}
         placeholder="Paste raw foreclosure notice, gazette clipping, or court docket text here…"
         aria-label="Raw legal notice"
-        className="h-36 w-full rounded-xl border border-[#D1D5DB] p-4 font-mono text-xs text-[#111827] focus:border-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/15"
+        className="h-36 w-full rounded-xl border border-line-strong p-4 font-mono text-xs text-ink focus:border-yours focus:outline-none focus:ring-2 focus:ring-yours/15"
       />
 
       <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-[#5B6472]">All extracted fields require comparison with the source document.</span>
+        <span className="text-xs text-ink-3">All extracted fields require comparison with the source document.</span>
         <button
           type="button"
           onClick={handleParse}
           disabled={isParsing || !rawText.trim()}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] px-5 text-xs font-bold text-white transition hover:bg-[#1E293B] disabled:opacity-50"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-ink px-5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:opacity-50"
         >
-          {isParsing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4 text-[#FDBC15]" />}
+          {isParsing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4 text-white/75" />}
           <span>{isParsing ? "Extracting…" : "Extract stated facts"}</span>
         </button>
       </div>
 
       {parseError ? (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800" role="alert">
+        <div className="flex items-start gap-2 rounded-xl border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{parseError}{needsUnlock ? <a href="/listings" target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold underline underline-offset-2">Open workspace in a new tab</a> : null}</span>
         </div>
       ) : null}
 
       {parsedResult ? (
-        <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-4 animate-in fade-in">
+        <div className="space-y-3 rounded-xl border border-catch/30 bg-catch-wash/40 p-4 animate-in fade-in">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-start gap-2 text-xs text-amber-900">
+            <div className="flex items-start gap-2 text-xs text-catch-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <strong className="block font-extrabold">Unverified extraction — source review required</strong>
@@ -251,7 +251,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
               onClick={handleAddToWatchlist}
               disabled={!canSave}
               title={canSave ? "Add this unverified extraction" : "A source-stated address and state are required"}
-              className="inline-flex items-center gap-1 rounded-lg bg-[#0F172A] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#1E293B] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Bookmark className="h-3.5 w-3.5" />
               <span>{canSave ? "Add extraction" : "Needs address + state"}</span>
@@ -276,21 +276,21 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
           </div>
 
           {parsedResult.opening_bid_basis === "derived_from_explicit_notice_fraction" ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+            <div className="rounded-lg border border-line bg-paper p-3 text-xs text-ink-2">
               Opening bid was calculated only because the notice explicitly states the {parsedResult.statutory_bid_fraction ? `${(parsedResult.statutory_bid_fraction * 100).toFixed(2)}%` : "statutory"} fraction of its stated appraisal. Verify the calculation before use.
             </div>
           ) : null}
 
           {missingReviewFields.length > 0 ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-              <strong className="block text-slate-950">Evidence gaps</strong>
+            <div className="rounded-lg border border-catch/30 bg-card p-3 text-xs text-ink-2">
+              <strong className="block text-catch-ink">Evidence gaps</strong>
               <span className="mt-1 block">Not found: {missingReviewFields.join(", ")}. Consult the official notice, docket, and sale terms; these values were not estimated.</span>
             </div>
           ) : null}
 
           {/(?:tract\s+[12]|parcel\s+(?:one|two|[12])|lot\s+[12]|permanent parcel nos|parcels:)/i.test(rawText) ? (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+            <div className="flex items-start gap-2 rounded-lg border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-catch-ink" />
               <div><strong className="block font-bold">Multiple parcel references detected</strong><span>Confirm which stated facts apply to each parcel in the official docket.</span></div>
             </div>
           ) : null}

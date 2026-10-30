@@ -5,59 +5,11 @@
 
 /* PERFECTPROPERTY exact design tokens */
 :root {
-  /* Primary text */
-  --dark: #181529;
-  --body-text: #6B7280;
-  --muted-text: #9CA3AF;
-  --nav-text: #374151;
-
-  /* Dark accent (NOT blue — used for all buttons/CTAs) */
-  --accent: #181529;
-  --accent-hover: #2a2640;
-
-  /* Backgrounds */
-  --page-bg: #F8F4EC;
-  --card-bg-white: #FFFFFF;
-  --card-bg-green: #e7faef;
-  --card-bg-blue: #F1F5F9;
-  --card-bg-pink: #FFD6C8;
-  --card-bg-lavender: #E9D5FF;
-  --card-bg-yellow: #fffaea;
-  --card-bg-red: #fff3f4;
-
-  /* Borders */
-  --border: #E5E7EB;
-  --border-light: #F3F4F6;
-
-  /* Accents */
-  --green: #3aaf57;
-  --green-bright: #16A34A;
-  --red: #B91C1C;
-  --gold: #fdbc15;
-
-  /* "The catch" — the brand's signature mark. Amber means "check this first". */
+  /* The catch: persimmon wash, border and text (same values as the catch tokens).
+     Used as var(--catch-*) in a few inline styles. */
   --catch-bg: #fff0e9;
   --catch-border: #ffc4b2;
   --catch-ink: #a92e14;
-
-  /* Primary scale */
-  --primary-500: #1E293B;
-  --primary-600: #0F172A;
-  --primary-700: #020617;
-
-  /* Neutrals */
-  --arcade-dark: #111827;
-  --new-text-dim-black: #4b5563;
-  --neutral-50: #f9fafb;
-  --neutral-200: #e5e7eb;
-  --neutral-300: #d1d5db;
-  --gray-800: #1f2937;
-  --gray-700: #374151;
-  --100: #f3f4f6;
-  --500: #6b7280;
-  --600: #4b5563;
-  --white: #ffffff;
-  --dim-grey: #727272;
 
   /* Shared interaction motion — fast UI feedback plus one explanatory map pass. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -76,9 +28,9 @@
    bg-paper, border-line, rounded-card, text-title.
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* Ink: one near-black family (slate). #111827/#0F172A both map to ink. */
+  /* Ink: one near-black family (midnight ink). */
   --color-ink: #181529;   /* midnight ink */
-  --color-ink-2: #3d3a4f;   /* body copy, 10.4:1 on paper */
+  --color-ink-2: #3d3a4f;   /* body copy, 10:1 on paper */
   --color-ink-3: #5f5c6e;   /* meta text, 5.9:1 on paper (AA) */
   --color-paper: #f8f4ec;  /* warm cream */   /* page */
   --color-card: #fffef9;    /* raised surface */
@@ -167,9 +119,11 @@
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --foreground: #181529; /* ink */
+  /* @theme inline maps --color-card to this var, so it must hold the palette
+     card (#fffef9), or every bg-card renders pure white. */
+  --card: #fffef9;
+  --card-foreground: #181529;
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.205 0 0);
@@ -181,7 +135,7 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --border: #ebe4d6; /* palette "line" */
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
@@ -242,16 +196,13 @@
     max-width: 100vw;
   }
   body {
-    @apply text-foreground; background-color: #F5F6F7;
+    @apply text-foreground; background-color: var(--color-paper);
     font-family: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overflow-x: hidden;
     max-width: 100vw;
-  }
-  ::selection {
-    background: rgba(33, 66, 231, 0.3);
   }
   /* Serif for testimonial quotes (arcade uses Droid Serif italic).
      Droid Serif is deprecated in next/font's font-data, so it stays on the
@@ -668,7 +619,7 @@
 }
 
 .live-market-maplibre .maplibregl-canvas:focus-visible {
-  outline: 2px solid #0F172A;
+  outline: 2px solid var(--color-ink);
   outline-offset: -4px;
 }
 
@@ -974,7 +925,7 @@
 /* ===== FOCUS STATES (accessibility) ===== */
 @layer base {
   *:focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
-    outline: 2px solid #0F172A !important;
+    outline: 2px solid var(--color-ink) !important;
     outline-offset: 2px !important;
     border-radius: 4px;
   }
@@ -984,8 +935,9 @@
   [contenteditable="true"]:focus-visible {
     outline: none !important;
     outline-offset: 0 !important;
-    border-color: #93C5FD;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.22);
+    /* Periwinkle: a field is where the buyer writes (the "yours" colour). */
+    border-color: var(--color-yours);
+    box-shadow: 0 0 0 3px rgba(79,107,246,0.22);
   }
   *:focus:not(:focus-visible) {
     outline: none !important;
@@ -1016,8 +968,8 @@ button[class*="nextjs"] {
 /* ─────────────────────────────────────────────────────────────────────────
    Evidence ink. Every value is drawn in one of three materials:
      printed  — published by the source. Plain ink. No decoration.
-     yours    — a number the buyer typed. Indigo, dashed "pencil" underline.
-     unknown  — nobody has published it. Amber hatch, same footprint as a
+     yours    — a number the buyer typed. Periwinkle, dashed "pencil" underline.
+     unknown  — nobody has published it. Persimmon hatch, same footprint as a
                 value, never collapsed, never quieter than a real fact.
    Rendered by <Fact> (src/components/evidence/fact.tsx).
    ───────────────────────────────────────────────────────────────────────── */

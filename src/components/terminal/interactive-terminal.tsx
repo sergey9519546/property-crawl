@@ -25,7 +25,7 @@ const MarketMap = dynamic(
     loading: () => (
       <div
         aria-hidden
-        className="relative h-[520px] overflow-hidden bg-[#E8EEF2] sm:h-[600px] lg:h-[660px]"
+        className="relative h-[520px] overflow-hidden bg-line sm:h-[600px] lg:h-[660px]"
       />
     ),
   },
@@ -451,15 +451,15 @@ export function InteractiveTerminal() {
   );
 
   return (
-    <section id="live-feed" className="py-20 bg-[#F5F6F7] border-t border-[#E5E7EB]" aria-label="Live property feed">
+    <section id="live-feed" className="py-20 bg-paper border-t border-line" aria-label="Live property feed">
       <div className="mx-auto max-w-[1200px] px-4">
         {/* Terminal Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-go">
               LIVE TRIAGE TERMINAL
             </span>
-            <h2 className="text-3xl font-bold text-[#111827]">Property Intelligence Engine</h2>
+            <h2 className="text-3xl font-bold text-ink">Property Intelligence Engine</h2>
           </div>
 
           <div className="flex items-center gap-2">
@@ -469,8 +469,8 @@ export function InteractiveTerminal() {
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "grid"
-                  ? "bg-[#0F172A] text-white shadow-sm"
-                  : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-[#F5F6F7]"
+                  ? "bg-ink text-white shadow-sm"
+                  : "bg-card text-ink-2 border border-line hover:bg-paper"
               )}
             >
               <LayoutGrid className="w-4 h-4" />
@@ -483,8 +483,8 @@ export function InteractiveTerminal() {
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "map"
-                  ? "bg-[#0F172A] text-white shadow-sm"
-                  : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-[#F5F6F7]"
+                  ? "bg-ink text-white shadow-sm"
+                  : "bg-card text-ink-2 border border-line hover:bg-paper"
               )}
             >
               <MapIcon className="w-4 h-4" />
@@ -497,34 +497,34 @@ export function InteractiveTerminal() {
               className={cn(
                 "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "parser"
-                  ? "bg-[#0F172A] text-white shadow-sm"
-                  : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-[#F5F6F7]"
+                  ? "bg-ink text-white shadow-sm"
+                  : "bg-card text-ink-2 border border-line hover:bg-paper"
               )}
             >
-              <Sparkles className="w-4 h-4 text-[#FDBC15] fill-[#FDBC15]" />
+              <Sparkles className="w-4 h-4 fill-current" />
               <span>Notice Parser</span>
             </button>
 
             <button
               onClick={() => setIsWatchlistOpen(true)}
-              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-slate-900 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
             >
-              <Bookmark className="w-4 h-4 text-[#0F172A] fill-[#0F172A]" />
+              <Bookmark className="w-4 h-4 text-ink fill-ink" />
               <span>Watchlist ({savedIds.size})</span>
             </button>
 
             <button
               onClick={() => setIsAlertsOpen(true)}
-              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-amber-500 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
               // The button reads "Saved searches". Labelling it "Open Alerts Manager" named
               // a different feature to anyone not looking at the screen, so the
               // label now contains the visible text.
               aria-label="Open Saved Searches Manager"
             >
-              <Bell className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+              <Bell className="w-4 h-4 text-ink-2 fill-ink/10" />
               <span>Saved searches</span>
               {unreadAlertCount > 0 && (
-                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
+                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
                   {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
                 </span>
               )}
@@ -532,19 +532,19 @@ export function InteractiveTerminal() {
 
             <Link
               href="/hunts"
-              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-emerald-700 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
               title="Durable saved hunts criteria engine"
             >
-              <Crosshair className="w-4 h-4 text-emerald-700" />
+              <Crosshair className="w-4 h-4 text-ink-2" />
               <span>Saved Hunts</span>
             </Link>
 
             <Link
               href="/sources"
-              className="px-4 py-2 bg-white border border-[#E5E7EB] hover:border-slate-800 text-[#111827] text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink-2 text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
               title="Source network intake and collector radar"
             >
-              <Radio className="w-4 h-4 text-slate-700" />
+              <Radio className="w-4 h-4 text-ink-2" />
               <span>Source Radar</span>
             </Link>
           </div>
@@ -555,10 +555,10 @@ export function InteractiveTerminal() {
         ) : (
           <>
             {/* Live Scraper Ingestion Banner */}
-            <div className="mb-4 px-4 py-2.5 bg-[#0F172A] rounded-2xl border border-slate-700 text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+            <div className="mb-4 px-4 py-2.5 bg-ink rounded-2xl border border-white/10 text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
               <div className="flex items-center gap-2">
-                <span className={cn("w-2 h-2 rounded-full", syncStatus === "ready" && observedCount > 0 ? "bg-emerald-400" : "bg-amber-400")} />
-                <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-emerald-400" : "text-amber-300")}>
+                <span className={cn("w-2 h-2 rounded-full", syncStatus === "ready" && observedCount > 0 ? "bg-go-fill" : "bg-catch")} />
+                <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-white" : "text-catch")}>
                   {syncStatus === "error"
                     ? "Demo fallback — data API unavailable"
                     : observedCount === 0 && syncCount > 0
@@ -567,38 +567,38 @@ export function InteractiveTerminal() {
                         ? "Connected to source-observed property feed"
                         : "Mixed evidence feed — verify each record"}
                 </span>
-                <span className="text-slate-400 hidden sm:inline">· scraper execution runs separately on the backend</span>
+                <span className="text-white/60 hidden sm:inline">· scraper execution runs separately on the backend</span>
               </div>
-              <div className="flex items-center gap-3 font-mono text-[11px] text-slate-300">
-                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-emerald-400" : "text-amber-300")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
+              <div className="flex items-center gap-3 font-mono text-[11px] text-white/75">
+                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-white" : "text-catch")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
                 {syncStatus === "loading" && <span>Connecting to property API…</span>}
                 {syncStatus === "error" && <span>Last loaded inventory retained</span>}
                 <button
                   disabled={syncStatus === "loading" || syncStatus === "refreshing"}
                   onClick={() => void loadListings(true)}
-                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1 border border-slate-600"
+                  className="bg-ink-2 hover:bg-ink-3 disabled:opacity-60 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1 border border-white/20"
                 >
                   {syncStatus === "refreshing" ? (
-                    <><span className="w-2.5 h-2.5 border-2 border-black/40 border-t-black rounded-full animate-spin inline-block" />Refreshing…</>
+                    <><span className="w-2.5 h-2.5 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />Refreshing…</>
                   ) : "Refresh inventory"}
                 </button>
               </div>
             </div>
 
-            {inventoryNotice && <p role="status" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{inventoryNotice}</p>}
+            {inventoryNotice && <p role="status" className="mb-4 rounded-xl border border-line-strong bg-paper p-3 text-sm text-ink-2">{inventoryNotice}</p>}
             {/* Filter Bar */}
-            <div className="p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm mb-4 space-y-3">
+            <div className="p-4 bg-card rounded-2xl border border-line shadow-sm mb-4 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 {/* Search */}
                 <div className="relative flex-1 min-w-[240px]">
-                  <Search className="w-4 h-4 text-[#5B6472] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => dispatchFilters({ type: "set", key: "searchQuery", value: e.target.value })}
                     aria-label="Search listings"
                     placeholder="Search address, county, court docket..."
-                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-[#D1D5DB] bg-white focus:outline-none focus:border-[#0F172A]"
+                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-line-strong bg-card focus:outline-none focus:border-ink"
                   />
                 </div>
 
@@ -607,7 +607,7 @@ export function InteractiveTerminal() {
                   value={selectedState}
                   onChange={(e) => dispatchFilters({ type: "set", key: "selectedState", value: e.target.value })}
                   aria-label="State filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="all">All States</option>
                   {availableStates.map((state) => (
@@ -622,7 +622,7 @@ export function InteractiveTerminal() {
                   value={selectedSource}
                   onChange={(e) => dispatchFilters({ type: "set", key: "selectedSource", value: e.target.value })}
                   aria-label="Source filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="all">All Sources</option>
                   {availableSources.map((key) => {
@@ -640,13 +640,13 @@ export function InteractiveTerminal() {
                   type="button"
                   aria-pressed={observedOnly}
                   onClick={() => dispatchFilters({ type: "toggleObservedOnly" })}
-                  className={cn("rounded-xl border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-[#0F172A] bg-[#0F172A] text-white" : "border-[#D1D5DB] bg-white text-[#374151]")}
+                  className={cn("rounded-xl border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-ink bg-ink text-white" : "border-line-strong bg-card text-ink-2")}
                 >Source-observed only</button>
                 <select
                   value={sortBy}
                   onChange={(e) => dispatchFilters({ type: "set", key: "sortBy", value: e.target.value as TerminalSort })}
                   aria-label="Sort listings"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-[#D1D5DB] bg-white text-[#374151] outline-none focus:outline-none focus:ring-2 focus:ring-slate-900/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="date">Published Deadline (Soonest)</option>
                   <option value="equity">Bid Spread (Highest)</option>
@@ -660,7 +660,7 @@ export function InteractiveTerminal() {
                     value is null on both sides, so the grid silently keeps its
                     default order while the control claims "Highest". Say so. */}
                 {unrankedSortReason ? (
-                  <p role="status" data-testid="sort-unranked-notice" className="text-[11px] font-medium text-amber-800">
+                  <p role="status" data-testid="sort-unranked-notice" className="text-[11px] font-medium text-catch-ink">
                     {unrankedSortReason}
                   </p>
                 ) : null}
@@ -672,8 +672,8 @@ export function InteractiveTerminal() {
                   className={cn(
                     "px-3 py-2 text-xs font-semibold rounded-xl border transition flex items-center gap-1.5 shadow-sm",
                     isAdvancedOpen || activeFiltersCount > 0
-                      ? "bg-[#0F172A] text-white border-[#0F172A]"
-                      : "bg-white border-[#D1D5DB] text-[#374151] hover:bg-[#F5F6F7]"
+                      ? "bg-ink text-white border-ink"
+                      : "bg-card border-line-strong text-ink-2 hover:bg-paper"
                   )}
                   aria-expanded={isAdvancedOpen}
                   aria-label="Toggle institutional filters"
@@ -688,7 +688,7 @@ export function InteractiveTerminal() {
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition flex items-center gap-1"
+                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 hover:bg-paper transition flex items-center gap-1"
                     aria-label="Reset all filters"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -699,16 +699,16 @@ export function InteractiveTerminal() {
 
               {/* Advanced Underwriting Drawer Tray */}
               {isAdvancedOpen && (
-                <div className="pt-3 border-t border-[#E5E7EB] grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
+                <div className="pt-3 border-t border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
                   {/* Min Deal Score */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Deal Score
                     </label>
                     <select
                       value={minDealScore}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minDealScore", value: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value={0}>Any Score</option>
                       <option value={70}>70+ (Elite Only)</option>
@@ -719,13 +719,13 @@ export function InteractiveTerminal() {
 
                   {/* Minimum modeled bid spread */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Bid Spread
                     </label>
                     <select
                       value={minEquity}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minEquity", value: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value={0}>Any Bid Spread</option>
                       <option value={25000}>$25,000+</option>
@@ -737,13 +737,13 @@ export function InteractiveTerminal() {
 
                   {/* Max Opening Bid */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Max Opening Bid
                     </label>
                     <select
                       value={maxOpeningBid === null ? "all" : maxOpeningBid}
                       onChange={(e) => dispatchFilters({ type: "set", key: "maxOpeningBid", value: e.target.value === "all" ? null : Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">Any Opening Bid</option>
                       <option value={50000}>Under $50k</option>
@@ -755,13 +755,13 @@ export function InteractiveTerminal() {
 
                   {/* Property Type */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Property Type
                     </label>
                     <select
                       value={propertyType}
                       onChange={(e) => dispatchFilters({ type: "set", key: "propertyType", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All Types</option>
                       <option value="Single Family">Single Family</option>
@@ -773,13 +773,13 @@ export function InteractiveTerminal() {
 
                   {/* Senior Lien / Title Risk */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Senior Title Risk
                     </label>
                     <select
                       value={seniorLienFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "seniorLienFilter", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All lien flags</option>
                       <option value="clean">Low lien flag</option>
@@ -789,13 +789,13 @@ export function InteractiveTerminal() {
 
                   {/* Statutory Redemption */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-[#5B6472] mb-1">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Redemption Status
                     </label>
                     <select
                       value={redemptionFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "redemptionFilter", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-[#D1D5DB] bg-white text-[#374151]"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All Jurisdictions</option>
                       <option value="immediate">Published 0-day term</option>
@@ -807,70 +807,70 @@ export function InteractiveTerminal() {
 
               {/* Active Filter Chips */}
               {activeFiltersCount > 0 && (
-                <div className="pt-2 border-t border-[#F1F5F9] flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="text-[11px] font-bold text-[#5B6472] mr-1">Active:</span>
-                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-[#0F172A] px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
+                <div className="pt-2 border-t border-line flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-[11px] font-bold text-ink-3 mr-1">Active:</span>
+                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
                   {selectedState !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       State: {selectedState}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedState", value: "all" })} aria-label="Remove state filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {selectedSource !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Source: {sourceDisplayText(SOURCES[selectedSource]?.label || selectedSource)}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedSource", value: "all" })} aria-label="Remove source filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {minDealScore > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Score: ≥{minDealScore}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minDealScore", value: 0 })} aria-label="Remove score filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {minEquity > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Bid spread: ≥${(minEquity / 1000).toFixed(0)}k
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minEquity", value: 0 })} aria-label="Remove bid spread filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {maxOpeningBid !== null && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Bid: ≤${(maxOpeningBid / 1000).toFixed(0)}k
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "maxOpeningBid", value: null })} aria-label="Remove max bid filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {propertyType !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Type: {propertyType}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "propertyType", value: "all" })} aria-label="Remove property type filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {seniorLienFilter !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Title: {seniorLienFilter === "clean" ? "Low lien flag" : "High junior-lien flag"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "seniorLienFilter", value: "all" })} aria-label="Remove title risk filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
                   {redemptionFilter !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F172A] text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
                       Redemption: {redemptionFilter === "immediate" ? "Published 0-day term" : "Published window"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "redemptionFilter", value: "all" })} aria-label="Remove redemption filter">
-                        <CloseIcon className="w-3 h-3 hover:text-red-300" />
+                        <CloseIcon className="w-3 h-3 hover:text-white/60" />
                       </button>
                     </span>
                   )}
@@ -879,40 +879,40 @@ export function InteractiveTerminal() {
             </div>
 
             {/* Triage Analytics Summary Bar */}
-            <div className="mb-6 p-4 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="mb-6 p-4 bg-card rounded-2xl border border-line shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#0F172A]/5 flex items-center justify-center text-[#0F172A] shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <LayoutGrid className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
-                  <p className="text-base font-extrabold text-[#111827]">{filtered.length} Records</p>
+                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
+                  <p className="text-base font-extrabold text-ink">{filtered.length} Records</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#0F172A]/5 flex items-center justify-center text-[#0F172A] shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
-                  <p className="text-base font-extrabold text-[#111827]">{displayMoney(medianBid)}</p>
+                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
+                  <p className="text-base font-extrabold text-ink">{displayMoney(medianBid)}</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-800 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-emerald-800 text-[10px] font-bold uppercase tracking-wider">Avg Bid Spread</p>
-                  <p className="text-base font-extrabold text-emerald-950">{avgEquity === null ? "Not modeled" : `+${avgEquity.toLocaleString()}`}</p>
+                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Avg Bid Spread</p>
+                  <p className="text-base font-extrabold text-ink">{avgEquity === null ? "Not modeled" : `+${avgEquity.toLocaleString()}`}</p>
                 </div>
               </div>
 
               {/* Interactive Deal Score Band Spectrum */}
               <div className="flex flex-col justify-center">
-                <p className="text-[#5B6472] text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
+                <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
                 <div className="flex items-center gap-1">
                   {scoreBandCounts.map(({ band, count }) => (
                     <button
@@ -929,8 +929,8 @@ export function InteractiveTerminal() {
                       className={cn(
                         "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
                         minDealScore === band.min
-                          ? "text-white ring-2 ring-[#0F172A]"
-                          : "text-slate-800 hover:opacity-90",
+                          ? "text-white ring-2 ring-ink"
+                          : "text-ink-2 hover:opacity-90",
                       )}
                       style={{
                         backgroundColor:
@@ -944,7 +944,7 @@ export function InteractiveTerminal() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] leading-4 text-[#5B6472]" title={DEAL_SCORE_MEANING}>
+                <p className="mt-1 text-[10px] leading-4 text-ink-3" title={DEAL_SCORE_MEANING}>
                   {DEAL_SCORE_MEANING}
                 </p>
               </div>
@@ -957,24 +957,24 @@ export function InteractiveTerminal() {
             ) : (
             /* Listings Grid */
             filtered.length === 0 ? (
-              <div className="p-12 text-center bg-white rounded-2xl border border-[#E5E7EB] shadow-sm space-y-4">
-                <SlidersHorizontal className="w-10 h-10 mx-auto text-[#5B6472]" />
+              <div className="p-12 text-center bg-card rounded-2xl border border-line shadow-sm space-y-4">
+                <SlidersHorizontal className="w-10 h-10 mx-auto text-ink-3" />
                 {/* An empty list because the load FAILED is not an empty list
                     because the filters are narrow. Telling the user to adjust
                     their criteria here contradicted the error banner above and
                     sent them to tune filters that were never the problem. */}
                 {syncStatus === "error" ? (
                   <>
-                    <h3 className="text-lg font-bold text-[#111827]">Inventory could not be loaded</h3>
-                    <p className="text-xs text-[#5B6472] max-w-md mx-auto">
+                    <h3 className="text-lg font-bold text-ink">Inventory could not be loaded</h3>
+                    <p className="text-xs text-ink-3 max-w-md mx-auto">
                       The listing feed did not load, so no properties were available to compare against
                       your criteria. This is a connection or data-mode problem, not a filter problem.
                     </p>
                   </>
                 ) : (
                   <>
-                    <h3 className="text-lg font-bold text-[#111827]">No properties match these underwriting criteria</h3>
-                    <p className="text-xs text-[#5B6472] max-w-md mx-auto">
+                    <h3 className="text-lg font-bold text-ink">No properties match these underwriting criteria</h3>
+                    <p className="text-xs text-ink-3 max-w-md mx-auto">
                       {unvaluedFilterReason
                         ?? "Try adjusting your modeled score, bid spread, or opening amount range to capture more published records."}
                     </p>
@@ -982,18 +982,18 @@ export function InteractiveTerminal() {
                 )}
 
                 {searchQuery.trim() && (
-                  <div className="pt-2 max-w-md mx-auto p-4 rounded-xl bg-[#0F172A] text-white space-y-2 border border-slate-700 shadow-md text-left">
-                    <div className="flex items-center gap-2 text-emerald-300 text-xs font-bold uppercase tracking-wider">
+                  <div className="pt-2 max-w-md mx-auto p-4 rounded-xl bg-ink text-white space-y-2 border border-white/10 shadow-md text-left">
+                    <div className="flex items-center gap-2 text-white text-xs font-bold uppercase tracking-wider">
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>Address research workspace</span>
                     </div>
-                    <p className="text-xs text-slate-300">
+                    <p className="text-xs text-white/75">
                       Looking for <strong>&quot;{searchQuery}&quot;</strong>? Open an evidence checklist for this address. Legal and title status remains unverified until official records are attached.
                     </p>
                     <button
                       type="button"
                       onClick={() => handleDeepCheckAddress(searchQuery)}
-                      className="w-full mt-2 py-2 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition border border-slate-600"
+                      className="w-full mt-2 py-2 px-4 rounded-lg bg-ink-2 hover:bg-ink-3 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition border border-white/20"
                     >
                       <Scale className="w-3.5 h-3.5" />
                       <span>Open evidence checklist for &quot;{searchQuery}&quot;</span>
@@ -1005,7 +1005,7 @@ export function InteractiveTerminal() {
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#0F172A] text-xs font-bold rounded-xl transition shadow-sm"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-line hover:bg-line-strong text-ink text-xs font-bold rounded-xl transition shadow-sm"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset All Filters</span>
@@ -1028,11 +1028,11 @@ export function InteractiveTerminal() {
                   <div
                     key={listing.id}
                     style={{ contentVisibility: "auto", containIntrinsicSize: "auto 460px" }}
-                    className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden shadow-sm hover:shadow-lg transition duration-200 flex flex-col justify-between group"
+                    className="bg-card rounded-2xl border border-line overflow-hidden shadow-sm hover:shadow-lg transition duration-200 flex flex-col justify-between group"
                   >
                     <div>
                       {/* Photo + Tags */}
-                      <div className="relative h-48 w-full bg-[#F5F6F7] overflow-hidden">
+                      <div className="relative h-48 w-full bg-paper overflow-hidden">
                         <ListingThumbnail listingId={listing.id} address={listing.address} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
                           <span
@@ -1043,7 +1043,7 @@ export function InteractiveTerminal() {
                           </span>
                           <span className={cn(
                             "rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase shadow-sm",
-                            isObserved ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900",
+                            isObserved ? "bg-paper text-ink-2" : "bg-catch-wash text-catch-ink",
                           )}>
                             {isObserved ? "Observed" : "Demo / unverified"}
                           </span>
@@ -1052,9 +1052,9 @@ export function InteractiveTerminal() {
                           onClick={(e) => { e.stopPropagation(); toggleSave(listing.id); }}
                           aria-label={isSaved ? `Remove ${listing.address} from watchlist` : `Add ${listing.address} to watchlist`}
                           aria-pressed={isSaved}
-                          className="absolute top-3 right-3 p-1.5 rounded-full bg-white/90 backdrop-blur-md text-[#374151] hover:text-slate-900 shadow"
+                          className="absolute top-3 right-3 p-1.5 rounded-full bg-card/90 backdrop-blur-md text-ink-2 hover:text-ink shadow"
                         >
-                          <Bookmark className={cn("w-4 h-4", isSaved && "fill-slate-900 text-slate-900")} />
+                          <Bookmark className={cn("w-4 h-4", isSaved && "fill-ink text-ink")} />
                         </button>
                       </div>
 
@@ -1062,10 +1062,10 @@ export function InteractiveTerminal() {
                       <div className="p-5 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <h3 className="font-bold text-base text-[#111827] line-clamp-1">{listing.address}</h3>
-                            <p className="text-xs text-[#5B6472]">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
+                            <h3 className="font-bold text-base text-ink line-clamp-1">{listing.address}</h3>
+                            <p className="text-xs text-ink-3">{displayText(listing.city)}, {listing.state} · {displayText(listing.county, "County not published")}</p>
                             {sourceRecordCountAtAddress && (
-                              <p className="mt-1 text-xs font-semibold text-slate-900">
+                              <p className="mt-1 text-xs font-semibold text-ink">
                                 {sourceRecordCountAtAddress} source records at this address
                               </p>
                             )}
@@ -1075,8 +1075,8 @@ export function InteractiveTerminal() {
                             data-testid="listing-deal-score"
                             className="text-xs font-extrabold px-2.5 py-1 rounded-md shrink-0"
                             style={{
-                              color: bandForScore(listing.dealScore)?.color ?? "#374151",
-                              backgroundColor: `${bandForScore(listing.dealScore)?.color ?? "#6B7280"}18`,
+                              color: bandForScore(listing.dealScore)?.color ?? "#3d3a4f",
+                              backgroundColor: `${bandForScore(listing.dealScore)?.color ?? "#5f5c6e"}18`,
                             }}
                           >
                             {knownNumber(listing.dealScore) === null
@@ -1086,20 +1086,20 @@ export function InteractiveTerminal() {
                         </div>
 
                         {/* Metric Row */}
-                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E5E7EB] text-xs">
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line text-xs">
                           <div>
-                            <span className="text-[#5B6472] block">Opening Bid:</span>
-                            <span data-testid="listing-opening-bid" className="font-bold text-[#111827] text-sm">{displayMoney(listing.openingBid)}</span>
+                            <span className="text-ink-3 block">Opening Bid:</span>
+                            <span data-testid="listing-opening-bid" className="font-bold text-ink text-sm">{displayMoney(listing.openingBid)}</span>
                           </div>
                           <div>
-                            <span className="text-emerald-800 font-semibold block">Modeled Bid Spread:</span>
-                            <span className="font-bold text-emerald-800 text-sm">{knownNumber(listing.equity) === null ? "Not modeled" : `+${listing.equity?.toLocaleString()}`}</span>
+                            <span className="text-ink-3 font-semibold block">Modeled Bid Spread:</span>
+                            <span className="font-bold text-ink text-sm">{knownNumber(listing.equity) === null ? "Not modeled" : `+${listing.equity?.toLocaleString()}`}</span>
                           </div>
                         </div>
 
-                        <p className="text-xs text-[#5B6472] flex items-center gap-1 pt-1">
-                          <Calendar className="w-3.5 h-3.5 text-[#5B6472]" />
-                          Auction: <span className="font-semibold text-[#111827]">{displayDate(listing.saleDate)}</span>
+                        <p className="text-xs text-ink-3 flex items-center gap-1 pt-1">
+                          <Calendar className="w-3.5 h-3.5 text-ink-3" />
+                          Auction: <span className="font-semibold text-ink">{displayDate(listing.saleDate)}</span>
                         </p>
                       </div>
                     </div>
@@ -1111,7 +1111,7 @@ export function InteractiveTerminal() {
                         aria-label={`${compare.ids.includes(listing.id) ? "Remove from" : "Add to"} compare: ${listing.address}`}
                         disabled={compare.full && !compare.ids.includes(listing.id)}
                         onClick={() => compare.toggle(listing.id)}
-                        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-[#D1D5DB] bg-white px-3 text-xs font-bold text-[#111827] hover:bg-[#F3F4F6] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-line-strong bg-card px-3 text-xs font-bold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {compare.ids.includes(listing.id) ? "In compare" : compare.full ? "Compare is full" : "Compare"}
                       </button>
@@ -1120,7 +1120,7 @@ export function InteractiveTerminal() {
                     <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-xl bg-[#0F172A] text-white text-xs font-bold hover:bg-[#1E293B] transition gap-1 shadow-sm"
+                        className="w-full inline-flex h-10 items-center justify-center rounded-xl bg-ink text-white text-xs font-bold hover:bg-ink-2 transition gap-1 shadow-sm"
                       >
                         <span>Underwrite Deal</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1129,7 +1129,7 @@ export function InteractiveTerminal() {
                         href={`/listings/${listing.id}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-xl border border-[#D1D5DB] bg-white text-[#0F172A] text-xs font-bold hover:bg-[#F3F4F6] transition gap-1 shadow-sm"
+                        className="w-full inline-flex h-10 items-center justify-center rounded-xl border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
                       >
                         <span>Listing page</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1148,16 +1148,16 @@ export function InteractiveTerminal() {
                 <button
                   type="button"
                   onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
-                  className="px-6 py-3 rounded-xl bg-[#0F172A] text-white text-sm font-bold transition hover:bg-[#1E293B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F172A] focus-visible:ring-offset-2"
+                  className="px-6 py-3 rounded-xl bg-ink text-white text-sm font-bold transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
                 >
                   Show {Math.min(remaining, PAGE_SIZE).toLocaleString()} more
                 </button>
-                {/* slate-600, not slate-500: this sits on the #F5F6F7 page
-                    background, where slate-500 measures 4.4:1 and WCAG AA wants
-                    4.5:1. On white the same class passes, so this is a
-                    background problem rather than a bad token -- changing the
-                    token globally would move every other page for one line. */}
-                <p className="text-xs text-slate-600">
+                {/* ink-3 is the lightest text the palette allows, not a
+                    guess: it measures 5.9:1 on the paper page background, and
+                    WCAG AA wants 4.5:1. Anything lighter than ink-3 would fail
+                    here, so this stays ink-3 rather than a paler token for
+                    the sake of hierarchy. */}
+                <p className="text-xs text-ink-3">
                   Showing {visible.length.toLocaleString()} of {filtered.length.toLocaleString()} matching listings
                 </p>
               </div>

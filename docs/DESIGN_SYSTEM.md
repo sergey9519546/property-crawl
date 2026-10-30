@@ -13,7 +13,7 @@ Our brand promise is "Every deal has a catch. We show it first." The design syst
 1. **A gap is drawn, not hidden.** A missing value keeps the same footprint as a real one and is never collapsed or dimmed. Why: empty space reads as "nothing to worry about". Do: show "Not in the notice" where the deposit would be. Don't: show a dash, or drop the row.
 2. **Every value has an origin, and the origin is visible.** Printed, yours, or unknown. Why: a buyer's guess that looks like a published fact is the most expensive mistake on the page. Do: mark a typed estimate with the pencil style and "yours". Don't: render an estimate in plain ink.
 3. **The caller never chooses "unknown".** Unknown is what a missing value becomes. Why: if a developer can pick it, a developer can style it away. Do: pass the raw value to `Fact`. Don't: add an `unknown` prop or pre-format a fallback string.
-4. **Colour is spent on evidence, not mood.** Amber means the catch, indigo means yours, green means an action or "live". Everything else is ink, paper and lines. Why: green reads as safe, and nothing here is safe by default. Do: use green for a button. Don't: use green for "good deal" or "verified".
+4. **Colour is spent on evidence, not mood.** Persimmon means the catch, periwinkle means yours, celadon green means an action or "live". Sunlit butter is the signature: brand moments only, never data. Everything else is ink, paper and lines. Why: green reads as safe, and nothing here is safe by default. Do: use green for a button. Don't: use green for "good deal" or "verified".
 5. **A derived number is only as strong as its weakest input (weakest-link rule).** Built on any guess, it is "yours". With a required input missing, it is unknown. Why: arithmetic launders weak inputs into confident-looking output. Do: show the top bid as yours when the estimate was typed. Don't: show it as printed because the opening bid was.
 6. **Say why it is missing, using fixed words.** "Not in the notice" is the default. Use "Set at the sale" or "Not checked yet" only when the source's rules prove it. Why: a wrong reason is invented data. Do: use the default. Don't: write a friendlier custom reason.
 7. **Never colour alone.** Material is carried by hatch, text and screen-reader text as well as colour. Why: colour-blind users, forced-colours mode, and print. Do: keep the hatch and the words. Don't: drop them for a cleaner look.
@@ -23,8 +23,8 @@ Our brand promise is "Every deal has a catch. We show it first." The design syst
 | Material | Meaning | Look | Markup |
 | --- | --- | --- | --- |
 | Printed | Published by the source | Plain ink, no decoration | `.ev-printed`, `data-evidence="printed"` |
-| Yours | Typed by the buyer | Indigo, dashed "pencil" underline, sr-only "Your estimate:" | `.ev-yours`, `data-evidence="yours"` |
-| Unknown | Nobody has published it | Amber hatch on a wash, inset hairline, sr-only "Unknown:" | `.ev-unknown`, `data-evidence="unknown"` |
+| Yours | Typed by the buyer | Periwinkle, dashed "pencil" underline, sr-only "Your estimate:" | `.ev-yours`, `data-evidence="yours"` |
+| Unknown | Nobody has published it | Persimmon hatch on a wash, inset hairline, sr-only "Unknown:" | `.ev-unknown`, `data-evidence="unknown"` |
 
 Tokens: `--color-ink`, `--color-yours`, `--color-yours-wash`, `--color-catch`, `--color-catch-ink`, `--color-catch-wash`. Under `forced-colors: active` the hatch is replaced by a dashed `CanvasText` border.
 
@@ -38,9 +38,18 @@ Weakest-link rule, in short: all inputs printed gives printed; any input yours g
 | --- | --- | --- | --- |
 | Ink family | `ink`, `ink-2`, `ink-3` | Text. `ink-3` is the lightest allowed for text (AA on paper). | Anything lighter for text |
 | Paper, card, line | `paper`, `card`, `line`, `line-strong` | Page, raised surface, hairlines | Decorative tints |
-| Amber | `catch`, `catch-ink`, `catch-wash` | The catch and unknown values | Warnings unrelated to a missing fact |
-| Indigo | `yours`, `yours-wash` | Values the buyer typed | Links or decoration |
-| Green | `go`, `go-wash` | Actions and "live" | "Good deal", "verified", "safe" |
+| Persimmon `#FF5533` (text: `#A92E14`) | `catch`, `catch-ink`, `catch-wash` | The catch and unknown values | Warnings unrelated to a missing fact |
+| Periwinkle `#4F6BF6` (text: `#3651E0`) | `yours`, `yours-wash` | Values the buyer typed | Links or decoration |
+| Celadon `#12B981` (text: `#0B7A56`) | `go`, `go-fill`, `go-wash` | Actions and "live". On `go-fill` use ink text: white is 2.5:1. | "Good deal", "verified", "safe" |
+| Sunlit butter `#FFE24A` | `signature` | Brand moments: selection, eyebrow dots | Any data value |
+
+**Cases the table doesn't settle:**
+- **Deal Score bands** are an ink ladder (Elite `ink`, Strong `ink-2`, Fair and Thin `ink-3`), set once in `src/lib/score-bands.ts` and mirrored in `server/intelligence/score-bands.js`. A score is a number to check, not a verdict, so it never turns green or red.
+- **System notices** (database unavailable, data mode, legal notices) are neutral: `border-line-strong bg-paper text-ink-2`. Persimmon is reserved for the listing's own catch.
+- **Errors** (a failed form or a failed load) borrow the catch tokens. Something is wrong or missing, which is what persimmon means.
+- **Success** of the user's own action, like a sent form, uses `go`: `bg-go-wash`, and a solid `bg-go` with white text for buttons.
+- **Form fields** focus in periwinkle: a field is where the buyer writes.
+- **Published data** (counts, dates, sources, opening bids, citations) is always ink, never periwinkle or green.
 
 ## 5. Scale
 
@@ -54,7 +63,7 @@ Weakest-link rule, in short: all inputs printed gives printed; any input yours g
 - **`Fact`** (`src/components/evidence/fact.tsx`): `<Fact value={...} format="money|date|text" origin="printed|yours" reason="..." />`. Decides the material from the value. Empty, zero money, "n/a", "unknown" and similar all become unknown.
 - **`YoursTag`**: a small "yours" chip beside buyer-typed inputs and results.
 - **`GapLedger`** (`gap-ledger.tsx`): "What this listing can't tell you". Rows come only from fields that are actually empty, in a fixed house-rule order: occupancy, liens, deposit, redemption, opening bid, sale date (not a cost estimate). Each row has why it matters and a way to find out. It never invents a contact: it links the source notice, or a generic action. Ticks are stored on this device only.
-- **`SectionHeading`** (`src/components/site/section-heading.tsx`): the one pattern for section titles: eyebrow pill, headline, one short paragraph. `tone="catch"` for amber sections.
+- **`SectionHeading`** (`src/components/site/section-heading.tsx`): the one pattern for section titles: eyebrow pill, headline, one short paragraph. `tone="catch"` for persimmon (catch) sections.
 - **`CatchReveal`** (`src/components/site/catch-reveal.tsx`): the homepage proof moment. Fetches a real current listing, shows it the way a sale posts it (price first), then the catch our rules found. Real data only; if listings cannot load it says so.
 
 ## 7. Accessibility

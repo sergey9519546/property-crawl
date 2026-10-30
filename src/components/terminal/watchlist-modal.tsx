@@ -226,15 +226,15 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-title"
-        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] overflow-hidden flex flex-col max-h-[85vh]"
+        className="w-full max-w-2xl bg-card rounded-2xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[85vh]"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#E5E7EB] flex items-center justify-between bg-white">
+        <div className="px-6 py-4 border-b border-line flex items-center justify-between bg-card">
           <div className="flex items-center gap-2">
-            <Bookmark className="w-5 h-5 text-[#15803D] fill-[#16A34A]" />
-            <h3 id="watchlist-title" className="text-lg font-bold text-[#111827]">Saved Watchlist ({savedListings.length})</h3>
+            <Bookmark className="w-5 h-5 text-ink fill-ink" />
+            <h3 id="watchlist-title" className="text-lg font-bold text-ink">Saved Watchlist ({savedListings.length})</h3>
           </div>
-          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-[#5B6472] hover:text-[#111827] hover:bg-[#F5F6F7]">
+          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-paper">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -242,89 +242,89 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         {/* Action Bar */}
         {savedListings.length > 0 && (
           <>
-            <div className="px-6 py-2.5 bg-[#0F172A] text-white flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="px-6 py-2.5 bg-ink text-white flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-4">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-300 block">Known opening amounts</span>
+                  <span className="text-[10px] uppercase font-bold text-white/75 block">Known opening amounts</span>
                   <span className="font-extrabold text-sm text-white">
                     {displayMoney(totalOpeningBids)}
                   </span>
-                  <span className="block text-[9px] text-slate-300">{knownOpeningBids.length}/{savedListings.length} published</span>
+                  <span className="block text-[9px] text-white/75">{knownOpeningBids.length}/{savedListings.length} published</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-emerald-400 block">Known bid spread</span>
-                  <span className="font-extrabold text-sm text-[#22C55E]">
+                  <span className="text-[10px] uppercase font-bold text-white/75 block">Known bid spread</span>
+                  <span className="font-extrabold text-sm text-white">
                     {displayMoney(totalBidSpread)}
                   </span>
-                  <span className="block text-[9px] text-slate-300">{knownBidSpreads.length}/{savedListings.length} modeled</span>
+                  <span className="block text-[9px] text-white/75">{knownBidSpreads.length}/{savedListings.length} modeled</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-slate-300 block">Avg modeled score</span>
+                  <span className="text-[10px] uppercase font-bold text-white/75 block">Avg modeled score</span>
                   <span className="font-extrabold text-sm text-white">
                     {averageModeledScore === null ? "Not modeled" : `${averageModeledScore}/99`}
                   </span>
-                  <span className="block text-[9px] text-slate-300">{knownScores.length}/{savedListings.length} scored</span>
+                  <span className="block text-[9px] text-white/75">{knownScores.length}/{savedListings.length} scored</span>
                 </div>
               </div>
-              <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+              <span className="text-[10px] font-semibold text-white/75 uppercase tracking-wider">
                 {savedListings.length} tracked opportunities
               </span>
             </div>
 
-            <div className="px-6 py-3 bg-[#F5F6F7] border-b border-[#E5E7EB] flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-[#5B6472] font-medium">Saved source records</span>
+            <div className="px-6 py-3 bg-paper border-b border-line flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs text-ink-3 font-medium">Saved source records</span>
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void loadPortfolioDashboard()}
                   disabled={portfolioLoading}
-                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm disabled:opacity-50"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm disabled:opacity-50"
                 >
                   <span>{portfolioLoading ? "Loading Rollup…" : "Portfolio Rollup"}</span>
                 </button>
                 <button
                   onClick={exportCsv}
-                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
-                  <FileText className="w-3.5 h-3.5 text-[#0F172A]" />
+                  <FileText className="w-3.5 h-3.5 text-ink" />
                   <span>Export CSV</span>
                 </button>
                 <button
                   onClick={exportJson}
-                  className="px-3 py-1.5 bg-white border border-[#E5E7EB] text-xs font-bold text-[#111827] rounded-lg hover:bg-[#F5F6F7] transition flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
-                  <Copy className="w-3.5 h-3.5 text-[#0F172A]" />
+                  <Copy className="w-3.5 h-3.5 text-ink" />
                   <span>Export JSON</span>
                 </button>
               </div>
             </div>
             {portfolioStatus && (
-              <div className="px-6 py-2.5 bg-amber-50 border-b border-amber-200 text-xs text-amber-950 flex items-center justify-between gap-2">
+              <div className="px-6 py-2.5 bg-paper border-b border-line-strong text-xs text-ink-2 flex items-center justify-between gap-2">
                 <span>{portfolioStatus}</span>
                 <a href="/sign-in" className="font-bold underline shrink-0">Unlock workspace</a>
               </div>
             )}
             {portfolioRollup && (
-              <div className="px-6 py-3 bg-slate-50 border-b border-[#E5E7EB] text-xs space-y-2" data-testid="portfolio-dashboard-rollup">
+              <div className="px-6 py-3 bg-paper border-b border-line text-xs space-y-2" data-testid="portfolio-dashboard-rollup">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
-                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Server Est. Value</span>
-                    <strong className="text-sm text-[#111827]">{displayMoney(portfolioRollup.totalEstimatedValue)}</strong>
+                  <div className="rounded-lg bg-card border border-line p-2">
+                    <span className="block text-[10px] font-bold uppercase text-ink-3">Server Est. Value</span>
+                    <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedValue)}</strong>
                   </div>
-                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
-                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Server Est. Spread</span>
-                    <strong className="text-sm text-[#15803D]">{displayMoney(portfolioRollup.totalEstimatedEquity)}</strong>
+                  <div className="rounded-lg bg-card border border-line p-2">
+                    <span className="block text-[10px] font-bold uppercase text-ink-3">Server Est. Spread</span>
+                    <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedEquity)}</strong>
                   </div>
-                  <div className="rounded-lg bg-white border border-[#E5E7EB] p-2">
-                    <span className="block text-[10px] font-bold uppercase text-[#5B6472]">Median Discount</span>
-                    <strong className="text-sm text-[#111827]">
+                  <div className="rounded-lg bg-card border border-line p-2">
+                    <span className="block text-[10px] font-bold uppercase text-ink-3">Median Discount</span>
+                    <strong className="text-sm text-ink">
                       {portfolioRollup.medianDiscount !== null ? `${Math.round(portfolioRollup.medianDiscount * 100)}%` : "Not modeled"}
                     </strong>
                   </div>
                 </div>
                 {Object.keys(portfolioRollup.perState || {}).length > 0 && (
-                  <p className="text-[11px] text-[#5B6472]">
-                    <strong className="text-[#111827]">States:</strong>{" "}
+                  <p className="text-[11px] text-ink-3">
+                    <strong className="text-ink">States:</strong>{" "}
                     {Object.entries(portfolioRollup.perState).map(([st, c]) => `${st} (${c})`).join(", ")}
                   </p>
                 )}
@@ -336,9 +336,9 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         {/* Listings List */}
         <div className="p-6 overflow-y-auto space-y-3 flex-1">
           {savedListings.length === 0 ? (
-            <div className="text-center py-12 text-[#5B6472] space-y-2">
-              <Bookmark className="w-10 h-10 mx-auto text-[#5B6472]" />
-              <p className="font-semibold text-[#111827]">No saved properties yet</p>
+            <div className="text-center py-12 text-ink-3 space-y-2">
+              <Bookmark className="w-10 h-10 mx-auto text-ink-3" />
+              <p className="font-semibold text-ink">No saved properties yet</p>
               <p className="text-xs">Click the bookmark icon on any auction listing or parsed notice to track it here.</p>
             </div>
           ) : (
@@ -349,7 +349,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
               return (
               <div
                 key={l.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-[#E5E7EB] hover:border-[#0F172A] bg-white transition group"
+                className="flex items-center justify-between p-4 rounded-xl border border-line hover:border-ink bg-card transition group"
               >
                 <button
                   type="button"
@@ -359,13 +359,13 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   {photoUrl ? (
                     <img src={photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
                   ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#F5F6F7] text-[#5B6472]" aria-label="No source photo published">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-3" aria-label="No source photo published">
                       <ImageOff className="h-4 w-4" />
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="font-bold text-sm text-[#111827] truncate">{l.address}</p>
-                    <p className="text-xs text-[#5B6472] truncate">
+                    <p className="font-bold text-sm text-ink truncate">{l.address}</p>
+                    <p className="text-xs text-ink-3 truncate">
                       {displayMoney(l.openingBid)} · Sale: {displayDate(l.saleDate)}
                     </p>
                   </div>
@@ -378,7 +378,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                     style={
                       scoreBand
                         ? { backgroundColor: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }
-                        : { backgroundColor: "#F1F5F9", color: "#5B6472" }
+                        : { backgroundColor: "var(--color-line)", color: "var(--color-ink-3)" }
                     }
                   >
                     {score === null ? "Not modeled" : `${Math.round(score)}/99`}
@@ -386,7 +386,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   <button
                     onClick={() => onRemove(l.id)}
                     aria-label={`Remove ${l.address} from watchlist`}
-                    className="p-1.5 text-[#5B6472] hover:text-[#B91C1C] transition"
+                    className="p-1.5 text-ink-3 hover:text-catch-ink transition"
                     title="Remove from watchlist"
                   >
                     <Trash2 className="w-4 h-4" />

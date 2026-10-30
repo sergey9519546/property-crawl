@@ -97,12 +97,12 @@ export function ListingWatchlistToggle({ listingId }: { listingId: string }) {
         disabled={busy}
         aria-pressed={saved ? "true" : "false"}
         onClick={() => void toggle()}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-900 hover:border-slate-900 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 disabled:opacity-50"
+        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg border border-line-strong px-4 py-3 text-sm font-semibold text-ink hover:border-ink hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 disabled:opacity-50"
       >
         <Bookmark className={`h-4 w-4 ${saved ? "fill-current" : ""}`} aria-hidden />
         {busy ? "Updating watchlist…" : saved ? "Saved to watchlist" : "Save to watchlist"}
       </button>
-      {error ? <p role="status" className="mt-2 text-xs text-red-700">{error}</p> : null}
+      {error ? <p role="status" className="mt-2 text-xs text-catch-ink">{error}</p> : null}
     </div>
   );
 }

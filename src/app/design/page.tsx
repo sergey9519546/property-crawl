@@ -23,10 +23,13 @@ const INK = [
 
 const EVIDENCE = [
   ["catch-wash", "bg-[var(--color-catch-wash)]", "The catch / unknown"],
-  ["catch", "bg-[var(--color-catch)]", "Amber accent"],
+  ["catch", "bg-[var(--color-catch)]", "Persimmon #FF5533, fills only"],
+  ["catch-ink", "bg-[var(--color-catch-ink)]", "Catch text #A92E14"],
   ["yours", "bg-[var(--color-yours)]", "Buyer-typed"],
   ["yours-wash", "bg-[var(--color-yours-wash)]", "Yours chip"],
-  ["go", "bg-[var(--color-go)]", "Actions and live only"],
+  ["go", "bg-[var(--color-go)]", "Go text #0B7A56"],
+  ["go-fill", "bg-[var(--color-go-fill)]", "Celadon #12B981, action fills"],
+  ["signature", "bg-[var(--color-signature)]", "Butter #FFE24A, brand only, never data"],
 ] as const;
 
 const TYPE = [
@@ -126,12 +129,12 @@ export default function DesignPage() {
             <div className={card}>
               <h3 className={kicker}>Yours <YoursTag /></h3>
               <p className="mt-3 text-title font-semibold"><Fact value="Your number" origin="yours" /></p>
-              <p className="mt-2 text-meta text-ink-2">Typed by the buyer. Indigo pencil.</p>
+              <p className="mt-2 text-meta text-ink-2">Typed by the buyer. Periwinkle pencil.</p>
             </div>
             <div className={card}>
               <h3 className={kicker}>Unknown</h3>
               <p className="mt-3 text-title font-semibold"><Fact value={null} format="money" /></p>
-              <p className="mt-2 text-meta text-ink-2">Nobody published it. Amber hatch.</p>
+              <p className="mt-2 text-meta text-ink-2">Nobody published it. Persimmon hatch.</p>
             </div>
           </div>
           <div className={`${card} mt-4`}>
@@ -169,9 +172,9 @@ export default function DesignPage() {
             <div className={card}>
               <h3 className={kicker}>Do</h3>
               <ul className="mt-3 list-disc space-y-2 pl-5 text-meta text-ink-2">
-                <li>Amber for the catch and for unknown values.</li>
-                <li>Indigo for what the buyer typed.</li>
-                <li>Green for an action or for something live.</li>
+                <li>Persimmon for the catch and for unknown values.</li>
+                <li>Periwinkle for what the buyer typed.</li>
+                <li>Celadon green for an action or for something live.</li>
                 <li>Ink, paper and lines for everything else.</li>
               </ul>
             </div>

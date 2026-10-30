@@ -90,27 +90,27 @@ export function CatchReveal() {
 
         <div className="relative mt-12 grid gap-4 lg:grid-cols-2">
           {/* Left: what the sale posts */}
-          <article className="overflow-hidden rounded-3xl border border-line bg-white shadow-[0_1px_2px_rgba(17,24,39,0.04),0_18px_48px_rgba(17,24,39,0.06)]">
-            <div className="relative h-44 bg-[linear-gradient(135deg,#f8f4ec,#fff6c8)]">
-              <House aria-hidden className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-slate-300" />
+          <article className="overflow-hidden rounded-3xl border border-line bg-card shadow-[0_1px_2px_rgba(24,21,41,0.04),0_18px_48px_rgba(24,21,41,0.06)]">
+            <div className="relative h-44 bg-[linear-gradient(135deg,#f8f4ec,#ebe4d6)]">
+              <House aria-hidden className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 text-ink-3/40" />
               {photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photo} alt="" loading="lazy" referrerPolicy="no-referrer" className="relative h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
               ) : null}
-              <span className="absolute left-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[12px] font-semibold text-ink shadow-sm backdrop-blur">
+              <span className="absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1 text-[12px] font-semibold text-ink shadow-sm backdrop-blur">
                 What the sale posts
               </span>
             </div>
             <div className="p-6 sm:p-7">
               {status === "loading" ? (
                 <div aria-hidden className="space-y-3">
-                  <div className="h-5 w-3/4 animate-pulse rounded bg-slate-100" />
-                  <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
-                  <div className="h-10 w-1/3 animate-pulse rounded bg-slate-100" />
+                  <div className="h-5 w-3/4 animate-pulse rounded bg-line" />
+                  <div className="h-4 w-1/2 animate-pulse rounded bg-line" />
+                  <div className="h-10 w-1/3 animate-pulse rounded bg-line" />
                 </div>
               ) : listing ? (
                 <>
-                  <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-go">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-ink-3">
                     {SOURCE_NAMES[String(listing.source)] ?? sourceDisplayText(String(listing.source ?? "Public sale"))}
                   </p>
                   <h3 className="mt-2 text-[20px] font-semibold leading-snug text-ink">{listing.address}</h3>
@@ -139,7 +139,7 @@ export function CatchReveal() {
           <article
             aria-live="polite"
             className={`relative flex flex-col rounded-3xl border p-6 transition-colors duration-300 sm:p-7 ${
-              revealed ? "border-[var(--catch-border)] bg-[var(--catch-bg)]" : "border-dashed border-line-strong bg-white/60"
+              revealed ? "border-[var(--catch-border)] bg-[var(--catch-bg)]" : "border-dashed border-line-strong bg-card/60"
             }`}
           >
             <p className="inline-flex w-fit items-center gap-1.5 rounded-full bg-catch-wash px-3 py-1 text-[12px] font-semibold text-[var(--catch-ink)]">
@@ -176,14 +176,14 @@ export function CatchReveal() {
                   ))}
                   {found.notes.map((note, i) => (
                     <li key={note} className="catch-item flex gap-3" style={{ animationDelay: `${(found.flags.length + i) * 70}ms` }}>
-                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-go-fill/15">
-                        <Check className="h-3.5 w-3.5 text-go" aria-hidden />
+                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink/10">
+                        <Check className="h-3.5 w-3.5 text-ink-2" aria-hidden />
                       </span>
                       <span className="text-[15px] leading-6 text-ink-2">{note}</span>
                     </li>
                   ))}
                 </ol>
-                <p className="mt-5 border-t border-catch/25 pt-4 text-[13px] leading-5 text-catch-ink/80">
+                <p className="mt-5 border-t border-catch/25 pt-4 text-[13px] leading-5 text-catch-ink">
                   Built only from what the listing publishes. Title, liens and condition still need your own check.
                 </p>
               </div>

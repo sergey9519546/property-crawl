@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PerfectProperty — Find the opportunity that changed",
   description:
-    "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out and a Deal Score on each listing.",
+    "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out for each sale.",
   keywords: [
     "PerfectProperty",
     "distressed property",
@@ -97,7 +97,7 @@ export default async function RootLayout({
         />
         <SeoSchema nonce={nonce} />
       </head>
-      <body className="antialiased bg-[#F5F6F7] text-[#111827]">
+      <body className="antialiased bg-paper text-ink">
         <NonceProvider nonce={nonce}>
           {children}
           <Toaster />

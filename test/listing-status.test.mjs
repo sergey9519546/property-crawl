@@ -8,12 +8,16 @@ import {
   listingStatusTone,
 } from "../src/lib/listing-status.ts";
 
+// Only an open auction may use the go (live) tokens, and only the held tone uses
+// the catch tokens; finished, sold, and unrecognized phrases stay neutral.
+const GO_OR_CATCH = /(?:bg|text)-(?:go|catch)/;
+
 test("recorded sales are sold, not open inventory", () => {
   for (const label of ["sold", "Sold to 3rd Party", "Auctioned - Sold to 3rd Party"]) {
     assert.equal(listingStatusTone(label), "sold");
     assert.equal(listingOfferAvailability("sold"), "https://schema.org/SoldOut");
-    assert.match(listingStatusClass("sold"), /rose/);
-    assert.doesNotMatch(listingStatusClass("sold"), /emerald/);
+    assert.match(listingStatusClass("sold"), /bg-line/);
+    assert.doesNotMatch(listingStatusClass("sold"), GO_OR_CATCH);
   }
 });
 
@@ -33,20 +37,20 @@ test("a finished auction is not a sale and is not in stock", () => {
     const tone = listingStatusTone(label);
     assert.equal(tone, "finished", label);
     assert.equal(listingOfferAvailability(tone), undefined);
-    assert.doesNotMatch(listingStatusClass(tone), /emerald|rose/);
+    assert.doesNotMatch(listingStatusClass(tone), GO_OR_CATCH);
   }
 });
 
-test("held auctions stay amber and unrecognized words stay neutral", () => {
+test("held auctions use the catch tone and unrecognized words stay neutral", () => {
   for (const label of ["postponed", "Active - Postponed", "adjourned", "stayed"]) {
     assert.equal(listingStatusTone(label), "held", label);
-    assert.match(listingStatusClass("held"), /amber/);
+    assert.match(listingStatusClass("held"), /text-catch-ink/);
     assert.equal(listingOfferAvailability("held"), undefined);
   }
   for (const label of ["foreclosed", "unsold", "Verify at source", ""]) {
     assert.equal(listingStatusTone(label), "neutral", label);
     assert.equal(listingOfferAvailability("neutral"), undefined);
-    assert.doesNotMatch(listingStatusClass("neutral"), /emerald/);
+    assert.doesNotMatch(listingStatusClass("neutral"), GO_OR_CATCH);
   }
 });
 
@@ -55,7 +59,7 @@ test("only an open auction phrase is in stock", () => {
     assert.equal(listingStatusTone(label), "open", label);
   }
   assert.equal(listingOfferAvailability("open"), "https://schema.org/InStock");
-  assert.match(listingStatusClass("open"), /emerald/);
+  assert.match(listingStatusClass("open"), /text-go\b/);
 });
 
 test("a stored sale wins over a lifecycle phrase that still says active", () => {

@@ -62,13 +62,13 @@ const GROUPS: MenuGroup[] = [
     label: "Product",
     columns: [
       [
-        { label: "Search listings", desc: "Upcoming sales on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7faef" },
-        { label: "The catch", desc: "What could cost you, on every listing", icon: Target, href: "/#the-catch", tint: "#fffaea" },
-        { label: "Run your numbers", desc: "Work out your top bid from your own estimates", icon: Calculator, href: "/#product", tint: "#E2E8F0" },
+        { label: "Search listings", desc: "Upcoming sales on a list, a map or a calendar", icon: LayoutDashboard, href: "/listings", tint: "#e7f8f0" },
+        { label: "The catch", desc: "What could cost you, on every listing", icon: Target, href: "/#the-catch", tint: "#fff0e9" },
+        { label: "Run your numbers", desc: "Work out your top bid from your own estimates", icon: Calculator, href: "/#product", tint: "#eef1ff" },
       ],
       [
-        { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#FFD6C8" },
-        { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#FEF3C7" },
+        { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#e7f8f0" },
+        { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#eef1ff" },
       ],
     ],
   },
@@ -77,14 +77,14 @@ const GROUPS: MenuGroup[] = [
     label: "Learn",
     columns: [
       [
-        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#E2E8F0" },
-        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#e7faef" },
-        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#FFD6C8" },
+        { label: "Buyer's guide", desc: "How auction sales work, step by step", icon: BookOpen, href: "/resources#knowledge-base", tint: "#ebe4d6" },
+        { label: "Questions", desc: "Short answers for first-time bidders", icon: Gauge, href: "/#faq", tint: "#ebe4d6" },
+        { label: "States and counties", desc: "Where we have listings right now", icon: Map, href: "/states", tint: "#ebe4d6" },
       ],
       [
-        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#E9D5FF" },
-        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#e7faef" },
-        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#E2E8F0" },
+        { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#ebe4d6" },
+        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#ebe4d6" },
+        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#ebe4d6" },
       ],
     ],
   },
@@ -174,7 +174,7 @@ export function SiteHeader() {
         <header
           className={`relative flex items-center justify-between rounded-[16px] px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
-              ? "bg-white/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
+              ? "bg-card/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
           }`}
           style={{ willChange: scrolled || open ? "backdrop-filter" : "auto" }}
@@ -229,7 +229,7 @@ export function SiteHeader() {
             href="/account"
             onMouseEnter={() => setOpen(null)}
             title="Members sign in with a one-time email link"
-            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-white"
+            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-card"
           >
             Sign in
           </Link>
@@ -260,7 +260,7 @@ export function SiteHeader() {
             onMouseLeave={() => setOpen(null)}
           >
             <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
-              <div className="mt-2 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
+              <div className="mt-2 overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
                 {GROUPS.filter((g) => g.key === open).map((g) => (
                   <MegaPanel key={g.key} group={g} />
                 ))}

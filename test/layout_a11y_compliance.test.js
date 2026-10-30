@@ -73,6 +73,8 @@ test('Listing page logic: no invented lien amounts, no false junior-lien alarm',
   assert.match(src, /\^\(\?:high\|critical\)\$/, 'lien warning must be gated on detector risk high/critical');
   assert.match(src, /\^SENIOR_LIEN_RISK/, 'lien warning must honor the SENIOR_LIEN_RISK detector warning');
   assert.doesNotMatch(src, /\(\?:junior\|second/, 'free-text junior/second regex must not drive the warning');
+  // No signal is not a check: only the buyer marks an item verified.
+  assert.doesNotMatch(src, /\? "flagged" : "verified"/, 'absence of a risk signal must default to pending, never verified');
 });
 
 test('Listing page logic: watchlist toggle saves to device storage for signed-out visitors', () => {

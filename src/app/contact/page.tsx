@@ -63,8 +63,8 @@ export default function ContactPage() {
           >
             <ArrowLeft className="h-4 w-4" /> Back to PerfectProperty
           </Link>
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
             Get in touch
           </p>
           <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
@@ -81,38 +81,38 @@ export default function ContactPage() {
         <div className="mx-auto max-w-3xl">
       <div>
         {status === "success" ? (
-          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-8 text-center space-y-4">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-800">
+          <div className="rounded-3xl border border-go/30 bg-go-wash p-8 text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-go-fill/20 text-go">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h2 className="text-xl font-bold text-emerald-950">Message received</h2>
-            <p className="text-sm text-emerald-800 max-w-md mx-auto">{responseMsg}</p>
+            <h2 className="text-xl font-bold text-go">Message received</h2>
+            <p className="text-sm text-ink-2 max-w-md mx-auto">{responseMsg}</p>
             <div className="pt-2">
               <button
                 type="button"
                 onClick={() => setStatus("idle")}
-                className="rounded-xl bg-emerald-800 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 transition"
+                className="rounded-xl bg-go px-5 py-2.5 text-sm font-semibold text-white hover:bg-go/90 transition"
               >
                 Send another message
               </button>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-line bg-white p-6 sm:p-8 shadow-sm">
+          <form onSubmit={handleSubmit} className="space-y-6 rounded-3xl border border-line bg-card p-6 sm:p-8 shadow-sm">
             {status === "error" && (
-              <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-900">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" />
+              <div className="flex items-center gap-2 rounded-xl border border-catch/30 bg-catch-wash p-4 text-xs font-medium text-catch-ink">
+                <AlertCircle className="h-4 w-4 shrink-0 text-catch-ink" />
                 <span>{responseMsg}</span>
               </div>
             )}
 
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
-                <label htmlFor="contact-name" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  Your name <span className="text-red-500">*</span>
+                <label htmlFor="contact-name" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
+                  Your name <span className="text-catch-ink">*</span>
                 </label>
                 <div className="relative mt-2">
-                  <User className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                  <User className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
                   <input
                     id="contact-name"
                     type="text"
@@ -121,17 +121,17 @@ export default function ContactPage() {
                     placeholder="Your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="contact-email" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                  Your email <span className="text-red-500">*</span>
+                <label htmlFor="contact-email" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
+                  Your email <span className="text-catch-ink">*</span>
                 </label>
                 <div className="relative mt-2">
-                  <Mail className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                  <Mail className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
                   <input
                     id="contact-email"
                     type="email"
@@ -140,18 +140,18 @@ export default function ContactPage() {
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                    className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                   />
                 </div>
               </div>
             </div>
 
             <div>
-              <label htmlFor="contact-company" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
+              <label htmlFor="contact-company" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
                 Company (optional)
               </label>
               <div className="relative mt-2">
-                <Building className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                <Building className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-ink-3" />
                 <input
                   id="contact-company"
                   type="text"
@@ -159,14 +159,14 @@ export default function ContactPage() {
                   placeholder="Your company or team"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="contact-message" className="block text-xs font-bold uppercase tracking-wide text-slate-700">
-                Your message <span className="text-red-500">*</span>
+              <label htmlFor="contact-message" className="block text-xs font-bold uppercase tracking-wide text-ink-2">
+                Your message <span className="text-catch-ink">*</span>
               </label>
               <div className="relative mt-2">
                 <textarea
@@ -177,10 +177,10 @@ export default function ContactPage() {
                   placeholder="Tell us what you need: a county, a listing, or a question about membership."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 p-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                  className="w-full rounded-xl border border-line-strongp-4 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                 />
               </div>
-              <p className="mt-1 text-right text-[11px] text-slate-400">
+              <p className="mt-1 text-right text-[11px] text-ink-3">
                 {message.length} / 5000 characters
               </p>
             </div>

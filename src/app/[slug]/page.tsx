@@ -99,8 +99,8 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
             <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-white shadow-sm">
               <Icon className="h-5 w-5" />
             </span>
-            <p className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
               {page.eyebrow}
             </p>
           </div>
@@ -118,7 +118,7 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
               <section
                 key={section.title}
                 id={section.id}
-                className="scroll-mt-24 rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-8"
+                className="scroll-mt-24 rounded-3xl border border-line bg-card p-6 shadow-sm sm:p-8"
               >
                 <div className="flex items-start gap-4">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper text-sm font-semibold tabular-nums text-ink-2">
@@ -150,10 +150,10 @@ export default async function InformationPage({ params }: { params: Promise<{ sl
 
           <div className="mt-10 rounded-3xl bg-ink p-8 text-white sm:p-10">
             <h2 className="text-2xl font-semibold tracking-[-0.02em]">{page.cta.heading}</h2>
-            <p className="mt-2 max-w-[520px] text-[16px] leading-7 text-slate-300">{page.cta.body}</p>
+            <p className="mt-2 max-w-[520px] text-[16px] leading-7 text-white/75">{page.cta.body}</p>
             <Link
               href={page.cta.href}
-              className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-ink transition-colors hover:bg-slate-100"
+              className="mt-6 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-card px-6 text-sm font-semibold text-ink transition-colors hover:bg-paper"
             >
               {page.cta.label}
               <ArrowRight className="h-4 w-4" aria-hidden />

@@ -16,22 +16,22 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white flex flex-col items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center">
       <div className="max-w-md w-full space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
           <AlertOctagon className="w-8 h-8" />
         </div>
 
         <div className="space-y-2">
-          <p className="text-xs font-mono uppercase tracking-widest text-red-400">Page unavailable</p>
+          <p className="text-xs font-mono uppercase tracking-widest text-catch-ink">Page unavailable</p>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
             This page couldn’t load
           </h1>
-          <p className="text-sm text-slate-300 leading-relaxed">
+          <p className="text-sm text-white/75 leading-relaxed">
             Try loading the page again, or return to property search. Your saved work remains in the workspace.
           </p>
           {error.digest && (
-            <p className="text-[11px] font-mono text-slate-400 pt-1">
+            <p className="text-[11px] font-mono text-white/60 pt-1">
               Error reference: {error.digest}
             </p>
           )}
@@ -40,7 +40,7 @@ export default function ErrorPage({
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
           <button
             onClick={() => reset()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-emerald-500 text-[#0F172A] text-xs font-bold hover:bg-emerald-400 transition shadow-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-go-fill text-ink text-xs font-bold hover:bg-go-fill/85 transition shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Try Again</span>

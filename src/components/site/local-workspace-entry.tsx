@@ -7,7 +7,7 @@
  */
 export function LocalWorkspaceEntry() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+    <div className="rounded-xl border border-line-strong bg-paper p-4 text-xs text-ink-2">
       Local browser-only workspace is not part of this beta. Use the listing
       workspace; research writes require the shared operator credential
       (see <a className="underline" href="/sign-in">Operator access</a>).

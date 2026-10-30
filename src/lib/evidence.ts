@@ -20,12 +20,12 @@ export function factText(value: unknown, format: FactFormat = "text"): string | 
     const t = Date.parse(value);
     return Number.isFinite(t)
       ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(t)
-      : value.trim();
+      : factText(value); // unparseable: same sentinel rules as text ("TBD" is not a date)
   }
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (typeof value !== "string") return null;
   const t = value.trim();
-  return t && !/^(?:—|-|unknown|n\/a|null|undefined|not published)$/i.test(t) ? t : null;
+  return t && !/^(?:—|-|unknown|n\/a|null|undefined|not published|tbd|tba|not specified|unspecified)$/i.test(t) ? t : null;
 }
 
 export type GapListing = {

@@ -67,7 +67,7 @@ export function DataModeBanner() {
       <div
         role="status"
         data-testid="data-mode-banner-pending"
-        className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
+        className="border-b border-line-strong bg-paper px-4 py-2 text-sm text-ink-2"
       >
         {/* Same reserved box as the real banner. A one-line placeholder against
             a two-line real message still moved the page 24px, because the
@@ -88,7 +88,7 @@ export function DataModeBanner() {
       <div
         role="status"
         data-testid="data-mode-banner"
-        className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
+        className="border-b border-catch/30 bg-catch-wash px-4 py-2 text-sm text-catch-ink"
       >
         <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
           <p className="leading-6">
@@ -99,7 +99,7 @@ export function DataModeBanner() {
           <button
             type="button"
             onClick={() => setDismissed(true)}
-            className="shrink-0 rounded border border-amber-300 px-2 py-1 text-xs font-medium"
+            className="shrink-0 rounded border border-catch/30 px-2 py-1 text-xs font-medium"
           >
             Dismiss
           </button>
@@ -140,7 +140,11 @@ export function DataModeBanner() {
     <div
       role="status"
       data-testid="data-mode-banner"
-      className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-950"
+      className={
+        health.dataMode === "unavailable"
+          ? "border-b border-line-strong bg-paper px-4 py-2 text-sm text-ink-2"
+          : "border-b border-catch/30 bg-catch-wash px-4 py-2 text-sm text-catch-ink"
+      }
     >
       <div className="mx-auto flex min-h-[65px] max-w-[1380px] items-start justify-between gap-4">
         <p className="leading-6">

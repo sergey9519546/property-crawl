@@ -18,7 +18,7 @@ function useTicks(id: string) {
   const [ticks, setTicks] = React.useState<Record<string, boolean>>({});
   React.useEffect(() => {
     try {
-      setTicks(JSON.parse(localStorage.getItem(key) || "{}"));
+      setTicks(JSON.parse(localStorage.getItem(key) || "{}") || {});
     } catch {
       /* Private mode or blocked storage: ticks just don't persist. */
     }

@@ -45,8 +45,8 @@ export default function AboutPage() {
           >
             <ArrowLeft className="h-4 w-4" /> Back to PerfectProperty
           </Link>
-          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <p className="mt-8 inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
             About us
           </p>
           <h1 className="mt-6 text-balance text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
@@ -82,7 +82,7 @@ export default function AboutPage() {
           <SectionHeading eyebrow="How it works" title="Four steps from search to bid" />
           <ol className="mt-10 grid gap-4 sm:grid-cols-2">
             {STEPS.map((step, i) => (
-              <li key={step.title} className="rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-7">
+              <li key={step.title} className="rounded-3xl border border-line bg-card p-6 shadow-sm sm:p-7">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-paper text-sm font-semibold tabular-nums text-ink-2">
                   {i + 1}
                 </span>
@@ -95,7 +95,7 @@ export default function AboutPage() {
       </section>
 
       <section className="px-5 pb-16">
-        <div className="mx-auto max-w-4xl rounded-3xl border border-line bg-white p-6 shadow-sm sm:p-10">
+        <div className="mx-auto max-w-4xl rounded-3xl border border-line bg-card p-6 shadow-sm sm:p-10">
           <SectionHeading eyebrow="Our limits" align="left" title="What we do and don't do">
             We help you find and size up a property. We don&apos;t replace a title search or an inspection, we don&apos;t
             bid for you, and we don&apos;t cover every county.
@@ -104,9 +104,9 @@ export default function AboutPage() {
             {PROMISES.map((p) => (
               <li
                 key={p}
-                className="flex items-center gap-2 rounded-2xl bg-emerald-50 p-3.5 text-sm font-semibold text-emerald-950"
+                className="flex items-center gap-2 rounded-2xl bg-paper p-3.5 text-sm font-semibold text-ink"
               >
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden /> {p}
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-ink-3" aria-hidden /> {p}
               </li>
             ))}
           </ul>
@@ -116,19 +116,19 @@ export default function AboutPage() {
       <section className="px-5 pb-20 sm:pb-28">
         <div className="mx-auto max-w-4xl rounded-3xl bg-ink p-8 text-white sm:p-12">
           <h2 className="text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">See the catch on a real sale</h2>
-          <p className="mt-3 max-w-[520px] text-[16px] leading-7 text-slate-300">
+          <p className="mt-3 max-w-[520px] text-[16px] leading-7 text-white/75">
             Open any listing and read the catch before anything else.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/listings"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-white px-6 text-sm font-semibold text-ink transition-colors hover:bg-slate-100"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-card px-6 text-sm font-semibold text-ink transition-colors hover:bg-paper"
             >
               Browse listings <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
             <Link
-              href="/resources#knowledge-base"
-              className="inline-flex h-12 items-center justify-center rounded-xl border border-slate-600 px-6 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              href="/#proof"
+              className="inline-flex h-12 items-center justify-center rounded-xl border border-white/30 px-6 text-sm font-semibold text-white transition-colors hover:bg-ink-2"
             >
               See where listings come from
             </Link>

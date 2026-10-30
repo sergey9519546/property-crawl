@@ -270,7 +270,7 @@ export function Storyteller() {
     <section id="product" className="relative isolate overflow-hidden py-24 sm:py-28">
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[620px] w-[min(1320px,96vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.2),rgba(147,197,253,0.08)_46%,transparent_73%)] blur-3xl"
+        className="pointer-events-none absolute left-1/2 top-20 -z-10 h-[620px] w-[min(1320px,96vw)] -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,rgba(216,207,189,0.45),rgba(235,228,214,0.3)_46%,transparent_73%)] blur-3xl"
       />
 
       <div className="mx-auto max-w-[1280px] px-5 lg:px-8">
@@ -278,27 +278,27 @@ export function Storyteller() {
           The same order an experienced bidder follows. Click through them with a real listing.
         </SectionHeading>
 
-        <div className="mt-14 overflow-hidden rounded-[28px] border border-white/90 bg-white/88 shadow-[0_30px_100px_rgba(15,23,42,0.14)] backdrop-blur-xl">
-            <div className="flex flex-col gap-3 border-b border-[#E8EDF3] bg-white/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+        <div className="mt-14 overflow-hidden rounded-[28px] border border-card/90 bg-card/90 shadow-[0_30px_100px_rgba(24,21,41,0.14)] backdrop-blur-xl">
+            <div className="flex flex-col gap-3 border-b border-line bg-card/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div>
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-ink">
                   Property decision workflow
                 </p>
                 <p className="mt-1 text-[16px] font-semibold text-ink">
                   {headline}
-                  {place ? <span className="ml-2 font-medium text-[#5B6472]">{place}</span> : null}
+                  {place ? <span className="ml-2 font-medium text-ink-3">{place}</span> : null}
                 </p>
               </div>
-              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
-                {published.status === "ready" ? "Latest listing" : headline}
+              <span className="inline-flex w-fit items-center gap-2 rounded-full border border-line-strong bg-paper px-3 py-1.5 text-[11px] font-bold text-ink-2">
+                <span className="h-2 w-2 rounded-full bg-ink-3" aria-hidden />
+                {published.status === "ready" ? "Next sale" : headline}
               </span>
             </div>
 
             <div
               role="tablist"
               aria-label="Property decision workflow"
-              className="relative grid grid-cols-2 gap-px border-b border-[#E8EDF3] bg-[#E8EDF3] sm:grid-cols-4"
+              className="relative grid grid-cols-2 gap-px border-b border-line bg-line sm:grid-cols-4"
             >
               {STAGES.map((item, index) => {
                 const selected = item.key === stage;
@@ -316,8 +316,8 @@ export function Storyteller() {
                     aria-controls="storyteller-panel"
                     onClick={() => setStage(item.key)}
                     onKeyDown={(event) => selectFromKeyboard(event, index)}
-                    className={`group relative min-h-[82px] bg-white px-3 py-4 text-left transition-colors sm:min-h-[94px] sm:px-5 ${
-                      selected ? "text-ink" : "text-[#5B6472] hover:bg-[#F8FAFC]"
+                    className={`group relative min-h-[82px] bg-card px-3 py-4 text-left transition-colors sm:min-h-[94px] sm:px-5 ${
+                      selected ? "text-ink" : "text-ink-3 hover:bg-paper"
                     }`}
                   >
                     <span
@@ -331,11 +331,11 @@ export function Storyteller() {
                         className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[10px] font-extrabold transition-colors sm:h-9 sm:w-9 sm:rounded-xl sm:text-[11px] ${
                           selected
                             ? "bg-ink text-white"
-                            // #64748b on #F1F5F9 measured 4.34:1 against a 4.5:1
-                            // requirement - the step number was flagged as
-                            // insufficient contrast. #475569 lands near 6.3:1 and
-                            // still reads as clearly unselected.
-                            : "bg-[#F1F5F9] text-[#475569] group-hover:bg-[#E2E8F0]"
+                            // The step number was once flagged for insufficient
+                            // contrast (4.34:1 against a 4.5:1 requirement).
+                            // text-ink-3 on paper measures 5.9:1 (AA) and still
+                            // reads as clearly unselected.
+                            : "bg-paper text-ink-3 group-hover:bg-line"
                         }`}
                       >
                         {item.step}
@@ -344,7 +344,7 @@ export function Storyteller() {
                         <span className="block text-[12px] font-extrabold tracking-[-0.01em] sm:text-[15px] sm:tracking-normal">
                           {item.label}
                         </span>
-                        <span className="mt-0.5 block text-[10px] font-semibold leading-[1.3] text-[#5B6472] sm:text-[11px]">
+                        <span className="mt-0.5 block text-[10px] font-semibold leading-[1.3] text-ink-3 sm:text-[11px]">
                           {item.summary}
                         </span>
                       </span>
@@ -361,20 +361,20 @@ export function Storyteller() {
               data-testid="storyteller-stage"
               data-stage={stage}
             >
-              <div className="grid gap-4 border-b border-[#E8EDF3] bg-[#F8FAFC] px-5 py-5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-7">
+              <div className="grid gap-4 border-b border-line bg-paper px-5 py-5 sm:grid-cols-[1fr_auto] sm:items-center sm:px-7">
                 <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink">
                     {activeStage.step} · {activeStage.eyebrow}
                   </p>
                   <h3 className="mt-1 text-[23px] font-bold tracking-[-0.02em] text-ink">
                     {activeStage.headline}
                   </h3>
-                  <p className="mt-1.5 max-w-[720px] text-[13px] font-medium leading-[1.55] text-[#5B6472] sm:text-[14px]">
+                  <p className="mt-1.5 max-w-[720px] text-[13px] font-medium leading-[1.55] text-ink-3 sm:text-[14px]">
                     {activeStage.description}
                   </p>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">
+                <div className="rounded-2xl border border-line bg-card px-4 py-3 shadow-sm">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-ink-3">
                     Output
                   </p>
                   <p className="mt-1 text-[13px] font-bold text-ink">
@@ -388,8 +388,8 @@ export function Storyteller() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-[#E8EDF3] bg-white px-5 py-4 sm:px-7">
-              <div className="hidden items-center gap-2 text-[11px] font-semibold text-[#5B6472] sm:flex">
+            <div className="flex items-center justify-between gap-3 border-t border-line bg-card px-5 py-4 sm:px-7">
+              <div className="hidden items-center gap-2 text-[11px] font-semibold text-ink-3 sm:flex">
                 <span className="text-ink">{activeIndex + 1} of {STAGES.length}</span>
                 <span aria-hidden>·</span>
                 <span>The same property in every step</span>
@@ -399,7 +399,7 @@ export function Storyteller() {
                   <button
                     type="button"
                     onClick={() => setStage(STAGES[activeIndex - 1].key)}
-                    className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-[#DCE3EA] bg-white px-4 text-[12px] font-bold text-[#334155] hover:bg-[#F8FAFC]"
+                    className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-line-strong bg-card px-4 text-[12px] font-bold text-ink-2 hover:bg-paper"
                   >
                     <ChevronLeft className="h-3.5 w-3.5" aria-hidden /> Back
                   </button>
@@ -408,7 +408,7 @@ export function Storyteller() {
                   <button
                     type="button"
                     onClick={() => setStage(STAGES[activeIndex + 1].key)}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-ink-2"
                   >
                     Next: {STAGES[activeIndex + 1].label}
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -416,7 +416,7 @@ export function Storyteller() {
                 ) : (
                   <a
                     href="/listings"
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-[#1E293B]"
+                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-ink px-4 text-[12px] font-bold text-white hover:bg-ink-2"
                   >
                     Browse listings <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                   </a>
@@ -441,20 +441,20 @@ function VerificationPanel() {
   const { listing, status } = React.useContext(PublishedListingContext);
   const checks = [
     { icon: Landmark, label: "Opening amount", detail: moneyText(listing?.openingBid) },
-    { icon: Building2, label: "Parcel number", detail: listing?.parcelKey || "Not listed" },
-    { icon: Database, label: "Sale date", detail: listing?.saleDate || "Not listed" },
-    { icon: Scale, label: "Occupancy", detail: listing?.occupancy || "Not listed" },
+    { icon: Building2, label: "Parcel number", detail: factText(listing?.parcelKey) ?? "Not listed" },
+    { icon: Database, label: "Sale date", detail: factText(listing?.saleDate, "date") ?? "Not listed" },
+    { icon: Scale, label: "Occupancy", detail: factText(listing?.occupancy) ?? "Not listed" },
   ];
 
   return (
     <div data-testid="storyteller-verify" className="grid min-h-[480px] gap-5 lg:grid-cols-[0.88fr_1.12fr]">
-      <article className="relative overflow-hidden on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
-        <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-slate-500/20 blur-3xl" />
-        <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-300">
-          Latest listing
+      <article className="relative overflow-hidden on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(24,21,41,0.2)] sm:p-8">
+        <div aria-hidden className="absolute -right-14 -top-14 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <p className="relative text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/75">
+          Next sale
         </p>
         <h4 className="relative mt-3 text-[28px] font-bold tracking-[-0.03em]">{listing?.address || (status === "loading" ? "Loading a sample listing" : "No listing to show yet")}</h4>
-        <p className="relative mt-1 text-[13px] font-medium text-slate-300">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Details from the listing"}</p>
+        <p className="relative mt-1 text-[13px] font-medium text-white/75">{[listing?.county, listing?.state].filter(Boolean).join(", ") || listing?.source || "Details from the listing"}</p>
 
         <dl className="relative mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/10">
           <EvidenceFact label="Source" value={listing?.source} />
@@ -465,36 +465,36 @@ function VerificationPanel() {
 
         <div className="relative mt-6 rounded-2xl border border-white/10 bg-white/[0.06] p-4">
           <div className="flex items-center gap-2 text-[11px] font-bold text-white">
-            <FileText className="h-4 w-4 text-slate-300" aria-hidden /> What the listing says
+            <FileText className="h-4 w-4 text-white/75" aria-hidden /> What the listing says
           </div>
-          <p className="mt-2 text-[12px] leading-[1.55] text-slate-300">
+          <p className="mt-2 text-[12px] leading-[1.55] text-white/75">
             {listing?.id ? "These details come straight from the listing. Check the original notice before you bid." : "We could not load a listing just now."}
           </p>
         </div>
       </article>
 
-      <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-5 shadow-sm sm:p-7">
+      <article className="rounded-[24px] border border-line bg-card p-5 shadow-sm sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#5B6472]">Quick check</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-3">Quick check</p>
             <h4 className="mt-1 text-[20px] font-bold text-ink">What we know, and what is missing</h4>
           </div>
-          <ShieldCheck className="h-7 w-7 text-emerald-600" aria-hidden />
+          <ShieldCheck className="h-7 w-7 text-ink-3" aria-hidden />
         </div>
         <div className="mt-5 space-y-2.5">
           {checks.map((check) => (
-            <div key={check.label} className="flex items-start gap-3 rounded-2xl border border-[#E8EDF3] bg-[#F8FAFC] p-4">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-[#334155] shadow-sm">
+            <div key={check.label} className="flex items-start gap-3 rounded-2xl border border-line bg-paper p-4">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-card text-ink-2 shadow-sm">
                 <check.icon className="h-4 w-4" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-ink">{check.label}</span>
-                <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-[#5B6472]">{check.detail}</span>
+                <span className="mt-0.5 block text-[11px] font-medium leading-[1.45] text-ink-3">{check.detail}</span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[0.08em] ${
                 check.detail === "Not listed"
-                  ? "bg-amber-50 text-amber-700"
-                  : "bg-emerald-50 text-emerald-700"
+                  ? "bg-catch-wash text-catch-ink"
+                  : "bg-line text-ink-2"
               }`}>
                 {check.detail === "Not listed" ? "Not listed" : "Listed"}
               </span>
@@ -509,7 +509,7 @@ function VerificationPanel() {
 function EvidenceFact({ label, value, format }: { label: string; value: unknown; format?: FactFormat }) {
   return (
     <div className="bg-white/[0.06] p-4">
-      <dt className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-400">{label}</dt>
+      <dt className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-white/60">{label}</dt>
       <dd className="mt-1 text-[13px] font-bold text-white"><Fact value={value} format={format} /></dd>
     </div>
   );
@@ -524,19 +524,8 @@ function UnderwritePanel() {
   const [carry, setCarry] = React.useState(0);
   const [profit, setProfit] = React.useState(0);
 
-  // Initialize with conservative baseline when opening bid is present
-  React.useEffect(() => {
-    if (opening && assumed === 0) {
-      const initAssumed = Math.round((opening * 1.5) / 5000) * 5000;
-      const initRepairs = Math.round((opening * 0.15) / 1000) * 1000;
-      const initCarry = Math.round((opening * 0.05) / 1000) * 1000;
-      const initProfit = Math.round((opening * 0.15) / 1000) * 1000;
-      setAssumed(initAssumed);
-      setRepairs(initRepairs);
-      setCarry(initCarry);
-      setProfit(initProfit);
-    }
-  }, [opening, assumed]);
+  // No starting values: a value derived from the opening bid would be invented
+  // data shown as "yours" (zero-fabrication rule). Every number starts at 0.
 
   const ceiling = assumed > 0 ? Math.max(0, assumed - repairs - carry - profit) : null;
   const offerRoom = ceiling !== null && opening !== null ? Math.max(0, ceiling - opening) : null;
@@ -552,7 +541,7 @@ function UnderwritePanel() {
       label: "Assumed value",
       value: assumed > 0 ? dollars(assumed) : "Not entered",
       width: "100%",
-      color: "bg-emerald-600",
+      color: "bg-yours",
       min: 0,
       max: Math.max(500000, Math.round((assumed || 300000) * 1.5)),
       current: assumed,
@@ -562,7 +551,7 @@ function UnderwritePanel() {
       label: "Repairs",
       value: dollars(repairs),
       width: bar(Math.max(0, assumed - repairs)),
-      color: "bg-sky-500",
+      color: "bg-yours/70",
       min: 0,
       max: Math.max(200000, Math.round((assumed || 300000) * 0.5)),
       current: repairs,
@@ -572,7 +561,7 @@ function UnderwritePanel() {
       label: "Carry + close",
       value: dollars(carry),
       width: bar(Math.max(0, assumed - repairs - carry)),
-      color: "bg-indigo-400",
+      color: "bg-yours/50",
       min: 0,
       max: Math.max(100000, Math.round((assumed || 300000) * 0.25)),
       current: carry,
@@ -582,7 +571,7 @@ function UnderwritePanel() {
       label: "Required profit",
       value: dollars(profit),
       width: bar(ceiling ?? 0),
-      color: "bg-violet-400",
+      color: "bg-yours/35",
       min: 0,
       max: Math.max(200000, Math.round((assumed || 300000) * 0.4)),
       current: profit,
@@ -592,15 +581,15 @@ function UnderwritePanel() {
 
   return (
     <div data-testid="storyteller-underwrite" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-      <article className="rounded-[24px] border border-[#E2E8F0] bg-white p-6 shadow-sm sm:p-8">
+      <article className="rounded-[24px] border border-line bg-card p-6 shadow-sm sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your numbers</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink">Your numbers</p>
             <h4 className="mt-1 text-[22px] font-bold tracking-[-0.02em] text-ink">Work out your top bid</h4>
-            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">Change any number. These are your estimates, not ours.</p>
+            <p className="mt-1 text-[12px] font-medium text-ink-3">Change any number. These are your estimates, not ours.</p>
           </div>
-          <span className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[11px] font-bold text-slate-900">
-            <Calculator className="h-4 w-4" aria-hidden /> Conservative model
+          <span className="inline-flex items-center gap-2 rounded-xl bg-paper px-3 py-2 text-[11px] font-bold text-ink">
+            <Calculator className="h-4 w-4" aria-hidden /> Value minus costs
           </span>
         </div>
 
@@ -608,7 +597,7 @@ function UnderwritePanel() {
           {deductions.map((item) => (
             <div key={item.label}>
               <div className="flex items-center justify-between text-[12px] font-bold">
-                <span className="text-[#475569]">{item.label}</span>
+                <span className="text-ink-3">{item.label}</span>
                 <span className="tabular-nums text-ink">{item.value}</span>
               </div>
               {item.onChange ? (
@@ -620,10 +609,10 @@ function UnderwritePanel() {
                   max={item.max}
                   value={item.current}
                   onChange={(e) => item.onChange?.(Number(e.target.value))}
-                  className="mt-2 h-2.5 w-full cursor-pointer accent-slate-900"
+                  className="mt-2 h-2.5 w-full cursor-pointer accent-[var(--color-yours)]"
                 />
               ) : (
-                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-[#EEF2F7]">
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-line">
                   <div className={`h-full rounded-full ${item.color}`} style={{ width: item.width }} />
                 </div>
               )}
@@ -631,28 +620,28 @@ function UnderwritePanel() {
           ))}
         </div>
 
-        <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-[#F8FAFC] p-2">
+        <div className="mt-8 grid grid-cols-3 gap-2 rounded-2xl bg-paper p-2">
           <ModelStat label="Opening bid" value={<Fact value={opening} format="money" />} />
-          <ModelStat label="Top bid" value={ceiling === null ? "—" : <Fact value={ceiling} format="money" origin="yours" />} emphasis />
-          <ModelStat label="Offer room" value={offerRoom === null ? "—" : <Fact value={offerRoom} format="money" origin="yours" />} />
+          <ModelStat label="Top bid" value={ceiling === null ? "Not entered" : <Fact value={ceiling} format="money" origin="yours" />} emphasis />
+          <ModelStat label="Offer room" value={offerRoom === null ? (ceiling !== null && opening === null ? "Needs an opening bid" : "Not entered") : <Fact value={offerRoom} format="money" origin="yours" />} />
         </div>
       </article>
 
-      <article className="flex flex-col on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(15,23,42,0.2)] sm:p-8">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Decision</p>
-        <p className="mt-3 text-[13px] font-semibold text-slate-300">Your top bid <YoursTag /></p>
+      <article className="flex flex-col on-ink rounded-[24px] bg-ink p-6 text-white shadow-[0_24px_60px_rgba(24,21,41,0.2)] sm:p-8">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/75">Decision</p>
+        <p className="mt-3 text-[13px] font-semibold text-white/75">Your top bid <YoursTag /></p>
         <p className="mt-1 text-[42px] font-bold tracking-[-0.04em] text-white">{ceiling === null ? "Enter your numbers" : <Fact value={ceiling} format="money" origin="yours" />}</p>
-        <p className="mt-1 text-[12px] text-slate-400">Built from the numbers you entered, so it is only as good as they are.</p>
+        <p className="mt-1 text-[12px] text-white/60">Built from the numbers you entered, so it is only as good as they are.</p>
         <div className="mt-5 h-px bg-white/10" />
         <div className="mt-5 space-y-4">
           <DecisionLine icon={DollarSign} label="Opening bid" value={<Fact value={opening} format="money" />} />
           <DecisionLine icon={AlertTriangle} label="Deposit" value={<Fact value={listing?.deposit} />} />
           <DecisionLine icon={Calendar} label="Sale date" value={<Fact value={listing?.saleDate} format="date" />} />
         </div>
-        <div className="mt-auto rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
-          <p className="text-[11px] font-bold text-amber-200">Occupancy</p>
-          <p className="mt-1 text-[11px] leading-[1.5] text-slate-300">
-            {listing?.occupancy ? `Occupancy: ${listing.occupancy}.` : "The listing does not say if anyone lives there."}
+        <div className="mt-auto rounded-2xl border border-catch/30 bg-catch/10 p-4">
+          <p className="text-[11px] font-bold text-[#ffb59f]">Occupancy</p>
+          <p className="mt-1 text-[11px] leading-[1.5] text-white/75">
+            {factText(listing?.occupancy) ? `Occupancy: ${factText(listing?.occupancy)}.` : "The listing does not say if anyone lives there."}
           </p>
         </div>
       </article>
@@ -662,8 +651,8 @@ function UnderwritePanel() {
 
 function ModelStat({ label, value, emphasis }: { label: string; value: React.ReactNode; emphasis?: boolean }) {
   return (
-    <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "on-ink bg-ink text-white" : "bg-white text-ink"}`}>
-      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-slate-400" : "text-[#5B6472]"}`}>{label}</p>
+    <div className={`rounded-xl px-3 py-4 text-center ${emphasis ? "on-ink bg-ink text-white" : "bg-card text-ink"}`}>
+      <p className={`text-[9px] font-extrabold uppercase tracking-[0.08em] ${emphasis ? "text-white/60" : "text-ink-3"}`}>{label}</p>
       <p className="mt-1 text-[18px] font-extrabold tabular-nums">{value}</p>
     </div>
   );
@@ -672,10 +661,10 @@ function ModelStat({ label, value, emphasis }: { label: string; value: React.Rea
 function DecisionLine({ icon: Icon, label, value }: { icon: typeof DollarSign; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-slate-300">
+      <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/75">
         <Icon className="h-4 w-4" aria-hidden />
       </span>
-      <span className="flex-1 text-[12px] font-medium text-slate-300">{label}</span>
+      <span className="flex-1 text-[12px] font-medium text-white/75">{label}</span>
       <span className="text-[13px] font-bold text-white">{value}</span>
     </div>
   );
@@ -700,14 +689,14 @@ function ActionPanel() {
 
   return (
     <div data-testid="storyteller-act" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-      <article className="overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white shadow-sm">
-        <div className="flex items-start justify-between gap-4 border-b border-[#E8EDF3] bg-ink px-6 py-5 text-white">
+      <article className="overflow-hidden rounded-[24px] border border-line bg-card shadow-sm">
+        <div className="flex items-start justify-between gap-4 border-b border-line bg-ink px-6 py-5 text-white">
           <div>
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-300">Listing</p>
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-white/75">Listing</p>
             <h4 className="mt-1 text-[21px] font-bold">{listing?.address || "No listing to show yet"}</h4>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-400">Your shortlist card</p>
+            <p className="mt-0.5 text-[11px] font-medium text-white/60">Your shortlist card</p>
           </div>
-          <span className="rounded-xl bg-emerald-400/15 px-3 py-2 text-[11px] font-extrabold text-emerald-200">
+          <span className="rounded-xl bg-white/10 px-3 py-2 text-[11px] font-extrabold text-white">
             {completedCount === actions.length ? "All done" : "To do"}
           </span>
         </div>
@@ -719,29 +708,29 @@ function ActionPanel() {
           </div>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Why it made the list</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-3">Why it made the list</p>
               <ul className="mt-3 space-y-2">
                 {[
                   listing?.saleDate ? `Sale date ${listing.saleDate}` : "No sale date listed",
                   listing?.source ? `Source ${listing.source}` : "No source listed",
                   listing?.parcelKey ? `Parcel ${listing.parcelKey}` : "No parcel number listed",
                 ].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden /> {item}
+                  <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-ink-2">
+                    <CheckCircle2 className="h-4 w-4 text-ink-3" aria-hidden /> {item}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">Conditions</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-ink-3">Conditions</p>
               <ul className="mt-3 space-y-2">
                 {[
-                  listing?.occupancy ? `Occupancy: ${listing.occupancy}` : "Occupancy not listed",
+                  factText(listing?.occupancy) ? `Occupancy: ${factText(listing?.occupancy)}` : "Occupancy not listed",
                   factText(listing?.deposit) === null ? "Deposit not in the notice" : `Deposit ${factText(listing?.deposit)}`,
                   "Title still needs checking",
                 ].map((item) => (
-                  <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-[#334155]">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" aria-hidden /> {item}
+                  <li key={item} className="flex items-center gap-2 text-[12px] font-semibold text-ink-2">
+                    <AlertTriangle className="h-4 w-4 text-catch-ink" aria-hidden /> {item}
                   </li>
                 ))}
               </ul>
@@ -750,13 +739,13 @@ function ActionPanel() {
         </div>
       </article>
 
-      <article className="rounded-[24px] border border-[#E2E8F0] bg-[#F8FAFC] p-5 sm:p-7">
+      <article className="rounded-[24px] border border-line bg-paper p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-900">Your to-do list</p>
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink">Your to-do list</p>
             <h4 className="mt-1 text-[20px] font-bold text-ink">Before the sale date</h4>
           </div>
-          <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-[#5B6472] shadow-sm">
+          <span className="rounded-full bg-card px-3 py-1.5 text-[10px] font-bold text-ink-3 shadow-sm">
             {completedCount} of {actions.length} done
           </span>
         </div>
@@ -768,16 +757,16 @@ function ActionPanel() {
               role="checkbox"
               aria-checked={action.done}
               onClick={() => toggleAction(action.label)}
-              className="flex w-full items-start gap-3 rounded-2xl border border-[#E2E8F0] bg-white p-4 text-left transition hover:border-slate-300"
+              className="flex w-full items-start gap-3 rounded-2xl border border-line bg-card p-4 text-left transition hover:border-line-strong"
             >
-              <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${action.done ? "bg-emerald-100 text-emerald-700" : "border border-[#CBD5E1] text-transparent"}`}>
+              <span className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full ${action.done ? "bg-go-wash text-go" : "border border-line-strong text-transparent"}`}>
                 <CheckCircle2 className="h-4 w-4" aria-hidden />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-ink">{action.label}</span>
-                <span className="mt-0.5 block text-[11px] font-medium text-[#5B6472]">{action.detail}</span>
+                <span className="mt-0.5 block text-[11px] font-medium text-ink-3">{action.detail}</span>
               </span>
-              <span className="rounded-lg bg-[#F1F5F9] px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-[#5B6472]">{action.owner}</span>
+              <span className="rounded-lg bg-line px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.06em] text-ink-3">{action.owner}</span>
             </button>
           ))}
         </div>
@@ -791,8 +780,8 @@ function ActionPanel() {
 
 function MemoMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-[#F1F5F9] px-3 py-4 text-center">
-      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-[#5B6472]">{label}</p>
+    <div className="rounded-2xl bg-paper px-3 py-4 text-center">
+      <p className="text-[9px] font-extrabold uppercase tracking-[0.08em] text-ink-3">{label}</p>
       <p className="mt-1 text-[19px] font-extrabold tabular-nums text-ink">{value}</p>
     </div>
   );

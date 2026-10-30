@@ -103,20 +103,20 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
   const isVerified = Boolean(result?.verified && evidence.length > 0);
 
   return (
-    <section className="space-y-4 rounded-2xl border border-white/10 bg-[#0F172A] p-5 text-white shadow-xl">
+    <section className="space-y-4 rounded-2xl border border-white/10 bg-ink p-5 text-white shadow-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-300">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-white/75">
             <Scale className="h-5 w-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold tracking-tight">Court-record evidence check</h3>
-              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+              <span className="rounded-full border border-catch/30 bg-catch/10 px-2 py-0.5 text-[10px] font-bold text-white/75">
                 Official source required
               </span>
             </div>
-            <p className="mt-1 max-w-2xl text-xs text-slate-600">
+            <p className="mt-1 max-w-2xl text-xs text-white/60">
               Checks whether court, recorder, tax, and bankruptcy evidence is actually attached. It never infers legal status from an address or AI response.
             </p>
           </div>
@@ -125,7 +125,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
         <button
           onClick={runVerification}
           disabled={isRunning || !canCheck}
-          className="flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-bold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-9 items-center gap-1.5 rounded-lg bg-card px-3 text-xs font-bold text-ink transition hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isRunning ? "animate-spin" : ""}`} />
           <span>{isRunning ? "Checking evidence..." : "Check official evidence"}</span>
@@ -133,28 +133,28 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
       </div>
 
       {!canCheck && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4 text-xs text-amber-100">
-          <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-xl border border-catch/30 bg-catch/10 p-4 text-xs text-white">
+          <FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-catch" />
           Address, county, and state are required before an evidence check can run.
         </div>
       )}
 
       {(logs.length > 0 || isRunning) && (
-        <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-slate-300">
-          <div className="mb-2 flex items-center gap-2 border-b border-white/5 pb-2 text-[10px] uppercase tracking-wider text-slate-500">
-            <Terminal className="h-3 w-3 text-amber-300" />
+        <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-black/50 p-4 font-mono text-[11px] leading-relaxed text-white/75">
+          <div className="mb-2 flex items-center gap-2 border-b border-white/5 pb-2 text-[10px] uppercase tracking-wider text-white/60">
+            <Terminal className="h-3 w-3 text-white/60" />
             Evidence audit log
           </div>
           {logs.map((log, index) => (
             <div key={`${index}-${log}`}>{log}</div>
           ))}
-          {isRunning && <div className="animate-pulse text-amber-300">&gt; Checking attached evidence...</div>}
+          {isRunning && <div className="animate-pulse text-go-fill">&gt; Checking attached evidence...</div>}
         </div>
       )}
 
       {error && (
-        <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-400/25 bg-red-400/10 p-4 text-xs text-red-100">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-catch/30 bg-catch/10 p-4 text-xs text-white">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-catch" />
           {error}
         </div>
       )}
@@ -162,32 +162,32 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
       {result && (
         <div className={`space-y-4 rounded-xl border p-4 ${
           isVerified
-            ? "border-emerald-400/30 bg-emerald-400/10"
-            : "border-amber-400/30 bg-amber-400/10"
+            ? "border-white/10 bg-white/5"
+            : "border-catch/30 bg-catch/10"
         }`}>
           <div className="flex items-start gap-3">
             {isVerified ? (
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-white/75" />
             ) : (
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch" />
             )}
             <div>
               <p className={`text-xs font-extrabold uppercase tracking-wide ${
-                isVerified ? "text-emerald-200" : "text-amber-200"
+                isVerified ? "text-white/75" : "text-white"
               }`}>
                 {isVerified ? "Verified from attached official evidence" : "Not verified from official records"}
               </p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-200">{result.statusReason}</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/75">{result.statusReason}</p>
             </div>
           </div>
 
           {!isVerified && result.missingEvidence?.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Evidence still required</p>
-              <ul className="mt-2 grid gap-1.5 text-xs text-slate-200 sm:grid-cols-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/60">Evidence still required</p>
+              <ul className="mt-2 grid gap-1.5 text-xs text-white/75 sm:grid-cols-2">
                 {result.missingEvidence.map((item) => (
                   <li key={item} className="flex items-start gap-2">
-                    <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+                    <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-catch" />
                     {item}
                   </li>
                 ))}
@@ -211,7 +211,7 @@ export function DocketAgent({ listing, customAddress }: DocketAgentProps) {
             </div>
           )}
 
-          <p className="border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-300">
+          <p className="border-t border-white/10 pt-3 text-[11px] leading-relaxed text-white/75">
             {result.disclaimer}
           </p>
         </div>

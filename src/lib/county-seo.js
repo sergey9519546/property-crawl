@@ -166,7 +166,7 @@ function generateCountyMetadata({ state, county, count = 0, medianBid = null, ba
   const bidStr = medianBid ? ` Median opening bid: $${Math.round(medianBid).toLocaleString('en-US')}.` : '';
 
   const title = `Distressed & Foreclosure Property in ${countyFormatted}, ${st} | PerfectProperty`;
-  const description = `Explore ${countStr} distressed, foreclosure, and tax-deed properties in ${countyFormatted}, ${st}.${bidStr} Access verified docket records and statutory redemption terms.`;
+  const description = `Explore ${countStr} distressed, foreclosure, and tax-deed properties in ${countyFormatted}, ${st}.${bidStr} See the published sale details and the state's redemption rule.`;
 
   return {
     title,

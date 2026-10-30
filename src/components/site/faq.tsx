@@ -9,7 +9,7 @@ const QUESTIONS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Where do the listings come from?",
-    a: "Public sale notices and government listings: HUD, Fannie Mae and Freddie Mac, sheriff and trustee sales, county tax sales, IRS and Treasury seizures, USDA and VA, GSA and US Marshals, and land banks. Each listing links to its source when one is published.",
+    a: "Public sale notices and government listings: HUD homes, foreclosure auctions, sheriff sales, USDA homes, GSA sales, and IRS and Treasury seizures. More sources are on our list but don't supply listings yet. Each listing links to its source when one is published.",
   },
   {
     q: "Do you cover every county?",
@@ -29,7 +29,7 @@ const QUESTIONS: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Does this replace a title search or inspection?",
-    a: "No. We don't sell title reports or comps. Before you bid, order a title search and look at the property yourself.",
+    a: "No. We don't sell title reports or sold-price comparables. Before you bid, order a title search and look at the property yourself.",
   },
   {
     q: "Do I need cash on sale day?",
@@ -44,7 +44,7 @@ export function Faq() {
         <SectionHeading eyebrow="Questions" title="What first-time bidders ask us.">
           Short answers. The <Link href="/resources" className="font-semibold text-ink underline underline-offset-4">buyer&apos;s guide</Link> has the long ones.
         </SectionHeading>
-        <div className="mt-12 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white">
+        <div className="mt-12 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-card">
           {QUESTIONS.map(({ q, a }) => (
             <details key={q} className="faq-item group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-6 px-6 py-5 text-[16px] font-semibold text-ink transition-colors hover:bg-paper sm:px-7">

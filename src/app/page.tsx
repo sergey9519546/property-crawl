@@ -39,7 +39,7 @@ export default function PerfectPropertyPage() {
 
       <AuroraDivider index={2} />
       <section id="live-search" className="scroll-mt-24 px-5 pt-20 pb-4 lg:px-8">
-        <SectionHeading eyebrow="Try it" title="Search every live listing.">
+        <SectionHeading eyebrow="Try it" title="Search every listing we have.">
           Filter by state, sale type and price. Open any listing to see its catch.
         </SectionHeading>
       </section>

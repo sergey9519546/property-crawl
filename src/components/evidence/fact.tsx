@@ -5,8 +5,8 @@ import { factText, type FactFormat, type FactOrigin, type UnknownReason } from "
  * Evidence ink: the one way to show a value about a property.
  *
  *   printed  published by the source            -> plain ink
- *   yours    typed by the buyer (an estimate)     -> indigo pencil, "yours"
- *   unknown  nobody has published it             -> amber hatch, same footprint
+ *   yours    typed by the buyer (an estimate)     -> periwinkle pencil, "yours"
+ *   unknown  nobody has published it             -> persimmon hatch, same footprint
  *
  * "unknown" is never chosen by the caller: it is what happens when the value is
  * missing. So a gap can't be styled away, and a guess can't pass as a fact.
@@ -26,7 +26,8 @@ export function Fact({
   reason?: UnknownReason;
   className?: string;
 }) {
-  const text = factText(value, format);
+  // A published $0 means "not published", but a buyer's own result can be $0.
+  const text = origin === "yours" && format === "money" && value === 0 ? "$0" : factText(value, format);
   if (text === null) {
     return (
       <span data-evidence="unknown" className={`ev-unknown inline-block text-[0.8em] font-semibold ${className}`}>

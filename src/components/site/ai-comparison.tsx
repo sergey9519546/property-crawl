@@ -33,8 +33,8 @@ const COLS: Col[] = [
     features: [
       { label: "Everything in Free", ok: true },
       { label: "Hunts that re-check for new listings", ok: true },
-      { label: "Email when a new listing fits, or a saved one changes", ok: true },
-      { label: "Price-drop alerts on saved listings", ok: true },
+      { label: "Email when a new listing fits your hunt, or one it found changes", ok: true },
+      { label: "Price drops on saved listings, in your portfolio", ok: true },
       { label: "Account watchlist and portfolio on any device", ok: true },
     ],
   },
@@ -64,8 +64,8 @@ export function AiComparison() {
     <section id="pricing" className="scroll-mt-24 px-5 pt-24 pb-28 lg:px-8">
       <div className="mx-auto max-w-[880px]">
         <SectionHeading eyebrow="Pricing" title="Browse free. Pay when you want us to watch for you.">
-          Everything you need to find a sale and see its catch is free. Members get an email the moment a new
-          listing fits their hunt, or a saved one changes.
+          Everything you need to find a sale and see its catch is free. Members get an email when a new
+          listing fits their hunt, or one it found changes.
         </SectionHeading>
 
         <GsapStaggerGroup className="mt-12 grid grid-cols-1 gap-4 md:grid-cols-2" stagger={0.15}>
@@ -75,8 +75,8 @@ export function AiComparison() {
               data-stagger-item
               className={`flex flex-col rounded-3xl border p-7 ${
                 col.highlight
-                  ? "border-ink bg-white shadow-[0_0_0_1px_#0F172A,0_18px_48px_rgba(15,23,42,0.12)]"
-                  : "border-line bg-white/70"
+                  ? "border-ink bg-card shadow-[0_0_0_1px_#181529,0_18px_48px_rgba(24,21,41,0.12)]"
+                  : "border-line bg-card/70"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -94,8 +94,8 @@ export function AiComparison() {
               <ul className="mt-6 flex-1 space-y-3">
                 {col.features.map((f) => (
                   <li key={f.label} className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
-                      <Check className="h-3 w-3 text-emerald-700" />
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink/10">
+                      <Check className="h-3 w-3 text-ink" />
                     </span>
                     <span className="text-[14px] leading-6 text-ink">{f.label}</span>
                   </li>
@@ -106,7 +106,7 @@ export function AiComparison() {
                   Become a member
                 </Link>
               ) : (
-                <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl border border-line-strong text-sm font-semibold text-ink hover:bg-white">
+                <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl border border-line-strong text-sm font-semibold text-ink hover:bg-card">
                   Start searching
                 </Link>
               )}
@@ -114,7 +114,7 @@ export function AiComparison() {
           ))}
         </GsapStaggerGroup>
         <p className="mt-6 text-center text-[13px] text-ink-3">
-          Not included in either plan: title reports, comps, or a sale in every county. <a href="#faq" className="font-semibold text-ink underline underline-offset-4">Why?</a>
+          Not included in either plan: title reports, sold-price comparables, or a sale in every county. <a href="#faq" className="font-semibold text-ink underline underline-offset-4">Why?</a>
         </p>
       </div>
     </section>

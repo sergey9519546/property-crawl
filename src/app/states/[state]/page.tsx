@@ -52,10 +52,10 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   if (!state) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-16">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-500">Browse by state</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">We don't recognize that state</h1>
-        <p className="mt-4 text-sm leading-6 text-slate-600">Use a two-letter state code, like OH or FL.</p>
-        <Link href="/states" className="mt-6 inline-block text-sm font-semibold text-slate-950 underline">All states</Link>
+        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Browse by state</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">We don't recognize that state</h1>
+        <p className="mt-4 text-sm leading-6 text-ink-3">Use a two-letter state code, like OH or FL.</p>
+        <Link href="/states" className="mt-6 inline-block text-sm font-semibold text-ink underline">All states</Link>
       </main>
     );
   }
@@ -65,8 +65,8 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
   const hasRule = !redemption.label.startsWith("Statutory redemption details require");
   return (
     <main className="mx-auto max-w-3xl px-6 py-16 text-ink">
-      <p className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
-        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      <p className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-2">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signature ring-1 ring-ink/20" />
         Browse by state
       </p>
       <h1 className="mt-5 text-balance text-[34px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink sm:text-[42px]">Foreclosure and government property auctions in {state}</h1>
@@ -77,7 +77,7 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
         {total > 0 ? (
           <Link href={`/listings?state=${state}`} className="rounded-xl bg-ink px-5 py-3 font-semibold text-white transition hover:bg-ink-2">Browse all {total} {state} listings</Link>
         ) : null}
-        <Link href="/states" className="font-semibold text-slate-950 underline">All states</Link>
+        <Link href="/states" className="font-semibold text-ink underline">All states</Link>
       </div>
       {hasRule ? (
         <div className="mt-6 rounded-2xl border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5 text-[var(--catch-ink)]">
@@ -87,23 +87,23 @@ export default async function StateCountiesPage({ params }: { params: Promise<{ 
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">{error}</p>
+        <p role="alert" className="mt-6 rounded-xl border border-catch/30 bg-catch-wash p-4 text-sm text-catch-ink">{error}</p>
       ) : counties.length === 0 ? (
-        <p className="mt-6 text-sm text-slate-600">No listings in {state} show a county yet. Browse all {state} listings above.</p>
+        <p className="mt-6 text-sm text-ink-3">No listings in {state} show a county yet. Browse all {state} listings above.</p>
       ) : (
-        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-white">
+        <ul className="mt-6 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-card">
           {counties.map((row) => (
             <li key={row.county}>
               <Link
                 href={`/states/${state}/${countyToSlug(row.county)}`}
-                className="block px-4 py-3 text-sm hover:bg-slate-50"
+                className="block px-4 py-3 text-sm hover:bg-paper"
               >
                 <span className="flex items-center justify-between gap-4">
-                  <span className="font-semibold text-slate-950">{row.county}</span>
-                  <span className="tabular-nums text-slate-600">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
+                  <span className="font-semibold text-ink">{row.county}</span>
+                  <span className="tabular-nums text-ink-3">{row.count} {row.count === 1 ? "listing" : "listings"}</span>
                 </span>
                 {row.sources.length > 0 ? (
-                  <span className="mt-1 block text-xs text-slate-500">{row.sources.join(", ")}</span>
+                  <span className="mt-1 block text-xs text-ink-3">{row.sources.join(", ")}</span>
                 ) : null}
               </Link>
             </li>

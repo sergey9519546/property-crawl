@@ -156,24 +156,24 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Deal Alerts Manager" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white text-slate-950 shadow-2xl">
-        <header className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Deal Alerts Manager" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-card text-ink shadow-2xl">
+        <header className="flex items-start justify-between gap-4 border-b border-line p-6">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Your research workspace</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3">Your research workspace</p>
             <h2 className="mt-1 text-2xl font-semibold tracking-tight">Saved searches</h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-500">Save your criteria, see matching inventory, and reopen the search in one click.</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-3">Save your criteria, see matching inventory, and reopen the search in one click.</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close Alerts Dialog" className="rounded-full p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={onClose} aria-label="Close Alerts Dialog" className="rounded-full p-2 text-ink-3 hover:bg-paper"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="space-y-6 overflow-y-auto p-6">
           <div className="flex items-center justify-between">
-            <p className="rounded-xl bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-950">
+            <p className="rounded-xl bg-paper px-4 py-3 text-xs leading-relaxed text-ink-2">
               Workspace-backed. Runs against the live pool on demand and records matches for later review. Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace.
             </p>
             {unreadCount > 0 && (
-              <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-100">
+              <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-paper px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-line">
                 <Check className="h-3.5 w-3.5" /> Mark {unreadCount} read
               </button>
             )}
@@ -181,57 +181,57 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
 
           <form className="space-y-4" onSubmit={handleCreate}>
             <div>
-              <label htmlFor="saved-search-name" className="text-xs font-semibold text-slate-600">Search name</label>
-              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="e.g. New Jersey under $250k" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" />
+              <label htmlFor="saved-search-name" className="text-xs font-semibold text-ink-3">Search name</label>
+              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="e.g. New Jersey under $250k" className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
-                <label htmlFor="saved-search-state" className="text-xs font-semibold text-slate-600">State market</label>
-                <select id="saved-search-state" value={state} onChange={(event) => setState(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                <label htmlFor="saved-search-state" className="text-xs font-semibold text-ink-3">State market</label>
+                <select id="saved-search-state" value={state} onChange={(event) => setState(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
                   <option value="All">All available states</option>
                   {availableStates.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="saved-search-score" className="text-xs font-semibold text-slate-600">Minimum modeled score</label>
-                <select id="saved-search-score" value={minScore} onChange={(event) => setMinScore(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                <label htmlFor="saved-search-score" className="text-xs font-semibold text-ink-3">Minimum modeled score</label>
+                <select id="saved-search-score" value={minScore} onChange={(event) => setMinScore(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
                   <option value={0}>Any / not modeled</option>
                   {[50, 60, 70, 80, 90].map((value) => <option key={value} value={value}>{value} or higher</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="saved-search-bid" className="text-xs font-semibold text-slate-600">Maximum opening bid</label>
-                <select id="saved-search-bid" value={maxBid} onChange={(event) => setMaxBid(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm">
+                <label htmlFor="saved-search-bid" className="text-xs font-semibold text-ink-3">Maximum opening bid</label>
+                <select id="saved-search-bid" value={maxBid} onChange={(event) => setMaxBid(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
                   <option value={0}>Any / not published</option>
                   {[100000, 150000, 250000, 500000, 1000000].map((value) => <option key={value} value={value}>$ {value.toLocaleString()}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label htmlFor="saved-search-email" className="text-xs font-semibold text-slate-600">Notify email (optional)</label>
-              <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-200" />
+              <label htmlFor="saved-search-email" className="text-xs font-semibold text-ink-3">Notify email (optional)</label>
+              <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-600" aria-live="polite">{draftMatches} matching records in loaded inventory</p>
-              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"><Bookmark className="h-4 w-4" /> Save search</button>
+              <p className="text-sm text-ink-3" aria-live="polite">{draftMatches} matching records in loaded inventory</p>
+              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-60"><Bookmark className="h-4 w-4" /> Save search</button>
             </div>
           </form>
 
           {(feedback || error) && (
-            <p role="status" className={`rounded-xl px-4 py-3 text-sm ${error ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700"}`}>
+            <p role="status" className={`rounded-xl px-4 py-3 text-sm ${error ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-2"}`}>
               {error || feedback}
             </p>
           )}
 
-          <section aria-label="Your saved searches" className="space-y-3 border-t border-slate-100 pt-5">
+          <section aria-label="Your saved searches" className="space-y-3 border-t border-line pt-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Your searches ({serverSearches.length})</h3>
-              {loading && <span className="text-[11px] text-slate-500">Loading…</span>}
+              {loading && <span className="text-[11px] text-ink-3">Loading…</span>}
             </div>
             {!serverSearches.length && !loading && (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center">
-                <Search className="mx-auto h-6 w-6 text-slate-400" />
-                <p className="mt-2 text-sm text-slate-500">No saved searches yet. Add filters above and save.</p>
+              <div className="rounded-2xl border border-dashed border-line p-6 text-center">
+                <Search className="mx-auto h-6 w-6 text-ink-3" />
+                <p className="mt-2 text-sm text-ink-3">No saved searches yet. Add filters above and save.</p>
               </div>
             )}
             {clientSearches.map((search, idx) => {
@@ -240,15 +240,15 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
               const matchCountForSearch = alertMatches.filter((m) => m.searchId === search.id).length;
               const unreadForSearch = alertMatches.filter((m) => m.searchId === search.id && !m.readAt).length;
               return (
-                <article key={search.id} className="rounded-2xl border border-slate-200 p-4">
+                <article key={search.id} className="rounded-2xl border border-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h4 className="break-words font-semibold">{search.name}</h4>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-ink-3">
                         {search.state === "All" ? "All markets" : search.state} · {search.minScore > 0 ? "Score ≥ " + search.minScore : "Any score"} · {search.maxBid > 0 ? "Bid ≤ $" + search.maxBid.toLocaleString() : "Any bid"}
                         {server?.lastRunAt ? ` · last run ${new Date(server.lastRunAt).toLocaleDateString()}` : ""}
                       </p>
-                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">{unreadForSearch} new</span>}
+                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink">{unreadForSearch} new</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -256,7 +256,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                         onClick={() => handleRun(search.id)}
                         disabled={runningId === search.id}
                         aria-label={"Run saved search " + search.name}
-                        className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                        className="rounded-lg p-2 text-go hover:bg-go-wash disabled:opacity-50"
                         title="Run now against live pool"
                       >
                         <Play className={`h-4 w-4 ${runningId === search.id ? "animate-pulse" : ""}`} />
@@ -265,24 +265,24 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                         type="button"
                         onClick={() => handleDelete(search.id)}
                         aria-label={"Delete saved search " + search.name}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="rounded-lg p-2 text-ink-3 hover:bg-catch-wash hover:text-catch-ink"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => onApply(search)} className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                    <button type="button" onClick={() => onApply(search)} className="inline-flex items-center gap-2 text-sm font-semibold text-go">
                       View {matches.length} matches in current inventory <ArrowRight className="h-4 w-4" />
                     </button>
-                    <button type="button" onClick={() => handleRun(search.id)} disabled={runningId === search.id} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60">
+                    <button type="button" onClick={() => handleRun(search.id)} disabled={runningId === search.id} className="inline-flex items-center gap-1 rounded-lg border border-go/30 bg-go-wash px-2 py-1 text-xs font-semibold text-go hover:bg-go-fill/20 disabled:opacity-60">
                       {runningId === search.id ? "Running…" : "Run against live pool"}
                     </button>
                     {matchCountForSearch > 0 && (
-                      <span className="text-[11px] text-slate-500">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
+                      <span className="text-[11px] text-ink-3">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">Includes explicitly labeled demo / unverified records. This is not an alert-delivery service.</p>
+                  <p className="mt-1 text-[11px] text-ink-3">Includes explicitly labeled demo / unverified records. This is not an alert-delivery service.</p>
                 </article>
               );
             })}

@@ -61,7 +61,12 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
 
   const lien = text(listing.seniorLienRisk);
   if (lien && !/^(low|none)$/i.test(lien)) flags.push(`Senior-lien signal is ${lien.toLowerCase()}: liens ahead of this sale may survive it.`);
-  for (const warning of titleWarnings.slice(0, 2)) flags.push(warning);
+  // Title-engine warnings arrive as "SHOUTED LABEL: sentence". Keep the
+  // sentence, and skip its redemption warning when redemption is already flagged.
+  const redemptionFlagged = (redemption !== null && redemption > 0) || !!text(listing.redemptionWarning);
+  for (const warning of titleWarnings.filter((w) => !(redemptionFlagged && /^STATUTORY REDEMPTION/.test(w))).slice(0, 2)) {
+    flags.push(warning.replace(/^[A-Z0-9][A-Z0-9 '’-]*:\s*/, ""));
+  }
 
   const deposit = text(listing.deposit);
   if (deposit) notes.push(`Deposit: ${deposit}.`);

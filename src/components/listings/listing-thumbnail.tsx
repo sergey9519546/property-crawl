@@ -15,7 +15,7 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
   const [reason, setReason] = useState("");
   const generation = useRef(0);
   const frame = layout === "card" ? "relative aspect-[4/3] w-full shrink-0 overflow-hidden" : "relative min-h-0 flex-1 overflow-hidden";
-  const caption = "flex min-h-14 shrink-0 flex-col justify-center border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] leading-4 text-slate-600";
+  const caption = "flex min-h-14 shrink-0 flex-col justify-center border-b border-line bg-paper px-4 py-2 text-[11px] leading-4 text-ink-3";
   useEffect(() => {
     generation.current++;
     setPhotoFailed(false);
@@ -43,15 +43,15 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
   if (publisherPhoto && !photoFailed) return (
     <div className="flex h-full w-full flex-col">
       <div className={frame}><img src={publisherPhoto} alt={`${photoProvider || "Publisher"} photo of ${address}`} loading="lazy" decoding="async" className="absolute inset-0 h-full w-full object-cover" onError={() => setPhotoFailed(true)} /></div>
-      {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{photoProvider} · Address-matched photo</a> : <span>Publisher photo</span>}<span className="text-slate-500">Review all photos in property details</span></div> : null}
+      {layout === "card" || (photoProvider && photoSourceUrl) ? <div className={caption}>{photoProvider && photoSourceUrl ? <a href={photoSourceUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{photoProvider} · Address-matched photo</a> : <span>Publisher photo</span>}<span className="text-ink-3">Review all photos in property details</span></div> : null}
     </div>
   );
 
   if ((status === "image" || status === "loaded") && metadata) return (
-    <div className="flex h-full flex-col bg-slate-100" data-testid="listing-thumbnail-streetview">
+    <div className="flex h-full flex-col bg-paper" data-testid="listing-thumbnail-streetview">
       <div className={frame}>
         <img src={`/api/property-image?listingId=${encodeURIComponent(listingId)}&mode=image`} alt={`Street-level context near ${address}`} className={`absolute inset-0 h-full w-full object-contain ${status === "loaded" ? "" : "opacity-0"}`} onLoad={() => setStatus("loaded")} onError={() => { setReason("The image could not be loaded. Try again later."); setStatus("unavailable"); }} />
-        {status === "image" && <p role="status" className="absolute inset-0 grid place-items-center text-xs text-slate-600">Loading street-level context…</p>}
+        {status === "image" && <p role="status" className="absolute inset-0 grid place-items-center text-xs text-ink-3">Loading street-level context…</p>}
       </div>
       <div className={caption}>
         <p>{metadata.attribution.includes(metadata.provider) ? metadata.attribution : `${metadata.provider} · ${metadata.attribution}`} · {formatCaptureDate(metadata.captureDate)}</p>
@@ -62,10 +62,10 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
 
   return (
     <div className="flex h-full w-full flex-col" data-testid="listing-thumbnail-unavailable">
-      <div className={`${frame} bg-slate-100`}>
+      <div className={`${frame} bg-paper`}>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
-          <ImageOff size={25} strokeWidth={1.4} className="text-slate-400" aria-hidden />
-          <p className="text-sm font-medium text-slate-600">Photo unavailable</p>
+          <ImageOff size={25} strokeWidth={1.4} className="text-ink-3" aria-hidden />
+          <p className="text-sm font-medium text-ink-3">Photo unavailable</p>
           {observed ? (() => {
             // One label for both the visible text and the accessible name.
             // They used to be written separately and drifted: the aria-label
@@ -76,7 +76,7 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
               : status === "unavailable" ? "Retry Street View"
               : "Check Street View";
             return (
-              <button type="button" disabled={status === "loading"} aria-label={`${label} for ${address}`} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:border-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-60">
+              <button type="button" disabled={status === "loading"} aria-label={`${label} for ${address}`} onClick={loadStreetView} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold text-ink-2 transition hover:border-ink-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
                 {status === "loading" ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Camera size={14} aria-hidden />}
                 {label}
               </button>
@@ -84,7 +84,7 @@ export function ListingThumbnail({ listingId, address, photo, observed, photoPro
           })() : null}
         </div>
       </div>
-      {layout === "card" || status === "unavailable" ? <div className={caption}>{status === "unavailable" ? <p role="status">{reason}</p> : <><span>{photoFailed ? "Publisher photo could not load" : "No publisher photo available"}</span><span className="text-slate-500">{observed ? "Street View depends on local coverage" : "See the source record for available media"}</span></>}</div> : null}
+      {layout === "card" || status === "unavailable" ? <div className={caption}>{status === "unavailable" ? <p role="status">{reason}</p> : <><span>{photoFailed ? "Publisher photo could not load" : "No publisher photo available"}</span><span className="text-ink-3">{observed ? "Street View depends on local coverage" : "See the source record for available media"}</span></>}</div> : null}
     </div>
   );
 }

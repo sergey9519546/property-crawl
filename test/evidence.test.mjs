@@ -14,6 +14,11 @@ test('factText treats empty, placeholder and non-positive money as unknown', () 
   assert.equal(factText('Not published'), null);
   assert.equal(factText('Occupied'), 'Occupied');
   assert.equal(factText('2026-10-27', 'date'), 'Oct 27, 2026');
+  // An unparseable "date" goes through the text sentinels, so "TBD" stays a gap.
+  assert.equal(factText('TBD', 'date'), null);
+  assert.equal(factText('Not published', 'date'), null);
+  assert.equal(factText('First Tuesday', 'date'), 'First Tuesday');
+  assert.equal(findGaps({ id: 'x', saleDate: 'TBD', deposit: 'TBD' }).some((g) => g.key === 'saleDate'), true);
 });
 
 test('findGaps lists every empty fact, in the fixed priority order', () => {

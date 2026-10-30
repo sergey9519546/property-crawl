@@ -31,10 +31,10 @@ dealScore = Math.max(1, Math.min(99, Math.round((1 - ratio) * 130)))
 
 | Range | Label | Color | Alpha |
 |---|---|---|---|
-| 70–99 | Elite | `#059669` (dark green) | 0x18 |
-| 55–69 | Strong | `#16a34a` (green) | 0x15 |
-| 35–54 | Fair | `#d97706` (amber) | 0x14 |
-| 1–34 | Thin | `#dc2626` (red) | 0x12 |
+| 70–99 | Elite | `#181529` (ink) | 0x18 |
+| 55–69 | Strong | `#3d3a4f` (ink-2) | 0x15 |
+| 35–54 | Fair | `#5f5c6e` (ink-3) | 0x14 |
+| 1–34 | Thin | `#5f5c6e` (ink-3) | 0x12 |
 
 Canonical band objects live in:
 
