@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-30T08:17:38.634Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-30T08:45:56.046Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -17,12 +17,12 @@
 
 | End | Catalog | Scheduled | Strong (P4) | Required | Status |
 |---|---:|---:|---:|:---:|---|
-| Federal/GSE REO | 7 | 5 | 2 | yes | ✅ adapter |
+| Federal/GSE REO | 7 | 5 | 1 | yes | ✅ adapter |
 | Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
-| Foreclosure/sheriff/trustee auction | 25 | 7 | 6 | yes | ✅ adapter |
-| Tax lien/deed sale | 111 | 10 | 9 | yes | ✅ adapter |
+| Foreclosure/sheriff/trustee auction | 25 | 7 | 1 | yes | ✅ adapter |
+| Tax lien/deed sale | 111 | 10 | 0 | yes | ✅ adapter |
 | Land bank inventory | 12 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
 | Commercial marketplaces (issuer-preserving) | 10 | 0 | 0 | no | catalog only |
@@ -39,7 +39,7 @@
 
 | Tier | Meaning | Count |
 |---|---|---:|
-| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 20 |
+| P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 5 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 11 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
 | P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 234 |
@@ -48,26 +48,14 @@
 
 | Adapter | Tier | Scrapling | Seed listings | Limitation |
 |---|---|---|---:|---|
-| `civilview` (CivilView Sheriff/Tax Sale Platform) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
-| `civilview` (CivilView Participating Jurisdictions (Nationwide set)) | P4_LIVE_STRONG | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
 | `gsa` (GSA Real Estate Sales) | P4_LIVE_STRONG | gsa-index, gsa-detail | 41 | robots exclusion on /our-listing; sparse inventory; Scrapling optional |
-| `hud` (HUD HomeStore) | P4_LIVE_STRONG | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `irs` (IRS Auctions) | P4_LIVE_STRONG | irs-detail | 1 | — |
 | `servicelink` (Public Auction Network) | P4_LIVE_STRONG | table-extract | 25 | — |
-| `sheriff` (Ohio Sheriff Sale Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Miami-Dade County FL — Tax Deed Auction (RealForeclose)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Broward County FL — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Palm Beach County FL — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Orange County FL (Orlando) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Hillsborough County FL (Tampa) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Lee County FL (Fort Myers) — Tax Deed Auction) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Pinellas County FL (St. Petersburg) — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Duval County FL (Jacksonville) — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Polk County FL — Tax Deed) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
-| `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P4_LIVE_STRONG | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `treasury` (Treasury Forfeiture Real Property) | P4_LIVE_STRONG | treasury-detail | 16 | — |
 | `usda` (USDA RD/FSA Property Resales) | P4_LIVE_STRONG | usda-table | 16 | — |
+| `civilview` (CivilView Sheriff/Tax Sale Platform) | P3_SCOPE_LIMITED | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
+| `civilview` (CivilView Participating Jurisdictions (Nationwide set)) | P3_SCOPE_LIMITED | civilview-sales | 60 | Jurisdiction-scoped (countyId); not nationwide |
+| `hud` (HUD HomeStore) | P3_SCOPE_LIMITED | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `courtlistener` (CourtListener / RECAP) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; enrichment only — never invents bid/sale |
@@ -80,6 +68,18 @@
 | `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | table-extract | 0 | USMS bot-protection / brokered RealLook; fail-closed |
 | `public-notices-email` (Press-Association Public Notice Email Alerts) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; operator IMAP/corpus evidence only |
+| `sheriff` (Ohio Sheriff Sale Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Miami-Dade County FL — Tax Deed Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Broward County FL — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Palm Beach County FL — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Orange County FL (Orlando) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Hillsborough County FL (Tampa) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Lee County FL (Fort Myers) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Pinellas County FL (St. Petersburg) — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Duval County FL (Jacksonville) — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Polk County FL — Tax Deed) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
 
 ## What we guarantee (code)

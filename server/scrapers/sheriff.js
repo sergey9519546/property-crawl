@@ -301,11 +301,11 @@ class SheriffSaleScraper extends BaseScraper {
         if (!refId || !parsed.address) continue;
         let openingBid = parsed.openingBid;
         let saleDate = parsed.saleDate ? this.normalizeSaleDate(parsed.saleDate) : null;
-        if ((openingBid == null || saleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
-          const adaptive = this.extractWithAdaptiveFallback(html, {
-            caseNumber: { selector: '.case-id', extractor: () => String(refId) },
-            openingBid: { selector: '.opening-bid', extractor: () => (openingBid != null ? String(openingBid) : null) },
-            saleDateText: { selector: '.sale-date', extractor: () => saleDate },
+        if ((openingBid == null || saleDate == null) && parsed.cardHtml && typeof this.extractWithAdaptiveFallback === 'function') {
+          const adaptive = this.extractWithAdaptiveFallback(parsed.cardHtml, {
+            caseNumber: { selector: '.case-id', extractor: (h) => (h.match(/(?:case\s*(?:#|no\.?)|certificate\s*(?:#|no\.?)):?\s*([0-9a-za-z\-_]+)/i)?.[1] || String(refId)) },
+            openingBid: { selector: '.opening-bid', extractor: (h) => (h.match(/(?:opening|starting|minimum|upset)\s*bid:?\s*\$([\d,]+(?:\.\d{2})?)/i)?.[1]?.replace(/,/g, '') || null) },
+            saleDateText: { selector: '.sale-date', extractor: (h) => (h.match(/(?:auction|sale)\s*date:?\s*([0-9]{1,2}\/[0-9]{1,2}\/[0-9]{4})/i)?.[1] || null) },
           }, { persistSelectors: false });
           if (adaptive && adaptive.identityPassed) {
             if (openingBid == null && adaptive.fields.openingBid) {

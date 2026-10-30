@@ -286,12 +286,15 @@ class IrsSeizedScraper extends BaseScraper {
     if ((resolvedOpeningBid == null || resolvedSaleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
       const adaptive = this.extractWithAdaptiveFallback(html, {
         caseNumber: { selector: 'address', extractor: () => slug },
-        openingBid: { selector: '.minimum-bid', extractor: () => (resolvedOpeningBid != null ? String(resolvedOpeningBid) : null) },
-        saleDateText: { selector: 'time', extractor: () => resolvedSaleDate },
+        openingBid: { selector: '.minimum-bid', extractor: (h) => (h.match(/minimum\s*bid[^$]{0,40}\$([\d,]+(?:\.\d{2})?)/i)?.[1]?.replace(/,/g, '') || null) },
+        saleDateText: { selector: 'time', extractor: (h) => (h.match(/<time[^>]*datetime="([^"]+)"/i)?.[1]?.slice(0, 10) || null) },
       }, { persistSelectors: false });
       if (adaptive && adaptive.identityPassed) {
         if (resolvedOpeningBid == null && adaptive.fields.openingBid) {
           resolvedOpeningBid = this.parseMoney(adaptive.fields.openingBid);
+        }
+        if (resolvedSaleDate == null && adaptive.fields.saleDateText) {
+          resolvedSaleDate = adaptive.fields.saleDateText.slice(0, 10);
         }
       }
     }
@@ -319,7 +322,7 @@ class IrsSeizedScraper extends BaseScraper {
       estLow: null,
       estHigh: null,
       assessed: null,
-      saleDate,
+      saleDate: resolvedSaleDate,
       plaintiff: null,
       defendant,
       judgment: null,

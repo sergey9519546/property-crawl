@@ -170,3 +170,43 @@ test('BaseScraper exposes extractWithAdaptiveFallback, runSpiderBatch, and reque
   assert.equal(adaptive.identityPassed, true);
   assert.equal(adaptive.fields.openingBid, '88000');
 });
+
+test('relocatePresentationSelector never matches deposit or judgment as opening bid', () => {
+  const depositOnlyHtml = `
+    <div class="card">
+      <span class="deposit">Required Deposit: $5,000.00</span>
+      <span class="judgment">Final Judgment Amount: $120,000.00</span>
+    </div>
+  `;
+  const relocated = relocatePresentationSelector(depositOnlyHtml, 'openingBid');
+  assert.equal(relocated, null, 'Deposit or judgment amount must not be extracted as opening bid');
+});
+
+test('BaseScraper.requestText fails closed on bot challenge and never escalates to waterfall', async () => {
+  const BaseScraper = require('../server/scrapers/base');
+  const { ScraperResponseError } = require('../server/scrapers/circuit-breaker');
+
+  let waterfallCalled = false;
+  const scraper = new BaseScraper({
+    name: 'BotChallengeTestScraper',
+    sourceKey: 'sheriff',
+    fetchImpl: async () => {
+      throw new ScraperResponseError('Cloudflare bot challenge detected', {
+        status: 403,
+        haltScraper: true,
+      });
+    },
+  });
+
+  await assert.rejects(
+    async () => {
+      await scraper.requestText('https://cuyahoga.sheriffsaleauction.ohio.gov/test', {
+        useWaterfall: true,
+      });
+    },
+    (err) => {
+      assert.ok(err.haltScraper, 'Error must retain haltScraper: true');
+      return true;
+    }
+  );
+});

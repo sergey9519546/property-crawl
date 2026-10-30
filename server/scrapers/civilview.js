@@ -685,8 +685,8 @@ class CivilViewScraper extends BaseScraper {
     let occupancy = this.parseOccupancy(propertyNote);
     if (!occupancy && typeof this.extractWithAdaptiveFallback === 'function') {
       const adaptive = this.extractWithAdaptiveFallback(html, {
-        caseNumber: { selector: '.sale-detail-value', extractor: () => sheriffNumber || null },
-        occupancyStatus: { selector: '.occupancy', extractor: () => occupancy || null },
+        caseNumber: { selector: '.sale-detail-value', extractor: (h) => (h.match(/Sheriff\s*#:[^<]*<span[^>]*class="sale-detail-value"[^>]*>([^<]+)<\/span>/i)?.[1]?.trim() || sheriffNumber || null) },
+        occupancyStatus: { selector: '.occupancy', extractor: (h) => (h.match(/(?:occupancy|status)[\s:]*(occupied|vacant|unknown)/i)?.[1] || null) },
       }, { persistSelectors: false });
       if (adaptive && adaptive.identityPassed && adaptive.fields.occupancyStatus) {
         occupancy = adaptive.fields.occupancyStatus.toUpperCase();

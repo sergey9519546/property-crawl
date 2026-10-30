@@ -69,8 +69,9 @@ class TreasuryForfeitureScraper extends BaseScraper {
           });
           if (batchResult && Array.isArray(batchResult.items)) {
             for (const item of batchResult.items) {
-              if (item && item.url && item.data && item.data.property) {
-                this._spiderDetailCache.set(item.url, item.data.property);
+              const itemUrl = item?.url || item?.data?.url;
+              if (item && itemUrl && item.data && item.data.property) {
+                this._spiderDetailCache.set(itemUrl, item.data.property);
               }
             }
           }
@@ -213,9 +214,9 @@ class TreasuryForfeitureScraper extends BaseScraper {
     let resolvedOpeningBid = openingBid;
     if ((resolvedOpeningBid == null || saleDate == null) && typeof this.extractWithAdaptiveFallback === 'function') {
       const adaptive = this.extractWithAdaptiveFallback(detailHtml, {
-        caseNumber: { selector: 'title', extractor: () => saleNumber || baseName },
-        openingBid: { selector: '.starting-bid', extractor: () => (resolvedOpeningBid != null ? String(resolvedOpeningBid) : null) },
-        saleDateText: { selector: '.auction-date', extractor: () => saleDate },
+        caseNumber: { selector: 'title', extractor: (h) => (h.match(/<title>([^<]+)<\/title>/)?.[1] ? (saleNumber || baseName) : null) },
+        openingBid: { selector: '.starting-bid', extractor: (h) => (h.match(/Starting\s*Bid:\s*\$([\d,]+)/i)?.[1]?.replace(/,/g, '') || null) },
+        saleDateText: { selector: '.auction-date', extractor: (h) => (h.match(/Auction\s*Date\s*and\s*Time:\s*([^<]+?)(?:Inspection|$)/i)?.[1] || null) },
       }, { persistSelectors: false });
       if (adaptive && adaptive.identityPassed) {
         if (resolvedOpeningBid == null && adaptive.fields.openingBid) {

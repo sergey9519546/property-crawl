@@ -102,10 +102,10 @@ function relocatePresentationSelector(html, field, options = {}) {
   const text = String(html || '');
   if (!text) return null;
 
-  if (field === 'openingBid' || field === 'currentBid' || field === 'judgmentAmount') {
-    // Look for monetary tokens with surrounding context
-    const moneyRegex = /(?:opening\s*bid|current\s*bid|judgment|amount|upset|minimum|price)[^$]{0,80}\$\s*([\d,]+(?:\.\d{2})?)/i;
-    const match = text.match(moneyRegex);
+  if (field === 'openingBid' || field === 'currentBid') {
+    // Zero-Fabrication: Strictly require bid context. Never attribute deposits or judgments as opening bids.
+    const bidRegex = /(?:opening\s*bid|starting\s*bid|minimum\s*bid|upset\s*bid|current\s*bid)[^$]{0,40}\$\s*([\d,]+(?:\.\d{2})?)/i;
+    const match = text.match(bidRegex);
     if (match) {
       return {
         strategy: 'contextual-regex',
@@ -114,15 +114,17 @@ function relocatePresentationSelector(html, field, options = {}) {
         confidence: 0.88,
       };
     }
-    // Fallback: standalone currency badge
-    const standaloneRegex = /class="[^"]*(?:bid|price|amount|val)[^"]*"[^>]*>\s*\$\s*([\d,]+)/i;
-    const standMatch = text.match(standaloneRegex);
-    if (standMatch) {
+  }
+
+  if (field === 'judgmentAmount') {
+    const judgmentRegex = /(?:final\s*judgment|judgment\s*amount|judgment)[^$]{0,40}\$\s*([\d,]+(?:\.\d{2})?)/i;
+    const match = text.match(judgmentRegex);
+    if (match) {
       return {
-        strategy: 'class-heuristic',
+        strategy: 'contextual-regex',
         field,
-        value: standMatch[1].replace(/,/g, ''),
-        confidence: 0.82,
+        value: match[1].replace(/,/g, ''),
+        confidence: 0.88,
       };
     }
   }

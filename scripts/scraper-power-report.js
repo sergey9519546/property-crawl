@@ -107,6 +107,12 @@ function powerFor(source, scheduled) {
   } else if (adapter === 'government-land' || adapter === 'local-surplus') {
     tier = 'P2_ENROLLMENT_TEMPLATE';
     score = 3;
+  } else if (status === 'LOCAL_ROUTE') {
+    tier = 'P2_LOCAL_ROUTE';
+    score = 3;
+  } else if (status === 'SCOPE_LIMITED') {
+    tier = 'P3_SCOPE_LIMITED';
+    score = 4;
   } else if (inScheduler && scrapling) {
     tier = 'P4_LIVE_STRONG';
     score = 5;

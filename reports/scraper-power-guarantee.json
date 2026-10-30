@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-30T08:17:38.634Z",
+  "generatedAt": "2026-10-30T08:45:56.046Z",
   "guarantee": {
     "catalogSources": 267,
     "scheduledAdapters": 21,
@@ -24,15 +24,17 @@
   },
   "tiers": {
     "P0_CATALOG_ONLY": 234,
-    "P4_LIVE_STRONG": 20,
+    "P4_LIVE_STRONG": 5,
+    "P3_SCOPE_LIMITED": 3,
     "P2_DISCOVERY_ADAPTER": 11,
-    "P2_BLOCKED_PUBLISHER": 2
+    "P2_BLOCKED_PUBLISHER": 2,
+    "P2_LOCAL_ROUTE": 12
   },
   "categories": {
     "tax_sale": {
       "total": 111,
       "scheduled": 10,
-      "strong": 9
+      "strong": 0
     },
     "parcel_evidence": {
       "total": 6,
@@ -42,12 +44,12 @@
     "foreclosure_auction": {
       "total": 25,
       "scheduled": 7,
-      "strong": 6
+      "strong": 1
     },
     "government_reo": {
       "total": 7,
       "scheduled": 5,
-      "strong": 2
+      "strong": 1
     },
     "government_seizure": {
       "total": 5,
@@ -122,7 +124,7 @@
       "required": true,
       "catalogEntries": 7,
       "scheduledAdapters": 5,
-      "strongAdapters": 2,
+      "strongAdapters": 1,
       "opportunityScheduled": 5,
       "coveredByCode": true,
       "honestGap": null,
@@ -242,7 +244,7 @@
       "required": true,
       "catalogEntries": 25,
       "scheduledAdapters": 7,
-      "strongAdapters": 6,
+      "strongAdapters": 1,
       "opportunityScheduled": 7,
       "coveredByCode": true,
       "honestGap": null,
@@ -280,7 +282,7 @@
       "required": true,
       "catalogEntries": 111,
       "scheduledAdapters": 10,
-      "strongAdapters": 9,
+      "strongAdapters": 0,
       "opportunityScheduled": 9,
       "coveredByCode": true,
       "honestGap": null,
@@ -706,8 +708,8 @@
       "access": "public",
       "discoveryUrl": "https://www.hudhomestore.gov/",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P3_SCOPE_LIMITED",
+        "score": 4,
         "inScheduler": true,
         "scrapling": [
           "hud-cards"
@@ -1048,8 +1050,8 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://salesweb.civilview.com/Sales/SalesSearch",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P3_SCOPE_LIMITED",
+        "score": 4,
         "inScheduler": true,
         "scrapling": [
           "civilview-sales"
@@ -1141,8 +1143,8 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://cuyahoga.sheriffsaleauction.ohio.gov/",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -1961,8 +1963,8 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://salesweb.civilview.com/",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P3_SCOPE_LIMITED",
+        "score": 4,
         "inScheduler": true,
         "scrapling": [
           "civilview-sales"
@@ -1987,8 +1989,8 @@
       "access": "jurisdiction",
       "discoveryUrl": "https://www.realauction.com/",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4156,8 +4158,8 @@
       "access": "public",
       "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4183,8 +4185,8 @@
       "access": "public",
       "discoveryUrl": "https://broward.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4210,8 +4212,8 @@
       "access": "public",
       "discoveryUrl": "https://palmbeach.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4237,8 +4239,8 @@
       "access": "public",
       "discoveryUrl": "https://orange.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4264,8 +4266,8 @@
       "access": "public",
       "discoveryUrl": "https://hillsborough.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4291,8 +4293,8 @@
       "access": "public",
       "discoveryUrl": "https://www.lee.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4318,8 +4320,8 @@
       "access": "public",
       "discoveryUrl": "https://pinellas.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4345,8 +4347,8 @@
       "access": "public",
       "discoveryUrl": "https://duval.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -4372,8 +4374,8 @@
       "access": "public",
       "discoveryUrl": "https://polk.realtaxdeed.com",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"
@@ -5617,8 +5619,8 @@
       "access": "public",
       "discoveryUrl": "https://www.miamidade.realforeclose.com/index.cfm",
       "power": {
-        "tier": "P4_LIVE_STRONG",
-        "score": 5,
+        "tier": "P2_LOCAL_ROUTE",
+        "score": 3,
         "inScheduler": true,
         "scrapling": [
           "table-extract"

@@ -102,6 +102,7 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     judgment,
     assessed,
     saleDate: dateMatch ? dateMatch[1] : null,
+    cardHtml: text,
     sourceUrl: getRealAuctionUrl(county, state, {
       ...options,
       auctionId: auctionIdMatch ? auctionIdMatch[1] : null,

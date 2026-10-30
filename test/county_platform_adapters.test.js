@@ -282,3 +282,41 @@ test('RealAuction tax-deed mode (.realtaxdeed.com) and SheriffSaleScraper docket
   assert.equal(parsed[0].provenance.platform, 'realtaxdeed');
   assert.equal(inspectSourceRecordUrl('sheriff', parsed[0].sourceUrl).isValid, true);
 });
+
+test('Zero-fabrication invariant: multi-item RealAuction docket does not bleed bids across cards', () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper();
+
+  const multiCardDocketHtml = `
+    <div class="Auction_W" id="Auction_1001">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Case #: 24-CV-111</td>
+          <td>Property Address: 100 Main St, Columbus, OH 43215</td>
+          <td>Opening Bid: $50,000.00</td>
+          <td>Auction Date: 12/01/2026</td>
+        </tr>
+      </table>
+    </div>
+    <div class="Auction_W" id="Auction_1002">
+      <table class="tbl_list_data">
+        <tr>
+          <td>Case #: 24-CV-222</td>
+          <td>Property Address: 200 Broad St, Columbus, OH 43215</td>
+          <td>Deposit: $5,000.00</td>
+          <td>Auction Date: 12/01/2026</td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  const results = scraper.parseRealauctionHtml(multiCardDocketHtml, {
+    name: 'Franklin',
+    domain: 'franklin.realforeclose.com',
+    state: 'OH',
+  });
+
+  assert.equal(results.length, 2);
+  assert.equal(results[0].openingBid, 50000, 'Card 1 must have its own opening bid');
+  assert.equal(results[1].openingBid, null, 'Card 2 without opening bid must remain strictly null (zero bleed)');
+});

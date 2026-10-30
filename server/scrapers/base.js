@@ -120,6 +120,14 @@ class BaseScraper {
       });
     } catch (primaryErr) {
       if (!canEscalate) throw primaryErr;
+      if (
+        primaryErr?.haltScraper
+        || this.circuitBreaker?.isOpen?.()
+        || primaryErr?.code === 'SCRAPER_CIRCUIT_OPEN'
+        || /bot\s*challenge|cloudflare|turnstile|captcha|access\s*denied/i.test(primaryErr?.message || '')
+      ) {
+        throw primaryErr;
+      }
       const wf = await waterfallFetch({
         url,
         sourceKey: this.sourceKey,
@@ -136,14 +144,6 @@ class BaseScraper {
     }
   }
 
-  async _legacyRequestText(url, options = {}) {
-    return fetchTextWithPolicy(url, {
-      ...options,
-      timeoutMs: options.timeoutMs ?? this.timeoutMs,
-      circuitBreaker: this.circuitBreaker,
-      fetchImpl: options.fetchImpl || this.fetchImpl
-    });
-  }
 
   async requestJson(url, options = {}) {
     return fetchJsonWithPolicy(url, {
