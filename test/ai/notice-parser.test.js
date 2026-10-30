@@ -255,3 +255,12 @@ test('deterministicParse: preserves exact rawNotice character offsets when Jdgmt
     assert.equal(notice.slice(span.start, span.end), span.quote, `span mismatch in rawNotice for ${key}`);
   }
 });
+
+test('deterministicParse: extracts deposit terms and prevents debt-as-price conflation', () => {
+  const notice = 'FORECLOSURE SALE: U.S. Bank vs. Alice Ray, Case No. 2026-CV-4410. 4500 Elm St, Columbus, OH 43215. Judgment amount: $185,000. 10% deposit required at time of sale in certified funds. Sale Date: 2026-11-20.';
+  const parsed = deterministicParse(notice);
+  assert.equal(parsed.judgment_amount, 185000);
+  assert.equal(parsed.opening_bid, 0, 'No opening bid should be imputed from judgment amount');
+  assert.match(parsed.deposit_terms, /10%\s+deposit/i);
+  assert.ok(parsed.evidenceSpans.deposit_terms?.verified);
+});

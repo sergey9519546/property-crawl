@@ -109,3 +109,22 @@ test('buildPropertyDossier wires hudSafmr on returned dossier', () => {
   });
   assert.equal(dossierNoZip.hudSafmr, null, 'expected dossier.hudSafmr to be null');
 });
+
+test('formatDecisionPacketMarkdown formats HUD SAFMR rent table when hudSafmr is present', () => {
+  const { formatDecisionPacketMarkdown } = require('../server/export/decision-packet');
+  const benchmarks = loadBenchmarks();
+  const validZip = Object.keys(benchmarks)[0];
+  const packet = buildDecisionPacket({
+    id: 'TEST-HUD-MD-1',
+    address: '100 Main St',
+    zip: validZip,
+    beds: 3,
+    openingBid: 120000,
+    source: 'sheriff'
+  });
+  const md = formatDecisionPacketMarkdown(packet);
+  assert.match(md, /### HUD Statutory Fair Market Rent \(SAFMR\) Floor/);
+  assert.match(md, /ZIP Code/);
+  assert.match(md, /Section 8 FMR Baseline/);
+  assert.match(md, /90% Voucher Floor/);
+});

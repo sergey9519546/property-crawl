@@ -388,6 +388,12 @@ test('computeStatutoryDeadlinesAndCarry models post-sale statutory windows and I
   const caCarry = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'CA', purchasePrice: 400_000 });
   assert.equal(caCarry.objectionOrConfirmationDays, 45);
   assert.match(caCarry.objectionLabel, /SB 1079/);
+  assert.equal(caCarry.effectiveTaxRatePct, 1.25);
+  assert.equal(caCarry.insuranceBaseRatePer1000, 2.79);
+  assert.ok(caCarry.estimatedPropertyTaxCarry > 0);
+  assert.ok(caCarry.estimatedInsuranceCarry > 0);
+  assert.ok(caCarry.totalHoldingCostCarry >= caCarry.estimatedCarryCost);
+  assert.ok(caCarry.monthlyHoldingCost > 0);
 
   const ilCarry = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-10-01', state: 'IL', purchasePrice: 200_000 });
   assert.equal(ilCarry.objectionOrConfirmationDays, 30);

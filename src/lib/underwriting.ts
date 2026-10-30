@@ -820,6 +820,12 @@ export interface StatutoryDeadlinesAndCarry {
   effectiveLockupDays: number;
   estimatedCarryCost: number | null;
   annualCostOfCapitalPct: number;
+  effectiveTaxRatePct?: number;
+  insuranceBaseRatePer1000?: number;
+  estimatedPropertyTaxCarry?: number | null;
+  estimatedInsuranceCarry?: number | null;
+  totalHoldingCostCarry?: number | null;
+  monthlyHoldingCost?: number | null;
   computedAt?: string;
 }
 
@@ -830,6 +836,27 @@ function addDaysIso(baseDateStr: string | null | undefined, days: number): strin
   return new Date(time + days * 86_400_000).toISOString().slice(0, 10);
 }
 
+export const EFFECTIVE_TAX_RATE_BY_STATE: Readonly<Record<string, number>> = {
+  AL: 0.0041, AK: 0.0118, AZ: 0.0063, AR: 0.0064, CA: 0.0125, CO: 0.0051, CT: 0.0179, DE: 0.0058, DC: 0.0057, FL: 0.0089,
+  GA: 0.0092, HI: 0.0029, ID: 0.0067, IL: 0.0200, IN: 0.0085, IA: 0.0152, KS: 0.0141, KY: 0.0086, LA: 0.0055, ME: 0.0124,
+  MD: 0.0105, MA: 0.0114, MI: 0.0148, MN: 0.0112, MS: 0.0079, MO: 0.0097, MT: 0.0074, NE: 0.0163, NV: 0.0055, NH: 0.0186,
+  NJ: 0.0223, NM: 0.0073, NY: 0.0140, NC: 0.0078, ND: 0.0098, OH: 0.0152, OK: 0.0090, OR: 0.0093, PA: 0.0149, RI: 0.0140,
+  SC: 0.0057, SD: 0.0124, TN: 0.0066, TX: 0.0170, UT: 0.0058, VT: 0.0190, VA: 0.0082, WA: 0.0094, WV: 0.0059, WI: 0.0161, WY: 0.0061,
+};
+
+export const INSURANCE_BASE_RATE_PER_1000: Readonly<Record<string, number>> = {
+  AK: 3.83, AL: 8.40, AR: 8.82, AZ: 3.43, CA: 2.79, CO: 5.78, CT: 4.68, DC: 3.66,
+  DE: 3.29, FL: 10.37, GA: 6.24, HI: 2.34, IA: 8.56, ID: 2.99, IL: 8.95, IN: 7.00,
+  KS: 12.73, KY: 7.15, LA: 13.53, MA: 3.85, MD: 4.07, ME: 3.72, MI: 4.82, MN: 6.89,
+  MO: 9.15, MS: 10.77, MT: 3.83, NC: 4.39, ND: 8.17, NE: 10.96, NH: 2.96, NJ: 3.55,
+  NM: 4.64, NV: 3.02, NY: 4.39, OH: 5.88, OK: 13.32, OR: 2.76, PA: 4.79, RI: 4.66,
+  SC: 6.33, SD: 6.80, TN: 5.54, TX: 8.94, UT: 2.52, VA: 3.98, VT: 3.54, WA: 2.80,
+  WI: 4.16, WV: 6.97, WY: 4.49,
+};
+
+export const DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000 = 5.52;
+export const DEFAULT_NATIONAL_TAX_RATE = 0.011;
+
 export function computeStatutoryDeadlinesAndCarry(params: {
   saleDate?: string | null;
   state?: string | null;
@@ -837,6 +864,12 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   redemptionDays?: number | null;
   hasIrsLien?: boolean;
   annualCostOfCapitalPct?: number;
+  effectiveTaxRatePct?: number;
+  insuranceBaseRatePer1000?: number;
+  estimatedPropertyTaxCarry?: number | null;
+  estimatedInsuranceCarry?: number | null;
+  totalHoldingCostCarry?: number | null;
+  monthlyHoldingCost?: number | null;
   computedAt?: string;
 }): StatutoryDeadlinesAndCarry {
   const st = (params.state || "").trim().toUpperCase();
@@ -878,6 +911,24 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     ? Math.round(price * (annualCostOfCapitalPct / 100) * (effectiveLockupDays / 365))
     : null;
 
+  const effTaxRate = params.effectiveTaxRatePct !== undefined
+    ? (nonNegativeNumber(params.effectiveTaxRatePct) ?? 0) / 100
+    : (EFFECTIVE_TAX_RATE_BY_STATE[st] ?? DEFAULT_NATIONAL_TAX_RATE);
+  const insRatePer1000 = params.insuranceBaseRatePer1000 !== undefined
+    ? (nonNegativeNumber(params.insuranceBaseRatePer1000) ?? 0)
+    : (INSURANCE_BASE_RATE_PER_1000[st] ?? DEFAULT_NATIONAL_INSURANCE_RATE_PER_1000);
+
+  const estimatedPropertyTaxCarry = price !== null && effectiveLockupDays > 0
+    ? Math.round(price * effTaxRate * (effectiveLockupDays / 365))
+    : null;
+  const estimatedInsuranceCarry = price !== null && effectiveLockupDays > 0
+    ? Math.round(price * (insRatePer1000 / 1000) * (effectiveLockupDays / 365))
+    : null;
+  const totalHoldingCostCarry = estimatedCarryCost !== null
+    ? estimatedCarryCost + (estimatedPropertyTaxCarry ?? 0) + (estimatedInsuranceCarry ?? 0)
+    : null;
+  const monthlyHoldingCost = price !== null ? Math.round(price * (annualCostOfCapitalPct / 100 / 12) + price * (effTaxRate / 12) + price * (insRatePer1000 / 1000 / 12)) : null;
+
   return {
     saleDateIso,
     objectionOrConfirmationDays,
@@ -889,6 +940,12 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     stateRedemptionDeadline: addDaysIso(saleDateIso, stateRedemptionDays),
     effectiveLockupDays,
     estimatedCarryCost,
+    effectiveTaxRatePct: Number((effTaxRate * 100).toFixed(2)),
+    insuranceBaseRatePer1000: insRatePer1000,
+    estimatedPropertyTaxCarry,
+    estimatedInsuranceCarry,
+    totalHoldingCostCarry,
+    monthlyHoldingCost,
     annualCostOfCapitalPct,
     ...(params.computedAt ? { computedAt: params.computedAt } : {}),
   };

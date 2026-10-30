@@ -328,6 +328,20 @@ No fee is inferred from the source or the state. A blank line was not entered. R
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
+${packet.hudSafmr ? `
+### HUD Statutory Fair Market Rent (SAFMR) Floor
+- **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
+- **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
+
+| Unit Size | Section 8 FMR Baseline | 90% Voucher Floor | 110% Voucher Ceiling |
+|---|---|---|---|
+| **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
+| **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |
+| **2 Bedroom** | $${packet.hudSafmr.rents?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['2br']?.toLocaleString() ?? '—'} |
+| **3 Bedroom** | $${packet.hudSafmr.rents?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['3br']?.toLocaleString() ?? '—'} |
+| **4 Bedroom** | $${packet.hudSafmr.rents?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['4br']?.toLocaleString() ?? '—'} |
+
+- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}
 
 ---
 

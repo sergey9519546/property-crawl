@@ -22,6 +22,7 @@ type Dossier = DiscoveryEvidenceData & {
   opportunityWeights?: Record<string, number>; componentScores?: Record<string, ComponentScore>;
   opportunitySummary?: { supported: number; unknown: number; contradicted: number };
   opportunityDisclaimer?: string;
+  hudSafmr?: { zip: string; bedrooms: number; fairMarketRent: number; paymentStandard90: Record<string, number>; paymentStandard110: Record<string, number>; rents: Record<string, number> } | null;
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
     parcel: { status: string; rawParcelId?: string; properties: Record<string, unknown>; source?: { url: string } } | null;
@@ -131,6 +132,32 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-semibold text-ink underline hover:text-ink-2">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </div></details>}
         <DiscoveryEvidence evidence={dossier} documentsShown={documentsShown} />
+        {dossier.hudSafmr && (
+          <div className="rounded-xl border border-line bg-paper p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">HUD Fair Market Rent Floor · ZIP {dossier.hudSafmr.zip}</h3>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[10px] font-semibold text-ink-2">
+                FY2025 SAFMR
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Section 8 Fair Market Rent baseline and statutory voucher payment standards (90%–110% per 24 CFR § 888.113).
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {(['0br', '1br', '2br', '3br', '4br'] as const).map((br) => (
+                <div key={br} className="rounded-lg border border-line/60 bg-surface/50 p-2 text-center">
+                  <span className="text-[10px] font-bold uppercase text-ink-3">{br.toUpperCase()}</span>
+                  <p className="mt-0.5 text-sm font-bold text-ink">
+                    ${(dossier.hudSafmr?.rents?.[br] ?? 0).toLocaleString()}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-ink-3">
+                    ${(dossier.hudSafmr?.paymentStandard90?.[br] ?? 0).toLocaleString()} – ${(dossier.hudSafmr?.paymentStandard110?.[br] ?? 0).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {dossier.opportunitySignals && dossier.opportunitySignals.length > 0 && (
           <details className="border-b border-line pb-4">
           <summary className="cursor-pointer text-sm font-semibold text-ink-2">Research priority · how it is calculated</summary>

@@ -129,10 +129,17 @@ function deterministicParse(rawNotice = '') {
   const dateMatch = clean.match(/(?:sale\s+date|auction\s+date|to\s+be\s+sold\s+on)\s*(?:is|:)?\s*([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{4}-\d{2}-\d{2})/i);
   // Extract Labeled APN / Parcel ID: e.g. "APN: 123-45-678" or "Parcel ID: 010-234567"
   const apnMatch = clean.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-\s.][0-9A-Za-z]{2,6}(?:[-\s.][0-9A-Za-z]{1,8})+|\d{8,14})\b/i);
+  // Extract Deposit Terms: e.g. "10% deposit required at sale" or "Deposit: $5,000 in certified funds"
+  const depositMatch = clean.match(/(?:deposit\s*(?:terms|required)?[:\s]*)?(\d{1,2}\s?%|\btwenty\s+percent\b|\bten\s+percent\b|\$[0-9,]+)[^.]{0,80}?(?:deposit|down\s*payment|certified\s+funds)/i);
 
   const state = addressMatch ? addressMatch[3].toUpperCase() : 'OH';
   const judgmentNum = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : 0;
-  const bidNum = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : 0;
+  let bidNum = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : 0;
+  // Guard against debt-as-price hallucination:
+  // When an ambiguous parse equates bid with judgment debt without explicit bid phrasing, drop bid to 0.
+  if (bidNum > 0 && judgmentNum > 0 && bidNum === judgmentNum && !clean.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$([0-9,]+(?:\.[0-9]{2})?)/i)) {
+    bidNum = 0;
+  }
 
   const plaintiff = vsMatch ? vsMatch[1].trim() : '';
   const defendant = vsMatch ? vsMatch[2].trim() : '';
@@ -145,6 +152,7 @@ function deterministicParse(rawNotice = '') {
   const rawText = String(rawNotice || '');
   const rawJudgmentSpanMatch = rawText.match(/(?:judgment(?:\s+amount)?|jdgmt|amount\s+due|debt)\s*(?:of|is|:)?\s*\$[0-9OoSs,]+(?:\.[0-9OoSs]{2})?/i);
   const rawBidSpanMatch = rawText.match(/(?:opening\s+bid|minimum\s+bid|upset\s+price|starting\s+bid)\s*(?:of|is|:)?\s*\$[0-9OoSs,]+(?:\.[0-9OoSs]{2})?/i);
+  const rawDepositSpanMatch = rawText.match(/(?:deposit\s*(?:terms|required)?[:\s]*)?(\d{1,2}\s?%|\btwenty\s+percent\b|\bten\s+percent\b|\$[0-9OoSs,]+)[^.]{0,80}?(?:deposit|down\s*payment|certified\s+funds)/i);
   const verifySpanInRawOrClean = (candidate, rawFallbackMatch = null) => {
     if (!candidate) return null;
     const direct = verifyVerbatimSpan(rawText, candidate);
@@ -164,6 +172,7 @@ function deterministicParse(rawNotice = '') {
     defendant: vsMatch ? verifySpanInRawOrClean(defendant) : null,
     sale_date: dateMatch ? verifySpanInRawOrClean(dateMatch[0].trim()) : null,
     apn: apnMatch ? verifySpanInRawOrClean(apnMatch[0].trim()) : null,
+    deposit_terms: depositMatch ? verifySpanInRawOrClean(depositMatch[0].trim(), rawDepositSpanMatch) : null,
   };
   const evidenceSpans = Object.fromEntries(
     Object.entries(rawEvidenceSpans).filter(([, span]) => span && span.verified)
@@ -188,6 +197,7 @@ function deterministicParse(rawNotice = '') {
     defendant,
     judgment_amount: judgmentNum,
     opening_bid: bidNum,
+    deposit_terms: depositMatch ? depositMatch[0].trim() : '',
     sale_date: dateMatch ? dateMatch[1].trim() : '',
     senior_lien_risk: seniorLienInfo.riskLevel,
     senior_lien_warning: seniorLienInfo.warning,
