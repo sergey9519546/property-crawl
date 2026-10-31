@@ -18,7 +18,7 @@ const { validateEnrollmentUrl } = require('./government-land');
 
 class LocalSurplusScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ name: 'LocalSurplusCollector', sourceKey: 'local-surplus' });
+    super({ name: 'LocalSurplusCollector', sourceKey: 'local-surplus', ...options });
     this.catalogId = 'county-surplus-property';
     this.enrollmentUrl = options.enrollmentUrl
       ?? process.env.LOCAL_SURPLUS_DISCOVERY_URL
@@ -53,6 +53,28 @@ class LocalSurplusScraper extends BaseScraper {
         report.fullSweepComplete = false;
         report.observationError = 'local_surplus end is enrollment-only until LOCAL_SURPLUS_DISCOVERY_URL is configured';
         return [];
+      }
+
+      try {
+        const html = await this.requestText(validation.url);
+        const embedded = this.extractEmbeddedState(html);
+        if (embedded && Array.isArray(embedded.jsonLd) && embedded.jsonLd.length > 0) {
+          const candidates = this.parseJsonLdProperties(embedded.jsonLd, {
+            sourceKey: 'local-surplus',
+            sourceUrl: validation.url,
+            publisher: 'County / Municipal Surplus',
+          });
+          const valid = candidates.filter(c => this.passesFilter(c)).map(c => this.standardizeListing(c));
+          if (valid.length > 0) {
+            report.statesSucceeded.push('enrollment');
+            finalizeRunReport(report, { emitted: valid.length });
+            report.outcome = 'success';
+            report.complete = true;
+            return valid;
+          }
+        }
+      } catch (err) {
+        if (err && err.code === 'LISTING_SCHEMA_INVALID') throw err;
       }
 
       report.statesFailed.push('enrollment');

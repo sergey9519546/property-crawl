@@ -698,6 +698,63 @@ class CivilViewScraper extends BaseScraper {
 
     if (!propertyId || !sheriffNumber || !detailAddressRaw) return null;
 
+    let priorPostponements = 0;
+    let debtorAdjournments = 0;
+    let plaintiffAdjournments = 0;
+    let stayActive = false;
+    let statutoryStayExhausted = null;
+    let lastAdjournmentDate = null;
+
+    if (Array.isArray(statusHistory) && statusHistory.length > 0) {
+      for (const entry of statusHistory) {
+        const s = String(entry.status || '').toLowerCase();
+        if (/adjourn|postpone|continu/i.test(s)) {
+          priorPostponements += 1;
+          if (/debtor|defendant/i.test(s)) debtorAdjournments += 1;
+          if (/plaintiff|bank|lender/i.test(s)) plaintiffAdjournments += 1;
+          if (entry.date) lastAdjournmentDate = entry.date;
+        }
+        if (/bankruptcy|automatic\s*stay|stay/i.test(s)) {
+          if (/lifted|relief|vacated|exhaust/i.test(s)) {
+            statutoryStayExhausted = true;
+            stayActive = false;
+          } else {
+            stayActive = true;
+            statutoryStayExhausted = false;
+          }
+        }
+      }
+      if (debtorAdjournments >= 2 && statutoryStayExhausted == null) {
+        statutoryStayExhausted = true;
+      }
+    }
+
+    const sourceFacts = {
+      priorPostponements,
+      statutoryStayExhausted,
+      stayActive,
+      upsetPrice: approximateUpsetPrice || null,
+      adjournmentTrajectory: {
+        totalAdjournments: priorPostponements,
+        debtorAdjournments,
+        plaintiffAdjournments,
+        stayActive,
+        lastAdjournmentDate,
+      },
+      saleDate: { raw: saleDateRaw, normalized: parseSaleDate(saleDateRaw) },
+      approximateUpsetPrice: approximateUpsetPrice
+        ? {
+            raw: upsetRaw,
+            amount: approximateUpsetPrice,
+            qualifier: 'approximate',
+            source: approximateUpsetSource,
+          }
+        : null,
+      openingBid: openingBid
+        ? { raw: openingBidRaw, amount: openingBid, source: openingBidSource }
+        : null,
+    };
+
     const sourceFields = Object.fromEntries(fields.entries());
     return {
       id: `CIV-${summary.county.state}-${summary.county.id}-${propertyId}`,
@@ -730,20 +787,9 @@ class CivilViewScraper extends BaseScraper {
       raw: description || propertyNote || JSON.stringify(sourceFields),
       status: 'scheduled',
       sourceObservedAt,
-      sourceFacts: {
-        saleDate: { raw: saleDateRaw, normalized: parseSaleDate(saleDateRaw) },
-        approximateUpsetPrice: approximateUpsetPrice
-          ? {
-              raw: upsetRaw,
-              amount: approximateUpsetPrice,
-              qualifier: 'approximate',
-              source: approximateUpsetSource,
-            }
-          : null,
-        openingBid: openingBid
-          ? { raw: openingBidRaw, amount: openingBid, source: openingBidSource }
-          : null,
-      },
+      apn: field(fields, 'parcel #') || null,
+      parcelId: field(fields, 'parcel #') || null,
+      sourceFacts,
       provenance: {
         origin: 'live',
         observed: true,
@@ -768,20 +814,7 @@ class CivilViewScraper extends BaseScraper {
               source: approximateUpsetSource,
             }
           : null,
-        sourceFacts: {
-          saleDate: { raw: saleDateRaw, normalized: parseSaleDate(saleDateRaw) },
-          approximateUpsetPrice: approximateUpsetPrice
-            ? {
-                raw: upsetRaw,
-                amount: approximateUpsetPrice,
-                qualifier: 'approximate',
-                source: approximateUpsetSource,
-              }
-            : null,
-          openingBid: openingBid
-            ? { raw: openingBidRaw, amount: openingBid, source: openingBidSource }
-            : null,
-        },
+        sourceFacts,
         openingBidSource: openingBid ? openingBidSource : null,
         openingBidSourceNote: openingBid
           ? 'Publisher explicitly labels this amount as an opening or minimum bid.'

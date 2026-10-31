@@ -236,6 +236,27 @@ class CourtListenerScraper extends BaseScraper {
       ? result.attorney.map((a) => textOrNull(a, 120)).filter(Boolean)
       : [];
     const state = stateFromCourtId(courtId);
+    let plaintiff = null;
+    let defendant = null;
+    if (caseName) {
+      const vMatch = caseName.match(/^(.*?)\s+(?:v\.?|vs\.?)\s+(.*?)$/i);
+      if (vMatch) {
+        plaintiff = textOrNull(vMatch[1], 120);
+        defendant = textOrNull(vMatch[2], 120);
+      } else {
+        const inReMatch = caseName.match(/^In\s+re\s+(.*?)$/i);
+        if (inReMatch) {
+          defendant = textOrNull(inReMatch[1], 120);
+        }
+      }
+    }
+    if (!plaintiff && parties.length >= 1) {
+      plaintiff = parties[0];
+      if (!defendant && parties.length >= 2) {
+        defendant = parties[1];
+      }
+    }
+    const attorney = attorneys.length > 0 ? attorneys[0] : null;
 
     // Court dockets have no property address. Use the case name as a
     // human-readable label so the validation contract is satisfied without
@@ -290,6 +311,9 @@ class CourtListenerScraper extends BaseScraper {
       sourceUrl,
       raw: truncateRaw(rawPayload),
       occupancy: 'Unknown',
+      plaintiff: plaintiff || null,
+      defendant: defendant || null,
+      attorney: attorney || null,
       provenance: {
         origin: 'live',
         observed: true,

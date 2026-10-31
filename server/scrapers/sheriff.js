@@ -204,26 +204,63 @@ class SheriffSaleScraper extends BaseScraper {
               } catch (_) {}
             }
 
-            const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=0&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
-            const res2 = await fetcher(ajaxUrl, {
-              headers: {
-                'User-Agent': ua,
-                Cookie: cookieHeader,
-                'X-Requested-With': 'XMLHttpRequest',
-              },
-            });
-            if (res2 && res2.ok) {
-              const rawJson = (await res2.text()).trim();
-              let json = null;
-              try { json = JSON.parse(rawJson); } catch (_) {}
-              if (json && json.retHTML) {
-                const decoded = decodeRealAuctionMacros(json.retHTML);
-                if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(decoded);
-                const ajaxListings = this.parseRealauctionHtml(decoded, county, { saleDate: targetDate });
-                if (ajaxListings.length > 0) {
-                  return ajaxListings;
+            const accumulatedListings = [];
+            const maxPages = Math.max(1, Math.min(5, Number(process.env.REALAUCTION_MAX_PAGES_PER_DATE) || 3));
+            for (let page = 0; page < maxPages; page++) {
+              const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=${page}&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
+              const res2 = await fetcher(ajaxUrl, {
+                headers: {
+                  'User-Agent': ua,
+                  Cookie: cookieHeader,
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              });
+              if (res2 && res2.ok) {
+                const rawJson = (await res2.text()).trim();
+                let json = null;
+                try { json = JSON.parse(rawJson); } catch (_) {}
+                if (json && json.retHTML) {
+                  const decoded = decodeRealAuctionMacros(json.retHTML);
+                  if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(decoded);
+                  const pageListings = this.parseRealauctionHtml(decoded, county, { saleDate: targetDate });
+                  if (pageListings.length > 0) {
+                    accumulatedListings.push(...pageListings);
+                  }
+                  if (pageListings.length < 10) break;
+                } else {
+                  break;
+                }
+              } else {
+                break;
+              }
+            }
+
+            try {
+              const cancelUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=C&PageDir=0&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;
+              const resCancel = await fetcher(cancelUrl, {
+                headers: {
+                  'User-Agent': ua,
+                  Cookie: cookieHeader,
+                  'X-Requested-With': 'XMLHttpRequest',
+                },
+              });
+              if (resCancel && resCancel.ok) {
+                const rawCancelJson = (await resCancel.text()).trim();
+                let cancelJson = null;
+                try { cancelJson = JSON.parse(rawCancelJson); } catch (_) {}
+                if (cancelJson && cancelJson.retHTML) {
+                  const decodedCancel = decodeRealAuctionMacros(cancelJson.retHTML);
+                  if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(decodedCancel);
+                  const cancelListings = this.parseRealauctionHtml(decodedCancel, county, { saleDate: targetDate, area: 'C' });
+                  if (cancelListings.length > 0) {
+                    accumulatedListings.push(...cancelListings);
+                  }
                 }
               }
+            } catch (_) {}
+
+            if (accumulatedListings.length > 0) {
+              return accumulatedListings;
             }
           }
         } catch (_) {
@@ -343,7 +380,7 @@ class SheriffSaleScraper extends BaseScraper {
         const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${String(refId).replace(/[^a-zA-Z0-9-]/g, '')}`;
 
         let sourceFacts = null;
-        if (parsed.assessed != null || parsed.certificateNumber || parsed.homestead != null) {
+        if (parsed.assessed != null || parsed.certificateNumber || parsed.homestead != null || parsed.status || parsed.cancellationReason || parsed.priorPostponements != null || parsed.statutoryStayExhausted != null) {
           sourceFacts = {};
           if (parsed.assessed != null) {
             sourceFacts.appraisedValue = Math.round(parsed.assessed);
@@ -353,6 +390,18 @@ class SheriffSaleScraper extends BaseScraper {
           }
           if (parsed.homestead != null) {
             sourceFacts.homestead = parsed.homestead;
+          }
+          if (parsed.status) {
+            sourceFacts.auctionStatus = parsed.status;
+          }
+          if (parsed.cancellationReason) {
+            sourceFacts.cancellationReason = parsed.cancellationReason;
+          }
+          if (parsed.priorPostponements != null) {
+            sourceFacts.priorPostponements = parsed.priorPostponements;
+          }
+          if (parsed.statutoryStayExhausted != null) {
+            sourceFacts.statutoryStayExhausted = parsed.statutoryStayExhausted;
           }
         }
 
@@ -369,10 +418,11 @@ class SheriffSaleScraper extends BaseScraper {
           estHigh: null,
           assessed: parsed.assessed != null ? Math.round(parsed.assessed) : null,
           saleDate,
-          plaintiff: null,
-          defendant: null,
+          propType: parsed.propType || null,
+          plaintiff: parsed.plaintiff || null,
+          defendant: parsed.defendant || null,
           judgment: parsed.judgment != null ? Math.round(parsed.judgment) : null,
-          attorney: null,
+          attorney: parsed.attorney || null,
           occupancy: null,
           deposit: null,
           sourceUrl: parsed.sourceUrl,
@@ -384,6 +434,7 @@ class SheriffSaleScraper extends BaseScraper {
             publisher: isTaxDeed ? `${county.name} County Tax Deed` : `${county.name} County Sheriff`,
             recordId: String(refId),
             platform: isTaxDeed ? 'realtaxdeed' : (parsed.platform || 'realauction'),
+            sourceFacts,
           },
         });
       }

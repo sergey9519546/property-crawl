@@ -433,3 +433,26 @@ test('raw publisher record is retained for discovery evidence ingestion', async 
   assert.equal(raw.attributes.OBJECTID, 100001);
   assert.equal(raw.attributes.PARCEL_ID, '12-34-56-789-0000-0000');
 });
+
+test('scrapeByApns cross-joins targeted Florida parcel list by APN and county FIPS', async () => {
+  let queriedUrl = null;
+  const scraper = makeScraper({
+    fetchImpl: async (url) => {
+      queriedUrl = url;
+      return jsonResponse(200, arcgisResponse([
+        feature({ attributes: { PARCEL_ID: '08412-000-000', JV: 310000, TOT_LVG_AR: 1950, EFF_YR_BLT: 2004, ACT_YR_BLT: 2004, DOR_UC: '0100' } })
+      ]));
+    }
+  });
+
+  const results = await scraper.scrapeByApns(['08412-000-000'], { countyFips: '12001' });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].assessed, 310000);
+  assert.equal(results[0].sqft, 1950);
+  assert.equal(results[0].year, 2004);
+  assert.equal(results[0].propType, 'Single Family');
+  assert.equal(results[0].apn, '08412-000-000');
+  assert.ok(queriedUrl);
+  assert.match(decodeURIComponent(queriedUrl).replace(/\+/g, ' '), /CO_NO\s*=\s*11/);
+  assert.match(queriedUrl, /08412-000-000/);
+});

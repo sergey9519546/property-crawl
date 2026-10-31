@@ -103,6 +103,9 @@ test('CivilView detail parser uses published facts and leaves unavailable facts 
   assert.deepEqual(listing.provenance.sourceFacts, listing.sourceFacts);
   assert.equal(listing.provenance.detailUrlRequiresCountySession, true);
   assert.equal(listing.provenance.parcelNumber, 'LOT 7, BLOCK 1203');
+  assert.equal(listing.apn, 'LOT 7, BLOCK 1203');
+  assert.equal(listing.sourceFacts.priorPostponements, 1);
+  assert.equal(listing.sourceFacts.upsetPrice, 564684.81);
   assert.deepEqual(listing.provenance.statusHistory.at(-1), {
     status: 'Adjourned - Court',
     date: '2026-09-11',

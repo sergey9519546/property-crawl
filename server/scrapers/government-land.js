@@ -13,7 +13,6 @@
 const BaseScraper = require('./base');
 const {
   createRunReport,
-  recordUnitFailure,
   finalizeRunReport,
 } = require('./run-report');
 
@@ -37,7 +36,7 @@ function validateEnrollmentUrl(raw) {
 
 class GovernmentLandScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ name: 'GovernmentLandCollector', sourceKey: 'government-land' });
+    super({ name: 'GovernmentLandCollector', sourceKey: 'government-land', ...options });
     this.catalogId = 'state-land-auctions';
     this.enrollmentUrl = options.enrollmentUrl
       ?? process.env.GOV_LAND_DISCOVERY_URL
@@ -75,7 +74,29 @@ class GovernmentLandScraper extends BaseScraper {
         return [];
       }
 
-      // Enrolled but this template collector does not yet parse publisher HTML.
+      try {
+        const html = await this.requestText(validation.url);
+        const embedded = this.extractEmbeddedState(html);
+        if (embedded && Array.isArray(embedded.jsonLd) && embedded.jsonLd.length > 0) {
+          const candidates = this.parseJsonLdProperties(embedded.jsonLd, {
+            sourceKey: 'government-land',
+            sourceUrl: validation.url,
+            publisher: 'BLM / State Land Office',
+          });
+          const valid = candidates.filter(c => this.passesFilter(c)).map(c => this.standardizeListing(c));
+          if (valid.length > 0) {
+            report.statesSucceeded.push('enrollment');
+            finalizeRunReport(report, { emitted: valid.length });
+            report.outcome = 'success';
+            report.complete = true;
+            return valid;
+          }
+        }
+      } catch (err) {
+        if (err && err.code === 'LISTING_SCHEMA_INVALID') throw err;
+      }
+
+      // Enrolled but no structured land-sale parser matched.
       // Fail closed — never return invented parcels.
       report.statesFailed.push('enrollment');
       report.failures.push({

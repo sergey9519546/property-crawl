@@ -358,6 +358,7 @@ class FlDorCadastralScraper extends BaseScraper {
     // scheduler can ingest the original ArcGIS payload as evidence.
     this.rawPublisherRecords = new WeakMap();
     this.resumeOffset = 0;
+    this.now = typeof options.now === 'function' ? options.now : (() => new Date());
   }
 
   setCheckpoint(checkpoint) {
@@ -431,6 +432,87 @@ class FlDorCadastralScraper extends BaseScraper {
       );
     }
     return { queryUrl, payload };
+  }
+
+  /**
+   * Targeted cadastral cross-join by parcel ID / APN list.
+   * Enables instant enrichment of distress/sheriff/taxdeed listings in Florida.
+   *
+   * @param {string[]} apnList - Array of APNs/parcel IDs to query
+   * @param {Object} [options] - Options including countyFips, timeoutMs
+   * @returns {Promise<Array<Object>>} Standardized cadastral records
+   */
+  async scrapeByApns(apnList, options = {}) {
+    if (!Array.isArray(apnList) || apnList.length === 0) return [];
+    const cleanApns = [...new Set(
+      apnList.map(a => String(a || '').trim().replace(/['"\\]/g, ''))
+        .filter(a => a.length >= 3 && a.length <= 40)
+    )];
+    if (cleanApns.length === 0) return [];
+
+    const countyFips = options.countyFips || options.fips;
+    let coNo = null;
+    if (countyFips) {
+      for (const [code, entry] of Object.entries(DOR_COUNTY_BY_CODE)) {
+        if (entry.fips === String(countyFips)) {
+          coNo = code;
+          break;
+        }
+      }
+    }
+
+    const CHUNK_SIZE = 50;
+    const allResults = [];
+    const observedAt = new Date(typeof this.now === 'function' ? this.now() : Date.now()).toISOString();
+
+    for (let i = 0; i < cleanApns.length; i += CHUNK_SIZE) {
+      const chunk = cleanApns.slice(i, i + CHUNK_SIZE);
+      const quoted = chunk.map(apn => `'${apn}'`).join(',');
+      let where = `PARCEL_ID IN (${quoted}) OR PARCELNO IN (${quoted})`;
+      if (coNo) {
+        where = `CO_NO = ${coNo} AND (${where})`;
+      }
+
+      const url = new URL(`${this.serviceRoot}/query`);
+      url.searchParams.set('where', where);
+      url.searchParams.set(
+        'outFields',
+        [
+          'OBJECTID', 'CO_NO', 'CENSUS_BK', 'PARCEL_ID', 'PARCELNO', 'ASMNT_YR', 'DOR_UC', 'PA_UC',
+          'JV', 'AV_SD', 'AV_NSD', 'TV_SD', 'LND_VAL', 'LND_SQFOOT', 'LND_UNTS_C',
+          'NO_LND_UNT', 'NO_RES_UNT', 'TOT_LVG_AR', 'EFF_YR_BLT', 'ACT_YR_BLT',
+          'OWN_NAME', 'OWN_ADDR1', 'OWN_ADDR2', 'OWN_CITY', 'OWN_STATE', 'OWN_STATE_',
+          'OWN_ZIPCD', 'PHY_ADDR1', 'PHY_ADDR2', 'PHY_CITY', 'PHY_ZIPCD',
+          'S_LEGAL', 'ALT_KEY', 'STATE_PAR_'
+        ].join(',')
+      );
+      url.searchParams.set('returnGeometry', 'false');
+      url.searchParams.set('outSR', '4326');
+      url.searchParams.set('f', 'json');
+      url.searchParams.set('resultRecordCount', String(chunk.length * 2));
+
+      try {
+        const payload = await this.requestJson(url.toString(), {
+          headers: {
+            'User-Agent': 'property-crawl-bot/1.0 (research; contact: ops@property-crawl.example)',
+            Accept: 'application/json'
+          }
+        });
+        if (payload && Array.isArray(payload.features)) {
+          for (const feature of payload.features) {
+            const mapped = this.mapFeature(feature, { queryUrl: url.toString(), observedAt });
+            if (mapped) {
+              this.rawPublisherRecords.set(mapped, feature);
+              allResults.push(mapped);
+            }
+          }
+        }
+      } catch (err) {
+        if (this.circuitBreaker.isOpen()) throw err;
+      }
+    }
+
+    return allResults;
   }
 
   mapFeature(feature, { queryUrl, observedAt }) {
@@ -577,6 +659,7 @@ class FlDorCadastralScraper extends BaseScraper {
     // The shared normalizer computes parcelKey from countyFips + APN and
     // enforces the canonical camelCase listing contract.
     const listing = this.standardizeListing(preNormalized);
+    if (listing) listing.apn = parcelId;
     this.rawPublisherRecords.set(listing, rawPayload);
     return listing;
   }

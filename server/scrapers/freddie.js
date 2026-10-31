@@ -106,6 +106,15 @@ class FreddieMacScraper extends BaseScraper {
         this._lastExtraction = { error: String(err?.message || err), code: err?.code || null };
       }
     }
+    if (!listings.length && typeof this.extractEmbeddedState === 'function') {
+      const embedded = this.extractEmbeddedState(html);
+      if (embedded.inlineProperties && embedded.inlineProperties.length > 0) {
+        listings = embedded.inlineProperties.map((p) => this.mapJsonItem(p, state)).filter(Boolean);
+      }
+      if (!listings.length && embedded.jsonLd && embedded.jsonLd.length > 0) {
+        listings = this.parseJsonLdProperties(embedded.jsonLd, state);
+      }
+    }
     if (!listings.length && looksLikeClientRenderedShell(html)) {
       if (spaXhrEnabled('freddie', process.env)) {
         const xhr = await captureSpaXhr(searchUrl, { sourceKey: 'freddie' });
@@ -238,6 +247,42 @@ class FreddieMacScraper extends BaseScraper {
     };
   }
 
+
+  parseJsonLdProperties(jsonLdList, state) {
+    const listings = [];
+    for (const item of (jsonLdList || [])) {
+      if (!item || !item.address) continue;
+      const idMatch = item.url ? item.url.match(/property\/([A-Za-z0-9_-]+)/i) : null;
+      const propId = idMatch ? idMatch[1] : (item.name ? item.name.replace(/[^A-Za-z0-9-]/g, '') : null);
+      if (!propId) continue;
+      listings.push({
+        id: `FRE-${propId}`,
+        state,
+        county: null,
+        city: item.address.split(',')[1]?.trim() || null,
+        zip: item.address.match(/\b\d{5}\b/)?.[0] || null,
+        address: item.address,
+        lat: item.lat || null,
+        lng: item.lng || null,
+        beds: item.beds || null,
+        baths: item.baths || null,
+        sqft: item.sqft || null,
+        openingBid: item.price || null,
+        estLow: null,
+        estHigh: null,
+        assessed: null,
+        saleDate: null,
+        plaintiff: null,
+        defendant: null,
+        occupancy: null,
+        deposit: null,
+        sourceUrl: item.url || `${this.baseUrl}/property/${propId}`,
+        raw: JSON.stringify(item).slice(0, 2000),
+        provenance: { origin: 'live', observed: true, publisher: 'Freddie Mac HomeSteps', recordId: propId, embeddedFormat: 'json-ld' },
+      });
+    }
+    return listings;
+  }
 
   // Demo/Unsplash inventory overrides removed (2026-09-14 audit).
   // Live collectors must not fabricate listings; BaseScraper may still read

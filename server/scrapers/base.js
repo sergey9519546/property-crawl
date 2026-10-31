@@ -12,6 +12,7 @@ const { waterfallFetch, impersonationEnabled } = require('./fetch-strategy');
 const { spaXhrEnabled } = require('./spa-xhr');
 const { runSpiderBatch, allocateSessionId } = require('./scrapling-spider');
 const { extractWithAdaptiveFallback } = require('./scrapling-runner');
+const { extractEmbeddedState, extractJsonLd } = require('./embedded-extractor');
 
 class BaseScraper {
   constructor({
@@ -84,6 +85,14 @@ class BaseScraper {
 
   extractWithAdaptiveFallback(html, fieldConfigs, options = {}) {
     return extractWithAdaptiveFallback(html, this.sourceKey, fieldConfigs, options);
+  }
+
+  extractEmbeddedState(html) {
+    return extractEmbeddedState(html);
+  }
+
+  extractJsonLd(html) {
+    return extractJsonLd(html);
   }
 
   async requestTextWithWaterfall(url, options = {}) {
@@ -228,6 +237,56 @@ class BaseScraper {
         fixtureName
       }
     }));
+  }
+
+  parseJsonLdProperties(jsonLdList, defaultOptions = {}) {
+    const listings = [];
+    const sourceKey = defaultOptions.sourceKey || this.sourceKey;
+    const defaultState = defaultOptions.state || 'US';
+    for (const item of (jsonLdList || [])) {
+      if (!item || !item.address) continue;
+      const addr = String(item.address).trim();
+      if (addr.length < 8) continue;
+      const idMatch = item.url ? item.url.match(/(?:property|listing|item|detail|parcel)\/([A-Za-z0-9_-]+)/i) : null;
+      const propId = idMatch ? idMatch[1] : (item.name ? item.name.replace(/[^A-Za-z0-9-]/g, '').slice(0, 32) : String(Date.now()));
+      const stateMatch = addr.match(/\b([A-Z]{2})\b\s*(?:\d{5})?$/i) || addr.match(/,\s*([A-Z]{2})\b/i);
+      const state = stateMatch ? stateMatch[1].toUpperCase() : defaultState;
+      const zipMatch = addr.match(/\b\d{5}\b/);
+      listings.push({
+        id: `${sourceKey.toUpperCase()}-${propId}`,
+        source: sourceKey,
+        state,
+        county: item.county || null,
+        city: item.city || addr.split(',')[1]?.trim() || null,
+        zip: zipMatch ? zipMatch[0] : null,
+        address: addr,
+        lat: item.lat || null,
+        lng: item.lng || null,
+        beds: item.beds || null,
+        baths: item.baths || null,
+        sqft: item.sqft || null,
+        year: item.year || null,
+        openingBid: item.price || null,
+        estLow: null,
+        estHigh: null,
+        assessed: null,
+        saleDate: item.saleDate || null,
+        plaintiff: null,
+        defendant: null,
+        occupancy: null,
+        deposit: null,
+        photo: item.image || null,
+        sourceUrl: item.url || defaultOptions.sourceUrl || null,
+        raw: JSON.stringify(item).slice(0, 1000),
+        provenance: {
+          origin: 'live',
+          observed: true,
+          publisher: defaultOptions.publisher || sourceKey,
+          recordId: String(propId),
+        },
+      });
+    }
+    return listings;
   }
 
   getVerifiedInventory() {

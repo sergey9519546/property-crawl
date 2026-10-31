@@ -266,7 +266,7 @@ class ServiceLinkScraper extends BaseScraper {
 
     if (options.checkpointPath !== undefined) {
       this.checkpointPath = explicitCheckpointPath(options.checkpointPath);
-    } else if (options.resumable || options.autoResume) {
+    } else if (options.resumable || options.autoResume || process.env.SERVICELINK_AUTO_RESUME === '1') {
       this.checkpointPath = explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH || DEFAULT_CHECKPOINT_PATH);
     } else {
       this.checkpointPath = null;
@@ -371,6 +371,7 @@ class ServiceLinkScraper extends BaseScraper {
         isCashOnly: observedBoolean(record?.isCashOnly),
         isFinancible: observedBoolean(record?.isFinancible),
         interiorAccessAvailable: observedBoolean(record?.interiorAccessAvailable),
+        lotSize: finiteNumber(property?.lotSize),
         listingStatus: {
           statusText: cleanText(status.statusText, 240),
           statusTextSRP: cleanText(status.statusTextSRP, 240),
@@ -419,6 +420,7 @@ class ServiceLinkScraper extends BaseScraper {
       status: sourceStatus,
       sourceObservedAt: observedAt,
       provenance,
+      sourceFacts: provenance.sourceFacts,
     });
     if (listing) rawPublisherRecords.set(listing, record);
     return listing;

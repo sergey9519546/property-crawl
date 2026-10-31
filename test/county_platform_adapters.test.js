@@ -546,3 +546,53 @@ test('TrusteeSaleScraper AcclaimWeb recorder bridge parses non-judicial trustee 
     trustee.fetchText = originalFetchText;
   }
 });
+
+test('RealAuction trajectory & cancellation parsing extracts bankruptcy stay and postponements into sourceFacts', () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper({ counties: [{ name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' }] });
+
+  const stayedCardHtml = `
+    <div class="AUCTION_ITEM" id="Auction_201991">
+      <div class="item_row">Auction ID: 201991</div>
+      <div class="item_row">Case #: CV-24-881122</div>
+      <div class="item_row">Property Address: 742 Evergreen Terr, Cleveland, OH 44102</div>
+      <div class="item_row">Plaintiff: US Bank Trust National Association</div>
+      <div class="item_row">Defendant: Homer Simpson</div>
+      <div class="item_row">Attorney: Manley Deas Kochalski LLC</div>
+      <div class="item_row">Auction Status: Stayed - Chapter 13 Automatic Stay</div>
+      <div class="item_row">Opening Bid: $80,000.00</div>
+      <div class="item_row">Auction Date: 12/01/2026</div>
+    </div>
+  `;
+
+  const postponedCardHtml = `
+    <div class="AUCTION_ITEM" id="Auction_201992">
+      <div class="item_row">Auction ID: 201992</div>
+      <div class="item_row">Case #: CV-24-881133</div>
+      <div class="item_row">Property Address: 123 Elm St, Cleveland, OH 44105</div>
+      <div class="item_row">Auction Status: Postponed (2 times) to 01/15/2027</div>
+      <div class="item_row">Opening Bid: $95,000.00</div>
+      <div class="item_row">Auction Date: 01/15/2027</div>
+    </div>
+  `;
+
+  const parsedStay = parseRealAuctionCard(stayedCardHtml, 'cuyahoga', 'OH');
+  assert.equal(parsedStay.cancellationReason, 'Bankruptcy Stay');
+  assert.equal(parsedStay.statutoryStayExhausted, false);
+  assert.equal(parsedStay.plaintiff, 'US Bank Trust National Association');
+  assert.equal(parsedStay.defendant, 'Homer Simpson');
+  assert.equal(parsedStay.attorney, 'Manley Deas Kochalski LLC');
+
+  const parsedPostpone = parseRealAuctionCard(postponedCardHtml, 'cuyahoga', 'OH');
+  assert.equal(parsedPostpone.cancellationReason, 'Postponed');
+  assert.equal(parsedPostpone.priorPostponements, 2);
+
+  const listings = scraper.parseRealauctionHtml(stayedCardHtml, { name: 'Cuyahoga', domain: 'cuyahoga.sheriffsaleauction.ohio.gov', state: 'OH' });
+  assert.equal(listings.length, 1);
+  assert.equal(listings[0].plaintiff, 'US Bank Trust National Association');
+  assert.equal(listings[0].defendant, 'Homer Simpson');
+  assert.equal(listings[0].attorney, 'Manley Deas Kochalski LLC');
+  assert.equal(listings[0].sourceFacts.cancellationReason, 'Bankruptcy Stay');
+  assert.equal(listings[0].sourceFacts.statutoryStayExhausted, false);
+  assert.equal(listings[0].provenance.sourceFacts.statutoryStayExhausted, false);
+});

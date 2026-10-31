@@ -137,6 +137,14 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
   let assessed = null;
   let saleDate = options && options.saleDate ? options.saleDate : null;
   let homestead = null;
+  let status = null;
+  let cancellationReason = null;
+  let priorPostponements = null;
+  let statutoryStayExhausted = null;
+  let plaintiff = null;
+  let defendant = null;
+  let attorney = null;
+  let propType = null;
 
   // 1. Structured table extraction (ColdFusion ad_tab markup)
   if (text.includes('ad_tab') || text.includes('AD_LBL') || text.includes('AD_DTA')) {
@@ -168,6 +176,11 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     if (fields['auction date'] || fields['sale date']) {
       saleDate = fields['auction date'] || fields['sale date'];
     }
+    status = fields['auction status'] || fields['status'] || null;
+    plaintiff = fields['plaintiff'] || fields['plaintiff name'] || null;
+    defendant = fields['defendant'] || fields['defendant name'] || null;
+    attorney = fields['attorney'] || fields['attorney name'] || fields['attorney for plaintiff'] || null;
+    propType = fields['property type'] || fields['prop type'] || null;
   }
 
   // 2. Regex fallback for fields not populated via table
@@ -209,6 +222,42 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
   }
 
   // Homestead Exemption
+  if (!status) {
+    const statusMatch = text.match(/(?:Auction\s*Status|Status):?\s*([A-Za-z0-9\s\-_.,]+?)(?:<|\n|\r|$)/i);
+    if (statusMatch) status = statusMatch[1].trim();
+  }
+  if (!plaintiff) {
+    const plMatch = text.match(/Plaintiff:?\s*([A-Za-z0-9\s\-_.,&]+?)(?:<|\n|\r|vs?\.?|Defendant)/i);
+    if (plMatch) plaintiff = plMatch[1].trim();
+  }
+  if (!defendant) {
+    const defMatch = text.match(/(?:Defendant|Def):?\s*([A-Za-z0-9\s\-_.,&]+?)(?:<|\n|\r|$)/i);
+    if (defMatch) defendant = defMatch[1].trim();
+  }
+  if (!attorney) {
+    const attyMatch = text.match(/Attorney:?\s*([A-Za-z0-9\s\-_.,&]+?)(?:<|\n|\r|$)/i);
+    if (attyMatch) attorney = attyMatch[1].trim();
+  }
+
+  const combinedStatusText = `${status || ''} ${text}`;
+  if (/bankruptcy|automatic\s*stay/i.test(combinedStatusText)) {
+    statutoryStayExhausted = false;
+    cancellationReason = 'Bankruptcy Stay';
+    if (!status) status = 'Stayed - Bankruptcy';
+  } else if (/stay(?:ed)?\b/i.test(combinedStatusText)) {
+    statutoryStayExhausted = false;
+    cancellationReason = 'Court Stay';
+    if (!status) status = 'Stayed';
+  } else if (/postpone|adjourn|continue/i.test(combinedStatusText)) {
+    cancellationReason = 'Postponed';
+    const priorMatch = text.match(/(?:postponed|adjourned)\s*\(?([0-9]+)\s*(?:times|x)?\)?/i);
+    priorPostponements = priorMatch ? parseInt(priorMatch[1], 10) : 1;
+    if (!status) status = 'Postponed';
+  } else if (/cancel(?:ed|led)?|dismissed|withdrawn/i.test(combinedStatusText)) {
+    cancellationReason = 'Canceled';
+    if (!status) status = 'Canceled';
+  }
+
   if (/Homestead(?:\s*Exemption)?\s*:\s*(?:Yes|True|Y)\b/i.test(text)) {
     homestead = true;
   } else if (/Homestead(?:\s*Exemption)?\s*:\s*(?:No|False|N)\b/i.test(text)) {
@@ -239,6 +288,14 @@ function parseRealAuctionCard(cardHtml = '', county = 'cuyahoga', state = 'OH', 
     judgment,
     assessed,
     saleDate,
+    status,
+    cancellationReason,
+    priorPostponements,
+    statutoryStayExhausted,
+    plaintiff,
+    defendant,
+    attorney,
+    propType,
     cardHtml: text,
     sourceUrl: getRealAuctionUrl(county, state, {
       ...options,
