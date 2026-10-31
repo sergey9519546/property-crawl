@@ -1,9 +1,12 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const { ScraperCircuitBreaker, ScraperResponseError } = require('./circuit-breaker');
 const {
   DEFAULT_REQUEST_TIMEOUT_MS,
   crawlJitter,
   fetchJsonWithPolicy,
-  fetchTextWithPolicy,
+  fetchTextWithPolicy: httpFetchTextWithPolicy,
   normalizeRequestTimeout
 } = require('./http');
 const { standardizeListingRecord } = require('./normalization');
@@ -13,6 +16,58 @@ const { spaXhrEnabled } = require('./spa-xhr');
 const { runSpiderBatch, allocateSessionId } = require('./scrapling-spider');
 const { extractWithAdaptiveFallback } = require('./scrapling-runner');
 const { extractEmbeddedState, extractJsonLd } = require('./embedded-extractor');
+
+const DEV_CACHE_DIR = path.resolve(__dirname, '../../.cache/dev-scraper-cache');
+const DEV_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function isDevCacheActive(env = process.env) {
+  if (env.NODE_ENV === 'production') return false;
+  return env.SCRAPER_DEV_CACHE === '1';
+}
+
+function getDevCachePath(url, cacheDir = DEV_CACHE_DIR) {
+  const hash = crypto.createHash('sha256').update(String(url)).digest('hex');
+  return path.join(cacheDir, `${hash}.txt`);
+}
+
+async function fetchTextWithPolicy(url, options = {}) {
+  const env = options.env || process.env;
+  const cacheDir = options.devCacheDir || DEV_CACHE_DIR;
+  const active = isDevCacheActive(env);
+
+  if (active) {
+    const cacheFile = getDevCachePath(url, cacheDir);
+    try {
+      if (fs.existsSync(cacheFile)) {
+        const stat = fs.statSync(cacheFile);
+        const ageMs = Date.now() - stat.mtimeMs;
+        if (ageMs < DEV_CACHE_TTL_MS) {
+          const body = fs.readFileSync(cacheFile, 'utf8');
+          console.log(`[BaseScraper] DevCache hit: ${url}`);
+          return body;
+        }
+      }
+    } catch (_) {
+      // Fall through to live fetch on read/stat error
+    }
+  }
+
+  const body = await httpFetchTextWithPolicy(url, options);
+
+  if (active && typeof body === 'string') {
+    try {
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+      }
+      const cacheFile = getDevCachePath(url, cacheDir);
+      fs.writeFileSync(cacheFile, body, 'utf8');
+    } catch (_) {
+      // Non-fatal cache write failure
+    }
+  }
+
+  return body;
+}
 
 class BaseScraper {
   constructor({
@@ -152,7 +207,6 @@ class BaseScraper {
       throw primaryErr;
     }
   }
-
 
   async requestJson(url, options = {}) {
     return fetchJsonWithPolicy(url, {
@@ -307,4 +361,15 @@ class BaseScraper {
   }
 }
 
+BaseScraper.fetchTextWithPolicy = fetchTextWithPolicy;
+BaseScraper.getDevCachePath = getDevCachePath;
+BaseScraper.isDevCacheActive = isDevCacheActive;
+BaseScraper.DEV_CACHE_DIR = DEV_CACHE_DIR;
+BaseScraper.DEV_CACHE_TTL_MS = DEV_CACHE_TTL_MS;
+
 module.exports = BaseScraper;
+module.exports.fetchTextWithPolicy = fetchTextWithPolicy;
+module.exports.getDevCachePath = getDevCachePath;
+module.exports.isDevCacheActive = isDevCacheActive;
+module.exports.DEV_CACHE_DIR = DEV_CACHE_DIR;
+module.exports.DEV_CACHE_TTL_MS = DEV_CACHE_TTL_MS;

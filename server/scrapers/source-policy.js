@@ -79,7 +79,7 @@ const SOURCE_HOSTS = Object.freeze({
     'data.phila.gov',
   ],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
-  trustee: ['recorder.clarkcountynv.gov', 'recorderecomm.clarkcountynv.gov', 'recorder.washoecounty.gov', 'icris.washoecounty.us'],
+  trustee: ['recorder.clarkcountynv.gov', 'recorderecomm.clarkcountynv.gov', 'recorder.washoecounty.gov', 'icris.washoecounty.us', 'recorder.maricopa.gov', 'cclerk.hctx.net'],
   usda: ['resales.usda.gov'],
   va: ['vrmproperties.com'],
 });

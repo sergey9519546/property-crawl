@@ -32,6 +32,7 @@ const {
   isCadastralGeometry,
   observedProperties,
   ARCGIS_REGISTRY,
+  computePolygonMetrics,
 } = require('../../server/routes/parcel-boundary');
 
 // --- coordinate / textValue / numberValue are private; exercise through ---
@@ -257,4 +258,29 @@ test('hasObservedListingCoordinates: returns true when derived fields are empty 
   assert.equal(hasObservedListingCoordinates({
     provenance: { observed: true, derivedFields: {} }
   }), true);
+});
+
+// --- computePolygonMetrics ---------------------------------------------
+
+test('computePolygonMetrics: calculates perimeter and coordinate count for valid Polygon', () => {
+  const geom = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [-80.192, 25.761],
+        [-80.191, 25.761],
+        [-80.191, 25.762],
+        [-80.192, 25.762],
+        [-80.192, 25.761]
+      ]
+    ]
+  };
+  const metrics = computePolygonMetrics(geom);
+  assert.equal(metrics.coordinatesCount, 5);
+  assert.ok(typeof metrics.perimeterFt === 'number' && metrics.perimeterFt > 0);
+
+  const out = observedProperties({ ACRES: 0.5 }, ARCGIS_REGISTRY.FL, geom);
+  assert.equal(out.coordinatesCount, 5);
+  assert.equal(out.perimeterFt, metrics.perimeterFt);
+  assert.equal(out.lotAcres, 0.5);
 });

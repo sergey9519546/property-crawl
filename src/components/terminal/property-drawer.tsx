@@ -38,7 +38,7 @@ import { computeCashToClose, computeCreMetrics, generateLetterOfIntent, generate
 import type { CashAmountField, CashInputBasis } from "@/lib/underwriting";
 import { getWatchlistComps, type WatchlistCompsResponse } from "@/lib/intelligence-client";
 
-interface PropertyDrawerProps {
+export interface PropertyDrawerProps {
   listing: Listing | null;
   onClose: () => void;
   isSaved: boolean;
@@ -542,6 +542,25 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               {/* Fail-closed official-record evidence check. */}
               <PropertyIntelligence key={listing.id} listingId={listing.id} />
               <DocketAgent listing={listing} />
+
+              {/* Cadastral Parcel Footprint & Boundary */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-ink uppercase tracking-wide flex items-center gap-1.5">
+                    <Box className="w-4 h-4 text-ink" />
+                    <span>Cadastral parcel boundary</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("3d")}
+                    className="text-xs font-semibold text-ink-3 hover:text-ink underline flex items-center gap-1"
+                  >
+                    <span>Full 3D inspection</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <Parcel3DVisualizer listing={listing} />
+              </div>
 
               {/* Modeled title-risk signal; not a completed title search. */}
               <div className="space-y-3">

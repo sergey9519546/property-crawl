@@ -558,6 +558,73 @@ async function run() {
     }
   });
 
+  await test('POST /api/parcel-boundary accepts apn + state + county and returns GeoJSON feature', async () => {
+    const originalFetch = global.fetch;
+    let requestedUrl = '';
+    global.fetch = async (url) => {
+      requestedUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[[-81.694, 41.499], [-81.693, 41.499], [-81.693, 41.500], [-81.694, 41.500], [-81.694, 41.499]]]
+            },
+            properties: { PARCELPIN: '101-01-001', ACRES: 0.18, FRONT_FEET: 40 }
+          }]
+        })
+      };
+    };
+
+    try {
+      const res = await request('/api/parcel-boundary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { apn: '101-01-001', state: 'OH', county: 'Cuyahoga' }
+      });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.type, 'Feature');
+      assert.strictEqual(res.body.geometry.type, 'Polygon');
+      assert.strictEqual(res.body.properties.parcelId, '101-01-001');
+      assert.strictEqual(res.body.properties.lotAcres, 0.18);
+      assert.ok(requestedUrl.includes('cuyahogacounty.us') || requestedUrl.includes('LBRS'));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await test('GET /api/parcel-boundary accepts apn + state + county via query string', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[[-81.694, 41.499], [-81.693, 41.499], [-81.693, 41.500], [-81.694, 41.500], [-81.694, 41.499]]]
+          },
+          properties: { PARCELPIN: '101-01-001', ACRES: 0.18 }
+        }]
+      })
+    });
+
+    try {
+      const res = await request('/api/parcel-boundary?apn=101-01-001&state=OH&county=Cuyahoga');
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.type, 'Feature');
+      assert.strictEqual(res.body.properties.parcelId, '101-01-001');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   await test('API throttling returns retry guidance and cannot be bypassed with forged forwarded headers', async () => {
     let limited;
     for (let i = 0; i < 121; i++) {

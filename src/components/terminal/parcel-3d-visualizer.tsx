@@ -14,6 +14,8 @@ interface ParcelMetadata {
   parcelId: string | null;
   lotSqft: number | null;
   lotAcres: number | null;
+  perimeterFt?: number | null;
+  coordinatesCount?: number | null;
   frontageFt: number | null;
   depthFt: number | null;
   zoning: string | null;
@@ -57,6 +59,27 @@ function outerRing(feature: ParcelFeature | null): Position[] {
   return Array.isArray(ring) ? ring.filter(isPosition) : [];
 }
 
+function computeClientPerimeter(ring: Position[]): number | null {
+  if (!ring || ring.length < 4) return null;
+  let totalMeters = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const pt1 = ring[i];
+    const pt2 = ring[i + 1];
+    if (!pt1 || !pt2) continue;
+    const [lng1, lat1] = pt1;
+    const [lng2, lat2] = pt2;
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLng = (lng2 - lng1) * (Math.PI / 180);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    totalMeters += 6371000 * c;
+  }
+  const feet = Math.round(totalMeters * 3.28084);
+  return feet > 0 ? feet : null;
+}
+
 function toSvgPoints(ring: Position[]) {
   if (ring.length < 4) return "";
   const unique = ring.slice(0, -1);
@@ -90,7 +113,7 @@ function formatNumber(value: number | null) {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-[118px]">
-      <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">{label}</span>
+      <span className="block text-xs font-semibold uppercase tracking-wider text-white/60">{label}</span>
       <span className="mt-1 block font-mono text-xs font-semibold text-white">{value}</span>
     </div>
   );
@@ -104,7 +127,27 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     const controller = new AbortController();
     setLoadState({ status: "loading", feature: null, message: null });
 
-    void fetch(`/api/parcel-boundary?listingId=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+    const apn = (
+      listing.apn ||
+      (listing.provenance as Record<string, unknown> | null | undefined)?.parcelNumber ||
+      (listing as unknown as { parcelId?: string; parcelNumber?: string }).parcelId ||
+      (listing as unknown as { parcelId?: string; parcelNumber?: string }).parcelNumber ||
+      ""
+    ).toString().trim();
+
+    const query = new URLSearchParams();
+    if (listing.id) query.set("listingId", listing.id);
+    if (apn) query.set("apn", apn);
+    if (listing.state) query.set("state", listing.state);
+    if (listing.county) query.set("county", listing.county);
+    if (listing.lat !== null && listing.lat !== undefined && Number.isFinite(Number(listing.lat))) {
+      query.set("lat", String(listing.lat));
+    }
+    if (listing.lng !== null && listing.lng !== undefined && Number.isFinite(Number(listing.lng))) {
+      query.set("lng", String(listing.lng));
+    }
+
+    void fetch(`/api/parcel-boundary?${query.toString()}`, { signal: controller.signal })
       .then(async (response) => {
         const body = await response.json().catch(() => null);
         if (!response.ok) {
@@ -130,15 +173,24 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       active = false;
       controller.abort();
     };
-  }, [listing.id]);
+  }, [listing.id, listing.state, listing.county, listing.apn, listing.lat, listing.lng]);
 
   const ring = useMemo(() => outerRing(loadState.feature), [loadState.feature]);
   const points = useMemo(() => toSvgPoints(ring), [ring]);
   const metadata = loadState.feature?.properties ?? null;
+  const perimeter = metadata?.perimeterFt ?? computeClientPerimeter(ring);
+  const coordCount = metadata?.coordinatesCount ?? (ring.length > 0 ? ring.length : null);
   const dimensions = metadata?.frontageFt !== null && metadata?.frontageFt !== undefined
     && metadata?.depthFt !== null && metadata?.depthFt !== undefined
     ? `${metadata.frontageFt.toLocaleString()}′ × ${metadata.depthFt.toLocaleString()}′`
     : "Not reported";
+
+  const resolvedApn = (
+    metadata?.parcelId ||
+    listing.apn ||
+    (listing.provenance as Record<string, unknown> | null | undefined)?.parcelNumber ||
+    ""
+  ).toString().trim();
 
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-ink text-white shadow-xl" aria-label="Parcel geometry reference">
@@ -146,7 +198,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
         {loadState.status === "loading" ? (
           <div className="flex min-h-[280px] items-center justify-center gap-2 text-sm text-white/75" role="status">
             <LoaderCircle className="h-4 w-4 animate-spin" />
-            Checking the public parcel source…
+            Resolving cadastral boundary overlay…
           </div>
         ) : null}
 
@@ -155,9 +207,9 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
             <span className="mb-4 grid h-11 w-11 place-items-center rounded-full border border-catch/30 bg-catch/10">
               <AlertTriangle className="h-5 w-5 text-catch" />
             </span>
-            <h3 className="text-base font-semibold">Parcel geometry unavailable</h3>
+            <h3 className="text-base font-semibold">Cadastral boundary unavailable</h3>
             <p className="mt-2 text-sm leading-6 text-white/60">{loadState.message}</p>
-            <p className="mt-3 text-xs text-white/60">No boundary, dimensions, zoning, slope, setbacks, or parcel number have been estimated.</p>
+            <p className="mt-3 text-xs text-white/60">No boundary polygon was confirmed by the county or state cadastral GIS source.</p>
           </div>
         ) : null}
 
@@ -181,7 +233,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
                 <Box className="h-3.5 w-3.5 text-white/75" />
                 Source cadastral footprint
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-xl border border-catch/30 bg-black/60 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-catch backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-xl border border-catch/30 bg-black/60 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-catch backdrop-blur-md">
                 <MapPin className="h-3.5 w-3.5" />
                 {NOT_A_SURVEY}
               </span>
@@ -195,14 +247,22 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
           <div className="flex flex-wrap gap-x-7 gap-y-4">
             <Fact
               label="Lot area"
-              value={metadata.lotSqft !== null ? `${formatNumber(metadata.lotSqft)} sq ft` : metadata.lotAcres !== null ? `${formatNumber(metadata.lotAcres)} ac` : "Not reported"}
+              value={metadata.lotAcres !== null ? `${formatNumber(metadata.lotAcres)} ac (${formatNumber(metadata.lotSqft)} sq ft)` : metadata.lotSqft !== null ? `${formatNumber(metadata.lotSqft)} sq ft` : "Not reported"}
+            />
+            <Fact
+              label="Perimeter"
+              value={perimeter !== null ? `${perimeter.toLocaleString()} ft` : "Not reported"}
+            />
+            <Fact
+              label="Vertices"
+              value={coordCount !== null ? `${coordCount} points` : "Not reported"}
             />
             <Fact label="Dimensions" value={dimensions} />
             <Fact label="Zoning" value={metadata.zoning || "Not reported"} />
-            <Fact label="Parcel / APN" value={metadata.parcelId || "Not reported"} />
+            <Fact label="Parcel / APN" value={resolvedApn || "Not reported"} />
           </div>
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-2 border-t border-white/10 pt-3 text-[11px] leading-5 text-white/60">
-            <span>{metadata.sourceName}</span>
+          <div className="mt-4 flex flex-wrap items-start justify-between gap-2 border-t border-white/10 pt-3 text-xs leading-5 text-white/60">
+            <span className="font-semibold text-white/80">Cadastral Source: {metadata.sourceName}</span>
             <span className="max-w-xl text-right">{metadata.disclaimer || NOT_A_SURVEY}</span>
           </div>
         </div>
@@ -210,3 +270,5 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     </section>
   );
 }
+
+export { Parcel3DVisualizer as ParcelBoundaryCard };

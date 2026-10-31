@@ -108,7 +108,16 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     }
 
     let active = true;
-    void fetch(`/api/parcel-boundary?listingId=${encodeURIComponent(selectedId)}`)
+    const apn = (selected?.apn || (selected?.provenance as Record<string, unknown> | null | undefined)?.parcelNumber || "").toString().trim();
+    const query = new URLSearchParams();
+    if (selectedId) query.set("listingId", selectedId);
+    if (apn) query.set("apn", apn);
+    if (selected?.state) query.set("state", selected.state);
+    if (selected?.county) query.set("county", selected.county);
+    if (selected?.lat != null && Number.isFinite(selected.lat)) query.set("lat", String(selected.lat));
+    if (selected?.lng != null && Number.isFinite(selected.lng)) query.set("lng", String(selected.lng));
+
+    void fetch(`/api/parcel-boundary?${query.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!active || !data) return;
