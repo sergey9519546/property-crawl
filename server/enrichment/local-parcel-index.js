@@ -23,7 +23,7 @@ try {
  */
 function getLocalParcelDb() {
   const dbPath = process.env.PROPERTY_LOCAL_PARCEL_DB || process.env.PROPERTY_OFFLINE_PARCEL_DB || DEFAULT_LOCAL_PARCEL_DB_PATH;
-  if (!dbPath || !fs.existsSync(dbPath) || !DatabaseSyncClass) {
+  if (!dbPath || !fs.existsSync(/*turbopackIgnore: true*/ dbPath) || !DatabaseSyncClass) {
     if (dbInstance) {
       try { dbInstance.close(); } catch {}
       dbInstance = null;
