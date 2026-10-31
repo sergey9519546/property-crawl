@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { inspectPublisherPhoto } = require('./media-policy');
+const { evaluateDrift, calculateFieldYield, computeDomStructureHash } = require('./drift-detector');
 
 const DEFAULT_TELEMETRY_PATH = path.resolve(__dirname, '../../.cache/scraper-telemetry.json');
 
@@ -175,6 +176,19 @@ class ScraperTelemetry {
     state.yieldMetrics.photoYield = (state.yieldMetrics.photoYield * oldWeight) + ((photoCount / total) * weight);
 
     // Drift Detection: If critical fields drop below 50% yield, DOM likely changed
+    if (metadata.html || metadata.historicalBaseline) {
+      const driftReport = evaluateDrift(
+        sourceName,
+        metadata.html || '',
+        listings,
+        metadata.historicalBaseline || state.historicalBaseline || {}
+      );
+      state.driftReport = driftReport;
+      if (driftReport.hasDrift) {
+        state.driftDetected = true;
+      }
+    }
+
     state.driftDetected = (
       state.yieldMetrics.addressYield < 0.5 ||
       state.yieldMetrics.openingBidYield < 0.5
@@ -235,4 +249,4 @@ class ScraperTelemetry {
 // Singleton instance for global app tracking
 const telemetryInstance = new ScraperTelemetry();
 
-module.exports = { ScraperTelemetry, telemetryInstance };
+module.exports = { ScraperTelemetry, telemetryInstance, evaluateDrift, calculateFieldYield, computeDomStructureHash };

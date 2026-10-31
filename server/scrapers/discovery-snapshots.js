@@ -11,6 +11,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { createLedgerBlock, GENESIS_HASH } = require('../discovery/evidence-ledger');
 
 const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '../../.cache/discovery-snapshots');
 
@@ -272,6 +273,20 @@ function createMarkdownEvidenceSnapshot({
   const markdown = `${metaLines.join('\n')}\n\n---\n\n${bodyMarkdown}`.trim() + '\n';
   const sha256 = crypto.createHash('sha256').update(markdown).digest('hex');
 
+  const ledgerBlock = createLedgerBlock({
+    index: Number(metadata?.ledgerIndex ?? 0),
+    prevHash: metadata?.prevHash || GENESIS_HASH,
+    timestamp: capturedAt,
+    source: safeSource,
+    recordId: safeRecordId,
+    payloadSha256: rawSha256,
+    action: 'MARKDOWN_SNAPSHOT_CREATED',
+    metadata: {
+      title: safeTitle,
+      snapshotSha256: sha256
+    }
+  });
+
   return {
     sourceKey: safeSource,
     recordId: safeRecordId,
@@ -280,6 +295,7 @@ function createMarkdownEvidenceSnapshot({
     sha256,
     capturedAt,
     metadata,
+    ledgerBlock,
     toString() {
       return this.markdown;
     },
@@ -359,6 +375,7 @@ async function recordSnapshot(input = {}, options = {}) {
     markdownPath,
     markdownSnapshot,
     markdown: markdownSnapshot ? markdownSnapshot.markdown : null,
+    ledgerBlock: markdownSnapshot ? markdownSnapshot.ledgerBlock : null,
     payloadSha256,
     observedAt
   };

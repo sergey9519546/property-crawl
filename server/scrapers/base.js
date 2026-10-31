@@ -16,6 +16,7 @@ const { spaXhrEnabled } = require('./spa-xhr');
 const { runSpiderBatch, allocateSessionId } = require('./scrapling-spider');
 const { extractWithAdaptiveFallback } = require('./scrapling-runner');
 const { extractEmbeddedState, extractJsonLd } = require('./embedded-extractor');
+const { computeDomStructureHash, calculateFieldYield, evaluateDrift } = require('./drift-detector');
 
 const DEV_CACHE_DIR = path.resolve(__dirname, '../../.cache/dev-scraper-cache');
 const DEV_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -359,6 +360,18 @@ class BaseScraper {
     } catch (_) {}
     return [];
   }
+
+  computeDomStructureHash(html) {
+    return computeDomStructureHash(html);
+  }
+
+  calculateFieldYield(listings) {
+    return calculateFieldYield(listings);
+  }
+
+  evaluateDrift(html, listings, historicalBaseline) {
+    return evaluateDrift(this.sourceKey, html, listings, historicalBaseline);
+  }
 }
 
 BaseScraper.fetchTextWithPolicy = fetchTextWithPolicy;
@@ -366,6 +379,9 @@ BaseScraper.getDevCachePath = getDevCachePath;
 BaseScraper.isDevCacheActive = isDevCacheActive;
 BaseScraper.DEV_CACHE_DIR = DEV_CACHE_DIR;
 BaseScraper.DEV_CACHE_TTL_MS = DEV_CACHE_TTL_MS;
+BaseScraper.computeDomStructureHash = computeDomStructureHash;
+BaseScraper.calculateFieldYield = calculateFieldYield;
+BaseScraper.evaluateDrift = evaluateDrift;
 
 module.exports = BaseScraper;
 module.exports.fetchTextWithPolicy = fetchTextWithPolicy;
@@ -373,3 +389,6 @@ module.exports.getDevCachePath = getDevCachePath;
 module.exports.isDevCacheActive = isDevCacheActive;
 module.exports.DEV_CACHE_DIR = DEV_CACHE_DIR;
 module.exports.DEV_CACHE_TTL_MS = DEV_CACHE_TTL_MS;
+module.exports.computeDomStructureHash = computeDomStructureHash;
+module.exports.calculateFieldYield = calculateFieldYield;
+module.exports.evaluateDrift = evaluateDrift;
