@@ -6,28 +6,26 @@
 // blocked by Akamai/edgesuite with HTTP 403).
 //
 // Strategy (3-stage):
-//   1. Fetch /sheriffsales for the list of US sheriff-sale county
-//      storefronts (BedfordPASheriffSales, AdamsCountySheriffSales, ...).
-//      Also fetches /real-estate-auctions and /county-tax-sales for the
-//      additional channel pages — these share the same county-link shape.
-//   2. For the first 3 reachable county storefronts (e.g. Berks County PA
-//      has 80+ live auctions), fetch the storefront page. Each page embeds
-//      the full auction list as JSON objects in inline <script> blocks —
-//      one per auction — with structured fields: AuctionID, Asset_Title,
-//      ActualCloseTime, MinimumBid, CurrentBid, SheriffNumber, Attorney,
-//      DebtAmount, Defendant, StatusID, BidCount, etc.
+//   1. Fetch /sheriffsales, /county-tax-sales, and /real-estate-auctions for
+//      the list of US county storefronts (BedfordPASheriffSales, AdamsCountySheriffSales, ...).
+//   2. Rotate through discovered storefronts using a cursor so all counties
+//      are swept across runs. Each page embeds the full auction list as JSON objects
+//      in inline <script> blocks — one per auction — with structured fields:
+//      AuctionID, Asset_Title, ActualCloseTime, MinimumBid, CurrentBid, SheriffNumber,
+//      Attorney, DebtAmount, Defendant, StatusID, BidCount, APN, DepositAmount, etc.
 //   3. Map each JSON record to a listing via this.standardizeListing().
 //      id = "B4A-{AuctionID}", source = "bid4assets", state = "PA" (parsed
 //      from the "Berks County, PA Sheriff Sale: ..." title prefix).
 //
-// Per docs/sources-to-scrape.md #3: ~8,300+ active real-estate auctions
-// across US states. Per-state counts (Aug 2026): PA 6,711, LA 343, FL 101,
-// CA 75, NV 63, AR 58, TX 51.
-//
-// Rate limit: 1 req/sec between storefront fetches. The Akamai CDN is
-// sensitive to non-browser user agents, so we send a real Chrome UA.
+// Rate limit: 1 req/sec between storefront fetches.
 
 const BaseScraper = require('./base');
+const {
+  createRunReport,
+  recordUnitFailure,
+  recordUnitSuccess,
+  finalizeRunReport,
+} = require('./run-report');
 
 // Maps Bid4Assets "PropertyType" / status keywords to the canonical
 // propType strings used by base.js#standardizeListing defaults.
@@ -46,15 +44,27 @@ function classifyPropType(rawType, statusId, title) {
 //   "Berks County, PA Sheriff Sale: 906 NORTH 25TH STREET"
 // or
 //   "***POSTPONED***Berks County, PA Sheriff Sale: 906 NORTH 25TH STREET- Postponed to 11/06/2026, New Auction 1308882"
-// into { state, street, status }.
+// into { state, street, status, postponedToDate, newAuctionId }.
 function parseAssetTitle(title) {
-  if (!title) return { state: null, street: '', status: null };
+  if (!title) return { state: null, street: '', status: null, postponedToDate: null, newAuctionId: null };
   let status = 'Scheduled';
   let cleaned = title;
   if (/^\*+\s*(POSTPONED|STAYED|CANCELLED|WITHDRAWN)/i.test(cleaned)) {
     status = RegExp.$1.toUpperCase();
     cleaned = cleaned.replace(/^\*+\s*(POSTPONED|STAYED|CANCELLED|WITHDRAWN)\**\s*/i, '');
   }
+
+  let postponedToDate = null;
+  let newAuctionId = null;
+  const postponeMatch = cleaned.match(/Postponed\s+to\s+([0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{4})/i);
+  if (postponeMatch) {
+    postponedToDate = parseSaleDate(postponeMatch[1]);
+  }
+  const newAuctionMatch = cleaned.match(/New\s+Auction\s+([0-9]+)/i);
+  if (newAuctionMatch) {
+    newAuctionId = newAuctionMatch[1];
+  }
+
   // The first colon is the field separator: prefix : street
   const colonIdx = cleaned.indexOf(':');
   const prefix = colonIdx >= 0 ? cleaned.substring(0, colonIdx) : cleaned;
@@ -64,7 +74,7 @@ function parseAssetTitle(title) {
   // Pull a 2-letter state code from the prefix (e.g. "Berks County, PA Sheriff Sale")
   const stateMatch = prefix.match(/\b([A-Z]{2})\b/);
   const state = stateMatch ? stateMatch[1] : null;
-  return { state, street, status };
+  return { state, street, status, postponedToDate, newAuctionId };
 }
 
 // Parses a "MM/DD/YYYY" or ISO date string to YYYY-MM-DD.
@@ -77,34 +87,59 @@ function parseSaleDate(raw) {
     const dd = String(d.getUTCDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
-  const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const m = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (m) return `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
   return null;
 }
 
+function rotateStorefronts(slugs, startIndex, limit) {
+  if (!Array.isArray(slugs) || slugs.length === 0) return [];
+  const size = Math.max(0, Math.floor(Number(limit) || 0));
+  if (size === 0) return [];
+  if (size >= slugs.length) return [...slugs];
+  const length = slugs.length;
+  const start = ((Math.floor(Number(startIndex) || 0) % length) + length) % length;
+  const window = [];
+  for (let index = 0; index < size; index += 1) {
+    window.push(slugs[(start + index) % length]);
+  }
+  return window;
+}
+
 class Bid4AssetsScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'Bid4AssetsScraper', sourceKey: 'bid4assets' });
+  constructor(options = {}) {
+    super({ name: 'Bid4AssetsScraper', sourceKey: 'bid4assets', ...options });
     this.baseUrl = 'https://www.bid4assets.com';
-    this.maxStorefronts = 3; // Berks alone has 80+ — 3 storefronts is enough for v1
-    // Browser UA — the Akamai CDN returns 403 for Node's default UA.
+    this.maxStorefronts = Number(options.maxStorefronts ?? process.env.BID4ASSETS_MAX_STOREFRONTS) || 3;
+    this.rotationOffset = Number(options.rotationOffset ?? process.env.BID4ASSETS_ROTATION_OFFSET) || 0;
     this.userAgent =
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
+      const report = createRunReport('bid4assets', {
+        endpoint: '/sheriffsales',
+        maxStorefronts: this.maxStorefronts,
+        rotationOffset: this.rotationOffset,
+      });
+      this.lastRunReport = report;
+
       const countySlugs = await this.discoverStorefronts();
+      report.endpointsTried = 1;
+      const targetSlugs = rotateStorefronts(countySlugs, this.rotationOffset, this.maxStorefronts);
+
       console.log(
-        `[${this.name}] Discovered ${countySlugs.length} sheriff-sale county storefronts; visiting first ${this.maxStorefronts}`
+        `[${this.name}] Discovered ${countySlugs.length} storefronts; sweeping ${targetSlugs.length} at offset ${this.rotationOffset}`
       );
 
       const allListings = [];
       const seenIds = new Set();
 
-      for (let i = 0; i < Math.min(this.maxStorefronts, countySlugs.length); i++) {
-        const slug = countySlugs[i];
+      for (let i = 0; i < targetSlugs.length; i++) {
+        const slug = targetSlugs[i];
         try {
           const listings = await this.fetchStorefront(slug);
           let added = 0;
@@ -115,19 +150,28 @@ class Bid4AssetsScraper extends BaseScraper {
             allListings.push(item);
             added++;
           }
+          recordUnitSuccess(report, slug.replace(/^\//, ''), added);
           console.log(`[${this.name}]   ${slug}: ${listings.length} raw / ${added} new`);
         } catch (err) {
+          recordUnitFailure(report, slug.replace(/^\//, ''), err);
           console.warn(`[${this.name}] Failed ${slug}: ${err.message}`);
         }
-        if (i < this.maxStorefronts - 1) await this.crawlJitter();
+        if (i < targetSlugs.length - 1) await this.crawlJitter();
       }
 
       console.log(
-        `[${this.name}] Scraped ${allListings.length} Bid4Assets auctions from ${this.maxStorefronts} storefronts`
+        `[${this.name}] Scraped ${allListings.length} Bid4Assets auctions from ${targetSlugs.length} storefronts`
       );
-      return allListings
+
+      const standardized = allListings
         .filter((item) => this.passesFilter(item))
         .map((item) => this.standardizeListing(item));
+
+      finalizeRunReport(report, { emitted: standardized.length });
+      report.outcome = standardized.length ? 'success' : 'empty';
+      report.complete = report.failures.length === 0;
+
+      return standardized;
     });
   }
 
@@ -143,23 +187,32 @@ class Bid4AssetsScraper extends BaseScraper {
   }
 
   async discoverStorefronts() {
-    // /sheriffsales has the most counties (Bedford, Berks, Adams, ...).
-    // We ignore /real-estate-auctions and /county-tax-sales for v1 because
-    // they have the same per-county storefront URL pattern; doubling up
-    // just wastes requests. Expand in Phase 2.
-    const html = await this.fetchText(`${this.baseUrl}/sheriffsales`);
-    // Case-insensitive: the page mixes /BedfordPASheriffSales (capital S)
-    // with /berkscountysheriffsales (lowercase s).
-    const linkRe = /href="(\/[A-Za-z][A-Za-z0-9]*[Ss]heriff[A-Za-z0-9]*)"/g;
+    // Multi-channel discovery: /sheriffsales, /county-tax-sales, /real-estate-auctions
+    const channels = ['/sheriffsales', '/county-tax-sales', '/real-estate-auctions'];
     const slugs = new Set();
-    let m;
-    while ((m = linkRe.exec(html)) !== null) {
-      slugs.add(m[1]);
+
+    for (const channel of channels) {
+      try {
+        const html = await this.fetchText(`${this.baseUrl}${channel}`);
+        const linkRe = /href="(\/[A-Za-z][A-Za-z0-9_-]*(?:[Ss]heriff|[Tt]ax[Ss]ale|[Aa]uction)[A-Za-z0-9_-]*)"/g;
+        let m;
+        while ((m = linkRe.exec(html)) !== null) {
+          slugs.add(m[1]);
+        }
+      } catch (err) {
+        console.warn(`[${this.name}] Channel discovery warning on ${channel}: ${err.message}`);
+      }
     }
-    // Lowercase everything for ordering so we can compare case-insensitively.
+
+    if (slugs.size === 0) {
+      // Fallback known storefronts if HTML discovery returns empty
+      slugs.add('/berkscountysheriffsales');
+      slugs.add('/adamscountysheriffsales');
+      slugs.add('/bedfordpasheriffsales');
+    }
+
     const slugArr = [...slugs];
     const lower = slugArr.map((s) => s.toLowerCase());
-    // Prefer counties we know carry data (Berks alone has 80+).
     const preferred = [
       '/berkscountysheriffsales',
       '/adamscountysheriffsales',
@@ -167,7 +220,7 @@ class Bid4AssetsScraper extends BaseScraper {
     ];
     const ordered = [
       ...preferred.filter((p) => lower.includes(p)).map((p) => slugArr[lower.indexOf(p)]),
-      ...slugArr,
+      ...slugArr.filter((s) => !preferred.includes(s.toLowerCase())),
     ];
     return ordered;
   }
@@ -189,8 +242,7 @@ class Bid4AssetsScraper extends BaseScraper {
           records.push(obj);
         }
       } catch (err) {
-        // Skip malformed JSON; the embedded objects sometimes have trailing
-        // commas that break the parser. Not worth a hard failure.
+        // Skip malformed JSON
       }
     }
 
@@ -200,28 +252,39 @@ class Bid4AssetsScraper extends BaseScraper {
   }
 
   toListing(rec, slug, storefrontUrl) {
-    const { state, street, status } = parseAssetTitle(rec.Asset_Title);
+    const { state, street, status, postponedToDate, newAuctionId } = parseAssetTitle(rec.Asset_Title);
     const saleDate = parseSaleDate(rec.ActualCloseTime);
     const auctionId = rec.AuctionID;
     const id = `B4A-${auctionId}`;
     const minimumBid = Number(rec.MinimumBid);
     const currentBid = Number(rec.CurrentBid);
     const debtAmount = Number(rec.DebtAmount);
+    const depositAmount = Number(rec.DepositAmount ?? rec.RequiredDeposit ?? rec.Deposit);
     const openingBid = Number.isFinite(minimumBid) && minimumBid > 0 ? minimumBid : null;
     const price = Number.isFinite(currentBid) && currentBid > 0 ? currentBid : null;
-    // Derive a friendly county name from the storefront slug. The slug
-    // shapes are: /berkscountysheriffsales -> "berks",
-    //              /BedfordPASheriffSales -> "Bedford",
-    //              /BossierSheriff -> "Bossier",
-    //              /adamscountysheriffsales -> "adams".
+    const deposit = Number.isFinite(depositAmount) && depositAmount > 0 ? depositAmount : null;
+    const rawApn = rec.ParcelID || rec.APN || rec.ParcelNumber || rec.TaxParcelID || null;
+    const apn = rawApn ? String(rawApn).trim() : null;
+
+    // Derive a friendly county name from the storefront slug.
     const raw = (slug || '').replace(/^\//, '');
-    const countyMatch = raw.match(/^([A-Za-z]+?)(?:County|PA)?(?:Sheriff|SheriffSales|Sales)?$/i);
+    const countyMatch = raw.match(/^([A-Za-z]+?)(?:County|PA)?(?:Sheriff|SheriffSales|Sales|TaxSale)?$/i);
     const county = (countyMatch ? countyMatch[1] : raw)
-      .replace(/sheriff|sheriffsales|countysheriff|sales/i, '')
+      .replace(/sheriff|sheriffsales|countysheriff|sales|taxsale/i, '')
       .replace(/pa$/i, '')
       .trim() || null;
 
     if (!auctionId || !state || !street) return null;
+
+    const sourceFacts = {
+      sheriffNumber: rec.SheriffNumber ?? null,
+      bidCount: rec.BidCount ?? null,
+      debtAmount: Number.isFinite(debtAmount) && debtAmount > 0 ? debtAmount : null,
+      apn,
+      deposit,
+      postponedToDate,
+      newAuctionId,
+    };
 
     return {
       id,
@@ -249,21 +312,19 @@ class Bid4AssetsScraper extends BaseScraper {
       judgment: null,
       attorney: rec.Attorney?.trim() || null,
       occupancy: null,
-      deposit: null,
+      deposit,
+      apn,
       photo: rec.PhotoUrl ?? rec.ImageUrl ?? null,
       status,
       sourceUrl: `${this.baseUrl}/auction/${auctionId}`,
       raw: JSON.stringify(rec),
+      sourceFacts,
       provenance: {
         origin: 'live',
         observed: true,
         publisher: 'Bid4Assets',
         recordId: String(auctionId),
-        sourceFacts: {
-          sheriffNumber: rec.SheriffNumber ?? null,
-          bidCount: rec.BidCount ?? null,
-          debtAmount: Number.isFinite(debtAmount) && debtAmount > 0 ? debtAmount : null
-        }
+        sourceFacts,
       },
     };
   }
@@ -279,3 +340,7 @@ class Bid4AssetsScraper extends BaseScraper {
 }
 
 module.exports = new Bid4AssetsScraper();
+module.exports.Bid4AssetsScraper = Bid4AssetsScraper;
+module.exports.parseAssetTitle = parseAssetTitle;
+module.exports.parseSaleDate = parseSaleDate;
+module.exports.rotateStorefronts = rotateStorefronts;

@@ -299,6 +299,10 @@ class IrsSeizedScraper extends BaseScraper {
       }
     }
     const defendant = defMatch ? defMatch[1].trim() : null;
+    const depositMatch = html.match(/(?:Earnest\s*Money|Deposit|Bid\s*Deposit)\s*[:#]?\s*\$([0-9,]+)/i);
+    const deposit = depositMatch ? parseInt(depositMatch[1].replace(/,/g, ''), 10) : null;
+    const apnMatch = `${publisherTitle} ${desc}`.match(/(?:Parcel\s*(?:ID|#|No\.?)|APN|PIN)\s*[:#]?\s*([A-Za-z0-9._-]+)/i);
+    const apn = apnMatch ? apnMatch[1].trim() : (parcelPrefixedLand ? addrLines[0].replace(/^parcel\s+id[:\s]*/i, '').trim() : null);
 
     const id = `IRS-${state}-${slug.toUpperCase().slice(0, 18)}`;
     const fullAddress = `${street}, ${city}, ${state} ${zip}`;
@@ -328,13 +332,15 @@ class IrsSeizedScraper extends BaseScraper {
       judgment: null,
       attorney: null,
       occupancy: null,
-      deposit: null,
+      deposit,
+      apn,
       photo: gallery[0]?.url || null,
       sourceUrl: detailUrl,
+      sourceFacts: { publisherTitle: publisherTitle || null, addressQualification: /^\d/.test(street) ? 'numbered_street' : 'positive_land_evidence', publisherParcelLabel: parcelPrefixedLand ? addrLines[0] : null, redemptionPeriodDays: 180, statutoryRedemption: '26 U.S.C. § 6337 (180 days)', deposit, apn },
       raw: (desc || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 2000),
       provenance: {
         origin: 'live', observed: true, publisher: 'Internal Revenue Service', recordId: slug,
-        sourceFacts: { publisherTitle: publisherTitle || null, addressQualification: /^\d/.test(street) ? 'numbered_street' : 'positive_land_evidence', publisherParcelLabel: parcelPrefixedLand ? addrLines[0] : null },
+        sourceFacts: { publisherTitle: publisherTitle || null, addressQualification: /^\d/.test(street) ? 'numbered_street' : 'positive_land_evidence', publisherParcelLabel: parcelPrefixedLand ? addrLines[0] : null, redemptionPeriodDays: 180, statutoryRedemption: '26 U.S.C. § 6337 (180 days)', deposit, apn },
         media: gallery.length ? {
           photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
           gallery

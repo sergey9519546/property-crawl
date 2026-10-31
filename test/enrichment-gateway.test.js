@@ -162,6 +162,18 @@ test('runScraperSafely returns outcome=skipped when the scraper has no scrape me
   assert.equal(result.reason, 'no_scrape_method');
 });
 
+test('runScraperSafely invokes scrapeByApns when supported and searchQuery given', async () => {
+  const mockApnScraper = {
+    async scrapeByApns(apns) {
+      return apns.map((apn) => ({ id: `PARCEL-${apn}`, apn }));
+    }
+  };
+  const result = await runScraperSafely(mockApnScraper, { searchQuery: '01-234-567' });
+  assert.equal(result.outcome, 'success');
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].apn, '01-234-567');
+});
+
 test('refreshByParcelKey runs registered scrapers and returns the post-refresh aggregate view', async () => {
   const parcelKey = 'CA-LA-1234-007';
   const calls = [];

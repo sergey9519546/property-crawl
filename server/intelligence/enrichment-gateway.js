@@ -205,15 +205,27 @@ const ENRICHMENT_SCRAPERS = [
   { source: 'ca-controller-tax-sale', scraper: () => caController }
 ];
 
-async function runScraperSafely(scraper, options) {
-  if (!scraper || typeof scraper.scrape !== 'function') {
+async function runScraperSafely(scraper, options = {}) {
+  if (!scraper || (typeof scraper.scrape !== 'function' && typeof scraper.scrapeByApns !== 'function' && typeof scraper.scrapeFeed !== 'function')) {
     return { outcome: 'skipped', reason: 'no_scrape_method', records: [] };
   }
   try {
-    const result = await scraper.scrape(options);
-    const records = Array.isArray(result?.listings) ? result.listings
-      : Array.isArray(result?.records) ? result.records
+    let records = [];
+    if (typeof scraper.scrapeByApns === 'function' && options.searchQuery) {
+      records = await scraper.scrapeByApns([options.searchQuery], options);
+    } else if (typeof scraper.scrape === 'function') {
+      const result = await scraper.scrape(options);
+      records = Array.isArray(result?.listings) ? result.listings
+        : Array.isArray(result?.records) ? result.records
+        : Array.isArray(result) ? result
         : [];
+    } else if (typeof scraper.scrapeFeed === 'function') {
+      const result = await scraper.scrapeFeed(options);
+      records = Array.isArray(result?.listings) ? result.listings
+        : Array.isArray(result?.records) ? result.records
+        : Array.isArray(result) ? result
+        : [];
+    }
     return { outcome: records.length ? 'success' : 'empty', records, error: null };
   } catch (error) {
     return { outcome: 'failed', error: error.message, records: [] };

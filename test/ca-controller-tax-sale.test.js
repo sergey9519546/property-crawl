@@ -10,7 +10,8 @@ const {
   classifyPropType,
   parseDateText,
   parseMoney,
-  normalizeCountyName
+  normalizeCountyName,
+  rotateCaCounties
 } = require('../server/scrapers/ca-controller-tax-sale');
 const { validateListingForIngestion } = require('../server/scrapers/validation');
 const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
@@ -627,4 +628,25 @@ test('raw publisher record is retained for discovery evidence ingestion', async 
 test('source key constant matches the catalog and scheduler registration', () => {
   assert.equal(SOURCE_KEY, 'ca-controller-tax-sale');
   assert.equal(DIRECTORY_URL, 'https://www.sco.ca.gov/boe_tax_sales.html');
+});
+
+test('rotateCaCounties rotates counties fairly across offsets without dropping or fabricating', () => {
+  const sample = [
+    { county: 'Alameda' },
+    { county: 'Butte' },
+    { county: 'Fresno' },
+    { county: 'Los Angeles' },
+    { county: 'Orange' },
+    { county: 'San Diego' }
+  ];
+  const offset0 = rotateCaCounties(sample, 0, 3);
+  assert.deepEqual(offset0.map(c => c.county), ['Alameda', 'Butte', 'Fresno']);
+
+  const offset3 = rotateCaCounties(sample, 3, 3);
+  assert.deepEqual(offset3.map(c => c.county), ['Los Angeles', 'Orange', 'San Diego']);
+
+  const offset5 = rotateCaCounties(sample, 5, 2);
+  assert.deepEqual(offset5.map(c => c.county), ['San Diego', 'Alameda']);
+
+  assert.deepEqual(rotateCaCounties([], 0, 5), []);
 });

@@ -450,6 +450,33 @@ test('bid4assets passesFilter: rejects records that fail id/state/address shape'
   assert.equal(bid4assets.passesFilter({ id: 'B4A-1', state: 'PA', address: '12 ELM STREET, Reading' }), true);
 });
 
+test('bid4assets extracts APN, deposit, and postponement reschedule trajectory', () => {
+  const { rotateStorefronts } = require('../../server/scrapers/bid4assets');
+  const res = bid4assets.toListing({
+    AuctionID: 1308882,
+    Asset_Title: '***POSTPONED***Berks County, PA Sheriff Sale: 906 NORTH 25TH STREET- Postponed to 11/06/2026, New Auction 1309999',
+    MinimumBid: 45000,
+    DepositAmount: 5000,
+    APN: '12-345-678-00',
+    SheriffNumber: 'SH-2026-99',
+    DebtAmount: 85000,
+  }, '/berkscountysheriffsales', 'https://www.bid4assets.com/berkscountysheriffsales');
+
+  assert.ok(res);
+  assert.equal(res.status, 'POSTPONED');
+  assert.equal(res.apn, '12-345-678-00');
+  assert.equal(res.deposit, 5000);
+  assert.equal(res.sourceFacts.postponedToDate, '2026-11-06');
+  assert.equal(res.sourceFacts.newAuctionId, '1309999');
+  assert.equal(res.sourceFacts.sheriffNumber, 'SH-2026-99');
+  assert.equal(res.sourceFacts.debtAmount, 85000);
+
+  const slugs = ['/countyA', '/countyB', '/countyC', '/countyD'];
+  assert.deepEqual(rotateStorefronts(slugs, 0, 2), ['/countyA', '/countyB']);
+  assert.deepEqual(rotateStorefronts(slugs, 2, 2), ['/countyC', '/countyD']);
+  assert.deepEqual(rotateStorefronts(slugs, 3, 2), ['/countyD', '/countyA']);
+});
+
 // --- US Marshals --------------------------------------------------------
 
 const { UsMarshalsScraper } = require('../../server/scrapers/marshals');
@@ -742,6 +769,28 @@ test('landbanksearch passesFilter: rejects shape and address-length violations',
   assert.equal(landbanksearch.passesFilter({ id: 'X-1', state: 'OH', address: '12 ELM STREET' }), false);
   assert.equal(landbanksearch.passesFilter({ id: 'LB-1', state: 'OHIO', address: '12 ELM STREET' }), false);
   assert.equal(landbanksearch.passesFilter({ id: 'LB-1', state: 'OH', address: 'short' }), false);
+});
+
+test('landbanksearch extracts APN, lot size, and rotates active land banks', () => {
+  const { rotateLandBanks } = require('../../server/scrapers/landbanksearch');
+  const card = `<a href="/p/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">
+    <img src="https://cdn.landbanksearch.com/p.jpg" alt="4500 Lorain Ave" />
+    <div class="truncate text-xs">Cleveland, OH</div>
+    <div class="font-display">$8,500</div>
+    <div>Parcel: 001-22-333</div>
+    <div>0.45 acres</div>
+    <span>Structure</span>
+  </a>`;
+  const out = landbanksearch.parseCardHtml('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', card, { name: 'Cuyahoga Land Bank', slug: 'cuyahoga', state: 'OH' });
+  assert.ok(out);
+  assert.equal(out.apn, '001-22-333');
+  assert.equal(out.sourceFacts.lotSize, 0.45);
+  assert.equal(out.sourceFacts.bankName, 'Cuyahoga Land Bank');
+
+  const banks = [{ slug: 'b1' }, { slug: 'b2' }, { slug: 'b3' }, { slug: 'b4' }];
+  assert.deepEqual(rotateLandBanks(banks, 0, 2), [{ slug: 'b1' }, { slug: 'b2' }]);
+  assert.deepEqual(rotateLandBanks(banks, 2, 2), [{ slug: 'b3' }, { slug: 'b4' }]);
+  assert.deepEqual(rotateLandBanks(banks, 3, 2), [{ slug: 'b4' }, { slug: 'b1' }]);
 });
 
 test('sheriff parseRealauctionHtml: extracts preview cards with AUCTION_ITEM markup', () => {

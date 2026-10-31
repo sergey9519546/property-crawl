@@ -228,6 +228,14 @@ class TreasuryForfeitureScraper extends BaseScraper {
       }
     }
     const gallery = extractDetailImages({ source: 'treasury', html: detailHtml, sourceUrl: detailUrl, address: fullAddress });
+    const numericDeposit = this.parseMoney(deposit);
+    const sourceFacts = {
+      parcelNumber: parcelNo || null,
+      siteAcres: Number.isFinite(acres) ? acres : null,
+      depositText: deposit || null,
+      deposit: numericDeposit || null,
+      apn: parcelNo || null,
+    };
 
     return {
       id: saleNumber ? `TRSY-${saleNumber}` : `TRSY-${baseName.toUpperCase()}`,
@@ -253,16 +261,18 @@ class TreasuryForfeitureScraper extends BaseScraper {
       judgment: null,
       attorney: null,
       occupancy: null,
-      deposit: deposit || null,
+      deposit: numericDeposit || null,
+      apn: parcelNo || null,
       photo: gallery[0]?.url || null,
       sourceUrl: detailUrl,
       raw: body.substring(0, 2000),
+      sourceFacts,
       provenance: {
         origin: 'live',
         observed: true,
         publisher: 'U.S. Department of the Treasury',
         recordId: String(saleNumber || baseName),
-        sourceFacts: { parcelNumber: parcelNo || null, siteAcres: Number.isFinite(acres) ? acres : null },
+        sourceFacts,
         media: gallery.length ? {
           photo: { sourceRecordUrl: detailUrl, extraction: { selector: gallery[0].selector, association: 'exact_detail_page' } },
           gallery

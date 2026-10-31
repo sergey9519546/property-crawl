@@ -244,6 +244,17 @@ function truncateRaw(payload, maxBytes = MAX_RAW_BYTES) {
   });
 }
 
+function rotateCaCounties(counties, startIndex = 0, limit = 25) {
+  if (!Array.isArray(counties) || counties.length === 0) return [];
+  const start = ((Number(startIndex) || 0) % counties.length + counties.length) % counties.length;
+  const lim = Math.max(1, Number(limit) || counties.length);
+  const rotated = [];
+  for (let i = 0; i < Math.min(lim, counties.length); i++) {
+    rotated.push(counties[(start + i) % counties.length]);
+  }
+  return rotated;
+}
+
 function classifyPropType(description) {
   const text = String(description || '').toLowerCase();
   if (!text.trim()) return 'Unknown';
@@ -369,6 +380,7 @@ class CaControllerTaxSaleScraper extends BaseScraper {
       MAX_COUNTIES_PER_RUN,
       MAX_COUNTIES_PER_RUN
     );
+    this.rotationOffset = Number(options.rotationOffset ?? process.env.CA_TAX_SALE_ROTATION_OFFSET) || 0;
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled(SOURCE_KEY);
     this.extract = options.extractImpl || extractWithScrapling;
@@ -783,7 +795,7 @@ class CaControllerTaxSaleScraper extends BaseScraper {
     return directoryUrl || this.directoryUrl;
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
     return this.executeWithRetry(async () => {
       const observedAt = new Date().toISOString();
       const collected = [];
@@ -821,14 +833,16 @@ class CaControllerTaxSaleScraper extends BaseScraper {
       // recorded as skips — never invented.
       const visitable = counties
         .filter((entry) => entry.parcelListUrl || entry.countyPageUrl)
-        .slice(0, this.maxCounties);
+        ;
+      const offset = Number(options?.rotationOffset ?? this.rotationOffset) || 0;
+      const targetCounties = rotateCaCounties(visitable, offset, this.maxCounties);
 
       let countiesVisited = 0;
       let countiesSkipped = 0;
       let parcelsDiscovered = 0;
       let parcelsRejected = 0;
 
-      for (const countyEntry of visitable) {
+      for (const countyEntry of targetCounties) {
         if (collected.length >= this.maxRecords) break;
         const listUrl = countyEntry.parcelListUrl || countyEntry.countyPageUrl;
         let body;
@@ -921,3 +935,4 @@ module.exports.classifyPropType = classifyPropType;
 module.exports.parseDateText = parseDateText;
 module.exports.parseMoney = parseMoney;
 module.exports.normalizeCountyName = normalizeCountyName;
+module.exports.rotateCaCounties = rotateCaCounties;

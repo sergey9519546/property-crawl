@@ -9,66 +9,77 @@
 //
 // Strategy (2-stage):
 //   1. Fetch /data and parse the table of 70+ land banks + per-feed counts.
-//      Sort by count desc, take top N (default 5).
-//   2. For each top land bank, fetch /land-banks/{slug} and extract the
-//      "Cheapest current listings" grid (~12 cards per page). Each card
-//      already has address, city/state, price, photo, and propType badge.
-//
-// Per-listing fields:
-//   - id        = "LB-{uuid}" (uuid from /p/{uuid} href)
-//   - source    = "landbank"
-//   - address   = "0 Ruby Ave, Cleveland, OH" (from card alt + city/state)
-//   - state     = 2-letter (from /data row, also confirmed in card)
-//   - openingBid= parsed "$X" price (null when the source says "Make offer")
-//   - photo     = card <img src> (satellite or real photo from source bank)
-//   - sourceUrl = https://www.landbanksearch.com/p/{uuid}
-//   - propType  = mapped only when the source publishes a type badge
-//
-// Safety:
-//   - AbortController timeout = 30s per fetch (modeled on treasury.js)
-//   - randomized 250-750ms polite delay between land-bank page fetches
-//   - 5 land banks x ~12 cards = ~60 listings per run (well under
-//     the 180s build-data.js timeout)
-//   - maxListingsPerBank cap = 100 (defensive)
-//
-// Coordinates are left null because listing cards do not publish parcel-level
-// coordinates. A city centroid must never masquerade as an observed geocode.
+//      Sort by count desc, rotate through the list using a cursor so all
+//      municipal feeds are swept across scheduled runs.
+//   2. For each selected land bank, fetch /land-banks/{slug} and extract the
+//      current listings grid (~12 cards per page). Each card has address,
+//      city/state, price, photo, propType, APN, and lot size when published.
 
 const BaseScraper = require('./base');
+const {
+  createRunReport,
+  recordUnitFailure,
+  recordUnitSuccess,
+  finalizeRunReport,
+} = require('./run-report');
+
+function rotateLandBanks(banks, startIndex, limit) {
+  if (!Array.isArray(banks) || banks.length === 0) return [];
+  const size = Math.max(0, Math.floor(Number(limit) || 0));
+  if (size === 0) return [];
+  if (size >= banks.length) return [...banks];
+  const length = banks.length;
+  const start = ((Math.floor(Number(startIndex) || 0) % length) + length) % length;
+  const window = [];
+  for (let index = 0; index < size; index += 1) {
+    window.push(banks[(start + index) % length]);
+  }
+  return window;
+}
 
 class LandBankSearchScraper extends BaseScraper {
-  constructor() {
-    super({ name: 'LandBankSearchScraper', sourceKey: 'landbank' });
+  constructor(options = {}) {
+    super({ name: 'LandBankSearchScraper', sourceKey: 'landbank', ...options });
     this.baseUrl = 'https://www.landbanksearch.com';
-    this.maxLandBanks = 5;
-    this.maxListingsPerBank = 100;
+    this.maxLandBanks = Number(options.maxLandBanks ?? process.env.LANDBANK_MAX_BANKS) || 5;
+    this.rotationOffset = Number(options.rotationOffset ?? process.env.LANDBANK_ROTATION_OFFSET) || 0;
+    this.maxListingsPerBank = Number(options.maxListingsPerBank) || 100;
+    this.lastRunReport = null;
   }
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
+      const report = createRunReport('landbank', {
+        endpoint: '/data',
+        maxLandBanks: this.maxLandBanks,
+        rotationOffset: this.rotationOffset,
+      });
+      this.lastRunReport = report;
+
       const banks = await this.fetchLandBanks();
       console.log(`[${this.name}] Discovered ${banks.length} land banks on /data`);
+      report.endpointsTried = 1;
 
-      const top = banks
-        .filter((b) => b.count > 0)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, this.maxLandBanks);
+      const activeBanks = banks.filter((b) => b.count > 0);
+      const selected = rotateLandBanks(activeBanks, this.rotationOffset, this.maxLandBanks);
 
       console.log(
-        `[${this.name}] Top ${top.length} by volume: ${top
+        `[${this.name}] Sweeping ${selected.length} of ${activeBanks.length} active land banks (offset ${this.rotationOffset}): ${selected
           .map((b) => `${b.name}(${b.state},${b.count})`)
           .join(', ')}`
       );
 
       const allListings = [];
-      for (const bank of top) {
+      for (const bank of selected) {
         try {
           const listings = await this.fetchBankListings(bank);
           console.log(
             `[${this.name}]   ${bank.name}(${bank.state}): ${listings.length} cards`
           );
           allListings.push(...listings);
+          recordUnitSuccess(report, bank.slug, listings.length);
         } catch (err) {
+          recordUnitFailure(report, bank.slug, err);
           console.warn(
             `[${this.name}] Failed ${bank.slug} (${bank.state}): ${err.message}`
           );
@@ -77,12 +88,18 @@ class LandBankSearchScraper extends BaseScraper {
       }
 
       console.log(
-        `[${this.name}] Scraped ${allListings.length} LandBankSearch listings across ${top.length} land banks`
+        `[${this.name}] Scraped ${allListings.length} LandBankSearch listings across ${selected.length} land banks`
       );
 
-      return allListings
+      const standardized = allListings
         .filter((item) => this.passesFilter(item))
         .map((item) => this.standardizeListing(item));
+
+      finalizeRunReport(report, { emitted: standardized.length });
+      report.outcome = standardized.length ? 'success' : 'empty';
+      report.complete = report.failures.length === 0;
+
+      return standardized;
     });
   }
 
@@ -189,8 +206,30 @@ class LandBankSearchScraper extends BaseScraper {
 
     const address = `${street}, ${city}, ${state}`;
 
+    // Extract APN / Parcel ID if published
+    const parcelMatch = cardHtml.match(/(?:parcel|apn|pin|tax\s*id)\s*[:#]?\s*([A-Za-z0-9._-]+)/i);
+    const apn = parcelMatch ? parcelMatch[1].trim() : null;
+
+    // Extract Lot Size if published
+    const lotMatch = cardHtml.match(/([0-9,.]+)\s*(acres?|sq\s*ft)/i);
+    let lotSize = null;
+    if (lotMatch) {
+      const num = parseFloat(lotMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(num) && num > 0) {
+        lotSize = lotMatch[2].toLowerCase().startsWith('acre') ? num : Math.round(num);
+      }
+    }
+
+    const sourceFacts = {
+      bankName: bank?.name || null,
+      bankState: bank?.state || null,
+      apn,
+      lotSize,
+    };
+
     return {
       id: `LB-${uuid}`,
+      source: 'landbank',
       state,
       county: null,
       city,
@@ -203,8 +242,16 @@ class LandBankSearchScraper extends BaseScraper {
       occupancy: null,
       sourceUrl: `${this.baseUrl}/p/${uuid}`,
       photo,
+      apn,
       raw: cardHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 2000),
-      provenance: { origin: 'live', observed: true, publisher: bank.name, recordId: uuid },
+      sourceFacts,
+      provenance: {
+        origin: 'live',
+        observed: true,
+        publisher: bank?.name || 'LandBankSearch',
+        recordId: uuid,
+        sourceFacts,
+      },
     };
   }
 
@@ -219,3 +266,5 @@ class LandBankSearchScraper extends BaseScraper {
 }
 
 module.exports = new LandBankSearchScraper();
+module.exports.LandBankSearchScraper = LandBankSearchScraper;
+module.exports.rotateLandBanks = rotateLandBanks;

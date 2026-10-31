@@ -542,6 +542,11 @@ test('TrusteeSaleScraper AcclaimWeb recorder bridge parses non-judicial trustee 
     assert.equal(listings[0].defendant, 'Johnathan Doe');
     assert.equal(listings[0].provenance.platform, 'acclaimweb');
     assert.equal(inspectSourceRecordUrl('trustee', listings[0].sourceUrl).isValid, true);
+
+    const multiListings = await trustee.scrapeFeed({ jurisdictions: ['clark', 'washoe'], docType: 'NOTICE OF TRUSTEE SALE' });
+    assert.equal(multiListings.length, 2);
+    assert.equal(multiListings[1].county, 'Washoe');
+    assert.equal(trustee.lastRunReport.outcome, 'success');
   } finally {
     trustee.fetchText = originalFetchText;
   }
