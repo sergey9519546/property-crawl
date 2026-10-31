@@ -106,6 +106,117 @@ function rotateStorefronts(slugs, startIndex, limit) {
   return window;
 }
 
+/**
+ * Robustly extracts Bid4Assets JSON auction record objects from page HTML.
+ * Handles balanced braces, nested metadata, unescaped characters, and arbitrary key ordering.
+ */
+function extractAuctionJsonRecords(html) {
+  const text = String(html || '');
+  const records = [];
+  const seenIds = new Set();
+
+  // 1. Balanced-brace scanner centered around "AuctionID" occurrences
+  const idKeywordRe = /"AuctionID"\s*:\s*(\d+)/g;
+  let match;
+
+  while ((match = idKeywordRe.exec(text)) !== null) {
+    const rawId = match[1];
+    if (seenIds.has(rawId)) continue;
+
+    const matchPos = match.index;
+
+    // Scan backwards from matchPos to find the opening '{' of this object
+    let openBraceIndex = -1;
+    let inStrBack = false;
+    for (let i = matchPos - 1; i >= 0; i--) {
+      const char = text[i];
+      if (char === '"' && (i === 0 || text[i - 1] !== '\\')) {
+        inStrBack = !inStrBack;
+      } else if (!inStrBack && char === '{') {
+        openBraceIndex = i;
+        break;
+      }
+    }
+
+    if (openBraceIndex === -1) continue;
+
+    // Scan forward from openBraceIndex counting balanced braces
+    let braceDepth = 0;
+    let inStr = false;
+    let escaped = false;
+    let closeBraceIndex = -1;
+
+    for (let i = openBraceIndex; i < text.length; i++) {
+      const char = text[i];
+      if (inStr) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inStr = false;
+        }
+      } else {
+        if (char === '"') {
+          inStr = true;
+        } else if (char === '{') {
+          braceDepth++;
+        } else if (char === '}') {
+          braceDepth--;
+          if (braceDepth === 0) {
+            closeBraceIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (closeBraceIndex !== -1) {
+      const jsonStr = text.slice(openBraceIndex, closeBraceIndex + 1);
+      try {
+        const obj = JSON.parse(jsonStr);
+        if (obj && obj.AuctionID && obj.Asset_Title) {
+          seenIds.add(String(obj.AuctionID));
+          records.push(obj);
+          continue;
+        }
+      } catch {
+        // Attempt minor cleanup: replace unescaped control chars / newlines inside string values
+        try {
+          const sanitized = jsonStr.replace(/[\r\n\t]/g, ' ');
+          const obj = JSON.parse(sanitized);
+          if (obj && obj.AuctionID && obj.Asset_Title) {
+            seenIds.add(String(obj.AuctionID));
+            records.push(obj);
+            continue;
+          }
+        } catch {
+          // Ignore parse failure on this object
+        }
+      }
+    }
+  }
+
+  // 2. Fallback regex for minimal mock blocks or non-standard formatting
+  if (records.length === 0) {
+    const objectRe = /\{\s*"AuctionID"\s*:\s*(\d+)\s*,[\s\S]*?\}/g;
+    let m;
+    while ((m = objectRe.exec(text)) !== null) {
+      try {
+        const obj = JSON.parse(m[0]);
+        if (obj && obj.AuctionID && obj.Asset_Title && !seenIds.has(String(obj.AuctionID))) {
+          seenIds.add(String(obj.AuctionID));
+          records.push(obj);
+        }
+      } catch {
+        // Skip
+      }
+    }
+  }
+
+  return records;
+}
+
 class Bid4AssetsScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'Bid4AssetsScraper', sourceKey: 'bid4assets', ...options });
@@ -228,23 +339,7 @@ class Bid4AssetsScraper extends BaseScraper {
   async fetchStorefront(slug) {
     const url = `${this.baseUrl}${slug}`;
     const html = await this.fetchText(url);
-
-    // Each auction is embedded in the page as a JSON object literal.
-    // The object always starts with {"AuctionID":<number>,"Asset_Title":...
-    // Capture greedily up to the matching closing brace.
-    const objectRe = /\{\s*"AuctionID"\s*:\s*(\d+)\s*,[\s\S]*?\}/g;
-    const records = [];
-    let m;
-    while ((m = objectRe.exec(html)) !== null) {
-      try {
-        const obj = JSON.parse(m[0]);
-        if (obj && obj.AuctionID && obj.Asset_Title) {
-          records.push(obj);
-        }
-      } catch (err) {
-        // Skip malformed JSON
-      }
-    }
+    const records = extractAuctionJsonRecords(html);
 
     return records
       .map((rec) => this.toListing(rec, slug, url))
@@ -278,12 +373,15 @@ class Bid4AssetsScraper extends BaseScraper {
 
     const sourceFacts = {
       sheriffNumber: rec.SheriffNumber ?? null,
-      bidCount: rec.BidCount ?? null,
+      attorney: rec.Attorney ?? null,
       debtAmount: Number.isFinite(debtAmount) && debtAmount > 0 ? debtAmount : null,
-      apn,
-      deposit,
+      defendant: rec.Defendant ?? null,
+      statusId: rec.StatusID ?? null,
+      bidCount: Number.isFinite(Number(rec.BidCount)) ? Number(rec.BidCount) : 0,
       postponedToDate,
       newAuctionId,
+      depositAmount: deposit,
+      apn,
     };
 
     return {
@@ -344,3 +442,4 @@ module.exports.Bid4AssetsScraper = Bid4AssetsScraper;
 module.exports.parseAssetTitle = parseAssetTitle;
 module.exports.parseSaleDate = parseSaleDate;
 module.exports.rotateStorefronts = rotateStorefronts;
+module.exports.extractAuctionJsonRecords = extractAuctionJsonRecords;

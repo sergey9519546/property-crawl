@@ -357,7 +357,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               <button
                 type="button"
                 onClick={() => updateCustomOpeningBid("")}
-                className="text-[11px] font-bold text-ink-2 underline underline-offset-2 hover:text-ink"
+                className="text-xs font-bold text-ink-2 underline underline-offset-2 hover:text-ink"
               >
                 Reset bid
               </button>
@@ -384,14 +384,14 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </button>
           )}
         </div>
-        {statutoryPreset?.supported === false && statutoryPreset.notice && <p role="note" data-testid="statutory-unsupported-notice" className="rounded-xl border border-catch/30 bg-catch-wash p-3 text-[11px] text-ink">{statutoryPreset.notice}</p>}
+        {statutoryPreset?.supported === false && statutoryPreset.notice && <p role="note" data-testid="statutory-unsupported-notice" className="rounded-xl border border-catch/30 bg-catch-wash p-3 text-xs text-ink">{statutoryPreset.notice}</p>}
         {appliedPresetCitations && (
-          <div className="rounded-xl border border-line-strong bg-paper p-3 text-[11px] leading-relaxed text-ink-2">
+          <div className="rounded-xl border border-line-strong bg-paper p-3 text-xs leading-relaxed text-ink-2">
             <p className="font-bold">Applied statutory schedule assumption ({appliedPresetCitations[0]}):</p>
             <ul className="mt-1 list-disc pl-4 space-y-0.5">
               {appliedPresetCitations.slice(1).map((cite) => <li key={cite}>{cite}</li>)}
             </ul>
-            <p className="mt-1 text-[10px] text-ink-3">Explicit scenario assumptions only — verify exact county clerk / sheriff fee sheet before bidding.</p>
+            <p className="mt-1 text-xs text-ink-3">Explicit scenario assumptions only — verify exact county clerk / sheriff fee sheet before bidding.</p>
           </div>
         )}
         {deadlinesAndCarry.effectiveLockupDays > 0 && (
@@ -403,13 +403,13 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               )}
             </div>
             {deadlinesAndCarry.objectionLabel && (
-              <p className="mt-1 text-[11px] text-ink-3">{deadlinesAndCarry.objectionLabel}{deadlinesAndCarry.objectionDeadline ? ` — window ends ${deadlinesAndCarry.objectionDeadline}` : ""}</p>
+              <p className="mt-1 text-xs text-ink-3">{deadlinesAndCarry.objectionLabel}{deadlinesAndCarry.objectionDeadline ? ` — window ends ${deadlinesAndCarry.objectionDeadline}` : ""}</p>
             )}
             {deadlinesAndCarry.stateRedemptionDeadline && (
-              <p className="mt-0.5 text-[11px] text-ink-3">Recorded redemption window ends {deadlinesAndCarry.stateRedemptionDeadline} ({deadlinesAndCarry.stateRedemptionDays}d)</p>
+              <p className="mt-0.5 text-xs text-ink-3">Recorded redemption window ends {deadlinesAndCarry.stateRedemptionDeadline} ({deadlinesAndCarry.stateRedemptionDays}d)</p>
             )}
             {deadlinesAndCarry.irsRedemptionDeadline && (
-              <p className="mt-0.5 text-[11px] text-catch-ink font-semibold">26 U.S.C. § 7425(d) IRS 120-day redemption window ends {deadlinesAndCarry.irsRedemptionDeadline}</p>
+              <p className="mt-0.5 text-xs text-catch-ink font-semibold">26 U.S.C. § 7425(d) IRS 120-day redemption window ends {deadlinesAndCarry.irsRedemptionDeadline}</p>
             )}
           </div>
         )}
@@ -543,15 +543,15 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         {cash.totalAcquisitionCost !== null ? (
           <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
             <div className="rounded-xl border border-line bg-paper p-3">
-              <p className="text-[11px] font-bold uppercase text-ink-3">Acquisition cost at the opening amount</p>
+              <p className="text-xs font-bold uppercase text-ink-3">Acquisition cost at the opening amount</p>
               <p className="text-xl font-extrabold text-yours">{displayMoney(cash.totalAcquisitionCost)}</p>
-              <p className="mt-1 text-[10px] text-ink-3">The published opening amount plus the acquisition costs you entered.</p>
+              <p className="mt-1 text-xs text-ink-3">The published opening amount plus the acquisition costs you entered.</p>
             </div>
             {amounts.registrationFunds !== null && amounts.creditedDeposit !== null && cash.cashDueAtSettlement !== null ? (
               <div className="rounded-xl border border-line bg-paper p-3">
-                <p className="text-[11px] font-bold uppercase text-ink-3">Cash to close</p>
+                <p className="text-xs font-bold uppercase text-ink-3">Cash to close</p>
                 <p className="text-xl font-extrabold text-yours">{displayMoney(cash.cashDueAtSettlement)}</p>
-                <p className="mt-1 text-[10px] text-ink-3">Acquisition cost minus the deposit credited to the price. Registration funds are not added again.</p>
+                <p className="mt-1 text-xs text-ink-3">Acquisition cost minus the deposit credited to the price. Registration funds are not added again.</p>
               </div>
             ) : (
               <div className="rounded-xl border border-catch/30 bg-catch-wash p-3 text-xs text-ink">Cash to close stays blank until registration funds and the credited deposit are both entered.</div>
@@ -567,7 +567,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-catch-ink" />
               <div>
                 <h4 className="text-xs font-bold">Price scenario unavailable</h4>
-                <p className="mt-1 text-[11px] leading-relaxed text-ink-2">A maximum allowable offer is a statement about what this property is worth, and this record carries no supported comparable-sale valuation, so none is shown. The published opening amount is {displayMoney(openingBid)}; the cost model above uses only that amount and the assumptions you entered.</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-2">A maximum allowable offer is a statement about what this property is worth, and this record carries no supported comparable-sale valuation, so none is shown. The published opening amount is {displayMoney(openingBid)}; the cost model above uses only that amount and the assumptions you entered.</p>
               </div>
             </div>
             <div className="mt-3 border-t border-catch/30 pt-3">
@@ -615,17 +615,17 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 <button
                   type="button"
                   onClick={() => updateCustomValuation("")}
-                  className="text-[11px] font-bold text-ink-2 underline underline-offset-2 hover:text-ink"
+                  className="text-xs font-bold text-ink-2 underline underline-offset-2 hover:text-ink"
                 >
                   Reset assumption
                 </button>
               </div>
             )}
             <div className="grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-line bg-paper p-3"><p className="text-[11px] font-bold uppercase text-ink-3">Maximum price meeting target</p><p className="text-xl font-extrabold text-yours">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-[10px] text-ink-3">After explicit costs, rehab, and target profit.</p></div>
-              <div className="rounded-xl border border-line bg-paper p-3"><p className="text-[11px] font-bold uppercase text-ink-3">Change needed at opening amount</p><p className="text-xl font-extrabold text-yours">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-[10px] text-ink-3">Required price reduction if costs stay unchanged.</p></div>
+              <div className="rounded-xl border border-line bg-paper p-3"><p className="text-xs font-bold uppercase text-ink-3">Maximum price meeting target</p><p className="text-xl font-extrabold text-yours">{displayMoney(reverseScenario.maxPurchasePrice)}</p><p className="mt-1 text-xs text-ink-3">After explicit costs, rehab, and target profit.</p></div>
+              <div className="rounded-xl border border-line bg-paper p-3"><p className="text-xs font-bold uppercase text-ink-3">Change needed at opening amount</p><p className="text-xl font-extrabold text-yours">{displayMoney(reverseScenario.priceReductionNeeded)}</p><p className="mt-1 text-xs text-ink-3">Required price reduction if costs stay unchanged.</p></div>
               <div className="rounded-xl border border-line bg-paper p-3 sm:col-span-2">
-                <p className="text-[11px] font-bold uppercase text-ink-3">Cost alternative</p>
+                <p className="text-xs font-bold uppercase text-ink-3">Cost alternative</p>
                 <p className="mt-1 text-sm font-bold text-yours">At the opening amount, other acquisition costs may total at most {displayMoney(reverseScenario.maxOtherAcquisitionCostsAtCurrentPrice)}.</p>
                 <p className="mt-1 text-xs text-ink-3">{reverseScenario.targetAchievableAtCurrentPrice ? `Required cost reduction: ${displayMoney(reverseScenario.costReductionNeeded)}.` : "The target cannot be achieved at the current price, even with zero other acquisition costs."} Registration funds and a credited deposit affect timing and liquidity; a credited deposit is not counted twice.</p>
               </div>

@@ -239,6 +239,50 @@ test('AcclaimWeb parses full search results container', () => {
   assert.equal(filings[1].instrumentNumber, '20261007:002222');
 });
 
+test('AcclaimWeb parses multi-line alias grantors and tag-wrapped recording labels without truncation', () => {
+  const multiLineHtml = `
+    <tr class="search-result-row">
+      <td class="col-inst"><b>Instrument:</b> 20261009:008899</td>
+      <td class="col-date"><b>Recorded:</b> 10/09/2026</td>
+      <td class="col-type"><b>Doc Type:</b> NOTICE OF TRUSTEE SALE</td>
+      <td class="col-grantor"><b>Grantor:</b> Martinez, David<br>AKA David M Martinez<br>Martinez David J</td>
+      <td class="col-grantee"><b>Grantee:</b> Western Title Trustee Services</td>
+      <td class="col-apn"><b>APN:</b> 139-22-310-001</td>
+      <td class="col-desc"><b>Legal Desc:</b> Lot 12 Block 3 Green Valley</td>
+    </tr>
+  `;
+
+  const parsed = parseAcclaimRecordRow(multiLineHtml, 'clark');
+  assert.ok(parsed);
+  assert.equal(parsed.instrumentNumber, '20261009:008899');
+  assert.equal(parsed.recordedDate, '10/09/2026');
+  assert.equal(parsed.docType, 'NOTICE OF TRUSTEE SALE');
+  assert.equal(parsed.distressStage, 'SCHEDULED_AUCTION');
+  assert.equal(parsed.grantor, 'Martinez, David');
+  assert.equal(parsed.grantee, 'Western Title Trustee Services');
+  assert.equal(parsed.apn, '139-22-310-001');
+  assert.equal(parsed.legalDescription, 'Lot 12 Block 3 Green Valley');
+
+  // Verify generic table row parsing in parseAcclaimSearchHtml
+  const genericTableHtml = `
+    <table id="tblSearchResults">
+      <tr>
+        <td class="col-inst">Doc #: 2026-9901</td>
+        <td class="col-date">10/11/2026</td>
+        <td class="col-type">NOTICE OF DEFAULT</td>
+        <td class="col-grantor">Taylor, Robert</td>
+        <td class="col-apn">163-12-101-005</td>
+      </tr>
+    </table>
+  `;
+  const filings = parseAcclaimSearchHtml(genericTableHtml, 'washoe');
+  assert.equal(filings.length, 1);
+  assert.equal(filings[0].county, 'Washoe');
+  assert.equal(filings[0].instrumentNumber, '2026-9901');
+  assert.equal(filings[0].grantor, 'Taylor, Robert');
+  assert.equal(filings[0].apn, '163-12-101-005');
+});
+
 
 test('RealAuction tax-deed mode (.realtaxdeed.com) and SheriffSaleScraper docket bridge', () => {
   const { REALAUCTION_FLORIDA_TAXDEED_COUNTIES } = require('../server/scrapers/adapters/realauction');
@@ -721,5 +765,77 @@ test('parseTexasTaxSaleHtml extracts multi-record Texas Constable auction docket
   assert.equal(listings[1].openingBid, 35000);
   assert.equal(listings[1].sourceFacts.isHomestead, true);
   assert.equal(listings[1].sourceFacts.statutoryRedemptionDays, 730); // 2 years for homestead
+});
+
+test('parseTexasTaxSaleCard captures trailing docket subdivision suffixes across Texas jurisdictions', () => {
+  const cardWithSuffix = `
+    <div class="tax-card">
+      <div>Cause No: 2024-TX-104-A</div>
+      <div>Precinct 4 Constable</div>
+      <div>Account: 041-892-001-0022</div>
+      <div>Situs Address: 1420 Post Oak Blvd, Houston, TX 77056</div>
+      <div>Adjudged Value: $385,000.00</div>
+      <div>Minimum Bid: $42,500.00</div>
+    </div>
+  `;
+  const parsed = parseTexasTaxSaleCard(cardWithSuffix, 'harris');
+  assert.ok(parsed);
+  assert.equal(parsed.sourceFacts.causeNumber, '2024-TX-104-A');
+  assert.equal(parsed.id, 'tx-tax-harris-2024-tx-104-a');
+  assert.equal(parsed.openingBid, 42500);
+
+  const cardWithSlashSuffix = `
+    <div class="tax-card">
+      <div>Suit #: TX-22-12345-1</div>
+      <div>Precinct 2</div>
+      <div>Address: 500 Main St, Fort Worth, TX 76102</div>
+      <div>Minimum Bid: $19,000</div>
+    </div>
+  `;
+  const parsedTarrant = parseTexasTaxSaleCard(cardWithSlashSuffix, 'tarrant');
+  assert.ok(parsedTarrant);
+  assert.equal(parsedTarrant.sourceFacts.causeNumber, 'TX-22-12345-1');
+  assert.equal(parsedTarrant.id, 'tx-tax-tarrant-tx-22-12345-1');
+});
+
+test('Bid4Assets extractAuctionJsonRecords parses nested JSON, braces in titles, and leading metadata', () => {
+  const { extractAuctionJsonRecords } = require('../server/scrapers/bid4assets');
+
+  const pageHtml = `
+    <html>
+      <script>
+        var item1 = {
+          "storefront": "berks",
+          "AuctionID": 104928,
+          "Asset_Title": "Berks County, PA Sheriff Sale: 123 MAIN ST {UNIT #2} \\"DUPLEX\\"",
+          "ActualCloseTime": "11/20/2026",
+          "MinimumBid": 45000,
+          "CurrentBid": 50000,
+          "DebtAmount": 95000,
+          "ParcelID": "08-123-456",
+          "nestedMeta": {
+            "lienPriority": "first",
+            "statutoryType": "judicial"
+          }
+        };
+      </script>
+      <script>
+        var item2 = {
+          "AuctionID": 104929,
+          "Asset_Title": "Berks County, PA Sheriff Sale: 456 OAK AVE",
+          "ActualCloseTime": "11/20/2026",
+          "MinimumBid": 20000,
+          "CurrentBid": 25000
+        };
+      </script>
+    </html>
+  `;
+
+  const records = extractAuctionJsonRecords(pageHtml);
+  assert.equal(records.length, 2);
+  assert.equal(records[0].AuctionID, 104928);
+  assert.match(records[0].Asset_Title, /123 MAIN ST \{UNIT #2\}/);
+  assert.equal(records[0].nestedMeta.lienPriority, 'first');
+  assert.equal(records[1].AuctionID, 104929);
 });
 

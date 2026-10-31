@@ -201,8 +201,8 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
   const countyInfo = TEXAS_TAX_SALE_COUNTIES[String(countyKey).toLowerCase()] || TEXAS_TAX_SALE_COUNTIES.harris;
 
   // 1. Cause / Suit Number: e.g. "2024-TX-0129", "TX-22-12345", "Case: 2023-88123"
-  const causeMatch = text.match(/(?:cause\s*(?:no\.?|#|number)?|suit\s*(?:no\.?|#|number)?|case\s*(?:no\.?|#|number)?)\s*[:#]?\s*([A-Za-z0-9]{2,8}[-\s\/][A-Za-z0-9-]{3,12})/i)
-    || text.match(/\b(\d{4}-TX-\d{3,6}|TX-\d{2,4}-\d{3,6})\b/i);
+  const causeMatch = text.match(/(?:cause\s*(?:no\.?|#|number)?|suit\s*(?:no\.?|#|number)?|case\s*(?:no\.?|#|number)?)\s*[:#]?\s*([A-Za-z0-9]{2,8}(?:[-\s\/][A-Za-z0-9]{1,12}){1,4})/i)
+    || text.match(/\b(\d{4}-TX-\d{3,6}(?:-[A-Za-z0-9]{1,4})?|TX-\d{2,4}-\d{3,6}(?:-[A-Za-z0-9]{1,4})?)\b/i);
   const causeNumber = causeMatch ? causeMatch[1].trim().replace(/\s+/g, '-') : null;
 
   // 2. CAD Account / APN: e.g. "Account: 041-234-000-0012", "APN: 04218-104-0120", "CAD: 1234567890"
