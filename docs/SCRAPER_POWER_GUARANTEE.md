@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-30T22:39:59.001Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-10-31T05:30:59.613Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -9,7 +9,7 @@
 |---|---:|
 | Catalog sources (all ends) | **288** |
 | Scheduled production adapters | **21** |
-| Adapters with Scrapling profiles | **46** |
+| Adapters with Scrapling profiles | **53** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
 
@@ -22,7 +22,7 @@
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
 | Foreclosure/sheriff/trustee auction | 25 | 7 | 1 | yes | ✅ adapter |
-| Tax lien/deed sale | 132 | 31 | 0 | yes | ✅ adapter |
+| Tax lien/deed sale | 132 | 38 | 0 | yes | ✅ adapter |
 | Land bank inventory | 12 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
 | Commercial marketplaces (issuer-preserving) | 10 | 0 | 0 | no | catalog only |
@@ -40,9 +40,9 @@
 | Tier | Meaning | Count |
 |---|---|---:|
 | P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 5 |
-| P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 11 |
+| P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 12 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
-| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 234 |
+| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 227 |
 
 ## Scheduled adapters (power scorecard)
 
@@ -58,6 +58,7 @@
 | `hud` (HUD HomeStore) | P3_SCOPE_LIMITED | hud-cards | 1971 | Publisher maintenance/challenges possible; fail-closed + Scrapling hud-cards |
 | `bid4assets` (Bid4Assets) | P2_BLOCKED_PUBLISHER | — | 0 | CAPTCHA/account; circuit breaker fails closed |
 | `ca-controller-tax-sale` (CA State Controller Tax-Defaulted Sales Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
+| `ca-controller-tax-sale` (California State Controller — Tax-Defaulted Public Auctions Directory) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Cloudflare; DISCOVERY_ONLY until canaries |
 | `courtlistener` (CourtListener / RECAP) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; enrichment only — never invents bid/sale |
 | `fannie` (Fannie Mae HomePath) | P2_DISCOVERY_ADAPTER | table-extract | 0 | SPA/API often unparseable without partner feed; fail-closed + SPA observation_error |
 | `fl-dor-cadastral` (FL DOR Statewide Cadastral (ArcGIS REST)) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY until two clean canaries (parcel evidence, not sale inventory) |
@@ -68,7 +69,9 @@
 | `local-surplus` (County/Municipal Surplus Real Property) | P2_DISCOVERY_ADAPTER | — | 0 | Enrollment template: LOCAL_SURPLUS_DISCOVERY_URL required; skipped_not_enrolled until enrolled |
 | `marshals` (U.S. Marshals Asset Forfeiture) | P2_DISCOVERY_ADAPTER | table-extract | 0 | USMS bot-protection / brokered RealLook; fail-closed |
 | `public-notices-email` (Press-Association Public Notice Email Alerts) | P2_DISCOVERY_ADAPTER | — | 0 | DISCOVERY_ONLY; operator IMAP/corpus evidence only |
+| `sheriff` (Alachua County Tax-Deed Records) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Ohio Sheriff Sale Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Harris County, TX Tax Sale) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Realauction Sheriff/Tax Sale Portals (Multi-state)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Miami-Dade County FL — Tax Deed Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Broward County FL — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
@@ -100,6 +103,10 @@
 | `sheriff` (Santa Rosa County FL (Milton) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (St. Johns County FL (St. Augustine) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Bay County FL (Panama City) — Tax Deed Auction) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Dallas County TX — Tax Sale Properties) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Bexar County TX (San Antonio) — Resale Properties List) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Tarrant County TX (Fort Worth) — Delinquent Tax Sales) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
+| `sheriff` (Travis County TX (Austin) — Tax Sale) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
 
