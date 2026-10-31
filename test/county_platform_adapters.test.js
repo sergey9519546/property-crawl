@@ -601,3 +601,125 @@ test('RealAuction trajectory & cancellation parsing extracts bankruptcy stay and
   assert.equal(listings[0].sourceFacts.statutoryStayExhausted, false);
   assert.equal(listings[0].provenance.sourceFacts.statutoryStayExhausted, false);
 });
+
+const {
+  TEXAS_TAX_SALE_COUNTIES,
+  getFirstTuesdayOfMonth,
+  getNextTexasTaxSaleDate,
+  getTexasTaxSaleRedemption,
+  parseTexasTaxSaleCard,
+  parseTexasTaxSaleHtml,
+} = require('../server/scrapers/adapters/texas-tax-sale');
+
+test('Texas Tax Sale adapter covers major Texas counties with statutory precincts', () => {
+  assert.ok(TEXAS_TAX_SALE_COUNTIES.harris, 'Harris county must be registered');
+  assert.ok(TEXAS_TAX_SALE_COUNTIES.dallas, 'Dallas county must be registered');
+  assert.ok(TEXAS_TAX_SALE_COUNTIES.tarrant, 'Tarrant county must be registered');
+  assert.ok(TEXAS_TAX_SALE_COUNTIES.bexar, 'Bexar county must be registered');
+  assert.ok(TEXAS_TAX_SALE_COUNTIES.travis, 'Travis county must be registered');
+
+  assert.equal(TEXAS_TAX_SALE_COUNTIES.harris.state, 'TX');
+  assert.equal(TEXAS_TAX_SALE_COUNTIES.harris.fips, '48201');
+  assert.deepEqual(TEXAS_TAX_SALE_COUNTIES.harris.precincts, [1, 2, 3, 4, 5, 6, 7, 8]);
+});
+
+test('getFirstTuesdayOfMonth calculates exact statutory First Tuesday dates per Tex. Tax Code § 34.01', () => {
+  assert.equal(getFirstTuesdayOfMonth(2026, 11), '2026-11-03'); // Nov 1 is Sun -> Tue is Nov 3
+  assert.equal(getFirstTuesdayOfMonth(2026, 12), '2026-12-01'); // Dec 1 is Tue -> Tue is Dec 1
+  assert.equal(getFirstTuesdayOfMonth(2027, 1), '2027-01-05');  // Jan 1 is Fri -> Tue is Jan 5
+  assert.equal(getFirstTuesdayOfMonth(2027, 2), '2027-02-02');  // Feb 1 is Mon -> Tue is Feb 2
+  assert.equal(getFirstTuesdayOfMonth(2027, 3), '2027-03-02');  // Mar 1 is Mon -> Tue is Mar 2
+});
+
+test('getTexasTaxSaleRedemption applies statutory 180-day non-homestead and 730-day homestead terms', () => {
+  const investor = getTexasTaxSaleRedemption({ isHomestead: false });
+  assert.equal(investor.redemptionDays, 180);
+  assert.equal(investor.penaltyRatePct, 25);
+  assert.match(investor.statutoryCitation, /Tex\. Tax Code § 34\.21\(e\)/);
+
+  const homestead = getTexasTaxSaleRedemption({ isHomestead: true });
+  assert.equal(homestead.redemptionDays, 730);
+  assert.equal(homestead.penaltyRatePct, 25);
+  assert.match(homestead.statutoryCitation, /Tex\. Tax Code § 34\.21\(a\)/);
+});
+
+test('parseTexasTaxSaleCard extracts cause number, CAD APN, adjudged value, opening bid, and constable precinct', () => {
+  const rowHtml = `
+    <tr>
+      <td>Suit No: 2024-TX-08912</td>
+      <td>Precinct 4 Constable</td>
+      <td>Account: 041-892-001-0024</td>
+      <td>Harris County, City of Houston vs. James E. Martinez</td>
+      <td>Property: 8912 Willow Run Dr, Houston, TX 77088</td>
+      <td>Legal: Lot 12, Block 4, Willow Run Sec 2</td>
+      <td>Adjudged Value: $195,000.00</td>
+      <td>Minimum Bid: $42,500.00</td>
+      <td>Sale Date: November 03, 2026</td>
+    </tr>
+  `;
+
+  const listing = parseTexasTaxSaleCard(rowHtml, 'harris', { zip: '77088' });
+  assert.ok(listing, 'Listing must be parsed');
+  assert.equal(listing.state, 'TX');
+  assert.equal(listing.county, 'Harris');
+  assert.equal(listing.city, 'Houston');
+  assert.equal(listing.zip, '77088');
+  assert.equal(listing.address, '8912 Willow Run Dr');
+  assert.equal(listing.openingBid, 42500);
+  assert.equal(listing.assessedValue, 195000);
+  assert.equal(listing.apn, '041-892-001-0024');
+  assert.equal(listing.saleDate, '2026-11-03');
+
+  // Zero-fabrication guarantees
+  assert.equal(listing.dealScore, null);
+  assert.equal(listing.estLow, null);
+  assert.equal(listing.estHigh, null);
+  assert.equal(listing.arv, null);
+
+  // Operational facts on sourceFacts
+  assert.equal(listing.sourceFacts.causeNumber, '2024-TX-08912');
+  assert.equal(listing.sourceFacts.constablePrecinct, 4);
+  assert.equal(listing.sourceFacts.plaintiff, 'Harris County, City of Houston');
+  assert.equal(listing.sourceFacts.defendant, 'James E. Martinez');
+  assert.equal(listing.sourceFacts.statutoryRedemptionDays, 180);
+  assert.equal(listing.sourceFacts.penaltyRatePct, 25);
+  assert.equal(listing.sourceFacts.bidderCertificateRequired, true);
+});
+
+test('parseTexasTaxSaleHtml extracts multi-record Texas Constable auction docket', () => {
+  const docketHtml = `
+    <div class="tax-sale-docket">
+      <tr class="listing-row">
+        <td>Cause No: 2024-TX-001</td>
+        <td>Precinct 1 Constable</td>
+        <td>CAD: 010-100-001-0010</td>
+        <td>Dallas County vs. John Carter</td>
+        <td>100 Elm St, Dallas, TX 75201</td>
+        <td>Adjudged Value: $140,000.00</td>
+        <td>Minimum Bid: $28,000.00</td>
+      </tr>
+      <tr class="listing-row">
+        <td>Cause No: 2024-TX-002</td>
+        <td>Precinct 3 Constable</td>
+        <td>CAD: 010-100-001-0020</td>
+        <td>Dallas County vs. Mary Higgins (Residence Homestead)</td>
+        <td>200 Oak St, Dallas, TX 75202</td>
+        <td>Adjudged Value: $210,000.00</td>
+        <td>Minimum Bid: $35,000.00</td>
+      </tr>
+    </div>
+  `;
+
+  const listings = parseTexasTaxSaleHtml(docketHtml, 'dallas', { saleDate: '2026-11-03' });
+  assert.equal(listings.length, 2);
+
+  assert.equal(listings[0].county, 'Dallas');
+  assert.equal(listings[0].openingBid, 28000);
+  assert.equal(listings[0].sourceFacts.statutoryRedemptionDays, 180);
+
+  assert.equal(listings[1].county, 'Dallas');
+  assert.equal(listings[1].openingBid, 35000);
+  assert.equal(listings[1].sourceFacts.isHomestead, true);
+  assert.equal(listings[1].sourceFacts.statutoryRedemptionDays, 730); // 2 years for homestead
+});
+

@@ -861,7 +861,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Dallas County TX — Tax Sale Properties (county, TX). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.dallascounty.org/departments/pubworks/property-division.php",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Dallas County TX — Tax Sale Properties for delinquent tax property records and scheduled auctions.",
@@ -889,7 +889,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Bexar County TX (San Antonio) — Resale Properties List (county, TX). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.bexar.org/DocumentCenter/View/41852/Bexar-County-Resale-Properties-Distribution-List?bidId=",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Bexar County TX (San Antonio) — Resale Properties List for delinquent tax property records and scheduled auctions.",
@@ -917,7 +917,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Tarrant County TX (Fort Worth) — Delinquent Tax Sales (county, TX). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.tarrantcountytx.gov/en/constables/constable-3/delinquent-tax-sales.html",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Tarrant County TX (Fort Worth) — Delinquent Tax Sales for delinquent tax property records and scheduled auctions.",
@@ -945,7 +945,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Travis County TX (Austin) — Tax Sale (county, TX). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.traviscountytx.gov/departments/constable/precinct-3/tax-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Travis County TX (Austin) — Tax Sale for delinquent tax property records and scheduled auctions.",

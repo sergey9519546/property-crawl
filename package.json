@@ -71,6 +71,7 @@
     "sources:notices": "node scripts/collect-federal-notices.js",
     "sources:public-records": "node scripts/collect-public-records.js",
     "sources:setup": "node scripts/setup-source-operator.js",
+    "sources:tax-sales": "node scripts/collect-tax-sales.js",
     "sources:taxonomy": "node scripts/sync-source-taxonomy.js",
     "start": "next start -p 3001",
     "start:api": "node --env-file-if-exists=.env.local server/server.js",

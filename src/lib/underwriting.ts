@@ -742,7 +742,11 @@ export function computeStatutoryFeePreset(params: {
     sheriffPoundage = 0;
     transferTax = 0;
     defaultDepositPct = 0.10;
-    citations.push("Texas Const. art. VIII § 29: $0 state real estate transfer tax.");
+    citations.push(
+      "Texas Const. art. VIII § 29: $0 state real estate transfer tax.",
+      "Tex. Local Gov't Code § 118.011: County clerk recording fee ($34 typical baseline).",
+      "Tex. Tax Code § 34.015: Purchaser tax certificate required before deed execution."
+    );
   } else if (st === "CA") {
     scheduleLabel = "California Non-Judicial Trustee Schedule (Cal. Civ. Code § 2924h & § 2924m; Rev. & Tax Code § 11911)";
     sheriffPoundage = Math.min(Math.round(price * 0.01), 1500);
@@ -880,6 +884,10 @@ export const DEFAULT_NATIONAL_TAX_RATE = 0.011;
 export function computeStatutoryDeadlinesAndCarry(params: {
   saleDate?: string | null;
   state?: string | null;
+  source?: string | null;
+  distressType?: string | null;
+  isTaxSale?: boolean;
+  isHomestead?: boolean;
   purchasePrice?: number | string | null;
   redemptionDays?: number | null;
   hasIrsLien?: boolean;
@@ -926,10 +934,33 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   } else if (st === "NV") {
     objectionOrConfirmationDays = 0;
     objectionLabel = "NV non-judicial deed of trust trustee sale (NRS 107.080; 0-day post-sale redemption)";
+  } else if (st === "TX") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      objectionOrConfirmationDays = 20;
+      objectionLabel = "TX 20-day constable deed processing & confirmation period (Tex. Tax Code § 34.01)";
+    } else {
+      objectionOrConfirmationDays = 0;
+      objectionLabel = "TX non-judicial deed of trust sale (Tex. Prop. Code § 51.002; title passes upon deed delivery)";
+    }
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
-  const stateRedemptionDays = Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
+  let stateRedemptionDays = Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0));
+  if (stateRedemptionDays === 0 && st === "TX") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = params.isHomestead ? 730 : 180;
+    }
+  }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
   const annualCostOfCapitalPct = nonNegativeNumber(params.annualCostOfCapitalPct) ?? 10;
   const price = positiveNumber(params.purchasePrice);

@@ -181,3 +181,51 @@ test('deposit crediting never produces negative settlement obligation', () => {
   assert.ok(overCredited.totalAcquisitionCost < 90000);
   assert.equal(overCredited.netCashDueAtSettlement, 0, 'Net cash due must clamp to zero');
 });
+
+test('evaluates Texas tax sale statutory deadlines: 180-day non-homestead and 730-day homestead', () => {
+  const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset } = require('../src/lib/underwriting.ts');
+
+  // 1. Non-homestead tax sale
+  const investorTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'TX',
+    distressType: 'tax_sale',
+    isHomestead: false,
+    purchasePrice: 100000,
+  });
+  assert.equal(investorTaxSale.stateRedemptionDays, 180);
+  assert.equal(investorTaxSale.objectionOrConfirmationDays, 20);
+  assert.equal(investorTaxSale.effectiveLockupDays, 180);
+  assert.match(investorTaxSale.objectionLabel, /TX 20-day constable deed processing/);
+
+  // 2. Homestead tax sale (2-year statutory right of redemption)
+  const homesteadTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'TX',
+    distressType: 'tax_sale',
+    isHomestead: true,
+    purchasePrice: 100000,
+  });
+  assert.equal(homesteadTaxSale.stateRedemptionDays, 730);
+  assert.equal(homesteadTaxSale.objectionOrConfirmationDays, 20);
+  assert.equal(homesteadTaxSale.effectiveLockupDays, 730);
+
+  // 3. Deed of trust private mortgage sale (0-day post-sale redemption)
+  const trusteeSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'TX',
+    distressType: 'foreclosure_auction',
+    purchasePrice: 100000,
+  });
+  assert.equal(trusteeSale.stateRedemptionDays, 0);
+  assert.equal(trusteeSale.objectionOrConfirmationDays, 0);
+  assert.equal(trusteeSale.effectiveLockupDays, 0);
+
+  // 4. Texas fee preset citations
+  const preset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'TX' });
+  assert.ok(preset.supported);
+  assert.equal(preset.transferTax, 0);
+  assert.equal(preset.sheriffPoundage, 0);
+  assert.ok(preset.citations.some(c => c.includes('Tex. Tax Code § 34.015')));
+  assert.ok(preset.citations.some(c => c.includes("Tex. Local Gov't Code § 118.011")));
+});

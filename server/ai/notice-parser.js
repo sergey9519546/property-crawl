@@ -128,7 +128,7 @@ function deterministicParse(rawNotice = '') {
   // Extract Sale Date: e.g. "Sale Date: October 14, 2026" or "2026-10-14"
   const dateMatch = clean.match(/(?:sale\s+date|auction\s+date|to\s+be\s+sold\s+on)\s*(?:is|:)?\s*([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{4}-\d{2}-\d{2})/i);
   // Extract Labeled APN / Parcel ID: e.g. "APN: 123-45-678" or "Parcel ID: 010-234567"
-  const apnMatch = clean.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-\s.][0-9A-Za-z]{2,6}(?:[-\s.][0-9A-Za-z]{1,8})+|\d{8,14})\b/i);
+  const apnMatch = clean.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-.](?:[0-9A-Za-z]{1,8}[-.])*[0-9A-Za-z]{1,8}|[0-9]{2,5}\s+(?:\d{2,6}\s+)*\d{1,8}|\d{8,14})\b/i);
   // Extract Deposit Terms: e.g. "10% deposit required at sale" or "Deposit: $5,000 in certified funds"
   const depositMatch = clean.match(/(?:deposit\s*(?:terms|required)?[:\s]*)?(\d{1,2}\s?%|\btwenty\s+percent\b|\bten\s+percent\b|\$[0-9,]+)[^.]{0,80}?(?:deposit|down\s*payment|certified\s+funds)/i);
 
