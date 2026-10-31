@@ -1758,115 +1758,252 @@ export function classifyInvestmentStrategies(params: {
 }
 
 
+export type RedemptionRegime =
+  | "redeemable_deed_flat_penalty"
+  | "redeemable_deed_or_lien_interest"
+  | "post_redemption_deed";
+
+export function getTaxInstrumentBadge(state?: string | null, regime?: RedemptionRegime | null): string {
+  const st = (state || "").trim().toUpperCase();
+  if (["GA", "TX", "TN"].includes(st)) return "Redeemable Tax Deed";
+  if (["AZ", "MD", "SC", "IN"].includes(st)) return "Tax Lien Certificate";
+  if (["FL", "MI", "WA"].includes(st)) return "Post-Redemption Fee-Simple Deed";
+  if (regime === "post_redemption_deed") return "Post-Redemption Fee-Simple Deed";
+  if (regime === "redeemable_deed_flat_penalty") return "Redeemable Tax Deed";
+  return "Tax Lien Certificate";
+}
+
 export interface StatutoryRedemptionYield {
   purchasePrice: number;
   state: string;
   redemptionDays: number;
   statutoryRatePct: number;
+  regime: RedemptionRegime;
   yieldType: "penalty" | "interest";
+  isFlatPenalty: boolean;
+  isAnnualInterest: boolean;
+  effectiveYieldPct: number;
   grossProceeds: number;
   netReturn: number;
+  netStatutoryReturn: number;
   annualizedIrrPct: number;
   statutoryCitation: string;
+  instrumentBadge: string;
 }
 
 /**
  * Calculates statutory tax sale redemption yield for investors holding tax deeds/certificates
  * during the statutory redemption period.
+ *
+ * Classifies statutory redemption into three distinct statutory regimes:
+ *  A. redeemable_deed_flat_penalty (GA, TX, SC)
+ *  B. redeemable_deed_or_lien_interest (TN, AZ, MD, IN)
+ *  C. post_redemption_deed (FL, MI, WA - 0 post-sale redemption days)
  */
 export function computeRedemptionYield(params: {
   purchasePrice: number | string | null;
   state?: string | null;
   redemptionDays?: number | null;
   isTaxSale?: boolean | null;
+  isHomestead?: boolean | null;
 }): StatutoryRedemptionYield | null {
   const price = positiveNumber(params.purchasePrice);
   if (price === null) return null;
   const st = (params.state || "").trim().toUpperCase();
 
+  const callerPassedDays = params.redemptionDays !== undefined && params.redemptionDays !== null;
+  const passedDays = callerPassedDays ? Math.max(0, Math.round(nonNegativeNumber(params.redemptionDays) ?? 0)) : null;
+
+  let days = 365;
   let statutoryRatePct = 0;
+  let regime: RedemptionRegime = "redeemable_deed_or_lien_interest";
   let yieldType: "penalty" | "interest" = "interest";
+  let isFlatPenalty = false;
+  let isAnnualInterest = false;
   let statutoryCitation = "Generic statutory interest baseline";
-  let days = Math.max(30, Math.round(nonNegativeNumber(params.redemptionDays) ?? 365));
+  let effectiveYieldPct = 0;
 
   if (st === "GA") {
-    statutoryRatePct = 20; // 20% flat penalty for Year 1
+    regime = "redeemable_deed_flat_penalty";
     yieldType = "penalty";
-    statutoryCitation = "O.C.G.A. § 48-4-42: 20% statutory penalty on tax deed redemption in year one.";
-    days = 365;
+    isFlatPenalty = true;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 365;
+    statutoryRatePct = days > 365 ? 40 : 20;
+    effectiveYieldPct = statutoryRatePct;
+    statutoryCitation = "O.C.G.A. § 48-4-42: " + (days > 365 ? "40% statutory penalty in year two" : "20% statutory penalty in year one") + " on tax deed redemption.";
   } else if (st === "TX") {
-    statutoryRatePct = 25; // 25% flat penalty for Year 1
+    regime = "redeemable_deed_flat_penalty";
     yieldType = "penalty";
-    statutoryCitation = "Tex. Tax Code § 34.21: 25% statutory redemption penalty in year one (50% in year two).";
-    days = 180;
-  } else if (st === "TN") {
-    statutoryRatePct = 12; // 12% per annum
-    yieldType = "interest";
-    statutoryCitation = "T.C.A. § 67-5-2701: 12% per annum statutory interest on tax sale redemption.";
-    days = 365;
-  } else if (st === "FL") {
-    statutoryRatePct = 18; // 18% statutory interest rate floor
-    yieldType = "interest";
-    statutoryCitation = "Fla. Stat. § 197.542: 18% statutory interest rate floor on tax deed redemption.";
-    days = 365;
-  } else if (st === "MD") {
-    statutoryRatePct = 12; // 12% to 20% statutory yield
-    yieldType = "interest";
-    statutoryCitation = "Md. Code Tax-Prop. § 14-827: 12% statutory annual interest rate on tax certificate redemption.";
-    days = 180;
-  } else if (st === "IL") {
-    statutoryRatePct = 18; // 18% penalty every 6 months
-    yieldType = "penalty";
-    statutoryCitation = "35 ILCS 200/21-355: 18% statutory penalty per 6-month period on scavenger/tax sales.";
-    days = 180;
-  } else if (st === "MI") {
-    statutoryRatePct = 50; // 50% penalty on tax forfeiture
-    yieldType = "penalty";
-    statutoryCitation = "MCL § 211.78g: 50% statutory penalty on tax-reverted property redemption.";
-    days = 180;
+    isFlatPenalty = true;
+    isAnnualInterest = false;
+    const isHomestead = Boolean(params.isHomestead || (passedDays !== null && passedDays === 730));
+    if (passedDays !== null) {
+      days = passedDays;
+    } else if (isHomestead) {
+      days = 730;
+    } else {
+      days = 180;
+    }
+    if (isHomestead) {
+      statutoryRatePct = days > 365 ? 50 : 25;
+      statutoryCitation = "Tex. Tax Code § 34.21(a): " + (days > 365 ? "50% statutory penalty in year two (days 366-730)" : "25% statutory penalty in year one") + " on residence homestead / agricultural land tax deed redemption.";
+    } else {
+      statutoryRatePct = 25;
+      statutoryCitation = "Tex. Tax Code § 34.21(e): 25% flat statutory redemption penalty (180-day redemption period) on non-homestead tax deed redemption.";
+    }
+    effectiveYieldPct = statutoryRatePct;
   } else if (st === "SC") {
-    statutoryRatePct = 12; // 3% to 12% tiered interest
-    yieldType = "interest";
-    statutoryCitation = "S.C. Code Ann. § 12-51-90: 12% statutory annual interest on tax sale redemption.";
-    days = 365;
-  } else if (st === "IN") {
-    statutoryRatePct = 15; // 10% first 6 months, 15% thereafter
+    regime = "redeemable_deed_flat_penalty";
     yieldType = "penalty";
-    statutoryCitation = "Ind. Code § 6-1.1-25-2: 10% penalty within 6 months, 15% thereafter on tax certificate redemption.";
-    days = 365;
-  } else if (st === "MO") {
-    statutoryRatePct = 10; // 10% per annum
+    isFlatPenalty = true;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 365;
+    if (days <= 90) {
+      statutoryRatePct = 3;
+    } else if (days <= 180) {
+      statutoryRatePct = 6;
+    } else if (days <= 270) {
+      statutoryRatePct = 9;
+    } else {
+      statutoryRatePct = 12;
+    }
+    effectiveYieldPct = statutoryRatePct;
+    const tierLabel = days <= 90 ? "3% Q1" : days <= 180 ? "6% Q2" : days <= 270 ? "9% Q3" : "12% Q4";
+    statutoryCitation = "S.C. Code Ann. § 12-51-90: " + statutoryRatePct + "% tiered statutory penalty (" + tierLabel + ") on tax sale redemption, capped at bid amount.";
+  } else if (st === "TN") {
+    regime = "redeemable_deed_or_lien_interest";
     yieldType = "interest";
-    statutoryCitation = "Mo. Rev. Stat. § 140.340: 10% per annum statutory interest on tax sale redemption.";
-    days = 365;
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 365;
+    statutoryRatePct = 12;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
+    statutoryCitation = "T.C.A. § 67-5-2701: 12% per annum simple interest on tax sale redemption (accrues pro-rata).";
   } else if (st === "AZ") {
-    statutoryRatePct = 16; // 16% per annum
+    regime = "redeemable_deed_or_lien_interest";
     yieldType = "interest";
-    statutoryCitation = "A.R.S. § 42-18153: 16% per annum statutory interest rate on tax certificate redemption.";
-    days = 1095;
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 1095;
+    statutoryRatePct = 16;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
+    statutoryCitation = "A.R.S. § 42-18153: Up to 16% per annum simple interest bid-down rate on tax certificate redemption.";
+  } else if (st === "MD") {
+    regime = "redeemable_deed_or_lien_interest";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 180;
+    statutoryRatePct = 12;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
+    statutoryCitation = "Md. Code Tax-Prop. § 14-820: 12%–20% county certificate rate on tax certificate redemption (12% baseline).";
+  } else if (st === "IN") {
+    regime = "redeemable_deed_or_lien_interest";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 365;
+    statutoryRatePct = days <= 180 ? 10 : 15;
+    effectiveYieldPct = statutoryRatePct;
+    statutoryCitation = "IC 6-1.1-25-2: 10% within 6 months, 15% thereafter on minimum bid plus 5% per annum on surplus.";
+  } else if (st === "FL") {
+    regime = "post_redemption_deed";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 0;
+    statutoryRatePct = 0;
+    effectiveYieldPct = 0;
+    statutoryCitation = "Fla. Stat. § 197.542: Tax deed auction redemption expires upon clerk receiving deed payment (0-day post-sale redemption, immediate fee-simple title; 18% statutory cap under § 197.432 applies to certificate holders only).";
+  } else if (st === "MI") {
+    regime = "post_redemption_deed";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 0;
+    statutoryRatePct = 0;
+    effectiveYieldPct = 0;
+    statutoryCitation = "MCL § 211.78m: County treasurer tax foreclosure auctions (redemption expires March 31 prior to auction; 0-day post-sale redemption, immediate deed).";
+  } else if (st === "WA") {
+    regime = "post_redemption_deed";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 0;
+    statutoryRatePct = 0;
+    effectiveYieldPct = 0;
+    statutoryCitation = "RCW 84.64.080: County tax foreclosure deed sale (0-day post-sale redemption; immediate deed execution, 30-day appeal window under RCW 84.64.120).";
+  } else if (st === "IL") {
+    regime = "redeemable_deed_flat_penalty";
+    yieldType = "penalty";
+    isFlatPenalty = true;
+    isAnnualInterest = false;
+    days = passedDays !== null ? passedDays : 180;
+    statutoryRatePct = 18;
+    effectiveYieldPct = 18;
+    statutoryCitation = "35 ILCS 200/21-355: 18% statutory penalty per 6-month period on scavenger/tax sales.";
+  } else if (st === "MO") {
+    regime = "redeemable_deed_or_lien_interest";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 365;
+    statutoryRatePct = 10;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
+    statutoryCitation = "Mo. Rev. Stat. § 140.340: 10% per annum statutory interest on tax sale redemption.";
   } else {
-    statutoryRatePct = 8;
+    regime = "redeemable_deed_or_lien_interest";
     yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : 365;
+    statutoryRatePct = 8;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
     statutoryCitation = "Generic 8% statutory interest rate baseline.";
   }
 
-  const grossMultiplier = yieldType === "penalty"
-    ? (1 + statutoryRatePct / 100)
-    : (1 + (statutoryRatePct / 100) * (days / 365));
+  let grossProceeds = price;
+  let netReturn = 0;
+  let annualizedIrrPct = 0;
 
-  const grossProceeds = Math.round(price * grossMultiplier);
-  const netReturn = grossProceeds - price;
-  const annualizedIrrPct = Math.round(((netReturn / price) * (365 / days)) * 1000) / 10;
+  if (regime === "post_redemption_deed") {
+    grossProceeds = price;
+    netReturn = 0;
+    annualizedIrrPct = 0;
+  } else if (isFlatPenalty) {
+    grossProceeds = Math.round(price * (1 + statutoryRatePct / 100));
+    netReturn = grossProceeds - price;
+    annualizedIrrPct = days > 0 ? Math.round(((netReturn / price) * (365 / days)) * 1000) / 10 : 0;
+  } else if (st === "IN") {
+    grossProceeds = Math.round(price * (1 + statutoryRatePct / 100));
+    netReturn = grossProceeds - price;
+    annualizedIrrPct = days > 0 ? Math.round(((netReturn / price) * (365 / days)) * 1000) / 10 : 0;
+  } else {
+    const grossMultiplier = 1 + (statutoryRatePct / 100) * (days / 365);
+    grossProceeds = Math.round(price * grossMultiplier);
+    netReturn = grossProceeds - price;
+    annualizedIrrPct = days > 0 ? Math.round(((netReturn / price) * (365 / days)) * 1000) / 10 : 0;
+  }
+
+  const netStatutoryReturn = netReturn;
+  const instrumentBadge = getTaxInstrumentBadge(st, regime);
 
   return {
     purchasePrice: price,
     state: st,
     redemptionDays: days,
     statutoryRatePct,
+    regime,
     yieldType,
+    isFlatPenalty,
+    isAnnualInterest,
+    effectiveYieldPct,
     grossProceeds,
     netReturn,
+    netStatutoryReturn,
     annualizedIrrPct,
     statutoryCitation,
+    instrumentBadge,
   };
 }

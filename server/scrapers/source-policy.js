@@ -46,7 +46,26 @@ const SOURCE_HOSTS = Object.freeze({
   irs: ['irsauctions.gov'],
   landbank: ['landbanksearch.com'],
   marshals: ['usmarshals.gov', 'reallook.com'],
-  sheriff: ['sheriffsaleauction.ohio.gov', 'realforeclose.com', 'realtaxdeed.com', 'publicnoticesohio.com'],
+  sheriff: [
+    'sheriffsaleauction.ohio.gov',
+    'realforeclose.com',
+    'realtaxdeed.com',
+    'publicnoticesohio.com',
+    'hctax.net',
+    'dallascounty.org',
+    'tarrantcountytx.gov',
+    'bexar.org',
+    'traviscountytx.gov',
+    'collincountytx.gov',
+    'dentoncounty.gov',
+    'epcounty.com',
+    'fortbendcountytx.gov',
+    'mctx.org',
+    'wilco.org',
+    'lgbs.com',
+    'mvbalaw.com',
+    'pbfcm.com',
+  ],
   servicelink: ['www.servicelinkauction.com'],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
   trustee: ['recorder.clarkcountynv.gov', 'recorderecomm.clarkcountynv.gov', 'recorder.washoecounty.gov', 'icris.washoecounty.us'],
@@ -196,7 +215,7 @@ function hasSourceRecordShape(source, url) {
       return (/^\/usms-inventory\/[^/]+$/.test(path) && hasStablePathToken(url))
         || (/^\/what-we-do\/asset-forfeiture\/real-property\/.+/.test(path) && hasStablePathToken(url));
     case 'sheriff':
-      return path !== '/' && path !== '/search' && (hasRecordQuery(url) || hasStablePathToken(url));
+      return path !== '/' && path !== '/search' && (hasRecordQuery(url) || hasStablePathToken(url) || /tax[-_]?sales?|resale/i.test(path) || url.pathname.split('/').some((seg) => /^\d{3,}$/.test(seg)));
     case 'servicelink':
       return /^\/property-details\/[a-z0-9][a-z0-9-]{7,}$/i.test(path)
         && !url.search

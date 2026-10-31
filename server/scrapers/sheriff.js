@@ -15,6 +15,13 @@ const {
   decodeRealAuctionMacros,
   parseRealAuctionDocketHtml,
 } = require('./adapters/realauction');
+const { standardizeListingRecord } = require('./normalization');
+const {
+  TEXAS_TAX_SALE_COUNTIES,
+  parseTexasTaxSaleHtml,
+  parseTexasTaxSaleCard,
+  getNextTexasTaxSaleDate,
+} = require('./adapters/texas-tax-sale');
 
 const DEFAULT_FL_COUNTIES = [
   ...REALAUCTION_FLORIDA_COUNTIES.map((c) => ({
@@ -71,6 +78,69 @@ const DEFAULT_OH_COUNTIES = [
   { name: 'Licking', domain: 'licking.sheriffsaleauction.ohio.gov', state: 'OH' },
 ];
 
+const DEFAULT_TX_COUNTIES = Object.freeze(
+  Object.entries(TEXAS_TAX_SALE_COUNTIES).map(([key, info]) => {
+    let domain = '';
+    try {
+      domain = new URL(info.taxOfficeUrl).hostname;
+    } catch (_) {
+      domain = `${key}.tx.gov`;
+    }
+    return Object.freeze({
+      key,
+      name: info.county,
+      domain,
+      state: 'TX',
+      url: info.taxOfficeUrl,
+      precincts: info.precincts,
+      defaultCity: info.defaultCity,
+    });
+  })
+);
+
+function normalizeCountyInput(county) {
+  if (typeof county === 'string') {
+    const key = county.trim().toLowerCase().replace(/\s+/g, '_');
+    if (TEXAS_TAX_SALE_COUNTIES[key]) {
+      const info = TEXAS_TAX_SALE_COUNTIES[key];
+      let domain = '';
+      try { domain = new URL(info.taxOfficeUrl).hostname; } catch (_) {}
+      return {
+        key,
+        name: info.county,
+        state: 'TX',
+        domain,
+        url: info.taxOfficeUrl,
+        precincts: info.precincts,
+        defaultCity: info.defaultCity,
+      };
+    }
+    return { name: county.trim(), state: 'OH' };
+  }
+  if (county && typeof county === 'object') {
+    const key = (county.key || county.name || '').toLowerCase().replace(/\s+/g, '_');
+    if (TEXAS_TAX_SALE_COUNTIES[key]) {
+      const info = TEXAS_TAX_SALE_COUNTIES[key];
+      let domain = county.domain;
+      if (!domain) {
+        try { domain = new URL(info.taxOfficeUrl).hostname; } catch (_) {}
+      }
+      return {
+        key,
+        name: county.name || info.county,
+        state: county.state || 'TX',
+        domain,
+        url: county.url || info.taxOfficeUrl,
+        precincts: county.precincts || info.precincts,
+        defaultCity: county.defaultCity || info.defaultCity,
+        ...county,
+      };
+    }
+    return county;
+  }
+  return { name: 'Unknown', state: 'OH' };
+}
+
 function parseExtraCounties(raw) {
   // Format: Name:domain:ST,Name:domain:ST
   return String(raw || '').split(',').map(entry => {
@@ -90,10 +160,14 @@ class SheriffSaleScraper extends BaseScraper {
     const flCounties = (options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1')
       ? DEFAULT_FL_COUNTIES
       : (process.env.SHERIFF_INCLUDE_FL === '0' ? [] : TOP_FL_COUNTIES);
+    const txCounties = (options.includeTexas || process.env.SHERIFF_INCLUDE_TX === '1')
+      ? DEFAULT_TX_COUNTIES
+      : (process.env.SHERIFF_INCLUDE_TX === '0' ? [] : DEFAULT_TX_COUNTIES);
     this.counties = options.counties
       || [
         ...DEFAULT_OH_COUNTIES,
         ...flCounties,
+        ...txCounties,
         ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES),
       ];
     this.timeoutMs = 30000;
@@ -119,8 +193,7 @@ class SheriffSaleScraper extends BaseScraper {
       const countyResults = await mapWithConcurrency(this.counties, concurrency, async (c) => {
         const unit = `${c.name},${c.state}`;
         try {
-          const countyListings = await this.fetchCountyRealauction(c);
-          recordUnitSuccess(report, unit, countyListings.length);
+          const countyListings = await this.scrapeCounty(c, report);
           return countyListings;
         } catch (err) {
           recordUnitFailure(report, unit, err, 'county');
@@ -136,6 +209,10 @@ class SheriffSaleScraper extends BaseScraper {
       let schemaRejected = 0;
       for (const l of allListings) {
         if (!this.passesFilter(l)) continue;
+        if (l._alreadyStandardized) {
+          standardized.push(l);
+          continue;
+        }
         try {
           standardized.push(this.standardizeListing(l));
         } catch (err) {
@@ -158,6 +235,112 @@ class SheriffSaleScraper extends BaseScraper {
       console.log(`[${this.name}] Standardized ${standardized.length} Sheriff Sale listings (${report.outcome})`);
       return standardized;
     });
+  }
+
+  isTexasCounty(county) {
+    if (!county) return false;
+    const c = typeof county === 'string' ? normalizeCountyInput(county) : county;
+    const state = String(c.state || '').toUpperCase();
+    if (state === 'TX') return true;
+    const domain = String(c.domain || c.url || '').toLowerCase();
+    const txDomains = [
+      'hctax.net', 'dallascounty.org', 'tarrantcountytx.gov', 'bexar.org',
+      'traviscountytx.gov', 'collincountytx.gov', 'dentoncounty.gov',
+      'epcounty.com', 'fortbendcountytx.gov', 'mctx.org', 'wilco.org',
+      'lgbs.com', 'mvbalaw.com', 'pbfcm.com',
+    ];
+    if (txDomains.some((d) => domain.includes(d))) return true;
+    const key = String(c.key || c.name || '').toLowerCase().replace(/\s+/g, '_');
+    if (TEXAS_TAX_SALE_COUNTIES[key]) return true;
+    return String(c.platform || '').includes('texas');
+  }
+
+  async scrapeCounty(county, runReport = null, options = {}) {
+    const c = typeof county === 'string' ? normalizeCountyInput(county) : county;
+    const isTx = this.isTexasCounty(c);
+    if (isTx) {
+      return this.fetchCountyTexasTaxSale(c, runReport, options);
+    }
+    const listings = await this.fetchCountyRealauction(c);
+    if (runReport) {
+      const unit = `${c.name},${c.state}`;
+      recordUnitSuccess(runReport, unit, listings.length);
+    }
+    return listings;
+  }
+
+  async fetchCountyTexasTaxSale(county, runReport = null, options = {}) {
+    const c = typeof county === 'string' ? normalizeCountyInput(county) : county;
+    const countyKey = (c.key || c.name || 'harris').toLowerCase().replace(/\s+/g, '_');
+    const countyInfo = TEXAS_TAX_SALE_COUNTIES[countyKey] || TEXAS_TAX_SALE_COUNTIES.harris;
+    const targetUrl = c.url
+      || (c.domain ? (c.domain.startsWith('http') ? c.domain : `https://${c.domain}`) : countyInfo?.taxOfficeUrl);
+
+    let html = options.html || c.html;
+    if (!html) {
+      const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+      html = await this.requestText(targetUrl, {
+        headers: {
+          'User-Agent': ua,
+          Accept: 'text/html,application/xhtml+xml',
+        },
+      });
+    }
+
+    if (Array.isArray(this._htmlSamples) && html) {
+      this._htmlSamples.push(html);
+    }
+
+    const parseOptions = {
+      ...options,
+      sourceUrl: targetUrl,
+      saleDate: options.saleDate || c.saleDate,
+    };
+
+    const rawListings = parseTexasTaxSaleHtml(html, countyKey, parseOptions);
+
+    const standardizedListings = [];
+    for (const raw of rawListings) {
+      if (!this.passesFilter(raw)) continue;
+      try {
+        const listing = standardizeListingRecord(raw, { sourceKey: this.sourceKey });
+        if (this._publisherRecords && raw && typeof raw === 'object') {
+          this._publisherRecords.set(listing, raw);
+        }
+        Object.defineProperty(listing, '_alreadyStandardized', {
+          value: true,
+          enumerable: false,
+          writable: true,
+          configurable: true,
+        });
+        standardizedListings.push(listing);
+      } catch (err) {
+        if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+          console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (runReport) {
+      const unit = `${c.name || countyInfo.county},${c.state || 'TX'}`;
+      recordUnitSuccess(runReport, unit, standardizedListings.length);
+    }
+
+    return standardizedListings;
+  }
+
+  parseTexasTaxSaleHtml(html, countyKey, options = {}) {
+    return parseTexasTaxSaleHtml(html, countyKey, options);
+  }
+
+  parseTexasTaxSaleCard(html, countyKey, options = {}) {
+    return parseTexasTaxSaleCard(html, countyKey, options);
+  }
+
+  getNextTexasTaxSaleDate(fromDate) {
+    return getNextTexasTaxSaleDate(fromDate);
   }
 
   async fetchCountyRealauction(county) {
@@ -599,4 +782,10 @@ module.exports = new SheriffSaleScraper();
 module.exports.SheriffSaleScraper = SheriffSaleScraper;
 module.exports.DEFAULT_OH_COUNTIES = DEFAULT_OH_COUNTIES;
 module.exports.DEFAULT_FL_COUNTIES = DEFAULT_FL_COUNTIES;
+module.exports.DEFAULT_TX_COUNTIES = DEFAULT_TX_COUNTIES;
+module.exports.TEXAS_TAX_SALE_COUNTIES = TEXAS_TAX_SALE_COUNTIES;
+module.exports.parseTexasTaxSaleHtml = parseTexasTaxSaleHtml;
+module.exports.parseTexasTaxSaleCard = parseTexasTaxSaleCard;
+module.exports.getNextTexasTaxSaleDate = getNextTexasTaxSaleDate;
+module.exports.normalizeCountyInput = normalizeCountyInput;
 module.exports.parseExtraCounties = parseExtraCounties;

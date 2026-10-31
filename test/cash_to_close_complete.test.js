@@ -472,3 +472,196 @@ test('computes statutory tax sale redemption yield across major statutory states
   assert.equal(azYield.redemptionDays, 1095);
   assert.ok(azYield.statutoryCitation.includes('A.R.S. § 42-18153'));
 });
+test('verifies Texas tax deed redemption regimes: homestead (730d, 50% Year 2 / 25% Year 1) vs non-homestead (180d, 25%)', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // 1. Non-homestead default: 180 days, 25% flat penalty
+  const nonHomestead = computeRedemptionYield({ purchasePrice: 100000, state: 'TX' });
+  assert.ok(nonHomestead);
+  assert.equal(nonHomestead.regime, 'redeemable_deed_flat_penalty');
+  assert.equal(nonHomestead.redemptionDays, 180);
+  assert.equal(nonHomestead.statutoryRatePct, 25);
+  assert.equal(nonHomestead.isFlatPenalty, true);
+  assert.equal(nonHomestead.isAnnualInterest, false);
+  assert.equal(nonHomestead.grossProceeds, 125000);
+  assert.equal(nonHomestead.netStatutoryReturn, 25000);
+  assert.equal(nonHomestead.instrumentBadge, 'Redeemable Tax Deed');
+  assert.ok(nonHomestead.statutoryCitation.includes('Tex. Tax Code § 34.21(e)'));
+
+  // 2. Homestead default (no days passed): 730 days (2 years), 50% penalty in Year 2
+  const homesteadDefault = computeRedemptionYield({ purchasePrice: 100000, state: 'TX', isHomestead: true });
+  assert.ok(homesteadDefault);
+  assert.equal(homesteadDefault.regime, 'redeemable_deed_flat_penalty');
+  assert.equal(homesteadDefault.redemptionDays, 730);
+  assert.equal(homesteadDefault.statutoryRatePct, 50);
+  assert.equal(homesteadDefault.grossProceeds, 150000);
+  assert.equal(homesteadDefault.netStatutoryReturn, 50000);
+  assert.equal(homesteadDefault.instrumentBadge, 'Redeemable Tax Deed');
+  assert.ok(homesteadDefault.statutoryCitation.includes('Tex. Tax Code § 34.21(a)'));
+
+  // 3. Homestead redeemed in Year 1 (365 days): 25% penalty
+  const homesteadYr1 = computeRedemptionYield({ purchasePrice: 100000, state: 'TX', isHomestead: true, redemptionDays: 365 });
+  assert.ok(homesteadYr1);
+  assert.equal(homesteadYr1.redemptionDays, 365);
+  assert.equal(homesteadYr1.statutoryRatePct, 25);
+  assert.equal(homesteadYr1.grossProceeds, 125000);
+  assert.equal(homesteadYr1.netStatutoryReturn, 25000);
+
+  // 4. Passing redemptionDays = 730 implies homestead regime
+  const days730Yield = computeRedemptionYield({ purchasePrice: 100000, state: 'TX', redemptionDays: 730 });
+  assert.ok(days730Yield);
+  assert.equal(days730Yield.redemptionDays, 730);
+  assert.equal(days730Yield.statutoryRatePct, 50);
+  assert.equal(days730Yield.grossProceeds, 150000);
+});
+
+test('verifies Georgia tax deed redemption: 365d 20% flat penalty in Year 1 vs 40% Year 2', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Year 1 (365 days default): 20% flat penalty
+  const gaYr1 = computeRedemptionYield({ purchasePrice: 50000, state: 'GA' });
+  assert.ok(gaYr1);
+  assert.equal(gaYr1.regime, 'redeemable_deed_flat_penalty');
+  assert.equal(gaYr1.redemptionDays, 365);
+  assert.equal(gaYr1.statutoryRatePct, 20);
+  assert.equal(gaYr1.isFlatPenalty, true);
+  assert.equal(gaYr1.isAnnualInterest, false);
+  assert.equal(gaYr1.grossProceeds, 60000);
+  assert.equal(gaYr1.netStatutoryReturn, 10000);
+  assert.equal(gaYr1.instrumentBadge, 'Redeemable Tax Deed');
+  assert.ok(gaYr1.statutoryCitation.includes('O.C.G.A. § 48-4-42'));
+
+  // Year 2 (400 days): 40% flat penalty under O.C.G.A. § 48-4-42
+  const gaYr2 = computeRedemptionYield({ purchasePrice: 50000, state: 'GA', redemptionDays: 400 });
+  assert.ok(gaYr2);
+  assert.equal(gaYr2.redemptionDays, 400);
+  assert.equal(gaYr2.statutoryRatePct, 40);
+  assert.equal(gaYr2.grossProceeds, 70000);
+  assert.equal(gaYr2.netStatutoryReturn, 20000);
+});
+
+test('verifies Florida, Michigan, and Washington post-redemption fee-simple deeds (0-day post-sale redemption)', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Florida: Tax deed auction under Fla. Stat. § 197.542
+  const fl = computeRedemptionYield({ purchasePrice: 100000, state: 'FL' });
+  assert.ok(fl);
+  assert.equal(fl.regime, 'post_redemption_deed');
+  assert.equal(fl.redemptionDays, 0);
+  assert.equal(fl.statutoryRatePct, 0);
+  assert.equal(fl.effectiveYieldPct, 0);
+  assert.equal(fl.annualizedIrrPct, 0);
+  assert.equal(fl.grossProceeds, 100000);
+  assert.equal(fl.netStatutoryReturn, 0);
+  assert.equal(fl.instrumentBadge, 'Post-Redemption Fee-Simple Deed');
+  assert.ok(fl.statutoryCitation.includes('Fla. Stat. § 197.542'));
+  assert.ok(fl.statutoryCitation.includes('0-day post-sale redemption'));
+
+  // Michigan: MCL § 211.78m
+  const mi = computeRedemptionYield({ purchasePrice: 100000, state: 'MI' });
+  assert.ok(mi);
+  assert.equal(mi.regime, 'post_redemption_deed');
+  assert.equal(mi.redemptionDays, 0);
+  assert.equal(mi.statutoryRatePct, 0);
+  assert.equal(mi.grossProceeds, 100000);
+  assert.equal(mi.netStatutoryReturn, 0);
+  assert.equal(mi.instrumentBadge, 'Post-Redemption Fee-Simple Deed');
+  assert.ok(mi.statutoryCitation.includes('MCL § 211.78m'));
+
+  // Washington: RCW 84.64.080
+  const wa = computeRedemptionYield({ purchasePrice: 100000, state: 'WA' });
+  assert.ok(wa);
+  assert.equal(wa.regime, 'post_redemption_deed');
+  assert.equal(wa.redemptionDays, 0);
+  assert.equal(wa.statutoryRatePct, 0);
+  assert.equal(wa.grossProceeds, 100000);
+  assert.equal(wa.netStatutoryReturn, 0);
+  assert.equal(wa.instrumentBadge, 'Post-Redemption Fee-Simple Deed');
+  assert.ok(wa.statutoryCitation.includes('RCW 84.64.080'));
+});
+
+test('verifies Tennessee 12% per annum simple interest accrual under T.C.A. § 67-5-2701', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Full 365-day year: 12%
+  const tnFull = computeRedemptionYield({ purchasePrice: 80000, state: 'TN' });
+  assert.ok(tnFull);
+  assert.equal(tnFull.regime, 'redeemable_deed_or_lien_interest');
+  assert.equal(tnFull.redemptionDays, 365);
+  assert.equal(tnFull.statutoryRatePct, 12);
+  assert.equal(tnFull.effectiveYieldPct, 12);
+  assert.equal(tnFull.isAnnualInterest, true);
+  assert.equal(tnFull.isFlatPenalty, false);
+  assert.equal(tnFull.grossProceeds, 89600);
+  assert.equal(tnFull.netStatutoryReturn, 9600);
+  assert.equal(tnFull.instrumentBadge, 'Redeemable Tax Deed');
+  assert.ok(tnFull.statutoryCitation.includes('T.C.A. § 67-5-2701'));
+
+  // Half-year (180 days pro-rata): 12% * (180/365) ~= 5.92%
+  const tnHalf = computeRedemptionYield({ purchasePrice: 100000, state: 'TN', redemptionDays: 180 });
+  assert.ok(tnHalf);
+  assert.equal(tnHalf.redemptionDays, 180);
+  assert.equal(tnHalf.statutoryRatePct, 12);
+  assert.equal(tnHalf.effectiveYieldPct, 5.92);
+  assert.equal(tnHalf.grossProceeds, 105918);
+  assert.equal(tnHalf.netStatutoryReturn, 5918);
+});
+
+test('verifies South Carolina quarterly tiered redemption penalties under S.C. Code § 12-51-90', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Q1 (<= 90 days): 3%
+  const scQ1 = computeRedemptionYield({ purchasePrice: 100000, state: 'SC', redemptionDays: 60 });
+  assert.ok(scQ1);
+  assert.equal(scQ1.regime, 'redeemable_deed_flat_penalty');
+  assert.equal(scQ1.redemptionDays, 60);
+  assert.equal(scQ1.statutoryRatePct, 3);
+  assert.equal(scQ1.grossProceeds, 103000);
+  assert.equal(scQ1.netStatutoryReturn, 3000);
+  assert.equal(scQ1.instrumentBadge, 'Tax Lien Certificate');
+  assert.ok(scQ1.statutoryCitation.includes('3% Q1'));
+
+  // Q2 (91-180 days): 6%
+  const scQ2 = computeRedemptionYield({ purchasePrice: 100000, state: 'SC', redemptionDays: 150 });
+  assert.ok(scQ2);
+  assert.equal(scQ2.redemptionDays, 150);
+  assert.equal(scQ2.statutoryRatePct, 6);
+  assert.equal(scQ2.grossProceeds, 106000);
+  assert.equal(scQ2.netStatutoryReturn, 6000);
+  assert.ok(scQ2.statutoryCitation.includes('6% Q2'));
+
+  // Q3 (181-270 days): 9%
+  const scQ3 = computeRedemptionYield({ purchasePrice: 100000, state: 'SC', redemptionDays: 240 });
+  assert.ok(scQ3);
+  assert.equal(scQ3.redemptionDays, 240);
+  assert.equal(scQ3.statutoryRatePct, 9);
+  assert.equal(scQ3.grossProceeds, 109000);
+  assert.equal(scQ3.netStatutoryReturn, 9000);
+  assert.ok(scQ3.statutoryCitation.includes('9% Q3'));
+
+  // Q4 (default 365 days): 12%
+  const scQ4 = computeRedemptionYield({ purchasePrice: 100000, state: 'SC' });
+  assert.ok(scQ4);
+  assert.equal(scQ4.redemptionDays, 365);
+  assert.equal(scQ4.statutoryRatePct, 12);
+  assert.equal(scQ4.grossProceeds, 112000);
+  assert.equal(scQ4.netStatutoryReturn, 12000);
+  assert.ok(scQ4.statutoryCitation.includes('12% Q4'));
+});
+
+test('verifies parameter preservation: caller redemptionDays is never overwritten', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Caller specifies custom day counts; function must honor them
+  const gaCustom = computeRedemptionYield({ purchasePrice: 100000, state: 'GA', redemptionDays: 90 });
+  assert.equal(gaCustom.redemptionDays, 90);
+
+  const txCustom = computeRedemptionYield({ purchasePrice: 100000, state: 'TX', redemptionDays: 60 });
+  assert.equal(txCustom.redemptionDays, 60);
+
+  const tnCustom = computeRedemptionYield({ purchasePrice: 100000, state: 'TN', redemptionDays: 120 });
+  assert.equal(tnCustom.redemptionDays, 120);
+
+  const azCustom = computeRedemptionYield({ purchasePrice: 100000, state: 'AZ', redemptionDays: 365 });
+  assert.equal(azCustom.redemptionDays, 365);
+});

@@ -213,18 +213,29 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     setAiStrategy(null);
   };
   const hasIrsNoticeFlag = listing.source === "irs" || /(?:internal\s*revenue|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(`${listing.seniorLienWarning || ""} ${listing.redemptionWarning || ""}`);
+  const isTaxCandidate = Boolean(
+    listing.auctionProgram === "tax_deed" ||
+    (typeof listing.source === "string" && listing.source.toLowerCase().includes("tax")) ||
+    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax")) ||
+    (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
+  );
   const deadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
     saleDate: listing.saleDate,
     state: listing.state,
     purchasePrice: cash.totalAcquisitionCost ?? openingBid,
     redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
     hasIrsLien: hasIrsNoticeFlag,
+    isTaxSale: isTaxCandidate,
+    isHomestead: Boolean(listing.isHomestead),
   });
+  const statutoryCarry = deadlinesAndCarry;
   const reassessmentShock = computeReassessmentShock({ purchasePrice: openingBid, state: listing.state });
   const isTaxSale = Boolean(
+    listing.auctionProgram === "tax_deed" ||
     (typeof listing.source === "string" && listing.source.toLowerCase().includes("tax")) ||
-    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax"))
-
+    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax")) ||
+    statutoryCarry.stateRedemptionDays > 0 ||
+    (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
   );
   const redemptionYield = isTaxSale && openingBid !== null
     ? computeRedemptionYield({
@@ -232,6 +243,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         state: listing.state,
         redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
         isTaxSale: true,
+        isHomestead: Boolean(listing.isHomestead),
       })
     : null;
   const surplusAnalysis = typeof listing.judgment === "number" && listing.judgment > 0
@@ -387,12 +399,23 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         )}
         {redemptionYield && (
-          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink">
+          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-bold text-go">Tax Sale Redemption Yield (Statutory Investor Scenario)</span>
-              <span className="rounded-md bg-go/10 px-2 py-0.5 font-extrabold text-go">
-                +{redemptionYield.statutoryRatePct}% {redemptionYield.yieldType === "penalty" ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedIrrPct}% IRR)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-go">Tax Sale Statutory Instrument</span>
+                <span className="rounded-md bg-go/20 px-2 py-0.5 text-xs font-extrabold text-go border border-go/30">
+                  {redemptionYield.instrumentBadge}
+                </span>
+              </div>
+              {redemptionYield.regime === "post_redemption_deed" ? (
+                <span className="rounded-md bg-go/10 px-2 py-0.5 font-bold text-go">
+                  0-Day Post-Sale Redemption (Immediate Fee-Simple Title)
+                </span>
+              ) : (
+                <span className="rounded-md bg-go/10 px-2 py-0.5 font-extrabold text-go">
+                  +{redemptionYield.statutoryRatePct}% {redemptionYield.isFlatPenalty ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedIrrPct}% IRR)
+                </span>
+              )}
             </div>
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
               <div className="rounded-lg border border-line bg-card p-2">
@@ -401,7 +424,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               </div>
               <div className="rounded-lg border border-line bg-card p-2">
                 <span className="text-[10px] text-ink-3 uppercase font-semibold block">Net Statutory Return</span>
-                <span className="text-sm font-bold text-go">+{displayMoney(redemptionYield.netReturn)}</span>
+                <span className={`text-sm font-bold ${redemptionYield.netStatutoryReturn > 0 ? "text-go" : "text-ink"}`}>
+                  {redemptionYield.netStatutoryReturn > 0 ? `+${displayMoney(redemptionYield.netStatutoryReturn)}` : "$0 (Direct Title Acquisition)"}
+                </span>
               </div>
             </div>
             <p className="mt-2 text-[11px] text-ink-3 leading-relaxed">{redemptionYield.statutoryCitation}</p>

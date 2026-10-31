@@ -261,6 +261,20 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
 
   const id = `tx-tax-${countyInfo.county.toLowerCase()}-${causeNumber || apn || Math.abs(hashCode(text))}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
 
+  let resolvedSourceUrl = options.sourceUrl || countyInfo.taxOfficeUrl;
+  if (resolvedSourceUrl && (causeNumber || apn)) {
+    try {
+      const u = new URL(resolvedSourceUrl);
+      const RECORD_QUERY_KEYS = new Set(['aid', 'auctionid', 'case', 'casenumber', 'docket', 'id', 'listingid', 'p', 'parcel', 'property_id', 'propertyid', 'saleid']);
+      const hasRecord = [...u.searchParams.keys()].some((k) => RECORD_QUERY_KEYS.has(k.toLowerCase()));
+      if (!hasRecord) {
+        if (causeNumber) u.searchParams.set('case', causeNumber);
+        else if (apn) u.searchParams.set('parcel', apn);
+        resolvedSourceUrl = u.toString();
+      }
+    } catch (_) {}
+  }
+
   return {
     id,
     address: address || legalDescription || `${countyInfo.county} County Tax Foreclosure`,
@@ -273,7 +287,7 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
     source: 'sheriff',
     sourceKey: 'sheriff',
     platform: 'texas-tax-sale',
-    sourceUrl: options.sourceUrl || countyInfo.taxOfficeUrl,
+    sourceUrl: resolvedSourceUrl,
     saleDate,
     openingBid: openingBid !== null ? openingBid : null,
     // Zero-fabrication guarantees:
@@ -281,7 +295,12 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
     estLow: null,
     estHigh: null,
     arv: null,
+    assessed: assessedValue !== null ? assessedValue : null,
     assessedValue: assessedValue !== null ? assessedValue : null,
+    auctionProgram: options.auctionProgram || 'tax_deed',
+    redemptionDays: redemption.redemptionDays,
+    redemptionWarning: redemption.statutoryCitation,
+    raw: rawText.slice(0, 2000),
     sourceFacts: {
       distressType: 'tax_sale',
       causeNumber,
@@ -298,6 +317,10 @@ function parseTexasTaxSaleCard(html = '', countyKey = 'harris', options = {}) {
       bidderCertificateRequired: true, // Tex. Tax Code § 34.015
     },
     provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: `${countyInfo.county} County Tax Assessor-Collector`,
+      recordId: causeNumber || apn || id,
       source: 'sheriff',
       platform: 'texas-tax-sale',
       observedAt: new Date().toISOString(),

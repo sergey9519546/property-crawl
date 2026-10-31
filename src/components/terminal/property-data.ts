@@ -68,6 +68,8 @@ export interface PropertyListing {
   /** Publisher-observed sale mechanism. Absence means it was not captured. */
   program?: string | null;
   auctionProgram?: string | null;
+  notes?: string | null;
+  isHomestead?: boolean | null;
   /** Publisher lifecycle value; deliberately separate from auction completion. */
   lifecycle?: string | null;
   lifecycleStatus?: string | null;
