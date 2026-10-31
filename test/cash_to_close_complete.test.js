@@ -271,3 +271,116 @@ test('computes Georgia statutory underwriting deadlines and fee citations', () =
   assert.equal(gaMortgagePreset.transferTax, 100);
   assert.ok(gaMortgagePreset.citations.some(c => c.includes('O.C.G.A. § 44-14-162')));
 });
+
+test('calculates complete Tennessee cash-to-close schedule and statutory deadlines', () => {
+  // 1. Fee calculation
+  const result = calculateCompleteCashToClose({
+    winningBid: 100000,
+    state: 'TN',
+    creditedDeposit: 10000,
+  });
+  assert.equal(result.state, 'TN');
+  assert.equal(result.transferTax, 370); // $0.37 per $100 (T.C.A. § 67-4-409)
+  assert.equal(result.sheriffPoundage, 0);
+  assert.equal(result.recordingFees, 50);
+  assert.equal(result.totalAcquisitionCost, 100420);
+  assert.equal(result.netCashDueAtSettlement, 90420);
+
+  // 2. Tax sale 1-year statutory redemption
+  const tnTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'TN',
+    distressType: 'tax_sale',
+    purchasePrice: 100000,
+  });
+  assert.equal(tnTaxSale.stateRedemptionDays, 365);
+  assert.equal(tnTaxSale.objectionOrConfirmationDays, 30);
+  assert.equal(tnTaxSale.effectiveLockupDays, 365);
+  assert.match(tnTaxSale.objectionLabel, /TN 30-day chancery court decree of confirmation window/);
+
+  // 3. Deed of trust 0-day redemption
+  const tnMortgageSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'TN',
+    distressType: 'foreclosure_auction',
+    purchasePrice: 100000,
+  });
+  assert.equal(tnMortgageSale.stateRedemptionDays, 0);
+  assert.equal(tnMortgageSale.objectionOrConfirmationDays, 0);
+  assert.equal(tnMortgageSale.effectiveLockupDays, 0);
+
+  // 4. Preset citations
+  const preset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'TN', distressType: 'tax_sale' });
+  assert.ok(preset.supported);
+  assert.equal(preset.transferTax, 370);
+  assert.ok(preset.citations.some(c => c.includes('T.C.A. § 67-5-2701')));
+  assert.ok(preset.citations.some(c => c.includes('12% per annum')));
+});
+
+test('calculates complete Washington cash-to-close schedule and statutory deadlines', () => {
+  // 1. Fee calculation
+  const result = calculateCompleteCashToClose({
+    winningBid: 100000,
+    state: 'WA',
+    creditedDeposit: 10000,
+  });
+  assert.equal(result.state, 'WA');
+  assert.equal(result.transferTax, 1600); // 1.6% combined state & local REET (RCW 82.45.060)
+  assert.equal(result.sheriffPoundage, 0);
+  assert.equal(result.recordingFees, 200);
+  assert.equal(result.totalAcquisitionCost, 101800);
+  assert.equal(result.netCashDueAtSettlement, 91800);
+
+  // 2. Tax foreclosure 30-day appeal window
+  const waTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'WA',
+    distressType: 'tax_sale',
+    purchasePrice: 100000,
+  });
+  assert.equal(waTaxSale.stateRedemptionDays, 0);
+  assert.equal(waTaxSale.objectionOrConfirmationDays, 30);
+  assert.equal(waTaxSale.effectiveLockupDays, 30);
+  assert.match(waTaxSale.objectionLabel, /WA 30-day tax foreclosure judgment appeal window/);
+
+  // 3. Preset citations
+  const preset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'WA' });
+  assert.ok(preset.supported);
+  assert.equal(preset.transferTax, 1600);
+  assert.ok(preset.citations.some(c => c.includes('RCW 82.45.060')));
+  assert.ok(preset.citations.some(c => c.includes('RCW 61.24.040')));
+});
+
+test('calculates complete Maryland cash-to-close schedule and statutory deadlines', () => {
+  // 1. Fee calculation
+  const result = calculateCompleteCashToClose({
+    winningBid: 100000,
+    state: 'MD',
+    creditedDeposit: 5000,
+  });
+  assert.equal(result.state, 'MD');
+  assert.equal(result.transferTax, 500); // 0.5% state transfer tax (Md. Code Tax-Prop. § 13-203)
+  assert.equal(result.sheriffPoundage, 0);
+  assert.equal(result.recordingFees, 60);
+  assert.equal(result.totalAcquisitionCost, 100560);
+  assert.equal(result.netCashDueAtSettlement, 95560);
+
+  // 2. Tax certificate 6-month (180-day) statutory redemption
+  const mdTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'MD',
+    distressType: 'tax_sale',
+    purchasePrice: 100000,
+  });
+  assert.equal(mdTaxSale.stateRedemptionDays, 180);
+  assert.equal(mdTaxSale.objectionOrConfirmationDays, 30);
+  assert.equal(mdTaxSale.effectiveLockupDays, 180);
+  assert.match(mdTaxSale.objectionLabel, /MD 30-day tax certificate issuance window/);
+
+  // 3. Preset citations
+  const preset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'MD', distressType: 'tax_sale' });
+  assert.ok(preset.supported);
+  assert.equal(preset.transferTax, 500);
+  assert.ok(preset.citations.some(c => c.includes('Md. Code Tax-Prop. § 14-827')));
+  assert.ok(preset.citations.some(c => c.includes('180-day')));
+});

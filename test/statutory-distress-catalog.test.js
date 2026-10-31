@@ -51,7 +51,7 @@ test('statutory distress catalog contains high-trust official distress sources s
 
     // Ingestion constraints: linked platform adapter or null
     if (entry.adapterKey !== null) {
-      assert.ok(['sheriff', 'civilview', 'ca-controller-tax-sale', 'landbank', 'courtlistener'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, ca-controller-tax-sale, landbank, courtlistener, or null`);
+      assert.ok(['sheriff', 'civilview', 'ca-controller-tax-sale', 'landbank', 'courtlistener', 'hud'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, ca-controller-tax-sale, landbank, courtlistener, hud, or null`);
     }
 
     // Workflow specification
@@ -190,4 +190,20 @@ test('statutory distress catalog links landbank, civilview, trustee, and courtli
     assert.ok(entry, `Source ${id} must exist in catalog`);
     assert.equal(entry.adapterKey, 'courtlistener', `${id} must have adapterKey courtlistener`);
   }
+
+  const v6SheriffIds = [
+    'tax-mecklenburg-nc-foreclosure', 'tax-durham-nc-foreclosure', 'tax-wake-nc-foreclosure',
+    'tax-shelby-tn-county-sale', 'tax-shelby-tn-trustee-sale', 'tax-knox-tn-trustee-sale', 'tax-nashville-davidson-chancery-clerk',
+    'tax-king-wa-treasury-foreclosure', 'tax-pierce-wa-foreclosure-purchase', 'tax-snohomish-wa-foreclosure-details',
+    'tax-cook-il-scavenger-sale', 'sheriff-cook-il-civil-services', 'sheriff-cook-il-foreclosure-portal'
+  ];
+  for (const id of v6SheriffIds) {
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.adapterKey, 'sheriff', `${id} must have adapterKey sheriff`);
+  }
+
+  const hudReo = getSource('bankreo-hud-gov-homes-for-sale');
+  assert.ok(hudReo, 'Source bankreo-hud-gov-homes-for-sale must exist');
+  assert.equal(hudReo.adapterKey, 'hud');
 });

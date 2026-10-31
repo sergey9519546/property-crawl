@@ -178,8 +178,12 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   };
   const currentActive = classifyStatusActivity(listing.status || listing.lifecycleStatus) === 'active';
   const currentSaleMs = parseSaleDateMs(listing.saleDate);
-  let priorPostponements = 0;
-  let hasDatePushRelist = false;
+  const sourceFacts = listing.sourceFacts || listing.provenance?.sourceFacts || {};
+  const docketPriorPostponements = Number.isInteger(sourceFacts.priorPostponements) && sourceFacts.priorPostponements > 0
+    ? sourceFacts.priorPostponements
+    : 0;
+  let priorPostponements = docketPriorPostponements;
+  let hasDatePushRelist = docketPriorPostponements > 0 && currentActive;
   for (let i = 0; i < recordHistory.length; i += 1) {
     const h = recordHistory[i];
     const isInactive = classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive';
@@ -194,14 +198,16 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   }
   const hasHistoryRelist = hasDatePushRelist || recordHistory.some((h) => classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive'
     && currentActive);
-  const statutoryStayExhausted = priorPostponements >= 2 && currentActive;
+  const statutoryStayExhausted = (priorPostponements >= 2 && currentActive) || Boolean(sourceFacts.statutoryStayExhausted);
   const historicalBids = recordHistory
     .map((h) => Number(h?.fields?.openingBid ?? h?.openingBid))
     .filter((v) => Number.isFinite(v) && v > 0);
   const currentBidNum = Number(listing.openingBid);
   const earliestBid = historicalBids.length > 0 ? historicalBids[0] : null;
-  const cumulativeBidDropPct = earliestBid !== null && Number.isFinite(currentBidNum) && currentBidNum > 0 && currentBidNum < earliestBid
-    ? Number((((earliestBid - currentBidNum) / earliestBid) * 100).toFixed(1))
+  const sourcePriorBid = Number(sourceFacts.priorOpeningBid || listing.priorOpeningBid);
+  const baselineBid = earliestBid !== null ? earliestBid : (Number.isFinite(sourcePriorBid) && sourcePriorBid > 0 ? sourcePriorBid : null);
+  const cumulativeBidDropPct = baselineBid !== null && Number.isFinite(currentBidNum) && currentBidNum > 0 && currentBidNum < baselineBid
+    ? Number((((baselineBid - currentBidNum) / baselineBid) * 100).toFixed(1))
     : null;
 
   // Explicit relist wording. "Returned" / "re-listed" anywhere in the status

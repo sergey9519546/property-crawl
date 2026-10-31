@@ -126,7 +126,7 @@ function extractRawApn(listing) {
   if (provenanceApn) return provenanceApn;
   const rawNotice = [listing.raw, listing.description, listing.legalDescription, listing.notes].filter((s) => typeof s === 'string' && s).join(' ');
   if (rawNotice) {
-    const labeledApnMatch = rawNotice.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|PIN)\s*[:#]\s*([0-9]{2,5}[-\s.][0-9A-Za-z]{2,6}(?:[-\s.][0-9A-Za-z]{1,8})+|\d{8,14})\b/i);
+    const labeledApnMatch = rawNotice.match(/\b(?:APN|Parcel\s*(?:ID|No\.?|Number|#)|Tax\s*(?:Map|Parcel|ID)|Folio|PIN)\s*[:#]?\s*([0-9]{2,5}[-.](?:[0-9A-Za-z]{1,8}[-.])*[0-9A-Za-z]{1,8}|\d{8,14})\b/i);
     if (labeledApnMatch) return cleanText(labeledApnMatch[1]);
   }
   return null;

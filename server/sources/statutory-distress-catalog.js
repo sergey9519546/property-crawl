@@ -1365,7 +1365,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County IL (Chicago) — Scavenger Sale (county, IL). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.cookcountytreasurer.com/scavengersale.aspx",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Cook County IL (Chicago) — Scavenger Sale for delinquent tax property records and scheduled auctions.",
@@ -1561,7 +1561,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Mecklenburg County NC (Charlotte) — Tax Foreclosure Properties (county, NC). Official statutory source for tax deed.",
     "discoveryUrl": "https://tax.mecknc.gov/tax-foreclosure-properties",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Mecklenburg County NC (Charlotte) — Tax Foreclosure Properties for delinquent tax property records and scheduled auctions.",
@@ -1617,7 +1617,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Durham County NC — Tax Foreclosure Properties (county, NC). Official statutory source for tax deed.",
     "discoveryUrl": "https://dconc.gov/Tax-Administration/Payment-Options-and-Collections/Foreclosure",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Durham County NC — Tax Foreclosure Properties for delinquent tax property records and scheduled auctions.",
@@ -1645,7 +1645,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Wake County NC (Raleigh) — Tax Foreclosures (county, NC). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.wake.gov/departments-government/tax-administration/real-estate/foreclosures",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Wake County NC (Raleigh) — Tax Foreclosures for delinquent tax property records and scheduled auctions.",
@@ -1701,7 +1701,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Shelby County TN (Memphis) — Tax Sale Information (county, TN). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.shelbycountytn.gov/330/Tax-Sale-Information",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Shelby County TN (Memphis) — Tax Sale Information for delinquent tax property records and scheduled auctions.",
@@ -1729,7 +1729,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Shelby County TN — Trustee Tax Sale Properties (county, TN). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.shelbycountytrustee.com/108/Tax-Sale",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Shelby County TN — Trustee Tax Sale Properties for delinquent tax property records and scheduled auctions.",
@@ -1757,7 +1757,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Knox County TN (Knoxville) — Trustee Tax Sale (county, TN). Official statutory source for tax deed.",
     "discoveryUrl": "https://trustee.knoxcounty.org/services/tax-sale",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Knox County TN (Knoxville) — Trustee Tax Sale for delinquent tax property records and scheduled auctions.",
@@ -1785,7 +1785,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Nashville/Davidson County TN — Tax Sale Schedule (city, TN). Official statutory source for tax deed.",
     "discoveryUrl": "https://chanceryclerkandmaster.nashville.gov/fees/property-tax-schedule",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Nashville/Davidson County TN — Tax Sale Schedule for delinquent tax property records and scheduled auctions.",
@@ -1897,7 +1897,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "King County WA (Seattle) — Tax Foreclosure Auction (county, WA). Official statutory source for tax deed.",
     "discoveryUrl": "https://kingcounty.gov/en/dept/executive-services/buildings-property/treasury-operations/tax-foreclosures/auctions",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect King County WA (Seattle) — Tax Foreclosure Auction for delinquent tax property records and scheduled auctions.",
@@ -1925,7 +1925,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Pierce County WA (Tacoma) — Foreclosure Property Purchase (county, WA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.piercecountywa.gov/718/Purchasing-Foreclosure-Property",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Pierce County WA (Tacoma) — Foreclosure Property Purchase for delinquent tax property records and scheduled auctions.",
@@ -1953,7 +1953,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Snohomish County WA — Tax Foreclosure Sale Details (county, WA). Official statutory source for tax deed.",
     "discoveryUrl": "https://snohomishcountywa.gov/2755/Tax-Foreclosure-Sale-Details",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Snohomish County WA — Tax Foreclosure Sale Details for delinquent tax property records and scheduled auctions.",
@@ -2093,7 +2093,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County IL Sheriff — Foreclosure Property Sale (county, IL). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://cookcountysheriffil.gov/departments/courts/civil-services/foreclosure-property-sale",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Cook County IL Sheriff — Foreclosure Property Sale for civil foreclosure sale notices and scheduled auctions.",
@@ -2177,7 +2177,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County IL — Foreclosure Auction Site (county, IL). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://foreclosure.ccsheriff.org",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Cook County IL — Foreclosure Auction Site for civil foreclosure sale notices and scheduled auctions.",
@@ -2841,7 +2841,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "discoveryUrl": "https://communityprogress.org/resources/land-banks/national-land-bank-map",
     "access": "public",
     "adapterKey": "landbank",
-    "status": "DISCOVERY_ONLY",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Center for Community Progress — National Land Bank Map for available residential, commercial, or side-lot properties.",
       "fallback": "Contact the land bank authority or municipal community development agency.",
@@ -3002,8 +3002,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "HUD.gov — Homes for Sale (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://www.hud.gov/helping-americans/homes-for-sale",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search HUD.gov — Homes for Sale for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",

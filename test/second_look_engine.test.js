@@ -138,3 +138,25 @@ test('second-look does NOT trigger when no material facts change', () => {
   const evaluation = evaluateSecondLookTriggers(mockCase, freshListing);
   assert.equal(evaluation.shouldTrigger, false);
 });
+
+test('evaluateOpportunitySignals parses trajectory and cumulative bid drop directly from sourceFacts', () => {
+  const { evaluateOpportunitySignals } = require('../server/intelligence/signals');
+
+  const listing = {
+    id: 'test_trajectory_01',
+    status: 'active',
+    openingBid: 75000,
+    saleDate: '2026-11-20',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=987',
+    sourceFacts: {
+      priorPostponements: 3,
+      statutoryStayExhausted: true,
+      priorOpeningBid: 100000,
+    },
+  };
+
+  const evalResult = evaluateOpportunitySignals(listing);
+  assert.equal(evalResult.trajectory.priorPostponements, 3);
+  assert.equal(evalResult.trajectory.statutoryStayExhausted, true);
+  assert.equal(evalResult.trajectory.cumulativeBidDropPct, 25);
+});

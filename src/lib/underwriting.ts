@@ -672,7 +672,7 @@ export function computeStatutoryFeePreset(params: {
   const st = (params.state || "").trim().toUpperCase();
   const src = (params.source || "").trim().toLowerCase();
   const citations: string[] = [];
-  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV"].includes(st);
+  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD"].includes(st);
   const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
 
   let buyersPremium = 0;
@@ -826,6 +826,67 @@ export function computeStatutoryFeePreset(params: {
       "NRS 375.020: Real Property Transfer Tax ($1.95 per $500 / $3.90 per $1,000 baseline).",
       "NRS 116.3116: 9-month HOA super-priority assessment primes first deed of trust."
     );
+  } else if (st === "TN") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      src.includes("tax")
+    );
+    if (isTax) {
+      scheduleLabel = "Tennessee Chancery / County Tax Sale Schedule (T.C.A. § 67-5-2701 & § 67-4-409)";
+      sheriffPoundage = 0;
+      transferTax = Math.round((price / 1000) * 3.70);
+      defaultDepositPct = 0.10;
+      citations.push(
+        "T.C.A. § 67-5-2701: 365-day (1 year) statutory tax sale right of redemption with 12% per annum interest.",
+        "T.C.A. § 67-4-409: Tennessee state recordation/transfer tax ($0.37 per $100 / $3.70 per $1,000)."
+      );
+    } else {
+      scheduleLabel = "Tennessee Deed of Trust Foreclosure Schedule (T.C.A. § 35-5-101 & § 67-4-409)";
+      sheriffPoundage = 0;
+      transferTax = Math.round((price / 1000) * 3.70);
+      defaultDepositPct = 0.10;
+      citations.push(
+        "T.C.A. § 35-5-101: Non-judicial deed of trust sale under power (0-day post-sale redemption when waived in deed of trust).",
+        "T.C.A. § 67-4-409: Tennessee state recordation/transfer tax ($0.37 per $100 / $3.70 per $1,000)."
+      );
+    }
+  } else if (st === "WA") {
+    scheduleLabel = "Washington State Non-Judicial & Tax Foreclosure Schedule (RCW 61.24 & RCW 82.45)";
+    sheriffPoundage = 0;
+    transferTax = Math.round((price / 1000) * 16.00); // 1.6% combined state & local REET baseline
+    defaultDepositPct = 0.10;
+    citations.push(
+      "RCW 61.24.040: Non-judicial trustee sale under deed of trust (0-day post-sale redemption).",
+      "RCW 84.64.080: County tax foreclosure deed sale (immediate deed execution; 30-day appeal window under RCW 84.64.120).",
+      "RCW 82.45.060: Washington Real Estate Excise Tax (REET) (1.10% state baseline + 0.50% local typical)."
+    );
+  } else if (st === "MD") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      src.includes("tax")
+    );
+    if (isTax) {
+      scheduleLabel = "Maryland Tax Sale Certificate Auction Schedule (Md. Code Tax-Prop. § 14-827 & § 13-203)";
+      sheriffPoundage = 0;
+      transferTax = Math.round((price / 1000) * 5.00);
+      defaultDepositPct = 0.10;
+      citations.push(
+        "Md. Code Tax-Prop. § 14-827: 180-day (6-month) statutory redemption period before bill to foreclose right of redemption.",
+        "Md. Code Tax-Prop. § 14-820: County statutory interest rate on tax certificate redemption (12% to 20% typical).",
+        "Md. Code Tax-Prop. § 13-203: Maryland state transfer tax (0.5% / $5.00 per $1,000)."
+      );
+    } else {
+      scheduleLabel = "Maryland Judicial Foreclosure Schedule (Md. Rule 14-207 & § 13-203)";
+      sheriffPoundage = 0;
+      transferTax = Math.round((price / 1000) * 5.00);
+      defaultDepositPct = 0.10;
+      citations.push(
+        "Md. Rule 14-215: Mandatory court ratification of foreclosure sale before deed delivery.",
+        "Md. Code Tax-Prop. § 13-203: Maryland state transfer tax (0.5% / $5.00 per $1,000)."
+      );
+    }
   } else {
     transferTax = Math.round(price * 0.005);
     scheduleLabel = `${st || "State"} Statutory Baseline (Not Yet Modeled)`;
@@ -980,6 +1041,45 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionOrConfirmationDays = 0;
       objectionLabel = "GA non-judicial foreclosure under power of sale (O.C.G.A. § 44-14-162; 0-day post-sale redemption)";
     }
+  } else if (st === "TN") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      objectionOrConfirmationDays = 30;
+      objectionLabel = "TN 30-day chancery court decree of confirmation window (T.C.A. § 67-5-2701 1-yr redemption applies)";
+    } else {
+      objectionOrConfirmationDays = 0;
+      objectionLabel = "TN non-judicial deed of trust foreclosure under power of sale (T.C.A. § 35-5-101; 0-day redemption)";
+    }
+  } else if (st === "WA") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      objectionOrConfirmationDays = 30;
+      objectionLabel = "WA 30-day tax foreclosure judgment appeal window (RCW 84.64.120; 0-day post-deed redemption)";
+    } else {
+      objectionOrConfirmationDays = 0;
+      objectionLabel = "WA non-judicial trustee sale under deed of trust (RCW 61.24.040; 0-day post-sale redemption)";
+    }
+  } else if (st === "MD") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      objectionOrConfirmationDays = 30;
+      objectionLabel = "MD 30-day tax certificate issuance window (Md. Code Tax-Prop. § 14-827 6-month redemption applies)";
+    } else {
+      objectionOrConfirmationDays = 30;
+      objectionLabel = "MD 30-day circuit court order of ratification window (Md. Rule 14-215)";
+    }
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
@@ -1001,6 +1101,24 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     );
     if (isTax) {
       stateRedemptionDays = 365;
+    }
+  } else if (stateRedemptionDays === 0 && st === "TN") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 365;
+    }
+  } else if (stateRedemptionDays === 0 && st === "MD") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 180;
     }
   }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);

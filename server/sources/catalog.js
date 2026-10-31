@@ -119,7 +119,7 @@ const SOURCE_STATUS_BY_ID = Object.freeze({
   'auction-dot-com': 'DISCOVERY_ONLY',
   'hubzu': 'DISCOVERY_ONLY',
   'xome': 'DISCOVERY_ONLY',
-  'realauction': 'DISCOVERY_ONLY',
+  'realauction': 'LOCAL_ROUTE',
   'govdeals-real-property': 'DISCOVERY_ONLY',
   'mls-licensed-feed': 'DISCOVERY_ONLY',
   ...Object.fromEntries(
@@ -540,8 +540,8 @@ function listingServingSourceKeys() {
     const keys = new Set();
     for (const entry of SOURCE_CATALOG) {
       if (entry.status === 'DISCOVERY_ONLY') continue;
-      if (entry.adapterKey) keys.add(entry.adapterKey);
-      keys.add(entry.id);
+      if (entry.adapterKey && servesListings(entry.adapterKey)) keys.add(entry.adapterKey);
+      if (servesListings(entry.id)) keys.add(entry.id);
     }
     listingServingKeysCache = Object.freeze([...keys].sort());
   }

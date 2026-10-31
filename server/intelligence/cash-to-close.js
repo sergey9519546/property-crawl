@@ -120,6 +120,33 @@ const JURISDICTION_FEE_SCHEDULES = Object.freeze({
     settlementWindowHours: 0,
     notes: 'NRS 107.080 non-judicial trustee sale. NRS 375.020 transfer tax. 0-day post-sale redemption.',
   },
+  TN: {
+    state: 'TN',
+    name: 'Tennessee',
+    docStampRatePerThousand: 3.70, // $0.37 per $100 ($3.70/k) state transfer/recordation tax (T.C.A. § 67-4-409)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 50.00,
+    settlementWindowHours: 4, // Immediate certified funds at county courthouse auction
+    notes: 'T.C.A. § 35-5-101 deed of trust sale (0-day redemption if waived) vs. T.C.A. § 67-5-2701 tax sale (1-year statutory redemption with 12% interest).',
+  },
+  WA: {
+    state: 'WA',
+    name: 'Washington',
+    docStampRatePerThousand: 16.00, // 1.6% combined state & local REET baseline (RCW 82.45.060)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 200.00, // RCW 36.18.010 recording fees
+    settlementWindowHours: 0, // Cashier check tendered at auction gavel
+    notes: 'RCW 61.24.040 non-judicial trustee sale (0-day redemption). RCW 84.64.080 tax foreclosure (30-day confirmation appeal window).',
+  },
+  MD: {
+    state: 'MD',
+    name: 'Maryland',
+    docStampRatePerThousand: 5.00, // 0.5% state transfer tax (Md. Code Tax-Prop. § 13-203)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 60.00,
+    settlementWindowHours: 24,
+    notes: 'Md. Code Tax-Prop. § 14-827 tax sale certificate auction (6-month statutory redemption). 0.5% state transfer tax.',
+  },
 });
 
 const DEFAULT_SCHEDULE = Object.freeze({
