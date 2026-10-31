@@ -103,4 +103,12 @@ test('municipal survival statutes exist for FL, OH, IL, PA', () => {
   assert.equal(MUNICIPAL_SURVIVAL_RULES.OH.demolitionSurvives, true);
   assert.equal(MUNICIPAL_SURVIVAL_RULES.IL.demolitionSurvives, true);
   assert.equal(MUNICIPAL_SURVIVAL_RULES.PA.demolitionSurvives, true);
+  assert.equal(MUNICIPAL_SURVIVAL_RULES.TX.demolitionSurvives, true);
+  assert.equal(MUNICIPAL_SURVIVAL_RULES.CA.demolitionSurvives, true);
+  assert.equal(MUNICIPAL_SURVIVAL_RULES.NJ.demolitionSurvives, true);
+  assert.equal(MUNICIPAL_SURVIVAL_RULES.MI.demolitionSurvives, true);
+  assert.ok(SOCRATA_PORTALS.dallas);
+  assert.ok(SOCRATA_PORTALS.cincinnati);
+  assert.ok(SOCRATA_PORTALS.losangeles);
+  assert.ok(SOCRATA_PORTALS.philadelphia);
 });

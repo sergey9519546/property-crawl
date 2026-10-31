@@ -39,6 +39,34 @@ const MUNICIPAL_SURVIVAL_RULES = Object.freeze({
     statute: '53 P.S. § 7106',
     label: 'Pennsylvania municipal claims for water, sewer, and abatement prime all mortgages',
   },
+  TX: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: "Tex. Loc. Gov't Code § 214.0015 & § 342.007",
+    label: 'Texas municipal assessment for dangerous building demolition and health/safety nuisance abatement is privileged and prior to all liens except tax liens',
+  },
+  CA: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'Cal. Gov. Code § 38773.5 & § 25845',
+    label: 'California nuisance abatement and substandard structure demolition assessments collected on county tax roll survive foreclosure',
+  },
+  NJ: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'N.J.S.A. § 40:48-2.5 & § 40:48-2.14',
+    label: 'New Jersey municipal emergency repair and demolition liens of unfit buildings have priority over all private mortgages',
+  },
+  MI: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'MCL § 125.541',
+    label: 'Michigan dangerous building demolition and repair costs certified to the county tax roll prime all private mortgage liens',
+  },
 });
 
 function analyzeMunicipalViolations(listing = {}, violations = []) {

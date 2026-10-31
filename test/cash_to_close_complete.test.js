@@ -141,6 +141,36 @@ test('calculates complete New York referee sale cash-to-close schedule', () => {
   assert.equal(result.netCashDueAtSettlement, 228650);
 });
 
+test('calculates complete Michigan sheriff foreclosure cash-to-close schedule', () => {
+  const result = calculateCompleteCashToClose({
+    winningBid: 100000,
+    state: 'MI',
+    creditedDeposit: 10000,
+  });
+
+  assert.equal(result.state, 'MI');
+  assert.equal(result.transferTax, 430); // $4.30 per $1,000 (MCL § 207.505 & § 207.525)
+  assert.equal(result.sheriffPoundage, 500); // 0.5% capped statutory sheriff fee
+  assert.equal(result.recordingFees, 30);
+  assert.equal(result.totalAcquisitionCost, 100960);
+  assert.equal(result.netCashDueAtSettlement, 90960);
+});
+
+test('calculates complete Nevada non-judicial trustee sale cash-to-close schedule', () => {
+  const result = calculateCompleteCashToClose({
+    winningBid: 200000,
+    state: 'NV',
+    creditedDeposit: 20000,
+  });
+
+  assert.equal(result.state, 'NV');
+  assert.equal(result.transferTax, 780); // $3.90 per $1,000 (NRS 375.020)
+  assert.equal(result.sheriffPoundage, 0); // Non-judicial trustee auction
+  assert.equal(result.recordingFees, 75);
+  assert.equal(result.totalAcquisitionCost, 200855);
+  assert.equal(result.netCashDueAtSettlement, 180855);
+});
+
 test('deposit crediting never produces negative settlement obligation', () => {
   const overCredited = calculateCompleteCashToClose({
     winningBid: 50000,

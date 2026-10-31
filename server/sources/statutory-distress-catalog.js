@@ -1869,7 +1869,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "California State Controller — Tax-Defaulted Public Auctions Directory (state, CA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.sco.ca.gov/ardtax_public_auction.html",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "ca-controller-tax-sale",
     "status": "DISCOVERY_ONLY",
     "workflow": {
       "primary": "Inspect California State Controller — Tax-Defaulted Public Auctions Directory for delinquent tax property records and scheduled auctions.",

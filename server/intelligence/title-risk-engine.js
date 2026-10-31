@@ -52,7 +52,17 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
     return 'TAX_AUTHORITY';
   }
 
-  // 2. HOA / Condo Association
+  // 2. PACE Loan / Clean Energy Assessment
+  if (/(?:pace\s*(?:loan|assessment|financing|lien)|clean\s*energy\s*(?:lien|assessment)|hero\s*program|ygrene|property\s*assessed\s*clean\s*energy)/i.test(combined)) {
+    return 'PACE_LIEN';
+  }
+
+  // 3. Mechanic's Lien / Construction Lien / Materialman's Lien
+  if (/(?:mechanic'?s?\s*lien|materialm[ae]n'?s?\s*lien|construction\s*lien|contractor'?s?\s*lien|labor\s*(?:and|&)\s*materials?|claim\s*of\s*lien)/i.test(combined)) {
+    return 'MECHANICS_LIEN';
+  }
+
+  // 4. HOA / Condo Association
   if (/(?:homeowners?\s*association|condominium\s*association|\bhoa\b|condo\s*owners|master\s*association|community\s*association|property\s*owners\s*association)/i.test(combined)) {
     return 'HOA_ASSESSMENT';
   }
@@ -138,6 +148,14 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       canProceedWithBid = false;
       warnings.push('CRITICAL TITLE DEFECT: HOA foreclosing in a non-super-priority state. 1st mortgage recorded prior survives the auction in full!');
     }
+  } else if (partyType === 'PACE_LIEN') {
+    riskLevel = 'HIGH';
+    warnings.push('PACE ASSESSMENT SUPER-PRIORITY: PACE clean energy financing is collected as a senior municipal tax assessment under state statutes, surviving private mortgage foreclosures.');
+  } else if (partyType === 'MECHANICS_LIEN') {
+    firstMortgageSurvives = true;
+    riskLevel = 'CRITICAL';
+    canProceedWithBid = false;
+    warnings.push("CRITICAL TITLE DEFECT: Mechanic's/Construction lien foreclosure. Senior mortgages recorded prior to commencement of work survive sale in full; verify contractor commencement affidavit.");
   } else if (partyType === 'TAX_AUTHORITY') {
     riskLevel = 'LOW';
     warnings.push('TAX SALE PRIORITY: Property tax foreclosures generally prime all private mortgages and deeds of trust.');

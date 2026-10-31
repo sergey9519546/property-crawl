@@ -51,7 +51,7 @@ test('statutory distress catalog contains high-trust official distress sources s
 
     // Ingestion constraints: linked platform adapter or null
     if (entry.adapterKey !== null) {
-      assert.ok(['sheriff', 'civilview'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, or null`);
+      assert.ok(['sheriff', 'civilview', 'ca-controller-tax-sale'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, ca-controller-tax-sale, or null`);
     }
 
     // Workflow specification

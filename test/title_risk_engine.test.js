@@ -17,7 +17,40 @@ test('classifies foreclosing plaintiff party type accurately', () => {
   assert.equal(classifyForeclosingParty('Second Mortgage Loan Trust'), 'SECOND_MORTGAGE_HELOC');
   assert.equal(classifyForeclosingParty('Sunset Palms Homeowners Association, Inc.'), 'HOA_ASSESSMENT');
   assert.equal(classifyForeclosingParty('Franklin County Treasurer'), 'TAX_AUTHORITY');
+  assert.equal(classifyForeclosingParty('Ygrene Energy Fund California PACE Program'), 'PACE_LIEN');
+  assert.equal(classifyForeclosingParty('Apex Roofing & Construction Contractors, LLC Claim of Lien'), 'MECHANICS_LIEN');
   assert.equal(classifyForeclosingParty('John Doe Enterprises'), 'UNKNOWN');
+});
+
+test("PACE clean energy lien foreclosure warns of senior municipal assessment super-priority", () => {
+  const listing = {
+    id: 'prop-pace-01',
+    plaintiff: 'California HERO Program Clean Energy Financing Assessment District',
+    state: 'CA',
+    openingBid: 18000,
+  };
+
+  const risk = arbitrateTitleRisk(listing);
+  assert.equal(risk.riskLevel, 'HIGH');
+  assert.equal(risk.plaintiffType, 'PACE_LIEN');
+  assert.ok(risk.titleWarnings.some((w) => w.includes('PACE ASSESSMENT SUPER-PRIORITY')));
+});
+
+test("mechanic's construction lien foreclosure trips CRITICAL warning and senior mortgage survival", () => {
+  const listing = {
+    id: 'prop-mech-01',
+    plaintiff: "Buckeye Foundation & Masonry Contractors Mechanic's Lien Foreclosure",
+    state: 'OH',
+    openingBid: 9500,
+  };
+
+  const risk = arbitrateTitleRisk(listing);
+  assert.equal(risk.riskLevel, 'CRITICAL');
+  assert.equal(risk.firstMortgageSurvives, true);
+  assert.equal(risk.canProceedWithBid, false);
+  assert.equal(risk.plaintiffType, 'MECHANICS_LIEN');
+  assert.ok(risk.titleWarnings.some((w) => w.includes("Mechanic's/Construction lien foreclosure")));
+  assert.match(risk.titleActionAdvice, /DO NOT BID/);
 });
 
 test('junior mortgage foreclosure trips CRITICAL title defect and warns senior mortgage survives', () => {

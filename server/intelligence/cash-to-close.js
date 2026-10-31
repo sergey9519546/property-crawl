@@ -102,6 +102,24 @@ const JURISDICTION_FEE_SCHEDULES = Object.freeze({
     settlementWindowHours: 720, // 30 days to close with referee
     notes: 'RPAPL § 1354 referee deed sale. 10% deposit at auction; 30 days to close with referee.',
   },
+  MI: {
+    state: 'MI',
+    name: 'Michigan',
+    docStampRatePerThousand: 4.30,
+    defaultSheriffPoundagePercent: 0.005,
+    defaultRecordingFee: 30.00,
+    settlementWindowHours: 0,
+    notes: 'MCL § 600.3201 foreclosure by advertisement. $4.30/k transfer tax; 6-month statutory redemption applies.',
+  },
+  NV: {
+    state: 'NV',
+    name: 'Nevada',
+    docStampRatePerThousand: 3.90,
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 75.00,
+    settlementWindowHours: 0,
+    notes: 'NRS 107.080 non-judicial trustee sale. NRS 375.020 transfer tax. 0-day post-sale redemption.',
+  },
 });
 
 const DEFAULT_SCHEDULE = Object.freeze({

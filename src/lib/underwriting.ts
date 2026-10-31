@@ -670,7 +670,7 @@ export function computeStatutoryFeePreset(params: {
   const st = (params.state || "").trim().toUpperCase();
   const src = (params.source || "").trim().toLowerCase();
   const citations: string[] = [];
-  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY"].includes(st);
+  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV"].includes(st);
   const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
 
   let buyersPremium = 0;
@@ -781,6 +781,26 @@ export function computeStatutoryFeePreset(params: {
       "RPAPL § 1354: Distribution of mortgage foreclosure sale proceeds and referee deed.",
       "CPLR § 8003(b): Statutory referee compensation cap on mortgage foreclosure sales ($750–$1,100).",
       "NY Tax Law § 1402: NY State Real Estate Transfer Tax ($2.00 per $500 / $4.00 per $1,000)."
+    );
+  } else if (st === "MI") {
+    scheduleLabel = "Michigan Sheriff Foreclosure Schedule (MCL § 600.2558 & § 207.525)";
+    sheriffPoundage = Math.min(Math.round(price * 0.005), 500);
+    transferTax = Math.round((price / 1000) * 4.30);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "MCL § 600.2558: Sheriff statutory foreclosure sale fee schedule.",
+      "MCL § 207.505 & § 207.525: Combined state ($3.75/k) and county ($0.55/k) transfer tax ($4.30/k).",
+      "MCL § 600.3240: Statutory post-sale redemption period (6 months standard, 1 month if abandoned)."
+    );
+  } else if (st === "NV") {
+    scheduleLabel = "Nevada Non-Judicial Trustee Schedule (NRS 107.080 & NRS 375.020)";
+    sheriffPoundage = 0;
+    transferTax = Math.round((price / 500) * 1.95);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "NRS 107.080: Non-judicial trustee power of sale (0 days post-sale redemption).",
+      "NRS 375.020: Real Property Transfer Tax ($1.95 per $500 / $3.90 per $1,000 baseline).",
+      "NRS 116.3116: 9-month HOA super-priority assessment primes first deed of trust."
     );
   } else {
     transferTax = Math.round(price * 0.005);
@@ -900,6 +920,12 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   } else if (st === "NY") {
     objectionOrConfirmationDays = 30;
     objectionLabel = "NY 30-day referee report of sale & deed delivery (RPAPL § 1354)";
+  } else if (st === "MI") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "MI non-judicial foreclosure by advertisement (MCL § 600.3201; post-sale redemption governs lockup)";
+  } else if (st === "NV") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "NV non-judicial deed of trust trustee sale (NRS 107.080; 0-day post-sale redemption)";
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
