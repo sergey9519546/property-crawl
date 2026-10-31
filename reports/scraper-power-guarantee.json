@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-31T05:30:59.613Z",
+  "generatedAt": "2026-10-31T20:59:26.635Z",
   "guarantee": {
     "catalogSources": 288,
     "scheduledAdapters": 21,
-    "scraplingEnabledAdapters": 53,
+    "scraplingEnabledAdapters": 52,
     "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
     "endCoverageWithScheduledAdapter": 10,
@@ -23,17 +23,17 @@
     ]
   },
   "tiers": {
-    "P2_LOCAL_ROUTE": 39,
-    "P0_CATALOG_ONLY": 227,
+    "P0_CATALOG_ONLY": 228,
     "P4_LIVE_STRONG": 5,
     "P3_SCOPE_LIMITED": 3,
     "P2_DISCOVERY_ADAPTER": 12,
-    "P2_BLOCKED_PUBLISHER": 2
+    "P2_BLOCKED_PUBLISHER": 2,
+    "P2_LOCAL_ROUTE": 38
   },
   "categories": {
     "tax_sale": {
       "total": 132,
-      "scheduled": 38,
+      "scheduled": 37,
       "strong": 0
     },
     "parcel_evidence": {
@@ -281,13 +281,13 @@
       "label": "Tax lien/deed sale",
       "required": true,
       "catalogEntries": 132,
-      "scheduledAdapters": 38,
+      "scheduledAdapters": 37,
       "strongAdapters": 0,
-      "opportunityScheduled": 37,
+      "opportunityScheduled": 36,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
-        "alachua-tax-deeds*",
+        "alachua-tax-deeds",
         "harris-county-tax-sale*",
         "maricopa-tax-deed",
         "county-tax-sale-template",
@@ -658,25 +658,19 @@
       "category": "tax_sale",
       "role": "opportunity",
       "status": "LOCAL_ROUTE",
-      "adapterKey": "sheriff",
+      "adapterKey": null,
       "access": "public",
       "discoveryUrl": "https://alachuacounty.us/Depts/Clerk/TaxDeeds/Pages/TaxDeedSales.aspx",
       "power": {
-        "tier": "P2_LOCAL_ROUTE",
-        "score": 3,
-        "inScheduler": true,
-        "scrapling": [
-          "table-extract"
-        ],
+        "tier": "P0_CATALOG_ONLY",
+        "score": 1,
+        "inScheduler": false,
+        "scrapling": null,
         "flags": [
-          "scheduled",
-          "scrapling:table-extract",
-          "lastRunReport",
-          "fail-closed-upstream",
-          "limitation"
+          "lastRunReport"
         ]
       },
-      "weakness": "OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment",
+      "weakness": null,
       "seedListings": 0
     },
     {
