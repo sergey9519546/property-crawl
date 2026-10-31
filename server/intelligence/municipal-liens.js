@@ -67,6 +67,27 @@ const MUNICIPAL_SURVIVAL_RULES = Object.freeze({
     statute: 'MCL § 125.541',
     label: 'Michigan dangerous building demolition and repair costs certified to the county tax roll prime all private mortgage liens',
   },
+  MD: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'Md. Code Real Prop. § 14-804/806 & Baltimore City Code Art. 13',
+    label: 'Maryland municipal water/sewer charges and dangerous building demolition citations prime private mortgages as tax roll liens',
+  },
+  MO: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'RSMo § 67.410 & § 67.398',
+    label: 'Missouri municipal special tax bills for dangerous building repair or demolition are a lien on the property on equal footing with taxes',
+  },
+  GA: {
+    waterSewerSurvives: true,
+    demolitionSurvives: true,
+    nuisanceSurvives: true,
+    statute: 'O.C.G.A. § 41-2-9(b) & § 36-60-17',
+    label: 'Georgia municipal demolition and nuisance abatement liens are coequal with ad valorem taxes and prime security deeds',
+  },
 });
 
 function analyzeMunicipalViolations(listing = {}, violations = []) {
@@ -87,7 +108,12 @@ function analyzeMunicipalViolations(listing = {}, violations = []) {
     activeViolations.push(v);
     totalFines += Number(v.fineAmount || 0);
 
-    if (v.isCondemned || isDemolitionOrCondemnation(v.violationType || '')) {
+    if (
+      v.isCondemned ||
+      v.isDemolitionRisk ||
+      isDemolitionOrCondemnation(v.violationType || '') ||
+      isDemolitionOrCondemnation(v.description || '')
+    ) {
       isCondemned = true;
       hasDemolitionRisk = true;
     }

@@ -67,6 +67,17 @@ const SOURCE_HOSTS = Object.freeze({
     'pbfcm.com',
   ],
   servicelink: ['www.servicelinkauction.com'],
+  'socrata-code-enforcement': [
+    'data.austintexas.gov',
+    'www.dallasopendata.com',
+    'data.baltimorecity.gov',
+    'data.cincinnati-oh.gov',
+    'data.kcmo.org',
+    'data.cityoforlando.net',
+    'data.cityofchicago.org',
+    'data.nola.gov',
+    'data.phila.gov',
+  ],
   treasury: ['treasury.gov', 'cwsmarketing.com'],
   trustee: ['recorder.clarkcountynv.gov', 'recorderecomm.clarkcountynv.gov', 'recorder.washoecounty.gov', 'icris.washoecounty.us'],
   usda: ['resales.usda.gov'],
@@ -230,6 +241,7 @@ function hasSourceRecordShape(source, url) {
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');
     case 'email-notices':
     case 'public-notices-email':
+    case 'socrata-code-enforcement':
       return true;
     default:
       return false;

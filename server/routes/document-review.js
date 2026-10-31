@@ -194,6 +194,9 @@ function enumerateListingDocuments(listing, perListingLimit = HYDRATION_PER_LIST
         label,
         sourceField: `${container.path}[${index}]`,
         extractedAt: listing.sourceObservedAt || listing.provenance?.observedAt || null,
+        rawText: document.rawText || null,
+        evidenceSpans: document.evidenceSpans || null,
+        confidenceScore: typeof document.confidenceScore === 'number' ? document.confidenceScore : null,
       });
     }
     if (out.length >= perListingLimit) break;
@@ -234,6 +237,18 @@ async function hydratePendingCandidates(database) {
         sourceField: doc.sourceField,
         review: createPendingReview({ extractedAt: doc.extractedAt }),
         hydration: 'listing-document',
+        rawText: doc.rawText || listing.raw || null,
+        extractedFields: {
+          caseNumber: listing.provenance?.sourceFacts?.caseNumber || listing.caseNumber || listing.id,
+          defendant: listing.defendant || null,
+          plaintiff: listing.plaintiff || null,
+          openingBid: listing.openingBid || null,
+          judgmentAmount: listing.judgment || null,
+          saleDate: listing.saleDate || null,
+          apn: listing.apn || listing.provenance?.sourceFacts?.parcelId || null,
+          confidenceScore: doc.confidenceScore || (listing.dealScore ? listing.dealScore / 100 : null),
+          evidenceSpans: doc.evidenceSpans || {},
+        },
       });
       if (candidates.length >= HYDRATION_TOTAL_LIMIT) break;
     }
@@ -254,6 +269,9 @@ async function handleDocumentReview(req, res, dependencies = {}) {
     const requestedStatus = url.searchParams.get('status');
     const hydrate = url.searchParams.get('hydrate') !== 'false';
     const stored = [...store.map.entries()].map(([id, record]) => ({
+      rawText: record.rawText || null,
+      extractedFields: record.extractedFields || null,
+      updatedFields: record.updatedFields || null,
       id,
       ...normalizeReview(record),
       listingId: record.listingId || id.split('~')[0],
@@ -291,6 +309,23 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       } : {}),
       reviews: requested.map((entry) => {
         const review = normalizeReview(entry.review || entry);
+        let rawText = entry.rawText || null;
+        if (!rawText) {
+          const vault = dependencies.vault || defaultVault;
+          try {
+            if (typeof vault.getDocumentSync === 'function') {
+              const doc = vault.getDocumentSync(`reviews/${encodeURIComponent(entry.id)}.txt`)
+                || vault.getDocumentSync(`reviews/${encodeURIComponent(entry.listingId)}.txt`);
+              if (doc?.data) rawText = doc.data.toString('utf8');
+            }
+          } catch (_) {}
+        }
+        let extractedFields = entry.extractedFields || null;
+        if (entry.updatedFields && typeof entry.updatedFields === 'object') {
+          extractedFields = extractedFields
+            ? { ...extractedFields, ...entry.updatedFields }
+            : { ...entry.updatedFields };
+        }
         return {
           id: entry.id,
           listingId: entry.listingId,
@@ -299,6 +334,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
           label: entry.label || null,
           review,
           contentHash: entry.contentHash || null,
+          rawText: rawText || null,
+          extractedFields: extractedFields || null,
           ...(entry.hydration ? { hydration: entry.hydration } : {}),
         };
       }),
@@ -346,7 +383,17 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       });
       if (!contentHash && receipt?.sha256) contentHash = receipt.sha256;
     }
+    const updatedFields = body.updatedFields && typeof body.updatedFields === 'object'
+      ? body.updatedFields
+      : (previousRaw?.updatedFields || null);
+    let extractedFields = body.extractedFields || previousRaw?.extractedFields || null;
+    if (updatedFields) {
+      extractedFields = extractedFields ? { ...extractedFields, ...updatedFields } : { ...updatedFields };
+    }
     store.map.set(id, {
+      rawText: rawContent || body.rawText || previousRaw?.rawText || null,
+      extractedFields,
+      updatedFields,
       ...result,
       listingId,
       documentIndex: Number.isInteger(body.documentIndex) ? body.documentIndex : null,
@@ -381,6 +428,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       contentHash: contentHash || previousRaw?.contentHash || null,
       review: result,
       persisted,
+      updatedFields: updatedFields || undefined,
+      extractedFields: extractedFields || undefined,
     });
   }
 
@@ -413,6 +462,9 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       review: normalizeReview(record),
       contentHash: record.contentHash || null,
       ...(vaultDocument ? { vaultDocument, documentContent: vaultDocument.content } : {}),
+      rawText: record.rawText || vaultDocument?.content || null,
+      extractedFields: record.extractedFields || null,
+      updatedFields: record.updatedFields || null,
       hydration: 'store',
     });
   }

@@ -1927,16 +1927,23 @@ export interface StatutoryRedemptionYield {
   state: string;
   redemptionDays: number;
   statutoryRatePct: number;
+  penaltyRatePct: number;
   regime: RedemptionRegime;
+  legalRegime: string;
   yieldType: "penalty" | "interest";
   isFlatPenalty: boolean;
   isAnnualInterest: boolean;
   effectiveYieldPct: number;
   grossProceeds: number;
+  redemptionPayout: number;
   netReturn: number;
+  penaltyAmount: number;
   netStatutoryReturn: number;
   annualizedIrrPct: number;
+  annualizedYieldPct: number;
   statutoryCitation: string;
+  statute: string;
+  redemptionPeriodLabel: string;
   instrumentBadge: string;
 }
 
@@ -1986,7 +1993,7 @@ export function computeRedemptionYield(params: {
     yieldType = "penalty";
     isFlatPenalty = true;
     isAnnualInterest = false;
-    const isHomestead = Boolean(params.isHomestead || (passedDays !== null && passedDays === 730));
+    const isHomestead = Boolean(params.isHomestead || (passedDays !== null && passedDays > 365));
     if (passedDays !== null) {
       days = passedDays;
     } else if (isHomestead) {
@@ -2137,22 +2144,31 @@ export function computeRedemptionYield(params: {
 
   const netStatutoryReturn = netReturn;
   const instrumentBadge = getTaxInstrumentBadge(st, regime);
+  const legalRegime = regime === "redeemable_deed_flat_penalty" ? "Flat Statutory Penalty" : regime === "post_redemption_deed" ? "Immediate Deed" : "Statutory Interest";
+  const redemptionPeriodLabel = regime === "post_redemption_deed" || days === 0 ? "0 Days (Immediate Deed)" : `${Math.round(days / 30)} Month${Math.round(days / 30) === 1 ? "" : "s"} (${days} Days)`;
 
   return {
     purchasePrice: price,
     state: st,
     redemptionDays: days,
     statutoryRatePct,
+    penaltyRatePct: statutoryRatePct,
     regime,
+    legalRegime,
     yieldType,
     isFlatPenalty,
     isAnnualInterest,
     effectiveYieldPct,
     grossProceeds,
+    redemptionPayout: grossProceeds,
     netReturn,
+    penaltyAmount: netReturn,
     netStatutoryReturn,
     annualizedIrrPct,
+    annualizedYieldPct: annualizedIrrPct,
     statutoryCitation,
+    statute: statutoryCitation,
+    redemptionPeriodLabel,
     instrumentBadge,
   };
 }

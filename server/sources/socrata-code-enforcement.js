@@ -5,7 +5,8 @@
  *
  * Open Municipal Code Enforcement & Violation Ingestion via Socrata Open Data APIs.
  * Pulls active municipal code violations, condemned building notices, and demolition
- * orders across key metropolitan jurisdictions (Orlando, New Orleans, Chicago, Austin).
+ * orders across key metropolitan jurisdictions (Orlando, New Orleans, Chicago, Austin,
+ * Dallas, Baltimore, Cincinnati, Kansas City, Los Angeles, Philadelphia).
  */
 
 const SOCRATA_PORTALS = Object.freeze({
@@ -59,6 +60,16 @@ const SOCRATA_PORTALS = Object.freeze({
     dateField: 'created_date',
     fineField: 'estimated_cost',
   },
+  baltimore: {
+    city: 'Baltimore',
+    state: 'MD',
+    endpoint: 'https://data.baltimorecity.gov/resource/n435-yubt.json',
+    addressField: 'propertyaddress',
+    typeField: 'violationdescription',
+    statusField: 'violationstatus',
+    dateField: 'noticedate',
+    fineField: 'fine_amount',
+  },
   cincinnati: {
     city: 'Cincinnati',
     state: 'OH',
@@ -67,6 +78,16 @@ const SOCRATA_PORTALS = Object.freeze({
     typeField: 'violation_description',
     statusField: 'status',
     dateField: 'entered_date',
+    fineField: 'fine_amount',
+  },
+  kansascity: {
+    city: 'Kansas City',
+    state: 'MO',
+    endpoint: 'https://data.kcmo.org/resource/ax3m-jhxx.json',
+    addressField: 'street_address',
+    typeField: 'violation_description',
+    statusField: 'case_status',
+    dateField: 'violation_entry_date',
     fineField: 'fine_amount',
   },
   losangeles: {

@@ -21,6 +21,18 @@ type ReviewEntry = {
   documentIndex?: number | null;
   documentUrl?: string | null;
   review: Review;
+  rawText?: string | null;
+  extractedFields?: {
+    caseNumber?: string;
+    defendant?: string;
+    plaintiff?: string;
+    openingBid?: number;
+    judgmentAmount?: number;
+    saleDate?: string;
+    apn?: string;
+    confidenceScore?: number;
+    evidenceSpans?: any;
+  } | null;
 };
 
 type QueueSummary = {
@@ -167,6 +179,7 @@ export function DocumentReviewQueue() {
           status,
           reviewer: reviewer || undefined,
           notes: notes || undefined,
+          updatedFields: updatedFields || undefined,
         }),
       });
       const result = await response.json();
@@ -281,10 +294,17 @@ export function DocumentReviewQueue() {
                 id: entry.id,
                 listingId: entry.listingId,
                 sourceUrl: entry.documentUrl || undefined,
-                rawText: `Source Document: ${entry.listingId} (Doc #${entry.documentIndex ?? 0})\nDocument URL: ${entry.documentUrl || "None attached"}\nExtraction timestamp: ${entry.review.extractedAt || "Observed via crawler"}\nCurrent review status: ${entry.review.status}\nPrior status: ${entry.review.priorStatus || "None"}`,
+                rawText: entry.rawText || `Source Document: ${entry.listingId} (Doc #${entry.documentIndex ?? 0})\nDocument URL: ${entry.documentUrl || "None attached"}\nExtraction timestamp: ${entry.review.extractedAt || "Observed via crawler"}\nCurrent review status: ${entry.review.status}\nPrior status: ${entry.review.priorStatus || "None"}`,
                 extractedFields: {
-                  caseNumber: entry.listingId,
-                  confidenceScore: entry.review.status === "approved" ? 1.0 : undefined,
+                  caseNumber: entry.extractedFields?.caseNumber || entry.listingId,
+                  defendant: entry.extractedFields?.defendant,
+                  plaintiff: entry.extractedFields?.plaintiff,
+                  openingBid: entry.extractedFields?.openingBid,
+                  judgmentAmount: entry.extractedFields?.judgmentAmount,
+                  saleDate: entry.extractedFields?.saleDate,
+                  apn: entry.extractedFields?.apn,
+                  confidenceScore: entry.extractedFields?.confidenceScore ?? (entry.review.status === "approved" ? 1.0 : undefined),
+                  evidenceSpans: entry.extractedFields?.evidenceSpans,
                 },
                 reviewStatus: entry.review.status === "needs_more" ? "pending" : (entry.review.status as any),
               }))}

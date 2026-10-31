@@ -1,49 +1,11 @@
 import Link from "next/link";
 import { countyToSlug, getStatutoryRedemption } from "@/lib/county-seo";
+import { CountyRow, loadStateCounties as loadStateCountiesImpl } from "@/lib/state-coverage";
 
 export const dynamic = "force-dynamic";
 
-type CountyRow = { county: string; count: number; sources: string[] };
-
-type CoveragePayload = {
-  liveByState?: {
-    byStateTotal?: Record<string, unknown>;
-    byCounty?: Record<string, unknown>;
-    readError?: string | null;
-  };
-};
-
-async function loadStateCounties(state: string): Promise<{ total: number; counties: CountyRow[]; error: string | null }> {
-  const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
-  try {
-    const response = await fetch(`${apiUrl}/api/coverage`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
-    const body = (await response.json()) as CoveragePayload;
-    if (body.liveByState?.readError) return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
-    const totalRaw = body.liveByState?.byStateTotal?.[state];
-    const total = typeof totalRaw === "number" && Number.isFinite(totalRaw) && totalRaw > 0 ? totalRaw : 0;
-    const raw = body.liveByState?.byCounty?.[state];
-    const counties = Array.isArray(raw)
-      ? raw.flatMap((row) => {
-          if (!row || typeof row !== "object") return [];
-          const county = (row as { county?: unknown }).county;
-          const count = (row as { count?: unknown }).count;
-          const sources = (row as { sources?: unknown }).sources;
-          if (typeof county !== "string" || county.trim().length < 2) return [];
-          if (typeof count !== "number" || !Number.isFinite(count) || count <= 0) return [];
-          const names = Array.isArray(sources)
-            ? sources.filter((item): item is string => typeof item === "string" && item.length > 0)
-            : [];
-          return [{ county, count, sources: names }];
-        })
-      : [];
-    return { total, counties, error: null };
-  } catch {
-    return { total: 0, counties: [], error: "We couldn't load this state's counties right now. Please try again in a minute." };
-  }
+export async function loadStateCounties(state: string): Promise<{ total: number; counties: CountyRow[]; error: string | null }> {
+  return loadStateCountiesImpl(state);
 }
 
 export default async function StateCountiesPage({ params }: { params: Promise<{ state: string }> }) {

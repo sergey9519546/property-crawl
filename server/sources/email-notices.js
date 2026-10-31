@@ -34,6 +34,7 @@ const { detectNoticeState } = require('./email-notice-collector');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { parseRfc822 } = require('../scrapers/email-ingest');
 const defaultDb = require('../db/client');
+const { defaultVault } = require('../storage/document-vault');
 
 const FEED_CONFIG = emailFeeds.feeds || {};
 
@@ -166,6 +167,22 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
   const openingBid = Number(parsed.opening_bid) > 0 ? Number(parsed.opening_bid) : null;
   const judgment = Number(parsed.judgment_amount) > 0 ? Number(parsed.judgment_amount) : null;
 
+  if (meta.rawSnippet) {
+    try {
+      if (typeof defaultVault.putDocumentSync === 'function') {
+        defaultVault.putDocumentSync(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
+          contentType: 'text/plain',
+          metadata: { recordId, source: 'email-notices' },
+        });
+      } else if (typeof defaultVault.putDocument === 'function') {
+        defaultVault.putDocument(`reviews/${encodeURIComponent(recordId)}.txt`, meta.rawSnippet, {
+          contentType: 'text/plain',
+          metadata: { recordId, source: 'email-notices' },
+        }).catch(() => {});
+      }
+    } catch (_) {}
+  }
+
   return {
     id: recordId,
     source: 'email-notices',
@@ -202,6 +219,15 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
         sender: meta.sender || null,
         parcelIndex,
         totalParcels: meta.totalParcels || 1,
+        documents: [
+          {
+            title: `Statutory Legal Notice Evidence - ${parsed.case_number || recordId}`,
+            url: noticeUrl,
+            rawText: meta.rawSnippet || parsed.raw || null,
+            evidenceSpans: parsed.evidence_spans || {},
+            confidenceScore: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : null,
+          },
+        ],
       },
     },
   };

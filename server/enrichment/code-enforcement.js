@@ -8,6 +8,11 @@
  * - City of Chicago (IL): data.cityofchicago.org dataset 22u3-xenr
  * - City of New Orleans (LA): data.nola.gov dataset 8vs5-j6m5
  * - City of Philadelphia (PA): data.phila.gov / OpenDataPhilly licenses & inspections
+ * - City of Austin (TX): data.austintexas.gov dataset b274-pqqb
+ * - City of Dallas (TX): www.dallasopendata.com dataset 9qet-m2u9
+ * - City of Baltimore (MD): data.baltimorecity.gov dataset n435-yubt
+ * - City of Cincinnati (OH): data.cincinnati-oh.gov dataset cf5w-zngb
+ * - City of Kansas City (MO): data.kcmo.org dataset ax3m-jhxx
  */
 
 const MUNICIPAL_PORTALS = Object.freeze({
@@ -82,6 +87,96 @@ const MUNICIPAL_PORTALS = Object.freeze({
     statusField: 'casestatus',
     dateField: 'violationdate',
     inspectionDateField: 'inspectiondate'
+  },
+  austin: {
+    key: 'austin',
+    source: 'SOCRATA_AUSTIN',
+    name: 'City of Austin Code Cases',
+    host: 'data.austintexas.gov',
+    datasetId: 'b274-pqqb',
+    endpoint: 'https://data.austintexas.gov/resource/b274-pqqb.json',
+    states: ['TX'],
+    cities: ['AUSTIN'],
+    counties: ['TRAVIS', 'WILLIAMSON'],
+    addressField: 'property_address',
+    parcelField: 'parcel_id',
+    codeField: 'code_section',
+    descField: 'case_description',
+    statusField: 'case_status',
+    dateField: 'opened_date',
+    inspectionDateField: 'last_inspection_date'
+  },
+  dallas: {
+    key: 'dallas',
+    source: 'SOCRATA_DALLAS',
+    name: 'City of Dallas Code Compliance Violations',
+    host: 'www.dallasopendata.com',
+    datasetId: '9qet-m2u9',
+    endpoint: 'https://www.dallasopendata.com/resource/9qet-m2u9.json',
+    states: ['TX'],
+    cities: ['DALLAS'],
+    counties: ['DALLAS', 'COLLIN', 'DENTON'],
+    addressField: 'service_request_address',
+    parcelField: 'property_id',
+    codeField: 'violation_type',
+    descField: 'violation_description',
+    statusField: 'status',
+    dateField: 'created_date',
+    inspectionDateField: 'status_date'
+  },
+  baltimore: {
+    key: 'baltimore',
+    source: 'SOCRATA_BALTIMORE',
+    name: 'City of Baltimore Housing Code Violations',
+    host: 'data.baltimorecity.gov',
+    datasetId: 'n435-yubt',
+    endpoint: 'https://data.baltimorecity.gov/resource/n435-yubt.json',
+    states: ['MD'],
+    cities: ['BALTIMORE', 'BALTIMORE CITY'],
+    counties: ['BALTIMORE', 'BALTIMORE CITY'],
+    addressField: 'propertyaddress',
+    parcelField: 'blocklot',
+    codeField: 'violationcode',
+    descField: 'violationdescription',
+    statusField: 'violationstatus',
+    dateField: 'noticedate',
+    inspectionDateField: 'inspectiondate'
+  },
+  cincinnati: {
+    key: 'cincinnati',
+    source: 'SOCRATA_CINCINNATI',
+    name: 'City of Cincinnati Code Enforcement Violations',
+    host: 'data.cincinnati-oh.gov',
+    datasetId: 'cf5w-zngb',
+    endpoint: 'https://data.cincinnati-oh.gov/resource/cf5w-zngb.json',
+    states: ['OH'],
+    cities: ['CINCINNATI'],
+    counties: ['HAMILTON'],
+    addressField: 'address',
+    parcelField: 'parcel_number',
+    codeField: 'violation_code',
+    descField: 'violation_description',
+    statusField: 'status',
+    dateField: 'entered_date',
+    inspectionDateField: 'last_inspection_date'
+  },
+  kansascity: {
+    key: 'kansascity',
+    source: 'SOCRATA_KANSAS_CITY',
+    name: 'City of Kansas City Property Violations',
+    host: 'data.kcmo.org',
+    datasetId: 'ax3m-jhxx',
+    endpoint: 'https://data.kcmo.org/resource/ax3m-jhxx.json',
+    states: ['MO'],
+    cities: ['KANSAS CITY'],
+    counties: ['JACKSON', 'CLAY', 'PLATTE'],
+    addressField: 'street_address',
+    parcelField: 'kiva_pin',
+    codeField: 'ordinance_code',
+    descField: 'violation_description',
+    statusField: 'case_status',
+    dateField: 'violation_entry_date',
+    inspectionDateField: 'last_action_date'
   }
 });
 
@@ -96,7 +191,9 @@ const CLOSED_STATUSES = Object.freeze(new Set([
   'VOID',
   'ABATED',
   'INACTIVE',
-  'PASSED'
+  'PASSED',
+  'SATISFIED',
+  'COMPLETED'
 ]));
 
 const VACANCY_KEYWORDS = Object.freeze([
@@ -115,6 +212,27 @@ const VACANCY_KEYWORDS = Object.freeze([
   'vbr'
 ]);
 
+const DEMOLITION_KEYWORDS = Object.freeze([
+  'condemn',
+  'demolition',
+  'unsafe structure',
+  'unfit for human habitation',
+  'order to demolish',
+  'emergency board up',
+  'emergency board',
+  'imminent danger',
+  'substandard building',
+  'vacant building registration',
+  'dangerous building',
+  'structure unfit',
+  'collapse hazard'
+]);
+
+function isDemolitionOrCondemnationText(text = '') {
+  const lower = String(text || '').toLowerCase();
+  return DEMOLITION_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 /**
  * Resolves municipal portal configuration for state/county/city.
  */
@@ -123,11 +241,33 @@ function resolveMunicipalPortal({ state, county, city } = {}) {
   const st = String(state).trim().toUpperCase();
   const ct = city ? String(city).trim().toUpperCase() : '';
   const co = county ? String(county).trim().toUpperCase().replace(/\s+(COUNTY|PARISH)$/i, '') : '';
+  const coRaw = county ? String(county).trim().toUpperCase() : '';
 
-  for (const portal of Object.values(MUNICIPAL_PORTALS)) {
-    if (!portal.states.includes(st)) continue;
-    if (ct && portal.cities.includes(ct)) return portal;
-    if (co && portal.counties.includes(co)) return portal;
+  const portals = Object.values(MUNICIPAL_PORTALS).filter((p) => p.states.includes(st));
+  if (!portals.length) return null;
+
+  // 1. Exact city match
+  if (ct) {
+    const matchedCity = portals.find((p) => p.cities.includes(ct));
+    if (matchedCity) return matchedCity;
+  }
+
+  // 2. County / Parish match
+  if (co || coRaw) {
+    const matchedCounty = portals.find((p) =>
+      p.counties.includes(co) ||
+      p.counties.includes(coRaw) ||
+      (co.endsWith(' CITY') && p.counties.includes(co))
+    );
+    if (matchedCounty) return matchedCounty;
+  }
+
+  // 3. Substring city match (e.g. 'KANSAS CITY, MO' or 'PHILLY')
+  if (ct) {
+    const matchedCitySub = portals.find((p) =>
+      p.cities.some((c) => ct.includes(c) || c.includes(ct))
+    );
+    if (matchedCitySub) return matchedCitySub;
   }
 
   return null;
@@ -190,7 +330,7 @@ function isVacantNotice(record = {}, violation = {}) {
   if (record.vacant === 'Y' || record.vacant === true || record.is_vacant === true || record.is_vacant === 'Y') {
     return true;
   }
-  const text = `${violation.code || ''} ${violation.description || ''} ${record.case_type || ''} ${record.violation_type || ''} ${record.violation_ordinance || ''}`.toLowerCase();
+  const text = `${violation.code || ''} ${violation.description || ''} ${record.case_type || ''} ${record.violation_type || ''} ${record.violation_ordinance || ''} ${record.case_description || ''}`.toLowerCase();
   return VACANCY_KEYWORDS.some((kw) => text.includes(kw));
 }
 
@@ -204,20 +344,25 @@ function parseCodeViolationsResponse(data, portal) {
   } else if (data && Array.isArray(data.rows)) {
     records = data.rows;
   } else if (data && Array.isArray(data.features)) {
-    records = data.features.map(f => f.attributes || f.properties || {});
+    records = data.features.map((f) => f.attributes || f.properties || {});
   }
 
   const violations = [];
   let openViolationsCount = 0;
+  let totalFines = 0;
   let vacantBuildingNotice = false;
+  let hasDemolitionRisk = false;
+  let isCondemnedFlag = false;
   let latestInspectionTime = 0;
   let latestInspectionDateStr = null;
 
   for (const record of records) {
     const code = String(
-      record[portal.codeField] ||
+      (portal && portal.codeField && record[portal.codeField]) ||
       record.violation_code ||
       record.violationcode ||
+      record.code_section ||
+      record.ordinance_code ||
       record.code ||
       record.ordinance ||
       record.violation_ordinance ||
@@ -226,19 +371,22 @@ function parseCodeViolationsResponse(data, portal) {
     ).trim();
 
     const description = String(
-      record[portal.descField] ||
+      (portal && portal.descField && record[portal.descField]) ||
       record.violation_description ||
       record.violationdescription ||
+      record.case_description ||
       record.description ||
       record.violation_type ||
+      record.service_request_type ||
       record.violation ||
       record.comments ||
       ''
     ).trim();
 
     const status = String(
-      record[portal.statusField] ||
+      (portal && portal.statusField && record[portal.statusField]) ||
       record.violation_status ||
+      record.violationstatus ||
       record.case_status ||
       record.casestatus ||
       record.status ||
@@ -246,10 +394,14 @@ function parseCodeViolationsResponse(data, portal) {
     ).trim();
 
     const date = String(
-      record[portal.dateField] ||
+      (portal && portal.dateField && record[portal.dateField]) ||
       record.violation_date ||
       record.violationdate ||
       record.opened_date ||
+      record.created_date ||
+      record.entered_date ||
+      record.violation_entry_date ||
+      record.noticedate ||
       record.date_opened ||
       record.inspection_date ||
       record.violation_status_date ||
@@ -257,26 +409,94 @@ function parseCodeViolationsResponse(data, portal) {
       ''
     ).trim();
 
+    // Fine extraction
+    const rawFine = (portal && portal.fineField && record[portal.fineField] !== undefined)
+      ? record[portal.fineField]
+      : (record.fine_amount !== undefined
+        ? record.fine_amount
+        : record.fineAmount !== undefined
+        ? record.fineAmount
+        : record.fine !== undefined
+        ? record.fine
+        : record.fee_amount !== undefined
+        ? record.fee_amount
+        : record.total_fees !== undefined
+        ? record.total_fees
+        : record.fees_assessed !== undefined
+        ? record.fees_assessed
+        : record.estimated_cost !== undefined
+        ? record.estimated_cost
+        : record.fines !== undefined
+        ? record.fines
+        : record.fee !== undefined
+        ? record.fee
+        : record.penalty_amount !== undefined
+        ? record.penalty_amount
+        : record.balance_due !== undefined
+        ? record.balance_due
+        : record.amount !== undefined
+        ? record.amount
+        : 0);
+
+    const parsedFine = typeof rawFine === 'number'
+      ? rawFine
+      : parseFloat(String(rawFine || '0').replace(/[^0-9.-]/g, '')) || 0;
+    const fineAmount = Math.max(0, parsedFine);
+
+    // Demolition / condemnation detection
+    const fullText = `${code} ${description} ${record.case_type || ''} ${record.violation_type || ''} ${record.violation_description || ''} ${record.case_description || ''} ${record.ordinance_code || ''} ${record.code_section || ''}`;
+    const recordCondemned = Boolean(
+      record.is_condemned === true ||
+      record.is_condemned === 'Y' ||
+      record.condemned === true ||
+      record.condemned === 'Y' ||
+      record.isCondemned === true
+    );
+    const textCondemned = isDemolitionOrCondemnationText(fullText);
+    const isCondemned = recordCondemned || textCondemned;
+    const isDemolitionRisk = isCondemned || textCondemned;
+
+    // Vacancy detection
+    const isVacant = isVacantNotice(record, { code, description });
+
     const violation = {
       code,
       description,
       status,
-      date
+      date,
+      fineAmount,
+      isCondemned,
+      isDemolitionRisk,
+      isVacant,
+      violationType: description || code || 'Municipal Code Violation'
     };
 
     violations.push(violation);
 
     if (isOpenStatus(status)) {
       openViolationsCount++;
+      totalFines += fineAmount;
     }
 
-    if (!vacantBuildingNotice && isVacantNotice(record, violation)) {
+    if (!vacantBuildingNotice && (isVacant || isVacantNotice(record, violation))) {
       vacantBuildingNotice = true;
     }
 
+    if (isCondemned) {
+      isCondemnedFlag = true;
+      hasDemolitionRisk = true;
+    }
+    if (isDemolitionRisk) {
+      hasDemolitionRisk = true;
+    }
+
+    const inspectionField = portal ? portal.inspectionDateField : null;
     const candidateDates = [
-      record[portal.inspectionDateField],
+      inspectionField ? record[inspectionField] : null,
       record.last_inspection_date,
+      record.status_date,
+      record.inspectiondate,
+      record.last_action_date,
       record.inspection_date,
       record.violation_status_date,
       date
@@ -292,11 +512,14 @@ function parseCodeViolationsResponse(data, portal) {
   }
 
   return {
-    source: portal.source,
+    source: portal ? portal.source : 'SOCRATA_MUNICIPAL',
     queriedAt: new Date().toISOString(),
     violationsCount: violations.length,
     openViolationsCount,
+    totalFines,
     vacantBuildingNotice,
+    isCondemned: isCondemnedFlag,
+    hasDemolitionRisk,
     lastInspectionDate: latestInspectionDateStr,
     violations
   };
@@ -345,7 +568,10 @@ async function lookupCodeViolations({
       queriedAt: new Date().toISOString(),
       violationsCount: 0,
       openViolationsCount: 0,
+      totalFines: 0,
       vacantBuildingNotice: false,
+      isCondemned: false,
+      hasDemolitionRisk: false,
       lastInspectionDate: null,
       violations: []
     };
@@ -411,6 +637,8 @@ module.exports = {
   MUNICIPAL_PORTALS,
   CLOSED_STATUSES,
   VACANCY_KEYWORDS,
+  DEMOLITION_KEYWORDS,
+  isDemolitionOrCondemnation: isDemolitionOrCondemnationText,
   resolveMunicipalPortal,
   sanitizeSoqlLiteral,
   buildMunicipalQueryUrl,

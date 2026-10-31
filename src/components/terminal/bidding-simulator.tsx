@@ -50,6 +50,12 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
   const [appliedPresetCitations, setAppliedPresetCitations] = useState<string[] | null>(null);
+  const [holdingMonths, setHoldingMonths] = useState<number>(() => {
+    if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
+      return Math.max(1, Math.round(listing.redemptionDays / 30));
+    }
+    return 6;
+  });
 
   useEffect(() => {
     const stored = readUnderwriteScenario(listing.id);
@@ -72,6 +78,14 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       setCustomOpeningBid(stored.customOpeningBid);
     }
   }, [listing.id]);
+
+  useEffect(() => {
+    if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
+      setHoldingMonths(Math.max(1, Math.round(listing.redemptionDays / 30)));
+    } else {
+      setHoldingMonths(6);
+    }
+  }, [listing.id, listing.redemptionDays]);
 
   const persistScenario = (
     next: Record<ScenarioField, string>,
@@ -237,11 +251,12 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     statutoryCarry.stateRedemptionDays > 0 ||
     (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
   );
+  const simulatedDays = holdingMonths * 30;
   const redemptionYield = isTaxSale && openingBid !== null
     ? computeRedemptionYield({
         purchasePrice: openingBid,
         state: listing.state,
-        redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
+        redemptionDays: simulatedDays,
         isTaxSale: true,
         isHomestead: Boolean(listing.isHomestead),
       })
@@ -399,13 +414,18 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         )}
         {redemptionYield && (
-          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink space-y-2">
+          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-go">Tax Sale Statutory Instrument</span>
+                <span className="font-bold text-go">Tax Deed Redemption Yield &amp; Penalty Model</span>
                 <span className="rounded-md bg-go/20 px-2 py-0.5 text-xs font-extrabold text-go border border-go/30">
-                  {redemptionYield.instrumentBadge}
+                  {redemptionYield.legalRegime}
                 </span>
+                {redemptionYield.instrumentBadge && (
+                  <span className="rounded-md bg-card px-2 py-0.5 text-[11px] font-semibold text-ink-2 border border-line">
+                    {redemptionYield.instrumentBadge}
+                  </span>
+                )}
               </div>
               {redemptionYield.regime === "post_redemption_deed" ? (
                 <span className="rounded-md bg-go/10 px-2 py-0.5 font-bold text-go">
@@ -413,23 +433,99 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 </span>
               ) : (
                 <span className="rounded-md bg-go/10 px-2 py-0.5 font-extrabold text-go">
-                  +{redemptionYield.statutoryRatePct}% {redemptionYield.isFlatPenalty ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedIrrPct}% IRR)
+                  +{redemptionYield.penaltyRatePct}% {redemptionYield.isFlatPenalty ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedYieldPct}% annualized)
                 </span>
               )}
             </div>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
-              <div className="rounded-lg border border-line bg-card p-2">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Gross Redemption Payoff</span>
-                <span className="text-sm font-bold text-ink">{displayMoney(redemptionYield.grossProceeds)}</span>
+
+            <div className="space-y-2 rounded-lg border border-line bg-card/60 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-ink-2">Simulate redemption in month:</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[1, 3, 6, 12, 24].map((mo) => (
+                    <button
+                      key={mo}
+                      type="button"
+                      onClick={() => setHoldingMonths(mo)}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+                        holdingMonths === mo
+                          ? "bg-go text-white border-go shadow-xs"
+                          : "bg-card text-ink border-line hover:border-ink/30"
+                      }`}
+                    >
+                      {mo} mo
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="rounded-lg border border-line bg-card p-2">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Net Statutory Return</span>
-                <span className={`text-sm font-bold ${redemptionYield.netStatutoryReturn > 0 ? "text-go" : "text-ink"}`}>
-                  {redemptionYield.netStatutoryReturn > 0 ? `+${displayMoney(redemptionYield.netStatutoryReturn)}` : "$0 (Direct Title Acquisition)"}
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="1"
+                  max="24"
+                  step="1"
+                  value={holdingMonths}
+                  onChange={(e) => setHoldingMonths(Number(e.target.value))}
+                  className="w-full accent-go"
+                  aria-label="Holding duration in months"
+                />
+                <span className="text-xs font-bold text-ink whitespace-nowrap min-w-[3.5rem] text-right">
+                  {holdingMonths} mo ({simulatedDays}d)
                 </span>
               </div>
             </div>
-            <p className="mt-2 text-[11px] text-ink-3 leading-relaxed">{redemptionYield.statutoryCitation}</p>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">
+                  {redemptionYield.yieldType === "penalty" ? "Penalty Rate" : "Interest Rate"}
+                </span>
+                <span className="text-sm font-bold text-ink">
+                  {redemptionYield.penaltyRatePct}%
+                </span>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Gross Payout if Redeemed</span>
+                <span className="text-sm font-bold text-ink">
+                  {displayMoney(redemptionYield.redemptionPayout)}
+                </span>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Investor Yield / Profit</span>
+                <span className={`text-sm font-bold ${redemptionYield.penaltyAmount > 0 ? "text-go" : "text-ink"}`}>
+                  {redemptionYield.penaltyAmount > 0 ? `+${displayMoney(redemptionYield.penaltyAmount)}` : "$0 (Direct Title Acquisition)"}
+                </span>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Annualized Return (IRR)</span>
+                <span className="text-sm font-bold text-go">
+                  {redemptionYield.annualizedYieldPct}% annualized
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-line bg-card/60 p-2.5 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                <span className="font-semibold text-ink-2">Statutory Redemption Period:</span>
+                <span className="font-medium text-ink">{redemptionYield.redemptionPeriodLabel}</span>
+              </div>
+              <p className="text-[11px] text-ink-3 leading-relaxed">{redemptionYield.statute}</p>
+              {redemptionYield.regime === "redeemable_deed_flat_penalty" && (
+                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                  Flat statutory penalty does not prorate per-diem; full penalty is owed upon redemption regardless of exact day.
+                </p>
+              )}
+              {redemptionYield.regime === "redeemable_deed_or_lien_interest" && (
+                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                  Accrues simple statutory interest over holding duration.
+                </p>
+              )}
+              {redemptionYield.regime === "post_redemption_deed" && (
+                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                  Immediate title upon deed issuance; no post-sale redemption right survives the gavel drop.
+                </p>
+              )}
+            </div>
           </div>
         )}
 

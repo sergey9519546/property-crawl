@@ -1,35 +1,10 @@
 import Link from "next/link";
+import { loadStateCounts as loadStateCountsImpl } from "@/lib/state-coverage";
 
 export const dynamic = "force-dynamic";
 
-type CoveragePayload = {
-  liveByState?: {
-    byStateTotal?: Record<string, unknown>;
-    readError?: string | null;
-  };
-};
-
-async function loadStateCounts(): Promise<{ rows: { state: string; count: number }[]; error: string | null }> {
-  const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
-  try {
-    const response = await fetch(`${apiUrl}/api/coverage`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) return { rows: [], error: "We couldn't load the list of states right now. Please try again in a minute." };
-    const body = (await response.json()) as CoveragePayload;
-    if (body.liveByState?.readError) return { rows: [], error: "We couldn't load the list of states right now. Please try again in a minute." };
-    const totals = body.liveByState?.byStateTotal || {};
-    const rows = Object.entries(totals)
-      .flatMap(([state, count]) => {
-        if (!/^[A-Z]{2}$/.test(state) || typeof count !== "number" || !Number.isFinite(count) || count <= 0) return [];
-        return [{ state, count }];
-      })
-      .sort((left, right) => right.count - left.count || left.state.localeCompare(right.state));
-    return { rows, error: null };
-  } catch {
-    return { rows: [], error: "We couldn't load the list of states right now. Please try again in a minute." };
-  }
+export async function loadStateCounts(): Promise<{ rows: { state: string; count: number }[]; error: string | null }> {
+  return loadStateCountsImpl();
 }
 
 export default async function StatesPage() {

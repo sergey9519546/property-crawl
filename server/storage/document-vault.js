@@ -149,6 +149,75 @@ class DocumentVault {
    * @param {string} rawKey
    * @returns {Promise<Object|null>}
    */
+  putDocumentSync(rawKey, data, options = {}) {
+    const key = sanitizeKey(rawKey);
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(String(data), 'utf8');
+
+    if (buffer.length > MAX_DOCUMENT_SIZE) {
+      throw new Error(`Document exceeds maximum size of ${MAX_DOCUMENT_SIZE} bytes`);
+    }
+
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+    const contentType = options.contentType || 'application/octet-stream';
+    const storedAt = new Date().toISOString();
+
+    const localPath = this._localFilePath(key);
+    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+
+    const tempFile = `${localPath}.${crypto.randomUUID()}.tmp`;
+    fs.writeFileSync(tempFile, buffer);
+    fs.renameSync(tempFile, localPath);
+
+    const metaPath = `${localPath}.meta.json`;
+    const meta = {
+      key,
+      sha256,
+      size: buffer.length,
+      contentType,
+      storedAt,
+      metadata: options.metadata || {},
+    };
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+    return {
+      key,
+      size: buffer.length,
+      sha256,
+      contentType,
+      storedAt,
+      storageType: 'local',
+      localPath,
+    };
+  }
+
+  getDocumentSync(rawKey) {
+    const key = sanitizeKey(rawKey);
+    const localPath = this._localFilePath(key);
+    const metaPath = `${localPath}.meta.json`;
+
+    if (fs.existsSync(localPath)) {
+      const data = fs.readFileSync(localPath);
+      let meta = {};
+      try {
+        if (fs.existsSync(metaPath)) {
+          meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        }
+      } catch {}
+
+      return {
+        key,
+        data,
+        size: data.length,
+        sha256: meta.sha256 || crypto.createHash('sha256').update(data).digest('hex'),
+        contentType: meta.contentType || 'application/octet-stream',
+        storedAt: meta.storedAt || null,
+        metadata: meta.metadata || {},
+      };
+    }
+
+    return null;
+  }
+
   async getDocument(rawKey) {
     const key = sanitizeKey(rawKey);
     const localPath = this._localFilePath(key);
