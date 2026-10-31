@@ -1057,7 +1057,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Clayton County GA — Tax Sale List (PDF) (county, GA). Official statutory source for tax deed.",
     "discoveryUrl": "https://publicaccess.claytoncountyga.gov/content/PDF/AUGUST%202025%20TAX%20SALE%20LISTING.pdf",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Clayton County GA — Tax Sale List (PDF) for delinquent tax property records and scheduled auctions.",
@@ -1141,7 +1141,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Jackson County MO — Delinquent Land Tax Sale (16th Circuit) (county, MO). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.16thcircuit.org/delinquent-land-tax",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Jackson County MO — Delinquent Land Tax Sale (16th Circuit) for delinquent tax property records and scheduled auctions.",
@@ -1169,7 +1169,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Prince George's County MD — Tax Sale Site (county, MD). Official statutory source for tax deed.",
     "discoveryUrl": "https://taxsale.princegeorgescountymd.gov",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Prince George's County MD — Tax Sale Site for delinquent tax property records and scheduled auctions.",
@@ -1197,7 +1197,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Baltimore City MD — Tax Lien Certificate Sale Properties (city, MD). Official statutory source for tax deed.",
     "discoveryUrl": "https://data.baltimorecity.gov/maps/baltimore::tax-lien-certificate-sale-properties-2",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Baltimore City MD — Tax Lien Certificate Sale Properties for delinquent tax property records and scheduled auctions.",
@@ -1225,7 +1225,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Baltimore County MD — Tax Sale Properties PDF (county, MD). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.baltimorecountymd.gov/files/departments/budget-and-finance/documents/tax-sale-third-ad-2025.pdf",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Baltimore County MD — Tax Sale Properties PDF for delinquent tax property records and scheduled auctions.",
@@ -1253,7 +1253,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Maricopa County AZ — Unsold Tax-Deeded Land PDF (county, AZ). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.maricopa.gov/DocumentCenter/View/2241/Listing-of-Previously-Offered-Tax-Deeded-Land---NOT-SOLD-PDF",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Maricopa County AZ — Unsold Tax-Deeded Land PDF for delinquent tax property records and scheduled auctions.",
@@ -1281,7 +1281,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Arapahoe County CO — Tax Lien Sale Files (county, CO). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.arapahoeco.gov/your_county/county_departments/treasurer/tax_lien_sale/tax_lien_sale_files/index.php",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Arapahoe County CO — Tax Lien Sale Files for delinquent tax property records and scheduled auctions.",
@@ -1309,7 +1309,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Denver County CO — Tax Lien Sale (city, CO). Official statutory source for tax deed.",
     "discoveryUrl": "https://denvergov.org/Government/Agencies-Departments-Offices/Agencies-Departments-Offices-Directory/Department-of-Finance/Our-Divisions/Treasury/Property-Taxes/Real-Estate-Delinquent-Taxes-and-Tax-Lien-Sale",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Denver County CO — Tax Lien Sale for delinquent tax property records and scheduled auctions.",
@@ -1337,7 +1337,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Clark County NV (Las Vegas) — Tax Auction Properties (county, NV). Official statutory source for tax deed.",
     "discoveryUrl": "https://treasurer.clarkcountynv.gov/auction/Auction/AuctionList",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Clark County NV (Las Vegas) — Tax Auction Properties for delinquent tax property records and scheduled auctions.",
@@ -1393,7 +1393,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Wayne County MI (Detroit) — Foreclosed Property Auction (county, MI). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.waynecountymi.gov/Government/Elected-Officials/Treasurer/Claims-Auctions",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Wayne County MI (Detroit) — Foreclosed Property Auction for delinquent tax property records and scheduled auctions.",
@@ -1421,7 +1421,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Oakland County MI — Tax-Foreclosed Property Auction (county, MI). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.oakgov.com/government/oakland-county-treasurer-s-office/property-taxes/property-tax-foreclosure-surplus-claims",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Oakland County MI — Tax-Foreclosed Property Auction for delinquent tax property records and scheduled auctions.",
@@ -1449,7 +1449,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Macomb County MI — Tax Foreclosure Auction (county, MI). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.macombgov.org/departments/treasurers-office/tax-foreclosure/auction-and-claims",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Macomb County MI — Tax Foreclosure Auction for delinquent tax property records and scheduled auctions.",
@@ -1477,7 +1477,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Genesee County MI (Flint) — Tax Sale Auction (county, MI). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.geneseecountymi.gov/departments/treasurer/index.php",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Genesee County MI (Flint) — Tax Sale Auction for delinquent tax property records and scheduled auctions.",
@@ -1505,7 +1505,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Allen County IN (Fort Wayne) — Tax Sale (county, IN). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.allencounty.in.gov/270/Tax-Sale",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Allen County IN (Fort Wayne) — Tax Sale for delinquent tax property records and scheduled auctions.",
@@ -1533,7 +1533,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Grant County IN — Delinquent Property Listing (county, IN). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.in.gov/counties/grant/files/DelinquentPropertyListing2022.pdf",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Grant County IN — Delinquent Property Listing for delinquent tax property records and scheduled auctions.",
@@ -1589,7 +1589,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Mecklenburg County NC — Delinquent Taxpayer Lists (county, NC). Official statutory source for tax deed.",
     "discoveryUrl": "https://tax.mecknc.gov/Delinquent-Taxpayer-Lists",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Mecklenburg County NC — Delinquent Taxpayer Lists for delinquent tax property records and scheduled auctions.",
@@ -1673,7 +1673,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Durham County NC — Tax Delinquent Properties Map (ArcGIS) (county, NC). Official statutory source for tax deed.",
     "discoveryUrl": "https://experience.arcgis.com/experience/640b8534655c4397b75f1d5a9cbad201",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Durham County NC — Tax Delinquent Properties Map (ArcGIS) for delinquent tax property records and scheduled auctions.",
@@ -1813,7 +1813,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Knox County TN — Tax Sale Properties Map (KGIS) (county, TN). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.kgis.org/portal/AboutUs/PolicyBoard/TabId/93/ArtMID/497/ArticleID/5040/Property-Tax-Sale-Maps.aspx",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Knox County TN — Tax Sale Properties Map (KGIS) for delinquent tax property records and scheduled auctions.",
@@ -1981,7 +1981,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Worcester MA — Tax Foreclosure Public Auctions (city, MA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.worcesterma.gov/finance/liens-auctions/public-auctions",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Worcester MA — Tax Foreclosure Public Auctions for delinquent tax property records and scheduled auctions.",
@@ -2009,7 +2009,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "NYC Department of Finance — In Rem Foreclosure (city, NY). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.nyc.gov/site/finance/property/in-rem-foreclosure.page",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect NYC Department of Finance — In Rem Foreclosure for delinquent tax property records and scheduled auctions.",
@@ -2037,7 +2037,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Indiana County PA — Tax Claim Bureau Sale Listing (PDF) (county, PA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.indianacountypa.gov/wp-content/uploads/Website-Public-Listing.pdf",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Indiana County PA — Tax Claim Bureau Sale Listing (PDF) for delinquent tax property records and scheduled auctions.",
@@ -2065,7 +2065,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "DC OTR — Annual Tax Sale (state, DC). Official statutory source for tax deed.",
     "discoveryUrl": "https://taxsale.dc.gov",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect DC OTR — Annual Tax Sale for delinquent tax property records and scheduled auctions.",
@@ -2373,7 +2373,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Will County IL — Sheriff Foreclosure Surplus List (county, IL). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.willcosheriff.org/civil-court/foreclosures/surplus-list",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Will County IL — Sheriff Foreclosure Surplus List for civil foreclosure sale notices and scheduled auctions.",
@@ -2513,8 +2513,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Miami-Dade FL — Lis Pendens Search (county, FL). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.miamidadeclerk.gov/clerk/search-public-records",
     "access": "jurisdiction",
-    "adapterKey": null,
-    "status": "LOCAL_ROUTE",
+    "adapterKey": "courtlistener",
+    "status": "DISCOVERY_ONLY",
     "workflow": {
       "primary": "Monitor Miami-Dade FL — Lis Pendens Search for civil foreclosure sale notices and scheduled auctions.",
       "fallback": "Confirm foreclosure sale status with the county sheriff civil division or court clerk.",
@@ -2541,8 +2541,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Suffolk County MA — MassLandRecords (county, MA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.masslandrecords.com/suffolk",
     "access": "jurisdiction",
-    "adapterKey": null,
-    "status": "LOCAL_ROUTE",
+    "adapterKey": "courtlistener",
+    "status": "DISCOVERY_ONLY",
     "workflow": {
       "primary": "Monitor Suffolk County MA — MassLandRecords for civil foreclosure sale notices and scheduled auctions.",
       "fallback": "Confirm foreclosure sale status with the county sheriff civil division or court clerk.",
@@ -2569,8 +2569,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "City of Las Vegas — Abandoned Property Registry (city, NV). Official statutory source for foreclosure.",
     "discoveryUrl": "https://www.lasvegasnevada.gov/Business/Planning-Zoning/Code-Enforcement/Abandoned-Property-Registry",
     "access": "jurisdiction",
-    "adapterKey": null,
-    "status": "LOCAL_ROUTE",
+    "adapterKey": "courtlistener",
+    "status": "DISCOVERY_ONLY",
     "workflow": {
       "primary": "Monitor City of Las Vegas — Abandoned Property Registry for civil foreclosure sale notices and scheduled auctions.",
       "fallback": "Confirm foreclosure sale status with the county sheriff civil division or court clerk.",
@@ -2867,8 +2867,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Bank of America REO — Property Search (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://foreclosures.bankofamerica.com/search",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Bank of America REO — Property Search for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",
@@ -2894,8 +2894,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "BoA Real Estate Center — Bank-Owned Search (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://realestatecenter.bankofamerica.com",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search BoA Real Estate Center — Bank-Owned Search for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",
@@ -2921,8 +2921,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Wells Fargo REO — Property Listings (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://wellsfargoforeclosures.com",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Wells Fargo REO — Property Listings for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",
@@ -2948,8 +2948,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "US Bank REO — Property Listings (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://www.usbank.com/splash/real-estate/bank-owned-residential-real-estate-for-sale.html",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search US Bank REO — Property Listings for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",
@@ -2975,8 +2975,8 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Regions Bank — Real Estate Properties (national, US). Official statutory source for bank seized.",
     "discoveryUrl": "https://www.regions.com/real-estate-properties",
     "access": "public",
-    "adapterKey": null,
-    "status": "DISCOVERY_ONLY",
+    "adapterKey": "hud",
+    "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Regions Bank — Real Estate Properties for institution-owned real estate (REO) inventory.",
       "fallback": "Contact designated bank asset management office or listing agent.",

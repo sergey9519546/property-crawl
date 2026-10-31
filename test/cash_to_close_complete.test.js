@@ -384,3 +384,91 @@ test('calculates complete Maryland cash-to-close schedule and statutory deadline
   assert.ok(preset.citations.some(c => c.includes('Md. Code Tax-Prop. § 14-827')));
   assert.ok(preset.citations.some(c => c.includes('180-day')));
 });
+
+test('calculates complete South Carolina, Virginia, Indiana, Missouri, and Arizona schedules', () => {
+  // 1. South Carolina
+  const scResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'SC', creditedDeposit: 5000 });
+  assert.equal(scResult.state, 'SC');
+  assert.equal(scResult.transferTax, 370); // $3.70 per $1,000 (§ 12-24-10)
+  assert.equal(scResult.recordingFees, 50);
+  assert.equal(scResult.totalAcquisitionCost, 100420);
+  assert.equal(scResult.netCashDueAtSettlement, 95420);
+
+  const scTaxSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'SC', distressType: 'tax_sale', purchasePrice: 100000 });
+  assert.equal(scTaxSale.stateRedemptionDays, 365);
+  assert.equal(scTaxSale.objectionOrConfirmationDays, 30);
+  assert.equal(scTaxSale.effectiveLockupDays, 365);
+
+  // 2. Virginia
+  const vaResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'VA' });
+  assert.equal(vaResult.state, 'VA');
+  assert.equal(vaResult.transferTax, 333); // $3.33 per $1,000 (§ 58.1-801)
+  assert.equal(vaResult.recordingFees, 65);
+  const vaSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'VA', distressType: 'foreclosure_auction' });
+  assert.equal(vaSale.effectiveLockupDays, 0);
+
+  // 3. Indiana
+  const inResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'IN' });
+  assert.equal(inResult.state, 'IN');
+  assert.equal(inResult.transferTax, 0);
+  assert.equal(inResult.recordingFees, 35);
+  const inTaxSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'IN', distressType: 'tax_sale', purchasePrice: 100000 });
+  assert.equal(inTaxSale.stateRedemptionDays, 365);
+  assert.equal(inTaxSale.effectiveLockupDays, 365);
+
+  // 4. Missouri
+  const moResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'MO' });
+  assert.equal(moResult.state, 'MO');
+  assert.equal(moResult.transferTax, 0);
+  assert.equal(moResult.recordingFees, 24);
+  const moTaxSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'MO', distressType: 'tax_sale', purchasePrice: 100000 });
+  assert.equal(moTaxSale.stateRedemptionDays, 365);
+
+  // 5. Arizona
+  const azResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'AZ' });
+  assert.equal(azResult.state, 'AZ');
+  assert.equal(azResult.transferTax, 0);
+  assert.equal(azResult.recordingFees, 30);
+  const azTaxSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'AZ', distressType: 'tax_sale', purchasePrice: 100000 });
+  assert.equal(azTaxSale.stateRedemptionDays, 1095); // 3 years under A.R.S. § 42-18153
+  assert.equal(azTaxSale.effectiveLockupDays, 1095);
+});
+
+test('computes statutory tax sale redemption yield across major statutory states', () => {
+  const { computeRedemptionYield } = require('../src/lib/underwriting.ts');
+
+  // Georgia: 20% flat penalty
+  const gaYield = computeRedemptionYield({ purchasePrice: 50000, state: 'GA' });
+  assert.ok(gaYield);
+  assert.equal(gaYield.statutoryRatePct, 20);
+  assert.equal(gaYield.yieldType, 'penalty');
+  assert.equal(gaYield.grossProceeds, 60000);
+  assert.equal(gaYield.netReturn, 10000);
+  assert.equal(gaYield.annualizedIrrPct, 20);
+  assert.ok(gaYield.statutoryCitation.includes('O.C.G.A. § 48-4-42'));
+
+  // Texas: 25% flat penalty
+  const txYield = computeRedemptionYield({ purchasePrice: 100000, state: 'TX' });
+  assert.ok(txYield);
+  assert.equal(txYield.statutoryRatePct, 25);
+  assert.equal(txYield.yieldType, 'penalty');
+  assert.equal(txYield.grossProceeds, 125000);
+  assert.equal(txYield.netReturn, 25000);
+  assert.ok(txYield.statutoryCitation.includes('Tex. Tax Code § 34.21'));
+
+  // Tennessee: 12% per annum
+  const tnYield = computeRedemptionYield({ purchasePrice: 80000, state: 'TN' });
+  assert.ok(tnYield);
+  assert.equal(tnYield.statutoryRatePct, 12);
+  assert.equal(tnYield.yieldType, 'interest');
+  assert.equal(gaYield.grossProceeds, 60000);
+  assert.ok(tnYield.statutoryCitation.includes('T.C.A. § 67-5-2701'));
+
+  // Arizona: 16% per annum (3-year horizon)
+  const azYield = computeRedemptionYield({ purchasePrice: 20000, state: 'AZ' });
+  assert.ok(azYield);
+  assert.equal(azYield.statutoryRatePct, 16);
+  assert.equal(azYield.yieldType, 'interest');
+  assert.equal(azYield.redemptionDays, 1095);
+  assert.ok(azYield.statutoryCitation.includes('A.R.S. § 42-18153'));
+});

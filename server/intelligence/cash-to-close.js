@@ -138,6 +138,51 @@ const JURISDICTION_FEE_SCHEDULES = Object.freeze({
     settlementWindowHours: 0, // Cashier check tendered at auction gavel
     notes: 'RCW 61.24.040 non-judicial trustee sale (0-day redemption). RCW 84.64.080 tax foreclosure (30-day confirmation appeal window).',
   },
+  SC: {
+    state: 'SC',
+    name: 'South Carolina',
+    docStampRatePerThousand: 3.70, // S.C. Code Ann. § 12-24-10 deed recording fee ($1.85 state + $1.85 county = $3.70/k)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 50.00,
+    settlementWindowHours: 48,
+    notes: 'S.C. Code Ann. § 12-51-90 tax sale (1-year statutory redemption with 3-12% penalty). S.C. Code Ann. § 15-39-720 30-day upset bid period.',
+  },
+  VA: {
+    state: 'VA',
+    name: 'Virginia',
+    docStampRatePerThousand: 3.33, // Va. Code Ann. § 58.1-801 ($2.50/k state + $0.833/k local)
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 65.00,
+    settlementWindowHours: 0,
+    notes: 'Va. Code Ann. § 55.1-320 deed of trust non-judicial foreclosure (0-day post-sale redemption).',
+  },
+  IN: {
+    state: 'IN',
+    name: 'Indiana',
+    docStampRatePerThousand: 0.00, // $0 state transfer tax
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 35.00,
+    settlementWindowHours: 24,
+    notes: 'Ind. Code § 6-1.1-25-1 tax sale certificate (1-year statutory redemption with 10-15% penalty). Ind. Code § 32-29-7-3 judicial mortgage foreclosure.',
+  },
+  MO: {
+    state: 'MO',
+    name: 'Missouri',
+    docStampRatePerThousand: 0.00, // $0 state transfer tax
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 24.00,
+    settlementWindowHours: 0,
+    notes: 'Mo. Rev. Stat. § 140.340 tax sale (1-year statutory redemption with 10% interest). Mo. Rev. Stat. § 443.410 non-judicial trustee foreclosure.',
+  },
+  AZ: {
+    state: 'AZ',
+    name: 'Arizona',
+    docStampRatePerThousand: 0.00, // $0 transfer tax
+    defaultSheriffPoundagePercent: 0.00,
+    defaultRecordingFee: 30.00,
+    settlementWindowHours: 0,
+    notes: 'A.R.S. § 42-18153 tax certificate auction (3-year redemption with 16% interest). A.R.S. § 33-807 non-judicial trustee sale (0-day post-sale redemption).',
+  },
   MD: {
     state: 'MD',
     name: 'Maryland',

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Scale, ShieldCheck, Sparkles } from "lucide-react";
-import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
+import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 
@@ -221,6 +221,19 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     hasIrsLien: hasIrsNoticeFlag,
   });
   const reassessmentShock = computeReassessmentShock({ purchasePrice: openingBid, state: listing.state });
+  const isTaxSale = Boolean(
+    (typeof listing.source === "string" && listing.source.toLowerCase().includes("tax")) ||
+    (typeof listing.program === "string" && listing.program.toLowerCase().includes("tax"))
+
+  );
+  const redemptionYield = isTaxSale && openingBid !== null
+    ? computeRedemptionYield({
+        purchasePrice: openingBid,
+        state: listing.state,
+        redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
+        isTaxSale: true,
+      })
+    : null;
   const surplusAnalysis = typeof listing.judgment === "number" && listing.judgment > 0
     ? computeConstitutionalSurplus({ openingBid, judgmentDebt: listing.judgment })
     : null;
@@ -371,6 +384,27 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             {deadlinesAndCarry.irsRedemptionDeadline && (
               <p className="mt-0.5 text-[11px] text-catch-ink font-semibold">26 U.S.C. § 7425(d) IRS 120-day redemption window ends {deadlinesAndCarry.irsRedemptionDeadline}</p>
             )}
+          </div>
+        )}
+        {redemptionYield && (
+          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-go">Tax Sale Redemption Yield (Statutory Investor Scenario)</span>
+              <span className="rounded-md bg-go/10 px-2 py-0.5 font-extrabold text-go">
+                +{redemptionYield.statutoryRatePct}% {redemptionYield.yieldType === "penalty" ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedIrrPct}% IRR)
+              </span>
+            </div>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
+              <div className="rounded-lg border border-line bg-card p-2">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Gross Redemption Payoff</span>
+                <span className="text-sm font-bold text-ink">{displayMoney(redemptionYield.grossProceeds)}</span>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2">
+                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Net Statutory Return</span>
+                <span className="text-sm font-bold text-go">+{displayMoney(redemptionYield.netReturn)}</span>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-ink-3 leading-relaxed">{redemptionYield.statutoryCitation}</p>
           </div>
         )}
 

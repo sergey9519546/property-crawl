@@ -672,7 +672,7 @@ export function computeStatutoryFeePreset(params: {
   const st = (params.state || "").trim().toUpperCase();
   const src = (params.source || "").trim().toLowerCase();
   const citations: string[] = [];
-  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD"].includes(st);
+  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD", "SC", "VA", "IN", "MO", "AZ"].includes(st);
   const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
 
   let buyersPremium = 0;
@@ -1080,6 +1080,21 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionOrConfirmationDays = 30;
       objectionLabel = "MD 30-day circuit court order of ratification window (Md. Rule 14-215)";
     }
+  } else if (st === "SC") {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = "SC 30-day court confirmation & upset-bid window (S.C. Code Ann. § 15-39-720)";
+  } else if (st === "VA") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "VA non-judicial deed of trust foreclosure (Va. Code Ann. § 55.1-320; 0-day post-sale redemption)";
+  } else if (st === "IN") {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = "IN 30-day sheriff deed execution & recording window (Ind. Code § 32-29-7-3)";
+  } else if (st === "MO") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "MO non-judicial trustee foreclosure (Mo. Rev. Stat. § 443.410; 0-day redemption for 3rd-party)";
+  } else if (st === "AZ") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "AZ non-judicial trustee sale under deed of trust (A.R.S. § 33-807; 0-day post-sale redemption)";
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
@@ -1119,6 +1134,42 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     );
     if (isTax) {
       stateRedemptionDays = 180;
+    }
+  } else if (stateRedemptionDays === 0 && st === "SC") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 365;
+    }
+  } else if (stateRedemptionDays === 0 && st === "IN") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 365;
+    }
+  } else if (stateRedemptionDays === 0 && st === "MO") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 365;
+    }
+  } else if (stateRedemptionDays === 0 && st === "AZ") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 1095; // 3 years under A.R.S. § 42-18153
     }
   }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
@@ -1703,5 +1754,119 @@ export function classifyInvestmentStrategies(params: {
     equitySpreadDollars: spreadDollars,
     equitySpreadPct: spreadPct,
     criteriaNotes: notes,
+  };
+}
+
+
+export interface StatutoryRedemptionYield {
+  purchasePrice: number;
+  state: string;
+  redemptionDays: number;
+  statutoryRatePct: number;
+  yieldType: "penalty" | "interest";
+  grossProceeds: number;
+  netReturn: number;
+  annualizedIrrPct: number;
+  statutoryCitation: string;
+}
+
+/**
+ * Calculates statutory tax sale redemption yield for investors holding tax deeds/certificates
+ * during the statutory redemption period.
+ */
+export function computeRedemptionYield(params: {
+  purchasePrice: number | string | null;
+  state?: string | null;
+  redemptionDays?: number | null;
+  isTaxSale?: boolean | null;
+}): StatutoryRedemptionYield | null {
+  const price = positiveNumber(params.purchasePrice);
+  if (price === null) return null;
+  const st = (params.state || "").trim().toUpperCase();
+
+  let statutoryRatePct = 0;
+  let yieldType: "penalty" | "interest" = "interest";
+  let statutoryCitation = "Generic statutory interest baseline";
+  let days = Math.max(30, Math.round(nonNegativeNumber(params.redemptionDays) ?? 365));
+
+  if (st === "GA") {
+    statutoryRatePct = 20; // 20% flat penalty for Year 1
+    yieldType = "penalty";
+    statutoryCitation = "O.C.G.A. § 48-4-42: 20% statutory penalty on tax deed redemption in year one.";
+    days = 365;
+  } else if (st === "TX") {
+    statutoryRatePct = 25; // 25% flat penalty for Year 1
+    yieldType = "penalty";
+    statutoryCitation = "Tex. Tax Code § 34.21: 25% statutory redemption penalty in year one (50% in year two).";
+    days = 180;
+  } else if (st === "TN") {
+    statutoryRatePct = 12; // 12% per annum
+    yieldType = "interest";
+    statutoryCitation = "T.C.A. § 67-5-2701: 12% per annum statutory interest on tax sale redemption.";
+    days = 365;
+  } else if (st === "FL") {
+    statutoryRatePct = 18; // 18% statutory interest rate floor
+    yieldType = "interest";
+    statutoryCitation = "Fla. Stat. § 197.542: 18% statutory interest rate floor on tax deed redemption.";
+    days = 365;
+  } else if (st === "MD") {
+    statutoryRatePct = 12; // 12% to 20% statutory yield
+    yieldType = "interest";
+    statutoryCitation = "Md. Code Tax-Prop. § 14-827: 12% statutory annual interest rate on tax certificate redemption.";
+    days = 180;
+  } else if (st === "IL") {
+    statutoryRatePct = 18; // 18% penalty every 6 months
+    yieldType = "penalty";
+    statutoryCitation = "35 ILCS 200/21-355: 18% statutory penalty per 6-month period on scavenger/tax sales.";
+    days = 180;
+  } else if (st === "MI") {
+    statutoryRatePct = 50; // 50% penalty on tax forfeiture
+    yieldType = "penalty";
+    statutoryCitation = "MCL § 211.78g: 50% statutory penalty on tax-reverted property redemption.";
+    days = 180;
+  } else if (st === "SC") {
+    statutoryRatePct = 12; // 3% to 12% tiered interest
+    yieldType = "interest";
+    statutoryCitation = "S.C. Code Ann. § 12-51-90: 12% statutory annual interest on tax sale redemption.";
+    days = 365;
+  } else if (st === "IN") {
+    statutoryRatePct = 15; // 10% first 6 months, 15% thereafter
+    yieldType = "penalty";
+    statutoryCitation = "Ind. Code § 6-1.1-25-2: 10% penalty within 6 months, 15% thereafter on tax certificate redemption.";
+    days = 365;
+  } else if (st === "MO") {
+    statutoryRatePct = 10; // 10% per annum
+    yieldType = "interest";
+    statutoryCitation = "Mo. Rev. Stat. § 140.340: 10% per annum statutory interest on tax sale redemption.";
+    days = 365;
+  } else if (st === "AZ") {
+    statutoryRatePct = 16; // 16% per annum
+    yieldType = "interest";
+    statutoryCitation = "A.R.S. § 42-18153: 16% per annum statutory interest rate on tax certificate redemption.";
+    days = 1095;
+  } else {
+    statutoryRatePct = 8;
+    yieldType = "interest";
+    statutoryCitation = "Generic 8% statutory interest rate baseline.";
+  }
+
+  const grossMultiplier = yieldType === "penalty"
+    ? (1 + statutoryRatePct / 100)
+    : (1 + (statutoryRatePct / 100) * (days / 365));
+
+  const grossProceeds = Math.round(price * grossMultiplier);
+  const netReturn = grossProceeds - price;
+  const annualizedIrrPct = Math.round(((netReturn / price) * (365 / days)) * 1000) / 10;
+
+  return {
+    purchasePrice: price,
+    state: st,
+    redemptionDays: days,
+    statutoryRatePct,
+    yieldType,
+    grossProceeds,
+    netReturn,
+    annualizedIrrPct,
+    statutoryCitation,
   };
 }
