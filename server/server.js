@@ -216,6 +216,7 @@ async function handleRequest(req, res) {
       const sources = await db.getSources();
       return res.json(sources);
     }
+    if (url.pathname.startsWith('/api/sources/')) return handleSourceNetwork(req, res);
     if (url.pathname === '/api/coverage') {
       return handleCoverage(req, res);
     }

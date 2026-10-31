@@ -60,7 +60,49 @@ export async function GET(request: Request) {
     return Response.json({ error: "Listing not found", id }, { status: 404 });
   }
 
-  const packet = buildDecisionPacket(listing, {});
+  const parseNum = (val: string | null): number | null => {
+    if (val === null || val === undefined || val === "") return null;
+    const n = Number(val);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const operatorInput: Record<string, any> = {};
+
+  const disposition = url.searchParams.get("disposition");
+  if (disposition && disposition.trim()) {
+    operatorInput.disposition = disposition.trim();
+  }
+
+  const mao = parseNum(url.searchParams.get("maxAllowableOffer"));
+  if (mao !== null) operatorInput.maxAllowableOffer = mao;
+
+  const rehab = parseNum(url.searchParams.get("rehabBudget"));
+  if (rehab !== null) operatorInput.rehabBudget = rehab;
+
+  const targetMargin = parseNum(url.searchParams.get("targetMargin"));
+  if (targetMargin !== null) operatorInput.targetMargin = targetMargin;
+
+  const operatorNotes = url.searchParams.get("operatorNotes");
+  if (operatorNotes && operatorNotes.trim()) {
+    operatorInput.operatorNotes = operatorNotes.trim();
+  }
+
+  const cashFields = [
+    "registrationFunds",
+    "creditedDeposit",
+    "buyersPremium",
+    "sheriffPoundage",
+    "transferTax",
+    "delinquentTaxes",
+    "settlementCosts",
+  ] as const;
+
+  for (const field of cashFields) {
+    const amount = parseNum(url.searchParams.get(field));
+    if (amount !== null) operatorInput[field] = amount;
+  }
+
+  const packet = buildDecisionPacket(listing, operatorInput);
   const format = String(url.searchParams.get("format") || "").toLowerCase();
   const accept = String(request.headers.get("accept") || "").toLowerCase();
   const isMarkdown =

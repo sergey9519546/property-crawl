@@ -265,10 +265,16 @@ test('Decision Packet: attaches statutoryDeadlinesAndCarry and renders holding c
   assert.equal(s.objectionOrConfirmationDays, 10);
   assert.equal(s.objectionLabel, 'NC 10-day rolling upset-bid window (N.C.G.S. § 45-21.27)');
   assert.equal(s.effectiveLockupDays, 10);
-  // Zero-fabrication underwriting: without buyer-supplied price assumption, dollar carry is withheld
-  assert.equal(s.totalHoldingCostCarry, null);
-  const mdNoOffer = formatDecisionPacketMarkdown(packet);
+  // Zero-fabrication underwriting: without price assumption (neither MAO nor openingBid), dollar carry is withheld
+  const packetNoPrice = buildDecisionPacket({ ...listing, openingBid: null });
+  const sNoPrice = packetNoPrice.underwriting.statutoryDeadlinesAndCarry;
+  assert.equal(sNoPrice.totalHoldingCostCarry, null);
+  const mdNoOffer = formatDecisionPacketMarkdown(packetNoPrice);
   assert.match(mdNoOffer, /Buyer-supplied purchase price assumption required/);
+
+  // When openingBid is present, carry is computed from openingBid
+  assert.equal(typeof s.totalHoldingCostCarry, 'number');
+  assert.ok(s.totalHoldingCostCarry > 0);
 
   // With explicit buyer-supplied MAO, carry is computed
   const packetWithOffer = buildDecisionPacket(listing, { maxAllowableOffer: 250000 });

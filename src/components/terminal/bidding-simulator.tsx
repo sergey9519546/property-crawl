@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
-import { AlertTriangle, Calculator, CheckCircle2, Scale, ShieldCheck, Sparkles } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
 import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
@@ -546,6 +546,43 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <p>{reverseScenario.priceReductionNeeded > 0 ? <>The opening amount is {displayMoney(reverseScenario.priceReductionNeeded)} above the price that meets this scenario&apos;s target.</> : <>The opening amount meets this scenario&apos;s target with {displayMoney(reverseScenario.maxPurchasePrice - openingBid)} of price headroom.</>}</p>
         </div>
       )}
+
+      {/* Export Decision Packet */}
+      <div className="rounded-2xl border border-line bg-card p-4 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
+              <Download className="h-4 w-4 text-yours" />
+              <span>Export Decision Packet</span>
+            </h4>
+            <p className="mt-0.5 text-xs text-ink-3">
+              Export complete forensic underwriting dossier with your active scenario assumptions, statutory carry schedule, and checksum.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <a
+            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=json&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={`decision-packet-${listing.id}.json`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-paper px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:bg-card hover:border-yours"
+          >
+            <FileJson className="h-3.5 w-3.5 text-yours" />
+            <span>Download JSON Packet</span>
+          </a>
+          <a
+            href={`/api/listings/${encodeURIComponent(listing.id)}/packet?format=markdown&disposition=UNDERWRITE&maxAllowableOffer=${encodeURIComponent(String(reverseScenario?.maxPurchasePrice ?? openingBid ?? ""))}&rehabBudget=${encodeURIComponent(String(rehabBudget))}&targetMargin=${encodeURIComponent(String(targetMargin))}&transferTax=${encodeURIComponent(scenario.transferTax)}&registrationFunds=${encodeURIComponent(scenario.registrationFunds)}&creditedDeposit=${encodeURIComponent(scenario.creditedDeposit)}&sheriffPoundage=${encodeURIComponent(scenario.sheriffPoundage)}&buyersPremium=${encodeURIComponent(scenario.buyersPremium)}&settlementCosts=${encodeURIComponent(scenario.settlementCosts)}&delinquentTaxes=${encodeURIComponent(scenario.delinquentTaxes)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={`decision-packet-${listing.id}.md`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong bg-paper px-3 py-1.5 text-xs font-bold text-ink shadow-sm transition hover:bg-card hover:border-yours"
+          >
+            <FileText className="h-3.5 w-3.5 text-yours" />
+            <span>Download Markdown Memo</span>
+          </a>
+        </div>
+      </div>
 
       {/* Statutory Tax Reset, Surplus & Rental Coverage */}
       <div className="space-y-4 rounded-2xl border border-line bg-card p-5 shadow-sm">

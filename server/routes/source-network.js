@@ -1,3 +1,5 @@
+const fs = require('node:fs');
+const path = require('node:path');
 const db = require('../db/client');
 const { scanAllListings } = require('../db/listings-scan');
 const scheduler = require('../scrapers/scheduler');
@@ -168,37 +170,68 @@ function createSourceNetworkHandler(dependencies = {}) {
           else process.env.UNBROWSE_PACKAGE_ROOT = previousRoot;
         }
       }
-      if (url.pathname === '/api/source-network/run' && req.method === 'POST') {
-        if (req.body?.scope === 'all') {
-          if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
-          if (!collector.networkEnabled) return res.status(503).json({ error: 'Network collection is disabled in this environment' });
-          if (!coordinator) return res.status(503).json({ error: 'Collection jobs are unavailable' });
-          // The release gate decides which sources have earned promotion, so where
-          // promotion exists it must bound a bulk collection. Consult it before
-          // starting anything: an empty gate has to fail closed, and a populated
-          // one has to restrict the job to exactly those sources.
-          //
-          // This was missing. scope=all called coordinator.start() with no
-          // sourceIds, which means no restriction at all -- every registered
-          // adapter, promoted or not -- and the route answered 202.
-          //
-          // Scoped to deployments that actually have a discovery store. Promotion
-          // is a concept of the advanced discovery mode; with no store there is
-          // no promotion record to gate on, and refusing to collect at all would
-          // be a different failure rather than a safer one.
-          let sourceIds;
-          const discoveryStore = resolveDiscoveryStore(env);
-          if (discoveryStore && typeof discoveryStore.promotedSources === 'function') {
-            const promoted = await discoveryStore.promotedSources();
-            sourceIds = Array.isArray(promoted) ? promoted.filter(Boolean) : [];
-            if (!sourceIds.length) {
-              return res.status(409).json({ error: 'No source has passed the release gate; promote a source before running a full collection' });
-            }
+
+      async function handleSourceCollection(req, res, sourceId) {
+        const source = catalog.find((item) => item.id === sourceId || item.adapterKey === sourceId);
+        if (!source) return res.status(400).json({ error: 'This source uses the evidence import workflow', workflow: null });
+
+        if (source.id === 'press-association-email' || source.adapterKey === 'public-notices-email') {
+          const defaultCorpusDir = path.join(__dirname, '../../test/fixtures/email-notices');
+          const configuredCorpus = (env && env.IMAP_CORPUS_DIR !== undefined) ? env.IMAP_CORPUS_DIR : (process.env.IMAP_CORPUS_DIR || defaultCorpusDir);
+          const corpusDir = (configuredCorpus && fs.existsSync(configuredCorpus)) ? configuredCorpus : null;
+          const imapEnv = env || process.env;
+          const hasImap = Boolean(imapEnv.IMAP_HOST && imapEnv.IMAP_USER && (imapEnv.IMAP_PASSWORD || imapEnv.IMAP_PASS));
+
+          if (!corpusDir && !hasImap) {
+            return res.status(200).json({
+              status: 'waiting_for_inbox',
+              sourceId: source.id,
+              message: 'IMAP credentials unset and no corpus directory found',
+            });
           }
-          const job = await coordinator.start({ trigger: 'source_network', ...(sourceIds ? { sourceIds } : {}), idempotencyKey: req.body?.idempotencyKey });
-          return res.status(202).json({ status: 'collecting', sourceId: null, accepted: true, job });
+
+          const { collectEmailNotices } = require('../sources/email-notices');
+          const startedAt = Date.now();
+          try {
+            const result = await collectEmailNotices({
+              corpusDir: corpusDir ? corpusDir : null,
+              database,
+              env: imapEnv,
+            });
+
+            if (database && database.pool) {
+              try {
+                await recordRun(database.pool, source.id, {
+                  listings: [],
+                  evidenceCount: result.evidencePackets || result.accepted || 0,
+                  acceptedCount: result.accepted || 0,
+                  durationMs: Date.now() - startedAt,
+                  error: null,
+                });
+              } catch (storeError) {
+                console.error('[Source Network] Run metadata was not recorded:', storeError.message);
+              }
+            }
+
+            return res.status(200).json({
+              status: 'collected',
+              sourceId: source.id,
+              accepted: result.accepted || 0,
+              evidencePackets: result.evidencePackets || result.accepted || 0,
+              publicationStatus: 'evidence_only',
+            });
+          } catch (err) {
+            if (err.code === 'IMAP_CREDENTIALS_UNSET' || err.name === 'ImapCredentialsUnsetError') {
+              return res.status(200).json({
+                status: 'waiting_for_inbox',
+                sourceId: source.id,
+                message: 'IMAP credentials unset and no corpus directory found',
+              });
+            }
+            throw err;
+          }
         }
-        const source = catalog.find((item) => item.id === req.body?.sourceId);
+
         if (source && evidenceCollectors[source.id]) {
           if (!collector.networkEnabled) return res.status(503).json({ error: 'Network collection is disabled in this environment' });
           if (evidenceJobs.has(source.id)) return res.status(409).json({ error: 'This evidence collection is already running' });
@@ -227,6 +260,40 @@ function createSourceNetworkHandler(dependencies = {}) {
         if (collector.isRunning) return res.status(409).json({ error: 'A collection is already running; refresh coverage to see its result' });
         collector.runAll({ sourceIds: [source.adapterKey] }).catch((error) => console.error('[Source Network] Collection failed:', error.message));
         return res.status(202).json({ status: 'collecting', sourceId: source.id, accepted: true });
+      }
+
+      // Explicit route pattern for gen-context route detection: '/api/sources/:sourceId/collect'
+      const collectMatch = url.pathname.match(/^\/api\/sources\/([^/]+)\/collect$/);
+      if (collectMatch && req.method === 'POST') {
+        return handleSourceCollection(req, res, collectMatch[1]);
+      }
+      if (url.pathname === '/api/source-network/run' && req.method === 'POST') {
+        if (req.body?.scope === 'all') {
+          if (req.body?.sourceId != null) return res.status(400).json({ error: 'Choose either scope all or one source, not both' });
+          if (!collector.networkEnabled) return res.status(503).json({ error: 'Network collection is disabled in this environment' });
+          if (!coordinator) return res.status(503).json({ error: 'Collection jobs are unavailable' });
+          // The release gate decides which sources have earned promotion, so where
+          // promotion exists it must bound a bulk collection. Consult it before
+          // starting anything: an empty gate has to fail closed, and a populated
+          // one has to restrict the job to exactly those sources.
+          //
+          // Scoped to deployments that actually have a discovery store. Promotion
+          // is a concept of the advanced discovery mode; with no store there is
+          // no promotion record to gate on, and refusing to collect at all would
+          // be a different failure rather than a safer one.
+          let sourceIds;
+          const discoveryStore = resolveDiscoveryStore(env);
+          if (discoveryStore && typeof discoveryStore.promotedSources === 'function') {
+            const promoted = await discoveryStore.promotedSources();
+            sourceIds = Array.isArray(promoted) ? promoted.filter(Boolean) : [];
+            if (!sourceIds.length) {
+              return res.status(409).json({ error: 'No source has passed the release gate; promote a source before running a full collection' });
+            }
+          }
+          const job = await coordinator.start({ trigger: 'source_network', ...(sourceIds ? { sourceIds } : {}), idempotencyKey: req.body?.idempotencyKey });
+          return res.status(202).json({ status: 'collecting', sourceId: null, accepted: true, job });
+        }
+        return handleSourceCollection(req, res, req.body?.sourceId);
       }
       return res.status(404).json({ error: 'Source network endpoint not found' });
     } catch (error) {

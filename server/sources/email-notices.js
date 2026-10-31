@@ -17,6 +17,8 @@
  * - Fails closed with typed error IMAP_CREDENTIALS_UNSET when credentials are not configured.
  */
 
+const fs = require('node:fs');
+const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
 const tls = require('node:tls');
@@ -30,6 +32,7 @@ const {
 } = require('../ai/notice-parser');
 const { detectNoticeState } = require('./email-notice-collector');
 const { validateListingForIngestion } = require('../scrapers/validation');
+const { parseRfc822 } = require('../scrapers/email-ingest');
 const defaultDb = require('../db/client');
 
 const FEED_CONFIG = emailFeeds.feeds || {};
@@ -207,7 +210,8 @@ function standardizeEmailNoticeListing(parsed = {}, meta = {}) {
 class EmailNoticesPipeline {
   constructor(options = {}) {
     this.env = options.env || process.env;
-    this.db = options.db || defaultDb;
+    this.db = options.database || options.db || defaultDb;
+    this.corpusDir = options.corpusDir || this.env.IMAP_CORPUS_DIR || null;
     this.transport = options.transport || null;
     this.imapClient = options.imapClient || null;
     this.allowedDomains = options.allowedDomains || PRESS_ASSOCIATION_DOMAINS;
@@ -225,6 +229,7 @@ class EmailNoticesPipeline {
   }
 
   isConfigured() {
+    if (this.corpusDir && fs.existsSync(this.corpusDir)) return true;
     if (this.transport) return true;
     if (this.imapClient) return true;
     return Boolean(this.config.host && this.config.user && this.config.pass);
@@ -238,6 +243,25 @@ class EmailNoticesPipeline {
 
   async fetchUnreadNotices() {
     this.checkCredentials();
+
+    // 0. Local fixture corpus directory
+    if (this.corpusDir && fs.existsSync(this.corpusDir)) {
+      const files = fs.readdirSync(this.corpusDir).filter((f) => /\.(eml|txt)$/i.test(f));
+      const messages = [];
+      for (const file of files) {
+        const raw = fs.readFileSync(path.join(this.corpusDir, file), 'utf8');
+        const parsed = parseRfc822(raw);
+        if (!parsed.subject && !parsed.body) continue;
+        messages.push({
+          id: parsed.messageId || file,
+          from: parsed.from,
+          subject: parsed.subject,
+          date: parsed.date,
+          body: parsed.body,
+        });
+      }
+      return messages.filter((msg) => !msg.from || isFromPressAssociation(msg.from, this.allowedDomains));
+    }
 
     // 1. Dependency-injected transport path
     if (this.transport) {
@@ -435,6 +459,10 @@ class EmailNoticesPipeline {
         report.errors.push({ emailId: email.id, error: err.message });
       }
     }
+
+    report.accepted = report.listingsAccepted;
+    report.evidencePackets = report.listingsGenerated;
+    report.publicationStatus = 'evidence_only';
 
     return report;
   }

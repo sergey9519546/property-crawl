@@ -1456,6 +1456,9 @@ export interface StateReassessmentRule {
   resetsOnSale: boolean;
   supplementalBillExpected: boolean;
   statutoryReference: string;
+  assessmentRatioPct?: number | null;
+  investorEffectiveTaxRatePct?: number | null;
+  investorAssessmentRatioPct?: number | null;
 }
 
 export const STATE_REASSESSMENT_RULES: Record<string, StateReassessmentRule> = Object.freeze({
@@ -1513,6 +1516,127 @@ export const STATE_REASSESSMENT_RULES: Record<string, StateReassessmentRule> = O
     supplementalBillExpected: false,
     statutoryReference: "IL Dept. of Revenue; fair market value reassessment on sale",
   },
+  OH: {
+    state: "OH",
+    ruleName: "OH_TRIENNIAL_UPDATE",
+    effectiveTaxRatePct: 1.52,
+    assessmentRatioPct: 35,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "Ohio Rev. Code § 5713.03: County Auditor establishes taxable value at 35% of true value in money; triennial update",
+  },
+  PA: {
+    state: "PA",
+    ruleName: "PA_COMMON_LEVEL_RATIO",
+    effectiveTaxRatePct: 1.49,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "72 P.S. § 5452.1a & STEB annual county CLR: Common Level Ratio (CLR) applies",
+  },
+  GA: {
+    state: "GA",
+    ruleName: "GA_TRANSFER_REASSESSMENT",
+    effectiveTaxRatePct: 0.92,
+    assessmentRatioPct: 40,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "O.C.G.A. § 48-5-7 (40% statutory assessment ratio); reassessment upon arm's-length transfer under O.C.G.A. § 48-5-2",
+  },
+  MI: {
+    state: "MI",
+    ruleName: "MI_PROPOSAL_A_UNCAPPING",
+    effectiveTaxRatePct: 1.48,
+    assessmentRatioPct: 50,
+    annualCapPct: 5,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "MCL § 211.27a: Headlee Amendment & Proposal A uncapping (Taxable value uncaps to State Equalized Value (50% true cash value) in year following transfer)",
+  },
+  WA: {
+    state: "WA",
+    ruleName: "WA_ANNUAL_REVALUATION",
+    effectiveTaxRatePct: 0.94,
+    assessmentRatioPct: 100,
+    annualCapPct: 1,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "RCW 84.41.030: Physical inspection cycle and annual market adjustments (annual revaluation cycle)",
+  },
+  TN: {
+    state: "TN",
+    ruleName: "TN_PERIODIC_REAPPRAISAL",
+    effectiveTaxRatePct: 0.66,
+    assessmentRatioPct: 25,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "T.C.A. § 67-5-801 (25% statutory assessment ratio for residential real property; 4-to-6 year reappraisal cycles under § 67-5-1601)",
+  },
+  MD: {
+    state: "MD",
+    ruleName: "MD_TRIENNIAL_CYCLE",
+    effectiveTaxRatePct: 1.05,
+    assessmentRatioPct: 100,
+    annualCapPct: 10,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "Md. Code Tax-Prop. § 8-103 (triennial reassessment cycle; Homestead Tax Credit cap resets upon transfer)",
+  },
+  AZ: {
+    state: "AZ",
+    ruleName: "AZ_CLASS_3_RESIDENTIAL",
+    effectiveTaxRatePct: 0.63,
+    assessmentRatioPct: 10,
+    annualCapPct: 5,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "A.R.S. § 42-12003 Class 3 residential (10% statutory assessment ratio; 5% LPV growth cap under A.R.S. § 42-13301)",
+  },
+  NC: {
+    state: "NC",
+    ruleName: "NC_OCTENNIAL_REVALUATION",
+    effectiveTaxRatePct: 0.78,
+    assessmentRatioPct: 100,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "N.C.G.S. § 105-286 (octennial revaluation schedule)",
+  },
+  SC: {
+    state: "SC",
+    ruleName: "SC_DUAL_RATIO_TRANSFER",
+    effectiveTaxRatePct: 0.57,
+    investorEffectiveTaxRatePct: 0.85,
+    assessmentRatioPct: 4,
+    investorAssessmentRatioPct: 6,
+    annualCapPct: 15,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "S.C. Code Ann. § 12-43-220: 4% legal residence vs 6% investor assessment ratio (Investor purchase from homeowner triggers 50% assessment ratio surge from 4% to 6%)",
+  },
+  CO: {
+    state: "CO",
+    ruleName: "CO_BIENNIAL_REASSESSMENT",
+    effectiveTaxRatePct: 0.51,
+    assessmentRatioPct: 6.7,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "Colo. Rev. Stat. § 39-1-104.2 (6.7% residential assessment rate)",
+  },
+  VA: {
+    state: "VA",
+    ruleName: "VA_FAIR_MARKET_VALUE",
+    effectiveTaxRatePct: 0.82,
+    assessmentRatioPct: 100,
+    annualCapPct: null,
+    resetsOnSale: true,
+    supplementalBillExpected: false,
+    statutoryReference: "Va. Code § 58.1-3201: 100% fair market value assessment (annual or biennial reassessment)",
+  },
   DEFAULT: {
     state: "US",
     ruleName: "NATIONAL_MEDIAN_TRANSFER",
@@ -1534,6 +1658,8 @@ export interface ReassessmentShockResult {
   supplementalBillEstimate: number | null;
   rule: StateReassessmentRule;
   explanation: string;
+  effectiveRatePct?: number;
+  isInvestor?: boolean;
 }
 
 export function computeReassessmentShock(params: {
@@ -1541,12 +1667,19 @@ export function computeReassessmentShock(params: {
   state?: string | null;
   priorAnnualTax?: number | string | null;
   overrideTaxRatePct?: number | string | null;
+  isInvestor?: boolean | null;
 } = {}): ReassessmentShockResult {
   const purchasePrice = positiveNumber(params.purchasePrice);
   const stateCode = (params.state || "").trim().toUpperCase();
   const rule = STATE_REASSESSMENT_RULES[stateCode] || STATE_REASSESSMENT_RULES.DEFAULT;
   const priorAnnualTax = nonNegativeNumber(params.priorAnnualTax);
-  const effectiveRate = positiveNumber(params.overrideTaxRatePct) ?? rule.effectiveTaxRatePct;
+  const isInvestor = Boolean(params.isInvestor);
+
+  let baselineRate = rule.effectiveTaxRatePct;
+  if (stateCode === "SC" && isInvestor) {
+    baselineRate = rule.investorEffectiveTaxRatePct ?? 0.85;
+  }
+  const effectiveRate = positiveNumber(params.overrideTaxRatePct) ?? baselineRate;
 
   if (purchasePrice === null) {
     return {
@@ -1559,6 +1692,8 @@ export function computeReassessmentShock(params: {
       supplementalBillEstimate: null,
       rule,
       explanation: "Reassessment tax shock requires an explicit purchase price or winning bid assumption.",
+      effectiveRatePct: effectiveRate,
+      isInvestor,
     };
   }
 
@@ -1570,6 +1705,17 @@ export function computeReassessmentShock(params: {
     : null;
 
   let explanation = `${rule.ruleName}: Purchase price ($${purchasePrice.toLocaleString()}) establishes new tax basis at ~${effectiveRate}% effective rate ($${reassessedAnnualTax.toLocaleString()}/year).`;
+
+  if (stateCode === "MI") {
+    explanation += " Proposal A uncapping to 50% SEV: Taxable value uncaps to State Equalized Value (50% true cash value) in the year following transfer under MCL § 211.27a.";
+  } else if (stateCode === "SC") {
+    if (isInvestor) {
+      explanation += " S.C. Code Ann. § 12-43-220: 4% to 6% investor ratio adjustment applied (non-homestead investor assessment ratio of 6% vs 4% legal residence triggers 50% ratio surge).";
+    } else {
+      explanation += " S.C. Code Ann. § 12-43-220: 4% legal residence assessment ratio applies (investor purchases trigger 4% to 6% investor ratio adjustment).";
+    }
+  }
+
   if (priorAnnualTax !== null) {
     if (annualTaxShock! > 0) {
       explanation += ` Tax shock increase of +$${annualTaxShock!.toLocaleString()}/year (+$${monthlyTaxShock!.toLocaleString()}/mo) over prior owner bill ($${priorAnnualTax.toLocaleString()}/yr).`;
@@ -1591,12 +1737,15 @@ export function computeReassessmentShock(params: {
     supplementalBillEstimate,
     rule,
     explanation,
+    effectiveRatePct: effectiveRate,
+    isInvestor,
   };
 }
 
 // ============================================================================
 // DSCR FINANCING & DEBT SERVICE COVERAGE ENGINE
 // ============================================================================
+
 
 export interface DscrCoverageResult {
   monthlyGrossRent: number | null;

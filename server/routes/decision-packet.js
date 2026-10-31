@@ -169,6 +169,12 @@ async function handleDecisionPacket(req, res, url, dependencies = {}) {
   const mao = parseNumber(body.maxAllowableOffer ?? url.searchParams.get('maxAllowableOffer'));
   if (mao !== null) operatorInput.maxAllowableOffer = mao;
 
+  const rehab = parseNumber(body.rehabBudget ?? url.searchParams.get('rehabBudget'));
+  if (rehab !== null) operatorInput.rehabBudget = rehab;
+
+  const targetMargin = parseNumber(body.targetMargin ?? url.searchParams.get('targetMargin'));
+  if (targetMargin !== null) operatorInput.targetMargin = targetMargin;
+
   const notes = body.operatorNotes || url.searchParams.get('operatorNotes');
   if (typeof notes === 'string' && notes.trim()) {
     operatorInput.operatorNotes = notes.trim();

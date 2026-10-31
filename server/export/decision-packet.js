@@ -73,15 +73,52 @@ function computeStatutoryDeadlinesAndCarry(params = {}) {
   } else if (st === 'NY') {
     objectionOrConfirmationDays = 30;
     objectionLabel = 'NY 30-day referee report of sale & deed delivery (RPAPL § 1354)';
+  } else if (st === 'PA') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'PA 30-day sheriff schedule of distribution (Pa. R.C.P. 3136)';
+  } else if (st === 'GA') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'GA 30-day judicial confirmation of non-judicial foreclosure sale (O.C.G.A. § 44-14-161)';
+  } else if (st === 'TX') {
+    objectionOrConfirmationDays = 20;
+    objectionLabel = 'TX 20-day post-sale recording & confirmation (Tex. Prop. Code § 51.002)';
+  } else if (st === 'MI') {
+    objectionOrConfirmationDays = 21;
+    objectionLabel = 'MI 21-day circuit court confirmation window (MCL § 600.3240)';
+  } else if (st === 'SC') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'SC 30-day upset-bidding hold (S.C. Code § 15-39-720)';
+  } else if (st === 'TN') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'TN 30-day chancery court sale confirmation (T.C.A. § 67-5-2501)';
+  } else if (st === 'MD') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'MD 30-day order of ratification (Md. Rule 14-215)';
+  } else if (st === 'AZ') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'AZ 30-day trustee deed delivery (A.R.S. § 33-811)';
+  } else if (st === 'IN') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'IN 30-day sheriff deed issuance (IC 32-29-7-10)';
+  } else if (st === 'MO') {
+    objectionOrConfirmationDays = 30;
+    objectionLabel = 'MO 30-day judicial confirmation (RSMo § 443.355)';
+  } else if (st === 'AL') {
+    objectionOrConfirmationDays = 180;
+    objectionLabel = 'AL 180-day residential homestead redemption (Ala. Code § 6-5-248)';
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
   const stateRedemptionDays = Math.max(0, Math.round(Number(params.redemptionDays) || 0));
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
   const annualCostOfCapitalPct = Number.isFinite(Number(params.annualCostOfCapitalPct)) ? Number(params.annualCostOfCapitalPct) : 10;
-  const price = typeof params.purchasePrice === 'number' && Number.isFinite(params.purchasePrice) && params.purchasePrice > 0
+  const candidatePrice = params.purchasePrice !== undefined && params.purchasePrice !== null && params.purchasePrice !== ''
     ? params.purchasePrice
-    : null;
+    : (params.maxAllowableOffer !== undefined && params.maxAllowableOffer !== null && params.maxAllowableOffer !== ''
+        ? params.maxAllowableOffer
+        : params.openingBid);
+  const parsedPrice = typeof candidatePrice === 'number' ? candidatePrice : Number(candidatePrice);
+  const price = Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
   const estimatedCarryCost = price !== null && effectiveLockupDays > 0
     ? Math.round(price * (annualCostOfCapitalPct / 100) * (effectiveLockupDays / 365))
     : null;
@@ -288,7 +325,7 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
   const statutoryDeadlinesAndCarry = computeStatutoryDeadlinesAndCarry({
     saleDate: listing.saleDate || null,
     state,
-    purchasePrice: maxAllowableOffer || null,
+    purchasePrice: maxAllowableOffer || openingBid || null,
     redemptionDays: publishedRedemptionDays(listing),
     hasIrsLien: Boolean(titleRisk.irsTaxLienRedemption?.hasIrsLien || titleRisk.irsTaxLienRedemption?.hasLien)
   });
@@ -318,6 +355,12 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       openingBid
     },
     provenance: provenancePayload,
+    underwritingAssumptions: {
+      rehabBudget: explicitPositive(operatorInput.rehabBudget) || 0,
+      targetMarginPct: Number(operatorInput.targetMargin) || 30,
+      maxAllowableOffer: maxAllowableOffer || null,
+      disposition: disposition || null,
+    },
     underwriting: {
       titleRisk: {
         plaintiffType: titleRisk.plaintiffType,
@@ -365,10 +408,11 @@ function formatDecisionPacketMarkdown(packet) {
   const c = u.cashToClose;
   const t = u.titleRisk;
   const d = packet.dispositionSignOff;
+  const ua = packet.underwritingAssumptions;
   const s = u.statutoryDeadlinesAndCarry || computeStatutoryDeadlinesAndCarry({
     saleDate: p.saleDate,
     state: p.state,
-    purchasePrice: d.maxAllowableOffer || null,
+    purchasePrice: d.maxAllowableOffer || p.openingBid || null,
     redemptionDays: t.statutoryRedemptionDays,
     hasIrsLien: Boolean(t.hasIrsTaxLien)
   });
@@ -458,7 +502,13 @@ No fee is inferred from the source or the state. A blank line was not entered. R
 
 ---
 
-## 4. Valuation band
+${ua ? `## 4. Underwriting Assumptions & Strategy
+- **Target Purchase Ceiling (MAO)**: ${Number.isFinite(ua.maxAllowableOffer) ? `$${ua.maxAllowableOffer.toLocaleString()}` : 'Not recorded'}
+- **Estimated Rehab Budget**: $${Number(ua.rehabBudget || 0).toLocaleString()}
+- **Target Profit Margin**: ${ua.targetMarginPct}%
+- **Disposition Recommendation**: \`${ua.disposition || 'Not recorded'}\`
+
+### Valuation Band
 ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
@@ -475,7 +525,24 @@ ${packet.hudSafmr ? `
 | **3 Bedroom** | $${packet.hudSafmr.rents?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['3br']?.toLocaleString() ?? '—'} |
 | **4 Bedroom** | $${packet.hudSafmr.rents?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['4br']?.toLocaleString() ?? '—'} |
 
-- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}
+- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}` : `## 4. Valuation band
+${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.toLocaleString()} – $${u.macroValuation.estHigh.toLocaleString()} (Midpoint: $${u.macroValuation.estimatedMacroValue.toLocaleString()})
+- **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
+- *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
+${packet.hudSafmr ? `
+### HUD Statutory Fair Market Rent (SAFMR) Floor
+- **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
+- **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
+
+| Unit Size | Section 8 FMR Baseline | 90% Voucher Floor | 110% Voucher Ceiling |
+|---|---|---|---|
+| **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
+| **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |
+| **2 Bedroom** | $${packet.hudSafmr.rents?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['2br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['2br']?.toLocaleString() ?? '—'} |
+| **3 Bedroom** | $${packet.hudSafmr.rents?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['3br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['3br']?.toLocaleString() ?? '—'} |
+| **4 Bedroom** | $${packet.hudSafmr.rents?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['4br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['4br']?.toLocaleString() ?? '—'} |
+
+- *Statutory Citation*: 42 U.S.C. § 1437f(o)(1)(B); official HUD Small Area Fair Market Rent schedule.` : ''}`}
 
 ---
 
