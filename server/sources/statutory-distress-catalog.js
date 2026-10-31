@@ -973,7 +973,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Fulton County GA (Atlanta) — Tax Sale (Sheriff) (county, GA). Official statutory source for tax deed.",
     "discoveryUrl": "https://fultoncountyga.gov/inside-fulton-county/fulton-county-departments/sheriff/tax-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Fulton County GA (Atlanta) — Tax Sale (Sheriff) for delinquent tax property records and scheduled auctions.",
@@ -1001,7 +1001,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "DeKalb County GA — Tax Sale Listing Search (county, GA). Official statutory source for tax deed.",
     "discoveryUrl": "https://publicaccess.dekalbtax.org/forms/htmlframe.aspx?mode=content/search/tax_sale_listing.html",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect DeKalb County GA — Tax Sale Listing Search for delinquent tax property records and scheduled auctions.",
@@ -1029,7 +1029,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cobb County GA — Tax Sale (county, GA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.cobbtax.gov/property/tax_sale/index.php",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Cobb County GA — Tax Sale for delinquent tax property records and scheduled auctions.",
@@ -1085,7 +1085,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga County OH (Cleveland) — Sheriff Foreclosure Sales (county, OH). Official statutory source for tax deed.",
     "discoveryUrl": "https://cpdocket.cp.cuyahogacounty.gov/SheriffSearch/printresults.aspx?q=searchType%3Ddate_range%26searchString%3D%26foreclosureType%3D%26dateFrom%3D%26dateTo%3D",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Cuyahoga County OH (Cleveland) — Sheriff Foreclosure Sales for delinquent tax property records and scheduled auctions.",
@@ -1113,7 +1113,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Franklin County OH (Columbus) — Sheriff Real Estate Sales (county, OH). Official statutory source for tax deed.",
     "discoveryUrl": "https://sheriff.franklincountyohio.gov/real-estate-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Franklin County OH (Columbus) — Sheriff Real Estate Sales for delinquent tax property records and scheduled auctions.",
@@ -1841,7 +1841,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Orange County CA — Tax-Defaulted Property Auction (county, CA). Official statutory source for tax deed.",
     "discoveryUrl": "https://www.octreasurer.gov/taxauction",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "ca-controller-tax-sale",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Inspect Orange County CA — Tax-Defaulted Property Auction for delinquent tax property records and scheduled auctions.",
@@ -2121,7 +2121,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga County OH — Sheriff Foreclosure Sales Search (county, OH). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://cpdocket.cp.cuyahogacounty.gov/SheriffSearch/printresults.aspx?q=searchType%3Ddate_range%26searchString%3D%26foreclosureType%3D%26dateFrom%3D%26dateTo%3D",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Cuyahoga County OH — Sheriff Foreclosure Sales Search for civil foreclosure sale notices and scheduled auctions.",
@@ -2149,7 +2149,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Franklin County OH — Sheriff Real Estate Sales (county, OH). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://sheriff.franklincountyohio.gov/real-estate-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Franklin County OH — Sheriff Real Estate Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2205,7 +2205,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Union County NJ — Sheriff Sale Information (county, NJ). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://ucnj.org/sheriff/functions/sheriffs-sale-information",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Union County NJ — Sheriff Sale Information for civil foreclosure sale notices and scheduled auctions.",
@@ -2233,7 +2233,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Middlesex County NJ — Sheriff Foreclosure Sales (county, NJ). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.middlesexcountynj.gov/government/municipalities/foreclosures",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Middlesex County NJ — Sheriff Foreclosure Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2261,7 +2261,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Philadelphia PA — Sheriff Sale Properties (city, PA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.phila.gov/services/property-lots-housing/foreclosure-sheriff-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Philadelphia PA — Sheriff Sale Properties for civil foreclosure sale notices and scheduled auctions.",
@@ -2289,7 +2289,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Montgomery County PA — Sheriff Sales (county, PA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.montgomerycountypa.gov/departments/sheriffs-office/sheriff-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Montgomery County PA — Sheriff Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2317,7 +2317,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Chester County PA — Sheriff Sales (Handbills) (county, PA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.chesco.org/3262/Sheriff-Sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Chester County PA — Sheriff Sales (Handbills) for civil foreclosure sale notices and scheduled auctions.",
@@ -2345,7 +2345,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Delaware County PA — Sheriff Real Estate Sales (county, PA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.delcopa.gov/sheriff/real-estate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "civilview",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Delaware County PA — Sheriff Real Estate Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2401,7 +2401,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Fulton County GA — Sheriff Tax Sales (county, GA). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://fultoncountyga.gov/inside-fulton-county/fulton-county-departments/sheriff/tax-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Fulton County GA — Sheriff Tax Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2429,7 +2429,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Clark County NV (Las Vegas) — Sheriff Sales (county, NV). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.clarkcountynv.gov/government/departments/sheriff_civil/sheriff_s_sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Clark County NV (Las Vegas) — Sheriff Sales for civil foreclosure sale notices and scheduled auctions.",
@@ -2457,7 +2457,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Clark County NV — 2025 Sheriff Sales List (county, NV). Official statutory source for sheriff sale.",
     "discoveryUrl": "https://www.clarkcountynv.gov/government/departments/sheriff_civil/sheriff_s_sales/2025-sales",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "sheriff",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Monitor Clark County NV — 2025 Sheriff Sales List for civil foreclosure sale notices and scheduled auctions.",
@@ -2597,7 +2597,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Detroit Land Bank Authority — Available Properties (city, MI). Official statutory source for land bank.",
     "discoveryUrl": "https://buildingdetroit.org/properties",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Detroit Land Bank Authority — Available Properties for available residential, commercial, or side-lot properties.",
@@ -2624,7 +2624,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Detroit Land Bank — Side Lots ($250) (city, MI). Official statutory source for land bank.",
     "discoveryUrl": "https://buildingdetroit.org/properties/?category=3",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Detroit Land Bank — Side Lots ($250) for available residential, commercial, or side-lot properties.",
@@ -2651,7 +2651,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Detroit Open Data — DLBA Owned Properties Dataset (city, MI). Official statutory source for land bank.",
     "discoveryUrl": "https://data.detroitmi.gov/datasets/848bc665295f4ca9b1e25068ffa88ab0_0/about",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Detroit Open Data — DLBA Owned Properties Dataset for available residential, commercial, or side-lot properties.",
@@ -2678,7 +2678,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga Land Bank — All Available Properties (county, OH). Official statutory source for land bank.",
     "discoveryUrl": "https://cuyahogalandbank.org/all-available-properties",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cuyahoga Land Bank — All Available Properties for available residential, commercial, or side-lot properties.",
@@ -2705,7 +2705,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga Land Bank — Available Side Yard Properties (county, OH). Official statutory source for land bank.",
     "discoveryUrl": "https://cuyahogalandbank.org/available-side-yard-properties",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cuyahoga Land Bank — Available Side Yard Properties for available residential, commercial, or side-lot properties.",
@@ -2732,7 +2732,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga Land Bank — Land Bank Homes (county, OH). Official statutory source for land bank.",
     "discoveryUrl": "https://cuyahogalandbank.org/land-bank-homes",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cuyahoga Land Bank — Land Bank Homes for available residential, commercial, or side-lot properties.",
@@ -2759,7 +2759,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County Land Bank — Property Inventory (county, IL). Official statutory source for land bank.",
     "discoveryUrl": "https://cookcountylandbank.org/what-are-you-looking-for",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cook County Land Bank — Property Inventory for available residential, commercial, or side-lot properties.",
@@ -2786,7 +2786,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County IL — Buy Land Bank Property (county, IL). Official statutory source for land bank.",
     "discoveryUrl": "https://www.cookcountyil.gov/service/buy-land-bank-property",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cook County IL — Buy Land Bank Property for available residential, commercial, or side-lot properties.",
@@ -2813,7 +2813,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "City of Cleveland — Land Bank Program (city, OH). Official statutory source for land bank.",
     "discoveryUrl": "https://www.clevelandohio.gov/city-hall/departments/community-development/programs-services/cleveland-land-bank",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search City of Cleveland — Land Bank Program for available residential, commercial, or side-lot properties.",
@@ -2840,7 +2840,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Center for Community Progress — National Land Bank Map (national, US). Official statutory source for land bank.",
     "discoveryUrl": "https://communityprogress.org/resources/land-banks/national-land-bank-map",
     "access": "public",
-    "adapterKey": null,
+    "adapterKey": "landbank",
     "status": "DISCOVERY_ONLY",
     "workflow": {
       "primary": "Search Center for Community Progress — National Land Bank Map for available residential, commercial, or side-lot properties.",
@@ -3029,7 +3029,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "NYC Surrogate's Court — WebSurrogate Case Search (state, NY). Official statutory source for probate.",
     "discoveryUrl": "https://websurrogates.nycourts.gov",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search NYC Surrogate's Court — WebSurrogate Case Search for open probate estate filings and real-property assets.",
@@ -3056,7 +3056,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Kings County NY (Brooklyn) Surrogate's Court (county, NY). Official statutory source for probate.",
     "discoveryUrl": "https://www.nycourts.gov/courts/2jd/surrogates/kings",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Kings County NY (Brooklyn) Surrogate's Court for open probate estate filings and real-property assets.",
@@ -3083,7 +3083,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "New York County (Manhattan) Surrogate's Court (county, NY). Official statutory source for probate.",
     "discoveryUrl": "https://www.nycourts.gov/courts/1st-judicial-district/new-york-county-surrogates-court",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search New York County (Manhattan) Surrogate's Court for open probate estate filings and real-property assets.",
@@ -3110,7 +3110,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cook County IL — Probate Division Case Search (county, IL). Official statutory source for probate.",
     "discoveryUrl": "https://www.cookcountycourt.org/ABOUT-THE-COURT/County-Departments/Probate-Division",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cook County IL — Probate Division Case Search for open probate estate filings and real-property assets.",
@@ -3137,7 +3137,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Cuyahoga County OH — Probate Court Case Search (county, OH). Official statutory source for probate.",
     "discoveryUrl": "https://probate.cuyahogacounty.us",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Cuyahoga County OH — Probate Court Case Search for open probate estate filings and real-property assets.",
@@ -3164,7 +3164,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Harris County TX — Probate Court Case Search (county, TX). Official statutory source for probate.",
     "discoveryUrl": "https://www.harriscountytx.gov/Departments/Courts/Probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Harris County TX — Probate Court Case Search for open probate estate filings and real-property assets.",
@@ -3191,7 +3191,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Dallas County TX — Probate Court Case Search (county, TX). Official statutory source for probate.",
     "discoveryUrl": "https://www.dallascounty.org/government/courts/county-courts-at-law/probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Dallas County TX — Probate Court Case Search for open probate estate filings and real-property assets.",
@@ -3218,7 +3218,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Los Angeles County CA — Superior Court Probate (county, CA). Official statutory source for probate.",
     "discoveryUrl": "https://www.lacourt.org/division/probate/probate.aspx",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Los Angeles County CA — Superior Court Probate for open probate estate filings and real-property assets.",
@@ -3245,7 +3245,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "San Diego County CA — Probate Case Search (county, CA). Official statutory source for probate.",
     "discoveryUrl": "https://www.sdcourt.ca.gov/sdcourt/civil/probate2",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search San Diego County CA — Probate Case Search for open probate estate filings and real-property assets.",
@@ -3272,7 +3272,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Fulton County GA — Probate Court Case Search (county, GA). Official statutory source for probate.",
     "discoveryUrl": "https://probate.fultoncountyga.gov",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Fulton County GA — Probate Court Case Search for open probate estate filings and real-property assets.",
@@ -3299,7 +3299,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Wayne County MI — Probate Court Case Search (county, MI). Official statutory source for probate.",
     "discoveryUrl": "https://www.3rdcc.org/divisions/probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Wayne County MI — Probate Court Case Search for open probate estate filings and real-property assets.",
@@ -3326,7 +3326,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Essex County NJ — Surrogate's Court (county, NJ). Official statutory source for probate.",
     "discoveryUrl": "https://www.essexcountynj.org/essex-county-surrogate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Essex County NJ — Surrogate's Court for open probate estate filings and real-property assets.",
@@ -3353,7 +3353,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Philadelphia PA — Register of Wills (city, PA). Official statutory source for probate.",
     "discoveryUrl": "https://secure.phila.gov/PROBATE",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Philadelphia PA — Register of Wills for open probate estate filings and real-property assets.",
@@ -3380,7 +3380,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Pima County AZ (Tucson) — Superior Court Probate (county, AZ). Official statutory source for probate.",
     "discoveryUrl": "https://www.sc.pima.gov/calendar-departments/probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Pima County AZ (Tucson) — Superior Court Probate for open probate estate filings and real-property assets.",
@@ -3407,7 +3407,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Maricopa County AZ (Phoenix) — Superior Court Probate (county, AZ). Official statutory source for probate.",
     "discoveryUrl": "https://www.superiorcourt.maricopa.gov/llrc/probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Maricopa County AZ (Phoenix) — Superior Court Probate for open probate estate filings and real-property assets.",
@@ -3434,7 +3434,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "King County WA (Seattle) — Superior Court Probate (county, WA). Official statutory source for probate.",
     "discoveryUrl": "https://www.kingcounty.gov/courts/superior-court/probate",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search King County WA (Seattle) — Superior Court Probate for open probate estate filings and real-property assets.",
@@ -3461,7 +3461,7 @@ const STATUTORY_DISTRESS_CATALOG_ENTRIES = Object.freeze([
     "coverage": "Miami-Dade FL — Probate Division Search (county, FL). Official statutory source for probate.",
     "discoveryUrl": "https://www.miamidadeclerk.gov/clerk/civil-family-probate-divisions.page",
     "access": "jurisdiction",
-    "adapterKey": null,
+    "adapterKey": "courtlistener",
     "status": "LOCAL_ROUTE",
     "workflow": {
       "primary": "Search Miami-Dade FL — Probate Division Search for open probate estate filings and real-property assets.",

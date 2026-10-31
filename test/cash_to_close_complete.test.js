@@ -7,6 +7,7 @@ const {
   JURISDICTION_FEE_SCHEDULES,
   calculateCompleteCashToClose,
 } = require('../server/intelligence/cash-to-close');
+const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset } = require('../src/lib/underwriting.ts');
 
 test('calculates complete Florida foreclosure cash-to-close schedule', () => {
   const result = calculateCompleteCashToClose({
@@ -228,4 +229,45 @@ test('evaluates Texas tax sale statutory deadlines: 180-day non-homestead and 73
   assert.equal(preset.sheriffPoundage, 0);
   assert.ok(preset.citations.some(c => c.includes('Tex. Tax Code § 34.015')));
   assert.ok(preset.citations.some(c => c.includes("Tex. Local Gov't Code § 118.011")));
+});
+
+test('computes Georgia statutory underwriting deadlines and fee citations', () => {
+  // 1. Georgia tax deed sale (1-year statutory redemption under O.C.G.A. § 48-4-40)
+  const gaTaxSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'GA',
+    distressType: 'tax_sale',
+    purchasePrice: 100000,
+  });
+  assert.equal(gaTaxSale.stateRedemptionDays, 365);
+  assert.equal(gaTaxSale.objectionOrConfirmationDays, 30);
+  assert.equal(gaTaxSale.effectiveLockupDays, 365);
+  assert.match(gaTaxSale.objectionLabel, /GA 30-day tax deed execution & recording window/);
+
+  // 2. Georgia non-judicial mortgage foreclosure (0-day post-sale redemption under O.C.G.A. § 44-14-162)
+  const gaMortgageSale = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'GA',
+    distressType: 'foreclosure_auction',
+    purchasePrice: 100000,
+  });
+  assert.equal(gaMortgageSale.stateRedemptionDays, 0);
+  assert.equal(gaMortgageSale.objectionOrConfirmationDays, 0);
+  assert.equal(gaMortgageSale.effectiveLockupDays, 0);
+  assert.match(gaMortgageSale.objectionLabel, /GA non-judicial foreclosure under power of sale/);
+
+  // 3. Georgia tax fee preset citations
+  const gaTaxPreset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'GA', distressType: 'tax_sale' });
+  assert.ok(gaTaxPreset.supported);
+  assert.equal(gaTaxPreset.transferTax, 100); // $1 per $1,000
+  assert.equal(gaTaxPreset.sheriffPoundage, 0);
+  assert.ok(gaTaxPreset.citations.some(c => c.includes('O.C.G.A. § 48-4-40')));
+  assert.ok(gaTaxPreset.citations.some(c => c.includes('20% statutory penalty')));
+  assert.ok(gaTaxPreset.citations.some(c => c.includes('O.C.G.A. § 48-6-1')));
+
+  // 4. Georgia mortgage fee preset citations
+  const gaMortgagePreset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'GA' });
+  assert.ok(gaMortgagePreset.supported);
+  assert.equal(gaMortgagePreset.transferTax, 100);
+  assert.ok(gaMortgagePreset.citations.some(c => c.includes('O.C.G.A. § 44-14-162')));
 });

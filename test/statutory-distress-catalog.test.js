@@ -51,7 +51,7 @@ test('statutory distress catalog contains high-trust official distress sources s
 
     // Ingestion constraints: linked platform adapter or null
     if (entry.adapterKey !== null) {
-      assert.ok(['sheriff', 'civilview', 'ca-controller-tax-sale'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, ca-controller-tax-sale, or null`);
+      assert.ok(['sheriff', 'civilview', 'ca-controller-tax-sale', 'landbank', 'courtlistener'].includes(entry.adapterKey), `${entry.id}: adapterKey must be sheriff, civilview, ca-controller-tax-sale, landbank, courtlistener, or null`);
     }
 
     // Workflow specification
@@ -145,5 +145,49 @@ test('Florida RealTaxDeed county sources are mapped to sheriff adapter and have 
     assert.match(entry.discoveryUrl, new RegExp(`^https://(www\\.)?${county}\\.realtaxdeed\\.com`));
     assert.ok(entry.workflow && entry.workflow.primary);
     assert.ok(Array.isArray(entry.requiredEvidence) && entry.requiredEvidence.length >= 2);
+  }
+});
+
+test('statutory distress catalog links landbank, civilview, trustee, and courtlistener adapters correctly', () => {
+  const landbankIds = [
+    'landbank-detroit-dlba', 'landbank-detroit-sidelots', 'landbank-detroit-opendata-dataset',
+    'landbank-cuyahoga-available-properties', 'landbank-cuyahoga-sideyard-properties', 'landbank-cuyahoga-homes',
+    'landbank-cook-county-inventory', 'landbank-cook-county-government', 'landbank-cleveland-program',
+    'landbank-community-progress-national-map'
+  ];
+  for (const id of landbankIds) {
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.adapterKey, 'landbank', `${id} must have adapterKey landbank`);
+  }
+
+  const civilviewIds = [
+    'sheriff-union-nj-sales-info', 'sheriff-middlesex-nj-foreclosures', 'sheriff-philadelphia-pa-foreclosures',
+    'sheriff-montgomery-pa-sales', 'sheriff-chester-pa-handbills', 'sheriff-delaware-pa-real-estate'
+  ];
+  for (const id of civilviewIds) {
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.adapterKey, 'civilview', `${id} must have adapterKey civilview`);
+  }
+
+  const clarkNvSheriffIds = [
+    'sheriff-clark-nv-civil-sales', 'sheriff-clark-nv-annual-sales'
+  ];
+  for (const id of clarkNvSheriffIds) {
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.adapterKey, 'sheriff', `${id} must have adapterKey sheriff`);
+  }
+
+  const probateSampleIds = [
+    'probate-nyc-websurrogates-case-search', 'probate-cook-il-probate-division',
+    'probate-harris-tx-court-search', 'probate-losangeles-ca-superior-court',
+    'probate-fulton-ga-court-search', 'probate-miamidade-fl-civil-probate'
+  ];
+  for (const id of probateSampleIds) {
+    const entry = getSource(id);
+    assert.ok(entry, `Source ${id} must exist in catalog`);
+    assert.equal(entry.adapterKey, 'courtlistener', `${id} must have adapterKey courtlistener`);
   }
 });

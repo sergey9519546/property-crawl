@@ -663,6 +663,8 @@ export function computeStatutoryFeePreset(params: {
   purchasePrice: number | string | null;
   state?: string | null;
   source?: string | null;
+  distressType?: string | null;
+  isTaxSale?: boolean | null;
   depositText?: string | null;
 }): StatutoryFeePreset | null {
   const price = positiveNumber(params.purchasePrice);
@@ -758,14 +760,32 @@ export function computeStatutoryFeePreset(params: {
       "Cal. Civ. Code § 2924m (SB 1079): 45-day post-sale eligible bidder window on 1-4 unit residential."
     );
   } else if (st === "GA") {
-    scheduleLabel = "Georgia Non-Judicial Foreclosure Schedule (O.C.G.A. § 44-14-162 & § 48-6-1)";
-    sheriffPoundage = 0;
-    transferTax = Math.round(price / 1000);
-    defaultDepositPct = 0.10;
-    citations.push(
-      "O.C.G.A. § 44-14-162: Non-judicial foreclosure under power of sale (first Tuesday auction).",
-      "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      src.includes("tax")
     );
+    if (isTax) {
+      scheduleLabel = "Georgia First Tuesday Tax Deed Schedule (O.C.G.A. § 48-4-1 et seq. & § 48-4-40)";
+      sheriffPoundage = 0;
+      transferTax = Math.round(price / 1000);
+      defaultDepositPct = 0.20;
+      citations.push(
+        "O.C.G.A. § 48-4-1: County tax commissioner / sheriff first Tuesday tax execution sale.",
+        "O.C.G.A. § 48-4-40: 12-month (365 days) statutory right of redemption with 20% statutory penalty in Year 1.",
+        "O.C.G.A. § 48-4-45: Mandatory barment of redemption notice after 12 months to ripen fee simple title.",
+        "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
+      );
+    } else {
+      scheduleLabel = "Georgia Non-Judicial Foreclosure Schedule (O.C.G.A. § 44-14-162 & § 48-6-1)";
+      sheriffPoundage = 0;
+      transferTax = Math.round(price / 1000);
+      defaultDepositPct = 0.10;
+      citations.push(
+        "O.C.G.A. § 44-14-162: Non-judicial foreclosure under power of sale (first Tuesday auction; 0-day post-sale redemption).",
+        "O.C.G.A. § 48-6-1: Georgia Real Estate Transfer Tax ($1.00 per $1,000 of consideration)."
+      );
+    }
   } else if (st === "IL") {
     scheduleLabel = "Illinois Judicial Mortgage Foreclosure Schedule (735 ILCS 5/15-1507 & 35 ILCS 200/31-10)";
     sheriffPoundage = Math.min(Math.round(price * 0.01), 1000);
@@ -947,6 +967,19 @@ export function computeStatutoryDeadlinesAndCarry(params: {
       objectionOrConfirmationDays = 0;
       objectionLabel = "TX non-judicial deed of trust sale (Tex. Prop. Code § 51.002; title passes upon deed delivery)";
     }
+  } else if (st === "GA") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      objectionOrConfirmationDays = 30;
+      objectionLabel = "GA 30-day tax deed execution & recording window (O.C.G.A. § 48-4-40 1-yr redemption applies)";
+    } else {
+      objectionOrConfirmationDays = 0;
+      objectionLabel = "GA non-judicial foreclosure under power of sale (O.C.G.A. § 44-14-162; 0-day post-sale redemption)";
+    }
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
@@ -959,6 +992,15 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     );
     if (isTax) {
       stateRedemptionDays = params.isHomestead ? 730 : 180;
+    }
+  } else if (stateRedemptionDays === 0 && st === "GA") {
+    const isTax = Boolean(
+      params.isTaxSale ||
+      params.distressType === "tax_sale" ||
+      (typeof params.source === "string" && params.source.toLowerCase().includes("tax"))
+    );
+    if (isTax) {
+      stateRedemptionDays = 365;
     }
   }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
