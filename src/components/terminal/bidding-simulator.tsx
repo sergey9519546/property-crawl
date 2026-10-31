@@ -422,7 +422,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                   {redemptionYield.legalRegime}
                 </span>
                 {redemptionYield.instrumentBadge && (
-                  <span className="rounded-md bg-card px-2 py-0.5 text-[11px] font-semibold text-ink-2 border border-line">
+                  <span className="rounded-md bg-card px-2 py-0.5 text-xs font-semibold text-ink-2 border border-line">
                     {redemptionYield.instrumentBadge}
                   </span>
                 )}
@@ -440,7 +440,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
             <div className="space-y-2 rounded-lg border border-line bg-card/60 p-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-medium text-ink-2">Simulate redemption in month:</span>
+                <span className="text-xs font-medium text-ink-2">Simulate redemption in month:</span>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {[1, 3, 6, 12, 24].map((mo) => (
                     <button
@@ -477,7 +477,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs">
               <div className="rounded-lg border border-line bg-card p-2.5">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">
+                <span className="text-xs text-ink-3 uppercase font-semibold block">
                   {redemptionYield.yieldType === "penalty" ? "Penalty Rate" : "Interest Rate"}
                 </span>
                 <span className="text-sm font-bold text-ink">
@@ -485,19 +485,19 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 </span>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Gross Payout if Redeemed</span>
+                <span className="text-xs text-ink-3 uppercase font-semibold block">Gross Payout if Redeemed</span>
                 <span className="text-sm font-bold text-ink">
                   {displayMoney(redemptionYield.redemptionPayout)}
                 </span>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Investor Yield / Profit</span>
+                <span className="text-xs text-ink-3 uppercase font-semibold block">Investor Yield / Profit</span>
                 <span className={`text-sm font-bold ${redemptionYield.penaltyAmount > 0 ? "text-go" : "text-ink"}`}>
                   {redemptionYield.penaltyAmount > 0 ? `+${displayMoney(redemptionYield.penaltyAmount)}` : "$0 (Direct Title Acquisition)"}
                 </span>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
-                <span className="text-[10px] text-ink-3 uppercase font-semibold block">Annualized Return (IRR)</span>
+                <span className="text-xs text-ink-3 uppercase font-semibold block">Annualized Return (IRR)</span>
                 <span className="text-sm font-bold text-go">
                   {redemptionYield.annualizedYieldPct}% annualized
                 </span>
@@ -505,23 +505,23 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </div>
 
             <div className="rounded-lg border border-line bg-card/60 p-2.5 space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
                 <span className="font-semibold text-ink-2">Statutory Redemption Period:</span>
                 <span className="font-medium text-ink">{redemptionYield.redemptionPeriodLabel}</span>
               </div>
-              <p className="text-[11px] text-ink-3 leading-relaxed">{redemptionYield.statute}</p>
+              <p className="text-xs text-ink-3 leading-relaxed">{redemptionYield.statute}</p>
               {redemptionYield.regime === "redeemable_deed_flat_penalty" && (
-                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                <p className="text-xs text-ink-2 font-medium leading-relaxed">
                   Flat statutory penalty does not prorate per-diem; full penalty is owed upon redemption regardless of exact day.
                 </p>
               )}
               {redemptionYield.regime === "redeemable_deed_or_lien_interest" && (
-                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                <p className="text-xs text-ink-2 font-medium leading-relaxed">
                   Accrues simple statutory interest over holding duration.
                 </p>
               )}
               {redemptionYield.regime === "post_redemption_deed" && (
-                <p className="text-[11px] text-ink-2 font-medium leading-relaxed">
+                <p className="text-xs text-ink-2 font-medium leading-relaxed">
                   Immediate title upon deed issuance; no post-sale redemption right survives the gavel drop.
                 </p>
               )}

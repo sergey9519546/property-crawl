@@ -222,9 +222,9 @@ class ScraperTelemetry {
       };
     }
 
-    if (report.scrapersInFault > 0) {
+    if (report.scrapersInFault > 0 || report.scrapersWithDrift > 0) {
       report.systemStatus = 'degraded';
-    } else if (report.scrapersChallengeGated > 0 || report.scrapersWithDrift > 0) {
+    } else if (report.scrapersChallengeGated > 0) {
       report.systemStatus = 'nominal_gated';
     }
 
