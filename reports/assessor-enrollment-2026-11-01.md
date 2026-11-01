@@ -137,7 +137,11 @@ the ratio component got their conversions this session:
   derived market figure understates market and the resulting discount is a
   conservative lower bound (a deal can only look worse than it is, never
   better). `amt_taxable_value` (Proposal A's capped value) is the taxed basis
-  and is explicitly excluded.
+  and is explicitly excluded. Coverage caveat, verified in production: the
+  endpoint is the **City of Detroit** authoritative parcel layer, so other
+  Wayne County municipalities (Harper Woods, Rockwood, Romulus, Livonia,
+  Dearborn, ...) correctly do not match it — of eight sampled Wayne listings,
+  the three Detroit parcels resolved and the five suburban ones did not.
 - **PA-Philadelphia** is a market-figure enrollment measured at 0.966 of the
   layer's own recorded 2026 sales (n=2,000): OPA's `market_value` is what it
   says it is. No code citation was available to fetch this session, so the
@@ -258,6 +262,8 @@ year (regression-pinned in `test/assessor-harvest.test.js`).
 | Gate | Result |
 |---|---|
 | `node --test test/assessor-reading.test.js test/assessor-harvest.test.js` | 32/32 pass |
+| `node --test test/assessor-backfill.test.js` | 4/4 pass |
+| `node --test test/db/listing-filters.test.js` (embedded PostgreSQL + in-memory) | 2/2 pass |
 | `npm run test:enrichment-intelligence` | 96/96 pass |
 | `npm run test:sources` | 602/602 pass |
 | `npm run test:canonical` | 48/48 pass |
@@ -297,12 +303,69 @@ what the statute does supply is the cap that makes the comparison conservative.
 MCL 211.27a(1) fetched from `legislature.mi.gov` (the 50% assessment rule); the
 Pennsylvania citation is field-based (no code text was fetchable this session).
 
+## Session audit (wiring, production hit-rate, and the backfill gap)
+
+An end-of-session audit verified that the enrollments are actually wired and
+working, and found one operational gap that code then closed:
+
+**Wiring** — `interpretAssessorParcel` is consumed at four points, so a stored
+roll converts wherever a listing is read: the evaluator's bid-to-value
+component (`server/intelligence/signals.js`), the read-time scorer
+(`server/scrapers/listing-intelligence.js`, which also reads the durable
+`provenance.derivedFields.assessorRoll` copy), the per-listing on-demand route
+(`server/routes/listings.js` → `GET /api/listings/:id/assessor`), and the public
+benchmark consensus (`server/enrichment/public-benchmark-consensus.js`).
+
+**Production hit-rate** (on-demand route, sampled 8 listings per county):
+Maricopa 8/8 and Philadelphia 8/8 resolved their roll figure; Wayne resolved
+3/8 — the misses are non-Detroit Wayne County municipalities, which exposed the
+coverage caveat documented above. Two sampled conversions produced live deal
+scores (a 0.81 ratio → score 24; a 10.2 ratio on a token parcel → score 1,
+clamped) — the honest conservative behaviour working as designed.
+
+**The bid-side gap**: every sampled Maricopa listing carries no published
+opening amount yet, so its ratio waits for bids; the rolls themselves resolve.
+This is listing-data reality, not an enrollment defect.
+
+**The backfill gap (found and closed)**: the ingest-time harvest only sees the
+listings a source run observes — and production servicelink cycles are
+incremental (25 records re-observed in the sampled cycle). Zero stored listings
+carried rolls hours after deploy, and a full sweep re-observation could take
+weeks. Closed with a bounded scheduler backfill:
+
+- `server/db/client.js`: two additive `getListings` filters — `county`
+  (ILIKE, case-insensitive) and `missingAssessorRoll` (the durable
+  `provenance.derivedFields.assessorRoll` marker is the authority) — with
+  dual-mode parity.
+- `server/enrichment/assessor-backfill.js`: pulls one page per converted state,
+  filters to geo/APN-ready roll-less rows, dedups, runs the same fail-open
+  cache-backed harvest, persists only rows that gained a roll. Bounded
+  (default 30 candidates/call), fail-open on every error.
+- `server/scrapers/scheduler.js`: runs the backfill once per source completion
+  (non-fatal), so rolls accumulate at up to ~25-55 rows per cycle alongside the
+  ingest-time harvest.
+
+Test evidence: `test/db/listing-filters.test.js` runs the new filters on a real
+embedded PostgreSQL engine **and** the in-memory provider — and caught a real
+bug before deploy (the filter initially referenced `assessed`, a
+listing-mapped name; the column is `assessed_value` — a SQL error that would
+have 500'd the listing route). `test/assessor-backfill.test.js` pins the
+module's candidate selection (roll marker is the authority, geo/APN readiness,
+dedup across per-state pages — a first draft double-counted and re-persisted
+already-rolled rows; the tests caught that too) and the cap/fail-open bounds.
+
 ## Expected effect and how to measure it
 
 The ratio component resolves when an enrolled-county listing gets a roll
 harvested at ingest (`harvestAssessorRolls` → `assessorRoll` →
-`interpretAssessorParcel` → FCV band ±8%). Measurement needs the production
-inventory:
+`interpretAssessorParcel` → FCV band ±8%), and on demand via the per-listing
+`/api/listings/:id/assessor` route. Production spot-check after deploy:
+Maricopa 8/8 and Philadelphia 8/8 sampled listings resolve their roll figure
+through the on-demand route; Wayne resolves the Detroit parcels (3/8 — city
+coverage, caveat above). Note a bid-side gap the enrollment cannot fix: the
+sampled Maricopa listings carry no published opening amount yet, so their
+ratios wait for bids; the rolls themselves resolve. Measurement needs the
+production inventory:
 
 ```
 npm run triage:measure

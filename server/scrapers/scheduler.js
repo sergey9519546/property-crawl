@@ -488,6 +488,19 @@ const scheduler = new IngestionScheduler({
         console.warn('[Scheduler] Assessor roll harvest failed (non-fatal):', error.message);
       }
     }
+    // Backfill stored, roll-less listings in converted-county states: the
+    // ingest-time harvest only sees the listings this run observed, so records
+    // ingested before a county's enrollment stay dark until a full sweep
+    // re-observes them. Bounded per run, cache-backed, fail-open.
+    try {
+      const { backfillAssessorRolls } = require('../enrichment/assessor-backfill');
+      const backfill = await backfillAssessorRolls({ db, limit: 25 });
+      if (backfill.harvested > 0) {
+        console.log(`[Scheduler] Backfilled ${backfill.persisted} stored assessor roll(s) (harvested ${backfill.harvested}, notFound ${backfill.notFound}, failed ${backfill.failed})`);
+      }
+    } catch (error) {
+      console.warn('[Scheduler] Assessor roll backfill failed (non-fatal):', error.message);
+    }
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
     if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {

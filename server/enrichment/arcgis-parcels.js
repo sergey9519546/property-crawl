@@ -746,6 +746,9 @@ const COUNTY_ARCGIS_REGISTRY = {
     // Detroit parcel_ids carry separators ("15008031-3", "15008011."), which
     // the normalized APN LIKE can never match; apnSeparatorRetry opts this
     // entry into the bounded wildcard-pattern retry in queryArcgisParcel.
+    // COVERAGE: the endpoint is the City of Detroit authoritative parcel
+    // layer — other Wayne County municipalities are not covered by it
+    // (verified in production: suburban listings do not match).
     name: 'Wayne County / City of Detroit Office of the Assessor',
     fips: '26163',
     endpoint: 'https://services2.arcgis.com/PpbvckyUgaYqseNQ/arcgis/rest/services/Detroit_MP_Parcel_Authoritative/FeatureServer/0/query',

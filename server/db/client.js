@@ -1938,6 +1938,15 @@ class DatabaseClient {
         sql += ` AND status = $${paramIdx++}`;
         params.push(status);
       }
+      if (filters.county && filters.county !== 'all') {
+        sql += ` AND county ILIKE $${paramIdx++}`;
+        params.push(String(filters.county));
+      }
+      if (filters.missingAssessorRoll) {
+        // The durable roll marker is the authority: `assessed_value` alone can
+        // pre-exist from other enrichment paths.
+        sql += ` AND provenance #> '{derivedFields,assessorRoll}' IS NULL AND (assessed_value IS NULL OR assessed_value <= 0)`;
+      }
       if (minScore) {
         sql += ` AND deal_score >= $${paramIdx++}`;
         params.push(Number(minScore));
@@ -2021,6 +2030,8 @@ class DatabaseClient {
       const publishedRedemptionKnown = Number.isFinite(publishedRedemption) ? publishedRedemption : null;
       if (redemption === 'immediate' && publishedRedemptionKnown !== 0) return false;
       if (redemption === 'redemption_active' && !(publishedRedemptionKnown > 0)) return false;
+      if (filters.county && filters.county !== 'all' && String(l.county || '').toUpperCase() !== String(filters.county).toUpperCase()) return false;
+      if (filters.missingAssessorRoll && (l.assessorParcel || l?.provenance?.derivedFields?.assessorRoll || (Number(l.assessed) > 0))) return false;
       if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
         const dist = this.calculateDistance(Number(lat), Number(lng), l.lat, l.lng);
         if (dist === null || dist > Number(radiusKm)) return false;
