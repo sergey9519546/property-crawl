@@ -223,6 +223,90 @@ test('ingestScrapyItems: invokes db.createListing in memory mode (!isPostgres) w
   }
 });
 
+test('ingestScrapyItems: a live-store merge failure is flagged, not silently swallowed', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-merge-fail-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-MERGE-1', propertyId: '3002001' });
+    const mockDb = {
+      isPg: false,
+      dataMode: () => 'memory',
+      createListing: async () => {},
+    };
+
+    const result = await ingestScrapyItems([valid], {
+      db: mockDb,
+      isPostgres: false,
+      liveStorePath,
+      // A merge failure must be visible: accepted=0 with ok:true would read as
+      // "nothing was valid" when the truth is "the store was down".
+      mergeLiveRecordsImpl: () => { throw new Error('store unreadable'); },
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.accepted, 0);
+    assert.equal(result.liveMergeError, true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: a Postgres persistence outage is flagged (postgresPersistError)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-outage-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-PGOUT-1', propertyId: '3003001' });
+    const mockDb = {
+      isPg: true,
+      dataMode: () => 'postgres',
+      createListing: async () => { throw new Error('connection refused'); },
+    };
+
+    const result = await ingestScrapyItems([valid], {
+      db: mockDb,
+      isPostgres: true,
+      liveStorePath,
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    // Per-item failures still count individually; the outage flag tells the
+    // caller the whole store was down rather than the items being invalid.
+    assert.equal(result.postgresFailed, 1);
+    assert.equal(result.postgresPersistError, false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: an outer database failure before any createListing sets postgresPersistError', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-db-throw-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-DBTHROW-1', propertyId: '3004001' });
+    // A db object whose property access itself throws simulates the require/
+    // verify layer failing wholesale — the outer catch path.
+    const throwingDb = new Proxy({}, {
+      get() { throw new Error('pool destroyed'); },
+    });
+
+    const result = await ingestScrapyItems([valid], {
+      db: throwingDb,
+      isPostgres: true,
+      liveStorePath,
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.accepted, 0);
+    assert.equal(result.postgresPersistError, true);
+    assert.equal(result.liveMergeError, false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('ingestScrapyItems: enforces servesListings + validateListingForIngestion before Postgres createListing and reports accurate Postgres accounting', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-test-'));
   const liveStorePath = path.join(tmpDir, 'live-listings.json');
@@ -300,6 +384,8 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification,
   assert.match(source, /dataMode\(\) === "postgres"/);
   assert.match(source, /MAX_ITEMS_PER_BATCH/);
   assert.match(source, /Batch exceeds maximum allowed items \(500\)/);
-  assert.match(source, /hasPostgresFailures\s*\?\s*207\s*:\s*200/);
+  assert.match(source, /hasPostgresFailures\s*\|\|\s*hasPersistenceErrors\s*\?\s*207\s*:\s*200/);
+  assert.match(source, /liveMergeError/);
+  assert.match(source, /postgresPersistError/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN/);
 });

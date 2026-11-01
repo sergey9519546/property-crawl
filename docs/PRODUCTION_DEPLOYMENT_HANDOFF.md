@@ -11,8 +11,20 @@ The application runs as a unified single-container multi-process stack using `Do
 2. **Next.js 16 Canonical UI**: Binds the public port and proxies `/api/*` requests to the internal loopback API.
 3. **Internal Listing API**: Managed by `scripts/start-production.js` on internal port `3002` (or `$PORT+2`), serving catalog listings, intelligence metrics, and scrapers.
 4. **Data Persistence**:
-   - **Default Demo Mode**: Zero database required to boot. Serves canonical seed listings across 16 sources (read current totals from `CONTEXT.md`).
-   - **Durable Production Mode**: Provide `DATABASE_URL` pointing to PostgreSQL + PostGIS 16.
+   - **No database configured**: the app boots in `dataMode: unavailable` and
+     listing routes refuse to serve — there is no silent in-memory fallback, and
+     the boot log says `NO INVENTORY WILL BE SERVED`.
+   - **$0 demo persistence**: `scripts/start-production.js` injects
+     `PROPERTY_DB=embedded` only when no `DATABASE_URL` is configured, giving the
+     container a real in-process PostgreSQL 16 + PostGIS 3.6 (ephemeral across
+     redeploys on free tiers).
+   - **Durable Production Mode**: provide `DATABASE_URL` pointing to
+     PostgreSQL + PostGIS. This is what the live Render service uses. With
+     `AUTO_MIGRATE=1`, boot applies pending migrations from
+     `server/db/migrations/` through the ledger-guarded runner
+     (`scripts/discovery-migrate.js`); the ingestion cycle starts 90 seconds
+     after boot (`SCRAPER_BOOT_DELAY_MS`) so the deploy health check passes
+     before collection begins.
 
 ---
 
@@ -24,7 +36,9 @@ Configure these in your host dashboard (Render Web Service / Koyeb App / Hugging
 |---|---|---|---|
 | `NODE_ENV` | **Yes** | `production` | Enables production optimizations and strict CSP |
 | `PORT` | **Yes** | `3000` (Render) / `8000` (Koyeb) | Public HTTP listener port |
-| `DATABASE_URL` | Optional | `postgres://user:pass@host:5432/db` | Enables durable Postgres persistence |
+| `DATABASE_URL` | **Yes** (for a public listing inventory) | `postgres://user:pass@host:5432/db` | Durable PostgreSQL + PostGIS persistence. Without it the app serves no inventory (fail-closed); the $0 demo path injects `PROPERTY_DB=embedded` instead |
+| `AUTO_MIGRATE` | Recommended | `1` | Applies pending migrations from `server/db/migrations/` on every boot (ledger-guarded) |
+| `SCRAPER_BOOT_DELAY_MS` | Recommended | `90000` | Defers the ingestion cycle past the deploy health-check window; too small and the UI health check starves under collector load |
 | `SCRAPER_ADMIN_TOKEN` | Recommended | `<random-32-char-token>` | Secures operator workspace & review queue |
 | `PROPERTY_OPERATOR_SECRET` | Optional | *(matches SCRAPER_ADMIN_TOKEN)* | Alias for operator authentication |
 | `WORKSPACE_SESSION_SECRET` | Recommended | `<random-32-char-token>` | Signs operator session cookies |

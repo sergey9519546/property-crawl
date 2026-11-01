@@ -207,6 +207,7 @@ async function ingestScrapyItems(items, options = {}) {
   let liveAccepted = 0;
   let liveRejected = 0;
   let totalLive = 0;
+  let liveMergeError = false;
 
   if (admissibleItems.length > 0) {
     try {
@@ -220,12 +221,14 @@ async function ingestScrapyItems(items, options = {}) {
       totalLive = merged?.retained || 0;
     } catch (err) {
       logger.error?.('[Scrapy Ingest] Live record store merge failed:', err?.message);
+      liveMergeError = true;
     }
   }
 
   let isPostgres = Boolean(options.isPostgres);
   let pgAccepted = 0;
   let pgFailed = 0;
+  let postgresPersistError = false;
 
   try {
     const db = options.db !== undefined ? options.db : require('../db/client');
@@ -266,6 +269,9 @@ async function ingestScrapyItems(items, options = {}) {
     }
   } catch (dbErr) {
     logger.error?.('[Scrapy Ingest] Database persistence failed:', dbErr?.message);
+    // The caller must be able to tell "nothing was valid" from "the store was
+    // down": a silent zero is the exact dishonest-empty-state this project bans.
+    postgresPersistError = true;
   }
 
   const accepted = isPostgres ? pgAccepted : liveAccepted;
@@ -277,6 +283,8 @@ async function ingestScrapyItems(items, options = {}) {
     rejected,
     totalLive,
     isPostgres,
+    liveMergeError,
+    postgresPersistError,
     postgresAccepted: pgAccepted,
     postgresRejected: gateRejected,
     postgresFailed: pgFailed,

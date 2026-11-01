@@ -111,12 +111,18 @@ export async function POST(request: Request) {
   const hasPostgresFailures = Boolean(
     ingestResult.isPostgres && (ingestResult.postgresFailed ?? 0) > 0
   );
-  const responseStatus = hasPostgresFailures ? 207 : 200;
+  // A failed merge or a down store must reach the caller: an accepted count of
+  // zero with ok:true would read as "nothing was valid" when the truth is "the
+  // store was down" — the dishonest-empty-state this project bans.
+  const hasPersistenceErrors = Boolean(
+    ingestResult.liveMergeError || ingestResult.postgresPersistError
+  );
+  const responseStatus = hasPostgresFailures || hasPersistenceErrors ? 207 : 200;
 
   return Response.json(
     {
-      ok: !hasPostgresFailures,
-      success: !hasPostgresFailures,
+      ok: !hasPostgresFailures && !hasPersistenceErrors,
+      success: !hasPostgresFailures && !hasPersistenceErrors,
       recipe: validated.recipe,
       spider: validated.spider || null,
       source: validated.source || null,
@@ -125,6 +131,8 @@ export async function POST(request: Request) {
       accepted: ingestResult.accepted,
       rejected: ingestResult.rejected,
       totalLive: ingestResult.totalLive,
+      ...(ingestResult.liveMergeError ? { liveMergeError: true } : {}),
+      ...(ingestResult.postgresPersistError ? { postgresPersistError: true } : {}),
       ...(ingestResult.isPostgres
         ? {
             postgresAccepted: ingestResult.postgresAccepted,

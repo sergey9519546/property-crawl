@@ -7,7 +7,7 @@ This guide details how to deploy **Property-Crawl** into production completely *
 ## 1. Architectural Overview & Why It Can Be Freely Deployed
 
 Property-Crawl is designed with zero-friction production requirements:
-1. **Zero Database Required to Boot**: When `DATABASE_URL` is omitted, the application automatically falls back to an in-memory data provider pre-seeded with canonical listings across 16 real estate sources per `CONTEXT.md` (Treasury, USDA, IRS, GSA, CivilView, ServiceLink, etc.).
+1. **No Database? The App Refuses to Invent One**: without `DATABASE_URL` the app boots in `dataMode: unavailable` and listing routes serve nothing — there is no silent in-memory fallback. For a $0 demo with real persistence, `scripts/start-production.js` injects `PROPERTY_DB=embedded` (an in-process PostgreSQL 16 + PostGIS 3.6, ephemeral across redeploys on free tiers). For a public inventory, configure `DATABASE_URL` (external PostgreSQL + PostGIS; boot applies migrations automatically with `AUTO_MIGRATE=1`).
 2. **Zero External Secrets Required**: `OPENAI_API_KEY`, `GOOGLE_MAPS_API_KEY`, and `CENSUS_API_KEY` are strictly optional and fail closed gracefully without crashing the app.
 3. **Unified Single-Port Container Architecture**: The app features a production orchestrator (`scripts/start-production.js`) that boots both the **Node.js Listing API** (internal loopback) and the **Next.js 16 Canonical UI** in a single container, exposing only one public HTTP port (`$PORT`). Next.js server routes (`src/app/api/*`) seamlessly proxy requests to the internal API via `PROPERTY_API_URL`.
 
@@ -144,7 +144,7 @@ To retain user hunts, new scrapes, and docket verification history across contai
 | `PORT` | Auto | `3000` | Public HTTP port exposed by the cloud host |
 | `NODE_ENV` | Yes | `production` | Enables production optimizations and disables debug logs |
 | `PROPERTY_API_URL` | Auto | `http://127.0.0.1:3002` | Used by Next.js to forward `/api/*` calls to the Node API |
-| `DATABASE_URL` | Optional | *empty* | Postgres+PostGIS connection string. When unset, uses in-memory data |
+| `DATABASE_URL` | Optional | *empty* | External PostgreSQL + PostGIS for a durable, public listing inventory. When unset, the app either runs the embedded engine (`PROPERTY_DB=embedded`, set automatically by `start-production.js` for $0 deploys) or refuses to serve listings |
 | `SCRAPER_BACKGROUND_ENABLED` | Optional | `0` | Set `1` to run background scrapers; keep `0` on low-RAM free tiers |
 | `SCRAPER_ADMIN_TOKEN` | Optional | *empty* | Bearer token to protect scraper trigger endpoints |
 | `GOOGLE_MAPS_API_KEY` | Optional | *empty* | Street View & Geocoding API key (fails closed safely) |

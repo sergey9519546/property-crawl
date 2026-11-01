@@ -106,9 +106,10 @@ HUMAN CHECKPOINT: yes (commits, push, production deploy) — approved.
 
 ## 6. Open questions for the human
 
-1. **Docket filings: filter or feature?** They are now hidden from listings.
-   A labeled "pre-foreclosure lead" surface is a product decision the constitution
-   defaults against; say the word and it becomes a scoped follow-up.
+1. **Docket filings: filter or feature?** — **DECIDED 2026-11-01 (owner)**: they
+   stay **filtered** from listings (the constitution default). A labeled
+   "pre-foreclosure lead" surface is not being built; the records remain on the
+   `/sources` evidence surfaces. Revisit only if the product direction changes.
 2. **Render blueprint sync** — **RESOLVED 2026-10-28**: `render.yaml` no longer
    declares `PROPERTY_DB`, and `server/db/database-target.js` makes
    `DATABASE_URL` win on Render even if the flag is reintroduced (logged
