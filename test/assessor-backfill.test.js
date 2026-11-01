@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { backfillAssessorRolls, CONVERTED_STATES, candidateReady } = require('../server/enrichment/assessor-backfill');
+const { backfillAssessorRolls, CONVERTED_STATES, candidateReady, countyEnrolled } = require('../server/enrichment/assessor-backfill');
 
 // Same ArcGIS envelope helper the assessor-harvest tests use: a fetch mock
 // returning one feature for a Maricopa APN query.
@@ -43,7 +43,7 @@ test('CONVERTED_STATES covers the states with verified conversions only', () => 
   }
 });
 
-test('backfill harvests roll-less stored rows and persists only the ones that got rolls', async () => {
+test('backfill harvests roll-less stored rows and persists each roll as it attaches', async () => {
   const rollLess = {
     id: 'servicelink:mar-1',
     source: 'servicelink',
@@ -64,21 +64,23 @@ test('backfill harvests roll-less stored rows and persists only the ones that go
     lng: -112.3,
     provenance: { origin: 'live', observed: true, derivedFields: { assessorRoll: { countyKey: 'AZ-MARICOPA' } } },
   };
-  const noGeo = {
-    id: 'servicelink:mar-3',
+  const unenrolledCounty = {
+    id: 'servicelink:pin-1',
     source: 'servicelink',
     state: 'AZ',
-    county: 'Maricopa',
+    county: 'Pinal',
+    lat: 32.75,
+    lng: -111.67,
     provenance: { origin: 'live', observed: true },
   };
-  const db = fakeDb([rollLess, alreadyRolled, noGeo]);
+  const db = fakeDb([rollLess, alreadyRolled, unenrolledCounty]);
   const result = await backfillAssessorRolls({
     db,
     fetchFn: async () => arcgisFetchReturning(MARICOPA_ATTRIBUTES)(),
     now: Date.parse('2026-11-01T00:00:00.000Z'),
   });
 
-  assert.equal(result.considered, 1, 'only the roll-less, geo-ready row is a candidate');
+  assert.equal(result.considered, 1, 'only the roll-less, geo-ready, enrolled-county row is a candidate');
   assert.equal(result.harvested, 1);
   assert.equal(result.persisted, 1);
   assert.deepEqual(db.persisted, ['servicelink:mar-1']);
@@ -119,11 +121,22 @@ test('backfill is bounded by the candidate cap and tolerant of db and fetch fail
   assert.equal(capped.harvested, 0);
 });
 
-test('candidateReady accepts coordinates or APN spellings and rejects bare rows', () => {
-  assert.equal(candidateReady({ lat: 33.4, lng: -112.3 }), true);
-  assert.equal(candidateReady({ provenance: { sourceFacts: { parcelNumber: '10101010' } } }), true);
-  assert.equal(candidateReady({ apn: '10101010' }), true);
-  assert.equal(candidateReady({ lat: 0, lng: 0 }), false, 'null island is not a coordinate');
+test('candidateReady requires coordinates or an APN, no existing roll, and an enrolled county', () => {
+  assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa' }), true);
+  assert.equal(candidateReady({ provenance: { sourceFacts: { parcelNumber: '10101010' } }, state: 'AZ', county: 'Maricopa' }), true);
+  assert.equal(candidateReady({ apn: '10101010', state: 'AZ', county: 'Maricopa' }), true);
+  assert.equal(candidateReady({ lat: 0, lng: 0, state: 'AZ', county: 'Maricopa' }), false, 'null island is not a coordinate');
+  assert.equal(candidateReady({ lat: 32.75, lng: -111.67, state: 'AZ', county: 'Pinal' }), false, 'unenrolled counties are not candidates');
+  assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa', provenance: { derivedFields: { assessorRoll: { countyKey: 'AZ-MARICOPA' } } } }), false, 'rolled rows are not candidates');
+  assert.equal(candidateReady({ lat: 33.4, lng: -112.3, state: 'AZ', county: 'Maricopa', assessed: 300000 }), false, 'assessed rows are not candidates');
   assert.equal(candidateReady({}), false);
   assert.equal(candidateReady(null), false);
+});
+
+test('countyEnrolled resolves registry entries and the Florida statewide fallback', () => {
+  assert.equal(countyEnrolled('AZ', 'Maricopa'), true);
+  assert.equal(countyEnrolled('AZ', 'Pinal'), false);
+  assert.equal(countyEnrolled('FL', 'Orange'), true, 'Florida resolves through the statewide fallback');
+  assert.equal(countyEnrolled('AZ', ''), false);
+  assert.equal(countyEnrolled(null, 'Maricopa'), false);
 });

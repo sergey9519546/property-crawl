@@ -345,6 +345,17 @@ weeks. Closed with a bounded scheduler backfill:
   (non-fatal), so rolls accumulate at up to ~25-55 rows per cycle alongside the
   ingest-time harvest.
 
+Operational finding during verification: a process killed mid-harvest (Render
+spin-down, deploy) loses the whole batch, because the harvest persisted only at
+the end. The harvest now takes an `onHarvested` callback invoked the moment a
+roll attaches (cache-hit and fetched paths), and both the scheduler and the
+backfill persist through it — an interrupted run keeps every roll it already
+earned. The candidate selector also filters to enrolled counties (the AZ page
+is ~40% unenrolled by id order), and the backfill dedups across per-state
+pages. Separately, a stale evidence-ledger lock file (left by a hard-killed
+local dev process) was found blocking ledger writes in this workspace; it is
+workspace-local — Render's ephemeral disk self-heals on each deploy.
+
 Test evidence: `test/db/listing-filters.test.js` runs the new filters on a real
 embedded PostgreSQL engine **and** the in-memory provider — and caught a real
 bug before deploy (the filter initially referenced `assessed`, a

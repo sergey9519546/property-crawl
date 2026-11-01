@@ -204,6 +204,12 @@ async function harvestAssessorRolls(listings, options = {}) {
       applyHarvest(candidate, cached.parcel, cached.observedAt);
       results.cacheHits += 1;
       results.harvested += 1;
+      // Persist incrementally when the caller asks for it: a long harvest that
+      // is interrupted mid-loop (host spin-down, deploy) must not lose the
+      // rolls it already attached.
+      if (typeof options.onHarvested === 'function') {
+        try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
+      }
       continue;
     }
     let parcel = null;
@@ -230,6 +236,10 @@ async function harvestAssessorRolls(listings, options = {}) {
     cacheDirty = true;
     applyHarvest(candidate, parcel, observedAt);
     results.harvested += 1;
+    // Same incremental-persist contract as the cache-hit path above.
+    if (typeof options.onHarvested === 'function') {
+      try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
+    }
   }
   if (cacheDirty) {
     try { saveCache(cachePath, cache); } catch (_) { /* cache write is best-effort */ }

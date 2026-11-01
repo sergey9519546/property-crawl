@@ -471,18 +471,23 @@ const scheduler = new IngestionScheduler({
     if (!run.error && run.listings.length) {
       try {
         const { harvestAssessorRolls } = require('../enrichment/assessor-harvest');
-        const harvest = await harvestAssessorRolls(run.listings);
-        if (harvest.harvested > 0) {
-          console.log(`[Scheduler] Harvested ${harvest.harvested} assessor roll(s) for ${sourceId}`);
-          for (const listing of run.listings) {
-            if (listing?.provenance?.derivedFields?.assessorRoll) {
-              try {
-                await db.createListing(listing);
-              } catch (persistError) {
-                console.warn('[Scheduler] Could not persist harvested assessor roll to DB (non-fatal):', persistError.message);
-              }
+        // onHarvested persists each roll the moment it attaches: the harvest
+        // can run for minutes and the process can die mid-loop (host
+        // spin-down, deploy) — a batch persist at the end would lose all of it.
+        let persistedFromRun = 0;
+        const harvest = await harvestAssessorRolls(run.listings, {
+          onHarvested: async (listing) => {
+            if (!listing?.provenance?.derivedFields?.assessorRoll) return;
+            try {
+              await db.createListing(listing);
+              persistedFromRun += 1;
+            } catch (persistError) {
+              console.warn('[Scheduler] Could not persist harvested assessor roll to DB (non-fatal):', persistError.message);
             }
-          }
+          },
+        });
+        if (harvest.harvested > 0) {
+          console.log(`[Scheduler] Harvested ${harvest.harvested} assessor roll(s) for ${sourceId} (persisted ${persistedFromRun})`);
         }
       } catch (error) {
         console.warn('[Scheduler] Assessor roll harvest failed (non-fatal):', error.message);

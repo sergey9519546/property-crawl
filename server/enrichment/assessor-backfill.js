@@ -12,6 +12,7 @@
 
 const { harvestAssessorRolls } = require('./assessor-harvest');
 const { MARKET_CONVERSION } = require('./assessor-reading');
+const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 
 // States whose counties carry verified market conversions in this registry.
 // FL is included: its conversions resolve through the statewide fallback.
@@ -19,6 +20,15 @@ const CONVERTED_STATES = Object.freeze(
   [...new Set(Object.keys(MARKET_CONVERSION).map((key) => String(key).split('-')[0]))]
     .filter((state) => /^[A-Z]{2}$/.test(state))
 );
+
+function countyEnrolled(state, county) {
+  if (!state || !county) return false;
+  const key = resolveCountyKey(state, county);
+  if (!key) return false;
+  // Florida conversions resolve through the statewide fallback registry, not
+  // a per-county entry, so every Florida listing is a valid candidate.
+  return Boolean(COUNTY_ARCGIS_REGISTRY[key]) || String(state).toUpperCase() === 'FL';
+}
 
 function candidateReady(listing) {
   if (!listing || typeof listing !== 'object') return false;
@@ -35,7 +45,11 @@ function candidateReady(listing) {
     || listing.provenance?.sourceFacts?.parcelNumber
     || listing.provenance?.sourceFacts?.parcelId
   );
-  return hasCoords || hasApn;
+  if (!hasCoords && !hasApn) return false;
+  // The per-state page mixes enrolled and unenrolled counties; without this
+  // check the candidate cap fills with rows the harvest can only answer
+  // "not found" for (verified in production: the AZ page is ~40% unenrolled).
+  return countyEnrolled(listing.state, listing.county);
 }
 
 async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, logger = null } = {}) {
@@ -70,26 +84,29 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   if (!candidates.length) return result;
   result.considered = candidates.length;
 
+  // onHarvested persists each roll the moment it attaches (see the harvest
+  // module): an interrupted run keeps the rolls it already earned.
   try {
-    const harvest = await harvestAssessorRolls(candidates, { fetchFn, now });
+    const harvest = await harvestAssessorRolls(candidates, {
+      fetchFn,
+      now,
+      onHarvested: async (listing) => {
+        if (!listing?.provenance?.derivedFields?.assessorRoll) return;
+        try {
+          await db.createListing(listing);
+          result.persisted += 1;
+        } catch (error) {
+          if (logger?.warn) logger.warn(`[AssessorBackfill] persist failed (non-fatal): ${error.message}`);
+        }
+      },
+    });
     result.harvested = harvest.harvested;
     result.failed = harvest.failed;
     result.notFound = harvest.notFound;
   } catch (error) {
     if (logger?.warn) logger.warn(`[AssessorBackfill] harvest failed (non-fatal): ${error.message}`);
-    return result;
-  }
-
-  for (const listing of candidates) {
-    if (!listing?.provenance?.derivedFields?.assessorRoll) continue;
-    try {
-      await db.createListing(listing);
-      result.persisted += 1;
-    } catch (error) {
-      if (logger?.warn) logger.warn(`[AssessorBackfill] persist failed (non-fatal): ${error.message}`);
-    }
   }
   return result;
 }
 
-module.exports = { backfillAssessorRolls, CONVERTED_STATES, candidateReady };
+module.exports = { backfillAssessorRolls, CONVERTED_STATES, candidateReady, countyEnrolled };
