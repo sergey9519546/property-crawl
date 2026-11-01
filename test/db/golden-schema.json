@@ -1,0 +1,2417 @@
+{
+  "tables": [
+    "account_login_tokens",
+    "accounts",
+    "ai_cache",
+    "alert_matches",
+    "canonical_parcels",
+    "discovery_atlas_ledger",
+    "discovery_atlas_sources",
+    "discovery_checkpoints",
+    "discovery_hunt_baselines",
+    "discovery_hunt_events",
+    "discovery_hunts",
+    "discovery_imports",
+    "discovery_jobs",
+    "discovery_leases",
+    "discovery_legacy_imports",
+    "discovery_listing_revision",
+    "discovery_media_assets",
+    "discovery_media_links",
+    "discovery_media_references",
+    "discovery_observations",
+    "discovery_public_record_research",
+    "discovery_schema_migrations",
+    "discovery_snapshots",
+    "discovery_source_rollouts",
+    "discovery_source_runs",
+    "discovery_worker_health",
+    "document_reviews",
+    "ingestion_logs",
+    "listing_history",
+    "listings",
+    "saved_deals",
+    "saved_searches",
+    "source_observation_runs",
+    "source_observations",
+    "sources",
+    "spatial_ref_sys",
+    "stripe_webhook_events",
+    "worker_leases"
+  ],
+  "columns": [
+    {
+      "table": "account_login_tokens",
+      "column": "email",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account_login_tokens",
+      "column": "expires_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account_login_tokens",
+      "column": "token_hash",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "account_login_tokens",
+      "column": "used_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "accounts",
+      "column": "current_period_end",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "email",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "stripe_customer_id",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "subscription_id",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "subscription_status",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "accounts",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "ai_cache",
+      "column": "content_hash",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "cost_usd",
+      "type": "numeric",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "ai_cache",
+      "column": "input_tokens",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "model_used",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "output_tokens",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "prompt_type",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ai_cache",
+      "column": "response_text",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "alert_matches",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "alert_matches",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "alert_matches",
+      "column": "matched_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "alert_matches",
+      "column": "read_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "alert_matches",
+      "column": "search_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "alert_matches",
+      "column": "user_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "canonical_apn",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "county",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "latitude",
+      "type": "double precision",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "longitude",
+      "type": "double precision",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "normalized_address",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "state",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "canonical_parcels",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_atlas_ledger",
+      "column": "dataset_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_ledger",
+      "column": "entry_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_ledger",
+      "column": "record",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "atlas_id",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "automation_status",
+      "type": "text",
+      "nullable": false,
+      "default": "'backlog'::text"
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "dataset_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "imported_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_atlas_sources",
+      "column": "record",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "cursor",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "pages_committed",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "scope_hash",
+      "type": "character",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "sweep_started_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_checkpoints",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "evaluation",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "hunt_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "hunt_version",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "identity_key",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_baselines",
+      "column": "source_record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "detected_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "event_type",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "evidence",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "hunt_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunt_events",
+      "column": "identity_key",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "criteria",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "criteria_hash",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "enabled",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "notify_email",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "owner",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "version",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "discovery_hunts",
+      "column": "webhook_url",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_imports",
+      "column": "dataset_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_imports",
+      "column": "imported_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_imports",
+      "column": "manifest",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "attempt_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "completed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "error_message",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "errors",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'[]'::jsonb"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "idempotency_key",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "idempotency_scope_hash",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "lease_expires_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "lease_owner",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "result",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "revision",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "source_keys",
+      "type": "ARRAY",
+      "nullable": false,
+      "default": "'{}'::text[]"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "stages",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "started_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_jobs",
+      "column": "trigger",
+      "type": "text",
+      "nullable": false,
+      "default": "'manual'::text"
+    },
+    {
+      "table": "discovery_leases",
+      "column": "expires_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_leases",
+      "column": "lease_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_leases",
+      "column": "owner_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_leases",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_legacy_imports",
+      "column": "content_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_legacy_imports",
+      "column": "imported_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_legacy_imports",
+      "column": "kind",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_legacy_imports",
+      "column": "original_path",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_legacy_imports",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_listing_revision",
+      "column": "revision",
+      "type": "bigint",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "discovery_listing_revision",
+      "column": "singleton",
+      "type": "boolean",
+      "nullable": false,
+      "default": "true"
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "bytes",
+      "type": "bigint",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "display_status",
+      "type": "text",
+      "nullable": false,
+      "default": "'policy_review_required'::text"
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "integrity",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "local_path",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "rights",
+      "type": "text",
+      "nullable": false,
+      "default": "'not_established'::text"
+    },
+    {
+      "table": "discovery_media_assets",
+      "column": "sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_links",
+      "column": "dataset_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_links",
+      "column": "sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_links",
+      "column": "source_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_links",
+      "column": "source_record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_links",
+      "column": "source_url",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "dataset_sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "media_index",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "reference_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "source_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "source_record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_media_references",
+      "column": "source_url",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_observations",
+      "column": "evidence_class",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_observations",
+      "column": "field_name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_observations",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "discovery_observations",
+      "column": "snapshot_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_observations",
+      "column": "value",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_public_record_research",
+      "column": "evidence_hash",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_public_record_research",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_public_record_research",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_public_record_research",
+      "column": "result",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_schema_migrations",
+      "column": "applied_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_schema_migrations",
+      "column": "name",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_schema_migrations",
+      "column": "sha256",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "payload_sha256",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "provenance",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "raw_payload",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "run_id",
+      "type": "uuid",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_snapshots",
+      "column": "source_record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "canary_scope_hash",
+      "type": "character",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "clean_canary_runs",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "configured_scope",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "last_clean_run_id",
+      "type": "uuid",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "promoted_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "state",
+      "type": "text",
+      "nullable": false,
+      "default": "'candidate'::text"
+    },
+    {
+      "table": "discovery_source_rollouts",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "accepted_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "completed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "coverage",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "discovered_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "discovery_job_id",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "error_message",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "idempotency_key",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "rejected_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "scope",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "scope_hash",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "started_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_source_runs",
+      "column": "trigger",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "current_job_id",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "details",
+      "type": "jsonb",
+      "nullable": false,
+      "default": "'{}'::jsonb"
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "last_loop_status",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "last_seen_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "worker_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "discovery_worker_health",
+      "column": "worker_key",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "content_hash",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "document_index",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "document_url",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "extracted_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "notes",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "prior_status",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "reviewed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "reviewer",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "revision",
+      "type": "integer",
+      "nullable": false,
+      "default": "1"
+    },
+    {
+      "table": "document_reviews",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "document_reviews",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "geography_columns",
+      "column": "coord_dimension",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "f_geography_column",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "f_table_catalog",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "f_table_name",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "f_table_schema",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "srid",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geography_columns",
+      "column": "type",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "coord_dimension",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "f_geometry_column",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "f_table_catalog",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "f_table_name",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "f_table_schema",
+      "type": "name",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "srid",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "geometry_columns",
+      "column": "type",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "duration_ms",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "error_message",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "items_inserted",
+      "type": "integer",
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "items_scraped",
+      "type": "integer",
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "items_updated",
+      "type": "integer",
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "ingestion_logs",
+      "column": "status",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "deal_score",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "listing_history",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "mid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "opening_bid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "recorded_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "listing_history",
+      "column": "source",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listing_history",
+      "column": "source_observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "address",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "assessed_value",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "attorney",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "auction_program",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "baths",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "beds",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "canonical_parcel_id",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "cash_to_close",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "cash_to_close_details",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "city",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "county",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "listings",
+      "column": "deal_score",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "defendant",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "deposit_terms",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "equity_spread",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "est_high",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "est_low",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "fetched_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "listings",
+      "column": "geog",
+      "type": "USER-DEFINED",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "has_documents",
+      "type": "boolean",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "images",
+      "type": "ARRAY",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "judgment_amount",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "latitude",
+      "type": "double precision",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "lifecycle_status",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "listing_date",
+      "type": "date",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "longitude",
+      "type": "double precision",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "mid_value",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "occupancy",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "opening_bid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "photo_url",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "plaintiff",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "price",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "prop_type",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "provenance",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "raw_notice",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "redemption_days",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "redemption_warning",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "sale_date",
+      "type": "date",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "senior_lien_risk",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "senior_lien_warning",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "source_observed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "source_url",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "sqft",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "state",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "status",
+      "type": "character varying",
+      "nullable": false,
+      "default": "'unknown'::character varying"
+    },
+    {
+      "table": "listings",
+      "column": "transaction_outcome",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "triage_priority",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "triage_priority_refreshed_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "listings",
+      "column": "year_built",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "zip",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "saved_deals",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "saved_deals",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "saved_deals",
+      "column": "is_alert_enabled",
+      "type": "boolean",
+      "nullable": true,
+      "default": "true"
+    },
+    {
+      "table": "saved_deals",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "saved_deals",
+      "column": "notes",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "saved_deals",
+      "column": "user_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "saved_searches",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "saved_searches",
+      "column": "filters",
+      "type": "jsonb",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "saved_searches",
+      "column": "id",
+      "type": "uuid",
+      "nullable": false,
+      "default": "uuid_generate_v4()"
+    },
+    {
+      "table": "saved_searches",
+      "column": "is_active",
+      "type": "boolean",
+      "nullable": true,
+      "default": "true"
+    },
+    {
+      "table": "saved_searches",
+      "column": "label",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "saved_searches",
+      "column": "last_match_count",
+      "type": "integer",
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "table": "saved_searches",
+      "column": "last_run_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "saved_searches",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "saved_searches",
+      "column": "user_id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "accepted_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "duration_ms",
+      "type": "bigint",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "error",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "evidence_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "last_non_empty_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "last_run_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "last_success_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "rejected_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "runs_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observation_runs",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "source_observations",
+      "column": "address",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "source_observations",
+      "column": "deposit",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "id",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "listing_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "notice_excerpt",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "notice_sha256",
+      "type": "character",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "observed_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "opening_bid",
+      "type": "numeric",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "raw_payload",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "record_id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "sale_date",
+      "type": "date",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "source_key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "source_observations",
+      "column": "status",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "color",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "sources",
+      "column": "is_active",
+      "type": "boolean",
+      "nullable": true,
+      "default": "true"
+    },
+    {
+      "table": "sources",
+      "column": "key",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "label",
+      "type": "character varying",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "note",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "tier",
+      "type": "character",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "sources",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "sources",
+      "column": "website_url",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "spatial_ref_sys",
+      "column": "auth_name",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "spatial_ref_sys",
+      "column": "auth_srid",
+      "type": "integer",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "spatial_ref_sys",
+      "column": "proj4text",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "spatial_ref_sys",
+      "column": "srid",
+      "type": "integer",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "spatial_ref_sys",
+      "column": "srtext",
+      "type": "character varying",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "stripe_webhook_events",
+      "column": "event_type",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "stripe_webhook_events",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "stripe_webhook_events",
+      "column": "received_at",
+      "type": "timestamp with time zone",
+      "nullable": false,
+      "default": "now()"
+    },
+    {
+      "table": "worker_leases",
+      "column": "attempt_count",
+      "type": "integer",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "worker_leases",
+      "column": "created_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    },
+    {
+      "table": "worker_leases",
+      "column": "expires_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "worker_leases",
+      "column": "id",
+      "type": "text",
+      "nullable": false,
+      "default": null
+    },
+    {
+      "table": "worker_leases",
+      "column": "lease_owner",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "worker_leases",
+      "column": "leased_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "worker_leases",
+      "column": "payload",
+      "type": "jsonb",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "worker_leases",
+      "column": "status",
+      "type": "text",
+      "nullable": false,
+      "default": "'available'::text"
+    },
+    {
+      "table": "worker_leases",
+      "column": "updated_at",
+      "type": "timestamp with time zone",
+      "nullable": true,
+      "default": "now()"
+    }
+  ]
+}

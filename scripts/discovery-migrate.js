@@ -6,6 +6,12 @@ const crypto = require('node:crypto');
 async function migrate(pool) {
   const client = await pool.connect();
   try {
+    // A held advisory lock used to hang boot indefinitely (the deploy then
+    // failed its health check while blocked). Fail fast with a clear name
+    // instead: two migrators racing is a bug to surface, not a queue to join.
+    // Session-level SET (not SET LOCAL): the lock is taken in autocommit.
+    // The RESET in the finally keeps the pooled connection clean.
+    await client.query("SET lock_timeout = '15s'");
     await client.query('SELECT pg_advisory_lock(72463198)');
     await client.query('CREATE TABLE IF NOT EXISTS discovery_schema_migrations(name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
     const directory = path.resolve(__dirname, '../server/db/migrations');
@@ -35,9 +41,19 @@ async function migrate(pool) {
         await client.query(sql);
         await client.query('INSERT INTO discovery_schema_migrations(name,sha256) VALUES($1,$2)', [name, digest]);
         await client.query('COMMIT');
-      } catch (error) { await client.query('ROLLBACK'); throw error; }
+      } catch (error) {
+        await client.query('ROLLBACK');
+        // Name the file: a bare Postgres error ('column X does not exist')
+        // without the migration name once cost a deploy outage.
+        error.message = `${name}: ${error.message}`;
+        throw error;
+      }
     }
-  } finally { await client.query('SELECT pg_advisory_unlock(72463198)'); client.release(); }
+  } finally {
+    try { await client.query('RESET lock_timeout'); } catch (_) { /* connection may already be gone */ }
+    await client.query('SELECT pg_advisory_unlock(72463198)').catch(() => {});
+    client.release();
+  }
 }
 function migrationTarget(env = process.env) {
   return require('../server/db/database-target').resolveDatabaseTarget(env);

@@ -46,7 +46,7 @@ ON CONFLICT (key) DO NOTHING;
 
 -- 2. Property Listings Table
 CREATE TABLE IF NOT EXISTS listings (
-    id VARCHAR(64) PRIMARY KEY,
+    id TEXT PRIMARY KEY,
     source_key VARCHAR(32) NOT NULL REFERENCES sources(key) ON DELETE RESTRICT,
     state VARCHAR(2) NOT NULL,
     county VARCHAR(64),
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS listings (
 CREATE TABLE IF NOT EXISTS saved_deals (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id VARCHAR(128) NOT NULL,
-    listing_id VARCHAR(64) NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    listing_id TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
     notes TEXT,
     is_alert_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS saved_deals (
 -- so re-running the same scrape doesn't create duplicate history rows.
 CREATE TABLE IF NOT EXISTS listing_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    listing_id VARCHAR(64) NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    listing_id TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
     source_observed_at TIMESTAMPTZ NOT NULL,
     opening_bid NUMERIC(14, 2),
     mid NUMERIC(14, 2),
@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS alert_matches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     search_id UUID NOT NULL REFERENCES saved_searches(id) ON DELETE CASCADE,
     user_id VARCHAR(128) NOT NULL,
-    listing_id VARCHAR(64) NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    listing_id TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
     matched_at TIMESTAMPTZ DEFAULT NOW(),
     read_at TIMESTAMPTZ,
     UNIQUE(search_id, listing_id)
@@ -213,9 +213,9 @@ CREATE TABLE IF NOT EXISTS ingestion_logs (
 -- 6. Source Observations & Snapshot History
 CREATE TABLE IF NOT EXISTS source_observations (
     id VARCHAR(64) PRIMARY KEY,
-    listing_id VARCHAR(64) NOT NULL,
+    listing_id TEXT NOT NULL,
     source_key VARCHAR(32) NOT NULL REFERENCES sources(key) ON DELETE CASCADE,
-    record_id VARCHAR(128) NOT NULL,
+    record_id TEXT NOT NULL,
     observed_at TIMESTAMPTZ NOT NULL,
     opening_bid NUMERIC(14, 2),
     sale_date DATE,
