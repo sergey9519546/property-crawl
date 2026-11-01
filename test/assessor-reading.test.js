@@ -95,6 +95,13 @@ test('assessor reading converts Maricopa full cash value 1:1 with the A.R.S. cit
   assert.equal(maricopa.dealScore, 66);
   assert.match(maricopa.citation, /FullCashValue/);
   assert.match(maricopa.citation, /42-11001/);
+  // The citation must carry the statutory cap (the figure cannot exceed market
+  // value, so the discount is a conservative lower bound) and name the taxed
+  // basis it deliberately excludes. A citation that simply equates full cash
+  // value with market value would overstate confidence in the comparison.
+  assert.match(maricopa.citation, /shall not be greater than market value/);
+  assert.match(maricopa.citation, /conservative lower bound/);
+  assert.match(maricopa.citation, /LimitedPropertyValue/);
   assert.equal(maricopa.field, 'FullCashValue');
   assert.equal(maricopa.withheldReason, null);
 

@@ -27,13 +27,19 @@ const MARKET_CONVERSION = Object.freeze({
     citation: 'Tarrant Appraisal District appraised value (APPRAISED_VALUE via the Fort Worth public parcels layer), compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01. Sampled 2026-roll records show APPRAISED_VALUE equal to MARKET_VALUE.',
   }),
 
-  // Arizona County Assessors (A.R.S. § 42-11001: "full cash value" means market
-  // value; the assessor-published FCV is the market figure, compared 1:1 with the
-  // published opening amount. AssessedFullCashValue (FCV × statutory ratio) is
-  // the taxed basis and is deliberately NOT used as market.)
+  // Arizona County Assessors. A.R.S. § 42-11001(6) makes full cash value the
+  // assessor's market-value estimate and caps it at market value ("Full cash
+  // value shall not be greater than market value regardless of the method
+  // prescribed"), so comparing the opening amount against it leaves the discount
+  // a conservative lower bound rather than an inflated one. Verified live against
+  // the county's own recorded sales: FullCashValue runs at ~0.82 of recorded sale
+  // price (median over ~16,000 dated 2023-2026 sales), while the taxed basis
+  // (LimitedPropertyValue) reads ~0.37 - i.e. the field is a market-level figure,
+  // not a taxable fraction. AssessedFullCashValue is the taxed basis and is
+  // deliberately NOT used as market.
   'AZ-MARICOPA': Object.freeze({
     mode: 'market-figure',
-    citation: 'Maricopa County Assessor FullCashValue (A.R.S. § 42-11001 full cash value = market value), compared 1:1 with the published opening amount.',
+    citation: 'Maricopa County Assessor FullCashValue, the statutory market-value estimate capped at market value by A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. Sampled live at ~0.82 of recorded sale price across ~16,000 dated 2023-2026 sales (LimitedPropertyValue, the taxed basis, reads ~0.37).',
   }),
 
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
