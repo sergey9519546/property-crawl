@@ -18,11 +18,11 @@
 | `MI-WAYNE` | `services2.arcgis.com/.../Detroit_MP_Parcel_Authoritative/FeatureServer/0/query` | `amt_assessed_value` (taxable-fraction 0.5) | statutory fraction | MCL 211.27a(1) fetched this session from `legislature.mi.gov`: "property shall be assessed at 50% of its true cash value under section 3 of article IX of the state constitution of 1963." Sampled APN `15008031-3`: assessed 905,600. The roll measures at ~0.33 of recorded 2024-2025 sale prices (n=2,000) — below the statutory 50% — so the derived market is a conservative lower bound, disclosed in the citation. `amt_taxable_value` (the Prop A capped value) is the taxed basis and is not used. Detroit's dashed `parcel_id` spellings required the new separator-tolerant APN retry (below) |
 | `PA-PHILADELPHIA` | (already registered) `services.arcgis.com/.../OPA_Properties_Public/FeatureServer/0/query` | `market_value` | market-figure | Sampled live: median `market_value`/sale = **0.966** across 2,000 dated 2026 sales (p10 0.64 / p90 1.60) — OPA's figure is a market figure. Sampled APN `301325005`: market_value 717,800; APN and point-intersect lookups both resolve with fips `42101`. `taxable_land`/`taxable_building` are the taxed components and are not used |
 
-Registry totals after this batch: **18 enrolled counties**, 14 with verified market
+Registry totals after this batch: **19 enrolled counties**, 14 with verified market
 conversions (TX-BEXAR, FL-ORANGE, OH-CUYAHOGA, FL-ALACHUA, TX-HARRIS,
 OH-FRANKLIN, OH-HAMILTON, TX-TARRANT, AZ-MARICOPA, AZ-PIMA, AZ-MOHAVE,
-AZ-YUMA, MI-WAYNE, PA-PHILADELPHIA), 4 withheld with named reasons (IL-COOK,
-NV-CLARK, ID-BANNOCK, NV-WASHOE).
+AZ-YUMA, MI-WAYNE, PA-PHILADELPHIA), 5 withheld with named reasons (IL-COOK,
+NV-CLARK, ID-BANNOCK, NV-WASHOE, MI-MACOMB).
 
 Evidence tiers are explicit and enforced by tests: Maricopa, Mohave, and Yuma
 carry sampled sale-price ratios (measured against each county's own recorded
@@ -165,6 +165,33 @@ order; the wildcard spans only separator positions). Verified live through the
 repo path: APN `15008031-3` now resolves to assessed 905,600 / fips `26163`.
 Counties without the flag issue exactly one request, unchanged
 (regression-pinned).
+
+### Macomb: registered but the conversion is withheld (measured vs prescribed)
+
+Macomb County's official ArcGIS Online org ("Macomb County, Michigan") hosts
+"Macomb County Tax Parcels" — 332,993 parcels, `TAX_ID` (dashed, so the
+separator-tolerant retry applies), Board-of-Review SEV (`mborsev_0`), the
+Proposal A capped taxable value (`mbortax`, verified ≤ SEV on 1,999/1,999
+sampled parcels), situs, legal, zoning. Sampled APN `02-24-378-004`: SEV
+152,100; point-intersect on the parcel's own centroid returned exactly that
+parcel, and both lookups resolve through the repository's own path (fips
+`26099`).
+
+The conversion is **withheld**, and the reason is the interesting part.
+Michigan prescribes assessed = 50% of true cash value (MCL 211.27a(1), verified
+this session) — an *equality*, not a one-sided cap. Arizona's FCV entries are
+safe without measurement because the statute caps the figure at market, so the
+discount can only be understated. A statutory *equality* has no guaranteed
+direction: if Macomb over-assesses (SEV above 50% of market — Detroit's
+historical failure mode), the ×2 gross-up would overstate the discount and
+inflate deal scores. Wayne was enrolled only because its deviation was
+*measured* (~0.33, conservative). Macomb's layer publishes no sale-price
+column, the staging table that carries a `date_of_sale` column has zero
+populated values, and no county service with recorded sales was found — so the
+deviation is unmeasured and the ×2 conversion cannot be shown to be
+conservative. The registry entry stands (parcel identity, situs, legal, zoning
+for 44 live records), the raw SEV is surfaced, and the score stays dark with a
+named reason until a sales source makes the measurement possible.
 
 ### Pinal: not enrollable this session (documented gap)
 

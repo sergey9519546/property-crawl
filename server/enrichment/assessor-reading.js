@@ -192,6 +192,7 @@ const WITHHOLD = Object.freeze({
   'NV-CLARK': 'Clark County TAX_VAL is taxable value, not market value. The raw figure is shown. No market comparison is computed.',
   'ID-BANNOCK': 'Bannock County TOTAL_VAL has no confirmed market ratio in this registry. The raw figure is shown. No market comparison is computed.',
   'NV-WASHOE': 'Washoe County TOTALASS is the assessed value; Nevada derives it from taxable value by the NRS 361.227 35 percent ratio, and the chain from full cash (market) value is not confirmed in this layer (TOTALAPR is present but its basis is unconfirmed). The raw figure is shown. No market comparison is computed.',
+  'MI-MACOMB': 'Macomb County mborsev_0 is the Board of Review state equalized value — the statutory 50% of true cash value under MCL 211.27a(1). Michigan prescribes equality, not a bound: an over-assessing roll would overstate the discount. This layer publishes no sale-price column and no county service with recorded sales was found, so the roll\u2019s deviation from 50 percent is unmeasured (Wayne\u2019s was measured at ~0.33 before its conversion). The raw figure is shown. No market comparison is computed.',
 });
 
 function dealScoreFromRatio(ratio) {

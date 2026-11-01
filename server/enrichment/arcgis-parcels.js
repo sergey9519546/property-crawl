@@ -742,6 +742,25 @@ const COUNTY_ARCGIS_REGISTRY = {
     legalDescField: 'DESCR1',
     situsAddressField: 'FULLSITEADDRESS'
   },
+  'MI-MACOMB': {
+    // Hosted in the county's own ArcGIS Online org ("Macomb County, Michigan").
+    // TAX_ID is dashed ("02-24-378-004") — the separator-tolerant retry
+    // applies. mborsev_0 is the Board of Review state equalized value and
+    // mbortax the Proposal A capped taxable value (verified <= SEV on
+    // 1,999/1,999 sampled parcels); the conversion is deliberately WITHHELD —
+    // see the reason in assessor-reading.js.
+    name: 'Macomb County Tax Parcels (Macomb County, Michigan)',
+    fips: '26099',
+    endpoint: 'https://services6.arcgis.com/K0qS4r8AEJxrE8em/arcgis/rest/services/Macomb_County_Parcel_Data/FeatureServer/10/query',
+    apnField: 'TAX_ID',
+    apnSeparatorRetry: true,
+    landUseField: 'zoning',
+    assessedTotalField: 'mborsev_0',
+    assessedLandField: null,
+    assessedImprvField: null,
+    legalDescField: 'LEGAL',
+    situsAddressField: 'ADDRESS'
+  },
   'MI-WAYNE': {
     // Detroit parcel_ids carry separators ("15008031-3", "15008011."), which
     // the normalized APN LIKE can never match; apnSeparatorRetry opts this

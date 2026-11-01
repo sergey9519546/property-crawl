@@ -46,8 +46,8 @@ test('assessor reading converts Cuyahoga taxable value at 35 percent', () => {
   assert.match(reading.citation, /5715\.01/);
 });
 
-test('assessor reading withholds a score for Cook, Clark, Bannock, and Washoe', () => {
-  for (const countyKey of ['IL-COOK', 'NV-CLARK', 'ID-BANNOCK', 'NV-WASHOE']) {
+test('assessor reading withholds a score for Cook, Clark, Bannock, Washoe, and Macomb', () => {
+  for (const countyKey of ['IL-COOK', 'NV-CLARK', 'ID-BANNOCK', 'NV-WASHOE', 'MI-MACOMB']) {
     const reading = interpretAssessorParcel({ countyKey, parcel: parcel(80000), openingBid: 20000 });
     assert.equal(reading.rawFigure, 80000);
     assert.equal(reading.marketComparison, null);
@@ -58,6 +58,15 @@ test('assessor reading withholds a score for Cook, Clark, Bannock, and Washoe', 
   // not the generic "no conversion configured" fallback.
   const washoe = interpretAssessorParcel({ countyKey: 'NV-WASHOE', parcel: parcel(80000), openingBid: 20000 });
   assert.match(washoe.withheldReason, /NRS 361\.227/);
+  // Macomb's SEV is the statutory 50%-of-true-cash-value figure, but unlike
+  // Wayne its deviation from 50 percent is unmeasured (no sale-price column),
+  // and Michigan prescribes equality rather than a one-sided cap — so the
+  // conversion must stay withheld until measured.
+  const macomb = interpretAssessorParcel({ countyKey: 'MI-MACOMB', parcel: parcel(152100), openingBid: 20000 });
+  assert.match(macomb.withheldReason, /211\.27a\(1\)/);
+  assert.match(macomb.withheldReason, /unmeasured/);
+  assert.equal(macomb.field, 'mborsev_0');
+  assert.equal(macomb.rawFigure, 152100);
 });
 
 // Enrolled 2026-10-21 from live-verified endpoints; the conversion math is
