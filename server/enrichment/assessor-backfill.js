@@ -10,7 +10,8 @@
 // harvest's own per-run limit and disk cache, and fail-open on every error.
 // A backfill failure must never affect ingest or serving.
 
-const { harvestAssessorRolls } = require('./assessor-harvest');
+const { harvestAssessorRolls, loadCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
+const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 const { MARKET_CONVERSION } = require('./assessor-reading');
 const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 
@@ -52,7 +53,7 @@ function candidateReady(listing) {
   return countyEnrolled(listing.state, listing.county);
 }
 
-async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, logger = null } = {}) {
+async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, cachePath, logger = null } = {}) {
   const result = { considered: 0, harvested: 0, persisted: 0, failed: 0, notFound: 0, skipped: null };
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function') {
     result.skipped = 'db-unavailable';
@@ -61,7 +62,15 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
 
   // The per-state pages can overlap (a listing sits in exactly one state, but
   // defensive dedup keeps one row = one candidate even if a caller reuses a
-  // store that ignores filters).
+  // store that ignores filters). Candidates with a fresh cache entry — a hit
+  // (already rolled) or a recent miss — are skipped so the candidate cap is
+  // spent on rows that can still learn something; without this, a state whose
+  // first-page rows persistently miss consumes the cap every run and starves
+  // every state behind it.
+  const cache = loadCache(cachePath || DEFAULT_CACHE_PATH);
+  const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
+  const missTtlMs = DEFAULT_MISS_TTL_MS;
+  const nowMs = Number.isFinite(now) ? now : Date.now();
   const seen = new Set();
   const candidates = [];
   for (const state of CONVERTED_STATES) {
@@ -77,6 +86,16 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       if (candidates.length >= limit) break;
       if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
       if (!candidateReady(row)) continue;
+      const countyKey = resolveCountyKey(row.state, row.county);
+      const lat = Number(row.lat);
+      const lng = Number(row.lng);
+      const cleanApn = normalizeApn(extractRawApn(row));
+      const key = cacheKeyFor(countyKey, lat, lng, cleanApn);
+      const entry = cache[key];
+      if (entry && Number.isFinite(Date.parse(entry.observedAt))) {
+        const age = nowMs - Date.parse(entry.observedAt);
+        if (entry.parcel ? age < cacheTtlMs : age < missTtlMs) continue;
+      }
       seen.add(row.id);
       candidates.push(row);
     }
@@ -90,6 +109,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     const harvest = await harvestAssessorRolls(candidates, {
       fetchFn,
       now,
+      cachePath,
       onHarvested: async (listing) => {
         if (!listing?.provenance?.derivedFields?.assessorRoll) return;
         try {

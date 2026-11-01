@@ -26,6 +26,10 @@ const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
 const DEFAULT_CACHE_LIMIT = 5000;
 const DEFAULT_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
+// Misses are retried on a much shorter clock than hits: long enough to stop a
+// failing county from consuming the candidate budget every run, short enough
+// that a transient endpoint failure is not permanent.
+const DEFAULT_MISS_TTL_MS = 3 * 24 * 3600 * 1000;
 // Per-run fetch budget. With 12 enrolled counties the default 25 left whole
 // runs unharvested; the env knob lets a deployment raise it without a code
 // change. Clamped so a bad value cannot turn the harvest into an unbounded
@@ -181,6 +185,7 @@ async function harvestAssessorRolls(listings, options = {}) {
   const limit = resolveHarvestLimit(options);
   const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : DEFAULT_CACHE_TTL_MS;
+  const missTtlMs = Number.isFinite(options.missTtlMs) ? options.missTtlMs : DEFAULT_MISS_TTL_MS;
   const now = Number.isFinite(options.now) ? options.now : Date.now();
   const candidates = (Array.isArray(listings) ? listings : [])
     .map(candidateListing)
@@ -200,17 +205,27 @@ async function harvestAssessorRolls(listings, options = {}) {
       cacheLoaded = true;
     }
     const cached = cache[key];
-    if (cached && Number.isFinite(Date.parse(cached.observedAt)) && now - Date.parse(cached.observedAt) < cacheTtlMs) {
-      applyHarvest(candidate, cached.parcel, cached.observedAt);
-      results.cacheHits += 1;
-      results.harvested += 1;
-      // Persist incrementally when the caller asks for it: a long harvest that
-      // is interrupted mid-loop (host spin-down, deploy) must not lose the
-      // rolls it already attached.
-      if (typeof options.onHarvested === 'function') {
-        try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
+    if (cached && Number.isFinite(Date.parse(cached.observedAt))) {
+      const age = now - Date.parse(cached.observedAt);
+      if (cached.parcel && age < cacheTtlMs) {
+        applyHarvest(candidate, cached.parcel, cached.observedAt);
+        results.cacheHits += 1;
+        results.harvested += 1;
+        // Persist incrementally when the caller asks for it: a long harvest that
+        // is interrupted mid-loop (host spin-down, deploy) must not lose the
+        // rolls it already attached.
+        if (typeof options.onHarvested === 'function') {
+          try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
+        }
+        continue;
       }
-      continue;
+      if (!cached.parcel && age < missTtlMs) {
+        // A recent miss: do not re-fetch within the miss window. Without this,
+        // a county whose parcels persistently miss consumes the whole
+        // candidate budget every run and starves every county behind it.
+        results.notFound += 1;
+        continue;
+      }
     }
     let parcel = null;
     try {
@@ -228,6 +243,11 @@ async function harvestAssessorRolls(listings, options = {}) {
     }
     if (!parcel) {
       results.notFound += 1;
+      // Negatively cache the miss (short TTL): the retry window keeps a
+      // transient failure from being permanent while stopping a failing
+      // parcel from consuming the candidate budget every run.
+      cache[key] = { parcel: null, observedAt: new Date(now).toISOString() };
+      cacheDirty = true;
       continue;
     }
     results.fetched += 1;
@@ -250,10 +270,12 @@ async function harvestAssessorRolls(listings, options = {}) {
 module.exports = {
   DEFAULT_CACHE_PATH,
   DEFAULT_CACHE_TTL_MS,
+  DEFAULT_MISS_TTL_MS,
   DEFAULT_HARVEST_LIMIT,
   cacheKeyFor,
   candidateListing,
   harvestAssessorRolls,
+  loadCache,
   readYearField,
   resolveHarvestLimit,
   taxYearFromRawAttributes,

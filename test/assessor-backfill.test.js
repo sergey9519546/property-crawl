@@ -2,6 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { backfillAssessorRolls, CONVERTED_STATES, candidateReady, countyEnrolled } = require('../server/enrichment/assessor-backfill');
+const { cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_MISS_TTL_MS } = require('../server/enrichment/assessor-harvest');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 // Same ArcGIS envelope helper the assessor-harvest tests use: a fetch mock
 // returning one feature for a Maricopa APN query.
@@ -31,6 +35,12 @@ function fakeDb(rows) {
       return listing;
     },
   };
+}
+
+// Hermetic cache: the default cache path is shared with real harvest runs, so
+// every backfill test points at its own temp file.
+function temporaryCachePath() {
+  return path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pc-backfill-')), 'assessor-roll.json');
 }
 
 test('CONVERTED_STATES covers the states with verified conversions only', () => {
@@ -76,6 +86,7 @@ test('backfill harvests roll-less stored rows and persists each roll as it attac
   const db = fakeDb([rollLess, alreadyRolled, unenrolledCounty]);
   const result = await backfillAssessorRolls({
     db,
+    cachePath: temporaryCachePath(),
     fetchFn: async () => arcgisFetchReturning(MARICOPA_ATTRIBUTES)(),
     now: Date.parse('2026-11-01T00:00:00.000Z'),
   });
@@ -116,7 +127,7 @@ test('backfill is bounded by the candidate cap and tolerant of db and fetch fail
       provenance: { origin: 'live', observed: true },
     });
   }
-  const capped = await backfillAssessorRolls({ db: fakeDb(rows), limit: 3, fetchFn: async () => ({ ok: true, json: async () => ({ features: [] }) }) });
+  const capped = await backfillAssessorRolls({ db: fakeDb(rows), limit: 3, cachePath: temporaryCachePath(), fetchFn: async () => ({ ok: true, json: async () => ({ features: [] }) }) });
   assert.equal(capped.considered, 3, 'the candidate cap bounds the batch');
   assert.equal(capped.harvested, 0);
 });
@@ -139,4 +150,32 @@ test('countyEnrolled resolves registry entries and the Florida statewide fallbac
   assert.equal(countyEnrolled('FL', 'Orange'), true, 'Florida resolves through the statewide fallback');
   assert.equal(countyEnrolled('AZ', ''), false);
   assert.equal(countyEnrolled(null, 'Maricopa'), false);
+});
+
+test('backfill skips candidates whose miss is negatively cached within the TTL', async () => {
+  const rollLess = {
+    id: 'servicelink:mar-9',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Maricopa',
+    lat: 33.5,
+    lng: -112.4,
+    provenance: { origin: 'live', observed: true },
+  };
+  const db = fakeDb([rollLess]);
+  const cachePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pc-backfill-miss-')), 'assessor-roll.json');
+  const key = cacheKeyFor('AZ-MARICOPA', 33.5, -112.4, null);
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify({ [key]: { parcel: null, observedAt: '2026-10-30T00:00:00.000Z' } }));
+
+  const result = await backfillAssessorRolls({
+    db,
+    cachePath,
+    fetchFn: async () => { throw new Error('must not fetch a cached miss'); },
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+  assert.equal(result.considered, 0, 'the cached miss is skipped during selection');
+  assert.equal(result.harvested, 0);
+  assert.deepEqual(db.persisted, []);
+  fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
 });

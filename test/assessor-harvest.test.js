@@ -148,17 +148,25 @@ test('harvest is bounded per run and fails open on unreachable rolls', async () 
   assert.equal(listings.every((listing) => listing.assessorParcel === undefined), true);
 });
 
-test('an empty feature list is a miss, not an error, and is not cached as a hit', async () => {
+test('an empty feature list is a miss, not an error, and is negatively cached', async () => {
   const cachePath = temporaryCachePath();
   const listing = liveListing();
-  const results = await harvestAssessorRolls([listing], {
-    cachePath,
-    fetchFn: arcgisFetchReturning(null),
-    now: Date.parse('2026-10-21T00:00:00.000Z'),
-  });
-  assert.equal(results.notFound, 1);
-  assert.equal(results.harvested, 0);
+  let fetchCount = 0;
+  const fetchFn = async () => { fetchCount += 1; return arcgisFetchReturning(null)(); };
+  const first = await harvestAssessorRolls([listing], { cachePath, fetchFn, now: Date.parse('2026-10-21T00:00:00.000Z') });
+  assert.equal(first.notFound, 1);
+  assert.equal(first.harvested, 0);
   assert.equal(listing.assessorParcel, undefined);
+
+  // Within the miss TTL the same parcel is not re-fetched: a county whose
+  // parcels persistently miss must not consume the candidate budget again.
+  const second = await harvestAssessorRolls([liveListing({ id: 'OH-CUY-2002' })], { cachePath, fetchFn, now: Date.parse('2026-10-22T00:00:00.000Z') });
+  assert.equal(second.notFound, 1);
+  assert.equal(fetchCount, 1, 'the miss cache suppresses the refetch');
+
+  // After the miss TTL the parcel is retried.
+  await harvestAssessorRolls([liveListing({ id: 'OH-CUY-2003' })], { cachePath, fetchFn, now: Date.parse('2026-10-30T00:00:00.000Z') });
+  assert.equal(fetchCount, 2, 'the miss is retried after its TTL');
 });
 
 test('taxYearFromRawAttributes accepts common roll-year spellings and rejects nonsense', () => {

@@ -392,6 +392,19 @@ module's candidate selection (roll marker is the authority, geo/APN readiness,
 dedup across per-state pages — a first draft double-counted and re-persisted
 already-rolled rows; the tests caught that too) and the cap/fail-open bounds.
 
+**Starvation fix (negative miss cache)**: the first production hours exposed a
+candidate-selection starvation — the backfill queries converted states in a
+fixed order, and a state whose first-page rows persistently miss (verified
+live: TX-Harris coordinates do not resolve in its own layer) consumed the whole
+30-candidate budget every run, so AZ/PA/MI/FL/OH never received candidates.
+`harvestAssessorRolls` now negatively caches misses (`{parcel: null}`) on a
+short TTL (3 days vs 30 for hits — a transient endpoint failure is not
+permanent), skips freshly-missed parcels instead of re-fetching them, and the
+backfill skips fresh cache entries during selection, so the cap is spent on
+rows that can still learn something. Production confirmation before the fix:
+Pima carried the only 3 stored rolls; every other converted county stayed at 0
+despite resolvable parcels.
+
 ## Expected effect and how to measure it
 
 The ratio component resolves when an enrolled-county listing gets a roll
