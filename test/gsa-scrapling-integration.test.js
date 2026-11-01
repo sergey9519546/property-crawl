@@ -7,6 +7,17 @@ process.env.SCRAPER_RESPECT_ROBOTS = '0';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { GsaSurplusScraper } = require('../server/scrapers/gsa');
+const { getScraplingRuntimeStatus, defaultPython } = require('../server/scrapers/scrapling-bridge');
+
+const runtime = getScraplingRuntimeStatus(defaultPython());
+
+function requirePython(t) {
+  if (!runtime.available) {
+    t.skip('Scrapling Python runtime not available');
+    return false;
+  }
+  return true;
+}
 
 const detail = `<input value='125 Test Street' name='tour_property_address'>
 <input value='Warwick' name='tour_property_city'>
@@ -14,7 +25,8 @@ const detail = `<input value='125 Test Street' name='tour_property_address'>
 <input value='02889' name='tour_property_zipcode'>
 <p>Sale Number: FIXTURE123. Vacant land.</p>`;
 
-test('Scrapling integration tolerates reordered attributes while retaining canonical truth', async () => {
+test('Scrapling integration tolerates reordered attributes while retaining canonical truth', async (t) => {
+  if (!requirePython(t)) return;
   const scraper = new GsaSurplusScraper({useScrapling:true});
   scraper.fetchText = async () => detail;
   const record = await scraper.fetchDetail('27', 100000);
@@ -34,7 +46,8 @@ test('enabled parser failure cannot silently use a native parser or fixture inve
   await assert.rejects(scraper.fetchDetail('27', null), /parser unavailable/);
 });
 
-test('index discovery feeds current bids only to their own publisher records', async () => {
+test('index discovery feeds current bids only to their own publisher records', async (t) => {
+  if (!requirePython(t)) return;
   const scraper = new GsaSurplusScraper({useScrapling:true});
   scraper.fetchText = async () => `<main>
     <article><a href='/asset-details/?property_id=27'>First property</a></article>
