@@ -66,6 +66,23 @@ const MARKET_CONVERSION = Object.freeze({
     citation: 'Yuma County Assessor TOTAL_FULL_CASH_VALUE (verified equal to LAND_FULL_CASH_VALUE + IMP_FULL_CASH_VALUE on 500 sampled parcels), full cash value under A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. Sampled live at ~0.66 of recorded sale price across 2025-2026 dated sales and above 1.0 against older sales (valuation lag), so the figure tracks the market rather than a taxed fraction.',
   }),
 
+  // Michigan assesses at 50 percent of true cash value (MCL 211.27a(1),
+  // implementing Const 1963 art IX § 3), so the assessed figure grosses up to
+  // market by exactly 2x. Measured disclosure: Detroit's roll currently
+  // assesses at ~0.33 of recorded 2024-2025 sale prices - below the statutory
+  // 50% - so the derived market figure is a conservative lower bound, not a
+  // measured market value. amt_taxable_value (the Prop A capped value) is the
+  // taxed basis and is deliberately NOT used.
+  'MI-WAYNE': Object.freeze({
+    mode: 'taxable-fraction',
+    taxableFraction: 0.5,
+    citation: 'Detroit / Wayne County assessed value (amt_assessed_value), the statutory 50% of true cash value under MCL 211.27a(1) and Const 1963 art. IX § 3, grossed up to market. Sampled live at ~0.33 of recorded 2024-2025 sale prices, below the statutory 50%, so the derived market figure is a conservative lower bound. The capped taxable value (amt_taxable_value) is the taxed basis and is deliberately NOT used as market.',
+  }),
+  'PA-PHILADELPHIA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Philadelphia OPA market_value, the city certified market value, compared 1:1 with the published opening amount; sampled live at ~0.97 of recorded sale price across 2,000 dated 2026 sales (p10 0.64 / p90 1.60), confirming the field is a market figure. taxable_land / taxable_building are the taxed components and are deliberately NOT used as market.',
+  }),
+
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
   'FL-ORANGE': Object.freeze({
     mode: 'market-figure',

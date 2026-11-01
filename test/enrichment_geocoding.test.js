@@ -258,6 +258,61 @@ test('ArcGIS Resolver: the envelope fallback is bounded to one retry even when i
   assert.equal(requested.length, 2, 'point query plus at most one envelope retry');
 });
 
+// Detroit stores parcel_ids with separators ("15008031-3"), which the
+// normalized APN LIKE can never match. Counties opting in via
+// apnSeparatorRetry get exactly one bounded retry whose where clause turns
+// every non-alphanumeric position of the raw spelling into a wildcard —
+// matching any separator variant of the same parcel number without needing
+// server-side REPLACE (hosted layers reject it). A county without the opt-in
+// must not change its request at all.
+test('ArcGIS Resolver: apnSeparatorRetry retries once with a separator-tolerant pattern', async () => {
+  const requested = [];
+  const mockFetch = async (url) => {
+    requested.push(String(url));
+    const isTolerant = /LIKE\+%27%2515008031%253%25%27/.test(String(url));
+    return {
+      ok: true,
+      json: async () => ({
+        features: isTolerant
+          ? [{ attributes: { parcel_id: '15008031-3', property_class_description: 'RESIDENTIAL', amt_assessed_value: 905600, address: '695 E GRAND BLVD' } }]
+          : []
+      })
+    };
+  };
+
+  const parcel = await queryArcgisParcel({
+    apn: '15008031-3',
+    state: 'MI',
+    county: 'Wayne',
+    fetchFn: mockFetch
+  });
+
+  assert.ok(parcel, 'the separator-tolerant retry must recover the dashed APN match');
+  assert.equal(parcel.rawApn, '15008031-3');
+  assert.equal(parcel.assessedValue.total, 905600);
+  assert.equal(requested.length, 2, 'plain LIKE plus at most one tolerant retry');
+  assert.match(requested[0], /UPPER%28parcel_id%29\+LIKE/);
+  assert.doesNotMatch(requested[0], /%2515008031%253%25/);
+  assert.match(requested[1], /LIKE\+%27%2515008031%253%25%27/);
+  assert.doesNotMatch(requested[1], /REPLACE/);
+});
+
+test('ArcGIS Resolver: counties without apnSeparatorRetry never issue a tolerant retry', async () => {
+  const requested = [];
+  const mockFetch = async (url) => {
+    requested.push(String(url));
+    return { ok: true, json: async () => ({ features: [] }) };
+  };
+  const miss = await queryArcgisParcel({
+    apn: '10101010',
+    state: 'AZ',
+    county: 'Maricopa',
+    fetchFn: mockFetch
+  });
+  assert.equal(miss, null, 'a genuine miss returns null');
+  assert.equal(requested.length, 1, 'no tolerant retry for a county without the opt-in');
+});
+
 test('ArcGIS Resolver: enrolled statewide and high-volume county registries resolve with valid FIPS and https endpoints', () => {
   assert.equal(COUNTY_ARCGIS_ENDPOINTS, COUNTY_ARCGIS_REGISTRY);
   assert.equal(normalizeParcelAttributes, normalizeArcgisAttributes);

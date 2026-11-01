@@ -743,10 +743,14 @@ const COUNTY_ARCGIS_REGISTRY = {
     situsAddressField: 'FULLSITEADDRESS'
   },
   'MI-WAYNE': {
+    // Detroit parcel_ids carry separators ("15008031-3", "15008011."), which
+    // the normalized APN LIKE can never match; apnSeparatorRetry opts this
+    // entry into the bounded wildcard-pattern retry in queryArcgisParcel.
     name: 'Wayne County / City of Detroit Office of the Assessor',
     fips: '26163',
     endpoint: 'https://services2.arcgis.com/PpbvckyUgaYqseNQ/arcgis/rest/services/Detroit_MP_Parcel_Authoritative/FeatureServer/0/query',
     apnField: 'parcel_id',
+    apnSeparatorRetry: true,
     landUseField: 'property_class_description',
     assessedTotalField: 'amt_assessed_value',
     assessedLandField: null,
@@ -1264,6 +1268,10 @@ async function queryArcgisParcel(params = {}, init = {}) {
     f: 'json',
     returnGeometry: 'false'
   });
+  // Set in the APN branch when the county opts in via apnSeparatorRetry: a
+  // where clause whose wildcard pattern tolerates separators in the stored
+  // APN, used only when the normalized LIKE misses.
+  let strippedWhereClause = null;
 
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
     // Spatial point intersection
@@ -1277,6 +1285,17 @@ async function queryArcgisParcel(params = {}, init = {}) {
     const clean = normalizeApn(apn);
     if (!clean) return null;
     let whereClause = `UPPER(${config.apnField}) LIKE '%${clean}%'`;
+    if (config.apnSeparatorRetry) {
+      // Rolls that store the APN with separators ("15008031-3") can never
+      // match the normalized LIKE. The bounded retry compares with every
+      // non-alphanumeric position of the raw spelling as a wildcard, which
+      // matches any separator variant of the same parcel number without
+      // needing server-side REPLACE (hosted layers reject it).
+      const rawPattern = String(apn).trim().toUpperCase().replace(/[^A-Z0-9]/g, '%');
+      if (/^%*[A-Z0-9][A-Z0-9%]*$/.test(rawPattern)) {
+        strippedWhereClause = `UPPER(${config.apnField}) LIKE '%${rawPattern}%'`;
+      }
+    }
     if (config.countyFilterField && county) {
       const cleanCounty = String(county)
         .trim()
@@ -1288,6 +1307,9 @@ async function queryArcgisParcel(params = {}, init = {}) {
         .trim();
       if (cleanCounty) {
         whereClause = `UPPER(${config.countyFilterField}) LIKE '%${cleanCounty}%' AND (${whereClause})`;
+        if (strippedWhereClause) {
+          strippedWhereClause = `UPPER(${config.countyFilterField}) LIKE '%${cleanCounty}%' AND (${strippedWhereClause})`;
+        }
       }
     }
     queryParams.set('where', whereClause);
@@ -1310,6 +1332,25 @@ async function queryArcgisParcel(params = {}, init = {}) {
 
     const data = await res.json();
     let features = data && Array.isArray(data.features) ? data.features : [];
+
+    // Separator-tolerant APN retry (see the APN branch above): a roll that
+    // stores the APN with separators ("15008031-3") can never match the
+    // normalized LIKE, so one bounded retry matches on the raw spelling with
+    // separator positions as wildcards.
+    if (!features.length && strippedWhereClause) {
+      queryParams.set('where', strippedWhereClause);
+      const stripRetry = await fetchFn(`${config.endpoint}?${queryParams.toString()}`, { signal,
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'PropertyCrawl/2.0 (ArcGIS Open Parcel Gateway)'
+        }
+      });
+      if (stripRetry.ok) {
+        const stripData = await stripRetry.json();
+        features = stripData && Array.isArray(stripData.features) ? stripData.features : [];
+      }
+    }
 
     // Centroid-point layers (spatialFallback: 'envelope') cannot be matched by
     // an exact point-intersect — the listing coordinate is not the parcel's

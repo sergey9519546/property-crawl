@@ -221,6 +221,41 @@ test('the Mohave and Yuma registry entries resolve and carry the live-verified l
   assert.equal(yuma.taxYearField, 'TAX_YEAR');
 });
 
+// Enrolled 2026-11-01 from live-verified layers. Michigan's statutory 50%
+// taxable fraction (MCL 211.27a(1)) grosses Detroit's assessed value to a
+// market figure that the county's own recorded sales show is conservative (the
+// roll assesses at ~0.33 of sale prices, below the statutory 50%). The test
+// pins the fraction, the arithmetic, and the disclosure.
+test('assessor reading converts Wayne assessed value at the statutory 50 percent', () => {
+  // Real values from the live layer: parcel 15008031-3, assessed 905600.
+  const wayne = interpretAssessorParcel({ countyKey: 'MI-WAYNE', parcel: parcel(905600), openingBid: 400000 });
+  assert.equal(wayne.enrolled, true);
+  assert.equal(wayne.marketComparison, 1811200);
+  assert.equal(Math.round(wayne.ratio * 100) / 100, 0.22);
+  // (1 - 0.2208) * 130 = 101 clamps at the 99 score ceiling.
+  assert.equal(wayne.dealScore, 99);
+  assert.match(wayne.citation, /211\.27a/);
+  assert.match(wayne.citation, /50% of true cash value/);
+  assert.match(wayne.citation, /~0\.33/);
+  assert.match(wayne.citation, /conservative lower bound/);
+  assert.equal(wayne.field, 'amt_assessed_value');
+  assert.equal(wayne.withheldReason, null);
+});
+
+test('assessor reading converts Philadelphia market value 1:1 with the measured citation', () => {
+  // Real values from the live layer: parcel 301325005, market_value 717800.
+  const philly = interpretAssessorParcel({ countyKey: 'PA-PHILADELPHIA', parcel: parcel(717800), openingBid: 500000 });
+  assert.equal(philly.enrolled, true);
+  assert.equal(philly.marketComparison, 717800);
+  assert.equal(Math.round(philly.ratio * 100) / 100, 0.7);
+  assert.equal(philly.dealScore, 39);
+  assert.match(philly.citation, /market_value/);
+  assert.match(philly.citation, /~0\.97/);
+  assert.match(philly.citation, /taxed components/);
+  assert.equal(philly.field, 'market_value');
+  assert.equal(philly.withheldReason, null);
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [
