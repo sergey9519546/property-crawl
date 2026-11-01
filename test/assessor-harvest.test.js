@@ -275,6 +275,58 @@ test('harvest reads the Pima string-valued TAXYR through the registry taxYearFie
   assert.equal(listing.parcelKey, '04019-10101003E');
 });
 
+// Mohave and Yuma label the current roll TAX_YEAR 2027 (the publisher's own
+// label; Maricopa's equivalent layer carries ParcelValuationYear 2027 beside a
+// TaxYear 2026). The rule is verbatim recording: the label is stamped as
+// published, never shifted to satisfy the statutory valuation-year definition,
+// and never dropped because it is future-dated. Downstream guards (the
+// benchmark consensus rejects future assessment years) handle the consequence.
+const YUMA_ATTRIBUTES = {
+  PIDNUM: '70053293',
+  TOTAL_FULL_CASH_VALUE: 152118,
+  LAND_FULL_CASH_VALUE: 108000,
+  IMP_FULL_CASH_VALUE: 44118,
+  TAX_YEAR: '2027',
+  USE_CODE: '11-RES SINGLE FAMILY RES',
+  STREET_ADDRESS: '11230 E 37TH PL #93',
+  LEGAL_DESCRIPTION: 'FORTUNA FOOTHILLS EST LOT 93 BLK 8',
+};
+
+test('harvest records Yuma future-dated publisher roll label verbatim', async () => {
+  const cachePath = temporaryCachePath();
+  const listing = {
+    id: 'AZ-YUM-1001',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Yuma',
+    address: '11230 E 37th Pl, Yuma, AZ',
+    openingBid: 100000,
+    lat: null,
+    lng: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'ServiceLink',
+      recordId: 'yum-1',
+      sourceFacts: { parcelNumber: '70053293' },
+    },
+  };
+  const results = await harvestAssessorRolls([listing], {
+    cachePath,
+    fetchFn: async () => arcgisFetchReturning(YUMA_ATTRIBUTES)(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(results.harvested, 1);
+  assert.equal(listing.assessorParcel.assessedValue.total, 152118);
+  const roll = listing.provenance.derivedFields.assessorRoll;
+  assert.equal(roll.countyKey, 'AZ-YUMA');
+  assert.equal(roll.taxYear, 2027);
+  assert.equal(roll.valuationYear, null);
+  assert.equal(roll.assessmentYear, 2027);
+  assert.equal(listing.parcelKey, '04027-70053293');
+});
+
 test('a Maricopa parcel without a tax year falls back to the publisher valuation-year label', async () => {
   const cachePath = temporaryCachePath();
   const listing = {

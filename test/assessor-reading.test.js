@@ -159,6 +159,68 @@ test('the Pima enrollment registry entry resolves and carries the live-verified 
   assert.equal(entry.taxYearField, 'TAXYR');
 });
 
+// Enrolled 2026-11-01 from live-verified county-owned layers. Mohave's layer is
+// a naming trap (the column called TOTAL_FCV_VALUE is the taxed basis), so the
+// registry pin and citation both guard the real full cash value field. Yuma's
+// FCV sits at ~0.66 of recent sale prices - market level, not a taxed fraction -
+// with the statutory cap keeping the comparison conservative.
+test('assessor reading converts Mohave full cash value and rejects the taxed-basis column', () => {
+  // Real values from the live layer: APN TPARCEL 22802081, FULL_CASH_VALUE 864270.
+  const mohave = interpretAssessorParcel({ countyKey: 'AZ-MOHAVE', parcel: parcel(864270), openingBid: 400000 });
+  assert.equal(mohave.enrolled, true);
+  assert.equal(mohave.marketComparison, 864270);
+  assert.equal(Math.round(mohave.ratio * 100) / 100, 0.46);
+  assert.equal(mohave.dealScore, 70);
+  assert.match(mohave.citation, /FULL_CASH_VALUE/);
+  assert.match(mohave.citation, /42-11001/);
+  assert.match(mohave.citation, /conservative lower bound/);
+  // The trap is named in the citation: TOTAL_FCV_VALUE is the taxed basis.
+  assert.match(mohave.citation, /TOTAL_FCV_VALUE is the taxed basis/);
+  assert.equal(mohave.field, 'FULL_CASH_VALUE');
+  assert.equal(mohave.withheldReason, null);
+});
+
+test('assessor reading converts Yuma full cash value with the sale-price corroboration on the citation', () => {
+  // Real values from the live layer: APN PIDNUM 70053293, TOTAL_FULL_CASH_VALUE 152118.
+  const yuma = interpretAssessorParcel({ countyKey: 'AZ-YUMA', parcel: parcel(152118), openingBid: 100000 });
+  assert.equal(yuma.enrolled, true);
+  assert.equal(yuma.marketComparison, 152118);
+  assert.equal(Math.round(yuma.ratio * 100) / 100, 0.66);
+  assert.equal(yuma.dealScore, 45);
+  assert.match(yuma.citation, /TOTAL_FULL_CASH_VALUE/);
+  assert.match(yuma.citation, /42-11001/);
+  assert.match(yuma.citation, /conservative lower bound/);
+  assert.match(yuma.citation, /~0\.66/);
+  assert.equal(yuma.field, 'TOTAL_FULL_CASH_VALUE');
+  assert.equal(yuma.withheldReason, null);
+});
+
+test('the Mohave and Yuma registry entries resolve and carry the live-verified layers', () => {
+  const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
+  assert.equal(resolveCountyKey('AZ', 'Mohave'), 'AZ-MOHAVE');
+  assert.equal(resolveCountyKey('AZ', 'Yuma'), 'AZ-YUMA');
+  const mohave = COUNTY_ARCGIS_REGISTRY['AZ-MOHAVE'];
+  assert.equal(mohave.fips, '04015');
+  assert.match(mohave.endpoint, /^https:\/\/mcgis\.mohave\.gov\//);
+  assert.match(mohave.endpoint, /PARCELS\/MapServer\/14\/query$/);
+  // TPARCEL is the separator-free APN spelling; the dashed spellings would
+  // never match the repo's normalized LIKE lookup.
+  assert.equal(mohave.apnField, 'TPARCEL');
+  assert.equal(mohave.assessedTotalField, 'FULL_CASH_VALUE');
+  assert.notEqual(mohave.assessedTotalField, 'TOTAL_FCV_VALUE');
+  assert.equal(mohave.assessedLandField, 'LANDVALUE');
+  assert.equal(mohave.assessedImprvField, 'IMPVALUE');
+  assert.equal(mohave.taxYearField, 'TAX_YEAR');
+  const yuma = COUNTY_ARCGIS_REGISTRY['AZ-YUMA'];
+  assert.equal(yuma.fips, '04027');
+  assert.match(yuma.endpoint, /^https:\/\/arcgis\.yumacountyaz\.gov\//);
+  assert.equal(yuma.apnField, 'PIDNUM');
+  assert.equal(yuma.assessedTotalField, 'TOTAL_FULL_CASH_VALUE');
+  assert.equal(yuma.assessedLandField, 'LAND_FULL_CASH_VALUE');
+  assert.equal(yuma.assessedImprvField, 'IMP_FULL_CASH_VALUE');
+  assert.equal(yuma.taxYearField, 'TAX_YEAR');
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [

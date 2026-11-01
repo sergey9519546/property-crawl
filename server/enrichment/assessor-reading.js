@@ -50,6 +50,21 @@ const MARKET_CONVERSION = Object.freeze({
     mode: 'market-figure',
     citation: 'Pima County Assessor FCV, the statutory market-value estimate capped at market value by A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. This layer publishes no sale-price column, so the entry rests on the statutory definition alone and is not sale-price corroborated.',
   }),
+  // Mohave's layer is a naming trap: the column called TOTAL_FCV_VALUE is the
+  // taxed basis (full cash value x the statutory assessment ratio, 0.10-0.15,
+  // verified on 2,000 sampled parcels) and ASSESSED_FULL_CASH_VALUE duplicates
+  // it. The real full cash value is FULL_CASH_VALUE, verified equal to
+  // LANDVALUE + IMPVALUE on 2,000/2,000 sampled parcels and sampled at ~0.81 of
+  // the county's own recorded 2025-2026 sale prices - the same market level as
+  // Maricopa.
+  'AZ-MOHAVE': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Mohave County Assessor FULL_CASH_VALUE, full cash value under A.R.S. § 42-11001(6) (verified equal to LANDVALUE + IMPVALUE on 2,000 sampled parcels), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. Sampled live at ~0.81 of recorded sale price across 2025-2026 dated sales. The layer column named TOTAL_FCV_VALUE is the taxed basis (full cash value x statutory assessment ratio) and is deliberately NOT used as market.',
+  }),
+  'AZ-YUMA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Yuma County Assessor TOTAL_FULL_CASH_VALUE (verified equal to LAND_FULL_CASH_VALUE + IMP_FULL_CASH_VALUE on 500 sampled parcels), full cash value under A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. Sampled live at ~0.66 of recorded sale price across 2025-2026 dated sales and above 1.0 against older sales (valuation lag), so the figure tracks the market rather than a taxed fraction.',
+  }),
 
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
   'FL-ORANGE': Object.freeze({

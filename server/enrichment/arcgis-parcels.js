@@ -523,6 +523,35 @@ const COUNTY_ARCGIS_REGISTRY = {
     situsAddressField: 'ADDRESS_OL',
     taxYearField: 'TAXYR'
   },
+  'AZ-MOHAVE': {
+    // The layer's APN spellings: TAXPIN/PARCEL are dashed ("228-02-073");
+    // TPARCEL is the compact form ("22802073") the separator-stripped LIKE
+    // lookup needs. The value-field trap is documented in assessor-reading.js.
+    name: 'Mohave County Assessor (Kingman / Lake Havasu City)',
+    fips: '04015',
+    endpoint: 'https://mcgis.mohave.gov/arcgis/rest/services/PARCELS/MapServer/14/query',
+    apnField: 'TPARCEL',
+    landUseField: 'USE_CODE',
+    assessedTotalField: 'FULL_CASH_VALUE',
+    assessedLandField: 'LANDVALUE',
+    assessedImprvField: 'IMPVALUE',
+    legalDescField: 'LEGAL_DESCRIPTION',
+    situsAddressField: 'SITE_ADDRESS',
+    taxYearField: 'TAX_YEAR'
+  },
+  'AZ-YUMA': {
+    name: 'Yuma County Assessor (Yuma)',
+    fips: '04027',
+    endpoint: 'https://arcgis.yumacountyaz.gov/webgis/rest/services/YC_Parcels/MapServer/0/query',
+    apnField: 'PIDNUM',
+    landUseField: 'USE_CODE',
+    assessedTotalField: 'TOTAL_FULL_CASH_VALUE',
+    assessedLandField: 'LAND_FULL_CASH_VALUE',
+    assessedImprvField: 'IMP_FULL_CASH_VALUE',
+    legalDescField: 'LEGAL_DESCRIPTION',
+    situsAddressField: 'STREET_ADDRESS',
+    taxYearField: 'TAX_YEAR'
+  },
   'TX-BEXAR': {
     name: 'Bexar County / San Antonio (BCAD)',
     fips: '48029',
