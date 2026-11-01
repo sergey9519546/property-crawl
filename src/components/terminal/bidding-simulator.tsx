@@ -27,7 +27,7 @@ const strategyLabels: Record<string, { label: string; desc: string }> = {
   wholesale: { label: "Wholesale", desc: "Equity spread supports assignment" },
   owner_occupy: { label: "Owner-Occupy", desc: "Under conforming limit with equity margin" },
   brrrr: { label: "BRRRR", desc: ">=30% spread allows refinance extraction" },
-  rental: { label: "Long-Term Rental", desc: "Rent floor & equity support cash flow" },
+  rental: { label: "Long-Term Rental", desc: "Rent assumptions & equity support cash flow" },
   flip: { label: "Fix & Flip", desc: ">=25% discount with scheduled auction date" },
 };
 
@@ -687,7 +687,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           <div>
             <h4 className="text-sm font-bold text-ink">Statutory Tax Reset, Surplus &amp; Rental Coverage</h4>
             <p className="mt-0.5 text-xs text-ink-3">
-              Post-sale tax reassessment shock, constitutional surplus equity recovery, and HUD SAFMR statutory rent floors.
+              Post-sale tax reassessment shock, constitutional surplus equity recovery, and historical HUD SAFMR rent benchmarks.
             </p>
           </div>
         </div>
@@ -710,11 +710,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </p>
           </div>
 
-          {/* HUD FY2025 SAFMR Rent Floor */}
+          {/* HUD FY2025 SAFMR Rent Benchmark */}
           {hudSafmr ? (
             <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Benchmark</span>
                 <span className="rounded bg-line px-1.5 py-0.5 text-xs font-semibold text-ink-2">{hudSafmr.bedrooms}BR • ZIP {hudSafmr.zip}</span>
               </div>
               <p className="text-lg font-extrabold text-yours">
@@ -739,7 +739,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             </div>
           ) : (
             <div className="rounded-xl border border-line bg-paper p-3.5 space-y-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Floor</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-ink-3">HUD FY2025 SAFMR Rent Benchmark</span>
               <p className="text-xs text-ink-3">
                 No statutory HUD SAFMR benchmark record published for ZIP {listing.zip || "unrecorded"}. Section 8 payment standards must be verified through the local housing authority.
               </p>

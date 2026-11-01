@@ -128,6 +128,25 @@ class ScraperTelemetry {
     state.lastError = null;
     state.lastErrorCode = null;
 
+    const scopeKey = metadata.scopeKey || 'default';
+    state.baselines ||= {};
+    const baseline = metadata.historicalBaseline || state.baselines[scopeKey] || null;
+    const domHashes = metadata.domHashes || (metadata.html ? {page:computeDomStructureHash(metadata.html)} : {});
+    const driftReport = evaluateDrift(sourceName, metadata.html || '', listings, baseline ? {fieldYield:baseline.fieldYield, ...(baseline.domHash ? {domHash:baseline.domHash} : {})} : {});
+    const changedPages = Object.keys(domHashes).filter(key => baseline?.domHashes?.[key] && baseline.domHashes[key] !== domHashes[key]);
+    if (changedPages.length) {
+      driftReport.domDrift = true;
+      driftReport.hasDrift = true;
+      if (!driftReport.flags.includes('DOM_STRUCTURE_DRIFT')) driftReport.flags.push('DOM_STRUCTURE_DRIFT');
+    }
+    driftReport.changedPages = changedPages;
+    state.driftReport = driftReport;
+    state.driftDetected = driftReport.hasDrift;
+    if (listings.length > 0 && !driftReport.hasDrift) {
+      state.baselines[scopeKey] = {version:1, fieldYield:calculateFieldYield(listings).fieldYield, domHashes:{...(baseline?.domHashes || {}),...domHashes}, capturedAt:state.lastRunAt};
+      // Bound source scope history; never retain publisher HTML in health telemetry.
+      for (const key of Object.keys(state.baselines).slice(0, -16)) delete state.baselines[key];
+    }
     if (listings.length === 0) {
       state.zeroYieldRuns += 1;
       state.consecutiveZeroYieldRuns += 1;
@@ -175,24 +194,6 @@ class ScraperTelemetry {
     state.yieldMetrics.dateYield = (state.yieldMetrics.dateYield * oldWeight) + ((dateCount / total) * weight);
     state.yieldMetrics.photoYield = (state.yieldMetrics.photoYield * oldWeight) + ((photoCount / total) * weight);
 
-    // Drift Detection: If critical fields drop below 50% yield, DOM likely changed
-    if (metadata.html || metadata.historicalBaseline) {
-      const driftReport = evaluateDrift(
-        sourceName,
-        metadata.html || '',
-        listings,
-        metadata.historicalBaseline || state.historicalBaseline || {}
-      );
-      state.driftReport = driftReport;
-      if (driftReport.hasDrift) {
-        state.driftDetected = true;
-      }
-    }
-
-    state.driftDetected = (
-      state.yieldMetrics.addressYield < 0.5 ||
-      state.yieldMetrics.openingBidYield < 0.5
-    );
     this._save();
   }
 
@@ -204,6 +205,7 @@ class ScraperTelemetry {
     const total = Object.keys(this.history).length;
     const report = {
       systemStatus: total === 0 ? 'idle' : 'healthy',
+      snapshotEvidence: require('./discovery-snapshots').evidenceStoreHealth(),
       totalScrapers: total,
       scrapersInFault: 0,
       scrapersChallengeGated: 0,

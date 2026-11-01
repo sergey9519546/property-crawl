@@ -1,0 +1,1 @@
+export function loadCountyInventory<T>(options: { stateCode: string; county: string; apiUrl: string; searchLocal: (query: string) => Promise<{ listings: T[]; readError?: unknown; dataMode?: string }> }): Promise<T[]>;

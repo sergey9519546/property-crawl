@@ -113,7 +113,7 @@ for (const suite of suites) {
   console.log(`Running ${suite.name}...`);
   const nextEnvSnapshot = snapshotNextEnv();
   try {
-    const output = execSync(suite.cmd, { stdio: 'pipe' }).toString();
+    const output = execSync(suite.cmd, { stdio: 'pipe', timeout: 20 * 60 * 1000, killSignal: 'SIGTERM', maxBuffer: 64 * 1024 * 1024, windowsHide: true }).toString();
     console.log(output);
     const skipped = skippedIn(output);
     if (skipped > 0) {

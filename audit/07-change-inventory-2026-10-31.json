@@ -1,0 +1,1871 @@
+{
+  "auditDate": "2026-10-31",
+  "baseline": "081278d1d2a91d2f7c4a0188094c1fb2092a5797",
+  "target": "1203730a69b018bcfa27946aa5aaeb271bb4b66c",
+  "commitCount": 47,
+  "changedFileCount": 325,
+  "commits": [
+    {
+      "sha": "1203730a69b018bcfa27946aa5aaeb271bb4b66c",
+      "authoredAt": "2026-10-31T16:33:10-07:00",
+      "subject": "feat(telemetry,swarm): implement scraper drift detector, cryptographic evidence ledger, DAG orchestrator, and public benchmark consensus"
+    },
+    {
+      "sha": "c8f094295f4c52f44827a2a633bc279135aa2d7f",
+      "authoredAt": "2026-10-31T15:53:48-07:00",
+      "subject": "feat(scrapers): add maricopa and harris recorder adapters, parcel map overlay, dev cache, and roadmap sync"
+    },
+    {
+      "sha": "f9e5198e11a5901f77bb823911896ff375fce2bc",
+      "authoredAt": "2026-10-31T14:21:39-07:00",
+      "subject": "fix(scrapers): harden acclaimweb, bid4assets json, and texas tax sale cause docket extraction"
+    },
+    {
+      "sha": "9f7d2a55720b77d95750fd85f82e7de9776d1f97",
+      "authoredAt": "2026-10-31T14:03:06-07:00",
+      "subject": "docs(scrapers): synchronize scraper power guarantee with alachua catalog null adapter"
+    },
+    {
+      "sha": "f5f39ecaef0bab28d29ad8d8ef7699d256a578f7",
+      "authoredAt": "2026-10-31T13:47:29-07:00",
+      "subject": "fix(verification): resolve telemetry drift state, alachua catalog key, design token ratchet, and context digest"
+    },
+    {
+      "sha": "155d8453a878c68ef82a00eed8bd495dfb58597f",
+      "authoredAt": "2026-10-31T05:55:43-07:00",
+      "subject": "fix(build): add turbopackIgnore to local parcel index existsSync"
+    },
+    {
+      "sha": "f8c7f79c52035fa499db70290e8db80c7ab1d6be",
+      "authoredAt": "2026-10-30T22:31:26-07:00",
+      "subject": "docs: synchronize scraper power guarantee with Texas tax sale adapters and 53 Scrapling profiles"
+    },
+    {
+      "sha": "c7777f4d0255bf2f8dfc1949dda1a808b949421b",
+      "authoredAt": "2026-10-30T21:58:30-07:00",
+      "subject": "feat: document review verbatim spans, 9-market socrata code violations, and resilient programmatic seo"
+    },
+    {
+      "sha": "a2495973708dc7734c05eed730ef984f70fce5e2",
+      "authoredAt": "2026-10-30T21:33:07-07:00",
+      "subject": "feat: scenario-bound decision packets, 12-state tax reassessment engine, and email notice intake"
+    },
+    {
+      "sha": "6b2f1e42e20087a80f25e669117a0cf74a13d0f8",
+      "authoredAt": "2026-10-30T21:07:34-07:00",
+      "subject": "fix(catalog): restore catalog honesty, refine redemption regimes, and wire texas tax sales"
+    },
+    {
+      "sha": "73314a086875a7f50922426dce68b40847f90d79",
+      "authoredAt": "2026-10-30T20:40:23-07:00",
+      "subject": "feat(underwriting,catalog): 10x Wave 7: 20-state statutory underwriting, tax deed redemption yield engine, and 100% distress catalog adaptation"
+    },
+    {
+      "sha": "005d7054bad4972b8e766e8060717af8e8cbf0de",
+      "authoredAt": "2026-10-30T20:29:20-07:00",
+      "subject": "feat(intelligence): expand statutory underwriting to 15 states, integrate docket trajectory, and adapt 14 sources"
+    },
+    {
+      "sha": "d610fb8c75617e0eba85c7cdb13492b7b60e5eaf",
+      "authoredAt": "2026-10-30T20:09:36-07:00",
+      "subject": "feat(scrapers): adapt 45 statutory distress sources and add Georgia First Tuesday underwriting"
+    },
+    {
+      "sha": "f7a1718a7358984f34ed183287de5a7e2fb45cba",
+      "authoredAt": "2026-10-30T19:48:51-07:00",
+      "subject": "feat(scrapers): 10x Wave 4 upgrade: Texas Tax Foreclosure adapter, statutory redemption lockup, RealAuction FL/TX catalog linkage, and APN precision"
+    },
+    {
+      "sha": "c0123303b6bf242d3b7c802235c47ce0d1cd881e",
+      "authoredAt": "2026-10-30T19:00:14-07:00",
+      "subject": "feat(underwriting): expand title risk engine, municipal super-liens, statutory fee schedules, and catalog adapter linkage"
+    },
+    {
+      "sha": "f2342dd6955056561684794b7c4af135a8b002ee",
+      "authoredAt": "2026-10-30T18:28:37-07:00",
+      "subject": "feat(scrapers): wave-2 10x intelligence upgrades across bid4assets, landbank, trustee, enrichment gateway, irs/treasury, and ca-controller"
+    },
+    {
+      "sha": "a4fc0396f856256ab6abb7baf34215561e2244f6",
+      "authoredAt": "2026-10-30T17:34:54-07:00",
+      "subject": "feat(scrapers): 10x scraper upgrade across embedded state, realauction, servicelink, civilview, cadastral join, and federal dockets"
+    },
+    {
+      "sha": "c88aeb82df3102e32dfb8aa02f035b860a49670b",
+      "authoredAt": "2026-10-30T16:32:51-07:00",
+      "subject": "feat: unlock live RealAuction ColdFusion AJAX scraper for Ohio and Florida distress sales"
+    },
+    {
+      "sha": "589545c24a157d79f238dbe316169afce2376802",
+      "authoredAt": "2026-10-30T16:07:35-07:00",
+      "subject": "feat: expand statutory email-as-api legal notice network to 14 states and Florida assessor just valuations"
+    },
+    {
+      "sha": "2a1b0ed0cbe7c78bab6a232a971a7577ea04b5c0",
+      "authoredAt": "2026-10-30T15:41:49-07:00",
+      "subject": "feat: expand tax sale catalog and realauction adapter coverage across 32 florida counties"
+    },
+    {
+      "sha": "40a7df8c2733b2898680ba54fba5e918e99e7f3f",
+      "authoredAt": "2026-10-30T15:17:15-07:00",
+      "subject": "feat(scrapers,parcels,notices): live AcclaimWeb endpoint resolution, multi-state email notice corpus expansion, and cadastral parcel benchmarks"
+    },
+    {
+      "sha": "abf4ac736045699ba2792653ec0fbe062d3780c4",
+      "authoredAt": "2026-10-30T14:58:57-07:00",
+      "subject": "fix(underwriting,listings,parcels): enforce zero-fabrication carry, memoize cadastral resolution, add 50-state rate parity test, and seed local parcel index"
+    },
+    {
+      "sha": "43aabda2a59e0b402fa0af4aa0c256c112051468",
+      "authoredAt": "2026-10-30T14:43:25-07:00",
+      "subject": "feat(underwriting,export,parcels): wire HUD SAFMR & statutory holding carry into decision packets and bridge cadastral APN to situsAddress"
+    },
+    {
+      "sha": "08b233f6edf0265d35a474c0b9f58940eb1b60f1",
+      "authoredAt": "2026-10-30T02:10:50-07:00",
+      "subject": "fix(test): accommodate content_hash column in document_reviews pg test mock"
+    },
+    {
+      "sha": "1c62192695c4bc1188daca27885488388168f395",
+      "authoredAt": "2026-10-30T01:52:41-07:00",
+      "subject": "feat(scrapers): wire AcclaimWeb recorder bridge into TrusteeSaleScraper with zero-fabrication invariant"
+    },
+    {
+      "sha": "131fd823c6231a3546892271dcaa69b570177725",
+      "authoredAt": "2026-10-30T01:47:12-07:00",
+      "subject": "fix(scrapers): prevent multi-card docket bid bleed and enforce bot challenge fail-closed"
+    },
+    {
+      "sha": "cf29cc7394b473042563d4747585beeb6e59a246",
+      "authoredAt": "2026-10-30T01:20:54-07:00",
+      "subject": "Wire Scrapling spider/waterfall/adaptive layers into BaseScraper & scrapers; unify RealAuction/RealTaxDeed adapters and Statutory Distress Catalog adapterKeys"
+    },
+    {
+      "sha": "f3bdf681126a93c83d4d301560245c780a00b4da",
+      "authoredAt": "2026-10-30T01:00:23-07:00",
+      "subject": "feat(underwriting,parser,indexer,ui): add 50-state tax & insurance carry, debt-as-price guard, local parcel indexer CLI, and HUD SAFMR cards"
+    },
+    {
+      "sha": "08c3aa027d439ae9c13300449ffe56094fd2da6f",
+      "authoredAt": "2026-10-30T00:43:12-07:00",
+      "subject": "refactor(catalog): replace external deal sources title with statutory distress catalog"
+    },
+    {
+      "sha": "c926b1e2d87cdd8629d26a28ab0d9d3f8ce8099c",
+      "authoredAt": "2026-10-30T00:32:05-07:00",
+      "subject": "feat(enrichment,scrapers,ui): wire HUD SAFMR & 10x underwriting into UI/API, fix assessor harvest ordering & APN lookup, harden live scrapers"
+    },
+    {
+      "sha": "5f9e48414f8664619db118188f3a4136f954e872",
+      "authoredAt": "2026-10-29T23:54:46-07:00",
+      "subject": "fix(normalization): allow coerce non-string inputs in normalizeApn while guarding symbols"
+    },
+    {
+      "sha": "205dfd080453e4164da73a992eabe6ff57e201e3",
+      "authoredAt": "2026-10-29T23:44:00-07:00",
+      "subject": "feat(catalog,underwriting,importer,enrichment): integrate Tranchi deal sources, statutory surplus, reassessment shock, HUD SAFMR and ServiceLink archive"
+    },
+    {
+      "sha": "ddbcd9822de184d37fbfac5d47acd72f2b1a79e4",
+      "authoredAt": "2026-10-29T23:27:12-07:00",
+      "subject": "fix(discovery,routes,enrichment): adversarial hardening for cursor validation, null island lat/lng, maxBid=0 and normalization guards"
+    },
+    {
+      "sha": "956f8427f06a941669339aff211e275ac6adb1b7",
+      "authoredAt": "2026-10-29T22:40:45-07:00",
+      "subject": "fix(remediation): close SSRF 6to4/dot bypasses, harden scrapy-ingest batch cap, sanitize ArcGIS SQL/Alachua, and add circuit breaker cooldown"
+    },
+    {
+      "sha": "37f365c064e4f090bb09a191fe2730429691994d",
+      "authoredAt": "2026-10-29T22:02:52-07:00",
+      "subject": "Harden scrapy-ingest Postgres gate, Zyte IPv6 SSRF filter, and expand ArcGIS parcel coverage to 346 counties"
+    },
+    {
+      "sha": "af577823f466459b64b00e25076f65332a11f2d8",
+      "authoredAt": "2026-10-29T21:19:45-07:00",
+      "subject": "fix(db): prefer DATABASE_URL over PROPERTY_DB=embedded across all NODE_ENV=production hosts"
+    },
+    {
+      "sha": "c8299398ba3ac0d6615381f67a7b8eef9165785c",
+      "authoredAt": "2026-10-29T20:40:48-07:00",
+      "subject": "feat(design-system): themed primitives, elevation, guard test and expanded doc"
+    },
+    {
+      "sha": "30faf5c83b0014aee9757e104f334fb42f1dc479",
+      "authoredAt": "2026-10-29T20:29:11-07:00",
+      "subject": "style(ui): cool white-gray background instead of warm cream"
+    },
+    {
+      "sha": "c0cd95ed58fd5ec4f4cf2709d09409f364908253",
+      "authoredAt": "2026-10-29T20:27:32-07:00",
+      "subject": "feat(ui): roll out palette 02 across buyer-facing pages and fix honesty bugs"
+    },
+    {
+      "sha": "9984d25a4bc9eae0e046b596bd4bd905d8d9e9c1",
+      "authoredAt": "2026-10-28T10:58:45-07:00",
+      "subject": "fix(db): follow DATABASE_URL in production and unblock collectors"
+    },
+    {
+      "sha": "389f0b01e536168a73519c86aaae35e90499cf91",
+      "authoredAt": "2026-10-28T08:50:21-07:00",
+      "subject": "feat(audit): add vault read-back verification, runtime cost-tracker guard, and computedAt timestamps"
+    },
+    {
+      "sha": "14a4558006ec5c13d4bf528dcf439709c36b5511",
+      "authoredAt": "2026-10-28T07:52:09-07:00",
+      "subject": "feat(hardening): atomic webhook claim-and-release, automatic vault SHA-256 binding, and real-engine Postgres tests"
+    },
+    {
+      "sha": "e5a9b7af3eabb1d18b5534b2ad0273cbc2e3126a",
+      "authoredAt": "2026-10-28T07:37:00-07:00",
+      "subject": "feat(ui): surface unsupported-jurisdiction notice in bidding simulator"
+    },
+    {
+      "sha": "543d1c309d2eb8f01feca3c4cb8f99289e95a120",
+      "authoredAt": "2026-10-28T03:56:16-07:00",
+      "subject": "feat(hardening): add webhook idempotency ledger, vault content hash binding, and unsupported jurisdiction safety"
+    },
+    {
+      "sha": "e29fa6a2f13e976f9ce8a1e9216d1864de40bf61",
+      "authoredAt": "2026-10-28T03:15:05-07:00",
+      "subject": "feat(underwriting): enforce zero-fabrication underwriting, statutory carry, and verified evidence gates"
+    },
+    {
+      "sha": "263c9d7b911acba720512f2e1da25b1b426a6615",
+      "authoredAt": "2026-10-24T16:33:26-07:00",
+      "subject": "copy: rewrite marketing pages in plain language and fix UI bugs"
+    },
+    {
+      "sha": "842154de5677516907906e887a8c4e9e2836da33",
+      "authoredAt": "2026-10-23T15:04:21-07:00",
+      "subject": "feat(accounts): paid member tier with magic-link sign-in and Stripe subscriptions"
+    }
+  ],
+  "files": [
+    {
+      "path": ".agents/skills/deal-scoring/SKILL.md",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": ".env.example",
+      "added": "19",
+      "deleted": "5"
+    },
+    {
+      "path": ".gitignore",
+      "added": "1",
+      "deleted": "0"
+    },
+    {
+      "path": "CONTEXT.md",
+      "added": "23",
+      "deleted": "19"
+    },
+    {
+      "path": "audit/05-implementation-report.md",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "data.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "docs/COMPLETION_CHECKLIST.md",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "docs/DESIGN_SYSTEM.md",
+      "added": "151",
+      "deleted": "0"
+    },
+    {
+      "path": "docs/SCRAPER_POWER_GUARANTEE.md",
+      "added": "55",
+      "deleted": "19"
+    },
+    {
+      "path": "docs/UNIMPLEMENTED_PLANS_AND_ROADMAP.md",
+      "added": "82",
+      "deleted": "40"
+    },
+    {
+      "path": "package.json",
+      "added": "16",
+      "deleted": "14"
+    },
+    {
+      "path": "render.yaml",
+      "added": "12",
+      "deleted": "5"
+    },
+    {
+      "path": "reports/scraper-power-guarantee.json",
+      "added": "3033",
+      "deleted": "58"
+    },
+    {
+      "path": "scripts/build-data.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "scripts/build-statutory-distress-catalog.js",
+      "added": "306",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/canary-live.js",
+      "added": "3",
+      "deleted": "2"
+    },
+    {
+      "path": "scripts/collect-tax-sales.js",
+      "added": "188",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/discovery-migrate.js",
+      "added": "4",
+      "deleted": "6"
+    },
+    {
+      "path": "scripts/import-servicelink-archive.js",
+      "added": "678",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/index-local-parcels.js",
+      "added": "263",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/scraper-power-report.js",
+      "added": "7",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/seed-local-parcels.js",
+      "added": "301",
+      "deleted": "0"
+    },
+    {
+      "path": "scripts/start-production.js",
+      "added": "2",
+      "deleted": "0"
+    },
+    {
+      "path": "server/accounts/store.js",
+      "added": "271",
+      "deleted": "0"
+    },
+    {
+      "path": "server/ai/legal-rules.js",
+      "added": "9",
+      "deleted": "3"
+    },
+    {
+      "path": "server/ai/notice-parser.js",
+      "added": "14",
+      "deleted": "4"
+    },
+    {
+      "path": "server/billing/stripe-checkout.js",
+      "added": "86",
+      "deleted": "25"
+    },
+    {
+      "path": "server/db/client.js",
+      "added": "27",
+      "deleted": "9"
+    },
+    {
+      "path": "server/db/database-capabilities.js",
+      "added": "178",
+      "deleted": "0"
+    },
+    {
+      "path": "server/db/database-target.js",
+      "added": "52",
+      "deleted": "0"
+    },
+    {
+      "path": "server/db/migrations/029_accounts.sql",
+      "added": "26",
+      "deleted": "0"
+    },
+    {
+      "path": "server/db/schema.sql",
+      "added": "29",
+      "deleted": "0"
+    },
+    {
+      "path": "server/discovery-readiness.js",
+      "added": "5",
+      "deleted": "4"
+    },
+    {
+      "path": "server/discovery/evidence-ledger.js",
+      "added": "286",
+      "deleted": "0"
+    },
+    {
+      "path": "server/discovery/hunt-store.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "server/discovery/query.js",
+      "added": "14",
+      "deleted": "8"
+    },
+    {
+      "path": "server/discovery/worker-health.js",
+      "added": "6",
+      "deleted": "4"
+    },
+    {
+      "path": "server/enrichment/arcgis-parcels.js",
+      "added": "1034",
+      "deleted": "33"
+    },
+    {
+      "path": "server/enrichment/assessor-harvest.js",
+      "added": "40",
+      "deleted": "16"
+    },
+    {
+      "path": "server/enrichment/assessor-reading.js",
+      "added": "110",
+      "deleted": "17"
+    },
+    {
+      "path": "server/enrichment/code-enforcement.js",
+      "added": "243",
+      "deleted": "15"
+    },
+    {
+      "path": "server/enrichment/data/hud-safmr-benchmarks.json",
+      "added": "1",
+      "deleted": "0"
+    },
+    {
+      "path": "server/enrichment/hpi.js",
+      "added": "13",
+      "deleted": "0"
+    },
+    {
+      "path": "server/enrichment/hud-safmr.js",
+      "added": "70",
+      "deleted": "0"
+    },
+    {
+      "path": "server/enrichment/local-parcel-index.js",
+      "added": "127",
+      "deleted": "0"
+    },
+    {
+      "path": "server/enrichment/public-benchmark-consensus.js",
+      "added": "246",
+      "deleted": "0"
+    },
+    {
+      "path": "server/export/decision-packet.js",
+      "added": "225",
+      "deleted": "2"
+    },
+    {
+      "path": "server/ingest/scrapy-webhook.js",
+      "added": "214",
+      "deleted": "2"
+    },
+    {
+      "path": "server/intelligence/cash-to-close.js",
+      "added": "141",
+      "deleted": "0"
+    },
+    {
+      "path": "server/intelligence/document-review-store.js",
+      "added": "11",
+      "deleted": "4"
+    },
+    {
+      "path": "server/intelligence/dossier.js",
+      "added": "2",
+      "deleted": "0"
+    },
+    {
+      "path": "server/intelligence/enrichment-gateway.js",
+      "added": "17",
+      "deleted": "5"
+    },
+    {
+      "path": "server/intelligence/hunts.js",
+      "added": "2",
+      "deleted": "0"
+    },
+    {
+      "path": "server/intelligence/municipal-liens.js",
+      "added": "55",
+      "deleted": "1"
+    },
+    {
+      "path": "server/intelligence/score-bands.js",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": "server/intelligence/signals.js",
+      "added": "11",
+      "deleted": "5"
+    },
+    {
+      "path": "server/intelligence/title-risk-engine.js",
+      "added": "19",
+      "deleted": "1"
+    },
+    {
+      "path": "server/routes/accounts.js",
+      "added": "65",
+      "deleted": "0"
+    },
+    {
+      "path": "server/routes/decision-packet.js",
+      "added": "6",
+      "deleted": "0"
+    },
+    {
+      "path": "server/routes/document-review.js",
+      "added": "93",
+      "deleted": "1"
+    },
+    {
+      "path": "server/routes/hunts.js",
+      "added": "20",
+      "deleted": "4"
+    },
+    {
+      "path": "server/routes/listings.js",
+      "added": "104",
+      "deleted": "15"
+    },
+    {
+      "path": "server/routes/parcel-boundary.js",
+      "added": "178",
+      "deleted": "42"
+    },
+    {
+      "path": "server/routes/parse.js",
+      "added": "6",
+      "deleted": "2"
+    },
+    {
+      "path": "server/routes/portfolio-dashboard.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "server/routes/price-drop.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "server/routes/saved-searches.js",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "server/routes/source-network.js",
+      "added": "95",
+      "deleted": "28"
+    },
+    {
+      "path": "server/scrapers/adapters/acclaimweb.js",
+      "added": "143",
+      "deleted": "30"
+    },
+    {
+      "path": "server/scrapers/adapters/harris-clerk-foreclosure.js",
+      "added": "404",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/adapters/maricopa-recorder.js",
+      "added": "361",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/adapters/realauction.js",
+      "added": "302",
+      "deleted": "57"
+    },
+    {
+      "path": "server/scrapers/adapters/texas-tax-sale.js",
+      "added": "383",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/base.js",
+      "added": "217",
+      "deleted": "7"
+    },
+    {
+      "path": "server/scrapers/bid4assets.js",
+      "added": "240",
+      "deleted": "76"
+    },
+    {
+      "path": "server/scrapers/ca-controller-tax-sale.js",
+      "added": "18",
+      "deleted": "3"
+    },
+    {
+      "path": "server/scrapers/circuit-breaker.js",
+      "added": "70",
+      "deleted": "5"
+    },
+    {
+      "path": "server/scrapers/civilview.js",
+      "added": "75",
+      "deleted": "30"
+    },
+    {
+      "path": "server/scrapers/courtlistener.js",
+      "added": "24",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/discovery-snapshots.js",
+      "added": "426",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/drift-detector.js",
+      "added": "257",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/embedded-extractor.js",
+      "added": "214",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/fannie.js",
+      "added": "45",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/fl-dor-cadastral.js",
+      "added": "83",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/freddie.js",
+      "added": "45",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/government-land.js",
+      "added": "24",
+      "deleted": "3"
+    },
+    {
+      "path": "server/scrapers/http.js",
+      "added": "54",
+      "deleted": "2"
+    },
+    {
+      "path": "server/scrapers/hud.js",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "server/scrapers/irs.js",
+      "added": "27",
+      "deleted": "4"
+    },
+    {
+      "path": "server/scrapers/landbanksearch.js",
+      "added": "86",
+      "deleted": "37"
+    },
+    {
+      "path": "server/scrapers/local-surplus.js",
+      "added": "23",
+      "deleted": "1"
+    },
+    {
+      "path": "server/scrapers/marshals.js",
+      "added": "5",
+      "deleted": "1"
+    },
+    {
+      "path": "server/scrapers/normalization.js",
+      "added": "8",
+      "deleted": "4"
+    },
+    {
+      "path": "server/scrapers/scheduler.js",
+      "added": "64",
+      "deleted": "13"
+    },
+    {
+      "path": "server/scrapers/scrapling-runner.js",
+      "added": "13",
+      "deleted": "11"
+    },
+    {
+      "path": "server/scrapers/selector-store.js",
+      "added": "355",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/servicelink.js",
+      "added": "6",
+      "deleted": "1"
+    },
+    {
+      "path": "server/scrapers/sheriff.js",
+      "added": "467",
+      "deleted": "17"
+    },
+    {
+      "path": "server/scrapers/source-policy.js",
+      "added": "36",
+      "deleted": "2"
+    },
+    {
+      "path": "server/scrapers/telemetry.js",
+      "added": "27",
+      "deleted": "2"
+    },
+    {
+      "path": "server/scrapers/treasury.js",
+      "added": "65",
+      "deleted": "13"
+    },
+    {
+      "path": "server/scrapers/trustee.js",
+      "added": "331",
+      "deleted": "9"
+    },
+    {
+      "path": "server/scrapers/usda.js",
+      "added": "19",
+      "deleted": "1"
+    },
+    {
+      "path": "server/scrapers/va.js",
+      "added": "45",
+      "deleted": "0"
+    },
+    {
+      "path": "server/scrapers/zyte-client.js",
+      "added": "113",
+      "deleted": "18"
+    },
+    {
+      "path": "server/security/workspace-identity.js",
+      "added": "40",
+      "deleted": "3"
+    },
+    {
+      "path": "server/server.js",
+      "added": "50",
+      "deleted": "12"
+    },
+    {
+      "path": "server/sources/catalog.js",
+      "added": "13",
+      "deleted": "8"
+    },
+    {
+      "path": "server/sources/collection-coordinator.js",
+      "added": "8",
+      "deleted": "1"
+    },
+    {
+      "path": "server/sources/email-feeds.json",
+      "added": "102",
+      "deleted": "0"
+    },
+    {
+      "path": "server/sources/email-notice-collector.js",
+      "added": "103",
+      "deleted": "10"
+    },
+    {
+      "path": "server/sources/email-notices.js",
+      "added": "61",
+      "deleted": "34"
+    },
+    {
+      "path": "server/sources/nationwide-us-catalog.js",
+      "added": "334",
+      "deleted": "6"
+    },
+    {
+      "path": "server/sources/socrata-code-enforcement.js",
+      "added": "62",
+      "deleted": "1"
+    },
+    {
+      "path": "server/sources/statutory-distress-catalog.js",
+      "added": "3487",
+      "deleted": "0"
+    },
+    {
+      "path": "server/storage/document-vault.js",
+      "added": "69",
+      "deleted": "0"
+    },
+    {
+      "path": "server/swarm/capability-graph.js",
+      "added": "104",
+      "deleted": "0"
+    },
+    {
+      "path": "server/swarm/dag-orchestrator.js",
+      "added": "568",
+      "deleted": "0"
+    },
+    {
+      "path": "server/swarm/trigger-weights.js",
+      "added": "235",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/[slug]/page.tsx",
+      "added": "50",
+      "deleted": "64"
+    },
+    {
+      "path": "src/app/about/page.tsx",
+      "added": "120",
+      "deleted": "127"
+    },
+    {
+      "path": "src/app/account/page.tsx",
+      "added": "19",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/account/verify/page.tsx",
+      "added": "17",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/api/account/login/route.ts",
+      "added": "53",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/api/account/portal/route.ts",
+      "added": "16",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/api/account/route.ts",
+      "added": "21",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/api/account/verify/route.ts",
+      "added": "19",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/api/alerts/matches/route.ts",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "src/app/api/checkout/route.ts",
+      "added": "28",
+      "deleted": "14"
+    },
+    {
+      "path": "src/app/api/contact/route.ts",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "src/app/api/hunts/[...path]/route.ts",
+      "added": "5",
+      "deleted": "5"
+    },
+    {
+      "path": "src/app/api/hunts/route.ts",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "src/app/api/listings/[id]/packet/route.ts",
+      "added": "43",
+      "deleted": "1"
+    },
+    {
+      "path": "src/app/api/portfolio/dashboard/route.ts",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "src/app/api/price-drops/route.ts",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "src/app/api/public/scrapy-ingest/route.ts",
+      "added": "54",
+      "deleted": "32"
+    },
+    {
+      "path": "src/app/api/saved-searches/[...path]/route.ts",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "src/app/api/saved-searches/route.ts",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "src/app/api/webhooks/stripe/route.ts",
+      "added": "53",
+      "deleted": "8"
+    },
+    {
+      "path": "src/app/api/workspace/session/route.ts",
+      "added": "7",
+      "deleted": "1"
+    },
+    {
+      "path": "src/app/checkout/page.tsx",
+      "added": "3",
+      "deleted": "92"
+    },
+    {
+      "path": "src/app/contact/page.tsx",
+      "added": "67",
+      "deleted": "55"
+    },
+    {
+      "path": "src/app/design/page.tsx",
+      "added": "353",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/error.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/app/global-error.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/app/globals.css",
+      "added": "167",
+      "deleted": "88"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": "src/app/listings/[id]/page.tsx",
+      "added": "117",
+      "deleted": "100"
+    },
+    {
+      "path": "src/app/listings/page.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/app/newsletter/unsubscribe/page.tsx",
+      "added": "11",
+      "deleted": "11"
+    },
+    {
+      "path": "src/app/not-found.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/app/page.tsx",
+      "added": "21",
+      "deleted": "41"
+    },
+    {
+      "path": "src/app/portfolio/page.tsx",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "src/app/privacy/page.tsx",
+      "added": "31",
+      "deleted": "25"
+    },
+    {
+      "path": "src/app/register/page.tsx",
+      "added": "6",
+      "deleted": "21"
+    },
+    {
+      "path": "src/app/resources/page.tsx",
+      "added": "189",
+      "deleted": "178"
+    },
+    {
+      "path": "src/app/sheriff-sales/[state]/page.tsx",
+      "added": "7",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/sheriff-sales/page.tsx",
+      "added": "6",
+      "deleted": "0"
+    },
+    {
+      "path": "src/app/sign-in/page.tsx",
+      "added": "18",
+      "deleted": "20"
+    },
+    {
+      "path": "src/app/states/[state]/[county]/page.tsx",
+      "added": "125",
+      "deleted": "117"
+    },
+    {
+      "path": "src/app/states/[state]/page.tsx",
+      "added": "36",
+      "deleted": "65"
+    },
+    {
+      "path": "src/app/states/page.tsx",
+      "added": "20",
+      "deleted": "39"
+    },
+    {
+      "path": "src/app/terms/page.tsx",
+      "added": "24",
+      "deleted": "24"
+    },
+    {
+      "path": "src/components/account/account-panel.tsx",
+      "added": "203",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/documents/document-review-queue.tsx",
+      "added": "23",
+      "deleted": "3"
+    },
+    {
+      "path": "src/components/evidence/fact.tsx",
+      "added": "61",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/evidence/gap-ledger.tsx",
+      "added": "102",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/hunts/save-search-button.tsx",
+      "added": "18",
+      "deleted": "18"
+    },
+    {
+      "path": "src/components/hunts/saved-hunts.tsx",
+      "added": "93",
+      "deleted": "88"
+    },
+    {
+      "path": "src/components/listings/alternative-street-view.tsx",
+      "added": "10",
+      "deleted": "10"
+    },
+    {
+      "path": "src/components/listings/assessor-reading.tsx",
+      "added": "13",
+      "deleted": "13"
+    },
+    {
+      "path": "src/components/listings/discovery-card.tsx",
+      "added": "35",
+      "deleted": "35"
+    },
+    {
+      "path": "src/components/listings/discovery-evidence.tsx",
+      "added": "13",
+      "deleted": "13"
+    },
+    {
+      "path": "src/components/listings/discovery-map.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/components/listings/discovery-workbench.tsx",
+      "added": "142",
+      "deleted": "139"
+    },
+    {
+      "path": "src/components/listings/enrichment-view.tsx",
+      "added": "24",
+      "deleted": "24"
+    },
+    {
+      "path": "src/components/listings/interactive-street-view.tsx",
+      "added": "13",
+      "deleted": "13"
+    },
+    {
+      "path": "src/components/listings/listing-compare.tsx",
+      "added": "22",
+      "deleted": "22"
+    },
+    {
+      "path": "src/components/listings/listing-media.tsx",
+      "added": "26",
+      "deleted": "26"
+    },
+    {
+      "path": "src/components/listings/listing-thumbnail.tsx",
+      "added": "9",
+      "deleted": "9"
+    },
+    {
+      "path": "src/components/listings/listing-watchlist-toggle.tsx",
+      "added": "27",
+      "deleted": "7"
+    },
+    {
+      "path": "src/components/listings/nearby-comps.tsx",
+      "added": "25",
+      "deleted": "24"
+    },
+    {
+      "path": "src/components/listings/opportunity-signals-card.tsx",
+      "added": "43",
+      "deleted": "43"
+    },
+    {
+      "path": "src/components/listings/property-documents.tsx",
+      "added": "13",
+      "deleted": "13"
+    },
+    {
+      "path": "src/components/listings/property-drawer.tsx",
+      "added": "3",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/listings/property-evidence-visual.tsx",
+      "added": "6",
+      "deleted": "6"
+    },
+    {
+      "path": "src/components/listings/property-image.tsx",
+      "added": "10",
+      "deleted": "10"
+    },
+    {
+      "path": "src/components/listings/property-intelligence.tsx",
+      "added": "81",
+      "deleted": "26"
+    },
+    {
+      "path": "src/components/listings/sale-mechanics.tsx",
+      "added": "9",
+      "deleted": "9"
+    },
+    {
+      "path": "src/components/portfolio/portfolio-view.tsx",
+      "added": "103",
+      "deleted": "102"
+    },
+    {
+      "path": "src/components/research/decision-packet-view.tsx",
+      "added": "132",
+      "deleted": "2"
+    },
+    {
+      "path": "src/components/site/ai-comparison.tsx",
+      "added": "74",
+      "deleted": "67"
+    },
+    {
+      "path": "src/components/site/ai-knows.tsx",
+      "added": "0",
+      "deleted": "83"
+    },
+    {
+      "path": "src/components/site/case-studies.tsx",
+      "added": "0",
+      "deleted": "186"
+    },
+    {
+      "path": "src/components/site/catch-reveal.tsx",
+      "added": "212",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/site/data-mode-banner.tsx",
+      "added": "20",
+      "deleted": "36"
+    },
+    {
+      "path": "src/components/site/faq.tsx",
+      "added": "61",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/site/fastest-way.tsx",
+      "added": "0",
+      "deleted": "343"
+    },
+    {
+      "path": "src/components/site/final-cta.tsx",
+      "added": "10",
+      "deleted": "7"
+    },
+    {
+      "path": "src/components/site/gtm.tsx",
+      "added": "0",
+      "deleted": "273"
+    },
+    {
+      "path": "src/components/site/hero.tsx",
+      "added": "8",
+      "deleted": "8"
+    },
+    {
+      "path": "src/components/site/integrations.tsx",
+      "added": "0",
+      "deleted": "72"
+    },
+    {
+      "path": "src/components/site/local-workspace-entry.tsx",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "src/components/site/logo.tsx",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "src/components/site/second-look-showcase.tsx",
+      "added": "57",
+      "deleted": "74"
+    },
+    {
+      "path": "src/components/site/section-heading.tsx",
+      "added": "44",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/site/seo-schema.tsx",
+      "added": "2",
+      "deleted": "1"
+    },
+    {
+      "path": "src/components/site/site-footer.tsx",
+      "added": "33",
+      "deleted": "37"
+    },
+    {
+      "path": "src/components/site/site-header.tsx",
+      "added": "43",
+      "deleted": "69"
+    },
+    {
+      "path": "src/components/site/social-proof.tsx",
+      "added": "72",
+      "deleted": "69"
+    },
+    {
+      "path": "src/components/site/storyteller.tsx",
+      "added": "171",
+      "deleted": "188"
+    },
+    {
+      "path": "src/components/site/testimonial.tsx",
+      "added": "0",
+      "deleted": "31"
+    },
+    {
+      "path": "src/components/site/video-modal.tsx",
+      "added": "0",
+      "deleted": "483"
+    },
+    {
+      "path": "src/components/sources/source-network.tsx",
+      "added": "4",
+      "deleted": "2"
+    },
+    {
+      "path": "src/components/terminal/alerts-modal.tsx",
+      "added": "35",
+      "deleted": "35"
+    },
+    {
+      "path": "src/components/terminal/bidding-simulator.tsx",
+      "added": "472",
+      "deleted": "73"
+    },
+    {
+      "path": "src/components/terminal/docket-agent.tsx",
+      "added": "23",
+      "deleted": "23"
+    },
+    {
+      "path": "src/components/terminal/due-diligence-checklist.tsx",
+      "added": "105",
+      "deleted": "100"
+    },
+    {
+      "path": "src/components/terminal/interactive-terminal.tsx",
+      "added": "125",
+      "deleted": "125"
+    },
+    {
+      "path": "src/components/terminal/market-map.tsx",
+      "added": "40",
+      "deleted": "31"
+    },
+    {
+      "path": "src/components/terminal/notice-parser.tsx",
+      "added": "22",
+      "deleted": "22"
+    },
+    {
+      "path": "src/components/terminal/parcel-3d-visualizer.tsx",
+      "added": "83",
+      "deleted": "21"
+    },
+    {
+      "path": "src/components/terminal/property-data.ts",
+      "added": "16",
+      "deleted": "2"
+    },
+    {
+      "path": "src/components/terminal/property-drawer.tsx",
+      "added": "148",
+      "deleted": "129"
+    },
+    {
+      "path": "src/components/terminal/watchlist-modal.tsx",
+      "added": "43",
+      "deleted": "43"
+    },
+    {
+      "path": "src/components/ui/alert.tsx",
+      "added": "9",
+      "deleted": "1"
+    },
+    {
+      "path": "src/components/ui/badge.tsx",
+      "added": "8",
+      "deleted": "1"
+    },
+    {
+      "path": "src/components/ui/button.tsx",
+      "added": "3",
+      "deleted": "0"
+    },
+    {
+      "path": "src/components/ui/toast.tsx",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "src/components/workspace/workspace-shell.tsx",
+      "added": "44",
+      "deleted": "20"
+    },
+    {
+      "path": "src/lib/county-seo.js",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "src/lib/db/migrations/029_accounts.sql",
+      "added": "26",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/db/schema.sql",
+      "added": "29",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/enrichment-api.ts",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": "src/lib/evidence.ts",
+      "added": "80",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/form-rate-limit.ts",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "src/lib/listing-catch.ts",
+      "added": "7",
+      "deleted": "2"
+    },
+    {
+      "path": "src/lib/listing-links.ts",
+      "added": "200",
+      "deleted": "7"
+    },
+    {
+      "path": "src/lib/listing-status.ts",
+      "added": "5",
+      "deleted": "5"
+    },
+    {
+      "path": "src/lib/member-account.ts",
+      "added": "94",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/property-api.ts",
+      "added": "3",
+      "deleted": "1"
+    },
+    {
+      "path": "src/lib/score-bands.ts",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": "src/lib/state-coverage.ts",
+      "added": "128",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/triage-chips.ts",
+      "added": "4",
+      "deleted": "4"
+    },
+    {
+      "path": "src/lib/underwrite-scenario.ts",
+      "added": "5",
+      "deleted": "0"
+    },
+    {
+      "path": "src/lib/underwriting.ts",
+      "added": "1146",
+      "deleted": "10"
+    },
+    {
+      "path": "src/lib/workspace-proxy.ts",
+      "added": "27",
+      "deleted": "5"
+    },
+    {
+      "path": "src/lib/workspace-session.ts",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "test/ai/notice-parser.test.js",
+      "added": "9",
+      "deleted": "0"
+    },
+    {
+      "path": "test/assessor-harvest.test.js",
+      "added": "58",
+      "deleted": "0"
+    },
+    {
+      "path": "test/assessor-reading.test.js",
+      "added": "59",
+      "deleted": "0"
+    },
+    {
+      "path": "test/ca-controller-tax-sale.test.js",
+      "added": "23",
+      "deleted": "1"
+    },
+    {
+      "path": "test/cash_to_close_complete.test.js",
+      "added": "561",
+      "deleted": "0"
+    },
+    {
+      "path": "test/challenger-m4-adversary.test.mjs",
+      "added": "14",
+      "deleted": "0"
+    },
+    {
+      "path": "test/circuit-breaker.test.js",
+      "added": "183",
+      "deleted": "0"
+    },
+    {
+      "path": "test/civilview.test.js",
+      "added": "3",
+      "deleted": "0"
+    },
+    {
+      "path": "test/cls-reserved-space.test.mjs",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "test/county_platform_adapters.test.js",
+      "added": "616",
+      "deleted": "0"
+    },
+    {
+      "path": "test/db/accounts-postgres.test.js",
+      "added": "75",
+      "deleted": "0"
+    },
+    {
+      "path": "test/decision-packet-scenario-export.test.js",
+      "added": "213",
+      "deleted": "0"
+    },
+    {
+      "path": "test/decision_packet_export.test.js",
+      "added": "74",
+      "deleted": "0"
+    },
+    {
+      "path": "test/design-tokens.test.mjs",
+      "added": "100",
+      "deleted": "0"
+    },
+    {
+      "path": "test/discovery-acceptance-query.test.js",
+      "added": "21",
+      "deleted": "0"
+    },
+    {
+      "path": "test/discovery-backend.test.js",
+      "added": "84",
+      "deleted": "0"
+    },
+    {
+      "path": "test/discovery/abandoned-job-sweep.test.js",
+      "added": "4",
+      "deleted": "0"
+    },
+    {
+      "path": "test/discovery/evidence-ledger.test.js",
+      "added": "233",
+      "deleted": "0"
+    },
+    {
+      "path": "test/document-review-pg-store.test.js",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "test/document-review-route.test.js",
+      "added": "65",
+      "deleted": "0"
+    },
+    {
+      "path": "test/document-review-split-pane-pipeline.test.js",
+      "added": "275",
+      "deleted": "0"
+    },
+    {
+      "path": "test/email_notice_collector.test.js",
+      "added": "107",
+      "deleted": "2"
+    },
+    {
+      "path": "test/embedded-extractor.test.js",
+      "added": "124",
+      "deleted": "0"
+    },
+    {
+      "path": "test/enrichment-gateway.test.js",
+      "added": "12",
+      "deleted": "0"
+    },
+    {
+      "path": "test/enrichment/public-benchmark-consensus.test.js",
+      "added": "134",
+      "deleted": "0"
+    },
+    {
+      "path": "test/enrichment_geocoding.test.js",
+      "added": "432",
+      "deleted": "1"
+    },
+    {
+      "path": "test/evidence.test.mjs",
+      "added": "43",
+      "deleted": "0"
+    },
+    {
+      "path": "test/fixtures/email-notices/fl-foreclosure-sale.eml",
+      "added": "23",
+      "deleted": "0"
+    },
+    {
+      "path": "test/fixtures/email-notices/il-foreclosure-sale.eml",
+      "added": "23",
+      "deleted": "0"
+    },
+    {
+      "path": "test/fixtures/email-notices/tx-trustee-sale.eml",
+      "added": "23",
+      "deleted": "0"
+    },
+    {
+      "path": "test/fl-dor-cadastral.test.js",
+      "added": "23",
+      "deleted": "0"
+    },
+    {
+      "path": "test/form-submissions.test.js",
+      "added": "2",
+      "deleted": "2"
+    },
+    {
+      "path": "test/honest-empty-state.test.js",
+      "added": "3",
+      "deleted": "3"
+    },
+    {
+      "path": "test/hud-safmr.test.js",
+      "added": "130",
+      "deleted": "0"
+    },
+    {
+      "path": "test/layout_a11y_compliance.test.js",
+      "added": "18",
+      "deleted": "0"
+    },
+    {
+      "path": "test/listing-catch.test.mjs",
+      "added": "14",
+      "deleted": "0"
+    },
+    {
+      "path": "test/listing-status.test.mjs",
+      "added": "11",
+      "deleted": "7"
+    },
+    {
+      "path": "test/local-parcel-index.test.js",
+      "added": "217",
+      "deleted": "0"
+    },
+    {
+      "path": "test/local-parcel-indexer.test.js",
+      "added": "175",
+      "deleted": "0"
+    },
+    {
+      "path": "test/member-accounts.test.js",
+      "added": "175",
+      "deleted": "0"
+    },
+    {
+      "path": "test/municipal-code-enforcement-expansion.test.js",
+      "added": "575",
+      "deleted": "0"
+    },
+    {
+      "path": "test/municipal_liens.test.js",
+      "added": "8",
+      "deleted": "0"
+    },
+    {
+      "path": "test/nationwide-coverage.test.js",
+      "added": "38",
+      "deleted": "0"
+    },
+    {
+      "path": "test/next_ui_e2e_test.py",
+      "added": "51",
+      "deleted": "55"
+    },
+    {
+      "path": "test/production-boot.test.js",
+      "added": "22",
+      "deleted": "6"
+    },
+    {
+      "path": "test/property-api-proxy-inventory.test.js",
+      "added": "1",
+      "deleted": "1"
+    },
+    {
+      "path": "test/public-compliance-pages.test.js",
+      "added": "5",
+      "deleted": "6"
+    },
+    {
+      "path": "test/reassessment-shock-underwriting.test.js",
+      "added": "351",
+      "deleted": "0"
+    },
+    {
+      "path": "test/recorder_platform_adapters.test.js",
+      "added": "460",
+      "deleted": "0"
+    },
+    {
+      "path": "test/routes/parcel-boundary-helpers.test.js",
+      "added": "26",
+      "deleted": "0"
+    },
+    {
+      "path": "test/routes/parse.test.js",
+      "added": "10",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scheduler-checkpoint.test.js",
+      "added": "52",
+      "deleted": "1"
+    },
+    {
+      "path": "test/scraper-power-report.test.js",
+      "added": "102",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scraper-reliability.test.js",
+      "added": "35",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/dev-cache-snapshots.test.js",
+      "added": "485",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/drift-detector.test.js",
+      "added": "355",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/federal-scrapers.test.js",
+      "added": "180",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/hud-documents.test.js",
+      "added": "1",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/selector-store.test.js",
+      "added": "128",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapers/source-policy-helpers.test.js",
+      "added": "40",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapling-adaptive.test.js",
+      "added": "70",
+      "deleted": "0"
+    },
+    {
+      "path": "test/scrapy-webhook.test.js",
+      "added": "215",
+      "deleted": "6"
+    },
+    {
+      "path": "test/second_look_engine.test.js",
+      "added": "22",
+      "deleted": "0"
+    },
+    {
+      "path": "test/server.test.js",
+      "added": "67",
+      "deleted": "0"
+    },
+    {
+      "path": "test/servicelink-archive-import.test.js",
+      "added": "310",
+      "deleted": "0"
+    },
+    {
+      "path": "test/sheriff-sales-redirects.test.js",
+      "added": "41",
+      "deleted": "0"
+    },
+    {
+      "path": "test/source-integrity.test.mjs",
+      "added": "140",
+      "deleted": "2"
+    },
+    {
+      "path": "test/source-network-email-intake.test.js",
+      "added": "148",
+      "deleted": "0"
+    },
+    {
+      "path": "test/statutory-distress-catalog.test.js",
+      "added": "192",
+      "deleted": "0"
+    },
+    {
+      "path": "test/swarm/dag-orchestrator.test.js",
+      "added": "146",
+      "deleted": "0"
+    },
+    {
+      "path": "test/swarm/trigger-weights.test.js",
+      "added": "105",
+      "deleted": "0"
+    },
+    {
+      "path": "test/tax-deed-simulator-ui.test.js",
+      "added": "217",
+      "deleted": "0"
+    },
+    {
+      "path": "test/test-wiring.test.js",
+      "added": "28",
+      "deleted": "5"
+    },
+    {
+      "path": "test/texas-tax-sale-wiring.test.js",
+      "added": "265",
+      "deleted": "0"
+    },
+    {
+      "path": "test/title_risk_engine.test.js",
+      "added": "33",
+      "deleted": "0"
+    },
+    {
+      "path": "test/underwriting-truth.test.mjs",
+      "added": "132",
+      "deleted": "0"
+    },
+    {
+      "path": "test/zyte-client.test.js",
+      "added": "115",
+      "deleted": "0"
+    }
+  ]
+}

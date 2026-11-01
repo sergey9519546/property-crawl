@@ -200,7 +200,7 @@ function parseHarrisClerkNotice(noticeHtmlOrText = '', options = {}) {
 
   // Calculate First Tuesday from posting date per Texas Property Code § 51.002
   const calculatedSaleDate = postingDate ? calculateTexasForeclosureSaleDate(postingDate) : null;
-  const saleDate = explicitSaleDate || calculatedSaleDate || null;
+  const saleDate = explicitSaleDate || null;
 
   // 4. Debtor / Mortgagor (Borrower)
   let debtor = null;
@@ -316,6 +316,7 @@ function parseHarrisClerkNotice(noticeHtmlOrText = '', options = {}) {
     instrumentNumber: fileNumber, // alias for standard pipeline
     postingDate: postingDate || null,
     saleDate: saleDate || null,
+    earliestEligibleSaleDate: calculatedSaleDate,
     debtor: debtor || null,
     grantor: debtor || null, // alias
     trustee: trustee || null,

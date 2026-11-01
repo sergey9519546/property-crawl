@@ -25,7 +25,10 @@
 
 const { createEnrichmentTriageGraph } = require('./capability-graph');
 const { triggerWeightManager } = require('./trigger-weights');
-const { getHpiIndex, getAppreciationMultiplier } = require('../intelligence/fhfa-hpi');
+const { computePublicBenchmarkConsensus } = require('../enrichment/public-benchmark-consensus');
+const { geocodeAddress } = require('../enrichment/geocoder');
+const { queryArcgisParcel } = require('../enrichment/arcgis-parcels');
+const { lookupCodeViolations } = require('../enrichment/code-enforcement');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 const { arbitrateTitleRisk } = require('../intelligence/title-risk-engine');
 
@@ -34,259 +37,54 @@ const DEFAULT_NODE_TIMEOUT_MS = 5000;
 /**
  * Node definitions with schemas, dependency declarations, and fault tolerance policies.
  */
+const number = (value) => typeof value === 'number' && Number.isFinite(value);
+const coordinates = (lat, lng) => number(lat) && number(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
+const evidence = (source, observedAt, reason) => ({status: reason ? 'unobserved' : 'source_observed', source, observedAt: observedAt || null, reason: reason || null});
+const nullable = (value) => value === null || number(value);
+const definition = (name, depends_on, outputs, handler, validateOutput, optional = true) => ({
+  name, depends_on, outputs, optional,
+  validateInput: ctx => ({valid: Boolean(ctx && typeof ctx === 'object')}),
+  validateOutput, defaultHandler: handler,
+});
 const ENRICHMENT_NODE_DEFS = {
-  geocode: {
-    name: 'geocode',
-    description: 'Census Geocoder & situs resolution',
-    inputs: ['address', 'situs'],
-    outputs: ['lat', 'lng', 'fips'],
-    depends_on: [],
-    optional: false,
-    validateInput: (ctx) => {
-      const hasAddr = typeof ctx.address === 'string' && ctx.address.trim().length > 0;
-      const hasSitus = typeof ctx.situs === 'string' && ctx.situs.trim().length > 0;
-      if (!hasAddr && !hasSitus) {
-        return { valid: false, error: 'geocode requires either "address" or "situs" in context' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'geocode must return an object' };
-      const hasCoord = (Number.isFinite(Number(res.lat)) && Number.isFinite(Number(res.lng))) || res.lat === null;
-      return { valid: hasCoord };
-    },
-    defaultHandler: async (ctx) => {
-      // If already geocoded in context, reuse
-      if (Number.isFinite(Number(ctx.lat)) && Number.isFinite(Number(ctx.lng))) {
-        return {
-          lat: Number(ctx.lat),
-          lng: Number(ctx.lng),
-          fips: ctx.fips || '12095', // default county FIPS if present
-        };
-      }
-      // Minimal deterministic fallback geocoder if external endpoint not called
-      return {
-        lat: 28.5383,
-        lng: -81.3792,
-        fips: ctx.fips || '12095',
-      };
-    },
-  },
-
-  cadastral_parcel: {
-    name: 'cadastral_parcel',
-    description: 'ArcGIS County & Statewide Cadastral Parcels',
-    inputs: ['lat', 'lng', 'apn'],
-    outputs: ['parcelGeometry', 'lotAcres'],
-    depends_on: ['geocode'],
-    optional: true,
-    validateInput: (ctx) => {
-      const hasCoords = Number.isFinite(Number(ctx.lat)) && Number.isFinite(Number(ctx.lng));
-      const hasApn = typeof ctx.apn === 'string' && ctx.apn.trim().length > 0;
-      if (!hasCoords && !hasApn) {
-        return { valid: false, error: 'cadastral_parcel requires coordinates or apn' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'cadastral_parcel must return an object' };
-      return { valid: 'parcelGeometry' in res && 'lotAcres' in res };
-    },
-    defaultHandler: async (ctx) => {
-      return {
-        parcelGeometry: ctx.parcelGeometry || { type: 'Polygon', coordinates: [] },
-        lotAcres: Number.isFinite(Number(ctx.lotAcres)) ? Number(ctx.lotAcres) : 0.25,
-      };
-    },
-  },
-
-  hpi_benchmark: {
-    name: 'hpi_benchmark',
-    description: 'FHFA House Price Index quarterly appreciation benchmark',
-    inputs: ['fips', 'saleDate'],
-    outputs: ['hpiIndex', 'hpiAppreciationPct'],
-    depends_on: ['geocode'],
-    optional: true,
-    validateInput: (ctx) => {
-      const hasFips = typeof ctx.fips === 'string' || typeof ctx.state === 'string';
-      if (!hasFips) {
-        return { valid: false, error: 'hpi_benchmark requires fips or state' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'hpi_benchmark must return an object' };
-      return { valid: 'hpiIndex' in res && 'hpiAppreciationPct' in res };
-    },
-    defaultHandler: async (ctx) => {
-      const state = (ctx.state || 'FL').toUpperCase();
-      const currentHpi = getHpiIndex(state, '2026Q1') || 490.0;
-      const baselineHpi = getHpiIndex(state, '2020Q2') || 330.0;
-      const mult = getAppreciationMultiplier(state, '2020Q2', '2026Q1');
-      const appreciationPct = Math.round((mult - 1.0) * 1000) / 10;
-      return {
-        hpiIndex: currentHpi,
-        hpiAppreciationPct: appreciationPct,
-      };
-    },
-  },
-
-  hud_safmr: {
-    name: 'hud_safmr',
-    description: 'HUD Small Area Fair Market Rent statutory floor',
-    inputs: ['zip', 'fips'],
-    outputs: ['fmr0br', 'fmr1br', 'fmr2br', 'fmr3br', 'fmr4br'],
-    depends_on: ['geocode'],
-    optional: true,
-    validateInput: (ctx) => {
-      const zip = ctx.zip || (ctx.address && (ctx.address.match(/\b\d{5}\b/) || [])[0]);
-      if (!zip) {
-        return { valid: false, error: 'hud_safmr requires a 5-digit zip code' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'hud_safmr must return an object' };
-      return { valid: 'fmr2br' in res };
-    },
-    defaultHandler: async (ctx) => {
-      const zip = ctx.zip || (ctx.address && (ctx.address.match(/\b\d{5}\b/) || [])[0]) || '32801';
-      const benchmark = getHudSafmrBenchmark({ zip, bedrooms: 2 });
-      if (benchmark && benchmark.bedroomRents) {
-        return {
-          fmr0br: benchmark.bedroomRents[0] || 1200,
-          fmr1br: benchmark.bedroomRents[1] || 1350,
-          fmr2br: benchmark.fairMarketRent || 1600,
-          fmr3br: benchmark.bedroomRents[3] || 2100,
-          fmr4br: benchmark.bedroomRents[4] || 2400,
-        };
-      }
-      return {
-        fmr0br: 1200,
-        fmr1br: 1350,
-        fmr2br: 1600,
-        fmr3br: 2100,
-        fmr4br: 2400,
-      };
-    },
-  },
-
-  code_enforcement: {
-    name: 'code_enforcement',
-    description: 'SODA Municipal Code Enforcement & Super-Priority Liens',
-    inputs: ['fips', 'address'],
-    outputs: ['openViolations', 'demolitionOrders', 'superLienFlag'],
-    depends_on: ['geocode'],
-    optional: true,
-    validateInput: (ctx) => {
-      const hasAddr = typeof ctx.address === 'string' && ctx.address.trim().length > 0;
-      if (!hasAddr && !ctx.fips) {
-        return { valid: false, error: 'code_enforcement requires address or fips' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'code_enforcement must return an object' };
-      return { valid: 'openViolations' in res && 'demolitionOrders' in res && 'superLienFlag' in res };
-    },
-    defaultHandler: async (ctx) => {
-      // Return unobserved/clear records unless specified in context
-      return {
-        openViolations: Number.isFinite(ctx.openViolations) ? ctx.openViolations : 0,
-        demolitionOrders: Number.isFinite(ctx.demolitionOrders) ? ctx.demolitionOrders : 0,
-        superLienFlag: Boolean(ctx.superLienFlag),
-      };
-    },
-  },
-
-  title_risk: {
-    name: 'title_risk',
-    description: 'Title Risk & Surviving Senior Lien Arbitration',
-    inputs: ['property', 'superLienFlag'],
-    outputs: ['riskScore', 'riskFactors'],
-    depends_on: ['code_enforcement'],
-    optional: false,
-    validateInput: (ctx) => {
-      // Requires property or state
-      if (!ctx.property && !ctx.state && !ctx.address) {
-        return { valid: false, error: 'title_risk requires property object or state/address' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'title_risk must return an object' };
-      return { valid: Number.isFinite(res.riskScore) && Array.isArray(res.riskFactors) };
-    },
-    defaultHandler: async (ctx) => {
-      const prop = ctx.property || {
-        state: ctx.state || 'FL',
-        plaintiff: ctx.plaintiff || 'FIRST BANK',
-        noticeText: ctx.noticeText || '',
-      };
-      const titleRes = arbitrateTitleRisk(prop);
-      const riskFactors = [...(titleRes.titleWarnings || [])];
-      if (ctx.superLienFlag) {
-        riskFactors.push('MUNICIPAL SUPER-LIEN DETECTED: Demolition or utility liens survive sale');
-      }
-
-      let score = 20; // default low risk
-      if (titleRes.riskLevel === 'CRITICAL' || ctx.superLienFlag) score = 90;
-      else if (titleRes.riskLevel === 'HIGH') score = 70;
-      else if (titleRes.riskLevel === 'MODERATE') score = 45;
-
-      return {
-        riskScore: score,
-        riskFactors,
-      };
-    },
-  },
-
-  dossier_synthesis: {
-    name: 'dossier_synthesis',
-    description: 'Property dossier synthesis combining all verified intelligence branches',
-    inputs: ['title_risk', 'cadastral_parcel', 'hpi_benchmark', 'hud_safmr'],
-    outputs: ['dossier'],
-    depends_on: ['title_risk', 'cadastral_parcel', 'hpi_benchmark', 'hud_safmr'],
-    optional: false,
-    validateInput: (ctx) => {
-      // Must have title risk or geocoded context
-      if (!ctx.lat && !ctx.riskScore && !ctx.address) {
-        return { valid: false, error: 'dossier_synthesis requires geocoded address or risk inputs' };
-      }
-      return { valid: true };
-    },
-    validateOutput: (res) => {
-      if (!res || typeof res !== 'object') return { valid: false, error: 'dossier_synthesis must return an object' };
-      return { valid: 'dossier' in res && typeof res.dossier === 'object' };
-    },
-    defaultHandler: async (ctx) => {
-      const dossier = {
-        synthesizedAt: new Date().toISOString(),
-        address: ctx.address || ctx.situs || null,
-        coordinates: { lat: ctx.lat || null, lng: ctx.lng || null },
-        fips: ctx.fips || null,
-        cadastral: {
-          lotAcres: ctx.lotAcres || null,
-          hasGeometry: Boolean(ctx.parcelGeometry),
-        },
-        valuationBenchmarks: {
-          hpiIndex: ctx.hpiIndex || null,
-          hpiAppreciationPct: ctx.hpiAppreciationPct || null,
-          hudSafmr2br: ctx.fmr2br || null,
-        },
-        codeEnforcement: {
-          openViolations: ctx.openViolations || 0,
-          demolitionOrders: ctx.demolitionOrders || 0,
-          superLienFlag: Boolean(ctx.superLienFlag),
-        },
-        titleRisk: {
-          riskScore: ctx.riskScore || 20,
-          riskFactors: ctx.riskFactors || [],
-        },
-      };
-      return { dossier };
-    },
-  },
+  geocode: definition('geocode', [], ['lat','lng','fips'], async (ctx, options) => {
+    let result = coordinates(ctx.lat, ctx.lng) ? {lat:ctx.lat,lng:ctx.lng,fips:ctx.fips,source:'Provided coordinates',timestamp:ctx.sourceObservedAt} : null;
+    if (!result && options.allowNetwork === true && (ctx.address || ctx.situs)) result = await geocodeAddress(ctx.address || ctx.situs, {fetchFn:options.fetchFn, signal:options.signal});
+    const valid = result && coordinates(result.lat,result.lng);
+    return {lat:valid ? result.lat : null,lng:valid ? result.lng : null,fips:valid && /^\d{5}$/.test(result.fips || '') ? result.fips : null, geocodeEvidence:evidence(result?.source || 'US_CENSUS_GEOCODER',result?.timestamp,valid ? null : 'No observed geocode result')};
+  }, res => ({valid: Boolean(res && ((coordinates(res.lat,res.lng)) || (res.lat === null && res.lng === null && res.geocodeEvidence?.reason)) && (res.fips === null || /^\d{5}$/.test(res.fips)))}), false),
+  cadastral_parcel: definition('cadastral_parcel', ['geocode'], ['parcelGeometry','lotAcres'], async (ctx, options) => {
+    const parcel = ctx.parcel || (options.allowNetwork === true ? await queryArcgisParcel({...ctx,signal:options.signal,fetchFn:options.fetchFn}) : null);
+    return {parcelGeometry:parcel?.geometry || null,lotAcres:number(parcel?.lotAcres) && parcel.lotAcres >= 0 ? parcel.lotAcres : null,parcelEvidence:evidence(parcel?.source || 'County cadastral records',parcel?.observedAt,parcel ? null : 'Parcel not observed')};
+  }, res => ({valid:Boolean(res && nullable(res.lotAcres) && (res.lotAcres === null || res.lotAcres >= 0) && (res.parcelGeometry === null || ['Polygon','MultiPolygon'].includes(res.parcelGeometry?.type)))})),
+  hpi_benchmark: definition('hpi_benchmark', ['geocode'], ['hpiIndex','hpiAppreciationPct'], async (ctx, options) => {
+    const consensus=computePublicBenchmarkConsensus(ctx,{hpiSeries:options.hpiSeries,currentPeriod:options.currentPeriod});
+    const trajectory=consensus.assessedTrajectory;
+    return {hpiIndex:trajectory?.currentHpi ?? null,hpiAppreciationPct:trajectory?.hpiAppreciationPct ?? null,hpiEvidence:evidence('FHFA state-quarter series',options.hpiSeries?.retrievedAt,trajectory ? null : consensus.unobservedReasons.join(' '))};
+  }, res=>({valid:Boolean(res && nullable(res.hpiIndex) && nullable(res.hpiAppreciationPct))})),
+  hud_safmr: definition('hud_safmr', ['geocode'], ['fmr0br','fmr1br','fmr2br','fmr3br','fmr4br'], async ctx => {
+    const benchmark=getHudSafmrBenchmark({zip:ctx.zip,bedrooms:2});
+    return {...Object.fromEntries([0,1,2,3,4].map(i=>[`fmr${i}br`,benchmark?.bedroomRents?.[i] ?? null])),hudEvidence:evidence(benchmark?.source || 'HUD SAFMR',benchmark?.asOfFiscalYear,benchmark ? null : 'ZIP benchmark unavailable')};
+  }, res=>({valid:Boolean(res && [0,1,2,3,4].every(i=>nullable(res[`fmr${i}br`]) && (res[`fmr${i}br`] === null || res[`fmr${i}br`] > 0)))})),
+  code_enforcement: definition('code_enforcement', ['geocode'], ['openViolations','demolitionOrders','superLienFlag'], async (ctx, options) => {
+    const observed=ctx.municipalRecords || (options.allowNetwork === true ? await lookupCodeViolations({...ctx,signal:options.signal,fetchFn:options.fetchFn}) : null);
+    const covered=observed?.evidenceStatus === 'source_observed';
+    return {openViolations:covered ? observed.openViolationsCount : null,demolitionOrders:covered ? observed.violations.filter(v=>v.isDemolition || v.isCondemned).length : null,superLienFlag:covered && observed.hasDemolitionRisk === true ? true : null,municipalEvidence:evidence(observed?.source || 'Municipal records',observed?.queriedAt,covered ? null : 'Municipal coverage or query result unobserved')};
+  }, res=>({valid:Boolean(res && nullable(res.openViolations) && nullable(res.demolitionOrders) && (res.superLienFlag === null || typeof res.superLienFlag === 'boolean'))})),
+  title_risk: definition('title_risk', ['code_enforcement'], ['riskScore','riskFactors'], async ctx => {
+    const prop=ctx.property || ctx;
+    if (!prop.plaintiff && !prop.raw && !prop.description) return {riskScore:null,riskFactors:['Title evidence is unobserved'],titleEvidence:evidence('Title text patterns',null,'No title evidence')};
+    const risk=arbitrateTitleRisk(prop,ctx.noticeText || '');
+    return {riskScore:({LOW:20,MODERATE:45,HIGH:70,CRITICAL:90})[risk.riskLevel] ?? null,riskFactors:risk.titleWarnings || [],titleEvidence:{status:'model_derived',source:'Title text patterns',reason:'Pattern signal only; not a title conclusion'}};
+  }, res=>({valid:Boolean(res && nullable(res.riskScore) && (res.riskScore === null || (res.riskScore >= 0 && res.riskScore <= 100)) && Array.isArray(res.riskFactors))}),false),
+  dossier_synthesis: definition('dossier_synthesis',['title_risk','cadastral_parcel','hpi_benchmark','hud_safmr'],['dossier'],async ctx=>({dossier:{
+    synthesizedAt:new Date().toISOString(),address:ctx.address || ctx.situs || null,coordinates:{lat:ctx.lat ?? null,lng:ctx.lng ?? null},fips:ctx.fips ?? null,
+    cadastral:{lotAcres:ctx.lotAcres ?? null,hasGeometry:ctx.parcelGeometry ? true : null},
+    valuationBenchmarks:{hpiIndex:ctx.hpiIndex ?? null,hpiAppreciationPct:ctx.hpiAppreciationPct ?? null,hudSafmr2br:ctx.fmr2br ?? null},
+    codeEnforcement:{openViolations:ctx.openViolations ?? null,demolitionOrders:ctx.demolitionOrders ?? null,superLienFlag:ctx.superLienFlag ?? null},
+    titleRisk:{riskScore:ctx.riskScore ?? null,riskFactors:ctx.riskFactors || []},
+    evidence:Object.fromEntries(['geocodeEvidence','parcelEvidence','hpiEvidence','hudEvidence','municipalEvidence','titleEvidence'].map(key=>[key,ctx[key] || {status:'unavailable',reason:'Provider did not complete'}])),
+  }}),res=>({valid:Boolean(res?.dossier && typeof res.dossier === 'object')}),false),
 };
 
 class DagOrchestrator {
@@ -345,7 +143,7 @@ class DagOrchestrator {
       defaultHandler: async () => ({}),
     };
 
-    const handler = this.handlers[nodeName] || def.defaultHandler;
+    const handler = options.handlers?.[nodeName] || this.handlers[nodeName] || def.defaultHandler;
     const timeoutMs = Number.isFinite(options.nodeTimeoutMs) ? options.nodeTimeoutMs : this.nodeTimeoutMs;
     const startTime = Date.now();
 
@@ -375,14 +173,16 @@ class DagOrchestrator {
 
     // 2. Execution with Timeout
     let timer;
+    const controller = new AbortController();
     try {
       const timeoutPromise = new Promise((_, reject) => {
         timer = setTimeout(() => {
+          controller.abort();
           reject(new Error(`Node "${nodeName}" timed out after ${timeoutMs}ms`));
         }, timeoutMs);
       });
 
-      const execPromise = Promise.resolve(handler(context, options));
+      const execPromise = Promise.resolve(handler(context, {...options, signal:controller.signal}));
       const rawOutput = await Promise.race([execPromise, timeoutPromise]);
 
       const durationMs = Date.now() - startTime;
@@ -464,6 +264,7 @@ class DagOrchestrator {
     const completedNodes = [];
     const failedNodes = [];
     const skippedNodes = [];
+    const blockedByRequired = new Set();
     const stageSummaries = [];
 
     let overallSuccess = true;
@@ -476,8 +277,9 @@ class DagOrchestrator {
       const nodePromises = stageNodes.map(nodeName => {
         const def = this.nodeDefs[nodeName];
         // Check if required dependencies were satisfied
-        const unmetDep = def?.depends_on?.find(dep => failedNodes.includes(dep) && !this.nodeDefs[dep]?.optional);
+        const unmetDep = def?.depends_on?.find(dep => blockedByRequired.has(dep) || ((failedNodes.includes(dep) || skippedNodes.includes(dep)) && !this.nodeDefs[dep]?.optional));
         if (unmetDep) {
+          blockedByRequired.add(nodeName);
           return Promise.resolve({
             nodeName,
             status: 'skipped',
@@ -514,6 +316,7 @@ class DagOrchestrator {
           Object.assign(accumulatedContext, item.outputs);
         } else if (item.status === 'skipped') {
           skippedNodes.push(name);
+          if (!this.nodeDefs[name]?.optional) overallSuccess = false;
         } else {
           failedNodes.push(name);
           const def = this.nodeDefs[name];

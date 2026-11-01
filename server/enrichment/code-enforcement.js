@@ -545,6 +545,7 @@ async function lookupCodeViolations({
   parcelId,
   address,
   timeoutMs = 4000,
+  signal,
   fetchFn = globalThis.fetch
 } = {}) {
   const portal = resolveMunicipalPortal({ state, county, city });
@@ -597,7 +598,7 @@ async function lookupCodeViolations({
       }
     };
     if (controller) {
-      fetchOptions.signal = controller.signal;
+      fetchOptions.signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     }
 
     const res = await fetchFn(url, fetchOptions);
@@ -615,7 +616,7 @@ async function lookupCodeViolations({
     }
 
     const json = await res.json();
-    return parseCodeViolationsResponse(json, portal);
+    return {...parseCodeViolationsResponse(json, portal), evidenceStatus:'source_observed'};
   } catch (err) {
     return {
       source: portal.source,

@@ -1820,6 +1820,28 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
                 "closing the drawer must return focus to the control that opened it",
             )
 
+    def test_unknown_senior_debt_keeps_acquisition_cost_incomplete(self):
+        self.page.goto(f"{BASE_URL}/listings/{self.primary_listing['id']}", wait_until="domcontentloaded")
+        binder = self.page.locator("#due-diligence-binder")
+        expect(binder).to_be_visible(timeout=30000)
+        button = binder.get_by_role("button", name="Adjust Lien Assumptions", exact=True)
+        if button.count():
+            button.click()
+        binder.get_by_label("Simulated Winning Bid ($)", exact=True).fill("100000")
+        binder.get_by_label("Foreclosing Lien Type", exact=True).select_option("second_mortgage")
+        binder.get_by_label("Delinquent Real Property Taxes ($)", exact=True).fill("0")
+        senior = binder.get_by_label("Surviving Senior Mortgage ($)", exact=True)
+        senior.fill("")
+        expect(binder.get_by_text("Incomplete", exact=True)).to_be_visible()
+        expect(binder.get_by_text("Unknown", exact=True)).to_be_visible()
+        senior.fill("200000")
+        expect(binder.get_by_text("$300,000", exact=True)).to_be_visible()
+        senior.fill("0")
+        expect(binder.get_by_text("Incomplete", exact=True)).to_have_count(0)
+        senior.fill("")
+        expect(binder.get_by_text("Incomplete", exact=True)).to_be_visible()
+        self.assertNotIn("Zero surviving lien debt", binder.inner_text())
+
     def test_property_drawer_is_an_accessible_escape_closeable_dialog(self):
         self.wait_for_live_feed()
         self.page.get_by_role("button", name="Underwrite Deal").first.click()

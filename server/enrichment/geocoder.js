@@ -132,6 +132,7 @@ async function geocodeAddress(address, options = {}) {
 
   try {
     const res = await fetchFn(queryUrl, {
+      signal: options.signal || AbortSignal.timeout(5000),
       method: 'GET',
       headers: {
         'Accept': 'application/json',

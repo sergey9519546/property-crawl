@@ -1,3 +1,4 @@
+const { executeDag } = require('../swarm/dag-orchestrator');
 const db = require('../db/client');
 const { createHash } = require('node:crypto');
 const { loadObservationsForRecord } = require('../db/observations-persistence');
@@ -76,7 +77,8 @@ function createPropertyIntelligenceHandler(dependencies = {}) {
       if (!authorized) {
         return res.json({ ...publicPayload, historyUnavailable, researchRestricted: true });
       }
-      return res.json({ ...publicPayload, ...extensions, historyUnavailable });
+      const execution = await executeDag({...listing,property:listing,parcel:evidence?.result?.parcel || null},{allowNetwork:false});
+      return res.json({ ...publicPayload, ...extensions, historyUnavailable, enrichmentExecution:{success:execution.success,dossier:execution.context.dossier || null,telemetry:execution.telemetry} });
     } catch (error) {
       console.error('[Property Intelligence]', error.message);
       return res.status(503).json({ error: 'Property research is temporarily unavailable. Stored listing evidence was preserved.' });

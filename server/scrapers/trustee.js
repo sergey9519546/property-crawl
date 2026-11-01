@@ -1,3 +1,4 @@
+const { recordSnapshot } = require('./discovery-snapshots');
 // server/scrapers/trustee.js
 //
 // Trustee's Sale Non-Judicial Foreclosure Scraper.
@@ -132,6 +133,8 @@ class TrusteeSaleScraper extends BaseScraper {
 
             for (const rec of records) {
               if (!rec || !rec.recordingNumber) continue;
+              await recordSnapshot({sourceKey:'trustee',recordId:rec.recordingNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,recordedDate:rec.recordedDate || null}},{snapshotDir:options.snapshotDir});
+              if (rec.distressStage === 'PRE_FORECLOSURE' || /NOTICE OF DEFAULT|LIS PENDENS|CERTIFICATE OF SALE/i.test(rec.docType || '')) continue;
               const ref = rec.recordingNumber.replace(/[^A-Za-z0-9-]/g, '');
               const itemKey = `AZ-Maricopa-${ref}-${rec.docType}`;
               if (seenRefs.has(itemKey)) continue;
@@ -141,6 +144,7 @@ class TrusteeSaleScraper extends BaseScraper {
                 apn: rec.apn || null,
                 docType: rec.docType || null,
                 distressStage: rec.distressStage || null,
+                recordedDate: rec.recordedDate || null,
                 grantor: rec.grantor || null,
                 grantee: rec.grantee || null,
                 recordingNumber: rec.recordingNumber || null,
@@ -154,13 +158,13 @@ class TrusteeSaleScraper extends BaseScraper {
                 county: 'Maricopa',
                 city: null,
                 zip: null,
-                address: rec.legalDescription || `Maricopa County Recorded Instrument ${rec.recordingNumber}`,
+                address: rec.situsAddress || rec.legalDescription || null,
                 apn: rec.apn || null,
                 openingBid: null, // Zero-Fabrication: statutory notice records debt, not opening bid
                 estLow: null,
                 estHigh: null,
                 assessed: null,
-                saleDate: rec.recordedDate ? new Date(rec.recordedDate).toISOString().slice(0, 10) : null,
+                saleDate: rec.saleDate || null,
                 plaintiff: rec.grantee || null,
                 defendant: rec.grantor || null,
                 judgment: null,
@@ -202,6 +206,7 @@ class TrusteeSaleScraper extends BaseScraper {
 
           for (const rec of records) {
             if (!rec || !rec.fileNumber) continue;
+            await recordSnapshot({sourceKey:'trustee',recordId:rec.fileNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,postingDate:rec.postingDate || null,earliestEligibleSaleDate:rec.earliestEligibleSaleDate || null}},{snapshotDir:options.snapshotDir});
             const ref = rec.fileNumber.replace(/[^A-Za-z0-9-]/g, '');
             const itemKey = `TX-Harris-${ref}`;
             if (seenRefs.has(itemKey)) continue;
@@ -212,6 +217,7 @@ class TrusteeSaleScraper extends BaseScraper {
               docType: rec.docType || null,
               distressStage: rec.distressStage || null,
               postingDate: rec.postingDate || null,
+              earliestEligibleSaleDate: rec.earliestEligibleSaleDate || null,
               debtor: rec.debtor || null,
               trustee: rec.trustee || null,
               fileNumber: rec.fileNumber || null,
@@ -225,7 +231,7 @@ class TrusteeSaleScraper extends BaseScraper {
               county: 'Harris',
               city: 'Houston',
               zip: null,
-              address: rec.situsAddress || rec.legalDescription || `Harris County Foreclosure Filing ${rec.fileNumber}`,
+              address: rec.situsAddress || rec.legalDescription || null,
               apn: rec.apn || null,
               openingBid: null, // Zero-Fabrication: statutory notice records debt balance, not opening bid
               estLow: null,
@@ -303,7 +309,7 @@ class TrusteeSaleScraper extends BaseScraper {
               estLow: null,
               estHigh: null,
               assessed: null,
-              saleDate: rec.recordedDate ? new Date(rec.recordedDate).toISOString().slice(0, 10) : null,
+              saleDate: rec.saleDate || null,
               plaintiff: rec.grantee || null,
               defendant: rec.grantor || null,
               judgment: null,

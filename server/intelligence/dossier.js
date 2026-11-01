@@ -1,3 +1,5 @@
+const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
+const { computePublicBenchmarkConsensus } = require('../enrichment/public-benchmark-consensus');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { evaluateOpportunitySignals } = require('./signals');
 const { buildDocumentEvidence } = require('./document-evidence');
@@ -84,6 +86,8 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   const documentEvidence = buildDocumentEvidence(listing, { capturedEvidence, observedAt: timestamp, sourceUrl: source.url });
   gaps.sort((a, b) => (TIER_ORDER[a.priorityTier] ?? 2) - (TIER_ORDER[b.priorityTier] ?? 2) || (b.potentialPointsGain || 0) - (a.potentialPointsGain || 0));
   return {
+    evidenceReceipt: verifiedSnapshotReceipt(listing),
+    publicBenchmarks: computePublicBenchmarkConsensus({...listing,parcel:publicRecords?.parcel || null}),
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),

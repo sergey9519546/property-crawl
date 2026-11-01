@@ -102,14 +102,17 @@ public listing endpoint was erroring during that window.
 `GET /api/listings?source=fl-dor-cadastral` → `total=0`;
 `GET /api/listings?source=servicelink` → `total=7498` (positive control intact).
 
-**Open landmine — do not sync the Render blueprint to the live service as-is.**
-`render.yaml` declares `PROPERTY_DB: embedded`, and the boot path uses the
-embedded engine *instead of* `DATABASE_URL` whenever that variable is set
-(`server/server.js:395`, `scripts/discovery-migrate.js:32`). The live service
-correctly has no `PROPERTY_DB` and uses external PostgreSQL. A blueprint sync
-would set it, make production serve an empty embedded database, and ignore the
-real one. `PROPERTY_DB`/`AUTO_MIGRATE` divergence between `render.yaml` and the
-live service is a decision for the owner, not a unilateral edit.
+**Resolved 2026-10-28 — the blueprint footgun is closed.** `render.yaml` no
+longer declares `PROPERTY_DB` (see its comment); a fresh deploy with no
+`DATABASE_URL` still gets the embedded engine from `scripts/start-production.js`.
+The boot path now resolves through one module, `server/db/database-target.js`:
+on Render (`RENDER=true`, platform-injected) a configured `DATABASE_URL` wins
+even if `PROPERTY_DB=embedded` or `PROPERTY_PG_DATA_DIR` is also set, with a
+logged reason; off Render the explicit embedded request still wins, so a dead
+localhost URL in the environment is not dialed. Guards:
+`test/production-boot.test.js` (blueprint shape) and
+`test/discovery-backend.test.js` (Render precedence, client dial, migrator
+target). A blueprint sync is now safe.
 
 ## Not resolved by this tree (recorded so the next session starts from evidence)
 

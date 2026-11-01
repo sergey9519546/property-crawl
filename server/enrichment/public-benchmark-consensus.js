@@ -9,7 +9,7 @@
  *    via server/enrichment/assessor-reading.js / parcel data.
  * 2. FHFA House Price Index (HPI) appreciation benchmarks
  *    via server/intelligence/fhfa-hpi.js or server/enrichment/hpi.js.
- * 3. HUD Small Area Fair Market Rent (SAFMR) statutory floor
+ * 3. HUD Small Area Fair Market Rent (SAFMR) published rent benchmark
  *    via server/enrichment/hud-safmr.js.
  *
  * STRICT ZERO-FABRICATION RULE:
@@ -45,10 +45,10 @@ const DISCLAIMER = 'Public record consensus benchmarks are statutory and adminis
  */
 function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   const unobservedReasons = [];
-  const sourcesVerified = [];
+  const sourcesAvailable = [];
 
   const ctx = listingContext && typeof listingContext === 'object' ? listingContext : {};
-  const state = (ctx.state || '').trim().toUpperCase();
+  const state = String(ctx.state || '').trim().toUpperCase();
   const zip = ctx.zip ? String(ctx.zip).trim().padStart(5, '0').slice(0, 5) : null;
   const openingBid = Number.isFinite(Number(ctx.openingBid)) && Number(ctx.openingBid) > 0
     ? Number(ctx.openingBid)
@@ -73,15 +73,15 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
       reading = null;
     }
 
-    const totalVal = Number.isFinite(Number(rawParcel?.assessedValue?.total))
+    const totalVal = rawParcel?.assessedValue?.total != null && Number.isFinite(Number(rawParcel.assessedValue.total))
       ? Number(rawParcel.assessedValue.total)
       : (Number.isFinite(Number(reading?.rawFigure)) ? Number(reading.rawFigure) : null);
 
-    const landVal = Number.isFinite(Number(rawParcel?.assessedValue?.land))
+    const landVal = rawParcel?.assessedValue?.land != null && Number.isFinite(Number(rawParcel.assessedValue.land))
       ? Number(rawParcel.assessedValue.land)
       : null;
 
-    const imprvVal = Number.isFinite(Number(rawParcel?.assessedValue?.improvement))
+    const imprvVal = rawParcel?.assessedValue?.improvement != null && Number.isFinite(Number(rawParcel.assessedValue.improvement))
       ? Number(rawParcel.assessedValue.improvement)
       : (totalVal !== null && landVal !== null && totalVal >= landVal ? totalVal - landVal : null);
 
@@ -96,7 +96,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
         marketComparison: reading?.marketComparison || null,
         citation: reading?.citation || null,
       };
-      sourcesVerified.push('assessor_roll');
+      sourcesAvailable.push('assessor_roll');
     } else {
       unobservedReasons.push('Assessor parcel layer returned no positive certified assessed total.');
     }
@@ -110,19 +110,22 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   let assessedTrajectory = null;
 
   if (state && assessorRoll && assessorRoll.assessedValue > 0) {
-    const rawYear = Number(ctx.assessmentYear || rawParcel?.assessmentYear);
-    const assessmentYear = Number.isFinite(rawYear) && rawYear >= 2015 && rawYear <= 2026
+    const providedPeriod = ctx.assessmentPeriod || rawParcel?.assessmentPeriod;
+    const rawYear = Number(ctx.assessmentYear ?? rawParcel?.assessmentYear ?? providedPeriod?.slice(0, 4));
+    const assessmentYear = Number.isInteger(rawYear) && rawYear >= 1900 && rawYear <= new Date().getUTCFullYear()
       ? rawYear
-      : 2020;
+      : null;
 
-    const baselinePeriod = `${assessmentYear}Q2`;
+    const baselinePeriod = assessmentYear !== null && /^\d{4}Q[1-4]$/.test(providedPeriod || '') && Number(providedPeriod.slice(0,4)) === assessmentYear ? providedPeriod : null;
+    if (assessmentYear === null) unobservedReasons.push('Assessment year is unknown; no HPI trajectory computed.');
+    else if (!baselinePeriod) unobservedReasons.push('Assessment quarter is unknown; no HPI trajectory computed.');
 
     try {
-      const baselineHpi = getHpiIndex(state, baselinePeriod);
-      const currentHpi = getHpiIndex(state, currentPeriod);
+      const baselineHpi = getHpiIndex(state, baselinePeriod, options.hpiSeries);
+      const currentHpi = getHpiIndex(state, currentPeriod, options.hpiSeries);
 
-      if (baselineHpi && currentHpi && baselineHpi > 0) {
-        const multiplier = getAppreciationMultiplier(state, baselinePeriod, currentPeriod);
+      if (baselineHpi && currentHpi && baselineHpi > 0 && baselinePeriod <= currentPeriod) {
+        const multiplier = getAppreciationMultiplier(state, baselinePeriod, currentPeriod, options.hpiSeries);
         const hpiAdjustedAssessedValue = Math.round(assessorRoll.assessedValue * multiplier);
         const appreciationPct = Math.round((multiplier - 1.0) * 1000) / 10;
 
@@ -136,8 +139,9 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
           hpiAppreciationPct: appreciationPct,
           hpiAdjustedAssessedValue,
           source: 'FHFA House Price Index (HPI) Quarterly Series',
+          provenance: { sourceUrl: options.hpiSeries.sourceUrl, retrievedAt: options.hpiSeries.retrievedAt, datasetSha256: options.hpiSeries.datasetSha256 },
         };
-        sourcesVerified.push('fhfa_hpi');
+        sourcesAvailable.push('fhfa_hpi');
       } else {
         unobservedReasons.push(`FHFA HPI index benchmarks unavailable for state "${state}".`);
       }
@@ -153,7 +157,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   }
 
   // -------------------------------------------------------------
-  // 3. HUD SAFMR Statutory Floor & Implied GRM
+  // 3. HUD SAFMR Rent Benchmark & Implied GRM
   // -------------------------------------------------------------
   let hudSafmr = null;
   let impliedGrm = null;
@@ -171,8 +175,8 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     }
   }
 
-  if (benchmark && (Number.isFinite(benchmark.fairMarketRent) || Number.isFinite(benchmark.fmr2br))) {
-    const fmr2br = Number.isFinite(benchmark.fairMarketRent) ? benchmark.fairMarketRent : benchmark.fmr2br;
+  if (benchmark && ((Number.isFinite(benchmark.fairMarketRent) && benchmark.fairMarketRent > 0) || (Number.isFinite(benchmark.fmr2br) && benchmark.fmr2br > 0))) {
+    const fmr2br = Number.isFinite(benchmark.fairMarketRent) && benchmark.fairMarketRent > 0 ? benchmark.fairMarketRent : benchmark.fmr2br;
     const annualFmr2br = fmr2br * 12;
 
     hudSafmr = {
@@ -188,7 +192,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
       asOfFiscalYear: benchmark.asOfFiscalYear || 'FY2025',
       source: benchmark.source || 'HUD FY2025 Small Area Fair Market Rents (SAFMR)',
     };
-    sourcesVerified.push('hud_safmr');
+    sourcesAvailable.push('hud_safmr');
 
     if (openingBid !== null && openingBid > 0) {
       impliedGrm = Math.round((openingBid / annualFmr2br) * 100) / 100;
@@ -197,7 +201,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     if (!zip && !benchmarkOverride) {
       unobservedReasons.push('5-digit ZIP code not provided; HUD SAFMR benchmark not queried.');
     } else {
-      unobservedReasons.push(`HUD SAFMR statutory rents not observed for ZIP code "${zip}".`);
+      unobservedReasons.push(`HUD SAFMR rent benchmarks not observed for ZIP code "${zip}".`);
     }
   }
 
@@ -209,8 +213,8 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   // -------------------------------------------------------------
   // Public Consensus Score (Bounded count: 0.0, 0.33, 0.67, 1.0)
   // -------------------------------------------------------------
-  const sourcesVerifiedCount = sourcesVerified.length;
-  const publicConsensusScore = Math.round((sourcesVerifiedCount / 3) * 100) / 100;
+  const availableSourceCount = sourcesAvailable.length;
+  const publicConsensusScore = Math.round((availableSourceCount / 3) * 100) / 100;
 
   return {
     benchmarkType: 'PUBLIC_RECORD_BENCHMARK',
@@ -218,9 +222,10 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     isBidRecommendation: false,
     disclaimer: DISCLAIMER,
 
-    publicConsensusScore,
-    sourcesVerifiedCount,
-    sourcesVerified: Object.freeze(sourcesVerified),
+    evidenceAvailabilityRatio: publicConsensusScore,
+    scoreMeaning: 'Available benchmark inputs; not agreement on property value',
+    availableSourceCount,
+    sourcesAvailable: Object.freeze(sourcesAvailable),
     unobservedReasons: Object.freeze(unobservedReasons),
 
     // 1. Assessor Roll
@@ -229,7 +234,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     // 2. FHFA HPI Trajectory
     assessedTrajectory,
 
-    // 3. HUD SAFMR Statutory Floor & GRM
+    // 3. HUD SAFMR Rent Benchmark & GRM
     hudSafmr,
     impliedGrm,
 

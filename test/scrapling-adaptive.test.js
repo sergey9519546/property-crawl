@@ -25,11 +25,11 @@ test('Scrapling runner enforces strict field classification', () => {
   assert.ok(isIdentityField('caseNumber'), 'caseNumber must be an identity field');
   assert.ok(isIdentityField('parcelId'), 'parcelId must be an identity field');
   assert.ok(isIdentityField('apn'), 'apn must be an identity field');
-  assert.equal(isIdentityField('openingBid'), false, 'openingBid must not be an identity field');
+  assert.equal(isIdentityField('openingBid'), true, 'money requires deterministic extraction');
 
-  assert.ok(isPresentationField('openingBid'), 'openingBid must be a presentation field');
-  assert.ok(isPresentationField('saleDateText'), 'saleDateText must be a presentation field');
-  assert.ok(isPresentationField('occupancyStatus'), 'occupancyStatus must be a presentation field');
+  assert.equal(isPresentationField('openingBid'), false);
+  assert.equal(isPresentationField('saleDateText'), false);
+  assert.equal(isPresentationField('occupancyStatus'), false);
   assert.equal(isPresentationField('caseNumber'), false, 'caseNumber must not be a presentation field');
 });
 
@@ -61,53 +61,21 @@ test('identity fields strictly fail closed and never relocate adaptively', () =>
   assert.equal(result.fields.caseNumber, null);
 });
 
-test('presentation fields adaptively relocate on DOM class drift', () => {
-  const html = `
-    <div class="auction-summary">
-      <div class="case-id">CASE-12345</div>
-      <div class="price-bubble">Opening Bid: $74,500.00</div>
-      <div class="calendar-chip">Sale Date: October 24, 2026</div>
-      <div class="property-tag">Status: Occupied</div>
-    </div>
-  `;
-
-  const tmpCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapling-cache-'));
-
-  try {
-    const result = extractWithAdaptiveFallback(html, 'county-auction', {
-      caseNumber: {
-        selector: '.case-id',
-        extractor: () => 'CASE-12345',
-      },
-      openingBid: {
-        selector: '.legacy-price-tag', // old selector that fails
-        extractor: () => null,
-      },
-      saleDateText: {
-        selector: '.legacy-date-badge', // old selector that fails
-        extractor: () => null,
-      },
-      occupancyStatus: {
-        selector: '.legacy-occ', // old selector that fails
-        extractor: () => null,
-      },
-    }, { cacheDir: tmpCacheDir, persistSelectors: true });
-
-    assert.equal(result.identityPassed, true);
-    assert.equal(result.fields.caseNumber, 'CASE-12345');
-    assert.equal(result.fields.openingBid, '74500.00');
-    assert.equal(result.fields.saleDateText, 'October 24, 2026');
-    assert.equal(result.fields.occupancyStatus, 'occupied');
-    assert.equal(result.relocations.length, 3, 'Should record 3 adaptive relocations');
-
-    // Verify selector cache store was saved
-    const store = loadSelectorStore('county-auction', tmpCacheDir);
-    assert.equal(store.sourceKey, 'county-auction');
-    assert.ok(store.selectors.openingBid);
-    assert.equal(store.relocations.length, 3);
-  } finally {
-    fs.rmSync(tmpCacheDir, { recursive: true, force: true });
-  }
+test('frozen presentation fallbacks do not relocate money, dates or occupancy', () => {
+  const result = extractWithAdaptiveFallback('<span class="bedrooms">3 beds</span><div>Opening Bid: $74,500.00</div>', 'county-auction', {
+    caseNumber: {selector:'.case-id',extractor:()=> 'CASE-12345'},
+    openingBid: {selector:'.old-price',extractor:()=>null},
+    saleDateText: {selector:'.old-date',extractor:()=>null},
+    occupancyStatus: {selector:'.old-occupancy',extractor:()=>null},
+    beds: {selector:'.old-beds',extractor:()=>null},
+  }, {persistSelectors:false});
+  assert.equal(result.identityPassed,false);
+  assert.equal(result.fields.caseNumber,'CASE-12345');
+  assert.equal(result.fields.openingBid,null);
+  assert.equal(result.fields.saleDateText,null);
+  assert.equal(result.fields.occupancyStatus,null);
+  assert.equal(result.fields.beds,3);
+  assert.equal(result.relocations.length,1);
 });
 
 test('SPA profile config defines verified portal endpoints and capture patterns', () => {
@@ -167,8 +135,8 @@ test('BaseScraper exposes extractWithAdaptiveFallback, runSpiderBatch, and reque
     caseNumber: { selector: '.case', extractor: () => 'CV-2026-100' },
     openingBid: { selector: '.missing-bid', extractor: () => null },
   }, { persistSelectors: false });
-  assert.equal(adaptive.identityPassed, true);
-  assert.equal(adaptive.fields.openingBid, '88000');
+  assert.equal(adaptive.identityPassed, false);
+  assert.equal(adaptive.fields.openingBid, null);
 });
 
 test('relocatePresentationSelector never matches deposit or judgment as opening bid', () => {

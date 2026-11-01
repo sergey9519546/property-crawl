@@ -333,6 +333,32 @@ test('computeLienWaterfall calculates debt extinguishment, surplus distribution,
   assert.equal(juniorForeclosure.surplusProceedsToBorrower, 5_000);
 });
 
+test('unknown senior debt never becomes a zero-debt acquisition conclusion', () => {
+  const scenario = { winningBid: 100000, foreclosingLienType: 'second_mortgage', foreclosingLienAmount: 100000, delinquentTaxesAmount: 0 };
+  for (const seniorMortgageAmount of [undefined, null, NaN, -1, Infinity]) {
+    const result = computeLienWaterfall({ ...scenario, seniorMortgageAmount });
+    assert.equal(result.complete, false);
+    assert.equal(result.totalSurvivingDebtOnProperty, null);
+    assert.equal(result.totalEffectiveAcquisitionCost, null);
+    assert.equal(result.surplusProceedsToBorrower, null);
+    assert.match(result.criticalAlert, /senior mortgage balance is unknown/i);
+    assert.doesNotMatch(result.summary, /Zero surviving|fully extinguishes/);
+  }
+  const zero = computeLienWaterfall({ ...scenario, seniorMortgageAmount: 0 });
+  assert.equal(zero.complete, true);
+  assert.equal(zero.totalSurvivingDebtOnProperty, 0);
+  assert.equal(zero.totalEffectiveAcquisitionCost, 100000);
+  const known = computeLienWaterfall({ ...scenario, seniorMortgageAmount: 200000 });
+  assert.equal(known.totalEffectiveAcquisitionCost, 300000);
+  assert.equal(computeLienWaterfall({ ...scenario, foreclosingLienType: 'unknown', seniorMortgageAmount: 0 }).complete, false);
+  assert.equal(computeLienWaterfall({ ...scenario, seniorMortgageAmount: 0, delinquentTaxesAmount: null }).complete, false);
+  const unknownForeclosing = computeLienWaterfall({...scenario,foreclosingLienType:'first_mortgage',foreclosingLienAmount:null,seniorMortgageAmount:0});
+  assert.equal(unknownForeclosing.surplusProceedsToBorrower,null);
+  assert.equal(unknownForeclosing.distributionComplete,false);
+  const firstWithZeroSurviving = computeLienWaterfall({...scenario,foreclosingLienType:'first_mortgage',foreclosingLienAmount:80000,seniorMortgageAmount:0});
+  assert.equal(firstWithZeroSurviving.surplusProceedsToBorrower,20000);
+});
+
 test('computeStatutoryFeePreset models state statutory poundage, transfer tax, and deposit terms as explicit presets', () => {
   const nj = computeStatutoryFeePreset({ purchasePrice: 120_000, state: 'NJ', source: 'civilview', depositText: '20% at gavel' });
   assert.ok(nj !== null);

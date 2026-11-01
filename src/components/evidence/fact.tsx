@@ -16,7 +16,7 @@ export type { FactOrigin, FactFormat, UnknownReason } from "@/lib/evidence";
 export function Fact({
   value,
   format = "text",
-  origin = "printed",
+  origin = "unverified",
   reason = "Not in the notice",
   className = "",
 }: {
@@ -45,7 +45,8 @@ export function Fact({
     );
   }
   return (
-    <span data-evidence="printed" className={`ev-printed ${className}`}>
+    <span data-evidence={origin} title={origin === "unverified" ? "Source provenance has not been verified" : undefined} className={`${origin === "printed" ? "ev-printed" : "ev-unknown"} ${className}`}>
+      {origin === "unverified" && <span className="sr-only">Unverified: </span>}
       {text}
     </span>
   );

@@ -1,5 +1,7 @@
 "use client";
 
+import { listingFactOrigin } from "@/lib/evidence";
+
 import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight, Bookmark, FileText, Loader2 } from "lucide-react";
@@ -172,8 +174,8 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
-        <div><dt className="text-xs text-ink-3">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact value={listing.openingBid} format="money" /></dd></div>
-        <div><dt className="text-xs text-ink-3">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact value={listing.saleDate} format="date" /></dd></div>
+        <div><dt className="text-xs text-ink-3">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd></div>
+        <div><dt className="text-xs text-ink-3">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" /></dd></div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-ink-3">
         <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>

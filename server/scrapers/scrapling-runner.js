@@ -1,3 +1,4 @@
+const { extractPresentationValue, isIdentityOrValuationField, isAdaptiveAllowed } = require('./selector-store');
 'use strict';
 
 /**
@@ -41,11 +42,11 @@ const PRESENTATION_FIELDS = new Set(spaProfileConfig.presentationFields || [
 const DEFAULT_CACHE_DIR = path.resolve(__dirname, '..', '..', '.cache', 'scrapling-selectors');
 
 function isIdentityField(field) {
-  return IDENTITY_FIELDS.has(String(field || '').trim());
+  return IDENTITY_FIELDS.has(String(field || '').trim()) || isIdentityOrValuationField(field);
 }
 
 function isPresentationField(field) {
-  return PRESENTATION_FIELDS.has(String(field || '').trim());
+  return isAdaptiveAllowed(field);
 }
 
 function getSelectorStorePath(sourceKey, cacheDir = DEFAULT_CACHE_DIR) {
@@ -193,6 +194,13 @@ function extractWithAdaptiveFallback(html, sourceKey, fieldConfigs, options = {}
     if (isId) {
       result.fields[field] = null;
       result.identityPassed = false;
+      continue;
+    }
+
+    const registered = extractPresentationValue(html, sourceKey, field, options);
+    if (registered) {
+      result.fields[field] = registered.value;
+      result.relocations.push({field,originalSelector:primarySelector,discoveredStrategy:'frozen-presentation-registry',selector:registered.selector});
       continue;
     }
 

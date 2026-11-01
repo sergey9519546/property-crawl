@@ -83,7 +83,7 @@ function extractDomSkeleton(html) {
     }
   }
 
-  return skeleton;
+  return skeleton.replace(/(<tr>[\s\S]*?<\/tr>)(?:\1)+/g, '$1').replace(/(<li>[\s\S]*?<\/li>)(?:\1)+/g, '$1');
 }
 
 /**

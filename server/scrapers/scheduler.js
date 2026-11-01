@@ -1,3 +1,4 @@
+const { recordSnapshot } = require('./discovery-snapshots');
 const crypto = require('node:crypto');
 const sheriff = require('./sheriff');
 const hud = require('./hud');
@@ -283,6 +284,7 @@ class IngestionScheduler {
             error.code = 'HISTORICAL_ONLY_SCRAPER';
             throw error;
           }
+          if (scraper._driftSamples) scraper._driftSamples.clear();
           console.log(`[Scheduler] Running ${scraper.name}...`);
           if (this.discoveryStore) {
             const scope=collectionScope(scraper);
@@ -350,6 +352,9 @@ class IngestionScheduler {
               );
               continue;
             }
+            // An unknown publisher payload stays null. Never label a normalized listing as captured publisher evidence.
+            const snapshot = await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance});
+            validation.listing.provenance.evidenceLedger = {index:snapshot.ledgerBlock.index,entryHash:snapshot.ledgerBlock.entryHash,payloadSha256:snapshot.payloadSha256};
             if(this.discoveryStore&&discoveryRun){
               // raw_payload records what the publisher actually returned. Prefer the
               // scraper's captured publisher record; otherwise use the stored raw only
@@ -374,6 +379,8 @@ class IngestionScheduler {
             }
           }
           this.telemetry.recordRun(scraper.name, accepted, latency, null, {
+            domHashes: scraper._driftSamples ? Object.fromEntries(scraper._driftSamples) : {},
+            scopeKey: scraper.lastRunReport?.scopeHash || scraper.sourceKey,
             rejectedCount: rejectedForScraper,
             circuitOpen: false,
             driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
@@ -416,6 +423,8 @@ class IngestionScheduler {
           if(err?.code==='DISCOVERY_JOB_LEASE_LOST')throw err;
           const latency = Date.now() - scraperStart;
           this.telemetry.recordRun(scraper.name, [], latency, err, {
+            domHashes: scraper._driftSamples ? Object.fromEntries(scraper._driftSamples) : {},
+            scopeKey: scraper.lastRunReport?.scopeHash || scraper.sourceKey,
             rejectedCount: rejectedForScraper,
             errorCode: err.code || err.name,
             circuitOpen: Boolean(scraper.circuitBreaker && scraper.circuitBreaker.isOpen()),

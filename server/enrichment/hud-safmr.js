@@ -60,7 +60,10 @@ function getHudSafmrBenchmark({ zip, bedrooms = 2 } = {}) {
     hudAreaName: entry.area || 'HUD Metropolitan FMR Area',
     bedroomRents: Object.freeze([...entry.rents]),
     source: 'HUD FY2025 Small Area Fair Market Rents (SAFMR)',
-    asOfFiscalYear: 'FY2025'
+    asOfFiscalYear: 'FY2025',
+    historical: true,
+    sourceUrl: 'https://www.huduser.gov/portal/datasets/fmr.html',
+    disclaimer: 'Historical program benchmark; not guaranteed rental income.'
   };
 }
 

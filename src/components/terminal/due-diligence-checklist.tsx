@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import type { Listing } from "@/data/listings";
+import { restoreChecklistStatuses } from "@/lib/evidence";
 import {
   computeStatutoryFeePreset,
   computeStatutoryDeadlinesAndCarry,
@@ -87,8 +88,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   // 3. Waterfall Simulation state
   const [waterfallBid, setWaterfallBid] = useState<string>(openingBid > 0 ? String(openingBid) : "");
   const [waterfallLienType, setWaterfallLienType] = useState<
-    "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed"
-  >(detectedForeclosingType);
+    "unknown" | "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed"
+  >("unknown");
   const [waterfallSeniorMtg, setWaterfallSeniorMtg] = useState<string>("");
   const [waterfallTaxes, setWaterfallTaxes] = useState<string>("");
   const [showWaterfallDetails, setShowWaterfallDetails] = useState<boolean>(isSeniorLienRisk);
@@ -175,17 +176,16 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   });
 
   useEffect(() => {
+    const defaults = Object.fromEntries(initialItems.map((item) => [item.id, item.defaultStatus]));
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === "object") {
-          setItemStatuses((prev) => ({ ...prev, ...parsed }));
-        }
-      }
+      setItemStatuses(restoreChecklistStatuses(localStorage.getItem(storageKey), defaults));
     } catch {
-      // Local storage unavailable in SSR or private mode
+      setItemStatuses(defaults);
     }
+    setWaterfallBid(openingBid > 0 ? String(openingBid) : "");
+    setWaterfallSeniorMtg("");
+    setWaterfallTaxes("");
+    setWaterfallLienType("unknown");
   }, [storageKey]);
 
   const setStatus = (id: string, status: CheckStatus) => {
@@ -205,9 +205,9 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
   const waterfallResult: LienWaterfallResult = computeLienWaterfall({
     winningBid: bidAmount,
     foreclosingLienType: waterfallLienType,
-    foreclosingLienAmount: bidAmount,
-    delinquentTaxesAmount: Number(waterfallTaxes) || 0,
-    seniorMortgageAmount: Number(waterfallSeniorMtg) || 0,
+    foreclosingLienAmount: null,
+    delinquentTaxesAmount: waterfallTaxes.trim() === "" ? null : Number(waterfallTaxes),
+    seniorMortgageAmount: waterfallSeniorMtg.trim() === "" ? null : Number(waterfallSeniorMtg),
     state: stateCode,
   });
 
@@ -407,10 +407,12 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
             <label className="space-y-1">
               <span>Foreclosing Lien Type</span>
               <select
+                aria-label="Foreclosing Lien Type"
                 value={waterfallLienType}
                 onChange={(e) => setWaterfallLienType(e.target.value as any)}
                 className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               >
+                <option value="unknown">Unknown — verify lien priority</option>
                 <option value="first_mortgage">1st Mortgage (Senior Deed)</option>
                 <option value="second_mortgage">2nd Mortgage (Subordinate)</option>
                 <option value="heloc">HELOC / Equity Line</option>
@@ -426,7 +428,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                 step="5000"
                 value={waterfallSeniorMtg}
                 onChange={(e) => setWaterfallSeniorMtg(e.target.value)}
-                placeholder="0 if 1st mtg foreclosing"
+                placeholder="Unknown until supplied"
                 className="w-full rounded-lg border border-line-strong bg-card px-3 py-1.5 text-xs text-yours shadow-xs focus:border-yours focus:outline-hidden"
               />
             </label>
@@ -454,14 +456,14 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
           <div
             className={`rounded-xl border p-3 shadow-xs ${
-              waterfallResult.totalSurvivingDebtOnProperty > 0
+              (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0
                 ? "border-catch/30 bg-catch-wash"
                 : "border-line bg-paper"
             }`}
           >
             <span
               className={`text-[11px] font-semibold ${
-                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-catch-ink" : "text-ink-3"
+                (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0 ? "text-catch-ink" : "text-ink-3"
               }`}
             >
               Surviving Priority Debt
@@ -469,25 +471,27 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
             <p
               className="mt-0.5 text-lg font-black text-yours"
             >
-              {hasBid ? displayMoney(waterfallResult.totalSurvivingDebtOnProperty) : "—"}
+              {hasBid ? waterfallResult.complete ? displayMoney(waterfallResult.totalSurvivingDebtOnProperty) : "Unknown" : "—"}
             </p>
             <span
               className={`text-[10px] ${
-                waterfallResult.totalSurvivingDebtOnProperty > 0 ? "text-catch-ink" : "text-ink-3"
+                (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0 ? "text-catch-ink" : "text-ink-3"
               }`}
             >
               {!hasBid
                 ? "Enter amounts to calculate"
-                : waterfallResult.totalSurvivingDebtOnProperty > 0
+                : !waterfallResult.complete
+                ? "Supply the missing balances and lien priority"
+                : (waterfallResult.totalSurvivingDebtOnProperty ?? 0) > 0
                 ? "Buyer must satisfy this senior debt!"
                 : "No surviving liens in the amounts entered"}
             </span>
           </div>
 
           <div className="on-ink rounded-xl border border-ink bg-ink p-3 text-white shadow-xs">
-            <span className="text-[11px] font-semibold text-white/75">True Effective Cost</span>
+            <span className="text-[11px] font-semibold text-white/75">Scenario Acquisition Cost</span>
             <p className="mt-0.5 text-lg font-black ev-yours">
-              {hasBid ? displayMoney(waterfallResult.totalEffectiveAcquisitionCost) : "—"}
+              {hasBid ? waterfallResult.complete ? displayMoney(waterfallResult.totalEffectiveAcquisitionCost) : "Incomplete" : "—"}
             </p>
             <span className="text-[10px] text-white/60">Bid + surviving mortgages & taxes</span>
           </div>
@@ -536,7 +540,7 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
                   </td>
                 </tr>
               ))}
-              {hasBid && waterfallResult.surplusProceedsToBorrower > 0 && (
+              {hasBid && (waterfallResult.surplusProceedsToBorrower ?? 0) > 0 && (
                 <tr className="bg-card font-semibold text-ink">
                   <td className="py-2 pr-3 text-[10px] uppercase font-bold text-ink-2">Surplus</td>
                   <td className="py-2 pr-3" colSpan={2}>

@@ -155,6 +155,9 @@ function verifyLedgerChain(chain) {
     }
 
     // 1. Genesis check
+    if (!Number.isFinite(Date.parse(entry.timestamp)) || !/^[a-f0-9]{64}$/i.test(entry.payloadSha256 || '')) {
+      return {valid:false,error:`Invalid timestamp or payload digest at block ${i}`,verifiedCount:i};
+    }
     if (i === 0) {
       if (entry.index !== 0 || entry.prevHash !== GENESIS_HASH) {
         return {
@@ -247,29 +250,76 @@ function appendLedgerEntry(chain, entryData) {
  * @param {string} filePath - Absolute path to ledger JSON file.
  * @param {Array<Object>} chain - Array of ledger blocks.
  */
-function saveLedgerToFile(filePath, chain) {
-  const target = filePath || DEFAULT_LEDGER_PATH;
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, JSON.stringify(chain, null, 2), 'utf8');
+function ledgerError(message, code = 'EVIDENCE_LEDGER_CORRUPT') {
+  return Object.assign(new Error(message), { code });
 }
 
-/**
- * Loads a ledger chain from disk, returning an empty array if not found or corrupted.
- *
- * @param {string} filePath - Absolute path to ledger JSON file.
- * @returns {Array<Object>}
- */
 function loadLedgerFromFile(filePath) {
   const target = filePath || DEFAULT_LEDGER_PATH;
-  if (!fs.existsSync(target)) {
-    return [];
-  }
   try {
     const raw = fs.readFileSync(target, 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    return [];
+    if (!raw.trim()) throw ledgerError('Empty ledger file');
+    const parsed = raw.trimStart().startsWith('[')
+      ? JSON.parse(raw) : raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
+    const result = verifyLedgerChain(parsed);
+    if (!result.valid) throw ledgerError(result.error);
+    return parsed;
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    // Preserve the original bytes and refuse all writes. Corruption is never an empty ledger.
+    throw ledgerError(`Evidence ledger is unreadable; original retained at ${target}: ${error.message}`);
+  }
+}
+
+function withLedgerLock(target, fn) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const lockPath = `${target}.lock`;
+  let lock;
+  try { lock = fs.openSync(lockPath, 'wx', 0o600); }
+  catch (error) { if (error.code === 'EEXIST') throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); throw error; }
+  try { return fn(); }
+  finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
+}
+
+function persistSuffix(target, chain, existing) {
+  const result = verifyLedgerChain(chain);
+  if (!result.valid) throw ledgerError(result.error);
+  if (chain.length < existing.length || existing.some((entry, i) => canonicalStringify(entry) !== canonicalStringify(chain[i]))) {
+    throw ledgerError('Evidence ledger history cannot be replaced or truncated');
+  }
+  const suffix = chain.slice(existing.length);
+  if (!suffix.length) return;
+  if (fs.existsSync(target) && fs.readFileSync(target, 'utf8').trimStart().startsWith('[')) {
+    throw ledgerError('Legacy ledger is read-only; migrate explicitly before appending');
+  }
+  const fd = fs.openSync(target, 'a', 0o600);
+  try {
+    fs.writeFileSync(fd, suffix.map(entry => JSON.stringify(entry)).join('\n') + '\n', 'utf8');
+    fs.fsyncSync(fd);
+  } finally { fs.closeSync(fd); }
+}
+
+function saveLedgerToFile(filePath, chain) {
+  const target = filePath || DEFAULT_LEDGER_PATH;
+  return withLedgerLock(target, () => persistSuffix(target, chain, loadLedgerFromFile(target)));
+}
+
+async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}) {
+  const target = filePath || DEFAULT_LEDGER_PATH;
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      return withLedgerLock(target, () => {
+        const chain = loadLedgerFromFile(target);
+        const existing = chain.slice();
+        const block = appendLedgerEntry(chain, entryData);
+        persistSuffix(target, chain, existing);
+        return block;
+      });
+    } catch (error) {
+      if (error.code !== 'EVIDENCE_LEDGER_BUSY' || Date.now() >= deadline) throw error;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
   }
 }
 
@@ -282,5 +332,6 @@ module.exports = {
   verifyLedgerChain,
   appendLedgerEntry,
   saveLedgerToFile,
-  loadLedgerFromFile
+  loadLedgerFromFile,
+  appendLedgerToFile
 };

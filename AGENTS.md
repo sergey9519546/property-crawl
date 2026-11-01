@@ -31,7 +31,10 @@ in-memory provider is reachable only by explicit opt-in
 digest-checked; live scrapers and `.cache/live-listings.json` can raise the
 served total further). Configure a Postgres+PostGIS `DATABASE_URL` (or the
 embedded engine via `PROPERTY_DB=embedded` + `PROPERTY_PG_DATA_DIR`) for a
-durable inventory. The repo's own `docker-compose.yml` wires PostGIS, but the
+durable inventory. On Render (`RENDER=true`, platform-injected), a configured
+`DATABASE_URL` wins even when `PROPERTY_DB=embedded` is also set, so a
+deployment cannot silently serve an empty embedded engine over its real
+database (`server/db/database-target.js`). The repo's own `docker-compose.yml` wires PostGIS, but the
 Base44 dev compose intentionally omits it for a lighter dev loop.
 
 No external secrets are required to **boot** public listing pages. Optional

@@ -29,7 +29,8 @@ const FORBIDDEN_FIELDS = new Set([
   'judgmentamount',
   'depositamount',
   'taxamount',
-  'saledate'
+  'saledate',
+  'saledatetext','addresstext','occupancystatus','occupancy','status'
 ]);
 
 const ALLOWED_PRESENTATION_FIELDS = new Set([
@@ -341,7 +342,35 @@ function getCandidateSelectors(sourceKey, fieldName) {
   return defaultSelectorStore.getCandidateSelectors(sourceKey, fieldName);
 }
 
+// Only predeclared presentation candidates are evaluated. No learned selector
+// can relocate identity, money, dates, occupancy or legal status.
+function extractPresentationValue(html, sourceKey, field, options = {}) {
+  if (!isAdaptiveAllowed(field)) return null;
+  const store = options.selectorStore || defaultSelectorStore;
+  const candidates = store.getCandidateSelectors(sourceKey, field);
+  for (const selector of candidates) {
+    const className = /^\.([a-zA-Z0-9_-]+)$/.exec(selector)?.[1];
+    const dataField = /^\[data-field="([a-zA-Z0-9_-]+)"\]$/.exec(selector)?.[1];
+    if (!className && !dataField) continue;
+    const tags = /<([a-z][\w-]*)\b([^>]*)>/gi;
+    let match;
+    while ((match = tags.exec(String(html || '')))) {
+      const attrs = match[2];
+      const classes = /\bclass\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]?.split(/\s+/) || [];
+      const data = /\bdata-field\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1];
+      if (!(className ? classes.includes(className) : data === dataField)) continue;
+      const body = String(html).slice(tags.lastIndex).split(new RegExp('</'+match[1]+'\\s*>','i'))[0].replace(/<[^>]*>/g,' ').trim();
+      const canonical = normalizeFieldKey(field);
+      if (canonical === 'propertyType' && body && body.length <= 120) return {value:body,selector};
+      const numeric = body.replace(/,/g,'').match(/^([0-9]+(?:\.[0-9]+)?)\s*(?:beds?|bedrooms?|baths?|bathrooms?|sq\.?\s*ft|sqft)?$/i);
+      if (numeric && Number.isFinite(Number(numeric[1]))) return {value:Number(numeric[1]),selector};
+    }
+  }
+  return null;
+}
+
 module.exports = {
+  extractPresentationValue,
   SelectorStore,
   defaultSelectorStore,
   resolveSelector,

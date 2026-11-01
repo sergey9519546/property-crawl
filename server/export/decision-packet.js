@@ -1,3 +1,4 @@
+const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
 'use strict';
 
 const crypto = require('crypto');
@@ -362,7 +363,11 @@ function buildDecisionPacket(listing = {}, operatorInput = {}) {
       disposition: disposition || null,
     },
     underwriting: {
+      evidenceReceipt: verifiedSnapshotReceipt(listing),
       titleRisk: {
+        evidenceClass: 'model_derived',
+        titleVerified: false,
+        seniorMortgageBalance: null,
         plaintiffType: titleRisk.plaintiffType,
         riskLevel: titleRisk.riskLevel,
         canProceedWithBid: titleRisk.canProceedWithBid,
@@ -513,11 +518,11 @@ ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.to
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
 ${packet.hudSafmr ? `
-### HUD Statutory Fair Market Rent (SAFMR) Floor
+### HUD Fair Market Rent (SAFMR) Benchmark
 - **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
 - **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
 
-| Unit Size | Section 8 FMR Baseline | 90% Voucher Floor | 110% Voucher Ceiling |
+| Unit Size | Section 8 FMR Baseline | 90% Benchmark Scenario | 110% Benchmark Scenario |
 |---|---|---|---|
 | **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
 | **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |
@@ -530,11 +535,11 @@ ${u.macroValuation ? `- **Estimated Macro Range**: $${u.macroValuation.estLow.to
 - **Historical Basis**: ${u.macroValuation.basis.type} ($${u.macroValuation.basis.historicalValue.toLocaleString()})
 - *Honest Disclosure*: ${u.macroValuation.disclaimer}` : '- Valuation estimate band currently unavailable.'}
 ${packet.hudSafmr ? `
-### HUD Statutory Fair Market Rent (SAFMR) Floor
+### HUD Fair Market Rent (SAFMR) Benchmark
 - **ZIP Code**: ${packet.hudSafmr.zip} (FY2025 Revised Section 8 FMR)
 - **Voucher Payment Standard**: 90% floor to 110% ceiling (24 CFR § 888.113)
 
-| Unit Size | Section 8 FMR Baseline | 90% Voucher Floor | 110% Voucher Ceiling |
+| Unit Size | Section 8 FMR Baseline | 90% Benchmark Scenario | 110% Benchmark Scenario |
 |---|---|---|---|
 | **0 Bedroom (Efficiency)** | $${packet.hudSafmr.rents?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['0br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['0br']?.toLocaleString() ?? '—'} |
 | **1 Bedroom** | $${packet.hudSafmr.rents?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard90?.['1br']?.toLocaleString() ?? '—'} | $${packet.hudSafmr.paymentStandard110?.['1br']?.toLocaleString() ?? '—'} |

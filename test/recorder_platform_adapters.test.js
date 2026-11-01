@@ -227,7 +227,8 @@ test('Harris County Clerk parses § 51.002 21-day foreclosure posting into struc
   assert.equal(parsed.fileNumber, 'FC-2026-009182');
   assert.equal(parsed.postingDate, '10/05/2026');
   // 10/05 + 21 days = 10/26 -> First Tuesday of November is 2026-11-03
-  assert.equal(parsed.saleDate, '2026-11-03');
+  assert.equal(parsed.saleDate, null);
+    assert.equal(parsed.earliestEligibleSaleDate, '2026-11-03');
   assert.equal(parsed.debtor, 'Henderson, Derrick');
   assert.equal(parsed.trustee, 'Hughes Watters Askanase LLP');
   assert.equal(parsed.situsAddress, '4120 Westheimer Rd, Houston, TX 77027');
@@ -273,13 +274,15 @@ test('Harris County Clerk parses multi-notice HTML feed', () => {
 
   // Notice 1: Posted 10/02 -> Sale 2026-11-03
   assert.equal(notices[0].fileNumber, 'FC-2026-001001');
-  assert.equal(notices[0].saleDate, '2026-11-03');
+  assert.equal(notices[0].saleDate, null);
+    assert.equal(notices[0].earliestEligibleSaleDate, '2026-11-03');
   assert.equal(notices[0].debtor, 'Martinez, Elena');
   assert.equal(notices[0].situsAddress, '7810 Bellaire Blvd, Houston, TX 77036');
 
   // Notice 2: Posted 10/16 -> 21 days is 11/06 -> Sale rolls over to 2026-12-01
   assert.equal(notices[1].fileNumber, 'FC-2026-001002');
-  assert.equal(notices[1].saleDate, '2026-12-01');
+  assert.equal(notices[1].saleDate, null);
+    assert.equal(notices[1].earliestEligibleSaleDate, '2026-12-01');
   assert.equal(notices[1].debtor, 'Taylor, Gregory');
 });
 
@@ -441,7 +444,8 @@ test('TrusteeSaleScraper integrates Harris County foreclosure notice filings in 
     assert.equal(l.county, 'Harris');
     assert.equal(l.city, 'Houston');
     assert.equal(l.openingBid, null, 'Zero-fabrication: openingBid is strictly null');
-    assert.equal(l.saleDate, '2026-11-03');
+    assert.equal(l.saleDate, null);
+    assert.equal(l.provenance.sourceFacts.earliestEligibleSaleDate, '2026-11-03');
     assert.equal(l.provenance.sourceFacts.apn, '088-014-002-0010');
     assert.ok(l.parcelKey, 'Parcel key should be attached from HCAD account');
     assert.equal(l.plaintiff, 'Barrett Daffin Frappier Turner & Engel LLP');

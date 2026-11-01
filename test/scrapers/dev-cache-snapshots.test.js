@@ -461,7 +461,7 @@ test.describe('P1.9: Sanitized Markdown Evidence Snapshots (server/scrapers/disc
     assert.equal(resWithMd.saved, true);
     assert.ok(fs.existsSync(resWithMd.rawPath));
     assert.ok(fs.existsSync(resWithMd.markdownPath));
-    assert.ok(resWithMd.markdownPath.endsWith('OH-HUD-998.md'));
+    assert.match(path.basename(resWithMd.markdownPath), /^[a-f0-9]{64}-[a-f0-9]{64}\.md$/);
 
     const mdContent = fs.readFileSync(resWithMd.markdownPath, 'utf8');
     assert.match(mdContent, /# HUD Evidence Snapshot: OH-HUD-998/);

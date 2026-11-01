@@ -2,8 +2,11 @@
 
 const assert = require('node:assert/strict');
 const { test, describe } = require('node:test');
-const { computePublicBenchmarkConsensus, DISCLAIMER } = require('../../server/enrichment/public-benchmark-consensus');
+const { computePublicBenchmarkConsensus: computeRawConsensus, DISCLAIMER } = require('../../server/enrichment/public-benchmark-consensus');
 
+// Explicit observed-series fixture; production has no synthetic fallback.
+const hpiSeries = {version:1, sourceUrl:'https://www.fhfa.gov/data/hpi', retrievedAt:'2026-10-30T00:00:00Z', datasetSha256:'a'.repeat(64), values:{FL:{'2020Q2':300,'2026Q1':450}}};
+const computePublicBenchmarkConsensus = context => computeRawConsensus(context, {hpiSeries});
 describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
   test('synthesizes assessor roll, FHFA HPI trajectory, and HUD SAFMR implied GRM when all 3 present', () => {
     const listingContext = {
@@ -14,6 +17,7 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
       apn: '123456-0000',
       openingBid: 160000,
       assessmentYear: 2020,
+      assessmentPeriod: '2020Q2',
       parcel: {
         county: 'ST. JOHNS',
         canonicalApn: '123456-0000',
@@ -33,11 +37,11 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
     assert.equal(result.disclaimer, DISCLAIMER);
 
     // 3 out of 3 verified
-    assert.equal(result.sourcesVerifiedCount, 3);
-    assert.equal(result.publicConsensusScore, 1.0);
-    assert.ok(result.sourcesVerified.includes('assessor_roll'));
-    assert.ok(result.sourcesVerified.includes('fhfa_hpi'));
-    assert.ok(result.sourcesVerified.includes('hud_safmr'));
+    assert.equal(result.availableSourceCount, 3);
+    assert.equal(result.evidenceAvailabilityRatio, 1.0);
+    assert.ok(result.sourcesAvailable.includes('assessor_roll'));
+    assert.ok(result.sourcesAvailable.includes('fhfa_hpi'));
+    assert.ok(result.sourcesAvailable.includes('hud_safmr'));
 
     // 1. Assessor roll
     assert.ok(result.assessorRoll);
@@ -82,8 +86,8 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
     assert.equal(result.assessorRoll, null);
     assert.equal(result.assessedTrajectory, null); // Cannot compute trajectory without assessor base value
     assert.ok(result.unobservedReasons.some(r => r.includes('assessor')));
-    assert.ok(result.sourcesVerifiedCount <= 2);
-    assert.ok(result.publicConsensusScore < 1.0);
+    assert.ok(result.availableSourceCount <= 2);
+    assert.ok(result.evidenceAvailabilityRatio < 1.0);
 
     // Strictly null
     assert.equal(result.estLow, null);
@@ -118,8 +122,8 @@ describe('Three-Way Public-Record Benchmark Consensus (Hack #4)', () => {
   test('handles completely unobserved property with 0.0 consensus score and explicit unobserved reasons', () => {
     const result = computePublicBenchmarkConsensus({});
 
-    assert.equal(result.publicConsensusScore, 0.0);
-    assert.equal(result.sourcesVerifiedCount, 0);
+    assert.equal(result.evidenceAvailabilityRatio, 0.0);
+    assert.equal(result.availableSourceCount, 0);
     assert.equal(result.assessorRoll, null);
     assert.equal(result.assessedTrajectory, null);
     assert.equal(result.hudSafmr, null);

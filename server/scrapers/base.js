@@ -91,6 +91,7 @@ class BaseScraper {
     // Pre-normalization publisher record, keyed by the standardized listing the
     // scheduler receives. Weak so a long run cannot leak parsed rows.
     this._publisherRecords = new WeakMap();
+    this._driftSamples = new Map();
   }
 
   // The publisher's own record for this listing, before normalization. Scrapers
@@ -224,7 +225,11 @@ class BaseScraper {
     const options = typeof timeoutOrOptions === 'object' && timeoutOrOptions !== null
       ? { ...timeoutOrOptions }
       : { timeoutMs: timeoutOrOptions, method, body };
-    return this.requestText(url, options);
+    const html = await this.requestText(url, options);
+    const parsed = new URL(url);
+    const pageKey = `${parsed.origin}${parsed.pathname}`;
+    if (this._driftSamples.size < 8 || this._driftSamples.has(pageKey)) this._driftSamples.set(pageKey, computeDomStructureHash(html));
+    return html;
   }
 
   async crawlJitter(options = {}) {

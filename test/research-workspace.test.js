@@ -12,6 +12,18 @@ const { createWorkspaceHandler } = require('../server/routes/workspace');
 
 const NOW = '2026-09-05T18:00:00.000Z';
 
+test('case revision from a new origin does not claim a newer publisher observation', t => {
+  const filePath = tempStore(t);
+  const first = cases.createCase({listing:listing(),origin:{type:'manual'}},{filePath,now:NOW});
+  const originOnly = cases.createCase({listing:listing(),origin:{type:'browser_import'}},{filePath,now:NOW});
+  assert.ok(originOnly.case.revision > first.case.revision);
+  assert.equal(originOnly.sourceCheck.updated,false);
+  assert.equal(originOnly.sourceCheck.basis,'retained_inventory');
+  const newer = cases.createCase({listing:listing({sourceObservedAt:'2026-09-05T17:30:00.000Z'}),origin:{type:'manual'}},{filePath,now:NOW});
+  assert.equal(newer.sourceCheck.updated,true);
+  assert.equal(newer.sourceCheck.observedAt,'2026-09-05T17:30:00.000Z');
+});
+
 function listing(overrides = {}) {
   const observedAt = overrides.sourceObservedAt || '2026-09-05T17:00:00.000Z';
   return {

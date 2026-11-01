@@ -1233,9 +1233,13 @@ export interface LienWaterfallItem {
 
 export interface LienWaterfallResult {
   winningBidAmount: number;
-  totalSurvivingDebtOnProperty: number;
-  totalEffectiveAcquisitionCost: number;
-  surplusProceedsToBorrower: number;
+  totalSurvivingDebtOnProperty: number | null;
+  totalEffectiveAcquisitionCost: number | null;
+  surplusProceedsToBorrower: number | null;
+  knownSurvivingDebtOnProperty: number;
+  unknownReasons: string[];
+  complete: boolean;
+  distributionComplete: boolean;
   items: LienWaterfallItem[];
   criticalAlert: string | null;
   summary: string;
@@ -1243,17 +1247,21 @@ export interface LienWaterfallResult {
 
 export function computeLienWaterfall(params: {
   winningBid: number;
-  foreclosingLienType: "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed" | "mechanic_lien";
-  foreclosingLienAmount: number;
-  delinquentTaxesAmount?: number;
-  seniorMortgageAmount?: number;
+  foreclosingLienType: "unknown" | "first_mortgage" | "second_mortgage" | "heloc" | "hoa_assessment" | "tax_deed" | "mechanic_lien";
+  foreclosingLienAmount?: number | null;
+  delinquentTaxesAmount?: number | null;
+  seniorMortgageAmount?: number | null;
   subordinateLiens?: Array<{ name: string; amount: number; type?: string }>;
   state?: string;
 }): LienWaterfallResult {
   const winningBid = Math.max(0, Number(params.winningBid) || 0);
-  const foreclosingAmount = Math.max(0, Number(params.foreclosingLienAmount) || 0);
-  const delinquentTaxes = Math.max(0, Number(params.delinquentTaxesAmount) || 0);
-  const seniorMortgage = Math.max(0, Number(params.seniorMortgageAmount || (params.foreclosingLienType === "first_mortgage" ? params.foreclosingLienAmount : 0)) || 0);
+  const balance = (value: unknown): number | null => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  const foreclosingBalance = balance(params.foreclosingLienAmount);
+  const foreclosingAmount = foreclosingBalance ?? 0;
+  const taxBalance = balance(params.delinquentTaxesAmount);
+  const seniorBalance = balance(params.seniorMortgageAmount);
+  const delinquentTaxes = taxBalance ?? 0; // Internal subtotal only; unknown totals are withheld below.
+  const seniorMortgage = params.foreclosingLienType === "first_mortgage" ? foreclosingAmount : seniorBalance ?? 0;
   const isJuniorForeclosure = params.foreclosingLienType === "second_mortgage" ||
     params.foreclosingLienType === "heloc" ||
     params.foreclosingLienType === "hoa_assessment" ||
@@ -1262,7 +1270,11 @@ export function computeLienWaterfall(params: {
   const items: LienWaterfallItem[] = [];
   let availableProceeds = winningBid;
   let totalSurvivingDebt = 0;
-  let criticalAlert: string | null = null;
+  const unknownReasons: string[] = [];
+  if (params.foreclosingLienType === "unknown") unknownReasons.push("Foreclosing lien priority has not been established.");
+  if (isJuniorForeclosure && seniorBalance === null) unknownReasons.push("The surviving senior mortgage balance is unknown.");
+  if (taxBalance === null) unknownReasons.push("Delinquent property taxes have not been supplied.");
+  let criticalAlert: string | null = unknownReasons.length ? unknownReasons.join(" ") : null;
 
   if (delinquentTaxes > 0) {
     const paidTaxes = Math.min(availableProceeds, delinquentTaxes);
@@ -1324,7 +1336,7 @@ export function computeLienWaterfall(params: {
     items.push({
       id: "foreclosing-lien-01",
       name: `Foreclosing Lien (${params.foreclosingLienType.replace("_", " ").toUpperCase()})`,
-      type: params.foreclosingLienType,
+      type: params.foreclosingLienType === "unknown" ? "other" : params.foreclosingLienType,
       amount: foreclosingAmount,
       seniority: 3,
       isForeclosingLien: true,
@@ -1354,16 +1366,24 @@ export function computeLienWaterfall(params: {
     });
   }
 
-  const surplusProceedsToBorrower = availableProceeds;
-  const totalEffectiveAcquisitionCost = winningBid + totalSurvivingDebt;
+  const complete = unknownReasons.length === 0;
+  const distributionComplete = complete && foreclosingBalance !== null;
+  const surplusProceedsToBorrower = distributionComplete ? availableProceeds : null;
+  const totalEffectiveAcquisitionCost = complete ? winningBid + totalSurvivingDebt : null;
 
-  const summary = totalSurvivingDebt > 0
-    ? `Winning bid of $${winningBid.toLocaleString()} leaves $${totalSurvivingDebt.toLocaleString()} in surviving priority debt on the property. Total effective acquisition: $${totalEffectiveAcquisitionCost.toLocaleString()}.`
-    : `Winning bid of $${winningBid.toLocaleString()} fully extinguishes all noticed subordinate mortgages and liens. Zero surviving lien debt against the purchaser.${surplusProceedsToBorrower > 0 ? ` Surplus proceeds of $${surplusProceedsToBorrower.toLocaleString()} to debtor.` : ""}`;
+  const summary = !complete
+    ? `Incomplete scenario: ${unknownReasons.join(" ")} A complete acquisition cost and surplus cannot be calculated. Known surviving debt subtotal: $${totalSurvivingDebt.toLocaleString()}.`
+    : totalSurvivingDebt > 0
+    ? `Winning bid of $${winningBid.toLocaleString()} leaves $${totalSurvivingDebt.toLocaleString()} in surviving priority debt on the property. Scenario acquisition cost: $${totalEffectiveAcquisitionCost!.toLocaleString()}.`
+    : `No surviving debt in the supplied scenario balances. This calculation does not establish clear title or verify that all liens have been identified.${(surplusProceedsToBorrower ?? 0) > 0 ? ` Modeled surplus proceeds: $${surplusProceedsToBorrower!.toLocaleString()}.` : ""}`;
 
   return {
     winningBidAmount: winningBid,
-    totalSurvivingDebtOnProperty: totalSurvivingDebt,
+    totalSurvivingDebtOnProperty: complete ? totalSurvivingDebt : null,
+    knownSurvivingDebtOnProperty: totalSurvivingDebt,
+    unknownReasons,
+    complete,
+    distributionComplete,
     totalEffectiveAcquisitionCost,
     surplusProceedsToBorrower,
     items,

@@ -1,3 +1,4 @@
+import { loadCountyInventory } from "@/lib/county-inventory";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -38,41 +39,16 @@ type ListingSummary = {
 };
 
 async function loadCountyData(stateCode: string, countyParam: string): Promise<ListingSummary[]> {
-  const normCounty = normalizeCountySlug(countyParam);
-  const countyQuery = normCounty.toLowerCase();
-  const apiUrl = process.env.PROPERTY_API_URL || "http://localhost:3000";
-
-  // First attempt: fetch via running API server
-  try {
-    const res = await fetch(
-      `${apiUrl}/api/listings?state=${encodeURIComponent(stateCode)}&county=${encodeURIComponent(countyQuery)}&limit=250`,
-      {
-        cache: "no-store",
-        signal: AbortSignal.timeout(4_000),
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const items = Array.isArray(data) ? data : Array.isArray(data?.listings) ? data.listings : [];
-      if (items.length > 0) return items;
-    }
-  } catch {
-    // API not reachable or timed out; fall through to server discovery engine
-  }
-
-  // Second attempt: local database & discovery engine (zero mock, production in-memory or PG)
-  try {
-    const db = require("@server/db/client");
-    const discovery = require("@server/discovery/query");
-    const searchUrl = new URL(
-      `http://localhost/api/listings?state=${encodeURIComponent(stateCode)}&county=${encodeURIComponent(countyQuery)}&limit=250`
-    );
-    const query = discovery.queryFromUrl(searchUrl);
-    const result = await discovery.search(db, query);
-    return Array.isArray(result?.listings) ? result.listings : [];
-  } catch {
-    return [];
-  }
+  return loadCountyInventory<ListingSummary>({
+    stateCode,
+    county: normalizeCountySlug(countyParam).toLowerCase(),
+    apiUrl: process.env.PROPERTY_API_URL || "http://localhost:3000",
+    searchLocal: async (query) => {
+      const db = require("@server/db/client");
+      const discovery = require("@server/discovery/query");
+      return discovery.search(db, discovery.queryFromUrl(new URL(`http://localhost/api/listings?${query}`)));
+    },
+  });
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

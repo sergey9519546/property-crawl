@@ -109,8 +109,10 @@ HUMAN CHECKPOINT: yes (commits, push, production deploy) — approved.
 1. **Docket filings: filter or feature?** They are now hidden from listings.
    A labeled "pre-foreclosure lead" surface is a product decision the constitution
    defaults against; say the word and it becomes a scoped follow-up.
-2. **Render blueprint sync**: `render.yaml` disagrees with the live service
-   (`PROPERTY_DB`, `AUTO_MIGRATE`). Align them deliberately — do not sync as-is.
+2. **Render blueprint sync** — **RESOLVED 2026-10-28**: `render.yaml` no longer
+   declares `PROPERTY_DB`, and `server/db/database-target.js` makes
+   `DATABASE_URL` win on Render even if the flag is reintroduced (logged
+   reason). A blueprint sync is now safe.
 3. **Production operator token**: the live service generates its own
    `SCRAPER_ADMIN_TOKEN`; `adminpass0816` is local only. Rotate/align if desired.
 4. **Valuation breadth**: which counties to enroll next (172 of 10,285 live records

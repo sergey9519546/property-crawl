@@ -1,3 +1,4 @@
+import { listingFactOrigin } from "@/lib/evidence";
 import { Metadata } from "next";
 import Link from "next/link";
 import { cache } from "react";
@@ -249,9 +250,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const addressParts = listing.address.split(",").map((part) => part.trim());
   const headlineAddress = citySuffix && addressParts.length >= 3 && addressParts[1]?.toLowerCase() === citySuffix.toLowerCase() ? addressParts[0] : listing.address;
   const propertyFacts = [
-    ["Property type", <Fact key="propType" value={listing.propType} />],
-    ["Occupancy", <Fact key="occupancy" value={listing.occupancy} />],
-    ["County", <Fact key="county" value={listing.county} />],
+    ["Property type", <Fact key="propType" origin={listingFactOrigin(listing, "propType")} value={listing.propType} />],
+    ["Occupancy", <Fact key="occupancy" origin={listingFactOrigin(listing, "occupancy")} value={listing.occupancy} />],
+    ["County", <Fact key="county" origin={listingFactOrigin(listing, "county")} value={listing.county} />],
   ] as [string, React.ReactNode][];
   const optionalPropertyFacts: [string, string | null][] = [
     ["Bedrooms", positiveNumber(listing.beds)?.toLocaleString() ?? null],
@@ -345,7 +346,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           {(openingBid !== null || optionalPublishedText(listing.saleDate) || saleTime) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-sm lg:hidden">
               {openingBid !== null ? <p><span className="text-ink-3">Opening amount </span><strong className="text-ink">{formatMoney(openingBid)}</strong></p> : null}
-              {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-ink-3">Reported sale </span><strong className="text-ink"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</strong></p> : null}
+              {optionalPublishedText(listing.saleDate) || saleTime ? <p><span className="text-ink-3">Reported sale </span><strong className="text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</strong></p> : null}
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
             </div>
           )}
@@ -377,7 +378,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <div className="mt-5 rounded-2xl border border-line bg-card p-5 text-ink shadow-sm lg:hidden">
             <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
             <p className="mt-4 text-3xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-ink-3">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
-            <dl className="mt-4 divide-y divide-line border-y border-line">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Reported sale</dt><dd className="text-right font-semibold"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Opening amount</dt><dd className="font-semibold"><Fact value={openingBid} format="money" /></dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-ink-3">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
+            <dl className="mt-4 divide-y divide-line border-y border-line">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Reported sale</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Opening amount</dt><dd className="font-semibold"><Fact value={openingBid} format="money" /></dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-ink-3">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
             {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-ink-3"><strong className="text-ink">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
@@ -607,9 +608,9 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </div>
             <p className="mt-5 text-4xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-ink-3">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-line border-y border-line py-1 space-y-0">
-              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-4"><dt className="flex shrink-0 items-center gap-2 text-ink-3"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold"><Fact value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-4"><dt className="text-ink-3">Opening amount</dt><dd className="text-sm font-semibold"><Fact value={openingBid} format="money" /></dd></div>}
+              {openingBid !== null ? <div className="flex items-start justify-between gap-4 py-4"><dt className="flex shrink-0 items-center gap-2 text-ink-3"><CalendarDays className="h-4 w-4" /> Reported sale</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-4"><dt className="text-ink-3">Opening amount</dt><dd className="text-sm font-semibold"><Fact value={openingBid} format="money" /></dd></div>}
               {saleLocation ? <div className="py-4"><dt className="flex items-center gap-2 text-ink-3"><MapPin className="h-4 w-4" /> Sale location</dt><dd className="mt-2 text-sm font-semibold leading-relaxed">{saleLocation}</dd></div> : null}
-              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-ink-3">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold"><Fact value={listing.deposit} /></dd></div>
+              <div className="flex items-center justify-between gap-4 py-4"><dt className="text-ink-3">Deposit terms</dt><dd className="max-w-[55%] text-right text-sm font-semibold"><Fact origin={listingFactOrigin(listing, "deposit")} value={listing.deposit} /></dd></div>
             </dl>
             <p className="mt-5 text-xs leading-relaxed text-ink-3">Confirm current sale terms with the publisher.</p>
             {exactSourceUrl ? (

@@ -279,6 +279,7 @@ async function handleRequest(req, res) {
         timestamp: new Date().toISOString(),
         // Honest runtime mode — a Pool object is not a connection.
         dataMode: db.dataMode(),
+        snapshotEvidence: require('./scrapers/discovery-snapshots').evidenceStoreHealth(),
         postgresConfigured: Boolean(process.env.DATABASE_URL),
         postgresReachable: db.postgresReachable === true,
         ...(db.databaseCapabilities

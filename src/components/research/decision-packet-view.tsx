@@ -77,14 +77,14 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const bidAmount = typeof p.openingBid === 'number' && p.openingBid > 0 ? p.openingBid : 0;
   // A surviving first mortgage has no published balance, so the waterfall is only
   // computed when nothing senior survives; otherwise we say the amount is unknown.
-  const seniorBalanceUnknown = Boolean(t.firstMortgageSurvives);
+  const seniorBalanceUnknown = t.firstMortgageSurvives !== false || t.instrumentPriority?.priorityVerified !== true;
   const waterfall = bidAmount > 0 && !seniorBalanceUnknown
     ? computeLienWaterfall({
         winningBid: bidAmount,
         foreclosingLienType: t.firstMortgageSurvives ? "second_mortgage" : "first_mortgage",
-        foreclosingLienAmount: bidAmount,
+        foreclosingLienAmount: null,
         seniorMortgageAmount: 0,
-        delinquentTaxesAmount: typeof c.delinquentTaxes === 'number' ? c.delinquentTaxes : 0,
+        delinquentTaxesAmount: typeof c.delinquentTaxes === 'number' ? c.delinquentTaxes : null,
         state: p.state,
       })
     : null;
@@ -316,7 +316,7 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
       {/* Lien Priority & Waterfall Schedule */}
       {seniorBalanceUnknown && bidAmount > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-900" data-testid="lien-waterfall-unknown">
-          <strong>A first mortgage may survive this sale, and its balance is not published.</strong> The lien waterfall is not computed. Pull the recorded mortgage and payoff before bidding.
+          <strong>Title priority and surviving balances require verification.</strong> The lien waterfall is not computed from a pattern flag. Pull the recorded instruments and payoffs before bidding.
         </div>
       )}
       {waterfall && (
@@ -326,8 +326,8 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
               <Scale className="w-4 h-4 text-slate-800" />
               <h3 className="font-bold text-sm text-slate-900">Lien Priority & Debt Extinguishment Waterfall</h3>
             </div>
-            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${waterfall.totalSurvivingDebtOnProperty > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
-              {waterfall.totalSurvivingDebtOnProperty > 0 ? `Surviving Senior Debt: $${waterfall.totalSurvivingDebtOnProperty.toLocaleString()}` : 'Zero Surviving Liens'}
+            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${(waterfall.totalSurvivingDebtOnProperty ?? 0) > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              {!waterfall.complete ? 'Surviving balances unknown' : (waterfall.totalSurvivingDebtOnProperty ?? 0) > 0 ? `Supplied surviving debt: $${waterfall.totalSurvivingDebtOnProperty!.toLocaleString()}` : 'No surviving debt in supplied balances'}
             </span>
           </div>
 
@@ -367,14 +367,14 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
                     </td>
                   </tr>
                 ))}
-                {waterfall.surplusProceedsToBorrower > 0 && (
+                {(waterfall.surplusProceedsToBorrower ?? 0) > 0 && (
                   <tr className="bg-sky-50/60 font-semibold text-sky-950">
                     <td className="py-1.5 pr-2 text-[10px] uppercase font-bold text-sky-800">Surplus</td>
                     <td className="py-1.5 pr-2" colSpan={2}>
                       Debtor / Mortgagor Surplus Proceeds
                     </td>
                     <td className="py-1.5 pr-2 text-right text-emerald-700">
-                      ${waterfall.surplusProceedsToBorrower.toLocaleString()}
+                      ${waterfall.surplusProceedsToBorrower!.toLocaleString()}
                     </td>
                     <td className="py-1.5 text-right text-slate-400">—</td>
                   </tr>
@@ -392,14 +392,14 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
             <div className="flex items-center gap-2">
               <Building className="w-4 h-4 text-sky-600" />
-              <h3 className="font-bold text-sm text-slate-900">HUD Statutory Fair Market Rent (SAFMR) Floor</h3>
+              <h3 className="font-bold text-sm text-slate-900">HUD Fair Market Rent (SAFMR) Benchmark</h3>
             </div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
               ZIP {livePacket.hudSafmr.zip} · FY2025 Revised Section 8 FMR
             </span>
           </div>
           <p className="text-[11px] text-slate-500 leading-snug">
-            Small Area FMR statutory voucher payment standards under 24 CFR § 888.113. Establishes the non-credit tenant rent floor for Section 8 Housing Choice Vouchers (90% payment floor to 110% payment ceiling).
+            Historical HUD rent benchmark. Actual payments depend on local program rules and property approval. The 90% and 110% figures are scenarios, not guaranteed rental income.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -407,8 +407,8 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
                 <tr className="border-b border-slate-200 text-slate-500">
                   <th className="py-1.5 pr-2 font-semibold">Unit Size</th>
                   <th className="py-1.5 pr-2 text-right font-semibold">Baseline FMR</th>
-                  <th className="py-1.5 pr-2 text-right font-semibold">90% Voucher Floor</th>
-                  <th className="py-1.5 text-right font-semibold">110% Voucher Ceiling</th>
+                  <th className="py-1.5 pr-2 text-right font-semibold">90% Benchmark Scenario</th>
+                  <th className="py-1.5 text-right font-semibold">110% Benchmark Scenario</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">

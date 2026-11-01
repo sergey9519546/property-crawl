@@ -4,6 +4,7 @@
   "description": "Evidence-first property research workspace for distressed and government-sold listings (private operator beta)",
   "main": "server/server.js",
   "scripts": {
+    "test:stabilization": "node --test test/tracks123-stabilization.test.js test/county-inventory.test.js",
     "build": "next build && node scripts/ensure-nft-manifests.js",
     "canary:list": "node scripts/canary-live.js list",
     "canary:live": "node scripts/canary-live.js run",

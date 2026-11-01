@@ -163,6 +163,8 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     warnings.push('SENIOR FORECLOSURE: 1st mortgage foreclosing wipes out junior deeds and subordinate judgment liens (subject to unjoined parties).');
   } else {
     riskLevel = 'MODERATE';
+    firstMortgageSurvives = null;
+    canProceedWithBid = false;
     warnings.push('UNCONFIRMED LIEN PRIORITY: Plaintiff lien position could not be deterministically established from publisher record. Title search required.');
   }
 

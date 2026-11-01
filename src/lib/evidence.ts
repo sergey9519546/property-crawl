@@ -1,7 +1,7 @@
 // Evidence ink: pure rules behind <Fact> and <GapLedger>. No React, no
 // imports, so node can test it directly (test/evidence.test.mjs).
 
-export type FactOrigin = "printed" | "yours";
+export type FactOrigin = "printed" | "yours" | "unverified";
 export type FactFormat = "money" | "date" | "text";
 
 /**
@@ -18,9 +18,10 @@ export function factText(value: unknown, format: FactFormat = "text"): string | 
   if (format === "date") {
     if (typeof value !== "string" || !value.trim()) return null;
     const t = Date.parse(value);
-    return Number.isFinite(t)
+    const isoDay = value.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/)?.[1];
+    return Number.isFinite(t) && (!isoDay || new Date(t).toISOString().slice(0, 10) === isoDay)
       ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" }).format(t)
-      : factText(value); // unparseable: same sentinel rules as text ("TBD" is not a date)
+      : null;
   }
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : null;
   if (typeof value !== "string") return null;
@@ -58,8 +59,8 @@ export function findGaps(listing: GapListing): Gap[] {
   if (factText(listing.occupancy) === null) {
     gaps.push({ key: "occupancy", fact: "Whether anyone lives there", reason: "Not in the notice", why: "You may not get inside before the sale, and moving people out can cost time and money.", action: { label: "Drive by and look, then check the notice", href: notice.href, external: notice.external } });
   }
-  const lien = factText(listing.seniorLienRisk);
-  if (lien === null || /^unknown$/i.test(lien)) {
+  // A risk pattern never establishes the scope or result of a title search.
+  {
     gaps.push({ key: "liens", fact: "Debts that stay with the property", reason: "Not checked yet", why: "Some liens survive the sale, and the new owner pays them.", action: { label: "Order a title search before you bid", href: "/resources#knowledge-base" } });
   }
   if (factText(listing.deposit) === null) {
@@ -76,5 +77,24 @@ export function findGaps(listing: GapListing): Gap[] {
     gaps.push({ key: "saleDate", fact: "The sale date", reason: "Not in the notice", why: "Sales get moved. Without a date you can't plan funds or inspection.", action: notice });
   }
   return gaps;
+}
+
+export function listingFactOrigin(listing: { provenance?: { origin?: string; observed?: boolean; derivedFields?: Record<string, unknown> } | null }, field: string): FactOrigin {
+  const p = listing.provenance;
+  return p?.observed === true && p.origin === "live" && !p.derivedFields?.[field] ? "printed" : "unverified";
+}
+
+export type ChecklistStatus = "verified" | "flagged" | "pending";
+export function restoreChecklistStatuses(raw: string | null, defaults: Record<string, ChecklistStatus>): Record<string, ChecklistStatus> {
+  const restored = { ...defaults };
+  try {
+    const parsed: unknown = JSON.parse(raw || "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return restored;
+    for (const id of Object.keys(defaults)) {
+      const status = (parsed as Record<string, unknown>)[id];
+      if (status === "verified" || status === "flagged" || status === "pending") restored[id] = status;
+    }
+  } catch { /* Retain defaults when storage is unreadable. */ }
+  return restored;
 }
 

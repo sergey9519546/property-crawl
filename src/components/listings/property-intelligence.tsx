@@ -135,7 +135,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
         {dossier.hudSafmr && (
           <div className="rounded-xl border border-line bg-paper p-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-ink">HUD Fair Market Rent Floor · ZIP {dossier.hudSafmr.zip}</h3>
+              <h3 className="text-sm font-bold text-ink">HUD Historical Rent Benchmark · ZIP {dossier.hudSafmr.zip}</h3>
               <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
                 FY2025 SAFMR
               </span>

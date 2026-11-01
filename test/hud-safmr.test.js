@@ -123,8 +123,8 @@ test('formatDecisionPacketMarkdown formats HUD SAFMR rent table when hudSafmr is
     source: 'sheriff'
   });
   const md = formatDecisionPacketMarkdown(packet);
-  assert.match(md, /### HUD Statutory Fair Market Rent \(SAFMR\) Floor/);
+  assert.match(md, /### HUD Fair Market Rent \(SAFMR\) Benchmark/);
   assert.match(md, /ZIP Code/);
   assert.match(md, /Section 8 FMR Baseline/);
-  assert.match(md, /90% Voucher Floor/);
+  assert.match(md, /90% Benchmark Scenario/);
 });

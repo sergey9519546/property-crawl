@@ -344,6 +344,7 @@ function createCase(input, options = {}) {
       const incomingObserved = Date.parse(listingSnapshot.sourceObservedAt || listingSnapshot.provenance.observedAt);
       const retainedObserved = Date.parse(existing.listingSnapshot?.sourceObservedAt || existing.listingSnapshot?.provenance?.observedAt);
       const previousSnapshot = existing.listingSnapshot ? { ...existing.listingSnapshot } : null;
+      const sourceCheck = { basis: 'retained_inventory', checkedAt: timestamp, previousObservedAt: existing.listingSnapshot?.sourceObservedAt || existing.listingSnapshot?.provenance?.observedAt || null, observedAt: listingSnapshot.sourceObservedAt || listingSnapshot.provenance.observedAt, updated: Number.isFinite(incomingObserved) && (!Number.isFinite(retainedObserved) || incomingObserved > retainedObserved) };
       if (Number.isFinite(incomingObserved) && (!Number.isFinite(retainedObserved) || incomingObserved > retainedObserved)) {
         const previousListingId = existing.listingId;
         existing.listingId = listingSnapshot.id;
@@ -357,7 +358,7 @@ function createCase(input, options = {}) {
         };
         changed = true;
       }
-      if (!changed) return { changed: false, value: { case: caseSummary(existing), created: false } };
+      if (!changed) return { changed: false, value: { case: caseSummary(existing), created: false, sourceCheck } };
       existing.revision += 1;
       existing.updatedAt = timestamp;
       const substantive = origin.type === 'new_match' || origin.type === 'hunt_match' || origin.type === 'evaluation_unknown'
@@ -366,7 +367,7 @@ function createCase(input, options = {}) {
       if (listingAliasChange) existing.history.unshift(historyEvent('listing_alias_updated', existing, timestamp, listingAliasChange));
       existing.history.unshift(historyEvent('origin_recorded', existing, timestamp, { originId: origin.id }));
       existing.history = existing.history.slice(0, MAX_CASE_HISTORY);
-      return { value: { case: caseSummary(existing), created: false } };
+      return { value: { case: caseSummary(existing), created: false, sourceCheck } };
     }
     if (store.cases.length >= MAX_CASES) throw new ResearchCaseError('RESEARCH_CASE_LIMIT', `No more than ${MAX_CASES} research cases may be stored`);
     const item = {

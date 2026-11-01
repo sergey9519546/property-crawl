@@ -240,7 +240,7 @@ test('Decision Packet View: component renders HUD SAFMR voucher table and statut
   const path = require('node:path');
   const viewSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/decision-packet-view.tsx'), 'utf8');
   assert.match(viewSrc, /data-testid="hud-safmr-card"/);
-  assert.match(viewSrc, /HUD Statutory Fair Market Rent \(SAFMR\) Floor/);
+  assert.match(viewSrc, /HUD Fair Market Rent \(SAFMR\) Benchmark/);
   assert.match(viewSrc, /data-testid="statutory-deadlines-carry"/);
   assert.match(viewSrc, /Statutory Deadlines & Capital Holding Carry/);
   assert.match(viewSrc, /computeStatutoryDeadlinesAndCarry/);
