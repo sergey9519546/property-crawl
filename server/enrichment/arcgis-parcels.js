@@ -510,6 +510,19 @@ const COUNTY_ARCGIS_REGISTRY = {
     taxYearField: 'TaxYear',
     valuationYearField: 'ParcelValuationYear'
   },
+  'AZ-PIMA': {
+    name: 'Pima County Assessor (Tucson)',
+    fips: '04019',
+    endpoint: 'https://gisdata.pima.gov/arcgis1/rest/services/GISOpenData/LandRecords/MapServer/12/query',
+    apnField: 'PARCEL',
+    landUseField: 'PARCEL_USE',
+    assessedTotalField: 'FCV',
+    assessedLandField: null,
+    assessedImprvField: null,
+    legalDescField: 'LEGAL1',
+    situsAddressField: 'ADDRESS_OL',
+    taxYearField: 'TAXYR'
+  },
   'TX-BEXAR': {
     name: 'Bexar County / San Antonio (BCAD)',
     fips: '48029',

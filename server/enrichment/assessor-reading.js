@@ -41,6 +41,15 @@ const MARKET_CONVERSION = Object.freeze({
     mode: 'market-figure',
     citation: 'Maricopa County Assessor FullCashValue, the statutory market-value estimate capped at market value by A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. Sampled live at ~0.82 of recorded sale price across ~16,000 dated 2023-2026 sales (LimitedPropertyValue, the taxed basis, reads ~0.37).',
   }),
+  // Same statutory basis as Maricopa (A.R.S. § 42-11001 is statewide), but this
+  // layer carries no sale-price column, so the entry rests on the definition
+  // alone — it must not borrow Maricopa's sampled ratio as if it were measured
+  // here. The Pima layer keyed by this entry is Pima-only (sampled JURIS_OL
+  // values are Pima jurisdictions).
+  'AZ-PIMA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Pima County Assessor FCV, the statutory market-value estimate capped at market value by A.R.S. § 42-11001(6), compared with the published opening amount; because full cash value shall not be greater than market value the computed discount is a conservative lower bound. This layer publishes no sale-price column, so the entry rests on the statutory definition alone and is not sale-price corroborated.',
+  }),
 
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
   'FL-ORANGE': Object.freeze({

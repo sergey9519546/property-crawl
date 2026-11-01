@@ -225,6 +225,56 @@ test('harvest stamps the Maricopa tax year and preserves the valuation-year labe
   assert.equal(listing.parcelKey, '04013-10101010');
 });
 
+// Pima publishes its tax year as a string ("2026") in TAXYR, a spelling the
+// generic roll-year list does not carry, so the value comes from the registry's
+// taxYearField. No sale-price or valuation-year column exists on this layer, so
+// the valuation-year fields stay null rather than being inferred.
+const PIMA_ATTRIBUTES = {
+  PARCEL: '10101003E',
+  FCV: 3051606,
+  TAXYR: '2026',
+  PARCEL_USE: '1170',
+  ADDRESS_OL: '2150 W ORANGE GROVE RD',
+  LEGAL1: "N263.33' S363.33' W359.67' E459.67' SE4",
+};
+
+test('harvest reads the Pima string-valued TAXYR through the registry taxYearField', async () => {
+  const cachePath = temporaryCachePath();
+  const listing = {
+    id: 'AZ-PIM-1001',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Pima',
+    address: '2150 W Orange Grove Rd, Tucson, AZ',
+    openingBid: 1500000,
+    lat: null,
+    lng: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'ServiceLink',
+      recordId: 'pim-1',
+      sourceFacts: { parcelNumber: '10101003E' },
+    },
+  };
+  const results = await harvestAssessorRolls([listing], {
+    cachePath,
+    fetchFn: async () => arcgisFetchReturning(PIMA_ATTRIBUTES)(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(results.harvested, 1);
+  assert.equal(listing.assessorParcel.assessedValue.total, 3051606);
+  assert.equal(listing.assessorParcel.legalDescription, PIMA_ATTRIBUTES.LEGAL1);
+  const roll = listing.provenance.derivedFields.assessorRoll;
+  assert.equal(roll.countyKey, 'AZ-PIMA');
+  assert.equal(roll.assessmentYear, 2026);
+  assert.equal(roll.taxYear, 2026);
+  assert.equal(roll.valuationYear, null);
+  assert.equal(listing.assessmentYear, 2026);
+  assert.equal(listing.parcelKey, '04019-10101003E');
+});
+
 test('a Maricopa parcel without a tax year falls back to the publisher valuation-year label', async () => {
   const cachePath = temporaryCachePath();
   const listing = {

@@ -126,6 +126,39 @@ test('the Maricopa enrollment registry entry resolves and carries the live-verif
   assert.equal(entry.valuationYearField, 'ParcelValuationYear');
 });
 
+// Enrolled 2026-11-01 from the live-verified Pima County layer
+// (gisdata.pima.gov GISOpenData/LandRecords layer 12, 448,600 parcels). The
+// conversion rests on the same statewide statute as Maricopa, but this layer has
+// no sale-price column, so the citation must not borrow Maricopa's sampled
+// ratio as if it had been measured here.
+test('assessor reading converts Pima full cash value 1:1 with the A.R.S. citation', () => {
+  // Real values captured from the live layer: APN 10101003E (2150 W Orange Grove Rd).
+  const pima = interpretAssessorParcel({ countyKey: 'AZ-PIMA', parcel: parcel(3051606), openingBid: 1500000 });
+  assert.equal(pima.enrolled, true);
+  assert.equal(pima.marketComparison, 3051606);
+  assert.equal(Math.round(pima.ratio * 100) / 100, 0.49);
+  assert.equal(pima.dealScore, 66);
+  assert.match(pima.citation, /42-11001/);
+  assert.match(pima.citation, /conservative lower bound/);
+  assert.match(pima.citation, /no sale-price column/);
+  assert.doesNotMatch(pima.citation, /0\.82/);
+  assert.equal(pima.field, 'FCV');
+  assert.equal(pima.withheldReason, null);
+});
+
+test('the Pima enrollment registry entry resolves and carries the live-verified layer', () => {
+  const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
+  assert.equal(resolveCountyKey('AZ', 'Pima'), 'AZ-PIMA');
+  assert.equal(resolveCountyKey('AZ', 'PIMA COUNTY'), 'AZ-PIMA');
+  const entry = COUNTY_ARCGIS_REGISTRY['AZ-PIMA'];
+  assert.equal(entry.fips, '04019');
+  assert.match(entry.endpoint, /^https:\/\/gisdata\.pima\.gov\//);
+  assert.match(entry.endpoint, /GISOpenData\/LandRecords\/MapServer\/12\/query$/);
+  assert.equal(entry.apnField, 'PARCEL');
+  assert.equal(entry.assessedTotalField, 'FCV');
+  assert.equal(entry.taxYearField, 'TAXYR');
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [
