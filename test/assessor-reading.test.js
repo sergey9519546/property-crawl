@@ -81,6 +81,44 @@ test('assessor reading converts the 2026-10-21 enrollments 1:1 with published ci
   assert.match(tarrant.citation, /23\.01/);
 });
 
+// Enrolled 2026-11-01 from the live-verified Maricopa County parcel layer
+// (gis.maricopa.gov Reference/ParcelCityCounty layer 0). Arizona publishes the
+// market figure directly: A.R.S. § 42-11001 defines full cash value as market
+// value, so FullCashValue converts 1:1 — while AssessedFullCashValue (FCV ×
+// statutory ratio) is the taxed basis and must never be read as market.
+test('assessor reading converts Maricopa full cash value 1:1 with the A.R.S. citation', () => {
+  // Real values captured from the live layer: APN 10101010, Avondale.
+  const maricopa = interpretAssessorParcel({ countyKey: 'AZ-MARICOPA', parcel: parcel(10205862), openingBid: 5000000 });
+  assert.equal(maricopa.enrolled, true);
+  assert.equal(maricopa.marketComparison, 10205862);
+  assert.equal(Math.round(maricopa.ratio * 100) / 100, 0.49);
+  assert.equal(maricopa.dealScore, 66);
+  assert.match(maricopa.citation, /FullCashValue/);
+  assert.match(maricopa.citation, /42-11001/);
+  assert.equal(maricopa.field, 'FullCashValue');
+  assert.equal(maricopa.withheldReason, null);
+
+  // The taxed basis (AssessedFullCashValue) must NOT be silently accepted as
+  // market: an interpreter configured against it would read 10205862 × ratio
+  // and overstate the discount. This guard pins the field choice.
+  assert.notEqual(maricopa.field, 'AssessedFullCashValue');
+});
+
+test('the Maricopa enrollment registry entry resolves and carries the live-verified layer', () => {
+  const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
+  assert.equal(resolveCountyKey('AZ', 'Maricopa'), 'AZ-MARICOPA');
+  assert.equal(resolveCountyKey('AZ', 'MARICOPA COUNTY'), 'AZ-MARICOPA');
+  const entry = COUNTY_ARCGIS_REGISTRY['AZ-MARICOPA'];
+  assert.match(entry.endpoint, /^https:\/\/gis\.maricopa\.gov\//);
+  assert.match(entry.endpoint, /Reference\/ParcelCityCounty\/MapServer\/0\/query$/);
+  assert.equal(entry.apnField, 'APN');
+  assert.equal(entry.assessedTotalField, 'FullCashValue');
+  assert.equal(entry.assessedLandField, 'LandFullCashValue');
+  assert.equal(entry.assessedImprvField, 'ImprovementFullCashValue');
+  assert.equal(entry.taxYearField, 'TaxYear');
+  assert.equal(entry.valuationYearField, 'ParcelValuationYear');
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [

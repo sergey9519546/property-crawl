@@ -20,7 +20,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { queryArcgisParcel, resolveCountyKey } = require('./arcgis-parcels');
+const { queryArcgisParcel, resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
@@ -40,8 +40,11 @@ const DEFAULT_HARVEST_LIMIT = 100;
 
 // Assessor rolls name the roll year inconsistently. These are the common
 // ArcGIS attribute spellings plus the Florida DOR NAL roll (ASMNT_YR); anything
-// outside 1900-2100 is rejected.
-const TAX_YEAR_FIELDS = ['taxYear', 'TAX_YEAR', 'tax_yr', 'TAX_YR', 'assessYr', 'ASSESS_YR', 'rollYear', 'ROLL_YEAR', 'assessmentYear', 'YEAR_ASSESSED', 'ASMNT_YR'];
+// outside 1900-2100 is rejected. Tax-year spellings come first: a county that
+// publishes both a tax year and a valuation-year label (Maricopa: TaxYear 2026
+// alongside ParcelValuationYear 2027) is stamped with the tax year, and the
+// publisher's valuation-year label is preserved separately in the provenance.
+const TAX_YEAR_FIELDS = ['taxYear', 'TAX_YEAR', 'tax_yr', 'TAX_YR', 'TaxYear', 'TAX_YEAR_1', 'assessYr', 'ASSESS_YR', 'rollYear', 'ROLL_YEAR', 'assessmentYear', 'YEAR_ASSESSED', 'ASMNT_YR', 'ParcelValuationYear', 'parcelValuationYear'];
 
 function cacheKeyFor(countyKey, lat, lng, cleanApn) {
   if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -85,6 +88,20 @@ function taxYearFromRawAttributes(rawAttributes) {
   return null;
 }
 
+// Reads one named year attribute (case-insensitive) without inferring anything.
+// The registry names the publisher's own field, so the value is the publisher's
+// label, not a derived date.
+function readYearField(rawAttributes, field) {
+  if (!rawAttributes || typeof rawAttributes !== 'object' || !field) return null;
+  const wanted = String(field).toLowerCase();
+  for (const [key, value] of Object.entries(rawAttributes)) {
+    if (String(key).toLowerCase() !== wanted) continue;
+    const year = Number(value);
+    return Number.isInteger(year) && year >= 1900 && year <= 2100 ? year : null;
+  }
+  return null;
+}
+
 function candidateListing(listing) {
   if (!listing || typeof listing !== 'object') return null;
   if (!listing.provenance || listing.provenance.origin !== 'live') return null;
@@ -113,7 +130,12 @@ function applyHarvest(candidate, parcel, observedAt) {
   const { listing } = candidate;
   listing.assessorParcel = parcel;
   listing.provenance.derivedFields = listing.provenance.derivedFields || {};
-  const assessmentYear = taxYearFromRawAttributes(parcel.rawAttributes) || (Number.isInteger(Number(parcel.taxYear)) && Number(parcel.taxYear) >= 1900 && Number(parcel.taxYear) <= 2100 ? Number(parcel.taxYear) : null);
+  const registryEntry = COUNTY_ARCGIS_REGISTRY[candidate.countyKey] || null;
+  const publisherTaxYear = readYearField(parcel.rawAttributes, registryEntry?.taxYearField);
+  const publisherValuationYear = readYearField(parcel.rawAttributes, registryEntry?.valuationYearField);
+  const assessmentYear = publisherTaxYear
+    || taxYearFromRawAttributes(parcel.rawAttributes)
+    || (Number.isInteger(Number(parcel.taxYear)) && Number(parcel.taxYear) >= 1900 && Number(parcel.taxYear) <= 2100 ? Number(parcel.taxYear) : null);
   // Durable copy for the provenance JSONB: everything the evaluator and the
   // county conversion need, without rawAttributes (large, and only the tax
   // year was read from it — captured explicitly below).
@@ -138,6 +160,8 @@ function applyHarvest(candidate, parcel, observedAt) {
     observedAt,
     basis: parcel.source === 'local_cadastral_offline_index' ? 'LOCAL_CADASTRAL_OFFLINE' : 'ARCGIS_REST_PARCEL',
     assessmentYear,
+    taxYear: publisherTaxYear,
+    valuationYear: publisherValuationYear,
     note: 'County assessor roll figure harvested at ingest; the market comparison applies the county conversion rule, never the raw figure where none is configured.',
   };
   if (parcel.canonicalApn && !listing.parcelKey) {
@@ -220,6 +244,7 @@ module.exports = {
   cacheKeyFor,
   candidateListing,
   harvestAssessorRolls,
+  readYearField,
   resolveHarvestLimit,
   taxYearFromRawAttributes,
 };

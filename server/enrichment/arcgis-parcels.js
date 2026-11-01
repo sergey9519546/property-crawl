@@ -496,6 +496,20 @@ const COUNTY_ARCGIS_REGISTRY = {
   ...WI_COUNTY_ENTRIES,
   ...CT_COUNTY_ENTRIES,
   ...AR_COUNTY_ENTRIES,
+  'AZ-MARICOPA': {
+    name: 'Maricopa County Assessor (Phoenix)',
+    fips: '04013',
+    endpoint: 'https://gis.maricopa.gov/arcgis/rest/services/Reference/ParcelCityCounty/MapServer/0/query',
+    apnField: 'APN',
+    landUseField: 'PropertyUseDescription',
+    assessedTotalField: 'FullCashValue',
+    assessedLandField: 'LandFullCashValue',
+    assessedImprvField: 'ImprovementFullCashValue',
+    legalDescField: 'PropertyDescription',
+    situsAddressField: 'PropertyFullStreetAddress',
+    taxYearField: 'TaxYear',
+    valuationYearField: 'ParcelValuationYear'
+  },
   'TX-BEXAR': {
     name: 'Bexar County / San Antonio (BCAD)',
     fips: '48029',

@@ -167,6 +167,93 @@ test('taxYearFromRawAttributes accepts common roll-year spellings and rejects no
   assert.equal(taxYearFromRawAttributes({ ROLL_YEAR: 1850 }), null);
   assert.equal(taxYearFromRawAttributes({ TAX_YEAR: 'n/a' }), null);
   assert.equal(taxYearFromRawAttributes(null), null);
+  // A tax-year spelling outranks a valuation-year label when a county publishes
+  // both (Maricopa: TaxYear 2026 next to ParcelValuationYear 2027).
+  assert.equal(taxYearFromRawAttributes({ ParcelValuationYear: 2027, TaxYear: 2026 }), 2026);
+});
+
+// Maricopa publishes the market figure directly (FullCashValue) and labels the
+// roll twice: TaxYear 2026 and ParcelValuationYear 2027. The harvest stamps the
+// tax year as the assessment year and keeps the publisher's valuation-year
+// label beside it, so neither date is invented nor silently dropped.
+const MARICOPA_ATTRIBUTES = {
+  APN: '10101010',
+  FullCashValue: 10205862,
+  LandFullCashValue: 1834600,
+  ImprovementFullCashValue: 8371262,
+  ParcelValuationYear: 2027,
+  TaxYear: 2026,
+  PropertyUseDescription: 'MUNICIPAL MISCELLANEOUS IMPROVED PROP',
+  PropertyFullStreetAddress: '11350 W CIVIC CENTER DR',
+  PropertyDescription: 'AVONDALE CIVIC CENTER MCR 642-07',
+};
+
+test('harvest stamps the Maricopa tax year and preserves the valuation-year label', async () => {
+  const cachePath = temporaryCachePath();
+  const listing = {
+    id: 'AZ-MAR-1001',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Maricopa',
+    address: '11350 W Civic Center Dr, Avondale, AZ 85323',
+    openingBid: 5000000,
+    lat: null,
+    lng: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'ServiceLink',
+      recordId: 'mar-1',
+      sourceFacts: { parcelNumber: '10101010' },
+    },
+  };
+  const results = await harvestAssessorRolls([listing], {
+    cachePath,
+    fetchFn: async () => arcgisFetchReturning(MARICOPA_ATTRIBUTES)(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(results.harvested, 1);
+  assert.equal(listing.assessorParcel.assessedValue.total, 10205862);
+  const roll = listing.provenance.derivedFields.assessorRoll;
+  assert.equal(roll.countyKey, 'AZ-MARICOPA');
+  assert.equal(roll.assessmentYear, 2026);
+  assert.equal(roll.taxYear, 2026);
+  assert.equal(roll.valuationYear, 2027);
+  assert.equal(listing.assessmentYear, 2026);
+  assert.equal(listing.assessed, 10205862);
+  assert.equal(listing.parcelKey, '04013-10101010');
+});
+
+test('a Maricopa parcel without a tax year falls back to the publisher valuation-year label', async () => {
+  const cachePath = temporaryCachePath();
+  const listing = {
+    id: 'AZ-MAR-1002',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Maricopa',
+    address: '10101001C, Avondale, AZ',
+    lat: null,
+    lng: null,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'ServiceLink',
+      recordId: 'mar-2',
+      sourceFacts: { parcelNumber: '10101001C' },
+    },
+  };
+  const results = await harvestAssessorRolls([listing], {
+    cachePath,
+    fetchFn: async () => arcgisFetchReturning({ ...MARICOPA_ATTRIBUTES, TaxYear: null })(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(results.harvested, 1);
+  const roll = listing.provenance.derivedFields.assessorRoll;
+  assert.equal(roll.taxYear, null);
+  assert.equal(roll.valuationYear, 2027);
+  assert.equal(roll.assessmentYear, 2027);
 });
 
 test('cacheKeyFor is stable for a county and rounded coordinates', () => {

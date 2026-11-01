@@ -27,6 +27,15 @@ const MARKET_CONVERSION = Object.freeze({
     citation: 'Tarrant Appraisal District appraised value (APPRAISED_VALUE via the Fort Worth public parcels layer), compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01. Sampled 2026-roll records show APPRAISED_VALUE equal to MARKET_VALUE.',
   }),
 
+  // Arizona County Assessors (A.R.S. § 42-11001: "full cash value" means market
+  // value; the assessor-published FCV is the market figure, compared 1:1 with the
+  // published opening amount. AssessedFullCashValue (FCV × statutory ratio) is
+  // the taxed basis and is deliberately NOT used as market.)
+  'AZ-MARICOPA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Maricopa County Assessor FullCashValue (A.R.S. § 42-11001 full cash value = market value), compared 1:1 with the published opening amount.',
+  }),
+
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
   'FL-ORANGE': Object.freeze({
     mode: 'market-figure',
