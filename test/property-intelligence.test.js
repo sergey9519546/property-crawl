@@ -167,6 +167,8 @@ test('concurrent valid POSTs coalesce, then POST and GET use the same cached evi
   const results = await Promise.all([first, second]);
   assert.equal(results[0].statusCode, 200);
   assert.deepEqual(results[0].body.publicRecords, evidence);
+  assert.equal(results[0].body.enrichmentExecution.success, true);
+  assert.equal(results[0].body.enrichmentExecution.dossier.codeEnforcement.openViolations, null);
   assert.deepEqual(results[1].body.publicRecords, evidence);
   const third = await invoke(handler, 'POST');
   const read = await invoke(handler, 'GET', publisherFixture().id, { token: 'operator-secret' });
@@ -191,6 +193,7 @@ test('an unauthorized GET never receives cached public-record evidence', async (
   const read = await invoke(handler, 'GET');  // no token
   assert.equal(read.body.publicRecords, null);
   assert.equal(read.body.researchRestricted, true);
+  assert.equal(read.body.enrichmentExecution, undefined);
   assert.equal(calls, 1, 'the unauthorized GET must not trigger a rebuild');
 });
 

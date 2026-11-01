@@ -1,4 +1,5 @@
 'use strict';
+const { capturedRecordUrl } = require('./record-link');
 
 /**
  * server/scrapers/adapters/harris-clerk-foreclosure.js
@@ -50,11 +51,13 @@ function parseDateToUtcTimestamp(dateVal) {
   const str = String(dateVal).trim();
   const mUs = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (mUs) {
-    return Date.UTC(Number(mUs[3]), Number(mUs[1]) - 1, Number(mUs[2]));
+    const year = Number(mUs[3]), month = Number(mUs[1]), day = Number(mUs[2]);
+    const timestamp = Date.UTC(year, month - 1, day), date = new Date(timestamp);
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? timestamp : null;
   }
   const mIso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (mIso) {
-    return Date.UTC(Number(mIso[1]), Number(mIso[2]) - 1, Number(mIso[3]));
+    return parseDateToUtcTimestamp(`${mIso[2]}/${mIso[3]}/${mIso[1]}`);
   }
   const parsed = new Date(str);
   return isNaN(parsed.getTime()) ? null : parsed.getTime();
@@ -124,9 +127,9 @@ function getHarrisClerkSearchUrl(options = {}) {
   const base = (options.baseUrl || HARRIS_CLERK_BASE_URL).replace(/\/+$/, '');
   if (options.fileNumber || options.instrumentNumber || options.id) {
     const id = options.fileNumber || options.instrumentNumber || options.id;
-    return `${base}/Foreclosure/details?id=${encodeURIComponent(id)}`;
+    throw new Error('A captured publisher record URL is required; no detail URL can be inferred from an instrument number');
   }
-  return `${base}/Foreclosure/Search`;
+  return `${base}/Applications/WebSearch/FRCL_R.aspx`;
 }
 
 /**
@@ -139,6 +142,22 @@ function getHarrisClerkSearchUrl(options = {}) {
 function parseHarrisClerkNotice(noticeHtmlOrText = '', options = {}) {
   const raw = String(noticeHtmlOrText || '');
   if (!raw.trim()) return null;
+
+  // Actual public WebForms grid, captured 2026-11-01. The grid establishes
+  // document identity and dates, but supplies no property/address/debt facts.
+  const document = raw.match(/<a\b[^>]*href="([^"]*ViewECdocs\.aspx\?[^\"]+)"[^>]*>\s*(FRCL-\d{4}-\d+)\s*<\/a>/i);
+  if (document) {
+    const sourceUrl = capturedRecordUrl(raw, new URL('/Applications/WebSearch/', options.baseUrl || HARRIS_CLERK_BASE_URL).href);
+    if (!sourceUrl) return null;
+    const field = name => raw.match(new RegExp(`id="[^"\\s]*${name}"[^>]*>([\\s\\S]*?)<\\/span>`, 'i'))?.[1];
+    const date = name => { const value = parseDateToUtcTimestamp(cleanCellText(field(name))); return value === null ? null : new Date(value).toISOString().slice(0, 10); };
+    return { source:'recorder', platform:'harris-clerk-foreclosure', county:'Harris', state:'TX',
+      fileNumber:document[2], instrumentNumber:document[2], postingDate:date('lblFileDate'), saleDate:date('lblSaleDate'),
+      earliestEligibleSaleDate:null, debtor:null, grantor:null, trustee:null, grantee:null, situsAddress:null,
+      legalDescription:null, apn:null, docType:HARRIS_DOC_TYPES.NOTICE_OF_FORECLOSURE_SALE,
+      distressStage:'SCHEDULED_AUCTION', sourceUrl, openingBid:null, estLow:null, estHigh:null, assessed:null,
+      evidenceOnly:true, pages:Number(cleanCellText(field('lblPages'))) || null };
+  }
 
   // 1. File Number / Instrument Number
   let fileNumber = null;
@@ -303,9 +322,7 @@ function parseHarrisClerkNotice(noticeHtmlOrText = '', options = {}) {
   }
 
   const baseUrl = (options.baseUrl || HARRIS_CLERK_BASE_URL).replace(/\/+$/, '');
-  const sourceUrl = fileNumber
-    ? `${baseUrl}/Foreclosure/details?id=${encodeURIComponent(fileNumber)}`
-    : `${baseUrl}/Foreclosure/Search`;
+  const sourceUrl = capturedRecordUrl(raw, baseUrl);
 
   return {
     source: 'recorder',
@@ -347,6 +364,13 @@ function parseHarrisClerkHtml(html = '', options = {}) {
   if (!text.trim()) return [];
 
   const notices = [];
+
+  for (const row of text.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    if (!/ViewECdocs\.aspx\?/i.test(row[1])) continue;
+    const parsed = parseHarrisClerkNotice(row[1], options);
+    if (parsed) notices.push(parsed);
+  }
+  if (notices.length) return notices;
 
   // 1. Structured table rows or notice containers
   const rowRegex =

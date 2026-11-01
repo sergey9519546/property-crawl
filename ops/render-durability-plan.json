@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "status": "prepared_not_applied_requires_recurring_cost_approval",
+  "serviceId": "srv-dbbc3vgm7kps73eehimg",
+  "postgresId": "dpg-dbbc8su7bikc73819uo0-a",
+  "region": "oregon",
+  "budget": {
+    "proposedBaseMonthlyCapUSD": 20,
+    "scope": "existing web service, existing PostgreSQL instance and 1 GB evidence/cache disk",
+    "condition": "Verify current provider quote fits the approved cap before mutation; metered traffic/build usage is separate. Do not enable storage autoscaling or add other resources."
+  },
+  "preconditions": [
+    "Final local release gates pass and the exact deploy commit is recorded.",
+    "Take and hash an off-host PostgreSQL custom-format dump; inspect it with pg_restore.",
+    "Preserve any accessible old evidence before replacing an ephemeral instance; do not claim inaccessible history was recovered.",
+    "Obtain explicit approval for the new recurring charges.",
+    "Check fresh service/database/disk metadata before applying; stop if resource identity or configuration has changed."
+  ],
+  "requestsAfterApproval": [
+    {
+      "method": "PATCH",
+      "path": "/v1/services/srv-dbbc3vgm7kps73eehimg",
+      "body": { "autoDeployTrigger": "off", "serviceDetails": { "plan": "starter" } }
+    },
+    {
+      "method": "PATCH",
+      "path": "/v1/postgres/dpg-dbbc8su7bikc73819uo0-a",
+      "body": { "plan": "basic_256mb", "enableDiskAutoscaling": false }
+    },
+    {
+      "method": "POST",
+      "path": "/v1/disks",
+      "body": { "name": "property-crawl-evidence", "sizeGB": 1, "mountPath": "/app/.cache", "serviceId": "srv-dbbc3vgm7kps73eehimg" },
+      "condition": "No existing disk at this mount; otherwise inspect/reuse it without recreating or shrinking it."
+    }
+  ],
+  "setIndividualEnvironmentVariablesPreservingAllOtherValues": {
+    "PROPERTY_EVIDENCE_DIR": "/app/.cache/discovery-snapshots",
+    "PROPERTY_DURABLE_MOUNT_PATH": "/app/.cache",
+    "PROPERTY_REQUIRE_DURABLE_EVIDENCE": "1",
+    "SCRAPER_BOOT_DELAY_MS": "90000"
+  },
+  "doNotChange": ["DATABASE_URL", "operator/session credentials", "database contents", "source promotion", "workspace pricing plan"],
+  "acceptance": [
+    "Database available, no free-plan expiry; PostgreSQL/PostGIS functionality and original inventory still readable.",
+    "Explicit pinned deploy reaches live; public /api/health release.commit matches the approved SHA.",
+    "Health reports snapshotEvidence.mountVerified=true, durability=mounted_filesystem and no write block.",
+    "Retain an explicitly identified evidence/control observation, record its ledger head and raw digest, then restart/redeploy and verify identical bytes/head remain.",
+    "Create evidence archive on host with scripts/evidence-backup.js, copy it off host, verify its SHA-256 and restore only into a new isolated directory; verify raw/markdown/PDF and ledger-head readback.",
+    "Enable/check provider database backups and prove restoration in a separate PostgreSQL target before accepting disaster recovery.",
+    "Record hosted deployment, persistence and recovery receipts; retain later-track hold until all remaining acceptance rows close."
+  ],
+  "rollback": [
+    "Redeploy the prior known working commit with the same mounted disk and database.",
+    "Never delete/detach the disk, downgrade to ephemeral storage, restore over the live store, or delete the database as rollback.",
+    "A paid-to-free database reversal is not assumed possible; retain storage and stop for operator review if cost expectations change."
+  ]
+}

@@ -333,5 +333,6 @@ module.exports = {
   appendLedgerEntry,
   saveLedgerToFile,
   loadLedgerFromFile,
+  withLedgerLock,
   appendLedgerToFile
 };

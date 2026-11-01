@@ -57,18 +57,11 @@ process.on('uncaughtException', (err) => {
   shutdown(1);
 });
 
-async function waitForHealth(url, timeoutMs = 30000) {
-  const startAt = Date.now();
-  while (Date.now() - startAt < timeoutMs && !closing) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
-      if (res.ok) return true;
-    } catch {
-      // transient connection failure during boot is expected
-    }
-    await new Promise((r) => setTimeout(r, 750));
-  }
-  return false;
+async function waitForHealth(url, timeoutMs = 120000) {
+  return require('./production-health').waitForHealth(url, {
+    timeoutMs, closing:() => closing,
+    onFailure:reason => console.error(`[Production] Health deadline exceeded (${reason}) for ${url}`),
+  });
 }
 
 /**
@@ -106,6 +99,7 @@ async function awaitBackendReady() {
 }
 
 async function boot() {
+  require('../server/discovery/evidence-storage').assertEvidenceStorage(bootEnv);
   console.log(`[Production] Bootstrapping Property-Crawl production runtime...`);
   console.log(`[Production] Public Port: ${publicPort} | Internal API Port: ${internalApiPort}`);
 
@@ -124,6 +118,8 @@ async function boot() {
     ...defaultDbEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
+    // Let both services become healthy before the first CPU/IO-heavy crawl.
+    SCRAPER_BOOT_DELAY_MS: bootEnv.SCRAPER_BOOT_DELAY_MS || '90000',
   };
   // --env-file-if-exists matches start:api / dev:api so the Node API sees
   // operator credentials even if this orchestrator is launched without them.

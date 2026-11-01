@@ -320,6 +320,8 @@ async function recordSnapshot(input = {}, options = {}) {
   const observedAt = input.observedAt || options.observedAt || new Date().toISOString();
   if (!Number.isFinite(Date.parse(observedAt))) throw new Error('Invalid snapshot observation date');
   const snapshotDir = options.snapshotDir || input.snapshotDir || process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR;
+  const storage = require('../discovery/evidence-storage').evidenceStorageStatus({evidenceDir:snapshotDir});
+  if (storage.writesBlocked) throw new Error(storage.reason);
   const rawPayload = input.rawPayload !== undefined ? input.rawPayload : (input.raw ?? input.html ?? null);
   const html = typeof input.html === 'string' ? input.html : (typeof rawPayload === 'string' ? rawPayload : '');
   const payloadSha256 = crypto.createHash('sha256').update(typeof rawPayload === 'string' ? rawPayload : JSON.stringify(rawPayload ?? null)).digest('hex');
@@ -385,7 +387,7 @@ function verifiedSnapshotReceipt(listing, options = {}) {
 
 function evidenceStoreHealth(snapshotDir = process.env.PROPERTY_EVIDENCE_DIR || DEFAULT_SNAPSHOT_DIR) {
   const target = path.join(snapshotDir,'evidence-ledger.jsonl');
-  const base = {backend:'file',durability:'local_filesystem_only',externalAnchor:false};
+  const base = {backend:'file',...require('../discovery/evidence-storage').evidenceStorageStatus({evidenceDir:snapshotDir}),externalAnchor:false};
   if (!fs.existsSync(target)) return {...base,integrity:'not_recorded',entries:0};
   try { const chain=loadLedgerFromFile(target); return {...base,integrity:'chain_verified',entries:chain.length}; }
   catch { return {...base,integrity:'unreadable',writesBlocked:true,reason:'Evidence ledger is unreadable; original retained and writes refused'}; }

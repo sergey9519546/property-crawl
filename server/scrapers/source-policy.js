@@ -236,6 +236,12 @@ function hasSourceRecordShape(source, url) {
       return (hasRecordQuery(url) || (/\.s?html?$/.test(last) && last !== 'realprop.shtml'));
     }
     case 'trustee':
+      if (url.hostname === 'www.cclerk.hctx.net' || url.hostname === 'cclerk.hctx.net') {
+        if (path === '/applications/websearch/viewecdocs.aspx') {
+          const token = url.searchParams.get('ID');
+          return Boolean(token && token.length >= 40 && token.length <= 1024 && !url.hash && [...url.searchParams.keys()].every(key => key === 'ID'));
+        }
+      }
       return path.includes('/details') && (url.searchParams.has('id') || hasStablePathToken(url));
     case 'usda':
       return path.endsWith('/sfhpropertydetail') && url.searchParams.has('id');

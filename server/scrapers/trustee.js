@@ -125,15 +125,22 @@ class TrusteeSaleScraper extends BaseScraper {
           : [MARICOPA_DOC_TYPES.NOTICE_OF_TRUSTEE_SALE, MARICOPA_DOC_TYPES.NOTICE_OF_DEFAULT];
 
         for (const docType of maricopaDocTypes) {
+          report.statesRequested.push(`maricopa:${docType}`);
+          report.endpointsTried++;
           try {
             const targetUrl = this.getMaricopaSearchUrl(docType, options);
+            const robotsUrl = new URL('/robots.txt',targetUrl).href;
+            const rules = await this.fetchText(robotsUrl,{headers:{'User-Agent':'property-crawl-bot/1.0'}});
+            if (require('robots-parser')(robotsUrl,rules).isAllowed(targetUrl,'property-crawl-bot/1.0') !== true) throw new Error('MARICOPA_ROBOTS_UNVERIFIED_OR_DENIED');
             const html = await this.fetchText(targetUrl);
             const records = this.parseMaricopaSearchHtml(html, { ...options, docType });
+            if (!records.length) throw new Error('RECORDER_QUERY_UNVERIFIED: no validated recorder query results');
             let added = 0;
 
             for (const rec of records) {
               if (!rec || !rec.recordingNumber) continue;
               await recordSnapshot({sourceKey:'trustee',recordId:rec.recordingNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,recordedDate:rec.recordedDate || null}},{snapshotDir:options.snapshotDir});
+              if (!rec.sourceUrl) continue;
               if (rec.distressStage === 'PRE_FORECLOSURE' || /NOTICE OF DEFAULT|LIS PENDENS|CERTIFICATE OF SALE/i.test(rec.docType || '')) continue;
               const ref = rec.recordingNumber.replace(/[^A-Za-z0-9-]/g, '');
               const itemKey = `AZ-Maricopa-${ref}-${rec.docType}`;
@@ -198,15 +205,39 @@ class TrusteeSaleScraper extends BaseScraper {
       // 2. Harris County, TX Clerk Foreclosure Filings (cclerk.hctx.net)
       // -----------------------------------------------------------------------
       if (jurKey === 'harris') {
+        report.statesRequested.push('harris:foreclosure');
+        report.endpointsTried++;
         try {
           const targetUrl = this.getHarrisClerkSearchUrl(options);
-          const html = await this.fetchText(targetUrl);
-          const records = this.parseHarrisClerkHtml(html, options);
+          const cookies = new Map();
+          const transport = async (url, init) => {
+            const headers = { ...init.headers };
+            if (cookies.size) headers.Cookie = [...cookies].map(([key, value]) => `${key}=${value}`).join('; ');
+            const response = await this.fetchImpl(url, { ...init, headers, redirect:'error' });
+            for (const cookie of response.headers?.getSetCookie?.() || []) {
+              const pair = cookie.split(';')[0], index = pair.indexOf('=');
+              if (index > 0) cookies.set(pair.slice(0,index),pair.slice(index+1));
+            }
+            return response;
+          };
+          const now = new Date();
+          const query = await require('./adapters/harris-clerk-query').queryHarrisClerk({
+            requestText:(url, init) => this.fetchText(url, { ...init, fetchImpl:transport }),
+            year:options.year ?? now.getUTCFullYear(), month:options.month ?? now.getUTCMonth()+1,
+            maxPages:options.maxPages ?? 1, baseUrl:options.baseUrl,
+          });
+          const records = query.records;
+          report.recorderEvidence = {jurisdiction:'harris',year:query.year,month:query.month,publishedTotal:query.publishedTotal,
+            capturedDocuments:records.length,truncated:query.truncated,queryComplete:query.complete,listingQualified:false};
+          for (const page of query.pages) await recordSnapshot({sourceKey:'trustee',recordId:`harris:${query.year}-${query.month}:page-${page.page}`,
+            html:page.html,saveMarkdown:true,metadata:{sourceUrl:targetUrl,kind:'recorder_index',...report.recorderEvidence}},{snapshotDir:options.snapshotDir});
           let added = 0;
 
           for (const rec of records) {
             if (!rec || !rec.fileNumber) continue;
             await recordSnapshot({sourceKey:'trustee',recordId:rec.fileNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,postingDate:rec.postingDate || null,earliestEligibleSaleDate:rec.earliestEligibleSaleDate || null}},{snapshotDir:options.snapshotDir});
+            if (!rec.sourceUrl) continue;
+            if (rec.evidenceOnly || (!rec.situsAddress && !rec.legalDescription && !rec.apn)) continue;
             const ref = rec.fileNumber.replace(/[^A-Za-z0-9-]/g, '');
             const itemKey = `TX-Harris-${ref}`;
             if (seenRefs.has(itemKey)) continue;
@@ -274,6 +305,8 @@ class TrusteeSaleScraper extends BaseScraper {
         : [RECORD_DOC_TYPES.NOTICE_OF_TRUSTEE_SALE, RECORD_DOC_TYPES.NOTICE_OF_DEFAULT];
 
       for (const docType of docTypes) {
+        report.statesRequested.push(`${jurKey}:${docType}`);
+        report.endpointsTried++;
         try {
           const targetUrl = this.getAcclaimSearchUrl(jurKey, docType);
           const html = await this.fetchText(targetUrl);
@@ -339,8 +372,12 @@ class TrusteeSaleScraper extends BaseScraper {
     }
 
     finalizeRunReport(report, { emitted: standardized.length });
-    report.outcome = standardized.length ? 'success' : 'empty';
-    report.complete = report.failures.length === 0;
+    if (report.recorderEvidence && (!report.recorderEvidence.queryComplete || !report.recorderEvidence.listingQualified)) {
+      report.truncated = report.recorderEvidence.truncated;
+      report.complete = false;
+      report.fullSweepComplete = false;
+      if (!standardized.length && !report.failures.length) report.outcome = 'evidence_only';
+    }
 
     return standardized;
   }

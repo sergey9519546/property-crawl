@@ -277,6 +277,8 @@ async function handleRequest(req, res) {
         status: 'ok',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
+        release: { commit: /^[a-f0-9]{40}$/i.test(process.env.RENDER_GIT_COMMIT || process.env.PROPERTY_RELEASE_SHA || '')
+          ? (process.env.RENDER_GIT_COMMIT || process.env.PROPERTY_RELEASE_SHA) : null },
         // Honest runtime mode — a Pool object is not a connection.
         dataMode: db.dataMode(),
         snapshotEvidence: require('./scrapers/discovery-snapshots').evidenceStoreHealth(),
@@ -478,10 +480,12 @@ async function startServer() {
       return;
     }
 
-    // Boot real data scrapers after initial server banner prints
+    // The two-process host defers expensive collection until after UI boot.
+    const configuredBootDelay = Number(process.env.SCRAPER_BOOT_DELAY_MS);
+    const bootDelay = Number.isFinite(configuredBootDelay) && configuredBootDelay >= 0 ? Math.min(configuredBootDelay,300000) : 500;
     setTimeout(() => {
       scheduler.runAll().catch(err => console.error('[Server] Scheduler failed on boot:', err));
-    }, 500);
+    }, bootDelay);
 
     // Recurring automated ingestion (default every 6 hours)
     const scrapeIntervalHours = scheduler.parseScrapeIntervalHours(process.env.SCRAPE_INTERVAL_HOURS);

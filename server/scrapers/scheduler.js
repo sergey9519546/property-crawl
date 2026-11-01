@@ -353,7 +353,8 @@ class IngestionScheduler {
               continue;
             }
             // An unknown publisher payload stays null. Never label a normalized listing as captured publisher evidence.
-            const snapshot = await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance});
+            const confidenceScores = (validation.listing.provenance.sourceFacts?.documents || []).map(document => document?.confidenceScore ?? document?.confidence_score).filter(score => typeof score === 'number' && Number.isFinite(score));
+            const snapshot = await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance,metadata:{sourceUrl:validation.listing.sourceUrl,confidenceScore:confidenceScores.length ? Math.min(...confidenceScores) : null}});
             validation.listing.provenance.evidenceLedger = {index:snapshot.ledgerBlock.index,entryHash:snapshot.ledgerBlock.entryHash,payloadSha256:snapshot.payloadSha256};
             if(this.discoveryStore&&discoveryRun){
               // raw_payload records what the publisher actually returned. Prefer the

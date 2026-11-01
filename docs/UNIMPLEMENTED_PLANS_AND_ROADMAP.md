@@ -8,6 +8,14 @@
 > across `STRATEGY.md`, `ULTRAPLAN.md`, `FOOLPROOF_SCRAPE_RESEARCH.md`, the architectural audits,
 > and the Discovery Brain specifications.
 
+> **2026-10-31 stabilization:** implementation labels below are historical.
+> Track 2/3 modules now have local integration and control-test repairs, with
+> source, database and hosted acceptance limits retained in
+> [`COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md) and
+> [`audit/08`](../audit/08-tracks123-stabilization-2026-10-31.md).
+> Earlier "shipped" or "100% verified production" language does not certify
+> the current hosted deployment or live source qualification.
+
 ---
 
 ## 1. Executive Summary

@@ -1,3 +1,4 @@
+const { capturedRecordUrl } = require('./record-link');
 'use strict';
 
 /**
@@ -32,7 +33,7 @@ function getMaricopaSearchUrl(docType = MARICOPA_DOC_TYPES.NOTICE_OF_TRUSTEE_SAL
   const base = (options.baseUrl || MARICOPA_RECORDER_BASE_URL).replace(/\/+$/, '');
   if (options.recordingNumber || options.docket) {
     const id = options.recordingNumber || options.docket;
-    return `${base}/details?id=${encodeURIComponent(id)}`;
+    throw new Error('A captured publisher record URL is required; no detail URL can be inferred from a recording number');
   }
   const cleanType = encodeURIComponent(docType || MARICOPA_DOC_TYPES.NOTICE_OF_TRUSTEE_SALE);
   return `${base}/recdoc/search?docType=${cleanType}`;
@@ -263,9 +264,7 @@ function parseMaricopaRecordRow(rowHtml = '', options = {}) {
 
   const distressStage = identifyDistressStage(docType);
   const baseUrl = (options.baseUrl || MARICOPA_RECORDER_BASE_URL).replace(/\/+$/, '');
-  const sourceUrl = recordingNumber
-    ? `${baseUrl}/details?id=${encodeURIComponent(recordingNumber)}`
-    : `${baseUrl}/recdoc/search`;
+  const sourceUrl = capturedRecordUrl(rowHtml, baseUrl);
 
   return {
     source: 'recorder',

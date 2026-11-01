@@ -36,6 +36,7 @@ const {
 } = require('../server/scrapers/adapters/harris-clerk-foreclosure');
 
 const trustee = require('../server/scrapers/trustee');
+// Record anchors below are synthetic parser fixtures, not live endpoint receipts.
 
 // ---------------------------------------------------------------------------
 // 1. Maricopa County, AZ Recorder Adapter Tests
@@ -54,8 +55,8 @@ test('Maricopa Recorder adapter defines statutory document types and builds URLs
   const nodUrl = getMaricopaSearchUrl(MARICOPA_DOC_TYPES.NOTICE_OF_DEFAULT);
   assert.ok(nodUrl.includes('docType=NOTICE%20OF%20DEFAULT'));
 
-  const detailUrl = getMaricopaSearchUrl(null, { recordingNumber: '2026-084912' });
-  assert.equal(detailUrl, 'https://recorder.maricopa.gov/details?id=2026-084912');
+
+  assert.throws(() => getMaricopaSearchUrl(null, {recordingNumber:'2026-084912'}), /captured publisher/);
 });
 
 test('Maricopa Recorder correctly classifies statutory distress stages', () => {
@@ -71,7 +72,7 @@ test('Maricopa Recorder correctly classifies statutory distress stages', () => {
 test('Maricopa Recorder parses Notice of Trustee Sale table row into structured record', () => {
   const rowHtml = `
     <tr class="maricopa-record-row">
-      <td class="col-recording"><b>Recording #:</b> 2026-084912</td>
+      <td class="col-recording"><b>Recording #:</b> 2026-084912<a href="https://recorder.maricopa.gov/details?id=2026-084912"></a></td>
       <td class="col-date"><b>Recorded:</b> 10/14/2026</td>
       <td class="col-type"><b>Doc Type:</b> NOTICE OF TRUSTEE SALE</td>
       <td class="col-grantor"><b>Grantor:</b> Alvarez, Carlos<br>AKA Carlos M Alvarez</td>
@@ -108,7 +109,7 @@ test('Maricopa Recorder parses full search result HTML containing multiple filin
   const searchHtml = `
     <div class="search-results-table">
       <div class="search-result-row">
-        Recording #: 2026-011111
+        Recording #: 2026-011111<a href="https://recorder.maricopa.gov/details?id=2026-011111"></a>
         Recorded: 10/10/2026
         Doc Type: NOTICE OF TRUSTEE SALE
         Grantor: Smith, Roger
@@ -117,7 +118,7 @@ test('Maricopa Recorder parses full search result HTML containing multiple filin
         Legal: Lot 5 Mountain Vista
       </div>
       <div class="search-result-row">
-        Recording #: 2026-022222
+        Recording #: 2026-022222<a href="https://recorder.maricopa.gov/details?id=2026-022222"></a>
         Recorded: 10/11/2026
         Doc Type: NOTICE OF DEFAULT
         Grantor: Johnson, Brenda
@@ -126,7 +127,7 @@ test('Maricopa Recorder parses full search result HTML containing multiple filin
         Legal: Lot 12 Sunburst Valley
       </div>
       <div class="search-result-row">
-        Recording #: 2026-033333
+        Recording #: 2026-033333<a href="https://recorder.maricopa.gov/details?id=2026-033333"></a>
         Recorded: 10/12/2026
         Doc Type: CERTIFICATE OF SALE
         Grantor: Williams, Kevin
@@ -209,7 +210,7 @@ test('calculateTexasForeclosureSaleDate enforces statutory 21-day notice rule', 
 test('Harris County Clerk parses § 51.002 21-day foreclosure posting into structured record', () => {
   const noticeHtml = `
     <tr class="harris-notice-row">
-      <td class="col-file"><b>File #:</b> FC-2026-009182</td>
+      <td class="col-file"><b>File #:</b> FC-2026-009182<a href="https://www.cclerk.hctx.net/Foreclosure/details?id=FC-2026-009182"></a></td>
       <td class="col-post"><b>Posting Date:</b> 10/05/2026</td>
       <td class="col-debtor"><b>Debtor:</b> Henderson, Derrick</td>
       <td class="col-trustee"><b>Substitute Trustee:</b> Hughes Watters Askanase LLP</td>
@@ -251,7 +252,7 @@ test('Harris County Clerk parses multi-notice HTML feed', () => {
   const multiHtml = `
     <div class="notices-container">
       <div class="NoticeItem">
-        File #: FC-2026-001001
+        File #: FC-2026-001001<a href="https://www.cclerk.hctx.net/Foreclosure/details?id=FC-2026-001001"></a>
         Posting Date: 10/02/2026
         Debtor: Martinez, Elena
         Substitute Trustee: Mackie Wolf Zientz & Mann PC
@@ -259,7 +260,7 @@ test('Harris County Clerk parses multi-notice HTML feed', () => {
         HCAD Account: 078-024-001-0019
       </div>
       <div class="NoticeItem">
-        File #: FC-2026-001002
+        File #: FC-2026-001002<a href="https://www.cclerk.hctx.net/Foreclosure/details?id=FC-2026-001002"></a>
         Posting Date: 10/16/2026
         Debtor: Taylor, Gregory
         Substitute Trustee: Barrett Daffin Frappier Turner & Engel LLP
@@ -293,7 +294,7 @@ test('Harris County Clerk parses multi-notice HTML feed', () => {
 test('Zero-Fabrication Invariant: Maricopa & Harris adapters never manufacture opening bids or valuations', () => {
   const maricopaRow = `
     <tr>
-      <td>Recording #: 2026-099444</td>
+      <td>Recording #: 2026-099444<a href="https://recorder.maricopa.gov/details?id=2026-099444"></a></td>
       <td>Recorded: 10/18/2026</td>
       <td>Doc Type: NOTICE OF TRUSTEE SALE</td>
       <td>Grantor: Unencumbered Estate</td>
@@ -309,7 +310,7 @@ test('Zero-Fabrication Invariant: Maricopa & Harris adapters never manufacture o
 
   const hharrisNotice = `
     <div>
-      File #: FC-2026-778899
+      File #: FC-2026-778899<a href="https://www.cclerk.hctx.net/Foreclosure/details?id=FC-2026-778899"></a>
       Posting Date: 10/07/2026
       Debtor: Lone Star Holdings
     </div>
@@ -375,7 +376,7 @@ test('TrusteeSaleScraper integrates Maricopa County recorder filings in scrapeFe
   const maricopaHtml = `
     <table id="tblSearchResults">
       <tr class="search-result-row">
-        <td class="col-recording">Recording #: 2026-091482</td>
+        <td class="col-recording">Recording #: 2026-091482<a href="https://recorder.maricopa.gov/details?id=2026-091482"></a></td>
         <td class="col-date">Recorded: 10/14/2026</td>
         <td class="col-type">Doc Type: NOTICE OF TRUSTEE SALE</td>
         <td class="col-grantor">Grantor: Martinez, David</td>
@@ -388,7 +389,7 @@ test('TrusteeSaleScraper integrates Maricopa County recorder filings in scrapeFe
 
   const origFetch = trustee.fetchText;
   try {
-    trustee.fetchText = async () => maricopaHtml;
+    trustee.fetchText = async url => url.endsWith('/robots.txt') ? 'User-agent: *\nAllow: /' : maricopaHtml;
 
     const listings = await trustee.scrapeFeed({ jurisdiction: 'maricopa' });
     assert.equal(listings.length, 1);
@@ -420,7 +421,7 @@ test('TrusteeSaleScraper integrates Harris County foreclosure notice filings in 
   const harrisHtml = `
     <div class="NoticeContainer">
       <div class="NoticeItem">
-        File #: FC-2026-004412
+        File #: FC-2026-004412<a href="https://www.cclerk.hctx.net/Foreclosure/details?id=FC-2026-004412"></a>
         Posting Date: 10/06/2026
         Debtor: Robinson, Keith
         Substitute Trustee: Barrett Daffin Frappier Turner & Engel LLP
@@ -432,9 +433,17 @@ test('TrusteeSaleScraper integrates Harris County foreclosure notice filings in 
 
   const origFetch = trustee.fetchText;
   try {
-    trustee.fetchText = async () => harrisHtml;
+    const form = '<input type="hidden" name="__VIEWSTATE" value="fixture"><input type="hidden" name="__EVENTVALIDATION" value="fixture">' +
+      '<select name="ctl00$ContentPlaceHolder1$ddlYear"><option value="2026">2026</option></select>' +
+      '<select name="ctl00$ContentPlaceHolder1$ddlMonth"><option value="11">November</option></select>';
+    let posts = 0;
+    trustee.fetchText = async (url, init) => {
+      if (url.endsWith('/robots.txt')) return 'User-agent: *\nAllow: /';
+      if (init?.method === 'POST' && ++posts === 2) return form + '<span id="lblCount">1 Row(s) Found.</span>' + harrisHtml;
+      return form;
+    };
 
-    const listings = await trustee.scrapeFeed({ jurisdiction: 'harris' });
+    const listings = await trustee.scrapeFeed({ jurisdiction: 'harris', year:2026, month:11 });
     assert.equal(listings.length, 1);
 
     const l = listings[0];

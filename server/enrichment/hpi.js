@@ -3,7 +3,7 @@
 /**
  * server/enrichment/hpi.js
  *
- * Bridge and re-export for FHFA House Price Index benchmarks.
+ * Explicit observed FHFA state-quarter inputs; no national-weight fallback.
  */
 
 // The national-weight model is not an observed state-quarter series.

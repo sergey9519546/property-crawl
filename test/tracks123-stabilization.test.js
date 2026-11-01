@@ -43,6 +43,17 @@ test('unknown assessment year or unobserved state HPI never yields a trajectory'
   result=computePublicBenchmarkConsensus({...input,assessmentYear:2020});
   assert.equal(result.assessedTrajectory,null);assert.ok(!result.sourcesAvailable.includes('fhfa_hpi'));
   assert.equal(result.estLow,null);assert.equal(result.dealScore,null);
+  assert.equal(computePublicBenchmarkConsensus({...input,parcel:{...input.parcel,status:'candidate'}}).assessorRoll,null);
+});
+
+test('recorder identity links must be captured, never inferred from filing numbers',()=>{
+  const maricopa=require('../server/scrapers/adapters/maricopa-recorder');
+  const harris=require('../server/scrapers/adapters/harris-clerk-foreclosure');
+  assert.equal(harris.getHarrisClerkSearchUrl(),'https://www.cclerk.hctx.net/Applications/WebSearch/FRCL_R.aspx');
+  assert.throws(()=>harris.getHarrisClerkSearchUrl({fileNumber:'FC-2026-001001'}),/captured publisher/);
+  assert.throws(()=>maricopa.getMaricopaSearchUrl(null,{recordingNumber:'2026-084912'}),/captured publisher/);
+  assert.equal(harris.parseHarrisClerkNotice('File #: FC-2026-001001 Posting Date: 10/01/2026').sourceUrl,null);
+  assert.equal(maricopa.parseMaricopaRecordRow('Recording #: 2026-084912 Recorded: 10/01/2026').sourceUrl,null);
 });
 test('DOM alarms survive health and restart, and row count alone is not layout drift',t=>{
   const telemetryPath=path.join(temporary(t),'telemetry.json');
@@ -104,4 +115,32 @@ test('low-confidence captured notices enter the operator intake review workflow'
   assert.match(record.reviewIntakeId,/^intake_/);
   const intake=JSON.parse(fs.readFileSync(intakeStorePath,'utf8'));
   assert.ok(JSON.stringify(intake).includes('needs_review'));
+});
+
+test('scheduler commits evidence before inventory and exposes DOM drift without losing publisher history',async t=>{
+  const dir=temporary(t), previous=process.env.PROPERTY_EVIDENCE_DIR;
+  process.env.PROPERTY_EVIDENCE_DIR=dir;
+  t.after(()=>{if(previous===undefined)delete process.env.PROPERTY_EVIDENCE_DIR;else process.env.PROPERTY_EVIDENCE_DIR=previous;});
+  const BaseScraper=require('../server/scrapers/base');
+  const {IngestionScheduler}=require('../server/scrapers/scheduler');
+  let html='<table><tr><td>Notice</td></tr></table>';
+  const probe=new BaseScraper({name:'StabilizationProbe',sourceKey:'civilview',fetchImpl:async()=>({ok:true,status:200,headers:new Map([['content-type','text/html']]),text:async()=>html})});
+  const sourceUrl='https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683';
+  probe.scrapeFeed=async()=>{
+    await probe.fetchText(sourceUrl);
+    const observedAt=new Date().toISOString();
+    return [probe.standardizeListing({id:'CIV-NJ-7-2128964683',source:'civilview',state:'NJ',county:'Bergen',address:'19 West Park Avenue, Park Ridge, NJ 07656',openingBid:100000,raw:'Test-only publisher notice with an explicitly published opening bid.',sourceUrl,sourceObservedAt:observedAt,provenance:{origin:'live',observed:true,publisher:'CivilView',recordId:'2128964683',observedAt}})];
+  };
+  const writes=[], telemetry=new ScraperTelemetry({persist:false});
+  const scheduler=new IngestionScheduler({realScrapers:[probe],database:{createListing:async listing=>{assert.ok(verifiedSnapshotReceipt(listing));writes.push(listing);}},telemetry,networkEnabled:true});
+  assert.equal((await scheduler.runAll()).totalIngested,1);
+  html='<article><p>Changed layout</p></article>';
+  assert.equal((await scheduler.runAll()).totalIngested,1);
+  assert.equal(telemetry.getHealthReport().details.StabilizationProbe.driftDetected,true);
+  const ledgerFile=path.join(dir,'evidence-ledger.jsonl');
+  assert.equal(ledger.loadLedgerFromFile(ledgerFile).length,2);
+  fs.appendFileSync(ledgerFile,'corrupt');
+  assert.equal((await scheduler.runAll()).totalIngested,0);
+  assert.equal(writes.length,2);
+  assert.equal(telemetry.getHealthReport().snapshotEvidence.integrity,'unreadable');
 });

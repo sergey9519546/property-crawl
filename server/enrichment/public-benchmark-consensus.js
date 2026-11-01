@@ -4,7 +4,7 @@
  * server/enrichment/public-benchmark-consensus.js
  *
  * Three-Way Public-Record Benchmark Consensus (Hack #4)
- * Synthesizes three zero-cost verified public records:
+ * Reports availability of three public-record benchmark inputs, not agreement on value:
  * 1. County Certified Assessor Tax Roll (assessedValue, landValue, improvementValue)
  *    via server/enrichment/assessor-reading.js / parcel data.
  * 2. FHFA House Price Index (HPI) appreciation benchmarks
@@ -36,6 +36,7 @@ const DISCLAIMER = 'Public record consensus benchmarks are statutory and adminis
  * @param {number} [listingContext.openingBid]
  * @param {number|string} [listingContext.saleDate]
  * @param {number|string} [listingContext.assessmentYear]
+ * @param {string} [listingContext.assessmentPeriod] - Explicit observed YYYYQn baseline; never inferred.
  * @param {Object} [listingContext.parcel] - Raw or resolved parcel object
  * @param {Object} [options]
  * @param {Object} [options.assessorParcel] - Pre-interpreted assessor parcel
@@ -59,7 +60,9 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   // 1. County Certified Assessor Tax Roll
   // -------------------------------------------------------------
   let assessorRoll = null;
-  const rawParcel = ctx.parcel || options.assessorParcel || null;
+  const suppliedParcel = ctx.parcel || options.assessorParcel || null;
+  const rawParcel = suppliedParcel?.status && suppliedParcel.status !== 'matched' ? null : suppliedParcel;
+  if (suppliedParcel && !rawParcel) unobservedReasons.push('Parcel identity is not matched; candidate assessment withheld.');
 
   if (rawParcel) {
     let reading = null;
