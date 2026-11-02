@@ -122,13 +122,22 @@ test('harvest skips non-enrolled counties, non-live provenance, and already-harv
   const cachePath = temporaryCachePath();
   const fetchFn = async () => { throw new Error('must not be called'); };
   const results = await harvestAssessorRolls([
-    liveListing({ state: 'CA', county: 'Los Angeles' }), // enrolled? No — not in the registry.
+    liveListing({ state: 'AZ', county: 'Pinal' }), // enrolled? No — Pinal has no verified assessor layer.
     liveListing({ id: 'X-2', provenance: { origin: 'seed', observed: false } }),
     liveListing({ id: 'X-3', assessorParcel: { assessedValue: { total: 1 } } }),
     liveListing({ id: 'X-4', lat: null }),
   ], { cachePath, fetchFn, now: Date.parse('2026-10-21T00:00:00.000Z') });
   assert.equal(results.considered, 0);
   assert.equal(results.harvested, 0);
+  // CA-Los Angeles is registered for parcel identity (conversion withheld), so
+  // its listings ARE harvest candidates now — document that the registration
+  // took effect at the harvest layer too.
+  const la = await harvestAssessorRolls(
+    [liveListing({ state: 'CA', county: 'Los Angeles', id: 'CA-1' })],
+    { cachePath: temporaryCachePath(), fetchFn: async () => ({ ok: true, json: async () => ({ features: [] }) }), now: Date.parse('2026-10-21T00:00:00.000Z') },
+  );
+  assert.equal(la.considered, 1, 'CA-Los Angeles is enrolled for parcel identity');
+  assert.equal(la.notFound, 1);
 });
 
 test('harvest is bounded per run and fails open on unreachable rolls', async () => {

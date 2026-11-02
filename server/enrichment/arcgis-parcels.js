@@ -726,6 +726,29 @@ const COUNTY_ARCGIS_REGISTRY = {
     taxYearField: 'TAXYEAR',
     source: 'wparcels'
   },
+  'CA-LOS ANGELES': {
+    // Los Angeles County Assessor parcel roll (official county cache service,
+    // 2,433,309 parcels). Roll_LandValue + Roll_ImpValue is the Prop 13
+    // assessed value: 100% of market value AT ACQUISITION, grown at <=2%/year.
+    // That is NOT guaranteed <= current market — recent acquisitions in a
+    // declining market assess above market, which would overstate discounts —
+    // and the layer publishes no sale-price column to measure the direction.
+    // Conversion deliberately WITHHELD (see assessor-reading.js); the entry
+    // stands for parcel identity (APN, situs, legal, use).
+    name: 'Los Angeles County Assessor parcel roll',
+    fips: '06037',
+    endpoint: 'https://cache.gis.lacounty.gov/cache/rest/services/LACounty_Cache/LACounty_Parcel/MapServer/0/query',
+    apnField: 'APN',
+    apnSeparatorRetry: true,
+    landUseField: 'UseDescription',
+    assessedTotalField: null,
+    assessedLandField: 'Roll_LandValue',
+    assessedImprvField: 'Roll_ImpValue',
+    sumLandAndImprvForTotal: true,
+    legalDescField: 'LegalDescription',
+    situsAddressField: 'SitusFullAddress',
+    taxYearField: 'Roll_Year'
+  },
   'PA-CHESTER': {
     name: 'Chester County Assessment Office (ChescoViews)',
     fips: '42029',

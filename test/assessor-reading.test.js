@@ -278,6 +278,38 @@ test('assessor reading converts Allegheny County market value 1:1 with the measu
   assert.equal(allegheny.withheldReason, null);
 });
 
+test('the Allegheny and Los Angeles registry entries resolve and carry their live-verified layers', () => {
+  const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
+  assert.equal(resolveCountyKey('PA', 'Allegheny'), 'PA-ALLEGHENY');
+  const allegheny = COUNTY_ARCGIS_REGISTRY['PA-ALLEGHENY'];
+  assert.equal(allegheny.fips, '42003');
+  assert.match(allegheny.endpoint, /^https:\/\/data\.wprdc\.org\//);
+  assert.equal(allegheny.apnField, 'PARID');
+  assert.equal(allegheny.assessedTotalField, 'FAIRMARKETTOTAL');
+  assert.equal(allegheny.source, 'wparcels');
+
+  assert.equal(resolveCountyKey('CA', 'Los Angeles'), 'CA-LOS ANGELES');
+  const la = COUNTY_ARCGIS_REGISTRY['CA-LOS ANGELES'];
+  assert.equal(la.fips, '06037');
+  assert.match(la.endpoint, /^https:\/\/cache\.gis\.lacounty\.gov\//);
+  assert.equal(la.apnField, 'APN');
+  assert.equal(la.apnSeparatorRetry, true, 'LA APNs are dashed and need the tolerant retry');
+  assert.equal(la.assessedTotalField, null);
+  assert.equal(la.sumLandAndImprvForTotal, true, 'LA assessed value is the Roll land + improvement sum');
+});
+
+test('assessor reading withholds the Los Angeles conversion with the Prop 13 direction reason', () => {
+  // Real values from the live layer: APN 2004-001-003, Roll_LandValue 740440 + Roll_ImpValue 313342 = 1053782.
+  const la = interpretAssessorParcel({ countyKey: 'CA-LOS ANGELES', parcel: parcel(1053782), openingBid: 400000 });
+  assert.equal(la.enrolled, true, 'LA is registered for parcel identity even though the score is withheld');
+  assert.equal(la.rawFigure, 1053782);
+  assert.equal(la.marketComparison, null);
+  assert.equal(la.dealScore, null);
+  assert.match(la.withheldReason, /Proposition 13/);
+  assert.match(la.withheldReason, /AT ACQUISITION/);
+  assert.match(la.withheldReason, /unmeasured/);
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [

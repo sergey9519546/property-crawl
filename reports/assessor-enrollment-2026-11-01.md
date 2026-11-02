@@ -18,11 +18,11 @@
 | `MI-WAYNE` | `services2.arcgis.com/.../Detroit_MP_Parcel_Authoritative/FeatureServer/0/query` | `amt_assessed_value` (taxable-fraction 0.5) | statutory fraction | MCL 211.27a(1) fetched this session from `legislature.mi.gov`: "property shall be assessed at 50% of its true cash value under section 3 of article IX of the state constitution of 1963." Sampled APN `15008031-3`: assessed 905,600. The roll measures at ~0.33 of recorded 2024-2025 sale prices (n=2,000) — below the statutory 50% — so the derived market is a conservative lower bound, disclosed in the citation. `amt_taxable_value` (the Prop A capped value) is the taxed basis and is not used. Detroit's dashed `parcel_id` spellings required the new separator-tolerant APN retry (below) |
 | `PA-PHILADELPHIA` | (already registered) `services.arcgis.com/.../OPA_Properties_Public/FeatureServer/0/query` | `market_value` | market-figure | Sampled live: median `market_value`/sale = **0.966** across 2,000 dated 2026 sales (p10 0.64 / p90 1.60) — OPA's figure is a market figure. Sampled APN `301325005`: market_value 717,800; APN and point-intersect lookups both resolve with fips `42101`. `taxable_land`/`taxable_building` are the taxed components and are not used |
 
-Registry totals after this batch: **19 enrolled counties**, 14 with verified market
+Registry totals after this batch: **21 enrolled counties**, 15 with verified market
 conversions (TX-BEXAR, FL-ORANGE, OH-CUYAHOGA, FL-ALACHUA, TX-HARRIS,
 OH-FRANKLIN, OH-HAMILTON, TX-TARRANT, AZ-MARICOPA, AZ-PIMA, AZ-MOHAVE,
-AZ-YUMA, MI-WAYNE, PA-PHILADELPHIA), 5 withheld with named reasons (IL-COOK,
-NV-CLARK, ID-BANNOCK, NV-WASHOE, MI-MACOMB).
+AZ-YUMA, MI-WAYNE, PA-PHILADELPHIA, PA-ALLEGHENY), 6 withheld with named reasons (IL-COOK,
+NV-CLARK, ID-BANNOCK, NV-WASHOE, MI-MACOMB, CA-LOS ANGELES).
 
 Evidence tiers are explicit and enforced by tests: Maricopa, Mohave, and Yuma
 carry sampled sale-price ratios (measured against each county's own recorded
@@ -192,6 +192,55 @@ deviation is unmeasured and the ×2 conversion cannot be shown to be
 conservative. The registry entry stands (parcel identity, situs, legal, zoning
 for 44 live records), the raw SEV is surfaced, and the score stays dark with a
 named reason until a sales source makes the measurement possible.
+
+### PA-Allegheny: enrolled via the WPRDC datastore (new non-ArcGIS fetch path)
+
+Allegheny County's assessment data lives on the Western Pennsylvania Regional
+Data Center (WPRDC), a CKAN instance — not on ArcGIS. The WPRDC
+"Allegheny County Property Assessments" datastore resource
+(`9a1c60bd-f9f7-4aba-aeb7-af8c3aaa44e5`, verified live: `datastore_search` with
+a `filters={"PARID":...}` predicate returns the parcel) publishes
+`FAIRMARKETTOTAL` / `FAIRMARKETLAND` / `FAIRMARKETBUILDING` (full market
+value), `SALEPRICE`/`SALEDATE`, `TAXYEAR` (2026), situs, legal, and class.
+
+Pennsylvania assesses at full market value under 72 P.S. § 5020-101 et seq.
+(County Assessment Law), and Allegheny County reassessed at 100% of market
+value under the 2013 countywide reassessment — the same constitutional footing
+as the PA-Philadelphia enrollment. The citation is field-based (no separate
+statutory text was fetchable this session), matching the TX-BEXAR precedent.
+
+New capability: `queryWparcelsParcel` in `server/enrichment/arcgis-parcels.js`
+queries the CKAN datastore API and returns the same parcel shape as
+`queryArcgisParcel`; the harvest dispatches per registry entry via
+`source: 'wparcels'`. Live verification: parcel `0023S00162000000` →
+FAIRMARKETTOTAL 410,100, TAXYEAR 2026.
+
+### CA-Los Angeles: registered for parcel identity, conversion withheld (Prop 13)
+
+The official LA County cache service hosts the assessor parcel roll
+(2,433,309 parcels): `APN` (dashed — the separator-tolerant retry applies),
+`Roll_LandValue` + `Roll_ImpValue` (Prop 13 assessed value), `Roll_Year` 2026,
+`SitusFullAddress`, `UseDescription`, `LegalDescription`. Sampled APN
+`2004-001-003`: 740,440 + 313,342 = 1,053,782.
+
+The conversion is **withheld**, and California is the cleanest example of why
+measured direction matters. Prop 13 assesses at 100% of market value **at
+acquisition**, grown at ≤2%/year — not at current market. For long-held parcels
+the assessed figure sits far below market (which would understate the
+discount), but for recently-acquired parcels in a declining market the assessed
+figure can sit **above** current market, which would overstate the discount —
+the dangerous direction. The layer publishes no sale-price column, so the
+direction is unmeasured. Unlike PA (which reassesses to market by law) or MI
+(where Wayne's deviation was measured), there is no statutory guarantee or
+measurement to lean on. The registry entry stands for parcel identity
+(APN/situs/legal/use for ~84 live records), the raw figure is surfaced, and the
+score stays dark with a named reason.
+
+For the same reason, the remaining California cohorts (Riverside 44, San Diego
+20, and others) are **not enrollable**: their ArcGIS layers publish no value
+fields at all (Riverside PARCELS: APN only; PARCELS_CREST: APN +
+TAX_RATE_AREA), and even if they did, the Prop 13 direction problem applies
+statewide.
 
 ### Pinal: not enrollable this session (documented gap)
 

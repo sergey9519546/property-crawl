@@ -271,12 +271,28 @@ function loadLedgerFromFile(filePath) {
   }
 }
 
+// The ledger lock is held only across a synchronous write (load → append →
+// fsync, milliseconds). A lock file older than this threshold belongs to a
+// crashed writer (host spin-down, deploy kill) and would block every future
+// write forever.
+const STALE_LEDGER_LOCK_MS = 30_000;
+
 function withLedgerLock(target, fn) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   const lockPath = `${target}.lock`;
+  const acquire = () => fs.openSync(lockPath, 'wx', 0o600);
   let lock;
-  try { lock = fs.openSync(lockPath, 'wx', 0o600); }
-  catch (error) { if (error.code === 'EEXIST') throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); throw error; }
+  try { lock = acquire(); }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    let stale = false;
+    try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > STALE_LEDGER_LOCK_MS; }
+    catch (_) { throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); }
+    if (!stale) throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY');
+    fs.unlinkSync(lockPath);
+    try { lock = acquire(); }
+    catch (_) { throw ledgerError('Evidence ledger has another writer', 'EVIDENCE_LEDGER_BUSY'); }
+  }
   try { return fn(); }
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }
 }
