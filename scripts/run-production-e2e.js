@@ -46,14 +46,17 @@ function isPortFree(port) {
   });
 }
 
-async function pickPorts(preferredPublic) {
+async function pickPorts(preferredPublic, maxAttempts = 5) {
   const preferred = Number.isFinite(preferredPublic) && preferredPublic > 0 ? [preferredPublic] : [];
-  const candidates = [...preferred, 3980, 3990, 4000, 4010, 4020, 4030, 4040, 4050, 4060, 4070];
-  for (const publicPort of candidates) {
-    const apiPort = publicPort + 2;
-    if (await isPortFree(publicPort) && await isPortFree(apiPort)) {
-      return { publicPort, apiPort };
+  const candidates = [...preferred, 3980, 3990, 4000, 4010, 4020, 4030, 4040, 4050, 4060, 4070, 4080, 4090];
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (const publicPort of candidates) {
+      const apiPort = publicPort + 2;
+      if (await isPortFree(publicPort) && await isPortFree(apiPort)) {
+        return { publicPort, apiPort };
+      }
     }
+    if (attempt < maxAttempts - 1) await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error('No free production e2e port pair found');
 }

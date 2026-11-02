@@ -64,8 +64,10 @@ for (const g of selected) {
   results.push({ ...g, ok, ms, code: res.status });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${g.id.padEnd(18)} ${String(ms).padStart(7)}ms  ${g.desc}`);
   if (!ok) {
-    const tail = out.split(/\r?\n/).filter((l) => /error|fail|FAIL|✖|Error/.test(l)).slice(0, 6);
-    for (const l of tail) console.log(`        ${l.slice(0, 130)}`);
+    const lines = out.split(/\r?\n/).filter(Boolean);
+    const tail = lines.filter((l) => /error|fail|FAIL|✖|Error|fatal|Exception/i.test(l)).slice(0, 10);
+    const toPrint = tail.length > 0 ? tail : lines.slice(-6);
+    for (const l of toPrint) console.log(`        ${l.slice(0, 130)}`);
   }
 }
 
