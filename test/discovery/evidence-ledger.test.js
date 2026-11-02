@@ -265,3 +265,34 @@ test('Ledger Persistence & Discovery Snapshot Integration', async (t) => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+test('Evidence ledger lock: a fresh foreign lock is respected, a stale one self-heals', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-ledger-lock-'));
+  const target = path.join(dir, 'ledger.jsonl');
+  const lockPath = `${target}.lock`;
+
+  try {
+    // A fresh lock (mtime = now) from another writer is respected: the write
+    // fails busy rather than clobbering a live writer.
+    fs.writeFileSync(lockPath, '', { flag: 'wx' });
+    assert.throws(
+      () => withLedgerLock(target, () => { throw new Error('must not run under a fresh foreign lock'); }),
+      (e) => e.code === 'EVIDENCE_LEDGER_BUSY',
+      'a fresh foreign lock must be respected'
+    );
+
+    // A stale lock (mtime pushed past the break threshold) belongs to a
+    // crashed writer: the write self-heals, succeeds, and removes the lock.
+    const staleTime = new Date(Date.now() - 10 * 60 * 1000);
+    fs.utimesSync(lockPath, staleTime, staleTime);
+    const wrote = withLedgerLock(target, () => {
+      fs.writeFileSync(target, `${JSON.stringify({ seq: 1 })}\n`, 'utf8');
+      return 'ok';
+    });
+    assert.equal(wrote, 'ok', 'a stale lock must be broken and the write must proceed');
+    assert.equal(fs.existsSync(lockPath), false, 'the broken lock must be cleaned up');
+    assert.equal(fs.readFileSync(target, 'utf8'), `${JSON.stringify({ seq: 1 })}\n`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
