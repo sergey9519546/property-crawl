@@ -118,6 +118,7 @@ async function boot() {
     ...defaultDbEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
+    NODE_OPTIONS: bootEnv.NODE_OPTIONS ? `${bootEnv.NODE_OPTIONS} --max-old-space-size=4096` : '--max-old-space-size=4096',
     // Let both services become healthy before the first CPU/IO-heavy crawl.
     SCRAPER_BOOT_DELAY_MS: bootEnv.SCRAPER_BOOT_DELAY_MS || '90000',
   };
@@ -145,6 +146,7 @@ async function boot() {
     PORT: String(publicPort),
     PROPERTY_API_URL: `http://127.0.0.1:${internalApiPort}`,
     NODE_ENV: 'production',
+    NODE_OPTIONS: bootEnv.NODE_OPTIONS ? `${bootEnv.NODE_OPTIONS} --max-old-space-size=4096` : '--max-old-space-size=4096',
   };
 
   // next start serves .next — refuse to boot a stale/missing production build.
