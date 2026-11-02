@@ -550,7 +550,7 @@ function pgSort(f) {
   if (f.sort === "date")
     return {
       expr: "(CASE WHEN sale_date >= CURRENT_DATE THEN extract(epoch from sale_date) "
-        + "ELSE 1e30 + extract(epoch from sale_date) END)",
+        + "ELSE 1e12 + extract(epoch from sale_date) END)",
       dir: sortDirection("date"),
     };
   if (f.sort === "bid-asc")

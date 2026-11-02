@@ -18,10 +18,32 @@ import {
   RefreshCw,
   Clock,
   Layers,
+  ChevronRight,
+  ChevronLeft,
+  Download,
+  Kanban,
+  CheckCircle2,
 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { sourceDisplayText } from "@/lib/source-display";
 import { bandForScore } from "@/lib/score-bands";
+
+export type PipelineStage =
+  | "triage"
+  | "title_audit"
+  | "bid_approved"
+  | "at_auction"
+  | "redemption_carry"
+  | "settled";
+
+export const PIPELINE_STAGES: Array<{ id: PipelineStage; label: string; description: string }> = [
+  { id: "triage", label: "Triage", description: "Initial screening & model score review" },
+  { id: "title_audit", label: "Title & Lien Audit", description: "Senior lien, HOA super-lien & docket verification" },
+  { id: "bid_approved", label: "Bid Approved", description: "Buyer maximum ceiling & wire deposit ready" },
+  { id: "at_auction", label: "At Auction", description: "Scheduled active sale / bidding window" },
+  { id: "redemption_carry", label: "Redemption Carry", description: "Post-sale statutory hold / IRS 120-day lockup" },
+  { id: "settled", label: "Settled / Resold", description: "Deed recorded, possession acquired or redeemed" },
+];
 
 type DashboardPayload = {
   count: number;
@@ -74,15 +96,42 @@ function formatMoney(amount: number | null | undefined): string {
   return `$${Math.round(amount).toLocaleString()}`;
 }
 
+const STORAGE_PIPELINE_KEY = "perfectproperty_pipeline_stages_v1";
+
 export function PortfolioView() {
   const session = useWorkspaceSession();
-  const [tab, setTab] = React.useState<"watchlist" | "drops" | "schedule" | "allocation">("watchlist");
+  const [tab, setTab] = React.useState<"watchlist" | "pipeline" | "drops" | "schedule" | "allocation">("pipeline");
   const [dashboard, setDashboard] = React.useState<DashboardPayload | null>(null);
   const [priceDrops, setPriceDrops] = React.useState<PriceDropItem[]>([]);
   const [deals, setDeals] = React.useState<SavedDeal[]>([]);
+  const [pipelineStages, setPipelineStages] = React.useState<Record<string, PipelineStage>>({});
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [refreshing, setRefreshing] = React.useState(false);
+
+  // Initialize pipeline stages from local storage
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_PIPELINE_KEY);
+      if (saved) {
+        setPipelineStages(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore local storage errors
+    }
+  }, []);
+
+  const updateDealStage = React.useCallback((dealId: string, newStage: PipelineStage) => {
+    setPipelineStages((prev) => {
+      const next = { ...prev, [dealId]: newStage };
+      try {
+        localStorage.setItem(STORAGE_PIPELINE_KEY, JSON.stringify(next));
+      } catch {
+        // Ignore
+      }
+      return next;
+    });
+  }, []);
 
   const loadData = React.useCallback(async () => {
     if (!session.memberTools) {
@@ -137,34 +186,27 @@ export function PortfolioView() {
     loadData();
   }, [loadData]);
 
-  async function handleRemove(listingId: string) {
+  const handleRemove = async (dealId: string) => {
     try {
-      const res = await fetch("/api/alerts", {
+      await fetch(`/api/alerts/${encodeURIComponent(dealId)}`, {
         method: "DELETE",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listingId }),
       });
-      if (!res.ok) throw new Error(`Could not remove from watchlist (HTTP ${res.status}).`);
-      setDeals((prev) => prev.filter((d) => d.id !== listingId && d.listingId !== listingId));
-      loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not remove from watchlist.");
+      setDeals((prev) => prev.filter((d) => (d.listingId || d.id) !== dealId));
+    } catch {
+      // Ignore delete errors
     }
-  }
+  };
 
   if (!session.memberTools) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-20 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-line text-ink-2 mb-6">
-          <PieChart className="h-8 w-8" />
-        </div>
-        <h1 className="text-3xl font-extrabold text-ink">Portfolio & Watchlist Dashboard</h1>
-        <p className="mt-3 text-sm text-ink-3 max-w-md mx-auto">
-          Sign in or unlock with your operator key to aggregate saved deals, monitor automated price drops,
-          and track upcoming auction schedules.
+        <ShieldCheck className="mx-auto h-12 w-12 text-ink-3 mb-4" />
+        <h2 className="text-2xl font-bold text-ink">Operator Access Required</h2>
+        <p className="mt-2 text-sm text-ink-3 max-w-md mx-auto">
+          The Portfolio & Capital Pipeline dashboard requires an active operator session. Unlock the workspace with your administrative credential to view portfolio rollups, track price drops, and manage capital workflows.
         </p>
-        <div className="mt-8 flex justify-center gap-4">
+        <div className="mt-6 flex justify-center gap-4">
           <button
             onClick={() => session.requestUnlock()}
             className="rounded-xl bg-ink px-6 py-3 text-sm font-semibold text-white hover:bg-ink-2 transition"
@@ -194,30 +236,77 @@ export function PortfolioView() {
   const count = dashboard?.count ?? deals.length;
   const dropsCount = priceDrops.filter((d) => d.dropped).length;
 
+  // Pipeline calculations
+  const dealsByStage: Record<PipelineStage, SavedDeal[]> = {
+    triage: [],
+    title_audit: [],
+    bid_approved: [],
+    at_auction: [],
+    redemption_carry: [],
+    settled: [],
+  };
+
+  let totalPipelineCapital = 0;
+  for (const deal of deals) {
+    const dealId = deal.listingId || deal.id;
+    const stage = pipelineStages[dealId] || "triage";
+    dealsByStage[stage].push(deal);
+    if (typeof deal.openingBid === "number" && Number.isFinite(deal.openingBid)) {
+      totalPipelineCapital += deal.openingBid;
+    }
+  }
+
+  const stageOrder: PipelineStage[] = [
+    "triage",
+    "title_audit",
+    "bid_approved",
+    "at_auction",
+    "redemption_carry",
+    "settled",
+  ];
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-12 text-ink sm:px-8">
+    <div className="mx-auto max-w-7xl px-6 py-12 text-ink sm:px-8">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-8">
         <div>
-          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Asset Management</p>
+          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Capital & Portfolio Management</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
-            Portfolio & Watchlist Dashboard
+            Institutional Capital Pipeline
           </h1>
           <p className="mt-1.5 text-xs text-ink-3">
-            Roll-up financial metrics, detected price drops, and auction schedules for your tracked assets.
+            Track saved distressed assets through 6 operational deal stages, monitor price drop alerts, and aggregate committed capital.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <a
+            href="/api/export?format=markdown&saved=true"
+            download="perfectproperty_dossiers.md"
+            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+            title="Download printable Markdown Underwriting Dossiers for saved deals"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export Dossiers (.md)
+          </a>
+          <a
+            href="/api/export?format=csv&saved=true"
+            download="perfectproperty_portfolio.csv"
+            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+            title="Download CSV table of all saved deals"
+          >
+            <Download className="h-3.5 w-3.5" />
+            CSV Export
+          </a>
           <button
             onClick={() => {
               setRefreshing(true);
               loadData();
             }}
             disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-4 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh Metrics
+            Refresh
           </button>
           <Link
             href="/listings"
@@ -229,21 +318,28 @@ export function PortfolioView() {
         </div>
       </div>
 
+      {error && (
+        <div className="mt-6 flex items-center gap-2 rounded-xl border border-caution/40 bg-caution/10 p-4 text-xs font-medium text-caution">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Tracked Properties</span>
-            <Building className="h-4 w-4 text-ink-3" />
+            <span>Pipeline Capital Exposure</span>
+            <DollarSign className="h-4 w-4 text-ink-3" />
           </div>
-          <p className="mt-3 text-3xl font-extrabold text-ink">{count}</p>
-          <p className="mt-1 text-[11px] text-ink-3">Saved to operator watchlist</p>
+          <p className="mt-3 text-3xl font-extrabold text-ink">{formatMoney(totalPipelineCapital)}</p>
+          <p className="mt-1 text-[11px] text-ink-3">Across {deals.length} tracked opportunities</p>
         </div>
 
         <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
-            <span>Modeled Equity</span>
-            <DollarSign className="h-4 w-4 text-ink-3" />
+            <span>Modeled Spread</span>
+            <Building className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">
             {formatMoney(dashboard?.totalEstimatedEquity)}
@@ -277,10 +373,21 @@ export function PortfolioView() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="mt-10 flex border-b border-line text-xs font-bold">
+      <div className="mt-10 flex border-b border-line text-xs font-bold overflow-x-auto">
+        <button
+          onClick={() => setTab("pipeline")}
+          className={`border-b-2 px-5 py-3 transition flex items-center gap-1.5 shrink-0 ${
+            tab === "pipeline"
+              ? "border-ink text-ink"
+              : "border-transparent text-ink-3 hover:text-ink"
+          }`}
+        >
+          <Kanban className="h-3.5 w-3.5" />
+          Capital Pipeline ({deals.length})
+        </button>
         <button
           onClick={() => setTab("watchlist")}
-          className={`border-b-2 px-5 py-3 transition ${
+          className={`border-b-2 px-5 py-3 transition shrink-0 ${
             tab === "watchlist"
               ? "border-ink text-ink"
               : "border-transparent text-ink-3 hover:text-ink"
@@ -290,7 +397,7 @@ export function PortfolioView() {
         </button>
         <button
           onClick={() => setTab("drops")}
-          className={`border-b-2 px-5 py-3 transition flex items-center gap-1.5 ${
+          className={`border-b-2 px-5 py-3 transition flex items-center gap-1.5 shrink-0 ${
             tab === "drops"
               ? "border-ink text-ink"
               : "border-transparent text-ink-3 hover:text-ink"
@@ -305,7 +412,7 @@ export function PortfolioView() {
         </button>
         <button
           onClick={() => setTab("schedule")}
-          className={`border-b-2 px-5 py-3 transition ${
+          className={`border-b-2 px-5 py-3 transition shrink-0 ${
             tab === "schedule"
               ? "border-ink text-ink"
               : "border-transparent text-ink-3 hover:text-ink"
@@ -315,18 +422,162 @@ export function PortfolioView() {
         </button>
         <button
           onClick={() => setTab("allocation")}
-          className={`border-b-2 px-5 py-3 transition ${
+          className={`border-b-2 px-5 py-3 transition shrink-0 ${
             tab === "allocation"
               ? "border-ink text-ink"
               : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
-          Portfolio Allocation
+          Jurisdiction Allocation
         </button>
       </div>
 
       {/* Tab Content */}
       <div className="mt-8">
+        {/* Capital Pipeline Kanban Tab */}
+        {tab === "pipeline" && (
+          <div className="space-y-6">
+            {deals.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line bg-card p-12 text-center">
+                <Kanban className="mx-auto h-8 w-8 text-ink-3 mb-3" />
+                <h3 className="text-base font-bold text-ink">No deals in pipeline</h3>
+                <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
+                  Save listings to your watchlist to begin tracking opportunities through institutional underwriting, title review, auction bidding, and redemption carry.
+                </p>
+                <div className="mt-5">
+                  <Link
+                    href="/listings"
+                    className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
+                  >
+                    Browse Opportunities <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-start">
+                {PIPELINE_STAGES.map((stage, stageIndex) => {
+                  const stageDeals = dealsByStage[stage.id];
+                  const stageCapital = stageDeals.reduce((sum, d) => sum + (d.openingBid || 0), 0);
+
+                  return (
+                    <div
+                      key={stage.id}
+                      className="rounded-2xl border border-line bg-card/60 p-3.5 flex flex-col min-h-[460px] shadow-sm"
+                    >
+                      {/* Column Header */}
+                      <div className="border-b border-line pb-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-xs text-ink">{stage.label}</span>
+                          <span className="rounded-full bg-line px-2 py-0.5 text-[10px] font-bold text-ink">
+                            {stageDeals.length}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-3">
+                          <span>Committed Capital:</span>
+                          <span className="font-bold text-ink">{formatMoney(stageCapital)}</span>
+                        </div>
+                        <p className="mt-1 text-[10px] text-ink-3 line-clamp-1" title={stage.description}>
+                          {stage.description}
+                        </p>
+                      </div>
+
+                      {/* Cards Container */}
+                      <div className="mt-3 space-y-3 flex-1 overflow-y-auto">
+                        {stageDeals.length === 0 ? (
+                          <div className="py-8 text-center text-[11px] text-ink-3 border border-dashed border-line/60 rounded-xl">
+                            No assets in {stage.label.toLowerCase()}
+                          </div>
+                        ) : (
+                          stageDeals.map((deal) => {
+                            const dealId = deal.listingId || deal.id;
+                            const scoreBand = bandForScore(deal.dealScore);
+
+                            return (
+                              <div
+                                key={dealId}
+                                className="group rounded-xl border border-line bg-card p-3 shadow-xs hover:border-line-strong transition"
+                              >
+                                <div className="flex items-center justify-between text-[10px] text-ink-3">
+                                  <span className="font-semibold">{sourceDisplayText(deal.source || "Auction")}</span>
+                                  {deal.dealScore != null && (
+                                    <span
+                                      className="rounded px-1.5 py-0.5 font-bold"
+                                      style={{ backgroundColor: `${scoreBand?.color}20`, color: scoreBand?.color }}
+                                    >
+                                      {Math.round(deal.dealScore)}/99
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="mt-1 text-xs font-bold text-ink line-clamp-2">
+                                  {deal.address || "Address not published"}
+                                </h4>
+                                {deal.city && deal.state && (
+                                  <p className="text-[10px] text-ink-3 mt-0.5">
+                                    {deal.city}, {deal.state}
+                                  </p>
+                                )}
+                                <div className="mt-2.5 flex items-center justify-between border-t border-line/60 pt-2 text-[11px]">
+                                  <span className="text-[10px] text-ink-3">Opening:</span>
+                                  <span className="font-extrabold text-ink">{formatMoney(deal.openingBid)}</span>
+                                </div>
+
+                                {deal.saleDate && (
+                                  <div className="mt-1 flex items-center justify-between text-[10px] text-ink-3">
+                                    <span>Sale Date:</span>
+                                    <span className="font-semibold text-ink-2">
+                                      {new Date(deal.saleDate).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {/* Action Buttons & Stage Shift */}
+                                <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-[11px]">
+                                  <button
+                                    onClick={() => {
+                                      if (stageIndex > 0) {
+                                        updateDealStage(dealId, stageOrder[stageIndex - 1]);
+                                      }
+                                    }}
+                                    disabled={stageIndex === 0}
+                                    className="p-1 rounded text-ink-3 hover:text-ink disabled:opacity-20 hover:bg-paper transition"
+                                    title={stageIndex > 0 ? `Move back to ${PIPELINE_STAGES[stageIndex - 1].label}` : "First stage"}
+                                  >
+                                    <ChevronLeft className="h-3.5 w-3.5" />
+                                  </button>
+
+                                  <Link
+                                    href={`/listings/${encodeURIComponent(dealId)}`}
+                                    className="text-[10px] font-semibold text-ink-2 hover:text-ink flex items-center gap-0.5 transition"
+                                  >
+                                    Dossier <ArrowRight className="h-2.5 w-2.5" />
+                                  </Link>
+
+                                  <button
+                                    onClick={() => {
+                                      if (stageIndex < stageOrder.length - 1) {
+                                        updateDealStage(dealId, stageOrder[stageIndex + 1]);
+                                      }
+                                    }}
+                                    disabled={stageIndex === stageOrder.length - 1}
+                                    className="p-1 rounded text-ink-3 hover:text-ink disabled:opacity-20 hover:bg-paper transition"
+                                    title={stageIndex < stageOrder.length - 1 ? `Advance to ${PIPELINE_STAGES[stageIndex + 1].label}` : "Final stage"}
+                                  >
+                                    <ChevronRight className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Watchlist Tab */}
         {tab === "watchlist" && (
           <div>
@@ -350,6 +601,9 @@ export function PortfolioView() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {deals.map((deal) => {
                   const dealId = deal.listingId || deal.id;
+                  const currentStageId = pipelineStages[dealId] || "triage";
+                  const currentStage = PIPELINE_STAGES.find((s) => s.id === currentStageId);
+
                   return (
                     <div
                       key={dealId}
@@ -360,11 +614,16 @@ export function PortfolioView() {
                           <span className="font-semibold text-ink-3">
                             {sourceDisplayText(deal.source || "Auction")}
                           </span>
-                          {deal.dealScore != null && (
-                            <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink" style={{ color: bandForScore(deal.dealScore)?.color }}>
-                              Score {Math.round(deal.dealScore)}
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink-2">
+                              {currentStage?.label || "Triage"}
                             </span>
-                          )}
+                            {deal.dealScore != null && (
+                              <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink" style={{ color: bandForScore(deal.dealScore)?.color }}>
+                                Score {Math.round(deal.dealScore)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <h3 className="mt-2 text-sm font-bold text-ink line-clamp-2">
                           {deal.address || "Address not published"}
