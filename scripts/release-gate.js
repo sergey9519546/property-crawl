@@ -36,7 +36,7 @@ const gates = [
   { id: 'test-wiring', desc: 'every test file reachable from a runner', cmd: node, args: ['--test', 'test/test-wiring.test.js'] },
   { id: 'ops-suites', desc: 'meta/wiring/contract suites', cmd: node, args: ['--test', 'test/coverage-matrix.test.js', 'test/test-wiring.test.js', 'test/corrupt-store-no-silent-overwrite.test.js', 'test/db-seed-failure-is-reported.test.js', 'test/store-load-failures-are-reported.test.js', 'test/e2e-demo-pin.test.js', 'test/inventory-signal.test.js', 'test/gen-context-route-drift.test.js', 'test/no-dead-duplicates.test.js', 'test/hunt-document-identity-agreement.test.js', 'test/discovery-operations-pg-gating.test.js', 'test/schema-mirror-contract.test.js', 'test/module-load-gate-fails-closed.test.js', 'test/verify-gate-reports-git-failure.test.js', 'test/scrapling-parser-guarded.test.js', 'test/ci-coverage-visibility.test.js', 'test/discovery-operations-split.test.js'] },
   { id: 'scraper-parser', desc: 'Scrapling parser on the pinned runtime', cmd: node, args: ['scripts/run-scrapling-parser-tests.js'] },
-  { id: 'production-smoke', desc: 'boot contract + guards without booting', cmd: node, args: ['scripts/production-smoke.js'] },
+  { id: 'production-smoke', desc: 'boot contract + guards without booting', cmd: node, args: ['scripts/production-smoke.js'], env: { ...process.env, SMOKE_API_URL: process.env.SMOKE_API_URL || 'http://127.0.0.1:39999' } },
   // next's bin directly: `npm` is npm.cmd on Windows and spawnSync without a
   // shell never starts it, which failed in 2ms and read as a broken build.
   { id: 'next-build', desc: 'production bundle', cmd: node, args: ['node_modules/next/dist/bin/next', 'build'], slow: true },
