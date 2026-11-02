@@ -91,6 +91,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),
+    federalHazards: listing.federalHazards || null,
     opportunitySignals: opportunityEvaluation.signals,
     trajectory: opportunityEvaluation.trajectory,
     triagePriority: opportunityEvaluation.triagePriority,

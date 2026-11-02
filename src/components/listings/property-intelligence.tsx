@@ -7,6 +7,7 @@ import { OpportunitySignalsCard } from '@/components/listings/opportunity-signal
 import type { ComponentScore, OpportunitySignal } from '@/components/listings/opportunity-signals-card';
 import { DiscoveryEvidence, type DiscoveryEvidenceData } from '@/components/listings/discovery-evidence';
 import { useWorkspaceSession } from '@/components/workspace/workspace-shell';
+import { cn } from '@/lib/utils';
 
 type Dossier = DiscoveryEvidenceData & {
   listingId: string; address: string; generatedAt: string; historyUnavailable: boolean;
@@ -46,6 +47,7 @@ const date = (value: string) => new Date(value).toLocaleDateString();
 export function PropertyIntelligence({ listingId, documentsShown = false }: { listingId: string; documentsShown?: boolean }) {
   const session = useWorkspaceSession();
   const [dossier, setDossier] = useState<Dossier | null>(null);
+  const [hazards, setHazards] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
@@ -61,10 +63,14 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
       if (!response.ok) throw new Error(result.error || 'Property investigation could not be completed');
       if (requestGeneration !== generation.current || controller.signal.aborted) return;
       setDossier(result);
+      void fetch(`/api/federal-hazards?listingId=${encodeURIComponent(listingId)}`, { signal: controller.signal })
+        .then((r) => r.ok ? r.json() : null)
+        .then((h) => { if (requestGeneration === generation.current && h?.status === 'success') setHazards(h); })
+        .catch(() => {});
     } catch (caught) { if (!(caught instanceof DOMException && caught.name === 'AbortError') && requestGeneration === generation.current) setError(caught instanceof Error ? caught.message : 'Property investigation could not be completed'); }
     finally { if (requestGeneration === generation.current && publicRequest.current === controller) setBusy(false); }
   }, [listingId]);
-  useEffect(() => { const requestGeneration=++generation.current;researchRequest.current?.abort();setDossier(null);void loadPublic(requestGeneration);return()=>{publicRequest.current?.abort();researchRequest.current?.abort();}; }, [loadPublic]);
+  useEffect(() => { const requestGeneration=++generation.current;researchRequest.current?.abort();setDossier(null);setHazards(null);void loadPublic(requestGeneration);return()=>{publicRequest.current?.abort();researchRequest.current?.abort();}; }, [loadPublic]);
 
   async function research() {
     if (!session.authenticated) { session.requestUnlock(); return; }
@@ -155,6 +161,53 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+        {hazards && hazards.status === 'success' && (
+          <div className="rounded-xl border border-line bg-paper p-4" data-testid="federal-hazard-gis-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">Federal Hazard GIS · FEMA / EPA / USGS</h3>
+              <span className={cn(
+                "rounded-full border px-2 py-0.5 text-xs font-semibold",
+                hazards.overallTier === 'critical_hazard' ? "border-catch/60 bg-catch-wash text-catch-ink" :
+                hazards.overallTier === 'high_hazard' ? "border-catch/40 bg-catch-wash text-catch-ink" :
+                "border-line bg-card text-ink-2"
+              )}>
+                {hazards.compositeScore}/100 GIS Score
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Special Flood Hazard Areas (NFHL), CERCLA/SEMS Superfund proximity, and USGS 3DEP terrain slope analysis.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">FEMA Flood Zone</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {hazards.layers?.femaFlood?.floodRisk?.zone || 'Zone X'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {hazards.layers?.femaFlood?.floodRisk?.isSpecialFloodHazardArea ? 'Mandatory NFIP Insurance' : 'Minimal Flood Hazard'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">EPA Environmental</span>
+                <p className="mt-1 text-sm font-bold text-ink capitalize">
+                  {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || 'Clean'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {hazards.underwritingImpact?.phaseOneEsaRequired ? 'Phase I ESA Recommended' : 'No Superfund Sites Detected'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">USGS Terrain Slope</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0}% Grade
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {hazards.underwritingImpact?.gradingContingencyRequired ? 'Steep Slope / Engineering Required' : 'Standard Buildable Grade'}
+                </p>
+              </div>
             </div>
           </div>
         )}

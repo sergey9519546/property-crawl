@@ -8,38 +8,22 @@
  * Implements rigorous foreclosure underwriting logic:
  * 1. Senior vs Junior Lien Survival: When 2nd mortgage/HELOC/HOA forecloses,
  *    senior 1st mortgage survives the sale in full.
- * 2. Federal Tax Liens: 26 U.S.C. § 7425(d) statutory 120-day IRS redemption right.
- * 3. 22-State HOA Super-Priority assessment rules (UCIOA & state statutes).
- * 4. 50-State Statutory Redemption & Upset Bid periods (AL, MI, NJ, NC, etc.).
+ * 2. Federal Tax Liens: 26 U.S.C. § 7425 25-day notice rule and 120-day IRS redemption right.
+ * 3. 22-State HOA Super-Priority assessment rules (UCIOA & state statutes), including
+ *    Nevada (NRS 116.3116) senior mortgage extinguishment under SFR Investments Pool 1.
+ * 4. Bankruptcy Automatic Stay Analyzer under 11 U.S.C. § 362 (serial-filer 30-day expiration,
+ *    zero automatic stay for 2+ prior dismissals, and 2-year in rem relief).
+ * 5. 50-State Statutory Redemption & Upset Bid periods (AL, MI, NJ, NC, etc.).
  */
 
 const { STATE_REDEMPTION_RULES } = require('../ai/legal-rules');
-
-// 22 States with statutory HOA / Condominium Super-Priority assessment liens
-const HOA_SUPER_PRIORITY_STATES = Object.freeze({
-  NV: { months: 9, statute: 'NRS 116.3116', label: 'Nevada 9-month HOA super-priority assessment primes first deed of trust' },
-  CO: { months: 6, statute: 'C.R.S. § 38-33.3-316', label: 'Colorado 6-month HOA super-priority assessment' },
-  CT: { months: 9, statute: 'Conn. Gen. Stat. § 47-258', label: 'Connecticut 9-month common interest ownership super-priority' },
-  FL: { months: 12, statute: 'Fla. Stat. § 718.116', label: 'Florida Safe Harbor: 12 months or 1% of original mortgage debt' },
-  WA: { months: 6, statute: 'RCW 64.34.364', label: 'Washington 6-month condo super-priority lien' },
-  DC: { months: 6, statute: 'D.C. Code § 42-1903.13', label: 'District of Columbia 6-month condo super-priority' },
-  MD: { months: 4, statute: 'Md. Code Real Prop. § 11-110', label: 'Maryland 4-month condo assessment priority up to $1,200' },
-  MA: { months: 6, statute: 'M.G.L. c. 183A § 6', label: 'Massachusetts 6-month rolling super-priority lien' },
-  MN: { months: 6, statute: 'Minn. Stat. § 515B.3-116', label: 'Minnesota 6-month common interest community super-priority' },
-  MO: { months: 6, statute: 'RSMo § 448.3-116', label: 'Missouri 6-month condominium super-priority' },
-  NJ: { months: 6, statute: 'N.J.S.A. 46:8B-21', label: 'New Jersey 6-month condo assessment super-priority' },
-  OR: { months: 6, statute: 'ORS § 100.450', label: 'Oregon 6-month condominium assessment super-priority' },
-  PA: { months: 6, statute: '68 Pa.C.S. § 3315', label: 'Pennsylvania 6-month uniform condominium super-priority' },
-  RI: { months: 6, statute: 'R.I. Gen. Laws § 34-36.1-3.16', label: 'Rhode Island 6-month super-priority assessment' },
-  TN: { months: 6, statute: 'Tenn. Code § 66-27-415', label: 'Tennessee 6-month condominium priority' },
-  VT: { months: 6, statute: '27A V.S.A. § 3-116', label: 'Vermont 6-month common interest ownership super-priority' },
-  WV: { months: 6, statute: 'W. Va. Code § 36B-3-116', label: 'West Virginia 6-month UCIOA super-priority' },
-  AL: { months: 6, statute: 'Ala. Code § 35-8A-316', label: 'Alabama 6-month condominium super-priority' },
-  AK: { months: 6, statute: 'AS § 34.08.470', label: 'Alaska 6-month common interest super-priority' },
-  HI: { months: 6, statute: 'HRS § 514B-146', label: 'Hawaii 6-month non-judicial condo super-priority' },
-  IL: { months: 6, statute: '765 ILCS 605/9', label: 'Illinois condominium assessment strict lien' },
-  NY: { months: 6, statute: 'N.Y. Real Prop. Law § 339-z', label: 'New York condominium assessment priority over subordinate liens' },
-});
+const {
+  HOA_SUPER_PRIORITY_RULES,
+  HOA_SUPER_PRIORITY_STATES,
+  evaluateHoaSuperLien,
+} = require('./hoa-super-lien');
+const { analyzeBankruptcyStay } = require('./bankruptcy-stay');
+const { evaluateIrsNoticeRule } = require('./irs-notice');
 
 /**
  * Classifies the foreclosing plaintiff party type
@@ -67,12 +51,12 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
     return 'HOA_ASSESSMENT';
   }
 
-  // 3. Junior Mortgage / HELOC / Second Trust Deed
+  // 5. Junior Mortgage / HELOC / Second Trust Deed
   if (/(?:second\s*(?:mortgage|(?:trust\s*)?deed)|2nd\s*(?:mortgage|(?:trust\s*)?deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien))/i.test(combined)) {
     return 'SECOND_MORTGAGE_HELOC';
   }
 
-  // 4. Conventional First Mortgage / Institutional Lender
+  // 6. Conventional First Mortgage / Institutional Lender
   if (/(?:mortgage|bank|fannie|freddie|wells\s*fargo|jpmorgan|chase|citibank|truist|pnc|us\s*bank|loan\s*service|trustee|nationstar|mr\s*cooper|freedom\s*mortgage|rocket|caliber|quicken)/i.test(combined)) {
     return 'FIRST_MORTGAGE';
   }
@@ -83,18 +67,17 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
 /**
  * Detects presence of recorded federal tax liens under 26 U.S.C. § 7425
  */
-function detectIrsFederalTaxLien(noticeText = '') {
-  const text = String(noticeText || '');
-  const hasIrs = /(?:united\s*states\s*of\s*america|internal\s*revenue\s*service|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(text);
-
+function detectIrsFederalTaxLien(noticeText = '', options = {}) {
+  const result = evaluateIrsNoticeRule({ noticeText, ...options });
   return {
-    hasIrsLien: hasIrs,
-    hasLien: hasIrs,
-    redemptionDays: hasIrs ? 120 : 0,
-    statute: '26 U.S.C. § 7425(d)',
-    warning: hasIrs
-      ? 'FEDERAL TAX LIEN ACTIVE: United States holds statutory 120-day right of redemption under 26 U.S.C. § 7425(d).'
-      : null,
+    hasIrsLien: result.hasFederalTaxLien,
+    hasLien: result.hasFederalTaxLien,
+    redemptionDays: result.redemptionDays,
+    statute: result.statutoryCitation,
+    warning: result.warning,
+    lienSurvivesForeclosure: result.lienSurvivesForeclosure,
+    noticeTimely: result.noticeTimely,
+    taxLienDischarged: result.taxLienDischarged,
   };
 }
 
@@ -122,26 +105,74 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   const notice = `${rawNoticeText} ${listing.raw || ''} ${listing.description || ''}`;
 
   const partyType = classifyForeclosingParty(plaintiff, notice);
-  const irsLien = detectIrsFederalTaxLien(notice);
   const instrumentSignals = extractInstrumentPrioritySignals(notice);
-  const hoaConfig = HOA_SUPER_PRIORITY_STATES[state] || null;
   const redemptionRule = (STATE_REDEMPTION_RULES || {})[state] || { days: 0, label: 'Standard statutory confirmation' };
+
+  // 1. Evaluate 50-State HOA Super-Lien Priority
+  const hoaEval = evaluateHoaSuperLien({
+    state,
+    monthlyDues: listing.monthlyHoa ?? listing.hoaDues ?? listing.monthlyDues ?? null,
+    originalMortgageDebt: listing.originalMortgageDebt ?? listing.mortgageDebt ?? null,
+    isHoaForeclosing: partyType === 'HOA_ASSESSMENT',
+    foreclosingPartyType: partyType,
+    noticeText: notice,
+  });
+
+  // 2. Evaluate IRS Federal Tax Lien 25-Day Notice Rule (26 U.S.C. § 7425)
+  const irsNoticeEval = evaluateIrsNoticeRule({
+    hasFederalTaxLien: listing.hasIrsLien ?? listing.hasFederalTaxLien,
+    saleDate: listing.saleDate,
+    irsNoticeDate: listing.irsNoticeDate,
+    noticeProvided: listing.irsNoticeProvided ?? listing.irsNoticeGiven,
+    noticeMethod: listing.irsNoticeMethod,
+    noticeText: notice,
+  });
+
+  const irsLien = {
+    hasIrsLien: irsNoticeEval.hasFederalTaxLien,
+    hasLien: irsNoticeEval.hasFederalTaxLien,
+    redemptionDays: irsNoticeEval.redemptionDays,
+    statute: irsNoticeEval.statutoryCitation,
+    warning: irsNoticeEval.warning,
+    lienSurvivesForeclosure: irsNoticeEval.lienSurvivesForeclosure,
+    noticeTimely: irsNoticeEval.noticeTimely,
+    taxLienDischarged: irsNoticeEval.taxLienDischarged,
+  };
+
+  // 3. Evaluate Bankruptcy Automatic Stay (11 U.S.C. § 362)
+  const bankruptcyStay = analyzeBankruptcyStay({
+    hasBankruptcyFiling: listing.bankruptcy?.active ?? listing.hasBankruptcyFiling,
+    petitionDate: listing.bankruptcy?.petitionDate ?? listing.petitionDate,
+    priorDismissalsWithin1Year: listing.bankruptcy?.priorDismissalsWithin1Year ?? listing.priorDismissalsWithin1Year,
+    hasCourtExtension: listing.bankruptcy?.hasCourtExtension ?? listing.hasCourtExtension,
+    hasInRemReliefOrder: listing.bankruptcy?.hasInRemReliefOrder ?? listing.hasInRemReliefOrder,
+    inRemOrderDate: listing.bankruptcy?.inRemOrderDate ?? listing.inRemOrderDate,
+    hasReliefFromStay: listing.bankruptcy?.hasReliefFromStay ?? listing.hasReliefFromStay,
+    saleDate: listing.saleDate,
+    noticeText: notice,
+  });
 
   const warnings = [];
   let riskLevel = 'LOW';
   let firstMortgageSurvives = false;
   let canProceedWithBid = true;
 
-  // 1. Junior Lien Foreclosure Alert
+  // I. Junior Lien Foreclosure / Priority Analysis
   if (partyType === 'SECOND_MORTGAGE_HELOC' || instrumentSignals.explicitlySubjectToSeniorMortgage) {
     firstMortgageSurvives = true;
     riskLevel = 'CRITICAL';
     canProceedWithBid = false;
     warnings.push('CRITICAL TITLE DEFECT: Foreclosing party is a junior lienholder (2nd Mortgage/HELOC). Senior 1st mortgage survives sale in full!');
   } else if (partyType === 'HOA_ASSESSMENT') {
-    if (hoaConfig) {
+    if (state === 'NV') {
+      // Nevada: True super-priority primes first deed of trust and extinguishes senior mortgage (SFR Investments Pool 1)
+      firstMortgageSurvives = false;
       riskLevel = 'HIGH';
-      warnings.push(`HOA SUPER-PRIORITY: ${hoaConfig.label}. Assessments over ${hoaConfig.months} months remain subordinate to first mortgage.`);
+      canProceedWithBid = true;
+      warnings.push(hoaEval.warningDetails[0]);
+    } else if (hoaEval.isSuperPriorityState) {
+      riskLevel = 'HIGH';
+      warnings.push(...hoaEval.warningDetails);
     } else {
       firstMortgageSurvives = true;
       riskLevel = 'CRITICAL';
@@ -161,6 +192,9 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     warnings.push('TAX SALE PRIORITY: Property tax foreclosures generally prime all private mortgages and deeds of trust.');
   } else if (partyType === 'FIRST_MORTGAGE') {
     warnings.push('SENIOR FORECLOSURE: 1st mortgage foreclosing wipes out junior deeds and subordinate judgment liens (subject to unjoined parties).');
+    if (hoaEval.isSuperPriorityState) {
+      warnings.push(`HOA SUPER-PRIORITY PAYOFF (${hoaEval.statute}): Senior mortgage foreclosure does NOT extinguish up to ${hoaEval.statutoryCapMonths} months of delinquent HOA assessments. Buyer/lender must satisfy super-priority lien.`);
+    }
   } else {
     riskLevel = 'MODERATE';
     firstMortgageSurvives = null;
@@ -168,13 +202,36 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     warnings.push('UNCONFIRMED LIEN PRIORITY: Plaintiff lien position could not be deterministically established from publisher record. Title search required.');
   }
 
-  // 2. Federal Tax Lien Redemption Warning
-  if (irsLien.hasIrsLien) {
-    if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH';
-    warnings.push(irsLien.warning);
+  // II. Federal Tax Lien 25-Day Rule Analysis
+  if (irsNoticeEval.hasFederalTaxLien) {
+    if (irsNoticeEval.lienSurvivesForeclosure) {
+      riskLevel = 'CRITICAL';
+      canProceedWithBid = false;
+      warnings.push(irsNoticeEval.warning);
+    } else {
+      if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH';
+      warnings.push(irsNoticeEval.warning);
+    }
   }
 
-  // 3. State Statutory Redemption Warning
+  // III. Bankruptcy Automatic Stay Analysis
+  if (bankruptcyStay.hasBankruptcyFiling || bankruptcyStay.inRemReliefActive) {
+    if (bankruptcyStay.stayEffective) {
+      riskLevel = 'CRITICAL';
+      canProceedWithBid = false;
+      warnings.push(`BANKRUPTCY AUTOMATIC STAY ACTIVE (${bankruptcyStay.statutoryRuleCited}): Foreclosure auction stayed by operation of law. Any sale conducted during stay is void ab initio.`);
+    } else if (bankruptcyStay.serialFilerFlag === 'TWO_OR_MORE_PRIOR_DISMISSALS_ZERO_STAY') {
+      warnings.push(`BANKRUPTCY SERIAL FILER (11 U.S.C. § 362(c)(4)): Debtor had 2+ prior dismissals within 1 year; ZERO automatic stay took effect upon filing. Foreclosure sale may proceed.`);
+    } else if (bankruptcyStay.serialFilerFlag === 'IN_REM_RELIEF_RECORDED_2_YEAR_BAR') {
+      warnings.push(`IN REM BANKRUPTCY RELIEF (11 U.S.C. § 362(d)(4)): Binding 2-year in rem order bars automatic stay on this property. Foreclosure sale may proceed.`);
+    } else if (bankruptcyStay.serialFilerFlag === 'SINGLE_PRIOR_DISMISSAL_30_DAY_EXPIRATION') {
+      warnings.push(`BANKRUPTCY STAY TERMINATED (11 U.S.C. § 362(c)(3)): Single prior dismissal within 1 year; automatic stay expired after 30 days without court extension. Foreclosure sale may proceed.`);
+    } else if (bankruptcyStay.serialFilerFlag === 'RELIEF_FROM_STAY_GRANTED') {
+      warnings.push(`RELIEF FROM STAY GRANTED (11 U.S.C. § 362(d)): Bankruptcy court granted relief from automatic stay. Foreclosure sale may proceed.`);
+    }
+  }
+
+  // IV. State Statutory Redemption Warning
   if (redemptionRule.days > 0) {
     warnings.push(`STATUTORY REDEMPTION ACTIVE: ${redemptionRule.label}`);
     if (redemptionRule.days >= 180 && riskLevel === 'LOW') {
@@ -182,14 +239,21 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     }
   }
 
-  // 4. North Carolina Upset Bid Window
+  // V. North Carolina Upset Bid Window
   if (state === 'NC') {
     warnings.push('NORTH CAROLINA 10-DAY UPSET BID: Sale remains open for upset bids (5% or $750 minimum increase) under N.C.G.S. § 45-21.27.');
   }
 
+  // VI. Action Advice Synthesis
   let titleActionAdvice = 'No senior-lien flag from the published plaintiff. This is not a title opinion or a bid instruction.';
   if (riskLevel === 'CRITICAL') {
-    titleActionAdvice = 'DO NOT BID. Senior mortgage survives sale; winning bidder takes property encumbered by underlying debt.';
+    if (bankruptcyStay.stayEffective) {
+      titleActionAdvice = 'DO NOT BID. Sale stayed by federal bankruptcy court (11 U.S.C. § 362). Foreclosure sale would be void ab initio.';
+    } else if (irsNoticeEval.lienSurvivesForeclosure) {
+      titleActionAdvice = 'DO NOT BID. Federal tax lien survives sale due to 26 U.S.C. § 7425 25-day notice failure.';
+    } else {
+      titleActionAdvice = 'DO NOT BID. Senior mortgage survives sale; winning bidder takes property encumbered by underlying debt.';
+    }
   } else if (riskLevel === 'HIGH') {
     titleActionAdvice = 'ESCROW ESCALATION. Order full 40-year title search to confirm federal tax lien and HOA payoff balances.';
   } else if (riskLevel === 'MODERATE') {
@@ -201,11 +265,20 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     plaintiffType: partyType,
     firstMortgageSurvives,
     irsTaxLienRedemption: irsLien,
+    irsNoticeEvaluation: irsNoticeEval,
     hoaSuperPriority: {
-      isSuperPriorityState: Boolean(hoaConfig),
-      monthsProtected: hoaConfig ? hoaConfig.months : 0,
-      statute: hoaConfig ? hoaConfig.statute : null,
+      isSuperPriorityState: hoaEval.isSuperPriorityState,
+      monthsProtected: hoaEval.statutoryCapMonths,
+      statutoryCapMonths: hoaEval.statutoryCapMonths,
+      statute: hoaEval.statute,
+      safeHarborApplicable: hoaEval.safeHarborApplicable,
+      statutoryDollarCap: hoaEval.statutoryDollarCap,
+      seniorMortgageExtinguished: hoaEval.seniorMortgageExtinguished,
+      riskRating: hoaEval.riskRating,
+      estimatedSuperLienAmount: hoaEval.estimatedSuperLienAmount,
+      warningDetails: hoaEval.warningDetails,
     },
+    bankruptcyStay,
     statutoryRedemption: {
       state,
       days: redemptionRule.days,
@@ -220,8 +293,12 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
 
 module.exports = {
   HOA_SUPER_PRIORITY_STATES,
+  HOA_SUPER_PRIORITY_RULES,
   classifyForeclosingParty,
   detectIrsFederalTaxLien,
   extractInstrumentPrioritySignals,
   arbitrateTitleRisk,
+  evaluateHoaSuperLien,
+  analyzeBankruptcyStay,
+  evaluateIrsNoticeRule,
 };

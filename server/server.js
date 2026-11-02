@@ -36,6 +36,7 @@ const handlePortfolioDashboard = require('./routes/portfolio-dashboard').createP
 const handlePropertyComparison = require('./routes/property-comparison').createPropertyComparisonHandler();
 const handlePriceDrop = require('./routes/price-drop').createPriceDropHandler();
 const { handleDecisionPacket } = require('./routes/decision-packet');
+const handleFederalHazards = require('./routes/federal-hazards');
 const scheduler = require('./scrapers/scheduler');
 const { discoveryReadiness, probeDiscoveryDatabase } = require('./discovery-readiness');
 
@@ -202,6 +203,7 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/export') return handleExport(req, res);
     if (url.pathname === '/api/verify-docket') return handleVerifyDocket(req, res);
     if (url.pathname === '/api/parcel-boundary') return handleParcelBoundary(req, res);
+    if (url.pathname === '/api/federal-hazards') return handleFederalHazards(req, res);
     if (url.pathname === '/api/property-image') return handlePropertyImage(req, res);
     if (url.pathname === '/api/property-image/providers') return handlePropertyImageProviders(req, res);
     if (url.pathname === '/api/property-intelligence') return handlePropertyIntelligence(req, res);

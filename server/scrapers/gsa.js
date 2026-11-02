@@ -24,6 +24,7 @@ const BaseScraper = require('./base');
 const { extractDetailImages } = require('./media-policy');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { isPathExcludedForAdapter, validateAccessForAdapter } = require('../sources/catalog');
+const { GsaApiAdapter, getGsaAuctionsApiUrl, parseGsaAuctionsApiResponse, standardizeGsaAuctionItem } = require('./adapters/gsa-api');
 
 const STATE_NAME_TO_CODE = {
   Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA',
@@ -149,6 +150,8 @@ class GsaSurplusScraper extends BaseScraper {
     this.lastRunReport = null;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('gsa');
     this.extract = options.extractImpl || extractWithScrapling;
+    this.useApi = options.useApi ?? (process.env.GSA_USE_OPEN_DATA_API === '1');
+    this.apiFetchImpl = options.apiFetchImpl || null;
     // Known property ids to refresh through the permitted /asset-details path.
     this.propertyIds = this.normalizePropertyIds(options.propertyIds);
   }
@@ -240,6 +243,9 @@ class GsaSurplusScraper extends BaseScraper {
     if (isPathExcludedForAdapter('gsa', excludedPath)) {
       const override = process.env.SCRAPER_RESPECT_ROBOTS === '0';
       if (!override) {
+        if (this.useApi || process.env.GSA_USE_OPEN_DATA_API === '1') {
+          return this.scrapeApi();
+        }
         if (this.propertyIds.length > 0) {
           console.warn(`[${this.name}] ${this.baseUrl}${excludedPath} is catalog-forbidden; refreshing ${this.propertyIds.length} known property id(s) via the permitted /asset-details path instead.`);
           return this.scrapeByIds(this.propertyIds);
@@ -329,6 +335,47 @@ class GsaSurplusScraper extends BaseScraper {
         robotsExclusion: { path: '/our-listing', source: 'catalog', honored: true }
       };
       console.log(`[${this.name}] Disposition list emitted ${listings.length} open properties (${parsed.closed.length} publisher-closed, ${rejected} rejected)`);
+      return listings;
+    });
+  }
+
+  async scrapeApi(options = {}) {
+    return this.executeWithRetry(async () => {
+      const adapter = new GsaApiAdapter({
+        apiKey: options.apiKey || process.env.GSA_API_KEY,
+        fetchImpl: options.fetchImpl || this.apiFetchImpl,
+      });
+      const items = await adapter.fetchAuctions(options);
+      const listings = [];
+      const failures = [];
+      for (const item of items) {
+        try {
+          listings.push(this.standardizeListing(item));
+        } catch (err) {
+          if (err && err.code === 'LISTING_SCHEMA_INVALID') {
+            console.warn(`[${this.name}] Dropped schema-invalid listing: ${err.message}`);
+            failures.push({ recordId: item.provenance?.recordId, error: err.message });
+          } else {
+            throw err;
+          }
+        }
+      }
+      const rejected = items.length - listings.length;
+      this.lastRunReport = {
+        outcome: failures.length ? 'partial_failure' : listings.length ? 'success' : 'empty',
+        scope: { endpoint: '/assets/gsaauctions/v2/auctions', filters: { assetClass: 'real_estate', source: 'open_data_api' } },
+        recordsDiscovered: items.length,
+        recordsEmitted: listings.length,
+        recordsRejected: rejected,
+        failures,
+        complete: failures.length === 0,
+        fullSweepComplete: failures.length === 0,
+        truncated: false,
+        fixtureFallbackUsed: false,
+        sweepType: 'open_data_api',
+        robotsExclusion: { path: '/our-listing', source: 'catalog', honored: true, bypassedVia: 'api.gsa.gov' }
+      };
+      console.log(`[${this.name}] GSA Open-Data API emitted ${listings.length} auctions (${failures.length} failed)`);
       return listings;
     });
   }
@@ -515,3 +562,7 @@ module.exports = new GsaSurplusScraper();
 module.exports.GsaSurplusScraper = GsaSurplusScraper;
 module.exports.parseAcceleratedDisposition = parseAcceleratedDisposition;
 module.exports.DISPOSITION_URL = DISPOSITION_URL;
+module.exports.GsaApiAdapter = GsaApiAdapter;
+module.exports.getGsaAuctionsApiUrl = getGsaAuctionsApiUrl;
+module.exports.parseGsaAuctionsApiResponse = parseGsaAuctionsApiResponse;
+module.exports.standardizeGsaAuctionItem = standardizeGsaAuctionItem;
