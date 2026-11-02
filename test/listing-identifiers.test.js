@@ -1,3 +1,4 @@
+process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../server/db/client');
