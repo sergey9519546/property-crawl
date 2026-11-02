@@ -165,6 +165,14 @@ function estimateNfipReserve(riskEvaluation) {
     };
   }
 
+  if (riskEvaluation.riskTier === 'undetermined' || riskEvaluation.zone === 'D') {
+    return {
+      estimatedAnnualPremiumReserve: 0,
+      basis: 'unknown',
+      reason: 'Unstudied / undetermined flood zone D; actuarial rate mapping unavailable'
+    };
+  }
+
   return {
     estimatedAnnualPremiumReserve: 0,
     basis: 'published',
@@ -263,8 +271,8 @@ async function queryFemaFloodZone({
       bestFeature = features[0].attributes || {};
     }
 
-    const fldZone = bestFeature ? bestFeature.FLD_ZONE : 'X';
-    const zoneSubty = bestFeature ? bestFeature.ZONE_SUBTY : null;
+    const fldZone = bestFeature ? bestFeature.FLD_ZONE : 'D';
+    const zoneSubty = bestFeature ? bestFeature.ZONE_SUBTY : 'UNSTUDIED / UNMAPPED AREA';
     const sfhaTf = bestFeature ? bestFeature.SFHA_TF : 'F';
     const staticBfe = bestFeature && Number.isFinite(Number(bestFeature.STATIC_BFE)) ? Number(bestFeature.STATIC_BFE) : null;
     const depth = bestFeature && Number.isFinite(Number(bestFeature.DEPTH)) ? Number(bestFeature.DEPTH) : null;

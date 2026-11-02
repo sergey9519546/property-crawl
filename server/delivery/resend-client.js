@@ -319,22 +319,31 @@ async function sendHuntDigest(options = {}) {
     return { delivered: false, reason: 'RESEND_API_KEY_UNSET' };
   }
 
-  if (!Array.isArray(matches)) {
+  if (!Array.isArray(matches) && !options.html) {
     return { delivered: false, reason: 'INVALID_MATCHES' };
   }
 
-  const { subject, html, text } = buildHuntDigestContent({
-    huntName,
-    matches,
-    appUrl: config.appUrl,
-  });
+  let subject = options.subject;
+  let html = options.html;
+  let text = options.text;
+
+  if (!html) {
+    const built = buildHuntDigestContent({
+      huntName,
+      matches,
+      appUrl: config.appUrl,
+    });
+    subject = built.subject;
+    html = built.html;
+    text = built.text;
+  }
 
   return dispatchEmail({
     to,
     from: config.from,
-    subject,
+    subject: subject || `[PropertyCrawl] Deal Alert: ${huntName || 'Hunt Results'}`,
     html,
-    text,
+    text: text || '',
     apiKey: config.apiKey,
     fetchFn: config.fetchFn,
   });

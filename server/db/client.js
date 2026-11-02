@@ -443,7 +443,14 @@ function applyCrossSourceBakeOff(listings) {
         const t = Date.parse(candidate.sourceObservedAt || candidate.provenance?.observedAt || '') || 0;
         if (t > bestOtherTime) { bestOther = candidate; bestOtherTime = t; }
       }
-      const bakeOff = computeBakeOff(bestOther, listing);
+      const myTime = Date.parse(listing.sourceObservedAt || listing.provenance?.observedAt || '') || 0;
+      let bakeOff;
+      if (myTime === bestOtherTime) {
+        const [first, second] = listing.source.localeCompare(bestOther.source) > 0 ? [bestOther, listing] : [listing, bestOther];
+        bakeOff = computeBakeOff(first, second);
+      } else {
+        bakeOff = computeBakeOff(bestOther, listing);
+      }
       listing.bakeOff = {
         preferredSource: bakeOff.preferredSource,
         reason: bakeOff.reason,

@@ -11,7 +11,7 @@ const { tokensMatch, presentedRunToken } = require('../server/routes/scrapers');
 const { isPrivateOrLocalHost } = require('../server/scrapers/scrapling-bridge');
 const { isBlockedSsrfHost, validatePublicHttpsUrl } = require('../server/scrapers/zyte-client');
 const { buildContentSecurityPolicy, scriptSrcAllowsUnsafeInline } = require('../src/lib/security/content-security-policy');
-const { resolveNodeOptions } = require('../scripts/start-production');
+const { resolveNodeOptions, detectAvailableMemoryMb } = require('../scripts/start-production');
 
 test('Security & Auth: operator credentials resolve with fail-closed semantics', () => {
   // Empty or unset environment fails closed
@@ -113,6 +113,11 @@ test('Infrastructure: resolveNodeOptions preserves custom heap limit and default
   // Custom limit on constrained hosts (Render 512MB free tier) is strictly preserved
   assert.equal(resolveNodeOptions('--max-old-space-size=512'), '--max-old-space-size=512');
   assert.equal(resolveNodeOptions('--max-old-space-size=384 --trace-warnings'), '--max-old-space-size=384 --trace-warnings');
+
+  // Dynamic memory sizing is bounded safely between 256MB and 4096MB
+  const detected = detectAvailableMemoryMb();
+  assert.ok(typeof detected === 'number' && Number.isFinite(detected));
+  assert.ok(detected >= 256 && detected <= 4096);
 });
 
 test('Infrastructure: package.json specifies engines node >=22.0.0', () => {

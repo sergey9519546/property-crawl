@@ -359,41 +359,56 @@ function optimizeEscrowAllocation(auctions = [], totalCapital = 0, options = {})
     }
 
     // With recycling: Check if adding candidate causes concurrent peak lockup to exceed liquidCapital
-    // Look for all funded auctions that overlap with candidate's lockup window:
-    // Overlap occurs if:
-    // not (candidate.recyclableTime <= existing.lockupStartTime || candidate.lockupStartTime >= existing.recyclableTime)
+    // Evaluate simultaneous peak commitment across all critical endpoints if candidate is added:
+    const testList = [...fundedList, candidate];
+    const criticalTimes = new Set();
+    for (const item of testList) {
+      criticalTimes.add(item.lockupStartTime);
+      criticalTimes.add(item.recyclableTime);
+    }
+
+    let peakCommitted = 0;
+    let peakActiveItems = [];
+    for (const t of criticalTimes) {
+      const activeAtT = testList.filter((item) => t >= item.lockupStartTime && t < item.recyclableTime);
+      const sumAtT = activeAtT.reduce((sum, item) => sum + item.requiredDeposit, 0);
+      if (sumAtT > peakCommitted) {
+        peakCommitted = sumAtT;
+        peakActiveItems = activeAtT;
+      }
+    }
+
+    const conflictingExisting = peakActiveItems.filter((item) => item.id !== candidate.id);
     const overlappingExisting = fundedList.filter((existing) => {
       const separated = candidate.recyclableTime <= existing.lockupStartTime ||
                         candidate.lockupStartTime >= existing.recyclableTime;
       return !separated;
     });
 
-    const concurrentDepositNeeded = overlappingExisting.reduce((sum, e) => sum + e.requiredDeposit, 0)
-      + candidate.requiredDeposit;
-
-    if (concurrentDepositNeeded <= liquidCapital) {
+    if (peakCommitted <= liquidCapital) {
       fundedList.push(candidate);
       allocatedAuctions.push({
         ...candidate,
         status: 'FUNDED',
         allocatedDeposit: candidate.requiredDeposit,
-        concurrentDepositsAtGavel: concurrentDepositNeeded,
+        concurrentDepositsAtGavel: peakCommitted,
         reason: overlappingExisting.length > 0
           ? `Funded concurrently with ${overlappingExisting.length} overlapping auction(s).`
           : 'Funded with recycled / standalone capital.',
       });
     } else {
       // Date conflict & capital shortfall
-      const conflictingNames = overlappingExisting.map((e) => e.id).join(', ');
+      const conflicts = conflictingExisting.length > 0 ? conflictingExisting : overlappingExisting;
+      const conflictingNames = conflicts.map((e) => e.id).join(', ');
       dateConflicts.push({
         candidateAuction: candidate.id,
-        conflictingAuctions: overlappingExisting.map((e) => e.id),
+        conflictingAuctions: conflicts.map((e) => e.id),
         candidateRequiredDeposit: candidate.requiredDeposit,
-        overlappingDeposits: overlappingExisting.reduce((sum, e) => sum + e.requiredDeposit, 0),
-        totalNeeded: concurrentDepositNeeded,
+        overlappingDeposits: conflicts.reduce((sum, e) => sum + e.requiredDeposit, 0),
+        totalNeeded: peakCommitted,
         availableCapital: liquidCapital,
-        shortfall: concurrentDepositNeeded - liquidCapital,
-        reason: `Deposit for ${candidate.id} ($${candidate.requiredDeposit.toLocaleString()}) overlaps with [${conflictingNames}] between ${candidate.lockupStartDate} and ${candidate.recyclableDate}. Peak deposit requirement ($${concurrentDepositNeeded.toLocaleString()}) exceeds capital ($${liquidCapital.toLocaleString()}).`,
+        shortfall: peakCommitted - liquidCapital,
+        reason: `Deposit for ${candidate.id} ($${candidate.requiredDeposit.toLocaleString()}) overlaps with [${conflictingNames}] between ${candidate.lockupStartDate} and ${candidate.recyclableDate}. Peak deposit requirement ($${peakCommitted.toLocaleString()}) exceeds capital ($${liquidCapital.toLocaleString()}).`,
       });
 
       allocatedAuctions.push({

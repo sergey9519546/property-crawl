@@ -239,6 +239,9 @@ async function dispatchInvestorAlertDigest({ recipient, hunt, evaluation, listin
     to: recipient,
     huntName: hunt.name,
     matches: report.matchedListings,
+    subject: `[PropertyCrawl] Deal Alert Digest: ${hunt.name || 'Target Watchlist'}`,
+    html: report.html,
+    text: report.text || report.markdown,
     ...options,
   });
 
@@ -263,7 +266,8 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
   for (const hunt of hunts) {
     try {
       const evaluation = evaluateInventory(hunt, listings, options);
-      const report = generateInvestorDigestReport({ hunt, evaluation: evaluation.response, listings, options });
+      const evalPayload = { ...evaluation.response, baseline: evaluation.baseline };
+      const report = generateInvestorDigestReport({ hunt, evaluation: evalPayload, listings, options });
 
       totalMatches += report.matchedCount;
       totalPriceDrops += report.priceDropsCount;
@@ -273,7 +277,7 @@ async function runAllHuntDigests({ listings = [], options = {} }) {
         dispatchResult = await dispatchInvestorAlertDigest({
           recipient: options.recipientEmail,
           hunt,
-          evaluation: evaluation.response,
+          evaluation: evalPayload,
           listings,
           options,
         });

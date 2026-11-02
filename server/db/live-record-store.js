@@ -50,10 +50,37 @@ function mergeLiveRecords(filePath, candidates, options = {}) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const lockPath = filePath + '.lock';
   let lock;
-  try { lock = fs.openSync(lockPath, 'wx', 0o600); }
-  catch (error) {
-    if (error.code === 'EEXIST') throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
-    throw error;
+  const STALE_LOCK_MS = 60000;
+  try {
+    lock = fs.openSync(lockPath, 'wx', 0o600);
+  } catch (error) {
+    if (error.code === 'EEXIST') {
+      try {
+        const stat = fs.statSync(lockPath);
+        if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) {
+          try {
+            fs.unlinkSync(lockPath);
+            lock = fs.openSync(lockPath, 'wx', 0o600);
+          } catch {
+            throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
+          }
+        } else {
+          throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
+        }
+      } catch (statErr) {
+        if (statErr.code === 'ENOENT') {
+          try {
+            lock = fs.openSync(lockPath, 'wx', 0o600);
+          } catch {
+            throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
+          }
+        } else {
+          throw new Error('Live record store is locked by another writer. Retry after it finishes; never remove an active lock.');
+        }
+      }
+    } else {
+      throw error;
+    }
   }
   try { return mergeLocked(filePath, candidates, options); }
   finally { fs.closeSync(lock); fs.unlinkSync(lockPath); }

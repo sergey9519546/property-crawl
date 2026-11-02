@@ -184,28 +184,28 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
               <div className="rounded-lg border border-line bg-card p-2.5">
                 <span className="text-[10px] font-bold uppercase text-ink-3">FEMA Flood Zone</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {hazards.layers?.femaFlood?.floodRisk?.zone || 'Zone X'}
+                  {hazards.layers?.femaFlood?.floodRisk?.zone || (hazards.layers?.femaFlood?.status === 'unavailable' ? 'Unavailable' : 'Zone X')}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.layers?.femaFlood?.floodRisk?.isSpecialFloodHazardArea ? 'Mandatory NFIP Insurance' : 'Minimal Flood Hazard'}
+                  {hazards.layers?.femaFlood?.status === 'unavailable' ? 'FEMA NFHL query unavailable' : (hazards.layers?.femaFlood?.floodRisk?.isSpecialFloodHazardArea ? 'Mandatory NFIP Insurance' : 'Minimal Flood Hazard')}
                 </p>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
                 <span className="text-[10px] font-bold uppercase text-ink-3">EPA Environmental</span>
                 <p className="mt-1 text-sm font-bold text-ink capitalize">
-                  {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || 'Clean'}
+                  {hazards.layers?.epaHazard?.environmentalLiability?.liabilityTier || (hazards.layers?.epaHazard?.status === 'unavailable' ? 'Unavailable' : 'Clean')}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.underwritingImpact?.phaseOneEsaRequired ? 'Phase I ESA Recommended' : 'No Superfund Sites Detected'}
+                  {hazards.layers?.epaHazard?.status === 'unavailable' ? 'EPA SEMS lookup unavailable' : (hazards.underwritingImpact?.phaseOneEsaRequired ? 'Phase I ESA Recommended' : 'No Superfund Sites Detected')}
                 </p>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
                 <span className="text-[10px] font-bold uppercase text-ink-3">USGS Terrain Slope</span>
                 <p className="mt-1 text-sm font-bold text-ink">
-                  {hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0}% Grade
+                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'N/A' : `${hazards.layers?.usgsTerrain?.slopeAnalysis?.slopePct ?? 0}% Grade`}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
-                  {hazards.underwritingImpact?.gradingContingencyRequired ? 'Steep Slope / Engineering Required' : 'Standard Buildable Grade'}
+                  {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'USGS 3DEP slope unavailable' : (hazards.underwritingImpact?.gradingContingencyRequired ? 'Steep Slope / Engineering Required' : 'Standard Buildable Grade')}
                 </p>
               </div>
             </div>

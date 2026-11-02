@@ -3,6 +3,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { loadLocalEnvFiles, resolveInternalApiPort } = require('./production-env');
 
 const root = path.resolve(__dirname, '..');
@@ -19,6 +20,42 @@ const publicPort = Number(bootEnv.PORT) || 3000;
 // or with other local stacks). Cloud PORT=3000 keeps historical 3002; any
 // other public port uses publicPort+2 (3700 → 3702).
 const internalApiPort = resolveInternalApiPort(publicPort, bootEnv.INTERNAL_API_PORT);
+
+function detectAvailableMemoryMb() {
+  let memBytes = null;
+  try {
+    if (fs.existsSync('/sys/fs/cgroup/memory.max')) {
+      const val = fs.readFileSync('/sys/fs/cgroup/memory.max', 'utf8').trim();
+      if (val !== 'max') {
+        const parsed = parseInt(val, 10);
+        if (Number.isFinite(parsed) && parsed > 0) memBytes = parsed;
+      }
+    }
+  } catch {}
+
+  if (!memBytes) {
+    try {
+      if (fs.existsSync('/sys/fs/cgroup/memory/memory.limit_in_bytes')) {
+        const val = fs.readFileSync('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf8').trim();
+        const parsed = parseInt(val, 10);
+        if (Number.isFinite(parsed) && parsed > 0 && parsed < 0x7ffffffffffff000) {
+          memBytes = parsed;
+        }
+      }
+    } catch {}
+  }
+
+  if (!memBytes) {
+    try {
+      memBytes = os.totalmem();
+    } catch {}
+  }
+
+  if (!memBytes || memBytes <= 0) return 2048;
+  const totalMb = Math.floor(memBytes / (1024 * 1024));
+  const targetMb = Math.floor(totalMb * 0.75);
+  return Math.max(256, Math.min(4096, targetMb));
+}
 
 function resolveNodeOptions(existingOptions, defaultLimit = '4096') {
   if (existingOptions && existingOptions.includes('--max-old-space-size')) return existingOptions;
@@ -123,7 +160,7 @@ async function boot() {
     ...defaultDbEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
-    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS),
+    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS, String(detectAvailableMemoryMb())),
     // Let both services become healthy before the first CPU/IO-heavy crawl.
     SCRAPER_BOOT_DELAY_MS: bootEnv.SCRAPER_BOOT_DELAY_MS || '90000',
   };
@@ -151,7 +188,7 @@ async function boot() {
     PORT: String(publicPort),
     PROPERTY_API_URL: `http://127.0.0.1:${internalApiPort}`,
     NODE_ENV: 'production',
-    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS),
+    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS, String(detectAvailableMemoryMb())),
   };
 
   // next start serves .next — refuse to boot a stale/missing production build.
@@ -210,4 +247,4 @@ if (require.main === module) boot().catch((err) => {
   shutdown(1);
 });
 
-module.exports = { resolveNodeOptions, awaitBackendReady, boot };
+module.exports = { resolveNodeOptions, detectAvailableMemoryMb, awaitBackendReady, boot };

@@ -264,3 +264,35 @@ test('deterministicParse: extracts deposit terms and prevents debt-as-price conf
   assert.match(parsed.deposit_terms, /10%\s+deposit/i);
   assert.ok(parsed.evidenceSpans.deposit_terms?.verified);
 });
+
+test('deterministicParse: honors hintState and extracts county from court venue', () => {
+  const notice = 'COURT OF COMMON PLEAS, FRANKLIN COUNTY. JPMorgan Chase Bank vs. Jane Smith. Case No. 2026-CV-0091. Opening bid: $75,000. Sale Date: 2026-12-15.';
+  const parsed = deterministicParse(notice, { hintState: 'OH' });
+  assert.equal(parsed.state, 'OH');
+  assert.equal(parsed.county, 'Franklin');
+  assert.equal(parsed.case_number, '2026-CV-0091');
+  assert.equal(parsed.opening_bid, 75000);
+
+  const flNotice = 'IN THE CIRCUIT COURT OF THE 15TH JUDICIAL CIRCUIT IN AND FOR PALM BEACH COUNTY, FLORIDA. Case No. 50-2024-CA-00123. Wells Fargo vs. Bob. Minimum bid: $120,000.';
+  const flParsed = deterministicParse(flNotice, { hintState: 'FL' });
+  assert.equal(flParsed.state, 'FL');
+  assert.equal(flParsed.county, 'Palm Beach');
+});
+
+test('splitMultiParcelNotice: preserves docket preamble when preservePreamble is enabled', () => {
+  const text = `COURT OF COMMON PLEAS, CUYAHOGA COUNTY. Case No. 2026-CV-1234. Deutsche Bank vs. John Doe. Sale Date: 2026-11-20.
+PARCEL 1: 100 Main St, Cleveland, OH 44115. Opening bid: $50,000.
+PARCEL 2: 102 Main St, Cleveland, OH 44115. Opening bid: $60,000.`;
+
+  const parsedList = parseLegalNotice(text, { preservePreamble: true });
+  assert.equal(parsedList.length, 2);
+  assert.equal(parsedList[0].case_number, '2026-CV-1234');
+  assert.equal(parsedList[0].plaintiff_or_seller, 'Deutsche Bank');
+  assert.equal(parsedList[0].sale_date, '2026-11-20');
+  assert.equal(parsedList[0].opening_bid, 50000);
+
+  assert.equal(parsedList[1].case_number, '2026-CV-1234');
+  assert.equal(parsedList[1].plaintiff_or_seller, 'Deutsche Bank');
+  assert.equal(parsedList[1].sale_date, '2026-11-20');
+  assert.equal(parsedList[1].opening_bid, 60000);
+});

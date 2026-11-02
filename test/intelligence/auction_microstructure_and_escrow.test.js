@@ -341,6 +341,33 @@ test('Escrow Optimizer: identifies date conflicts and capital shortfalls on over
   assert.equal(excluded.status, 'EXCLUDED_DATE_CONFLICT');
 });
 
+test('Escrow Optimizer: continuous peak timeline allows non-overlapping sequential auctions to fund within capital limit', () => {
+  // Auction 1: Days 1-3 ($10,000 deposit)
+  // Auction 2: Days 8-11 ($10,000 deposit)
+  // Total capital $15,000. Under continuous peak evaluation, both should be funded because at no point in time does deposit exceed $10,000.
+  const auctions = [
+    {
+      id: 'auction_early',
+      platform: 'realauction',
+      openingBid: 100000, // deposit: $10,000
+      saleDate: '2026-11-02T14:00:00Z',
+      dealScore: 90,
+    },
+    {
+      id: 'auction_later',
+      platform: 'realauction',
+      openingBid: 100000, // deposit: $10,000
+      saleDate: '2026-11-12T14:00:00Z',
+      dealScore: 85,
+    },
+  ];
+
+  const plan = optimizeEscrowAllocation(auctions, 15000);
+  assert.equal(plan.fundedAuctionCount, 2);
+  assert.equal(plan.dateConflicts.length, 0);
+  assert.equal(plan.totalCommittedCapital, 10000);
+});
+
 // ============================================================================
 // SUITE 3: DUAL-OUTCOME PENALTY REDEMPTION VS. ACQUISITION EXPECTED VALUE
 // ============================================================================

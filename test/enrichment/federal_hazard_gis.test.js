@@ -146,6 +146,28 @@ test('FEMA Flood: Spatial query returns mock attributes and caches', async () =>
   assert.equal(fetchCalled, 1);
 });
 
+test('FEMA Flood: Unmapped rural area with empty features returns Zone D undetermined risk', async () => {
+  const testCache = path.join(TEMP_CACHE_DIR, 'fema-unmapped-cache.json');
+  const emptyFeaturesFetch = async () => ({
+    ok: true,
+    json: async () => ({ features: [] })
+  });
+
+  const res = await queryFemaFloodZone({
+    lat: 38.8951,
+    lng: -77.0364,
+    cachePath: testCache,
+    fetchFn: emptyFeaturesFetch
+  });
+
+  assert.equal(res.status, 'success');
+  assert.equal(res.floodRisk.riskTier, 'undetermined');
+  assert.equal(res.floodRisk.zone, 'D');
+  assert.equal(res.floodRisk.subtype, 'UNSTUDIED / UNMAPPED AREA');
+  assert.equal(res.nfipReserve.basis, 'unknown');
+  assert.equal(res.nfipReserve.estimatedAnnualPremiumReserve, 0);
+});
+
 test('FEMA Flood: Network error fails closed without fabricating zone', async () => {
   const testCache = path.join(TEMP_CACHE_DIR, 'fema-fail-cache.json');
   const failingFetch = async () => {

@@ -145,6 +145,17 @@ test('applyCrossSourceBakeOff annotates cross-source parcelKey collisions', () =
   assert.equal(b.bakeOff.preferredSource, 'hud');
 });
 
+test('applyCrossSourceBakeOff: when observation times tie, both listings agree on preferred source without circular conflict', () => {
+  const ts = '2026-09-14T12:00:00.000Z';
+  const a = listing({ id: 'a', source: 'civilview', parcelKey: 'NJ-ESSEX:1001', sourceObservedAt: ts });
+  const b = listing({ id: 'b', source: 'servicelink', parcelKey: 'NJ-ESSEX:1001', sourceObservedAt: ts });
+  applyCrossSourceBakeOff([a, b]);
+
+  assert.ok(a.bakeOff);
+  assert.ok(b.bakeOff);
+  assert.equal(a.bakeOff.preferredSource, b.bakeOff.preferredSource, 'both records must agree on the same winner rather than claiming circular self-preference');
+});
+
 test('applyCrossSourceBakeOff annotates three-way collisions with multiple cross-source matches', () => {
   const a = listing({ id: 'a', source: 'servicelink', parcelKey: 'ST-CA:0001' });
   const b = listing({ id: 'b', source: 'hud', parcelKey: 'ST-CA:0001' });

@@ -440,6 +440,34 @@ test('arbitrateTitleRisk: Texas HOA foreclosure trips CRITICAL defect that first
   assert.ok(risk.titleWarnings.some((w) => w.includes('non-super-priority state')));
 });
 
+test('arbitrateTitleRisk: Florida and Colorado HOA foreclosure preserves first mortgage survival and trips CRITICAL defect', () => {
+  const listingFL = {
+    id: 'fl-hoa-001',
+    plaintiff: 'Palm Beach Point Property Owners Association',
+    state: 'FL',
+    openingBid: 8500,
+    monthlyHoa: 250,
+  };
+
+  const riskFL = arbitrateTitleRisk(listingFL);
+  assert.equal(riskFL.riskLevel, 'HIGH');
+  assert.equal(riskFL.firstMortgageSurvives, true);
+  assert.ok(riskFL.titleWarnings.some((w) => w.includes('does NOT extinguish prior recorded 1st mortgage')));
+
+  const listingCO = {
+    id: 'co-hoa-001',
+    plaintiff: 'Cherry Creek Condominium Association',
+    state: 'CO',
+    openingBid: 6200,
+    monthlyHoa: 300,
+  };
+
+  const riskCO = arbitrateTitleRisk(listingCO);
+  assert.equal(riskCO.riskLevel, 'HIGH');
+  assert.equal(riskCO.firstMortgageSurvives, true);
+  assert.ok(riskCO.titleWarnings.some((w) => w.includes('does NOT extinguish prior recorded 1st mortgage')));
+});
+
 test('arbitrateTitleRisk: Active bankruptcy stay elevates risk to CRITICAL and halts bidding', () => {
   const listing = {
     id: 'oh-bk-001',

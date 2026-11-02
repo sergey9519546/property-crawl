@@ -71,15 +71,20 @@ function neutralizePromptInjection(text = '') {
  * @param {string} rawNotice
  * @returns {Array<string>} Array of parcel notice strings
  */
-function splitMultiParcelNotice(rawNotice = '') {
+function splitMultiParcelNotice(rawNotice = '', options = {}) {
   const normalized = normalizeOcrText(rawNotice);
   const parcelHeaderRegex = /(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\.]/i;
   const parcelSplitter = /(?:^|\n|\.\s+)\s*(?=(?:PARCEL|TRACT|ITEM)\s+(?:[0-9]+|[A-Z]|I|II|III|IV|V)\s*[:\-\\.])/i;
 
   const rawParts = normalized.split(parcelSplitter).map(p => p.trim()).filter(Boolean);
+  const firstParcelIdx = rawParts.findIndex(part => parcelHeaderRegex.test(part));
+  const preamble = firstParcelIdx > 0 ? rawParts.slice(0, firstParcelIdx).join('\n\n') : '';
   const parcelParts = rawParts.filter(part => parcelHeaderRegex.test(part));
 
   if (parcelParts.length > 1) {
+    if (options.preservePreamble && preamble) {
+      return parcelParts.map(part => `${preamble}\n\n${part}`);
+    }
     return parcelParts;
   }
 
@@ -112,11 +117,14 @@ function verifyVerbatimSpan(rawText = '', candidate = '', fromIndex = 0) {
  * @param {string} rawNotice
  * @returns {object} Structured extracted notice
  */
-function deterministicParse(rawNotice = '') {
+function deterministicParse(rawNotice = '', options = {}) {
   const clean = normalizeOcrText(neutralizePromptInjection(rawNotice));
 
   // Extract address pattern: e.g. "123 Main St, Columbus, OH 43215"
   const addressMatch = clean.match(/(\d+\s+[A-Za-z0-9\.\s,]+?,\s*([A-Za-z\s]+?),\s*([A-Z]{2})\s*(\d{5})?)/);
+  // Extract County: e.g. "Court of Common Pleas, Franklin County", "Cuyahoga County, Ohio", "Sheriff's Office, Essex County"
+  const countyMatch = clean.match(/(?:court\s+of\s+common\s+pleas|district\s+court|sheriff(?:'s)?\s+office|in\s+and\s+for)\s*,?\s*(?:the\s+)?(?:county\s+of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+county/i) ||
+                      clean.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+County\b/);
   // Extract Case Number: e.g. "Case No. 2024-CV-1092"
   const caseMatch = clean.match(/(?:case\s*(?:no\.?|#)|docket\s*#?)\s*([0-9A-Za-z\-\/]+)/i);
   // Extract Judgment Amount: e.g. "Judgment: $142,500.00" or "Judgment amount: $245,000.00"
@@ -132,7 +140,10 @@ function deterministicParse(rawNotice = '') {
   // Extract Deposit Terms: e.g. "10% deposit required at sale" or "Deposit: $5,000 in certified funds"
   const depositMatch = clean.match(/(?:deposit\s*(?:terms|required)?[:\s]*)?(\d{1,2}\s?%|\btwenty\s+percent\b|\bten\s+percent\b|\$[0-9,]+)[^.]{0,80}?(?:deposit|down\s*payment|certified\s+funds)/i);
 
-  const state = addressMatch ? addressMatch[3].toUpperCase() : 'OH';
+  const fallbackState = options.defaultState !== undefined ? options.defaultState : 'OH';
+  const state = addressMatch ? addressMatch[3].toUpperCase() : (options.hintState ? options.hintState.toUpperCase() : fallbackState);
+  const toTitleCase = (s) => s ? s.toLowerCase().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
+  const county = countyMatch ? toTitleCase(countyMatch[1].trim()) : (options.hintCounty ? toTitleCase(options.hintCounty.trim()) : '');
   const judgmentNum = judgmentMatch ? parseFloat(judgmentMatch[1].replace(/,/g, '')) : 0;
   let bidNum = bidMatch ? parseFloat(bidMatch[1].replace(/,/g, '')) : 0;
   // Guard against debt-as-price hallucination:
@@ -189,6 +200,7 @@ function deterministicParse(rawNotice = '') {
   return {
     property_address: addressMatch ? addressMatch[1].trim() : '',
     city: addressMatch ? addressMatch[2].trim() : '',
+    county,
     state,
     zip: addressMatch && addressMatch[4] ? addressMatch[4] : '',
     case_number: caseMatch ? caseMatch[1].trim() : '',
@@ -214,11 +226,12 @@ function deterministicParse(rawNotice = '') {
 /**
  * High-level parser coordinating multi-parcel splitting, normalization, and fallback.
  * @param {string} rawNotice
+ * @param {object} [options]
  * @returns {Array<object>} Parsed parcel records
  */
-function parseLegalNotice(rawNotice = '') {
-  const parcels = splitMultiParcelNotice(rawNotice);
-  return parcels.map(parcelText => deterministicParse(parcelText));
+function parseLegalNotice(rawNotice = '', options = {}) {
+  const parcels = splitMultiParcelNotice(rawNotice, options);
+  return parcels.map(parcelText => deterministicParse(parcelText, options));
 }
 
 module.exports = {

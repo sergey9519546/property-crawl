@@ -171,8 +171,10 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       canProceedWithBid = true;
       warnings.push(hoaEval.warningDetails[0]);
     } else if (hoaEval.isSuperPriorityState) {
+      firstMortgageSurvives = true;
       riskLevel = 'HIGH';
       warnings.push(...hoaEval.warningDetails);
+      warnings.push(`HOA SUPER-PRIORITY: Under ${hoaEval.statute}, common assessment super-priority protects up to ${hoaEval.statutoryCapMonths} months of delinquent assessments but does NOT extinguish prior recorded 1st mortgage/deed of trust. Senior mortgage survives sale in full.`);
     } else {
       firstMortgageSurvives = true;
       riskLevel = 'CRITICAL';

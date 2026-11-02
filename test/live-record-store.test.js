@@ -21,6 +21,22 @@ test('concurrent writers fail safely without altering another writer lock or rec
   assert.equal(fs.existsSync(target), false);
 });
 
+test('stale locks older than 60 seconds are safely reclaimed after process crashes', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pp-stale-lock-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'records.json');
+  const lockPath = target + '.lock';
+  fs.writeFileSync(lockPath, 'crashed dead process lock');
+  // Backdate lock file mtime to 90 seconds ago
+  const pastMs = (Date.now() - 90000) / 1000;
+  fs.utimesSync(lockPath, pastMs, pastMs);
+
+  const res = mergeLiveRecords(target, [record()]);
+  assert.equal(res.accepted, 1);
+  assert.equal(fs.existsSync(target), true);
+  assert.equal(fs.existsSync(lockPath), false, 'lock should be released cleanly after merge');
+});
+
 function record(overrides = {}) {
   return {
     id: 'CIV-NJ-7-1234', source: 'civilview', state: 'NJ',

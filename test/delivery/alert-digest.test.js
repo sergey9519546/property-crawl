@@ -130,3 +130,39 @@ test('Alert Digest: dispatchInvestorAlertDigest fails closed when RESEND_API_KEY
   assert.ok(result.report);
   assert.equal(result.report.matchedCount, 1);
 });
+
+test('Alert Digest: dispatchInvestorAlertDigest forwards rich HTML report when apiKey is present', async () => {
+  const sampleHunt = { id: 'HUNT-FL', name: 'Florida REO Hunt' };
+  const sampleEvaluation = {
+    results: [{ listingId: 'FL-1', status: 'match' }],
+  };
+  const listings = [{ id: 'FL-1', address: '500 Ocean Dr', openingBid: 125000, state: 'FL', city: 'Miami' }];
+
+  let sentPayload = null;
+  const mockFetch = async (url, opts) => {
+    sentPayload = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ id: 'email_digest_9988' }),
+    };
+  };
+
+  const result = await dispatchInvestorAlertDigest({
+    recipient: 'acquisitions@realestate.com',
+    hunt: sampleHunt,
+    evaluation: sampleEvaluation,
+    listings,
+    options: {
+      apiKey: 're_test_mock_123',
+      fetchFn: mockFetch,
+    },
+  });
+
+  assert.equal(result.delivered, true);
+  assert.equal(result.id, 'email_digest_9988');
+  assert.ok(sentPayload);
+  assert.deepEqual(sentPayload.to, ['acquisitions@realestate.com']);
+  assert.match(sentPayload.subject, /Deal Alert Digest: Florida REO Hunt/);
+  assert.match(sentPayload.html, /500 Ocean Dr/);
+  assert.match(sentPayload.html, /\$125,000/);
+});
