@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Listing } from "@/data/listings";
 import { AlertTriangle, Calculator, CheckCircle2, Download, FileJson, FileText, Scale, ShieldCheck, Sparkles } from "lucide-react";
 import { classifyInvestmentStrategies, computeCashToClose, computeConstitutionalSurplus, computeDscrCoverage, computeReassessmentShock, computeRedemptionYield, computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeTargetPriceScenario } from "@/lib/underwriting";
+import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 
@@ -252,6 +253,16 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     (typeof listing.notes === "string" && listing.notes.toLowerCase().includes("tax"))
   );
   const simulatedDays = holdingMonths * 30;
+  const redemptionEv = isTaxSale && openingBid !== null
+    ? computeRedemptionExpectedValue({
+        winningBid: openingBid,
+        assumedArv: estimatedValue,
+        redemptionProbability: 0.75,
+        stateCode: listing.state,
+        isHomestead: Boolean(listing.isHomestead),
+        expectedHoldingMonths: holdingMonths,
+      })
+    : null;
   const redemptionYield = isTaxSale && openingBid !== null
     ? computeRedemptionYield({
         purchasePrice: openingBid,
@@ -526,6 +537,22 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 </p>
               )}
             </div>
+
+            {redemptionEv && (
+              <div className="rounded-lg border border-line bg-card/60 p-2.5 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-ink">Dual-Outcome Tax Deed EV (75% Redeem / 25% Acquire)</span>
+                  <span className="font-extrabold text-yours">
+                    {redemptionEv.expectedNetProfit !== null ? displayMoney(redemptionEv.expectedNetProfit) : "ARV Needed for Blended EV"}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-3 leading-relaxed">
+                  {redemptionEv.status === "benchmarked" && redemptionEv.blendedIrr !== null
+                    ? `Blended Expected Net Return factoring ${redemptionEv.expectedHoldingMonths}mo holding carry: ${displayMoney(redemptionEv.expectedNetProfit ?? 0)} (${redemptionEv.blendedIrr}% blended annualized IRR).`
+                    : "Zero-Fabrication Invariant: Blended acquisition expected value requires explicit buyer-supplied ARV assumption above."}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

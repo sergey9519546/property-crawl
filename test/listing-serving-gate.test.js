@@ -1,4 +1,5 @@
 'use strict';
+process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
 
 // test/listing-serving-gate.test.js
 //

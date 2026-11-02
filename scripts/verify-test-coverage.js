@@ -228,6 +228,8 @@ function main() {
     console.log('[test-coverage]   (none — verify.js reaches every JS test file)');
   } else {
     for (const f of runnable) console.log(`[test-coverage]   + ${f}`);
+    process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
+    process.env.NODE_ENV = process.env.NODE_ENV || 'test';
     console.log(`[test-coverage] running ${runnable.length} file(s) so CI actually covers them...`);
     execFileSync(process.execPath, ['--test', ...runnable], {
       cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000,

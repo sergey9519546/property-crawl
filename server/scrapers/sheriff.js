@@ -693,6 +693,22 @@ class SheriffSaleScraper extends BaseScraper {
     return listings;
   }
 
+  async fetchCountyPublicNotices(county) {
+    const fallbackUrl = `https://www.publicnoticesohio.com/search?county=${encodeURIComponent(county.name)}`;
+    try {
+      const html = await this.requestText(fallbackUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml',
+        }
+      });
+      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
+      return this.parsePublicNoticeHtml(html, county);
+    } catch (err) {
+      throw new Error(`[${this.name}] ${county.name}, ${county.state}: primary and public-notice fallback both failed: ${err.message}`);
+    }
+  }
+
   parsePublicNoticeHtml(html, county) {
     const listings = [];
     const noticeRegex = /<div[^>]*class="[^"]*notice-item[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;

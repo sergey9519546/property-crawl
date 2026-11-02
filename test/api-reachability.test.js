@@ -84,6 +84,7 @@ const KNOWN_BROWSER_REACHABLE = [
   { route: '/api/coverage', callers: ['src/components/sources/source-network.tsx'] },
   { route: '/api/source-network/onboarding', callers: ['src/components/sources/source-network.tsx'] },
   { route: '/api/source-network/unbrowse/status', callers: ['src/components/sources/source-network.tsx'] },
+  { route: '/api/federal-hazards', callers: ['src/components/listings/property-intelligence.tsx'] },
 ];
 
 // Served, admitted by the proxy, and rendered by nothing.
