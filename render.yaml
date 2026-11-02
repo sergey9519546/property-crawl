@@ -68,3 +68,8 @@ services:
       # Zyte / Scrapy Cloud Webhook Ingest Secret
       - key: SCRAPY_INGEST_SECRET
         sync: false
+      # Resend Email Delivery (Track 5 Alert Digests)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false

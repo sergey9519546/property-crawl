@@ -132,6 +132,7 @@ test('render.yaml does not pin PROPERTY_DB=embedded over the live DATABASE_URL',
   const render = fs.readFileSync(path.join(__dirname, '..', 'render.yaml'), 'utf8');
   assert.doesNotMatch(render, /key:\s*PROPERTY_DB\b/);
   assert.match(render, /key:\s*DATABASE_URL/);
+  assert.match(render, /key:\s*RESEND_API_KEY/);
   assert.match(render, /key:\s*AUTO_MIGRATE[\s\S]*?value:\s*"1"/);
   assert.doesNotMatch(render, /override embedded/i);
 });
