@@ -12,7 +12,9 @@ const {
   appendLedgerEntry,
   saveLedgerToFile,
   loadLedgerFromFile,
-  canonicalStringify
+  canonicalStringify,
+  withLedgerLock,
+  appendLedgerToFile
 } = require('../../server/discovery/evidence-ledger');
 const { createMarkdownEvidenceSnapshot } = require('../../server/scrapers/discovery-snapshots');
 
@@ -229,5 +231,37 @@ test('Ledger Persistence & Discovery Snapshot Integration', async (t) => {
     const verification = verifyLedgerChain(singleChain);
     assert.equal(verification.valid, true);
     assert.equal(verification.verifiedCount, 1);
+  });
+
+  await t.test('appendLedgerToFile and withLedgerLock atomically persist newline-delimited ledger entries', async () => {
+    const tmpDir = path.resolve(__dirname, `../../.cache/tmp-ledger-lock-test-${Date.now()}`);
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const ledgerFile = path.join(tmpDir, 'concurrent-ledger.json');
+
+    const block1 = await appendLedgerToFile(ledgerFile, {
+      source: 'treasury',
+      recordId: 'TREAS-001',
+      payloadSha256: 'a'.repeat(64),
+      action: 'SNAPSHOT_RECORDED'
+    });
+    assert.equal(block1.index, 0);
+    assert.equal(block1.prevHash, GENESIS_HASH);
+
+    const block2 = await appendLedgerToFile(ledgerFile, {
+      source: 'treasury',
+      recordId: 'TREAS-002',
+      payloadSha256: 'b'.repeat(64),
+      action: 'SNAPSHOT_RECORDED'
+    });
+    assert.equal(block2.index, 1);
+    assert.equal(block2.prevHash, block1.entryHash);
+
+    const loaded = loadLedgerFromFile(ledgerFile);
+    assert.equal(loaded.length, 2);
+    const verification = verifyLedgerChain(loaded);
+    assert.equal(verification.valid, true);
+    assert.equal(verification.verifiedCount, 2);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
