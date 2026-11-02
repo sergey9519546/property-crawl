@@ -192,7 +192,21 @@ function createDocumentReviewStore(options = {}) {
       const lockPath = `${storePath}.lock`;
       let lock;
       try {
-        lock = fs.openSync(lockPath, 'wx', 0o600);
+        const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
+        try {
+          lock = acquireLock();
+        } catch (lockErr) {
+          if (lockErr.code === 'EEXIST') {
+            const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
+            let stale = false;
+            try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs; } catch (_) {}
+            if (stale) {
+              try { fs.unlinkSync(lockPath); } catch (_) {}
+              try { lock = acquireLock(); } catch (_) {}
+            }
+          }
+          if (!lock) throw lockErr;
+        }
       } catch (error) {
         if (error.code === 'EEXIST') {
           console.warn('[document-review] Store is locked by another writer; persist refused.');

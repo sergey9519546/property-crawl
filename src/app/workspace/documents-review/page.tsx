@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function DocumentReviewPage() {
   return (
     <WorkspaceShell>
-      <main>
+      <main id="main-content" tabIndex={-1} className="outline-none">
         <DataModeBanner />
         <DocumentReviewQueue />
       </main>

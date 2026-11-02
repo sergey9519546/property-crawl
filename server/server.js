@@ -498,6 +498,29 @@ async function startServer() {
 }
 
 if (require.main === module) {
+  let shuttingDown = false;
+  const gracefulShutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
+    server.close(async () => {
+      try {
+        if (typeof db.close === 'function') {
+          await db.close();
+          console.log('[Server] Database connections closed.');
+        }
+      } catch (err) {
+        console.error('[Server] Error closing database:', err.message);
+      }
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('[Server] Shutdown deadline exceeded. Forcefully exiting.');
+      process.exit(1);
+    }, 5000).unref();
+  };
+  process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.once('SIGINT', () => gracefulShutdown('SIGINT'));
   startServer().catch((error) => {
     console.error('[Server] Startup failed:', error && error.message ? error.message : error);
     process.exit(1);

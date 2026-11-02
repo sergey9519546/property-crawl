@@ -329,6 +329,7 @@ module.exports = {
   ZYTE_EXTRACT_API_URL,
   SCRAPY_CLOUD_API_URL,
   zyteConfigured,
+  isBlockedSsrfHost,
   validatePublicHttpsUrl,
   zyteFetch,
   zyteFetchLike,

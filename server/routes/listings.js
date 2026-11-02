@@ -333,6 +333,16 @@ async function handleListings(req, res) {
       let id;
       try { id = decodeURIComponent(encodedId); } catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
       if (id.length > 256 || /[\/\\\u0000-\u001f\u007f]/.test(id)) return res.status(400).json({ error: 'Invalid listing identifier' });
+      if (typeof db.inventoryUnavailableReason === 'function') {
+        const unavailable = db.inventoryUnavailableReason();
+        if (unavailable) {
+          return res.status(503).json({
+            error: 'No inventory is being served.',
+            reason: unavailable,
+            dataMode: typeof db.dataMode === 'function' ? db.dataMode() : null,
+          });
+        }
+      }
       const listing = await db.getListingById(id);
       if (!listing) return res.status(404).json({ error: 'Listing not found' });
       // Admission gate: a stored record from a DISCOVERY_ONLY source is not

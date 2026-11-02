@@ -304,7 +304,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
 
   return (
     <WorkspaceShell>
-    <main className="min-h-screen bg-paper text-ink">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper text-ink outline-none">
       {/* Demo fallbacks are deliberately excluded from structured listing data. */}
       {!isDemo && (
         <script

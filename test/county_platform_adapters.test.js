@@ -6,6 +6,8 @@ const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
 
 const {
   NJ_COUNTY_MAP,
+  PA_COUNTY_MAP,
+  analyzeCivilViewStatusHistory,
   getCivilViewUrl,
   parseCivilViewRow,
   parseCivilViewHtml,
@@ -38,6 +40,32 @@ test('CivilView adapter maps New Jersey counties and builds URLs', () => {
   assert.equal(NJ_COUNTY_MAP[4].county, 'Camden');
   assert.equal(getCivilViewUrl(1), 'https://salesweb.civilview.com/Sales/SalesSearch?countyId=1');
   assert.equal(getCivilViewUrl(4), 'https://salesweb.civilview.com/Sales/SalesSearch?countyId=4');
+});
+
+test('CivilView adapter maps Pennsylvania counties including York and Lancaster', () => {
+  assert.equal(PA_COUNTY_MAP[62].county, 'York');
+  assert.equal(PA_COUNTY_MAP[62].state, 'PA');
+  assert.equal(PA_COUNTY_MAP[49].county, 'Lancaster');
+  assert.equal(PA_COUNTY_MAP[48].county, 'Cumberland');
+  assert.equal(PA_COUNTY_MAP[54].county, 'Monroe');
+  assert.equal(PA_COUNTY_MAP[60].county, 'Philadelphia');
+});
+
+test('CivilView analyzeCivilViewStatusHistory tracks statutory adjournments and stay exhaustion', () => {
+  const history = [
+    { status: 'Scheduled', date: '2026-01-10' },
+    { status: 'Adjourned by Debtor', date: '2026-02-10' },
+    { status: 'Adjourned - Defendant Stay', date: '2026-03-10' },
+  ];
+  const analysis = analyzeCivilViewStatusHistory(history);
+  assert.equal(analysis.priorPostponements, 2);
+  assert.equal(analysis.debtorAdjournments, 2);
+  assert.equal(analysis.statutoryStayExhausted, true);
+  assert.equal(analysis.latestStatus, 'Adjourned - Defendant Stay');
+
+  const fresh = analyzeCivilViewStatusHistory([{ status: 'Scheduled', date: '2026-01-10' }]);
+  assert.equal(fresh.statutoryStayExhausted, false);
+  assert.equal(fresh.priorPostponements, 0);
 });
 
 test('CivilView parses HTML table rows into structured listings', () => {

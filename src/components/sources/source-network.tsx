@@ -716,7 +716,7 @@ export function SourceNetwork() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F5F6F7] text-slate-950">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-[#F5F6F7] text-slate-950 outline-none">
       <div className="mx-auto max-w-[1440px] px-5 py-7 sm:px-10">
         <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-center">
           <div>

@@ -130,8 +130,13 @@ export function ReviewSplitPane({
   // Keyboard shortcut handler
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't trigger if operator is typing in an input
+      // Don't trigger if operator is typing in an input (except Escape to exit)
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur();
+          setEditMode(false);
+          setActiveFieldKey(null);
+        }
         return;
       }
 
@@ -155,6 +160,11 @@ export function ReviewSplitPane({
         case 'k':
           e.preventDefault();
           handlePrev();
+          break;
+        case 'escape':
+          e.preventDefault();
+          setEditMode(false);
+          setActiveFieldKey(null);
           break;
         default:
           break;
@@ -324,12 +334,13 @@ export function ReviewSplitPane({
             {/* Field: Case Number */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="font-semibold text-slate-600">Case / Docket Number</label>
+                <label htmlFor="split-edit-case-number" className="font-semibold text-slate-600">Case / Docket Number</label>
                 {renderSpanBadge('caseNumber')}
               </div>
               {editMode ? (
                 <input
                   type="text"
+                  id="split-edit-case-number"
                   value={editedFields.caseNumber || ''}
                   onChange={(e) => setEditedFields({ ...editedFields, caseNumber: e.target.value })}
                   className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
@@ -344,12 +355,13 @@ export function ReviewSplitPane({
             {/* Field: Defendant */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="font-semibold text-slate-600">Defendant (Owner / Heirs)</label>
+                <label htmlFor="split-edit-defendant" className="font-semibold text-slate-600">Defendant (Owner / Heirs)</label>
                 {renderSpanBadge('defendant')}
               </div>
               {editMode ? (
                 <input
                   type="text"
+                  id="split-edit-defendant"
                   value={editedFields.defendant || ''}
                   onChange={(e) => setEditedFields({ ...editedFields, defendant: e.target.value })}
                   className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
@@ -364,12 +376,13 @@ export function ReviewSplitPane({
             {/* Field: Plaintiff */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="font-semibold text-slate-600">Plaintiff (Foreclosing Lender)</label>
+                <label htmlFor="split-edit-plaintiff" className="font-semibold text-slate-600">Plaintiff (Foreclosing Lender)</label>
                 {renderSpanBadge('plaintiff')}
               </div>
               {editMode ? (
                 <input
                   type="text"
+                  id="split-edit-plaintiff"
                   value={editedFields.plaintiff || ''}
                   onChange={(e) => setEditedFields({ ...editedFields, plaintiff: e.target.value })}
                   className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
@@ -385,12 +398,13 @@ export function ReviewSplitPane({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label className="font-semibold text-slate-600">Opening Bid ($)</label>
+                  <label htmlFor="split-edit-opening-bid" className="font-semibold text-slate-600">Opening Bid ($)</label>
                   {renderSpanBadge('openingBid')}
                 </div>
                 {editMode ? (
                   <input
                     type="number"
+                    id="split-edit-opening-bid"
                     value={editedFields.openingBid ?? ''}
                     onChange={(e) => setEditedFields({ ...editedFields, openingBid: Number(e.target.value) })}
                     className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
@@ -403,12 +417,13 @@ export function ReviewSplitPane({
               </div>
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label className="font-semibold text-slate-600">Judgment Amount ($)</label>
+                  <label htmlFor="split-edit-judgment-amount" className="font-semibold text-slate-600">Judgment Amount ($)</label>
                   {renderSpanBadge('judgmentAmount')}
                 </div>
                 {editMode ? (
                   <input
                     type="number"
+                    id="split-edit-judgment-amount"
                     value={editedFields.judgmentAmount ?? ''}
                     onChange={(e) => setEditedFields({ ...editedFields, judgmentAmount: Number(e.target.value) })}
                     className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
@@ -425,12 +440,13 @@ export function ReviewSplitPane({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label className="font-semibold text-slate-600">Auction Sale Date</label>
+                  <label htmlFor="split-edit-sale-date" className="font-semibold text-slate-600">Auction Sale Date</label>
                   {renderSpanBadge('saleDate')}
                 </div>
                 {editMode ? (
                   <input
                     type="text"
+                    id="split-edit-sale-date"
                     value={editedFields.saleDate || ''}
                     onChange={(e) => setEditedFields({ ...editedFields, saleDate: e.target.value })}
                     className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"
@@ -443,12 +459,13 @@ export function ReviewSplitPane({
               </div>
               <div>
                 <div className="flex items-center justify-between gap-1 mb-1">
-                  <label className="font-semibold text-slate-600">APN / Parcel ID</label>
+                  <label htmlFor="split-edit-apn" className="font-semibold text-slate-600">APN / Parcel ID</label>
                   {renderSpanBadge('apn')}
                 </div>
                 {editMode ? (
                   <input
                     type="text"
+                    id="split-edit-apn"
                     value={editedFields.apn || ''}
                     onChange={(e) => setEditedFields({ ...editedFields, apn: e.target.value })}
                     className="w-full border border-slate-300 rounded px-2.5 py-1.5 font-mono text-xs"

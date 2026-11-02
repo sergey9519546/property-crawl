@@ -693,35 +693,6 @@ class SheriffSaleScraper extends BaseScraper {
     return listings;
   }
 
-  async fetchCountyPublicNotices(county) {
-    // Fallback public notice aggregation query
-    const fallbackUrl = `https://publicnoticesohio.com/search?county=${encodeURIComponent(county.name)}`;
-    try {
-      const html = await this.requestText(fallbackUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          Accept: 'text/html,application/xhtml+xml',
-        }
-      });
-      if (Array.isArray(this._htmlSamples)) this._htmlSamples.push(html);
-      return this.parsePublicNoticeHtml(html, county);
-    } catch (err) {
-      // Rethrow rather than return [].
-      //
-      // This is the fallback leg: fetchCountyRealauction reaches it whenever the
-      // primary portal returns no rows OR throws. Returning [] here made a
-      // county with BOTH endpoints down indistinguishable from a county that
-      // genuinely has no sheriff sales this week -- the caller then ran
-      // recordUnitSuccess(unit, 0) and the run report reported a successful
-      // county that had in fact collected nothing.
-      //
-      // Rethrowing puts it through the existing recordUnitFailure path in
-      // collect(), so a dead endpoint shows up as a failure with a reason
-      // instead of quietly becoming zero coverage.
-      throw new Error(`[${this.name}] ${county.name}, ${county.state}: primary and public-notice fallback both failed: ${err.message}`);
-    }
-  }
-
   parsePublicNoticeHtml(html, county) {
     const listings = [];
     const noticeRegex = /<div[^>]*class="[^"]*notice-item[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
@@ -741,7 +712,7 @@ class SheriffSaleScraper extends BaseScraper {
         const id = `SHERIFF-${county.state}-${county.name.slice(0, 3).toUpperCase()}-${caseNum.replace(/[^a-zA-Z0-9-]/g, '')}`;
         const sourceUrl = linkMatch[1].startsWith('http')
           ? linkMatch[1]
-          : new URL(linkMatch[1], 'https://publicnoticesohio.com').toString();
+          : new URL(linkMatch[1], 'https://www.publicnoticesohio.com').toString();
 
         listings.push({
           id,
@@ -770,7 +741,6 @@ class SheriffSaleScraper extends BaseScraper {
 
     return listings;
   }
-
 
   // Demo/Unsplash inventory overrides removed (2026-09-14 audit).
   // Live collectors must not fabricate listings; BaseScraper may still read

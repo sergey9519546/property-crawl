@@ -50,7 +50,6 @@ const SOURCE_HOSTS = Object.freeze({
     'sheriffsaleauction.ohio.gov',
     'realforeclose.com',
     'realtaxdeed.com',
-    'publicnoticesohio.com',
     'hctax.net',
     'dallascounty.org',
     'tarrantcountytx.gov',

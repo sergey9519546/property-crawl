@@ -20,6 +20,11 @@ const publicPort = Number(bootEnv.PORT) || 3000;
 // other public port uses publicPort+2 (3700 → 3702).
 const internalApiPort = resolveInternalApiPort(publicPort, bootEnv.INTERNAL_API_PORT);
 
+function resolveNodeOptions(existingOptions, defaultLimit = '4096') {
+  if (existingOptions && existingOptions.includes('--max-old-space-size')) return existingOptions;
+  return existingOptions ? `${existingOptions} --max-old-space-size=${defaultLimit}` : `--max-old-space-size=${defaultLimit}`;
+}
+
 const hasDatabase = Boolean(bootEnv.DATABASE_URL);
 const children = [];
 let closing = false;
@@ -118,7 +123,7 @@ async function boot() {
     ...defaultDbEnv,
     PORT: String(internalApiPort),
     NODE_ENV: 'production',
-    NODE_OPTIONS: bootEnv.NODE_OPTIONS ? `${bootEnv.NODE_OPTIONS} --max-old-space-size=4096` : '--max-old-space-size=4096',
+    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS),
     // Let both services become healthy before the first CPU/IO-heavy crawl.
     SCRAPER_BOOT_DELAY_MS: bootEnv.SCRAPER_BOOT_DELAY_MS || '90000',
   };
@@ -146,7 +151,7 @@ async function boot() {
     PORT: String(publicPort),
     PROPERTY_API_URL: `http://127.0.0.1:${internalApiPort}`,
     NODE_ENV: 'production',
-    NODE_OPTIONS: bootEnv.NODE_OPTIONS ? `${bootEnv.NODE_OPTIONS} --max-old-space-size=4096` : '--max-old-space-size=4096',
+    NODE_OPTIONS: resolveNodeOptions(bootEnv.NODE_OPTIONS),
   };
 
   // next start serves .next — refuse to boot a stale/missing production build.
@@ -200,7 +205,9 @@ async function boot() {
   }
 }
 
-boot().catch((err) => {
+if (require.main === module) boot().catch((err) => {
   console.error('[Production] Boot fatal error:', err);
   shutdown(1);
 });
+
+module.exports = { resolveNodeOptions, awaitBackendReady, boot };

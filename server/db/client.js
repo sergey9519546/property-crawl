@@ -1660,8 +1660,8 @@ class DatabaseClient {
       const raw = fs.readFileSync(this.workspaceStorePath, 'utf8');
       const data = JSON.parse(raw);
       if (data.version !== WORKSPACE_STORE_VERSION) {
-        console.warn('[DB] Workspace store version mismatch; starting with empty saved searches.');
-        return;
+        throw new Error(`Workspace store version mismatch (expected ${WORKSPACE_STORE_VERSION}, got ${data.version}); preserved existing data.`);
+        // Version mismatch throws to trigger quarantine
       }
       if (data.savedSearches && typeof data.savedSearches === 'object') {
         for (const [id, record] of Object.entries(data.savedSearches)) {

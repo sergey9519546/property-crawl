@@ -50,7 +50,7 @@ export default async function ListingsDirectoryPage({
   const initialPayload = await loadInitialListings(await searchParams);
   return (
     <WorkspaceShell>
-    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
+    <main id="main-content" tabIndex={-1} className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink outline-none">
       <DataModeBanner />
       <Suspense fallback={<div className="grid min-h-[60vh] place-items-center text-sm text-ink-3">Loading listings…</div>}>
         <DiscoveryWorkbench initialPayload={initialPayload} />

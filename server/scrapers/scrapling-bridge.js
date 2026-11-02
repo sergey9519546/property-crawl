@@ -22,6 +22,10 @@ const PROFILES = new Set(['gsa-index', 'gsa-detail', 'page-links', 'table-extrac
  * link-local, or otherwise non-public address (SSRF guard).
  */
 function isPrivateOrLocalHost(hostname) {
+  try {
+    const { isBlockedSsrfHost } = require('./zyte-client');
+    if (typeof isBlockedSsrfHost === 'function') return isBlockedSsrfHost(hostname);
+  } catch {}
   if (!hostname) return true;
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, ''); // strip IPv6 brackets
   if (h === 'localhost' || h === '::1' || h === '0.0.0.0' || h === '0') return true;

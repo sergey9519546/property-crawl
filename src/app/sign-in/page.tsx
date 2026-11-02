@@ -9,7 +9,7 @@ import { MemberSignInForm } from "@/components/account/account-panel";
  */
 export default function SignInPage() {
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16">
+    <main id="main-content" tabIndex={-1} className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-6 py-16 outline-none">
       <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Access</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight text-ink">Sign in</h1>
       <div className="mt-6 rounded-2xl border border-line bg-card p-6 shadow-sm">

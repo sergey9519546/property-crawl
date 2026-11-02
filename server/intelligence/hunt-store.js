@@ -74,7 +74,21 @@ function mutateStore(filePath, mutate, options = {}) {
   const lockPath = `${resolved}.lock`;
   let lock;
   try {
-    lock = fs.openSync(lockPath, 'wx', 0o600);
+    const acquireLock = () => fs.openSync(lockPath, 'wx', 0o600);
+    try {
+      lock = acquireLock();
+    } catch (lockErr) {
+      if (lockErr.code === 'EEXIST') {
+        const staleLockMs = typeof options.staleLockMs === 'number' ? options.staleLockMs : 30_000;
+        let stale = false;
+        try { stale = Date.now() - fs.statSync(lockPath).mtimeMs > staleLockMs; } catch (_) {}
+        if (stale) {
+          try { fs.unlinkSync(lockPath); } catch (_) {}
+          try { lock = acquireLock(); } catch (_) {}
+        }
+      }
+      if (!lock) throw lockErr;
+    }
   } catch (error) {
     if (error.code === 'EEXIST') throw new Error('Saved-hunt store is locked by another writer; retry after it finishes');
     throw error;

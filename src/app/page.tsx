@@ -24,7 +24,7 @@ import { SiteFooter } from "@/components/site/site-footer";
  */
 export default function PerfectPropertyPage() {
   return (
-    <main className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink">
+    <main id="main-content" tabIndex={-1} className="relative min-h-screen max-w-full overflow-x-hidden bg-paper text-ink outline-none">
       <GrainOverlay />
       <SiteHeader />
 

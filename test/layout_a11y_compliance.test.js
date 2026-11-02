@@ -43,6 +43,21 @@ test('Accessibility (a11y): Split-Pane review interface includes keyboard listen
   // Verify accessible button names
   assert.match(splitPaneSrc, /aria-label="Previous Notice"/);
   assert.match(splitPaneSrc, /aria-label="Next Notice"/);
+  assert.match(splitPaneSrc, /case\s+['"]escape['"]:/);
+  assert.match(splitPaneSrc, /htmlFor="split-edit-case-number"/);
+  assert.match(splitPaneSrc, /id="split-edit-case-number"/);
+});
+
+test('Accessibility (a11y): Root layout declares skip-to-content bypass link', () => {
+  const layoutSrc = read('src/app/layout.tsx');
+  assert.match(layoutSrc, /href="#main-content"/, 'Layout must author skip link targeting #main-content for WCAG 2.4.1 bypass');
+  assert.match(layoutSrc, /Skip to main content/, 'Skip link must display accessible prompt');
+
+  const landingSrc = read('src/app/page.tsx');
+  assert.match(landingSrc, /id="main-content"/, 'Landing page must carry target #main-content landmark');
+
+  const listingsSrc = read('src/app/listings/page.tsx');
+  assert.match(listingsSrc, /id="main-content"/, 'Listings page must carry target #main-content landmark');
 });
 
 test('Accessibility (a11y): Triage chips enforce accessible list semantics and hidden icons', () => {

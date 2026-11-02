@@ -51,6 +51,16 @@ const PA_COUNTY_MAP = Object.freeze({
   50: { county: 'Bucks', state: 'PA' },
   57: { county: 'Delaware', state: 'PA' },
   22: { county: 'Chester', state: 'PA' },
+  48: { county: 'Cumberland', state: 'PA' },
+  49: { county: 'Lancaster', state: 'PA' },
+  54: { county: 'Monroe', state: 'PA' },
+  55: { county: 'Luzerne', state: 'PA' },
+  56: { county: 'Lackawanna', state: 'PA' },
+  58: { county: 'Schuylkill', state: 'PA' },
+  61: { county: 'Lebanon', state: 'PA' },
+  62: { county: 'York', state: 'PA' },
+  63: { county: 'Carbon', state: 'PA' },
+  64: { county: 'Columbia', state: 'PA' },
 });
 
 const ALL_COUNTY_MAP = Object.freeze({
@@ -140,7 +150,59 @@ function parseCivilViewHtml(html = '', countyId = 1) {
   return rows;
 }
 
+/**
+ * Analyzes CivilView detail history for statutory adjournments and price trajectory.
+ * Under N.J.S.A. § 2A:17-36, debtors are entitled to two statutory adjournments.
+ */
+function analyzeCivilViewStatusHistory(historyRows = []) {
+  if (!Array.isArray(historyRows)) {
+    return {
+      priorPostponements: 0,
+      debtorAdjournments: 0,
+      statutoryStayExhausted: false,
+      latestStatus: null,
+      history: []
+    };
+  }
+
+  let priorPostponements = 0;
+  let debtorAdjournments = 0;
+  const history = [];
+
+  for (const item of historyRows) {
+    const statusText = typeof item === 'string' ? item : (item?.status || item?.event || '');
+    const cleanStatus = statusText.trim().toLowerCase();
+    if (!cleanStatus) continue;
+
+    const isAdjournment = /adjourn|postpone|stay|continued|reschedule/i.test(cleanStatus);
+    if (isAdjournment) {
+      priorPostponements += 1;
+      if (/debtor|defendant|borrower|owner|statutory/i.test(cleanStatus) || cleanStatus === 'adjourned') {
+        debtorAdjournments += 1;
+      }
+    }
+    history.push({
+      status: statusText,
+      date: item?.date || null,
+      amount: typeof item?.amount === 'number' ? item.amount : null,
+      isAdjournment
+    });
+  }
+
+  const statutoryStayExhausted = debtorAdjournments >= 2;
+  const latestStatus = history.length > 0 ? history[history.length - 1].status : null;
+
+  return {
+    priorPostponements,
+    debtorAdjournments,
+    statutoryStayExhausted,
+    latestStatus,
+    history
+  };
+}
+
 module.exports = {
+  analyzeCivilViewStatusHistory,
   NJ_COUNTY_MAP,
   PA_COUNTY_MAP,
   ALL_COUNTY_MAP,

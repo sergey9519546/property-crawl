@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function PortfolioPage() {
   return (
     <WorkspaceShell>
-      <main className="min-h-screen bg-paper">
+      <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper outline-none">
         <PortfolioView />
       </main>
     </WorkspaceShell>

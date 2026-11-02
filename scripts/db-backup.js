@@ -23,7 +23,12 @@ const DEFAULT_BACKUP_TARGETS = [
   'geocoding-cache.json',
   'saved-searches.json',
   'hpi-cache.json',
-  'search-index.json'
+  'search-index.json',
+  'document-review-store.json',
+  'workspace-store.json',
+  'saved-hunts.json',
+  'evidence-ledger.json',
+  'accounts-store.json'
 ];
 
 function calculateSha256(buffer) {

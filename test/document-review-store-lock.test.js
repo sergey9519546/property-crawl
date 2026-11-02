@@ -48,6 +48,19 @@ test('document-review store persist fails closed when lock is held', () => {
   assert.equal(store.persist(), true);
 });
 
+test('document-review store self-heals when lock file is stale', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-review-stale-'));
+  const storePath = path.join(dir, 'reviews.json');
+  const store = createDocumentReviewStore({ storePath, staleLockMs: 10, env: { NODE_ENV: 'development' } });
+  store.map.set('L-STALE', { status: 'approved', revision: 1 });
+  const lockPath = `${storePath}.lock`;
+  fs.writeFileSync(lockPath, 'crashed-process');
+  const past = new Date(Date.now() - 50_000);
+  fs.utimesSync(lockPath, past, past);
+  assert.equal(store.persist(), true);
+  assert.equal(fs.existsSync(lockPath), false);
+});
+
 test('failed persist rolls back in-memory review so GET cannot lie', async () => {
   process.env.SCRAPER_ADMIN_TOKEN = 'lock-token';
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-review-rollback-'));

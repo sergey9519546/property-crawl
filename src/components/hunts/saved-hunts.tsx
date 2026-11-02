@@ -309,7 +309,7 @@ export function SavedHunts() {
     ) || [];
 
   return (
-    <main className="min-h-screen bg-paper text-ink">
+    <main id="main-content" tabIndex={-1} className="min-h-screen bg-paper text-ink outline-none">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-10">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-ink-3">
           <Crosshair size={17} /> Saved Hunts
