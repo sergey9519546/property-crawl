@@ -121,7 +121,7 @@ export default function ContactPage() {
                     placeholder="Your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
+                    className="w-full rounded-xl border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                   />
                 </div>
               </div>
@@ -140,7 +140,7 @@ export default function ContactPage() {
                     placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
+                    className="w-full rounded-xl border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                   />
                 </div>
               </div>
@@ -159,7 +159,7 @@ export default function ContactPage() {
                   placeholder="Your company or team"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  className="w-full rounded-xl border border-line-strongpl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
+                  className="w-full rounded-xl border border-line-strong pl-10 pr-4 py-2.5 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                 />
               </div>
             </div>
@@ -177,7 +177,7 @@ export default function ContactPage() {
                   placeholder="Tell us what you need: a county, a listing, or a question about membership."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full rounded-xl border border-line-strongp-4 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
+                  className="w-full rounded-xl border border-line-strong p-4 text-sm text-ink placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink"
                 />
               </div>
               <p className="mt-1 text-right text-[11px] text-ink-3">
