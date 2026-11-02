@@ -81,7 +81,15 @@ const MARKET_CONVERSION = Object.freeze({
   'PA-PHILADELPHIA': Object.freeze({
     mode: 'market-figure',
     citation: 'Philadelphia OPA market_value, the city certified market value, compared 1:1 with the published opening amount; sampled live at ~0.97 of recorded sale price across 2,000 dated 2026 sales (p10 0.64 / p90 1.60), confirming the field is a market figure. taxable_land / taxable_building are the taxed components and are deliberately NOT used as market.',
+  }),  'PA-PHILADELPHIA': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Philadelphia OPA market_value, the city certified market value, compared 1:1 with the published opening amount; sampled live at ~0.97 of recorded sale price across 2,000 dated 2026 sales (p10 0.64 / p90 1.60), confirming the field is a market figure. taxable_land / taxable_building are the taxed components and are deliberately NOT used as market.',
   }),
+  'PA-ALLEGHENY': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Allegheny County OPA FAIRMARKETTOTAL, assessed at full market value under 72 P.S. § 5020-101 et seq. (County Assessment Law), compared 1:1 with the published opening amount.',
+  }),
+
 
   // Florida Property Appraisers (Fla. Const. art. VII, § 4; Fla. Stat. § 193.011 Just Valuation = 100% FMV)
   'FL-ORANGE': Object.freeze({

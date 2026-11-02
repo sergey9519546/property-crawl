@@ -20,7 +20,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { queryArcgisParcel, resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
+const { queryArcgisParcel, queryWparcelsParcel, resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
 
 const DEFAULT_CACHE_PATH = path.resolve(__dirname, '../../.cache/assessor-roll.json');
@@ -229,6 +229,8 @@ async function harvestAssessorRolls(listings, options = {}) {
     }
     let parcel = null;
     try {
+      const registryEntry = COUNTY_ARCGIS_REGISTRY[candidate.countyKey] || null;
+      const queryFn = registryEntry?.source === 'wparcels' ? queryWparcelsParcel : queryArcgisParcel;
       parcel = await queryFn({
         lat: candidate.lat,
         lng: candidate.lng,

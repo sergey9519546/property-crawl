@@ -706,6 +706,26 @@ const COUNTY_ARCGIS_REGISTRY = {
     situsAddressField: 'location',
     spatialFallback: 'envelope'
   },
+  'PA-ALLEGHENY': {
+    // Allegheny County, PA - Western Pennsylvania Regional Data Center (WPRDC).
+    // WPRDC publishes FullCashValue-equivalent (FAIRMARKETTOTAL) as the market value;
+    // Pennsylvania assesses at market value (Allegheny County reassessed at 100%
+    // market value under the 2013 countywide reassessment). No county service with
+    // recorded sales was found; the conversion rests on the statutory definition.
+    name: 'Allegheny County Office of Property Assessment (OPA)',
+    fips: '42003',
+    endpoint: 'https://data.wprdc.org/api/3/action/datastore_search',
+    resourceId: '9a1c60bd-f9f7-4aba-aeb7-af8c3aaa44e5',
+    apnField: 'PARID',
+    landUseField: 'CLASS',
+    assessedTotalField: 'FAIRMARKETTOTAL',
+    assessedLandField: 'FAIRMARKETLAND',
+    assessedImprvField: 'FAIRMARKETBUILDING',
+    legalDescField: 'LEGAL1',
+    situsAddressField: 'PROPERTYADDRESS',
+    taxYearField: 'TAXYEAR',
+    source: 'wparcels'
+  },
   'PA-CHESTER': {
     name: 'Chester County Assessment Office (ChescoViews)',
     fips: '42029',
@@ -1409,6 +1429,71 @@ async function queryArcgisParcel(params = {}, init = {}) {
   }
 }
 
+
+/**
+ * Query the Western Pennsylvania Regional Data Center (WPRDC) datastore API
+ * for Allegheny County assessor parcels by APN. Returns the same parcel shape
+ * as queryArcgisParcel so the harvest and UI can consume it identically.
+ *
+ * WPRDC publishes full cash value (FAIRMARKETTOTAL) as the market value;
+ * Pennsylvania assesses at market value (Allegheny County reassessed at 100%
+ * of market value under the 2013 countywide reassessment). No county service
+ * with recorded sales was found, so this entry rests on the statutory
+ * definition: assessment = market value.
+ */
+async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn }) {
+  const REGISTRY_SERVICE_ID = '9a1c60bd-f9f7-4aba-aeb7-af8c3aaa44e5';
+  const endpoint = 'https://data.wprdc.org/api/3/action/datastore_search';
+
+  if (!apn) return null;
+
+  const filters = JSON.stringify({ PARID: apn });
+  const url = `${endpoint}?resource_id=${REGISTRY_SERVICE_ID}&filters=${encodeURIComponent(filters)}&limit=1`;
+
+  let res;
+  try {
+    res = await fetchFn(url);
+  } catch (_) {
+    return null;
+  }
+  if (!res.ok) return null;
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    return null;
+  }
+
+  const features = data?.result?.records || [];
+  if (!features || features.length === 0) return null;
+
+  const attrs = features[0];
+  const rawApn = String(attrs.PARID || '');
+  if (!rawApn) return null;
+
+  const fmvTotal = Number(attrs.FAIRMARKETTOTAL);
+  const fmvLand = Number(attrs.FAIRMARKETLAND);
+  const fmvImprv = Number(attrs.FAIRMARKETBUILDING);
+  const assessedTotal = Number(attrs.COUNTYTOTAL);
+  const assessedLand = Number(attrs.COUNTYLAND);
+  const assessedImprv = Number(attrs.COUNTYBUILDING);
+
+  return {
+    rawApn,
+    assessedValue: {
+      total: Number.isFinite(fmvTotal) && fmvTotal > 0 ? fmvTotal : null,
+      land: Number.isFinite(fmvLand) && fmvLand > 0 ? fmvLand : null,
+      improvements: Number.isFinite(fmvImprv) && fmvImprv > 0 ? fmvImprv : null,
+    },
+    landUse: attrs.CLASS || null,
+    situsAddress: attrs.PROPERTYADDRESS || null,
+    legalDescription: attrs.LEGAL1 || null,
+    countyFips: '42003',
+    rawAttributes: attrs,
+  };
+}
+
 const queryCountyParcel = queryArcgisParcel;
 
 /**
@@ -1457,5 +1542,6 @@ module.exports = {
   parseNumericAttribute,
   queryArcgisParcel,
   queryCountyParcel,
-  resolveCadastralParcelIdentity
+  queryWparcelsParcel,
+  resolveCadastralParcelIdentity,
 };

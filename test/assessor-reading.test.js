@@ -265,6 +265,19 @@ test('assessor reading converts Philadelphia market value 1:1 with the measured 
   assert.equal(philly.withheldReason, null);
 });
 
+test('assessor reading converts Allegheny County market value 1:1 with the measured citation', () => {
+  // Real values from the live layer: parcel 0001C00228000400, FAIRMARKETTOTAL 410100.
+  const allegheny = interpretAssessorParcel({ countyKey: 'PA-ALLEGHENY', parcel: parcel(410100), openingBid: 300000 });
+  assert.equal(allegheny.enrolled, true);
+  assert.equal(allegheny.marketComparison, 410100);
+  assert.equal(Math.round(allegheny.ratio * 100) / 100, 0.73);
+  assert.equal(allegheny.dealScore, 35);
+  assert.match(allegheny.citation, /FAIRMARKETTOTAL/);
+  assert.match(allegheny.citation, /72 P.S./);
+  assert.equal(allegheny.field, 'FAIRMARKETTOTAL');
+  assert.equal(allegheny.withheldReason, null);
+});
+
 test('the 2026-10-21 enrollment registry entries resolve from county names and carry verified endpoints', () => {
   const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('../server/enrichment/arcgis-parcels');
   for (const [state, county, key] of [
