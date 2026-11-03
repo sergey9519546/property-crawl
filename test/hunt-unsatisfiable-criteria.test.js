@@ -14,18 +14,41 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const path = require('node:path');
 const { evaluateInventory } = require('../server/intelligence/hunts');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const { loadLiveRecords, resolveLiveStorePath } = require('../server/db/live-record-store');
+const { validateListingForIngestion } = require('../server/scrapers/validation');
 
 const NOW = new Date().toISOString();
+
+function loadSeedRecords() {
+  const live = loadLiveRecords(resolveLiveStorePath(process.env.PROPERTY_LIVE_CACHE_PATH))
+    .filter((record) => record.id && record.source);
+  if (live.length >= 3) return live.slice(0, 3);
+
+  const dataJsPath = path.resolve(__dirname, '..', 'data.js');
+  if (fs.existsSync(dataJsPath)) {
+    const sandbox = { window: {}, Math };
+    vm.createContext(sandbox);
+    vm.runInContext(fs.readFileSync(dataJsPath, 'utf8'), sandbox);
+    const dataJsListings = Array.isArray(sandbox.window.LISTINGS) ? sandbox.window.LISTINGS : [];
+    const valid = dataJsListings.flatMap((record) => {
+      const res = validateListingForIngestion(record);
+      return res.isValid && res.listing.provenance?.origin === 'live' && res.listing.provenance?.recordKind === 'source_record'
+        ? [res.listing]
+        : [];
+    });
+    if (valid.length >= 3) return valid.slice(0, 3);
+  }
+  return [];
+}
 
 // Built from a real, already-valid record rather than hand-rolled: a synthetic
 // listing that fails ingestion validation is rejected before any clause is
 // evaluated, which would make this test pass for the wrong reason.
-const SEEDS = loadLiveRecords(resolveLiveStorePath(process.env.PROPERTY_LIVE_CACHE_PATH))
-  .filter((record) => record.id && record.source)
-  .slice(0, 3);
+const SEEDS = loadSeedRecords();
 if (SEEDS.length < 3) {
-  test('fixtures available', { skip: `need 3 live store records, found ${SEEDS.length}` }, () => {});
+  test('fixtures available', { skip: `need 3 valid seed records, found ${SEEDS.length}` }, () => {});
 }
 
 function listing(index, extra = {}) {
