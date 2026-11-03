@@ -65,9 +65,15 @@ function classifyLienTier(lien) {
  * @param {object} [params.options={}]
  * @returns {object} Complete surplus waterfall analysis and ledger
  */
-function calculateSurplusEquityWaterfall({ winningBid = 0, totalAdjudgedDebt = 0, recordedLiens = [], options = {} } = {}) {
-  const bid = Number.isFinite(winningBid) && winningBid > 0 ? winningBid : 0;
-  const debt = Number.isFinite(totalAdjudgedDebt) && totalAdjudgedDebt > 0 ? totalAdjudgedDebt : 0;
+function calculateSurplusEquityWaterfall(params = {}) {
+  const { options = {} } = params;
+  const rawBid = params.winningBid ?? params.openingBid ?? 0;
+  const rawDebt = params.totalAdjudgedDebt ?? params.judgmentAmount ?? 0;
+  const rawLiens = params.recordedLiens ?? params.liens ?? [];
+
+  const bid = Number.isFinite(rawBid) && rawBid > 0 ? rawBid : 0;
+  const debt = Number.isFinite(rawDebt) && rawDebt > 0 ? rawDebt : 0;
+  const recordedLiens = Array.isArray(rawLiens) ? rawLiens : [];
 
   const grossSurplus = Math.max(0, Number((bid - debt).toFixed(2)));
   const surplusGenerated = grossSurplus > 0;

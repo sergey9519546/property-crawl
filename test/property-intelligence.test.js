@@ -352,6 +352,43 @@ test('history read failure leaves stored publisher facts available with an expli
   assert.equal(result.body.history, null);
 });
 
+test('buildPropertyDossier attaches possession timeline, auction deposit terms, microstructure and surplus waterfall', () => {
+  const listing = publisherFixture({
+    source: 'civilview',
+    state: 'NJ',
+    openingBid: 100000,
+    judgmentAmount: 85000,
+  });
+  const dossier = buildPropertyDossier(listing, { now: NOW });
+
+  // Possession Timeline
+  assert.ok(dossier.possessionTimeline);
+  assert.equal(dossier.possessionTimeline.state, 'NJ');
+  assert.equal(dossier.possessionTimeline.writOfPossession.statutory, 'N.J. Court R. 4:59-1');
+  assert.ok(dossier.possessionTimeline.carryCost.missingInputs.length > 0);
+  assert.equal(dossier.possessionTimeline.carryCost.totalEstimatedCost, null);
+
+  // Auction Deposit Terms
+  assert.ok(dossier.auctionDepositTerms);
+  assert.equal(dossier.auctionDepositTerms.rules.platform, 'civilview');
+  assert.equal(dossier.auctionDepositTerms.requiredDeposit.requiredDeposit, 20000); // 20% in NJ CivilView
+  assert.equal(dossier.auctionDepositTerms.requiredDeposit.basis, 'percentage');
+
+  // Auction Microstructure
+  assert.ok(dossier.auctionMicrostructure);
+  assert.equal(dossier.auctionMicrostructure.probability, null); // Zero-Fabrication on unobserved county stats
+  assert.equal(dossier.auctionMicrostructure.confidence, 'INSUFFICIENT_DOCKET_HISTORY');
+  assert.equal(dossier.auctionMicrostructure.statutoryContext, null);
+  assert.equal(dossier.auctionMicrostructure.notes.includes('Zero-Fabrication Invariant'), true);
+
+  // Surplus Waterfall
+  assert.ok(dossier.surplusWaterfall);
+  assert.equal(dossier.surplusWaterfall.grossSurplus, 15000); // 100k - 85k
+  assert.equal(dossier.surplusWaterfall.adjudgedDebtSatisfied, 85000);
+  assert.equal(dossier.surplusWaterfall.formerOwnerEquity, 15000);
+  assert.equal(dossier.surplusWaterfall.constitutionalBasis.landmarkCase, 'Tyler v. Hennepin County, 598 U.S. 631 (2023)');
+});
+
 test('unsupported method, malformed ID and absent listing return bounded client errors without enrichment', async () => {
   let calls = 0;
   const handler = handlerFor(async () => null, async () => { calls++; return {}; });
