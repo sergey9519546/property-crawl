@@ -389,7 +389,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
               <h3 className="text-sm font-bold text-ink">Auction Proceed Probability &amp; Microstructure</h3>
               <span className={cn(
                 "rounded-full border px-2 py-0.5 text-xs font-semibold",
-                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-emerald-500/40 bg-emerald-50 text-emerald-800" :
+                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-go/40 bg-go-wash text-go" :
                 dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability <= 0.4 ? "border-catch/40 bg-catch-wash text-catch-ink" :
                 "border-line bg-card text-ink-2"
               )}>
@@ -412,7 +412,7 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
                   <div key={i} className="flex items-center gap-2 text-xs text-ink-3">
                     <span className={cn(
                       "font-semibold",
-                      f.impact === 'positive' ? "text-emerald-700" : "text-catch-ink"
+                      f.impact === 'positive' ? "text-go" : "text-catch-ink"
                     )}>
                       {f.impact === 'positive' ? '▲' : '▼'} {f.weight > 0 ? `+${(f.weight * 100).toFixed(0)}%` : `${(f.weight * 100).toFixed(0)}%`}
                     </span>

@@ -276,7 +276,7 @@ export function Hero() {
         detail: { query, scope: selectedMarket?.kind || "search" },
       }),
     );
-    window.location.hash = "live-search";
+    window.location.hash = "live-feed";
     setSuggestionsOpen(false);
     setStatus(`Showing listings for ${label}.`);
   };
