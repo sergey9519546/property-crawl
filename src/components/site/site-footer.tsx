@@ -83,7 +83,7 @@ export function SiteFooter() {
       <div id="contact" className="bg-line">
         <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] lg:items-center lg:gap-20 lg:py-16">
           <div className="max-w-[600px]">
-            <p className="text-title font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[28px]">
+            <p className="text-title font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-display">
               Subscribe for source coverage notes
             </p>
             <p className="mt-2 max-w-[520px] text-body text-ink-3">

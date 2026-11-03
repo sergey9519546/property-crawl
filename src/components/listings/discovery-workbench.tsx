@@ -590,7 +590,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                       [key]: undefined,
                     } as Partial<DiscoveryFilters>)
                   }
-                  className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-[11px] font-semibold text-ink"
+                  className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
                 >
                   {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
@@ -1112,7 +1112,7 @@ function DiscoveryCalendar({
                         : "Opening bid not published"}
                     </span>
                     {bucket.medianDealScore !== null && (
-                      <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">
+                      <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">
                         Score {bucket.medianDealScore}
                       </span>
                     )}

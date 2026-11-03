@@ -537,13 +537,13 @@ export default async function ListingPage({ params, searchParams }: Props) {
               </p>
               <dl className="mt-4 space-y-3">
                 <div className="rounded-control border border-line bg-card p-3">
-                  <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}{listing.bakeOff?.preferredSource === listing.source ? <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">Preferred</span> : null}</dt>
+                  <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}{listing.bakeOff?.preferredSource === listing.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
                   <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(listing.openingBid)}</dd>
                   {observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {observedAt} UTC</dd> : null}
                 </div>
                 {listing.crossSourceMatches.map((match) => (
                   <div key={match.listingId} className="rounded-control border border-line bg-card p-3">
-                    <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(match.source)}{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">Preferred</span> : null}</dt>
+                    <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(match.source)}{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold text-ink-2">Preferred</span> : null}</dt>
                     <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(match.openingBid)}</dd>
                     {match.observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {formatObservedAt(match.observedAt)}</dd> : null}
                   </div>
@@ -569,7 +569,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   <Clock className="h-5 w-5 text-catch-ink" />
                   <span>Modeled redemption review</span>
                 </h2>
-                <span className="font-extrabold text-[11px] uppercase px-2.5 py-0.5 rounded bg-catch/15 text-catch-ink">
+                <span className="font-extrabold text-label uppercase px-2.5 py-0.5 rounded-control bg-catch/15 text-catch-ink">
                   {derivedRedemption
                     ? (modeledRedemptionDays !== null ? `${Math.round(modeledRedemptionDays)}-day state table` : "State table unset")
                     : (redemptionDays !== null ? redemptionLabel(redemptionDays) : "Official terms required")}

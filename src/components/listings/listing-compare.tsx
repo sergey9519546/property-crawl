@@ -233,13 +233,13 @@ export function CompareTray({
   const rows = payload?.rows ?? [];
 
   return (
-    <section aria-label="Listing comparison" data-testid="listing-compare" className="mt-5 rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5">
+    <section aria-label="Listing comparison" data-testid="listing-compare" className="mt-5 rounded-card border border-line bg-card p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-ink">Compare</h2>
           <p className="mt-1 text-xs leading-5 text-ink-3">The first listing is the target. Deltas are signed against it. A blank cell was not published and is not treated as zero. At most {COMPARE_LIMIT} listings.</p>
         </div>
-        <button type="button" onClick={onClear} className="rounded-lg border border-line-strong px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper">Clear</button>
+        <button type="button" onClick={onClear} className="rounded-control border border-line-strong px-3 py-2 text-xs font-semibold text-ink-2 hover:bg-paper">Clear</button>
       </div>
       <ul className="mt-3 flex flex-wrap gap-2">
         {ids.map((id, index) => (
@@ -253,7 +253,7 @@ export function CompareTray({
       </ul>
       {ids.length < 2 ? <p className="mt-3 text-sm text-ink-3">Select one more listing to compare.</p> : null}
       {loading ? <p role="status" className="mt-3 text-sm text-ink-3">Loading comparison…</p> : null}
-      {error ? <p role="alert" className="mt-3 rounded-xl bg-catch-wash p-3 text-sm text-catch-ink">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 rounded-control bg-catch-wash p-3 text-sm text-catch-ink">{error}</p> : null}
       {rows.length >= 2 ? (
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
@@ -267,7 +267,7 @@ export function CompareTray({
                   return (
                     <th key={id || index} scope="col" className="min-w-[10rem] py-2 pr-4 align-bottom">
                       {id ? <Link href={`/listings/${encodeURIComponent(id)}`} className="font-semibold text-ink underline-offset-2 hover:underline">{label}</Link> : <span className="font-semibold">{label}</span>}
-                      <span className="mt-1 block text-[11px] font-medium text-ink-3">{index === 0 ? "Target" : "Compared"}</span>
+                      <span className="mt-1 block text-label font-medium text-ink-3">{index === 0 ? "Target" : "Compared"}</span>
                     </th>
                   );
                 })}
@@ -289,8 +289,8 @@ export function CompareTray({
                     return (
                       <td key={`${row.id || index}-${field.key}`} className="py-2 pr-4 align-top">
                         <span className="font-semibold text-ink">{text}</span>
-                        {winner ? <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold uppercase text-ink-2">Best</span> : null}
-                        {deltaLabel ? <span className="mt-0.5 block text-[11px] text-ink-3">vs target {deltaLabel}</span> : null}
+                        {winner ? <span className="ml-2 rounded-control bg-line px-1.5 py-0.5 text-label font-bold uppercase text-ink-2">Best</span> : null}
+                        {deltaLabel ? <span className="mt-0.5 block text-label text-ink-3">vs target {deltaLabel}</span> : null}
                       </td>
                     );
                   })}
@@ -314,7 +314,7 @@ export function ListingCompareToggle({ listingId, className = "" }: { listingId:
       aria-pressed={selected}
       disabled={disabled}
       onClick={() => compare.toggle(listingId)}
-      className={`inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
       {selected ? "In compare" : disabled ? "Compare is full" : "Add to compare"}
     </button>

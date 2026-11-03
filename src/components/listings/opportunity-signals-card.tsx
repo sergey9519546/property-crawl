@@ -107,7 +107,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-6 bg-paper rounded-2xl border border-line text-xs text-ink-3 gap-2">
+      <div className="flex items-center justify-center p-6 bg-paper rounded-card border border-line text-xs text-ink-3 gap-2">
         <Loader2 className="w-4 h-4 animate-spin text-ink-2" />
         <span>Checking research signals…</span>
       </div>
@@ -116,7 +116,7 @@ export function OpportunitySignalsCard({ listingId, initialData = null, compact 
 
   if (error || !data) {
     return (
-      <div className="p-4 bg-catch-wash rounded-2xl border border-catch/30 text-xs text-catch-ink flex items-center justify-between">
+      <div className="p-4 bg-catch-wash rounded-card border border-catch/30 text-xs text-catch-ink flex items-center justify-between">
         <span>{error || 'Signals currently unavailable for this listing'}</span>
       </div>
     );
@@ -142,7 +142,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
   const weights = data.weights ?? {};
 
   return (
-    <div className={cn("bg-card rounded-2xl border border-line shadow-sm overflow-hidden text-ink", compact && "p-4")}>
+    <div className={cn("bg-card rounded-card border border-line shadow-sm overflow-hidden text-ink", compact && "p-4")}>
       {/* Header Banner */}
       <div className="bg-ink p-5 text-white flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
@@ -153,18 +153,18 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
         </div>
 
         {/* Score Dial / Badge */}
-<div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-xl border border-white/10">
+<div className="flex items-center gap-3 bg-white/10 px-4 py-2.5 rounded-control border border-white/10">
           <div className="text-right">
             <p className="text-xs font-semibold text-white/60">Priority score</p>
             <div className="flex items-center gap-1.5 justify-end">
               <span className="text-2xl font-black text-white">{priority}</span>
               <span className="text-xs font-semibold text-white/60">/99</span>
             </div>
-            <p className="text-[9px] text-white/60 mt-0.5">{data.signals.length}-signal · independent of modeled Deal Score</p>
+            <p className="text-meta text-white/60 mt-0.5">{data.signals.length}-signal · independent of modeled Deal Score</p>
           </div>
           <div
             className={cn(
-              "px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wide shrink-0",
+              "px-2.5 py-1 rounded-control text-label font-extrabold uppercase tracking-wide shrink-0",
               isHigh && "bg-catch text-ink border border-catch",
               isMed && "bg-white/10 text-white/75 border border-white/20",
               !isHigh && !isMed && "bg-white/5 text-white/60 border border-white/10"
@@ -211,13 +211,13 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
               const earnedPts = comp?.earnedPoints ?? 0;
               const fillPct = maxPts > 0 ? Math.min(100, Math.round((earnedPts / maxPts) * 100)) : 0;
               return (
-                <div key={key} className="p-2.5 rounded-lg bg-card border border-line flex flex-col justify-between gap-1.5">
+                <div key={key} className="p-2.5 rounded-control bg-card border border-line flex flex-col justify-between gap-1.5">
                   <div className="flex items-center justify-between font-semibold text-ink">
                     <span>{detail.label}</span>
                     <div className="flex items-center gap-1.5 text-right">
                       {comp ? (
-                        <span className="font-mono text-[11px] font-bold text-ink-2">
-                          {earnedPts} / {maxPts} <span className="text-[10px] text-ink-3 font-normal">pts</span>
+                        <span className="font-mono text-label font-bold text-ink-2">
+                          {earnedPts} / {maxPts} <span className="text-meta text-ink-3 font-normal">pts</span>
                         </span>
                       ) : (
                         <span className="text-ink font-extrabold">{weightPercent(value)}</span>
@@ -234,9 +234,9 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                       style={{ width: `${fillPct}%` }}
                     />
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-ink-3">
-                    <p className="leading-snug text-[10px]">{detail.desc}</p>
-                    <span className="text-[10px] font-semibold text-ink-3 shrink-0 ml-1.5">{weightPercent(value)} wt</span>
+                  <div className="flex items-center justify-between text-label text-ink-3">
+                    <p className="leading-snug text-meta">{detail.desc}</p>
+                    <span className="text-meta font-semibold text-ink-3 shrink-0 ml-1.5">{weightPercent(value)} wt</span>
                   </div>
                 </div>
               );
@@ -260,7 +260,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
               <div
                 key={signal.key}
                 className={cn(
-                  "p-3.5 rounded-xl border transition text-xs",
+                  "p-3.5 rounded-control border transition text-xs",
                   isSupported && "bg-paper border-line",
                   isContradicted && "bg-catch-wash border-catch/30",
                   !isSupported && !isContradicted && "bg-card border-catch/30"
@@ -280,7 +280,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
 
                   <span
                     className={cn(
-                      "px-2 py-0.5 rounded text-[10px] font-extrabold uppercase shrink-0",
+                      "px-2 py-0.5 rounded-control text-label font-extrabold uppercase shrink-0",
                       isSupported && "bg-line text-ink-2",
                       isContradicted && "bg-catch text-ink",
                       !isSupported && !isContradicted && "bg-catch-wash text-catch-ink"
@@ -292,7 +292,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
 
                 <p className="text-ink-2 leading-relaxed pl-6">{signal.reason}</p>
 
-                <div className="mt-2 pt-2 border-t border-line pl-6 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <div className="mt-2 pt-2 border-t border-line pl-6 flex flex-wrap items-center justify-between gap-2 text-label">
                   <div className="text-ink-2 font-semibold flex items-center gap-1">
                     <span>Next:</span>
                     <span>{signal.nextAction}</span>
@@ -301,7 +301,7 @@ const supportedCount = data.summary?.supported ?? data.signals.filter((s) => s.s
                   <div className="text-ink-3 flex items-center gap-2">
                     <span className="text-xs">{signal.evidenceClass.replace(/_/g, ' ')}</span>
                     {signal.observedAt && (
-                      <span className="text-[10px]">
+                      <span className="text-meta">
                         observed {new Date(signal.observedAt).toLocaleDateString()}
                       </span>
                     )}

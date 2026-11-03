@@ -55,7 +55,7 @@ export function Fact({
 /** A small "yours" flag to sit next to buyer-typed inputs and results. */
 export function YoursTag() {
   return (
-    <span className="ml-1.5 inline-flex rounded-full bg-[var(--color-yours-wash)] px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-[var(--color-yours)]">
+    <span className="ml-1.5 inline-flex rounded-full bg-[var(--color-yours-wash)] px-1.5 py-0.5 align-middle text-label font-bold uppercase tracking-wider text-[var(--color-yours)]">
       yours
     </span>
   );

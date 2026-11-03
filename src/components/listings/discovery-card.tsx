@@ -106,13 +106,13 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   return <article className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-card shadow-card transition-shadow hover:shadow-raised" aria-label={listing.address}>
     <div className="relative shrink-0">
       <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} observed={observed} layout="card" />
-      {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
+      {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-control bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}
       <button type="button" onClick={() => onSave(listing.id)} disabled={saving} aria-label={`${saved ? "Remove from" : "Add to"} watchlist: ${listing.address}`} aria-pressed={saved} className="absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border border-line bg-card text-ink-2 shadow-sm transition hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:opacity-60">
         {saving ? <Loader2 size={17} className="animate-spin" /> : <Bookmark size={17} className={saved ? "fill-ink text-ink" : ""} />}
       </button>
     </div>
     <div className="flex flex-1 flex-col p-4 sm:p-5">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-3">
+      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-ink-3">
         <span className="font-medium text-ink-3">{sourceDisplayText(SOURCES[listing.source]?.label || listing.source)}</span>
         {lifecycle ? <><span aria-hidden>·</span><span>{sourceDisplayText(lifecycle.replace(/_/g, " "))}</span></> : null}
         {!observed ? <span className="rounded bg-catch-wash px-1.5 py-0.5 text-catch-ink">{archived ? "Dated archive" : "Demo / unverified"}</span> : null}
@@ -169,7 +169,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
           </span>
         ) : null}
       </div>
-      <h2 className="text-lg font-semibold leading-6 tracking-tight text-ink"><Link href={href} prefetch={false} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3">{street}</Link></h2>
+      <h2 className="text-lg font-semibold leading-6 tracking-tight text-ink"><Link href={href} prefetch={false} className="rounded-control hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3">{street}</Link></h2>
       {locality ? <p className="mt-1 text-sm text-ink-3">{locality}</p> : null}
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
@@ -177,7 +177,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         <div><dt className="text-xs text-ink-3">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd></div>
         <div><dt className="text-xs text-ink-3">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" /></dd></div>
       </dl>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-ink-3">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-label text-ink-3">
         <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
@@ -192,11 +192,11 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
         {opportunity && knownNumber(opportunity.rank) !== null ? <span title={opportunity.note}>Opportunity rank {opportunity.rank}/100</span> : null}
       </div>
       <div className="mt-auto grid gap-2 pt-4">
-        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" aria-pressed={compared} aria-label={`${compared ? "Remove from" : "Add to"} compare: ${listing.address}`} disabled={compareFull && !compared} onClick={() => onCompare(listing.id)} className="inline-flex min-h-11 items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-semibold text-ink-2 transition hover:border-ink-3 hover:bg-paper focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 disabled:cursor-not-allowed disabled:opacity-50">
           {compared ? "In compare" : compareFull ? "Compare is full" : "Compare"}
         </button>
         <div className="grid gap-2 sm:grid-cols-[1.2fr_1fr]">
-          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-ink px-3 text-xs font-semibold text-white transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
+          <Link href={href} prefetch={false} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-3 text-xs font-semibold text-white transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink-3 focus-visible:ring-offset-2">View property <ArrowUpRight size={14} /></Link>
           <CaseAction listingId={listing.id} label="Research" className="h-11 border-line bg-card font-semibold text-ink-2 hover:border-ink-3 hover:bg-paper" />
         </div>
       </div>

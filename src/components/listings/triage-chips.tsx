@@ -32,7 +32,7 @@ export function TriageChips({ listing, className, iconSize = 11 }: Props) {
         return (
           <li
             key={chip.key}
-            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold ${chipToneClasses(chip.tone)}`}
+            className={`inline-flex items-center gap-1 rounded-control px-1.5 py-0.5 text-label font-semibold ${chipToneClasses(chip.tone)}`}
             data-triage-chip={chip.key}
           >
             <Icon size={iconSize} aria-hidden />

@@ -226,7 +226,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-title"
-        className="w-full max-w-2xl bg-card rounded-2xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[85vh]"
+        className="w-full max-w-2xl bg-card rounded-card shadow-2xl border border-line overflow-hidden flex flex-col max-h-[85vh]"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-line flex items-center justify-between bg-card">
@@ -234,7 +234,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             <Bookmark className="w-5 h-5 text-ink fill-ink" />
             <h3 id="watchlist-title" className="text-lg font-bold text-ink">Saved Watchlist ({savedListings.length})</h3>
           </div>
-          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-xl text-ink-3 hover:text-ink hover:bg-paper">
+          <button onClick={onClose} aria-label="Close watchlist" className="p-2 rounded-control text-ink-3 hover:text-ink hover:bg-paper">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -245,28 +245,28 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             <div className="px-6 py-2.5 bg-ink text-white flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-4">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-white/75 block">Known opening amounts</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">Known opening amounts</span>
                   <span className="font-extrabold text-sm text-white">
                     {displayMoney(totalOpeningBids)}
                   </span>
-                  <span className="block text-[9px] text-white/75">{knownOpeningBids.length}/{savedListings.length} published</span>
+                  <span className="block text-meta text-white/75">{knownOpeningBids.length}/{savedListings.length} published</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-white/75 block">Known bid spread</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">Known bid spread</span>
                   <span className="font-extrabold text-sm text-white">
                     {displayMoney(totalBidSpread)}
                   </span>
-                  <span className="block text-[9px] text-white/75">{knownBidSpreads.length}/{savedListings.length} modeled</span>
+                  <span className="block text-meta text-white/75">{knownBidSpreads.length}/{savedListings.length} modeled</span>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-white/75 block">Avg modeled score</span>
+                  <span className="text-label uppercase font-bold text-white/75 block">Avg modeled score</span>
                   <span className="font-extrabold text-sm text-white">
                     {averageModeledScore === null ? "Not modeled" : `${averageModeledScore}/99`}
                   </span>
-                  <span className="block text-[9px] text-white/75">{knownScores.length}/{savedListings.length} scored</span>
+                  <span className="block text-meta text-white/75">{knownScores.length}/{savedListings.length} scored</span>
                 </div>
               </div>
-              <span className="text-[10px] font-semibold text-white/75 uppercase tracking-wider">
+              <span className="text-label font-semibold text-white/75 uppercase tracking-wider">
                 {savedListings.length} tracked opportunities
               </span>
             </div>
@@ -278,20 +278,20 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   type="button"
                   onClick={() => void loadPortfolioDashboard()}
                   disabled={portfolioLoading}
-                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm disabled:opacity-50"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm disabled:opacity-50"
                 >
                   <span>{portfolioLoading ? "Loading Rollup…" : "Portfolio Rollup"}</span>
                 </button>
                 <button
                   onClick={exportCsv}
-                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
                   <FileText className="w-3.5 h-3.5 text-ink" />
                   <span>Export CSV</span>
                 </button>
                 <button
                   onClick={exportJson}
-                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-lg hover:bg-paper transition flex items-center gap-1 shadow-sm"
+                  className="px-3 py-1.5 bg-card border border-line-strong text-xs font-bold text-ink rounded-control hover:bg-paper transition flex items-center gap-1 shadow-sm"
                 >
                   <Copy className="w-3.5 h-3.5 text-ink" />
                   <span>Export JSON</span>
@@ -307,23 +307,23 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
             {portfolioRollup && (
               <div className="px-6 py-3 bg-paper border-b border-line text-xs space-y-2" data-testid="portfolio-dashboard-rollup">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg bg-card border border-line p-2">
-                    <span className="block text-[10px] font-bold uppercase text-ink-3">Server Est. Value</span>
+                  <div className="rounded-control bg-card border border-line p-2">
+                    <span className="block text-label font-bold uppercase text-ink-3">Server Est. Value</span>
                     <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedValue)}</strong>
                   </div>
-                  <div className="rounded-lg bg-card border border-line p-2">
-                    <span className="block text-[10px] font-bold uppercase text-ink-3">Server Est. Spread</span>
+                  <div className="rounded-control bg-card border border-line p-2">
+                    <span className="block text-label font-bold uppercase text-ink-3">Server Est. Spread</span>
                     <strong className="text-sm text-ink">{displayMoney(portfolioRollup.totalEstimatedEquity)}</strong>
                   </div>
-                  <div className="rounded-lg bg-card border border-line p-2">
-                    <span className="block text-[10px] font-bold uppercase text-ink-3">Median Discount</span>
+                  <div className="rounded-control bg-card border border-line p-2">
+                    <span className="block text-label font-bold uppercase text-ink-3">Median Discount</span>
                     <strong className="text-sm text-ink">
                       {portfolioRollup.medianDiscount !== null ? `${Math.round(portfolioRollup.medianDiscount * 100)}%` : "Not modeled"}
                     </strong>
                   </div>
                 </div>
                 {Object.keys(portfolioRollup.perState || {}).length > 0 && (
-                  <p className="text-[11px] text-ink-3">
+                  <p className="text-label text-ink-3">
                     <strong className="text-ink">States:</strong>{" "}
                     {Object.entries(portfolioRollup.perState).map(([st, c]) => `${st} (${c})`).join(", ")}
                   </p>
@@ -349,7 +349,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
               return (
               <div
                 key={l.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-line hover:border-ink bg-card transition group"
+                className="flex items-center justify-between p-4 rounded-control border border-line hover:border-ink bg-card transition group"
               >
                 <button
                   type="button"
@@ -357,9 +357,9 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                   className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left"
                 >
                   {photoUrl ? (
-                    <img src={photoUrl} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                    <img src={photoUrl} alt="" className="h-14 w-14 rounded-control object-cover" />
                   ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-paper text-ink-3" aria-label="No source photo published">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-control bg-paper text-ink-3" aria-label="No source photo published">
                       <ImageOff className="h-4 w-4" />
                     </div>
                   )}
@@ -374,7 +374,7 @@ export function WatchlistModal({ isOpen, onClose, savedListings, onRemove, onSel
                 <div className="flex items-center gap-3">
                   <ListingCompareToggle listingId={l.id} className="h-10 shrink-0" />
                   <span
-                    className="text-xs font-extrabold px-2.5 py-1 rounded-md"
+                    className="text-xs font-extrabold px-2.5 py-1 rounded-control"
                     style={
                       scoreBand
                         ? { backgroundColor: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }

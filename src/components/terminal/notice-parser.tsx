@@ -87,10 +87,10 @@ function moneyValue(value: number | null) {
 function ExtractedField({ label, value, evidence }: { label: string; value: string; evidence?: string | null }) {
   const missing = value === "Not found in notice";
   return (
-    <div className={`rounded-xl border p-3 ${missing ? "border-catch/30 bg-catch-wash" : "border-line bg-card"}`}>
-      <span className="block text-[10px] font-bold uppercase tracking-[0.1em] text-ink-3">{label}</span>
+    <div className={`rounded-control border p-3 ${missing ? "border-catch/30 bg-catch-wash" : "border-line bg-card"}`}>
+      <span className="block text-label font-bold uppercase tracking-[0.1em] text-ink-3">{label}</span>
       <strong className={`mt-1 block break-words text-xs ${missing ? "text-catch-ink" : "text-ink"}`}>{value}</strong>
-      {evidence ? <span className="mt-1.5 block line-clamp-2 text-[10px] leading-4 text-ink-3">Evidence: “{evidence}”</span> : null}
+      {evidence ? <span className="mt-1.5 block line-clamp-2 text-meta leading-4 text-ink-3">Evidence: “{evidence}”</span> : null}
     </div>
   );
 }
@@ -193,7 +193,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
   const llmCandidateCount = Object.keys(parseResponse?.unverifiedCandidates || {}).length;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-line bg-card p-6 shadow-sm">
+    <div className="space-y-4 rounded-card border border-line bg-card p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-ink" />
@@ -212,7 +212,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
         onChange={(event) => { setRawText(event.target.value); setParseResponse(null); setParseError(null); }}
         placeholder="Paste raw foreclosure notice, gazette clipping, or court docket text here…"
         aria-label="Raw legal notice"
-        className="h-36 w-full rounded-xl border border-line-strong p-4 font-mono text-xs text-ink focus:border-yours focus:outline-none focus:ring-2 focus:ring-yours/15"
+        className="h-36 w-full rounded-control border border-line-strong p-4 font-mono text-xs text-ink focus:border-yours focus:outline-none focus:ring-2 focus:ring-yours/15"
       />
 
       <div className="flex items-center justify-between gap-3">
@@ -221,7 +221,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
           type="button"
           onClick={handleParse}
           disabled={isParsing || !rawText.trim()}
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-ink px-5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:opacity-50"
+          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-control bg-ink px-5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:opacity-50"
         >
           {isParsing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileSearch className="h-4 w-4 text-white/75" />}
           <span>{isParsing ? "Extracting…" : "Extract stated facts"}</span>
@@ -229,14 +229,14 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
       </div>
 
       {parseError ? (
-        <div className="flex items-start gap-2 rounded-xl border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink" role="alert">
+        <div className="flex items-start gap-2 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink" role="alert">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{parseError}{needsUnlock ? <a href="/listings" target="_blank" rel="noopener noreferrer" className="mt-2 block font-semibold underline underline-offset-2">Open workspace in a new tab</a> : null}</span>
         </div>
       ) : null}
 
       {parsedResult ? (
-        <div className="space-y-3 rounded-xl border border-catch/30 bg-catch-wash/40 p-4 animate-in fade-in">
+        <div className="space-y-3 rounded-control border border-catch/30 bg-catch-wash/40 p-4 animate-in fade-in">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-start gap-2 text-xs text-catch-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -251,7 +251,7 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
               onClick={handleAddToWatchlist}
               disabled={!canSave}
               title={canSave ? "Add this unverified extraction" : "A source-stated address and state are required"}
-              className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1 rounded-control bg-ink px-3 py-1.5 text-xs font-bold text-white transition hover:bg-ink-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Bookmark className="h-3.5 w-3.5" />
               <span>{canSave ? "Add extraction" : "Needs address + state"}</span>
@@ -276,20 +276,20 @@ export function NoticeParser({ onSaveToWatchlist }: NoticeParserProps) {
           </div>
 
           {parsedResult.opening_bid_basis === "derived_from_explicit_notice_fraction" ? (
-            <div className="rounded-lg border border-line bg-paper p-3 text-xs text-ink-2">
+            <div className="rounded-control border border-line bg-paper p-3 text-xs text-ink-2">
               Opening bid was calculated only because the notice explicitly states the {parsedResult.statutory_bid_fraction ? `${(parsedResult.statutory_bid_fraction * 100).toFixed(2)}%` : "statutory"} fraction of its stated appraisal. Verify the calculation before use.
             </div>
           ) : null}
 
           {missingReviewFields.length > 0 ? (
-            <div className="rounded-lg border border-catch/30 bg-card p-3 text-xs text-ink-2">
+            <div className="rounded-control border border-catch/30 bg-card p-3 text-xs text-ink-2">
               <strong className="block text-catch-ink">Evidence gaps</strong>
               <span className="mt-1 block">Not found: {missingReviewFields.join(", ")}. Consult the official notice, docket, and sale terms; these values were not estimated.</span>
             </div>
           ) : null}
 
           {/(?:tract\s+[12]|parcel\s+(?:one|two|[12])|lot\s+[12]|permanent parcel nos|parcels:)/i.test(rawText) ? (
-            <div className="flex items-start gap-2 rounded-lg border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
+            <div className="flex items-start gap-2 rounded-control border border-catch/30 bg-catch-wash p-3 text-xs text-catch-ink">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-catch-ink" />
               <div><strong className="block font-bold">Multiple parcel references detected</strong><span>Confirm which stated facts apply to each parcel in the official docket.</span></div>
             </div>

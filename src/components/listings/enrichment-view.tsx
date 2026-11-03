@@ -87,7 +87,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
 
   if (!isValidKey) {
     return (
-      <section className="rounded-2xl border border-line bg-card p-6 text-sm text-ink-3">
+      <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
         <header className="mb-2 text-base font-semibold text-ink-2">Enrichment view</header>
         <p>No parcelKey is attached to this listing yet, so the cross-source enrichment view is unavailable.</p>
       </section>
@@ -96,7 +96,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
 
   if (loading && !view) {
     return (
-      <section className="rounded-2xl border border-line bg-card p-6 text-sm text-ink-3">
+      <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
         Loading enrichment view for <code>{parcelKey}</code>...
       </section>
     );
@@ -104,7 +104,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
 
   if (error && !view) {
     return (
-      <section className="rounded-2xl border border-catch/30 bg-catch-wash p-6 text-sm text-catch-ink">
+      <section className="rounded-card border border-catch/30 bg-catch-wash p-6 text-sm text-catch-ink">
         <header className="mb-2 text-base font-semibold">Enrichment view failed</header>
         <p>{error}</p>
       </section>
@@ -117,11 +117,11 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
 
   if (!view || !view.found) {
     return (
-      <section className="rounded-2xl border border-line bg-card p-6 text-sm text-ink-3">
+      <section className="rounded-card border border-line bg-card p-6 text-sm text-ink-3">
         <header className="mb-2 text-base font-semibold text-ink-2">Enrichment view</header>
         <p>No other source has reported a listing that shares the parcelKey <code>{parcelKey}</code>.</p>
         {showRefreshButton && (
-          <button onClick={onRefresh} disabled={refreshing} className="mt-3 rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-semibold">
+          <button onClick={onRefresh} disabled={refreshing} className="mt-3 rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold">
             {refreshLabel}
           </button>
         )}
@@ -133,7 +133,7 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
   const sortedSources = [...view.sources].sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
 
   return (
-    <section aria-labelledby="enrichment-view-heading" className="rounded-2xl border border-line bg-card p-6">
+    <section aria-labelledby="enrichment-view-heading" className="rounded-card border border-line bg-card p-6">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="enrichment-view-heading" className="text-base font-semibold text-ink-2">
@@ -147,24 +147,24 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
           <button
             onClick={onRefresh}
             disabled={refreshing}
-            className="rounded-lg border border-line bg-card px-3 py-1.5 text-sm font-semibold"
+            className="rounded-control border border-line bg-card px-3 py-1.5 text-sm font-semibold"
           >
             {refreshLabel}
           </button>
         )}
       </header>
 
-      {refreshStatus && <p className="mb-3 rounded-md bg-go-wash px-3 py-2 text-xs text-go">{refreshStatus}</p>}
-      {error && <p className="mb-3 rounded-md bg-catch-wash px-3 py-2 text-xs text-catch-ink">{error}</p>}
+      {refreshStatus && <p className="mb-3 rounded-control bg-go-wash px-3 py-2 text-xs text-go">{refreshStatus}</p>}
+      {error && <p className="mb-3 rounded-control bg-catch-wash px-3 py-2 text-xs text-catch-ink">{error}</p>}
 
       {view.freshestObservation && (
-        <div className="mb-4 rounded-xl bg-paper p-4">
+        <div className="mb-4 rounded-control bg-paper p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-semibold text-ink-2">
               Freshest cross-source observation
             </p>
             {view.freshestObservation.confidenceBand && (
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${confidenceBandColor(view.freshestObservation.confidenceBand)}`}>
+              <span className={`rounded-full px-2 py-0.5 text-label font-semibold ${confidenceBandColor(view.freshestObservation.confidenceBand)}`}>
                 {confidenceBandLabel(view.freshestObservation.confidenceBand)}
               </span>
             )}
@@ -192,15 +192,15 @@ export function EnrichmentView({ parcelKey, fetchImpl, showRefreshButton = true 
           <tbody>
             {sortedSources.map((entry) => (
               <tr key={entry.source} className="border-b border-line last:border-b-0">
-                <td className="px-3 py-2 align-top font-mono text-[11px] text-ink-3">#{entry.rank ?? '?'}</td>
+                <td className="px-3 py-2 align-top font-mono text-label text-ink-3">#{entry.rank ?? '?'}</td>
                 <td className="px-3 py-2 align-top font-medium text-ink-2">
                   {ADAPTER_LABELS[entry.source] || entry.source}
-                  <p className="mt-0.5 text-[10px] font-normal text-ink-3">{entry.listingIds.length} listing{entry.listingIds.length === 1 ? '' : 's'}</p>
+                  <p className="mt-0.5 text-meta font-normal text-ink-3">{entry.listingIds.length} listing{entry.listingIds.length === 1 ? '' : 's'}</p>
                 </td>
                 <td className="px-3 py-2 align-top text-ink-3">{entry.summary.observedAt || 'unknown'}</td>
                 <td className="px-3 py-2 align-top text-ink-3">{entry.summary.evidenceCount}</td>
                 <td className="px-3 py-2 align-top">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${confidenceBandColor(entry.confidenceBand)}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-label font-semibold ${confidenceBandColor(entry.confidenceBand)}`}>
                     {formatConfidence(entry.confidence)} · {entry.confidenceBand || 'unknown'}
                   </span>
                 </td>

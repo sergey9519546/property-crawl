@@ -42,9 +42,9 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
   const done = gaps.filter((g) => ticks[g.key]).length;
 
   return (
-    <section aria-labelledby={`gaps-${listing.id}`} className={`rounded-[var(--radius-card)] border border-[var(--catch-border)] bg-card p-5 sm:p-6 ${className}`}>
+    <section aria-labelledby={`gaps-${listing.id}`} className={`rounded-card border border-catch/30 bg-card p-5 sm:p-6 ${className}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={`gaps-${listing.id}`} className="text-[18px] font-semibold tracking-[-0.01em] text-ink">
+        <h2 id={`gaps-${listing.id}`} className="text-title font-semibold tracking-[-0.01em] text-ink">
           What this listing can&apos;t tell you
         </h2>
         {gaps.length ? (
@@ -63,7 +63,7 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
           {gaps.map((gap) => {
             const checked = !!ticks[gap.key];
             return (
-              <li key={gap.key} className={`rounded-xl border p-4 transition-colors ${checked ? "border-line bg-paper" : "border-line bg-card"}`}>
+              <li key={gap.key} className={`rounded-control border p-4 transition-colors ${checked ? "border-line bg-paper" : "border-line bg-card"}`}>
                 <div className="flex items-start gap-3">
                   <button
                     type="button"
@@ -71,14 +71,14 @@ export function GapLedger({ listing, className = "" }: { listing: GapListing; cl
                     aria-checked={checked}
                     aria-label={`I've checked: ${gap.fact}`}
                     onClick={() => toggle(gap.key)}
-                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${checked ? "border-ink bg-ink text-white" : "border-line-strong bg-card hover:border-ink-3"}`}
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-control border transition-colors ${checked ? "border-ink bg-ink text-white" : "border-line-strong bg-card hover:border-ink-3"}`}
                   >
                     {checked ? <Check className="h-4 w-4" aria-hidden /> : null}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className={`text-body font-semibold ${checked ? "text-ink-3 line-through" : "text-ink"}`}>{gap.fact}</p>
-                      <span className="ev-unknown text-[11px] font-semibold">{gap.reason}</span>
+                      <span className="ev-unknown text-label font-semibold">{gap.reason}</span>
                     </div>
                     <p className="mt-1 text-meta text-ink-2">{gap.why}</p>
                     {gap.action.external ? (

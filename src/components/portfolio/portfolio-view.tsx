@@ -405,7 +405,7 @@ export function PortfolioView() {
         >
           Price Drop Radar
           {dropsCount > 0 && (
-            <span className="rounded-full bg-line px-2 py-0.5 text-[10px] text-ink">
+            <span className="rounded-full bg-line px-2 py-0.5 text-label text-ink">
               {dropsCount}
             </span>
           )}
@@ -468,7 +468,7 @@ export function PortfolioView() {
                       <div className="border-b border-line pb-3">
                         <div className="flex items-center justify-between">
                           <span className="font-extrabold text-xs text-ink">{stage.label}</span>
-                          <span className="rounded-full bg-line px-2 py-0.5 text-[10px] font-bold text-ink">
+                          <span className="rounded-full bg-line px-2 py-0.5 text-label font-bold text-ink">
                             {stageDeals.length}
                           </span>
                         </div>
@@ -476,7 +476,7 @@ export function PortfolioView() {
                           <span>Committed Capital:</span>
                           <span className="font-bold text-ink">{formatMoney(stageCapital)}</span>
                         </div>
-                        <p className="mt-1 text-[10px] text-ink-3 line-clamp-1" title={stage.description}>
+                        <p className="mt-1 text-meta text-ink-3 line-clamp-1" title={stage.description}>
                           {stage.description}
                         </p>
                       </div>
@@ -497,7 +497,7 @@ export function PortfolioView() {
                                 key={dealId}
                                 className="group rounded-control border border-line bg-card p-3 shadow-xs hover:border-line-strong transition"
                               >
-                                <div className="flex items-center justify-between text-[10px] text-ink-3">
+                                <div className="flex items-center justify-between text-meta text-ink-3">
                                   <span className="font-semibold">{sourceDisplayText(deal.source || "Auction")}</span>
                                   {deal.dealScore != null && (
                                     <span
@@ -512,17 +512,17 @@ export function PortfolioView() {
                                   {deal.address || "Address not published"}
                                 </h4>
                                 {deal.city && deal.state && (
-                                  <p className="text-[10px] text-ink-3 mt-0.5">
+                                  <p className="text-meta text-ink-3 mt-0.5">
                                     {deal.city}, {deal.state}
                                   </p>
                                 )}
-                                <div className="mt-2.5 flex items-center justify-between border-t border-line/60 pt-2 text-[11px]">
-                                  <span className="text-[10px] text-ink-3">Opening:</span>
+                                <div className="mt-2.5 flex items-center justify-between border-t border-line/60 pt-2 text-label">
+                                  <span className="text-meta text-ink-3">Opening:</span>
                                   <span className="font-extrabold text-ink">{formatMoney(deal.openingBid)}</span>
                                 </div>
 
                                 {deal.saleDate && (
-                                  <div className="mt-1 flex items-center justify-between text-[10px] text-ink-3">
+                                  <div className="mt-1 flex items-center justify-between text-meta text-ink-3">
                                     <span>Sale Date:</span>
                                     <span className="font-semibold text-ink-2">
                                       {new Date(deal.saleDate).toLocaleDateString()}
@@ -531,7 +531,7 @@ export function PortfolioView() {
                                 )}
 
                                 {/* Action Buttons & Stage Shift */}
-                                <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-[11px]">
+                                <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2 text-label">
                                   <button
                                     onClick={() => {
                                       if (stageIndex > 0) {
@@ -547,7 +547,7 @@ export function PortfolioView() {
 
                                   <Link
                                     href={`/listings/${encodeURIComponent(dealId)}`}
-                                    className="text-[10px] font-semibold text-ink-2 hover:text-ink flex items-center gap-0.5 transition"
+                                    className="text-label font-semibold text-ink-2 hover:text-ink flex items-center gap-0.5 transition"
                                   >
                                     Dossier <ArrowRight className="h-2.5 w-2.5" />
                                   </Link>
@@ -615,11 +615,11 @@ export function PortfolioView() {
                             {sourceDisplayText(deal.source || "Auction")}
                           </span>
                           <div className="flex items-center gap-1.5">
-                            <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink-2">
+                            <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink-2">
                               {currentStage?.label || "Triage"}
                             </span>
                             {deal.dealScore != null && (
-                              <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink" style={{ color: bandForScore(deal.dealScore)?.color }}>
+                              <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink" style={{ color: bandForScore(deal.dealScore)?.color }}>
                                 Score {Math.round(deal.dealScore)}
                               </span>
                             )}
@@ -638,7 +638,7 @@ export function PortfolioView() {
                       <div className="mt-6 border-t border-line pt-4">
                         <div className="flex items-center justify-between text-xs">
                           <div>
-                            <span className="block text-[10px] uppercase font-medium text-ink-3">
+                            <span className="block text-meta uppercase font-medium text-ink-3">
                               Opening Amount
                             </span>
                             <span className="text-sm font-extrabold text-ink">
@@ -647,7 +647,7 @@ export function PortfolioView() {
                           </div>
                           {deal.saleDate && (
                             <div className="text-right">
-                              <span className="block text-[10px] uppercase font-medium text-ink-3">
+                              <span className="block text-meta uppercase font-medium text-ink-3">
                                 Auction Date
                               </span>
                               <span className="text-xs font-semibold text-ink-2">
@@ -699,7 +699,7 @@ export function PortfolioView() {
                   <div key={drop.listingId} className="flex items-center justify-between p-5 hover:bg-paper transition">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="rounded bg-line px-2 py-0.5 text-[10px] font-bold text-ink">
+                        <span className="rounded-control bg-line px-2 py-0.5 text-label font-bold text-ink">
                           {drop.dropPct ? `-${Math.round(drop.dropPct * 100)}% DROP` : "PRICE DROP"}
                         </span>
                         <h4 className="text-sm font-bold text-ink">{drop.address || drop.listingId}</h4>
@@ -739,7 +739,7 @@ export function PortfolioView() {
                   <div key={sale.id} className="flex items-center justify-between p-5 hover:bg-paper transition">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 rounded bg-go-wash px-2 py-0.5 text-[10px] font-bold text-go">
+                        <span className="flex items-center gap-1 rounded-control bg-go-wash px-2 py-0.5 text-label font-bold text-go">
                           <Clock className="h-3 w-3" />
                           {sale.saleDate ? new Date(sale.saleDate).toLocaleDateString() : "Scheduled"}
                         </span>

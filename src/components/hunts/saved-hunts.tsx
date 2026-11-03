@@ -486,7 +486,7 @@ export function SavedHunts() {
                   <span className="block text-xs font-semibold">
                     {template.name}
                   </span>
-                  <span className="mt-1 block text-[10px] leading-4 text-ink-3">
+                  <span className="mt-1 block text-meta leading-4 text-ink-3">
                     {template.description}
                   </span>
                 </button>
@@ -925,7 +925,7 @@ export function SavedHunts() {
                                 {result.status === "match" && result.relevance ? (
                                   <span
                                     title={result.relevance.note || "Evidence-backed triage rank for this hunt match."}
-                                    className={`rounded px-2 py-1 text-[10px] font-semibold ${
+                                    className={`rounded-control px-2 py-1 text-label font-semibold ${
                                       result.relevance.band === "high"
                                         ? "bg-ink text-white"
                                         : result.relevance.band === "medium"
@@ -937,7 +937,7 @@ export function SavedHunts() {
                                   </span>
                                 ) : null}
                                 <span
-                                  className={`rounded px-2 py-1 text-[10px] font-semibold ${result.status === "match" ? "bg-line" : result.status === "unknown" ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-3"}`}
+                                  className={`rounded-control px-2 py-1 text-label font-semibold ${result.status === "match" ? "bg-line" : result.status === "unknown" ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-3"}`}
                                 >
                                   {result.status.replaceAll("_", " ")}
                                 </span>

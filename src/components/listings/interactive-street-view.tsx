@@ -143,7 +143,7 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
           <div>
             <p className="text-sm font-bold text-ink">Interactive Street View stays on Google Maps</p>
             <p className="mt-2 text-xs leading-relaxed text-ink-3">This page does not load a Maps key. The capture date and distance are below.</p>
-            <a href={launch} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white">
+            <a href={launch} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white">
               Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             </a>
           </div>
@@ -157,11 +157,11 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
             <p className="mt-2 text-xs leading-relaxed text-ink-3">Use Google Maps to check available street-level coverage.</p>
             <div className="mt-3 flex flex-wrap justify-center gap-2">
               {embedUrl || browserMapsKey() ? (
-                <button type="button" onClick={() => setAttempt((value) => value + 1)} className="inline-flex items-center gap-2 rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-bold">
+                <button type="button" onClick={() => setAttempt((value) => value + 1)} className="inline-flex items-center gap-2 rounded-control border border-line-strong bg-card px-3 py-2 text-xs font-bold">
                   <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Retry viewer
                 </button>
               ) : null}
-              <a href={launch} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white">
+              <a href={launch} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-control bg-ink px-3 py-2 text-xs font-bold text-white">
                 Open in Google Maps <ExternalLink className="h-3.5 w-3.5" aria-hidden />
               </a>
             </div>
@@ -173,13 +173,13 @@ export function InteractiveStreetView({ address, sourceLabel, metadata, onUnavai
         <button
           type="button"
           onClick={() => setAttempt((value) => value + 1)}
-          className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-card px-3 py-2 text-[10px] font-bold text-ink shadow"
+          className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-control bg-card px-3 py-2 text-label font-bold text-ink shadow"
         >
           <RotateCcw className="h-3 w-3" aria-hidden /> Return to property
         </button>
       ) : null}
 
-      <div className="pointer-events-none absolute bottom-7 left-3 max-w-[70%] rounded-lg bg-ink/85 px-3 py-2 text-[10px] text-white shadow">
+      <div className="pointer-events-none absolute bottom-7 left-3 max-w-[70%] rounded-control bg-ink/85 px-3 py-2 text-meta text-white shadow">
         <strong>{label}</strong><br />{sourceLabel || "Property source"} · {address}
       </div>
     </div>

@@ -24,7 +24,7 @@ const LEGACY = [
 
 // Lower these when the debt shrinks; never raise them. Use text-display/title/
 // lead/body/meta/label and rounded-card/control/full instead.
-const BASELINE = { pxType: 213, pxRadius: 0 };
+const BASELINE = { pxType: 0, pxRadius: 0 };
 
 const OLD_PALETTE = /\b(?:bg|text|border|ring|fill|stroke|from|via|to|divide|outline|decoration|accent|placeholder|caret)-(?:slate|gray|zinc|neutral|stone|amber|emerald|indigo|green|red|blue|sky|violet|rose|orange|yellow|purple|teal|cyan|lime|fuchsia|pink)-\d{2,3}\b|#(?:0F172A|111827|1E293B|E2E8F0|F8FAFC|64748B|475569|334155)\b/gi;
 const SOLID_WHITE = /\bbg-white(?![/\w-])/g;

@@ -47,7 +47,7 @@ export function PropertyImage({
   if (!src || imageError) {
     return (
       <div
-        className={`relative w-full ${ratioClass} bg-ink rounded-xl overflow-hidden border border-white/10 flex flex-col justify-between p-4 select-none ${className}`}
+        className={`relative w-full ${ratioClass} bg-ink rounded-control overflow-hidden border border-white/10 flex flex-col justify-between p-4 select-none ${className}`}
         role="img"
         aria-label={`Cadastral blueprint for ${address}`}
       >
@@ -63,10 +63,10 @@ export function PropertyImage({
 
         {/* Top Badges */}
         <div className="relative z-10 flex items-center justify-between gap-2">
-          <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white border border-white/20">
+          <span className="px-2.5 py-1 rounded-control text-label font-bold uppercase tracking-wider bg-white/10 text-white border border-white/20">
             {state} · {county}
           </span>
-          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-ink-2/90 text-white/75 border border-white/10">
+          <span className="px-2 py-0.5 rounded-control text-label font-semibold bg-ink-2/90 text-white/75 border border-white/10">
             {propType}
           </span>
         </div>
@@ -86,12 +86,12 @@ export function PropertyImage({
         </div>
 
         {/* Bottom Metadata */}
-        <div className="relative z-10 bg-ink/90 backdrop-blur-sm p-2.5 rounded-lg border border-white/10 flex items-center justify-between text-xs">
+        <div className="relative z-10 bg-ink/90 backdrop-blur-sm p-2.5 rounded-control border border-white/10 flex items-center justify-between text-xs">
           <div className="truncate pr-2">
             <p className="font-bold text-white truncate">{address}</p>
-            <p className="text-[10px] text-white/60">Opening Bid: <span className="text-white font-semibold">{bidFormatted}</span></p>
+            <p className="text-meta text-white/60">Opening Bid: <span className="text-white font-semibold">{bidFormatted}</span></p>
           </div>
-          <span className="text-[9px] uppercase tracking-wider text-white/60 shrink-0 font-bold">
+          <span className="text-meta uppercase tracking-wider text-white/60 shrink-0 font-bold">
             Blueprint
           </span>
         </div>
@@ -100,7 +100,7 @@ export function PropertyImage({
   }
 
   return (
-    <div className={`relative w-full ${ratioClass} overflow-hidden rounded-xl bg-ink ${className}`}>
+    <div className={`relative w-full ${ratioClass} overflow-hidden rounded-control bg-ink ${className}`}>
       <img
         src={src}
         alt={alt}

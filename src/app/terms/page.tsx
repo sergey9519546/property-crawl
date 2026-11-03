@@ -21,7 +21,7 @@ export default function TermsPage() {
       </div>
 
       <div className="border-b border-line pb-8">
-        <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Legal & Compliance</p>
+        <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Legal & Compliance</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
           Terms of Service
         </h1>
@@ -52,7 +52,7 @@ export default function TermsPage() {
         </section>
 
         {/* Section 2 */}
-        <section className="rounded-2xl border border-line-strong bg-paper p-6 space-y-3 text-ink">
+        <section className="rounded-card border border-line-strong bg-paper p-6 space-y-3 text-ink">
           <h2 className="text-lg font-bold flex items-center gap-2 text-ink">
             <ShieldAlert className="h-5 w-5 text-ink-3" />
             2. No outreach to owners, and the laws we follow
@@ -138,14 +138,14 @@ export default function TermsPage() {
         </section>
       </div>
 
-      <div className="mt-12 rounded-2xl border border-line bg-paper p-6 flex items-center justify-between">
+      <div className="mt-12 rounded-card border border-line bg-paper p-6 flex items-center justify-between">
         <div>
           <h3 className="font-semibold text-ink">Questions regarding these terms?</h3>
           <p className="text-xs text-ink-3 mt-1">Our compliance team reviews inquiries regarding public data and terms.</p>
         </div>
         <Link
           href="/contact"
-          className="rounded-lg bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
+          className="rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
         >
           Contact Legal
         </Link>

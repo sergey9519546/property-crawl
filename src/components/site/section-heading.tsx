@@ -22,7 +22,7 @@ export function SectionHeading({
   return (
     <GsapReveal className={centered ? "mx-auto max-w-[760px] text-center" : "max-w-[760px]"}>
       <p
-        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] ${
+        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-label font-semibold uppercase tracking-[0.12em] ${
           tone === "catch"
             ? "border-[var(--catch-border)] bg-[var(--catch-bg)] text-[var(--catch-ink)]"
             : "border-line bg-card text-ink-2"

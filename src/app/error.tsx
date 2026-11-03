@@ -18,7 +18,7 @@ export default function ErrorPage({
   return (
     <div className="min-h-screen bg-ink text-white flex flex-col items-center justify-center p-6 text-center">
       <div className="max-w-md w-full space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
+        <div className="w-16 h-16 rounded-card bg-catch-wash border border-catch/30 text-catch-ink flex items-center justify-center mx-auto">
           <AlertOctagon className="w-8 h-8" />
         </div>
 
@@ -31,7 +31,7 @@ export default function ErrorPage({
             Try loading the page again, or return to property search. Your saved work remains in the workspace.
           </p>
           {error.digest && (
-            <p className="text-[11px] font-mono text-white/60 pt-1">
+            <p className="text-label font-mono text-white/60 pt-1">
               Error reference: {error.digest}
             </p>
           )}
@@ -40,7 +40,7 @@ export default function ErrorPage({
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
           <button
             onClick={() => reset()}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-go-fill text-ink text-xs font-bold hover:bg-go-fill/85 transition shadow-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-control bg-go-fill text-ink text-xs font-bold hover:bg-go-fill/85 transition shadow-sm"
           >
             <RefreshCw className="w-4 h-4" />
             <span>Try Again</span>
@@ -48,7 +48,7 @@ export default function ErrorPage({
 
           <Link
             href="/listings"
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition shadow-sm"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-control bg-white/10 border border-white/15 text-white text-xs font-bold hover:bg-white/15 transition shadow-sm"
           >
             <Home className="w-4 h-4" />
             <span>Return to properties</span>

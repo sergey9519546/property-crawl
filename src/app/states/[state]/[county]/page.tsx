@@ -327,7 +327,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
                   className="inline-flex items-center gap-1.5 rounded-control border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink-2"
                 >
                   <span className="font-semibold uppercase tracking-wider">{srcKey}</span>
-                  <span className="rounded-full bg-line px-1.5 py-0.2 text-[10px] font-bold tabular-nums text-ink-2">
+                  <span className="rounded-full bg-line px-1.5 py-0.2 text-label font-bold tabular-nums text-ink-2">
                     {count}
                   </span>
                 </span>

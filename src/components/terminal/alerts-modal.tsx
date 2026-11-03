@@ -157,10 +157,10 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Deal Alerts Manager" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-card text-ink shadow-2xl">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Deal Alerts Manager" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-card bg-card text-ink shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-line p-6">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-3">Your research workspace</p>
+            <p className="text-label font-bold uppercase tracking-[0.16em] text-ink-3">Your research workspace</p>
             <h2 className="mt-1 text-2xl font-semibold tracking-tight">Saved searches</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-3">Save your criteria, see matching inventory, and reopen the search in one click.</p>
           </div>
@@ -169,11 +169,11 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
 
         <div className="space-y-6 overflow-y-auto p-6">
           <div className="flex items-center justify-between">
-            <p className="rounded-xl bg-paper px-4 py-3 text-xs leading-relaxed text-ink-2">
+            <p className="rounded-control bg-paper px-4 py-3 text-xs leading-relaxed text-ink-2">
               Workspace-backed. Runs against the live pool on demand and records matches for later review. Email is sent only when this search stores an address and the server has RESEND_API_KEY and RESEND_FROM. Otherwise matches stay in this workspace.
             </p>
             {unreadCount > 0 && (
-              <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-paper px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-line">
+              <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-paper px-2 py-1 text-label font-semibold text-ink-2 hover:bg-line">
                 <Check className="h-3.5 w-3.5" /> Mark {unreadCount} read
               </button>
             )}
@@ -182,26 +182,26 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
           <form className="space-y-4" onSubmit={handleCreate}>
             <div>
               <label htmlFor="saved-search-name" className="text-xs font-semibold text-ink-3">Search name</label>
-              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="e.g. New Jersey under $250k" className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm focus:outline-none" />
+              <input id="saved-search-name" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="e.g. New Jersey under $250k" className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div>
                 <label htmlFor="saved-search-state" className="text-xs font-semibold text-ink-3">State market</label>
-                <select id="saved-search-state" value={state} onChange={(event) => setState(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
+                <select id="saved-search-state" value={state} onChange={(event) => setState(event.target.value)} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
                   <option value="All">All available states</option>
                   {availableStates.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="saved-search-score" className="text-xs font-semibold text-ink-3">Minimum modeled score</label>
-                <select id="saved-search-score" value={minScore} onChange={(event) => setMinScore(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
+                <select id="saved-search-score" value={minScore} onChange={(event) => setMinScore(Number(event.target.value))} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
                   <option value={0}>Any / not modeled</option>
                   {[50, 60, 70, 80, 90].map((value) => <option key={value} value={value}>{value} or higher</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="saved-search-bid" className="text-xs font-semibold text-ink-3">Maximum opening bid</label>
-                <select id="saved-search-bid" value={maxBid} onChange={(event) => setMaxBid(Number(event.target.value))} className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm">
+                <select id="saved-search-bid" value={maxBid} onChange={(event) => setMaxBid(Number(event.target.value))} className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm">
                   <option value={0}>Any / not published</option>
                   {[100000, 150000, 250000, 500000, 1000000].map((value) => <option key={value} value={value}>$ {value.toLocaleString()}</option>)}
                 </select>
@@ -209,16 +209,16 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
             </div>
             <div>
               <label htmlFor="saved-search-email" className="text-xs font-semibold text-ink-3">Notify email (optional)</label>
-              <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-card px-3 text-sm focus:outline-none" />
+              <input id="saved-search-email" type="email" value={notifyEmail} maxLength={320} onChange={(event) => setNotifyEmail(event.target.value)} placeholder="you@company.com" className="mt-1 h-11 w-full rounded-control border border-line-strong bg-card px-3 text-sm focus:outline-none" />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-3" aria-live="polite">{draftMatches} matching records in loaded inventory</p>
-              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-60"><Bookmark className="h-4 w-4" /> Save search</button>
+              <button type="submit" disabled={loading} className="inline-flex items-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2 disabled:opacity-60"><Bookmark className="h-4 w-4" /> Save search</button>
             </div>
           </form>
 
           {(feedback || error) && (
-            <p role="status" className={`rounded-xl px-4 py-3 text-sm ${error ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-2"}`}>
+            <p role="status" className={`rounded-control px-4 py-3 text-sm ${error ? "bg-catch-wash text-catch-ink" : "bg-paper text-ink-2"}`}>
               {error || feedback}
             </p>
           )}
@@ -226,10 +226,10 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
           <section aria-label="Your saved searches" className="space-y-3 border-t border-line pt-5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">Your searches ({serverSearches.length})</h3>
-              {loading && <span className="text-[11px] text-ink-3">Loading…</span>}
+              {loading && <span className="text-label text-ink-3">Loading…</span>}
             </div>
             {!serverSearches.length && !loading && (
-              <div className="rounded-2xl border border-dashed border-line p-6 text-center">
+              <div className="rounded-control border border-dashed border-line p-6 text-center">
                 <Search className="mx-auto h-6 w-6 text-ink-3" />
                 <p className="mt-2 text-sm text-ink-3">No saved searches yet. Add filters above and save.</p>
               </div>
@@ -240,7 +240,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
               const matchCountForSearch = alertMatches.filter((m) => m.searchId === search.id).length;
               const unreadForSearch = alertMatches.filter((m) => m.searchId === search.id && !m.readAt).length;
               return (
-                <article key={search.id} className="rounded-2xl border border-line p-4">
+                <article key={search.id} className="rounded-control border border-line p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h4 className="break-words font-semibold">{search.name}</h4>
@@ -248,7 +248,7 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                         {search.state === "All" ? "All markets" : search.state} · {search.minScore > 0 ? "Score ≥ " + search.minScore : "Any score"} · {search.maxBid > 0 ? "Bid ≤ $" + search.maxBid.toLocaleString() : "Any bid"}
                         {server?.lastRunAt ? ` · last run ${new Date(server.lastRunAt).toLocaleDateString()}` : ""}
                       </p>
-                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-line px-1.5 py-0.5 text-[10px] font-semibold text-ink">{unreadForSearch} new</span>}
+                      {unreadForSearch > 0 && <span className="mt-1 inline-block rounded bg-line px-1.5 py-0.5 text-label font-semibold text-ink">{unreadForSearch} new</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -279,10 +279,10 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                       {runningId === search.id ? "Running…" : "Run against live pool"}
                     </button>
                     {matchCountForSearch > 0 && (
-                      <span className="text-[11px] text-ink-3">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
+                      <span className="text-label text-ink-3">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
                     )}
                   </div>
-                  <p className="mt-1 text-[11px] text-ink-3">Includes explicitly labeled demo / unverified records. This is not an alert-delivery service.</p>
+                  <p className="mt-1 text-label text-ink-3">Includes explicitly labeled demo / unverified records. This is not an alert-delivery service.</p>
                 </article>
               );
             })}

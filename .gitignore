@@ -125,3 +125,4 @@ reports/release-gate-ledger.json
 .vercel
 scripts/cloudflared.exe
 scripts/check-render-deploy.js
+.impeccable/
