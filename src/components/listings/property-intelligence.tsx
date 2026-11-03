@@ -24,6 +24,73 @@ type Dossier = DiscoveryEvidenceData & {
   opportunitySummary?: { supported: number; unknown: number; contradicted: number };
   opportunityDisclaimer?: string;
   hudSafmr?: { zip: string; bedrooms: number; fairMarketRent: number; paymentStandard90: Record<string, number>; paymentStandard110: Record<string, number>; rents: Record<string, number> } | null;
+  possessionTimeline?: {
+    state: string | null;
+    saleType: string | null;
+    quietTitle?: { minDays: number | null; maxDays: number | null; statutory: string | null; notes: string | null };
+    writOfPossession?: { minDays: number | null; maxDays: number | null; statutory: string | null; notes: string | null };
+    carryCost?: {
+      estimatedHoldDays: number;
+      requiresQuietTitle: boolean;
+      missingInputs: string[];
+      basis: string;
+      totalEstimatedCost: number | null;
+    };
+    summary?: string;
+  };
+  auctionDepositTerms?: {
+    rules?: {
+      platform: string;
+      depositPercent: number;
+      minimumDeposit: number;
+      maximumDeposit: number | null;
+      paymentMethod: string;
+      leadTimeHours: number;
+      refundTurnaroundDays: number;
+      settlementWindowDays: number;
+      statutoryCitation?: string;
+      forfeitureRiskTerms?: string;
+    };
+    requiredDeposit?: {
+      targetBid: number;
+      requiredDeposit: number;
+      depositPercent: number;
+      basis: string;
+      paymentMethod: string;
+      depositDeadline: string | null;
+      leadTimeHours: number;
+      refundTurnaroundDays: number;
+      settlementWindowDays: number;
+    };
+  };
+  auctionMicrostructure?: {
+    probability: number | null;
+    confidence: string;
+    factors: { factor: string; impact: string; weight: number; description: string }[];
+    statutoryContext?: {
+      state: string;
+      statute: string;
+      maxDebtorAdjournments: number;
+      adjournmentDurationDays: number;
+      rule: string;
+    } | null;
+    notes?: string;
+  };
+  surplusWaterfall?: {
+    winningBid: number;
+    openingBid: number;
+    grossSurplus: number;
+    adjudgedDebtSatisfied: number;
+    deficiencyAmount: number;
+    allocatedJuniorClaims: number;
+    formerOwnerEquity: number;
+    uncoveredClaims: number;
+    constitutionalBasis?: {
+      landmarkCase: string;
+      constitutionalClause: string;
+      holding: string;
+    };
+  };
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
     parcel: { status: string; rawParcelId?: string; properties: Record<string, unknown>; source?: { url: string } } | null;
@@ -206,6 +273,203 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
                 </p>
                 <p className="mt-0.5 text-xs text-ink-3">
                   {hazards.layers?.usgsTerrain?.status === 'unavailable' ? 'USGS 3DEP slope unavailable' : (hazards.underwritingImpact?.gradingContingencyRequired ? 'Steep Slope / Engineering Required' : 'Standard Buildable Grade')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        {dossier.auctionDepositTerms && dossier.auctionDepositTerms.rules && (
+          <div className="rounded-xl border border-line bg-paper p-4" data-testid="auction-deposit-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">
+                Auction Escrow &amp; Deposit · {humanize(dossier.auctionDepositTerms.rules.platform || 'Judicial Sheriff')}
+              </h3>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+                {dossier.auctionDepositTerms.requiredDeposit?.depositPercent
+                  ? `${Math.round(dossier.auctionDepositTerms.requiredDeposit.depositPercent * 100)}% Deposit`
+                  : 'Statutory Floor'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Statutory upfront escrow rules, payment method constraints, and cashier turnaround timelines.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Required Deposit</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.auctionDepositTerms.requiredDeposit?.requiredDeposit != null
+                    ? `$${dossier.auctionDepositTerms.requiredDeposit.requiredDeposit.toLocaleString()}`
+                    : 'Calculated at bid'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Basis: {humanize(dossier.auctionDepositTerms.requiredDeposit?.basis || 'percentage')}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Payment Method</span>
+                <p className="mt-1 text-sm font-bold text-ink capitalize">
+                  {(dossier.auctionDepositTerms.requiredDeposit?.paymentMethod || dossier.auctionDepositTerms.rules.paymentMethod || 'cashier_check').replace(/_/g, ' ')}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Lead time: {dossier.auctionDepositTerms.rules.leadTimeHours ?? 24}h prior to gavel
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Settlement &amp; Refund</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.auctionDepositTerms.rules.settlementWindowDays ?? 30}-day window
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Refund turnaround: ~{dossier.auctionDepositTerms.rules.refundTurnaroundDays ?? 5} days
+                </p>
+              </div>
+            </div>
+            {dossier.auctionDepositTerms.rules.statutoryCitation && (
+              <p className="mt-2 text-[11px] text-ink-3">
+                Citation: {dossier.auctionDepositTerms.rules.statutoryCitation}
+              </p>
+            )}
+          </div>
+        )}
+        {dossier.possessionTimeline && (
+          <div className="rounded-xl border border-line bg-paper p-4" data-testid="possession-timeline-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">
+                Post-Sale Possession &amp; Title Timelines
+              </h3>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+                {dossier.possessionTimeline.state || 'Statutory'} Jurisdiction
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Holding period to legal possession, quiet title requirements, and holding carry cost.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Quiet Title Action</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.possessionTimeline.quietTitle?.minDays != null
+                    ? `${dossier.possessionTimeline.quietTitle.minDays}–${dossier.possessionTimeline.quietTitle.maxDays} days`
+                    : 'Direct deed / not required'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.possessionTimeline.quietTitle?.statutory || 'Judicial foreclosure direct conveyance'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Writ of Possession</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.possessionTimeline.writOfPossession?.minDays != null
+                    ? `${dossier.possessionTimeline.writOfPossession.minDays}–${dossier.possessionTimeline.writOfPossession.maxDays} days`
+                    : 'Unencoded timeline'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.possessionTimeline.writOfPossession?.statutory || 'Sheriff writ execution'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Holding Carry Cost</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.possessionTimeline.carryCost?.totalEstimatedCost != null
+                    ? `$${dossier.possessionTimeline.carryCost.totalEstimatedCost.toLocaleString()}`
+                    : 'Unconfirmed'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.possessionTimeline.carryCost?.missingInputs && dossier.possessionTimeline.carryCost.missingInputs.length > 0
+                    ? `Missing: ${dossier.possessionTimeline.carryCost.missingInputs.join(', ')}`
+                    : `Basis: ${dossier.possessionTimeline.carryCost?.basis || 'Observed carry'}`}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        {dossier.auctionMicrostructure && (
+          <div className="rounded-xl border border-line bg-paper p-4" data-testid="auction-microstructure-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">Auction Proceed Probability &amp; Microstructure</h3>
+              <span className={cn(
+                "rounded-full border px-2 py-0.5 text-xs font-semibold",
+                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability >= 0.7 ? "border-emerald-500/40 bg-emerald-50 text-emerald-800" :
+                dossier.auctionMicrostructure.probability != null && dossier.auctionMicrostructure.probability <= 0.4 ? "border-catch/40 bg-catch-wash text-catch-ink" :
+                "border-line bg-card text-ink-2"
+              )}>
+                {dossier.auctionMicrostructure.probability != null
+                  ? `${Math.round(dossier.auctionMicrostructure.probability * 100)}% Proceed Prob (${dossier.auctionMicrostructure.confidence})`
+                  : 'Insufficient Docket Data'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Venue docket clearing rates, debtor stay exhaustion, and venue postponement risks.
+            </p>
+            {dossier.auctionMicrostructure.statutoryContext && (
+              <p className="mt-2 text-xs font-medium text-ink-2">
+                Statutory Context ({dossier.auctionMicrostructure.statutoryContext.state}): {dossier.auctionMicrostructure.statutoryContext.rule}
+              </p>
+            )}
+            {dossier.auctionMicrostructure.factors && dossier.auctionMicrostructure.factors.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {dossier.auctionMicrostructure.factors.slice(0, 3).map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-ink-3">
+                    <span className={cn(
+                      "font-semibold",
+                      f.impact === 'positive' ? "text-emerald-700" : "text-catch-ink"
+                    )}>
+                      {f.impact === 'positive' ? '▲' : '▼'} {f.weight > 0 ? `+${(f.weight * 100).toFixed(0)}%` : `${(f.weight * 100).toFixed(0)}%`}
+                    </span>
+                    <span>{f.description}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {dossier.surplusWaterfall && (
+          <div className="rounded-xl border border-line bg-paper p-4" data-testid="surplus-waterfall-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">Excess Proceeds Waterfall</h3>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+                Tyler v. Hennepin County (2023)
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Constitutional Fifth Amendment allocation of excess bidding proceeds beyond foreclosing debt.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Adjudged Debt</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.surplusWaterfall.adjudgedDebtSatisfied != null
+                    ? `$${Math.round(dossier.surplusWaterfall.adjudgedDebtSatisfied).toLocaleString()}`
+                    : 'Not published'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.surplusWaterfall.deficiencyAmount > 0
+                    ? `Deficiency: $${Math.round(dossier.surplusWaterfall.deficiencyAmount).toLocaleString()}`
+                    : 'Adjudged debt satisfied'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Junior Lien Claims</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.surplusWaterfall.allocatedJuniorClaims != null
+                    ? `$${Math.round(dossier.surplusWaterfall.allocatedJuniorClaims).toLocaleString()}`
+                    : '$0'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  {dossier.surplusWaterfall.uncoveredClaims > 0
+                    ? `Uncovered: $${Math.round(dossier.surplusWaterfall.uncoveredClaims).toLocaleString()}`
+                    : 'Junior priority claims'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-line bg-card p-2.5">
+                <span className="text-[10px] font-bold uppercase text-ink-3">Former Owner Equity</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.surplusWaterfall.formerOwnerEquity != null
+                    ? `$${Math.round(dossier.surplusWaterfall.formerOwnerEquity).toLocaleString()}`
+                    : '$0'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Protected surplus equity
                 </p>
               </div>
             </div>
