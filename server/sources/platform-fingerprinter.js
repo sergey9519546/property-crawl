@@ -102,6 +102,16 @@ const SUPPORTED_PLATFORMS = [
     requiresRobotsCheck: true,
     primaryDomains: ['realestatesales.gov', 'api.gsa.gov', 'gsaauctions.gov'],
     description: 'U.S. General Services Administration federal surplus real property auctions and open-data REST API.'
+  },
+  {
+    id: 'la_recorder',
+    name: 'Los Angeles County Registrar-Recorder / County Clerk',
+    category: 'preforeclosure_intake',
+    adapterModule: 'server/scrapers/adapters/la-recorder.js',
+    supportsDirectApi: false,
+    requiresRobotsCheck: true,
+    primaryDomains: ['lavote.gov', 'lavote.net'],
+    description: 'Los Angeles County notice of default and trustee sale document intake and subscriber feed parsing (A31-09).'
   }
 ];
 
@@ -308,6 +318,15 @@ function classifySourceUrl(url) {
     };
   }
 
+  // 10. LA County Recorder (A31-09)
+  if (hostname.includes('lavote.gov') || hostname.includes('lavote.net')) {
+    return {
+      platform: 'la_recorder',
+      confidence: 'HIGH',
+      matchedRule: `domain:la_recorder:${hostname}`
+    };
+  }
+
   return {
     platform: 'unknown',
     confidence: 'UNKNOWN',
@@ -432,6 +451,18 @@ const HTML_SIGNATURE_SPECS = [
     ],
     supporting: [
       { name: 'GSA government domain', pattern: /gsa\.gov/i }
+    ]
+  },
+  {
+    platform: 'la_recorder',
+    strong: [
+      { name: 'LA County Registrar-Recorder', pattern: /Registrar-Recorder\s*\/\s*County\s*Clerk/i },
+      { name: 'lavote domain reference', pattern: /lavote\.(?:gov|net)/i },
+      { name: 'LA County Notice of Default', pattern: /Notice\s*of\s*Default[\s\S]{1,100}Los\s*Angeles/i }
+    ],
+    supporting: [
+      { name: 'Assessor Identification Number (AIN)', pattern: /\bAIN\b|Assessor'?s\s*Identification\s*Number/i },
+      { name: 'Notice of Trustee Sale', pattern: /Notice\s*of\s*Trustee\s*Sale/i }
     ]
   }
 ];

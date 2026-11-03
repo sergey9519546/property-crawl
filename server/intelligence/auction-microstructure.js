@@ -3,27 +3,17 @@
 /**
  * server/intelligence/auction-microstructure.js
  *
- * Docket Clearing-Rate Microstructure & Proceed Probability Engine.
+ * Auction Microstructure & Docket Clearing-Rate Engine.
  *
- * Models auction clearing microstructure from historical docket events:
- * 1. Categorizes auction outcomes:
- *    - 'scheduled': active / scheduled on auction docket
- *    - 'postponed': adjourned / rescheduled / continued
- *    - 'stayed': automatic bankruptcy stay / court injunction
- *    - 'sold_plaintiff': plaintiff buyback / bank credit-bid / REO reversion
- *    - 'sold_third_party': competitive sale to third-party investor
- *    - 'cancelled': satisfied / dismissed / redeemed prior to auction
+ * Implements:
+ * 1. Docket clearing-rate analytics from empirical county sheriff/trustee sales dockets.
+ * 2. Pre-auction proceed probability evaluation taking into account statutory adjournment
+ *    exhaustion (e.g. New Jersey N.J.S.A. § 2A:17-36: two 14-day statutory adjournments).
+ * 3. Empirical liquidation rates vs. plaintiff buyback (credit bid) rates.
  *
- * 2. Computes empirical clearing rates:
- *    - clearingRate = thirdPartySales / (soldPlaintiff + soldThirdParty || 1)
- *    - postponementRate = postponed / totalDockets
- *    - stayRate = stayed / totalDockets
- *    - plaintiffBuybackRate = soldPlaintiff / (soldPlaintiff + soldThirdParty || 1)
- *
- * 3. Evaluates Proceed Probability:
- *    - Factors in prior debtor postponements (e.g. CivilView 2 debtor stays in NJ under N.J.S.A. § 2A:17-36).
- *    - Zero-Fabrication Invariant: If docket stats are missing or insufficient, returns
- *      { probability: null, confidence: 'INSUFFICIENT_DOCKET_HISTORY', factors: [] }.
+ * Zero-Fabrication Invariant:
+ * If countyStats are missing, null, or have zero sample history, returns
+ * probability: null with confidence: 'INSUFFICIENT_DOCKET_HISTORY'.
  */
 
 const DOCKET_OUTCOMES = Object.freeze([
@@ -33,6 +23,7 @@ const DOCKET_OUTCOMES = Object.freeze([
   'sold_plaintiff',
   'sold_third_party',
   'cancelled',
+  'unknown',
 ]);
 
 /**
@@ -48,6 +39,7 @@ function normalizeDocketOutcome(event) {
     : String(event.outcome || event.status || event.disposition || event.lifecycleStatus || '');
 
   const text = raw.trim().toLowerCase();
+  if (!text) return 'scheduled';
 
   // Stay / Bankruptcy
   if (/stay|bankruptcy|injunction|chapter\s*(?:7|11|13)|automatic\s*stay/i.test(text)) {
@@ -74,16 +66,18 @@ function normalizeDocketOutcome(event) {
     return 'sold_third_party';
   }
 
-  // Plain 'sold' without plaintiff indication defaults to sold_third_party in sales records
-  if (/^sold$/i.test(text)) {
-    return 'sold_third_party';
+  // Scheduled / Active
+  if (/schedul|active|pend|calendar|upcoming/i.test(text)) {
+    return 'scheduled';
   }
 
-  return 'scheduled';
+  return 'unknown';
 }
 
 /**
  * Calculates empirical docket clearing analytics from an array of historical auction events.
+ *
+ * Zero-Fabrication: When totalDockets is 0, rates return null rather than 0.
  *
  * @param {Array<object|string>} historicalEvents
  * @param {object} [options={}]
@@ -102,18 +96,19 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
     sold_plaintiff: 0,
     sold_third_party: 0,
     cancelled: 0,
+    unknown: 0,
   };
 
   if (!Array.isArray(historicalEvents) || historicalEvents.length === 0) {
     return {
       totalDockets: 0,
       outcomeCounts: counts,
-      clearingRate: 0,
-      postponementRate: 0,
-      stayRate: 0,
-      plaintiffBuybackRate: 0,
-      saleRate: 0,
-      cancellationRate: 0,
+      clearingRate: null,
+      postponementRate: null,
+      stayRate: null,
+      plaintiffBuybackRate: null,
+      saleRate: null,
+      cancellationRate: null,
       sampleSufficient: false,
       sampleSize: 0,
     };
@@ -143,12 +138,12 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
     return {
       totalDockets: 0,
       outcomeCounts: counts,
-      clearingRate: 0,
-      postponementRate: 0,
-      stayRate: 0,
-      plaintiffBuybackRate: 0,
-      saleRate: 0,
-      cancellationRate: 0,
+      clearingRate: null,
+      postponementRate: null,
+      stayRate: null,
+      plaintiffBuybackRate: null,
+      saleRate: null,
+      cancellationRate: null,
       sampleSufficient: false,
       sampleSize: 0,
     };
@@ -159,7 +154,7 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
     if (counts[outcome] !== undefined) {
       counts[outcome] += 1;
     } else {
-      counts.scheduled += 1;
+      counts.unknown += 1;
     }
   }
 
@@ -172,8 +167,8 @@ function calculateDocketClearingAnalytics(historicalEvents, options = {}) {
   // postponementRate: postponed / totalDockets
   // stayRate: stayed / totalDockets
   // plaintiffBuybackRate: soldPlaintiff / (soldPlaintiff + soldThirdParty || 1)
-  const clearingRate = totalSales > 0 ? Number((soldThirdParty / totalSales).toFixed(4)) : 0;
-  const plaintiffBuybackRate = totalSales > 0 ? Number((soldPlaintiff / totalSales).toFixed(4)) : 0;
+  const clearingRate = totalSales > 0 ? Number((soldThirdParty / totalSales).toFixed(4)) : null;
+  const plaintiffBuybackRate = totalSales > 0 ? Number((soldPlaintiff / totalSales).toFixed(4)) : null;
   const postponementRate = Number((counts.postponed / totalDockets).toFixed(4));
   const stayRate = Number((counts.stayed / totalDockets).toFixed(4));
   const cancellationRate = Number((counts.cancelled / totalDockets).toFixed(4));
@@ -233,8 +228,6 @@ function evaluateAuctionProceedProbability(listing = {}, countyStats = null) {
   const isNJ = state === 'NJ' || source === 'civilview';
 
   // Base proceed probability from empirical docket history:
-  // Base probability = fraction of dockets that actually reached sale
-  // or (1 - postponementRate - stayRate - cancellationRate)
   const empiricalSaleRate = countyStats.saleRate || (countyStats.totalDockets > 0
     ? (countyStats.outcomeCounts.sold_plaintiff + countyStats.outcomeCounts.sold_third_party) / countyStats.totalDockets
     : 0.50);

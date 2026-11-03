@@ -26,6 +26,7 @@
     "dev:api": "node --env-file-if-exists=.env.local server/server.js",
     "dev:workspace": "node scripts/workspace-runner.js",
     "discovery:benchmark": "node scripts/benchmark-discovery.js",
+    "discovery:compact": "node scripts/compact-snapshots.js",
     "discovery:import": "node scripts/discovery-import.js",
     "discovery:import:legacy": "node scripts/discovery-import-legacy.js",
     "discovery:local": "node scripts/local-discovery.js",

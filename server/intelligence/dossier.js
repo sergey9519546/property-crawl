@@ -4,6 +4,10 @@ const { validateListingForIngestion } = require('../scrapers/validation');
 const { evaluateOpportunitySignals } = require('./signals');
 const { buildDocumentEvidence } = require('./document-evidence');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
+const { buildPossessionDossier } = require('./post-sale-possession');
+const { calculateSurplusEquityWaterfall } = require('./surplus-waterfall');
+const { evaluateAuctionProceedProbability } = require('./auction-microstructure');
+const { getAuctionDepositRules, calculateRequiredDeposit } = require('./escrow-optimizer');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
@@ -85,6 +89,20 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   const opportunityEvaluation = evaluateOpportunitySignals(listing, { observations, publicRecords, now, historyUnavailable });
   const documentEvidence = buildDocumentEvidence(listing, { capturedEvidence, observedAt: timestamp, sourceUrl: source.url });
   gaps.sort((a, b) => (TIER_ORDER[a.priorityTier] ?? 2) - (TIER_ORDER[b.priorityTier] ?? 2) || (b.potentialPointsGain || 0) - (a.potentialPointsGain || 0));
+  const possessionTimeline = buildPossessionDossier(listing);
+  const auctionDepositTerms = {
+    rules: getAuctionDepositRules(listing.source, { state: listing.state }),
+    requiredDeposit: calculateRequiredDeposit(listing),
+  };
+  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, null);
+  const surplusWaterfall = calculateSurplusEquityWaterfall({
+    winningBid: listing.openingBid,
+    openingBid: listing.openingBid,
+    judgmentAmount: listing.judgmentAmount,
+    propertyAddress: listing.address,
+    state: listing.state,
+    liens: listing.liens || publicRecords?.liens || [],
+  });
   return {
     evidenceReceipt: verifiedSnapshotReceipt(listing),
     publicBenchmarks: computePublicBenchmarkConsensus({...listing,parcel:publicRecords?.parcel || null}),
@@ -92,6 +110,10 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     source, facts, signals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),
     federalHazards: listing.federalHazards || null,
+    possessionTimeline,
+    auctionDepositTerms,
+    auctionMicrostructure,
+    surplusWaterfall,
     opportunitySignals: opportunityEvaluation.signals,
     trajectory: opportunityEvaluation.trajectory,
     triagePriority: opportunityEvaluation.triagePriority,

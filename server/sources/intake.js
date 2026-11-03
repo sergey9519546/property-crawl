@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const net = require('node:net');
 const { loadStore, putRecord, queryRecords, updateRecord } = require('./store');
+const { identifyAdapterForSource } = require('./platform-fingerprinter');
 
 const ALLOWED_KINDS = new Set(['text', 'csv', 'json']);
 const MAX_BODY_BYTES = 512 * 1024;
@@ -230,7 +231,8 @@ function validateSubmission(input, options = {}) {
     }
   }
   if (errors.length) return { isValid: false, errors };
-  return { isValid: true, errors: [], value: { sourceId, source, sourceUrl, capturedAt, kind, original } };
+  const platformFingerprint = sourceUrl ? identifyAdapterForSource(sourceUrl, kind === 'text' ? (original?.body || null) : null) : null;
+  return { isValid: true, errors: [], value: { sourceId, source, sourceUrl, capturedAt, kind, original, platformFingerprint } };
 }
 
 function getSummary(record, options = {}) {
@@ -247,6 +249,7 @@ function getSummary(record, options = {}) {
     content: record.content,
     provenance: record.provenance,
     review: record.review || null,
+    platformFingerprint: record.platformFingerprint || null,
   };
   summary.customSource = record.source?.cataloged === false ? {
     name: record.source.name,

@@ -114,7 +114,7 @@ test('Auction Microstructure: filters by county and state when requested', () =>
 test('Auction Microstructure: handles empty or invalid event list gracefully', () => {
   const emptyStats = calculateDocketClearingAnalytics([]);
   assert.equal(emptyStats.totalDockets, 0);
-  assert.equal(emptyStats.clearingRate, 0);
+  assert.equal(emptyStats.clearingRate, null);
   assert.equal(emptyStats.sampleSufficient, false);
 
   const nullStats = calculateDocketClearingAnalytics(null);

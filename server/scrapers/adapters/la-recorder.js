@@ -13,6 +13,12 @@
  * - Non-judicial (deed-of-trust) track only; no Lis Pendens required for DOT.
  * - AIN (Assessor's Identification Number): format XX-XXXX-XXX-XX (10 digits).
  * - Trustee sales conducted on courthouse steps between 9am–5pm on weekdays.
+ *
+ * Audit Invariant & Policy (A31-09):
+ * Per LA County Registrar-Recorder policy (lavote.gov/home/recorder/real-estate-records/general-info),
+ * real-estate records and indexes are not available online for automated scraping.
+ * This module operates as a deterministic document-evidence parser for intaken recorded notices
+ * (NOD/NTS/Trustee Deeds) collected via authorized subscriber feeds, manual intake, or records requests.
  */
 
 const { capturedRecordUrl } = require('./record-link');
@@ -543,6 +549,24 @@ function parseLaSearchHtml(html = '', options = {}) {
   return records;
 }
 
+/**
+ * Parses raw text or structured document from an LA County recorder manual intake,
+ * official public records request, or subscriber feed into standardized distress records.
+ *
+ * Aligned with Audit Finding A31-09:
+ * lavote.gov real-estate index is not available online. This intake parser processes
+ * verified offline document transmissions and official public records request packages.
+ *
+ * @param {string|Object} documentContent - Raw text, OCR transcript, or structured document
+ * @param {Object} [options]
+ * @returns {Array<Object>} Extracted distress records
+ */
+function parseLaDocumentIntake(documentContent, options = {}) {
+  if (!documentContent) return [];
+  const text = typeof documentContent === 'string' ? documentContent : JSON.stringify(documentContent);
+  return parseLaSearchHtml(text, options);
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
@@ -560,4 +584,5 @@ module.exports = {
   cleanCellText,
   parseLaRecordRow,
   parseLaSearchHtml,
+  parseLaDocumentIntake,
 };

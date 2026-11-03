@@ -212,7 +212,7 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
     rawItem.itemCategory ||
     rawItem.item_category ||
     rawItem.category ||
-    'Real Property';
+    null;
 
   const loc = parseGsaLocation(rawItem);
   const state = loc.state || 'US';
@@ -240,7 +240,7 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
     rawItem.auction_url ||
     rawItem.itemUrl ||
     rawItem.item_url ||
-    `https://gsaauctions.gov/auction/details/${encodeURIComponent(auctionNumber)}`;
+    null;
 
   return {
     id: listingId,
@@ -340,12 +340,12 @@ function parseGsaAuctionsApiResponse(jsonOrObject, options = {}) {
       /real|commercial|land|residential|house|building|property|office|warehouse|facility|acre/i.test(cat) ||
       /real\s*estate|real\s*property|building|parcel|acre/i.test(raw.propertyDescription || raw.itemDescription || '');
 
-    if (options.realEstateOnly !== false && !isRealEstate && cat.length > 0) {
-      // Non-real-estate GSA item (e.g. vehicles, tools)
+    if (options.realEstateOnly !== false && !isRealEstate) {
+      // Non-real-estate GSA item (e.g. vehicles, surplus equipment, or unverified category)
       rejected.push({
         auctionNumber: raw.auctionNumber || raw.saleNumber || 'UNKNOWN',
         reason: 'non_real_estate_category',
-        category: cat,
+        category: cat || 'unspecified',
       });
       continue;
     }

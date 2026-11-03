@@ -9,6 +9,7 @@
  * identical snapshots while preserving:
  *   - The first and last observation of each run
  *   - Every record where a status transition occurred
+ *   - Unhashed observations (never dropped by false null === null equality)
  *
  * Content identity is determined by SHA-256 hash of canonical JSON,
  * consistent with the evidence-ledger's canonicalStringify approach.
@@ -59,24 +60,46 @@ function computeContentHash(payload) {
 }
 
 /**
+ * Resolves or computes contentHash for an observation record.
+ * Ensures observations without an explicit contentHash field compute one
+ * deterministically rather than returning null.
+ *
+ * @param {*} obs - Observation record
+ * @returns {string|null} Hex digest or null if object unhashable
+ */
+function resolveHash(obs) {
+  if (obs && typeof obs.contentHash === 'string' && obs.contentHash.length > 0) {
+    return obs.contentHash;
+  }
+  if (obs && (obs.payload !== undefined || obs.data !== undefined)) {
+    return computeContentHash(obs.payload !== undefined ? obs.payload : obs.data);
+  }
+  if (obs && typeof obs === 'object') {
+    return computeContentHash(obs);
+  }
+  return null;
+}
+
+/**
  * Eliminates consecutive duplicate observations using their contentHash fields.
  * When two adjacent records share the same contentHash, the later one is dropped.
  * Does NOT apply any "always retain first/last" logic — that is handled by
  * compactObservations().
  *
- * @param {Array<Object>} observations - Ordered observation records, each with
- *   at least a `contentHash` string field.
+ * Unhashed records (hash === null) are never dropped as duplicates of each other.
+ *
+ * @param {Array<Object>} observations - Ordered observation records.
  * @returns {Array<Object>} Deduplicated observations (subset of input)
  */
 function dedupConsecutive(observations) {
   if (!Array.isArray(observations) || observations.length === 0) return [];
 
   const result = [];
-  let lastHash = null;
+  let lastHash = Symbol('initial');
 
   for (const obs of observations) {
-    const hash = obs.contentHash || null;
-    if (hash !== lastHash) {
+    const hash = resolveHash(obs);
+    if (hash === null || hash !== lastHash) {
       result.push(obs);
       lastHash = hash;
     }
@@ -94,10 +117,11 @@ function dedupConsecutive(observations) {
  *   1. Deduplicating consecutive identical records (same contentHash).
  *   2. Always retaining the first and last records of the original array.
  *   3. Always retaining status-transition records (status changed vs. previous).
+ *   4. Retaining unhashed distinct records without silent null === null truncation.
  *
  * @param {Array<Object>} observations - Ordered observation records. Each record
  *   should have:
- *     - `contentHash` {string} SHA-256 of the observation payload
+ *     - `contentHash` {string} SHA-256 of the observation payload (or computed on the fly)
  *     - `observedAt`  {string} ISO-8601 timestamp
  *     - `status`      {string} [optional] Status label for transition detection
  * @param {Object} [options] - Options
@@ -160,14 +184,14 @@ function compactObservations(observations, options = {}) {
 
   // Dedup consecutive identical hashes; always keep forced indices
   const compacted = [];
-  let lastHash = null;
+  let lastHash = Symbol('initial');
 
   for (let i = 0; i < originalCount; i++) {
     const obs = observations[i];
-    const hash = obs.contentHash || null;
+    const hash = resolveHash(obs);
     const isForced = retainedIndices.has(i);
 
-    if (isForced || hash !== lastHash) {
+    if (isForced || hash === null || hash !== lastHash) {
       compacted.push(obs);
       lastHash = hash;
     }
@@ -189,12 +213,10 @@ function compactObservations(observations, options = {}) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
-
 module.exports = {
+  canonicalStringify,
   computeContentHash,
+  resolveHash,
   dedupConsecutive,
   compactObservations,
 };

@@ -42,8 +42,8 @@ const {
 // PART 1: PLATFORM FINGERPRINTER & CLASSIFIER TESTS
 // ============================================================================
 
-test('SUPPORTED_PLATFORMS defines all 9 canonical vendor platforms with required metadata', () => {
-  assert.equal(SUPPORTED_PLATFORMS.length, 9);
+test('SUPPORTED_PLATFORMS defines canonical vendor platforms with required metadata', () => {
+  assert.equal(SUPPORTED_PLATFORMS.length, 10);
 
   const expectedPlatforms = [
     'civilview',
@@ -54,7 +54,8 @@ test('SUPPORTED_PLATFORMS defines all 9 canonical vendor platforms with required
     'texas_tax_sale',
     'cook_recorder',
     'miami_clerk',
-    'gsa_surplus'
+    'gsa_surplus',
+    'la_recorder'
   ];
 
   const platformIds = SUPPORTED_PLATFORMS.map((p) => p.id);

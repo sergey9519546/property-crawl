@@ -151,22 +151,25 @@ function normalizePlatformKey(platformOrSource, options = {}) {
  * @returns {object} Deposit rule configuration
  */
 function getAuctionDepositRules(platformOrSource, options = {}) {
-  const key = normalizePlatformKey(platformOrSource, options);
+  const opt = typeof options === 'string' ? { state: options } : (options && typeof options === 'object' ? options : {});
+  const key = normalizePlatformKey(platformOrSource, opt);
   const rule = PLATFORM_DEPOSIT_RULES[key] || PLATFORM_DEPOSIT_RULES.generic_sheriff;
 
   // Clone to avoid mutation
   const res = { ...rule };
 
   // Allow caller overrides
-  if (Number.isFinite(options.depositPercent) && options.depositPercent > 0) {
-    res.depositPercent = options.depositPercent;
+  if (Number.isFinite(opt.depositPercent) && opt.depositPercent > 0) {
+    res.depositPercent = opt.depositPercent;
   }
-  if (Number.isFinite(options.minimumDeposit)) {
-    res.minimumDeposit = options.minimumDeposit;
+  if (Number.isFinite(opt.minimumDeposit)) {
+    res.minimumDeposit = opt.minimumDeposit;
   }
 
   return res;
 }
+
+
 
 /**
  * Calculates the required upfront escrow / cashier deposit for a specific auction listing.
@@ -176,19 +179,36 @@ function getAuctionDepositRules(platformOrSource, options = {}) {
  * @returns {object} Calculated deposit requirement
  */
 function calculateRequiredDeposit(auctionListing = {}, options = {}) {
-  const platform = auctionListing.platform || auctionListing.source || 'generic_sheriff';
-  const state = auctionListing.state || options.state;
-  const rules = getAuctionDepositRules(platform, { state, ...options });
+  let listingObj = {};
+  let optObj = {};
+
+  if (auctionListing && typeof auctionListing === 'object') {
+    listingObj = auctionListing;
+    optObj = (options && typeof options === 'object') ? options : {};
+  } else {
+    const thirdArg = arguments[2];
+    const stateVal = typeof thirdArg === 'string' ? thirdArg : (thirdArg && typeof thirdArg === 'object' ? thirdArg.state : null);
+    listingObj = {
+      source: auctionListing,
+      openingBid: typeof options === 'number' ? options : null,
+      state: stateVal,
+    };
+    optObj = (thirdArg && typeof thirdArg === 'object') ? thirdArg : (stateVal ? { state: stateVal } : {});
+  }
+
+  const platform = listingObj.platform || listingObj.source || 'generic_sheriff';
+  const state = listingObj.state || optObj.state || null;
+  const rules = getAuctionDepositRules(platform, { state, ...optObj });
 
   // Determine target bid amount: targetBid option wins, then estimatedMaxBid, purchasePrice, openingBid
-  const targetBid = Number.isFinite(options.targetBid) && options.targetBid > 0
-    ? options.targetBid
-    : Number.isFinite(auctionListing.estimatedMaxBid) && auctionListing.estimatedMaxBid > 0
-      ? auctionListing.estimatedMaxBid
-      : Number.isFinite(auctionListing.purchasePrice) && auctionListing.purchasePrice > 0
-        ? auctionListing.purchasePrice
-        : Number.isFinite(auctionListing.openingBid) && auctionListing.openingBid > 0
-          ? auctionListing.openingBid
+  const targetBid = Number.isFinite(optObj.targetBid) && optObj.targetBid > 0
+    ? optObj.targetBid
+    : Number.isFinite(listingObj.estimatedMaxBid) && listingObj.estimatedMaxBid > 0
+      ? listingObj.estimatedMaxBid
+      : Number.isFinite(listingObj.purchasePrice) && listingObj.purchasePrice > 0
+        ? listingObj.purchasePrice
+        : Number.isFinite(listingObj.openingBid) && listingObj.openingBid > 0
+          ? listingObj.openingBid
           : 0;
 
   let rawCalculated = targetBid * rules.depositPercent;
@@ -209,7 +229,7 @@ function calculateRequiredDeposit(auctionListing = {}, options = {}) {
 
   // Calculate deposit deadline
   let depositDeadline = null;
-  const rawSaleDate = auctionListing.saleDate || auctionListing.auctionDate;
+  const rawSaleDate = listingObj.saleDate || listingObj.auctionDate;
   if (rawSaleDate) {
     const saleTime = new Date(rawSaleDate).getTime();
     if (!Number.isNaN(saleTime)) {
@@ -219,7 +239,7 @@ function calculateRequiredDeposit(auctionListing = {}, options = {}) {
   }
 
   return {
-    listingId: auctionListing.id || auctionListing.listingId || null,
+    listingId: listingObj.id || listingObj.listingId || null,
     targetBid,
     requiredDeposit: Math.round(requiredDeposit * 100) / 100,
     depositPercent: rules.depositPercent,

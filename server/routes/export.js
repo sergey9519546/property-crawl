@@ -2,6 +2,9 @@ const db = require('../db/client');
 const { presentListing } = require('./listings');
 const discovery = require('../discovery/query');
 const { requireWorkspaceIdentity } = require('../security/workspace-identity');
+const { buildPossessionDossier } = require('../intelligence/post-sale-possession');
+const { calculateRequiredDeposit, getAuctionDepositRules } = require('../intelligence/escrow-optimizer');
+const { calculateSurplusEquityWaterfall } = require('../intelligence/surplus-waterfall');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pipeline } = require('node:stream/promises');
@@ -107,6 +110,7 @@ function markdownDossier(listing) {
   const p = publicExportListing(listing);
   const cash = p.cashRequirement || {};
   const money = (val) => (val != null && Number.isFinite(Number(val)) ? `$${Math.round(Number(val)).toLocaleString('en-US')}` : 'Not published');
+  const possession = buildPossessionDossier(p);
 
   return [
     `# DISTRESSED ASSET DOSSIER: ${p.address || 'Address Unspecified'}`,
@@ -144,7 +148,12 @@ function markdownDossier(listing) {
     `- **Cash Due at Settlement:** ${money(cash.cashDueAtSettlement)}`,
     cash.missingInputs && cash.missingInputs.length ? `- **Unresolved Inputs:** ${cash.missingInputs.join('; ')}` : '',
     '',
-    '## 5. Cryptographic Provenance & Evidence Verification',
+    '## 5. Post-Sale Possession & Title Clearance Timelines',
+    `- **Quiet Title Action:** ${possession.quietTitle?.minDays != null ? `${possession.quietTitle.minDays}–${possession.quietTitle.maxDays} days (${possession.quietTitle.statutory})` : 'N/A or not required for direct deed'}`,
+    `- **Writ of Possession / Eviction:** ${possession.writOfPossession?.minDays != null ? `${possession.writOfPossession.minDays}–${possession.writOfPossession.maxDays} days (${possession.writOfPossession.statutory})` : 'Statutory timeline unencoded'}`,
+    `- **Holding Carry Basis:** ${possession.carryCost?.basis || 'Zero-Fabrication: requires observed parcel taxes and insurance'}`,
+    '',
+    '## 6. Cryptographic Provenance & Evidence Verification',
     `- **Publisher Origin:** \`${p.provenance?.origin || 'live'}\``,
     `- **Observed:** \`${p.provenance?.observed ? 'True' : 'Unconfirmed'}\``,
     `- **Exact Source URL:** ${p.sourceUrl || 'Archived'}`,

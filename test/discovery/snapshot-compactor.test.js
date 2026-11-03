@@ -11,8 +11,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   computeContentHash,
+  resolveHash,
   dedupConsecutive,
-  compactObservations
+  compactObservations,
 } = require('../../server/discovery/snapshot-compactor');
 
 test('Snapshot Compactor: computeContentHash', async (t) => {
@@ -31,6 +32,24 @@ test('Snapshot Compactor: computeContentHash', async (t) => {
   });
 });
 
+test('Snapshot Compactor: resolveHash', async (t) => {
+  await t.test('uses existing contentHash if present', () => {
+    assert.equal(resolveHash({ contentHash: 'abc123' }), 'abc123');
+  });
+
+  await t.test('computes hash from payload or data when contentHash is missing', () => {
+    const hash = resolveHash({ payload: { bid: 50000, status: 'active' } });
+    assert.equal(typeof hash, 'string');
+    assert.equal(hash.length, 64);
+  });
+
+  await t.test('computes hash from raw object when contentHash and payload are missing', () => {
+    const hash = resolveHash({ bid: 50000, status: 'active' });
+    assert.equal(typeof hash, 'string');
+    assert.equal(hash.length, 64);
+  });
+});
+
 test('Snapshot Compactor: dedupConsecutive', async (t) => {
   await t.test('returns empty array on empty or non-array input', () => {
     assert.deepEqual(dedupConsecutive([]), []);
@@ -43,11 +62,23 @@ test('Snapshot Compactor: dedupConsecutive', async (t) => {
       { id: 2, contentHash: 'hash-A' },
       { id: 3, contentHash: 'hash-B' },
       { id: 4, contentHash: 'hash-B' },
-      { id: 5, contentHash: 'hash-A' }
+      { id: 5, contentHash: 'hash-A' },
     ];
     const deduped = dedupConsecutive(observations);
     assert.equal(deduped.length, 3);
-    assert.deepEqual(deduped.map(o => o.id), [1, 3, 5]);
+    assert.deepEqual(deduped.map((o) => o.id), [1, 3, 5]);
+  });
+
+  await t.test('computes hash for observations lacking contentHash and dedups accurately', () => {
+    const observations = [
+      { id: 1, payload: { amount: 100 } },
+      { id: 2, payload: { amount: 100 } }, // duplicate of 1
+      { id: 3, payload: { amount: 200 } }, // distinct
+      { id: 4, payload: { amount: 200 } }, // duplicate of 3
+    ];
+    const deduped = dedupConsecutive(observations);
+    assert.equal(deduped.length, 2);
+    assert.deepEqual(deduped.map((o) => o.id), [1, 3]);
   });
 });
 
@@ -76,7 +107,7 @@ test('Snapshot Compactor: compactObservations', async (t) => {
       { id: 1, contentHash: 'hash-A', status: 'scheduled' },
       { id: 2, contentHash: 'hash-A', status: 'scheduled' },
       { id: 3, contentHash: 'hash-A', status: 'scheduled' },
-      { id: 4, contentHash: 'hash-A', status: 'scheduled' }
+      { id: 4, contentHash: 'hash-A', status: 'scheduled' },
     ];
     const res = compactObservations(observations);
     assert.equal(res.originalCount, 4);
@@ -93,13 +124,11 @@ test('Snapshot Compactor: compactObservations', async (t) => {
       { id: 2, contentHash: 'hash-A', status: 'scheduled' },
       { id: 3, contentHash: 'hash-B', status: 'postponed' },
       { id: 4, contentHash: 'hash-B', status: 'postponed' },
-      { id: 5, contentHash: 'hash-C', status: 'sold' }
+      { id: 5, contentHash: 'hash-C', status: 'sold' },
     ];
     const res = compactObservations(observations);
     assert.equal(res.originalCount, 5);
-    // index 0 (first), index 2 (status changed to postponed), index 4 (last & status changed to sold)
-    assert.equal(res.compacted.some(o => o.id === 3), true);
-    assert.equal(res.compacted.some(o => o.id === 5), true);
-    assert.equal(res.compacted[0].id, 1);
+    assert.equal(res.retainedCount, 3);
+    assert.deepEqual(res.compacted.map((o) => o.id), [1, 3, 5]);
   });
 });
