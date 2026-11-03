@@ -456,7 +456,7 @@ export function InteractiveTerminal() {
         {/* Terminal Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-go">
+            <span className="text-label font-extrabold uppercase tracking-wider text-go">
               LIVE TRIAGE TERMINAL
             </span>
             <h2 className="text-3xl font-bold text-ink">Property Intelligence Engine</h2>
@@ -524,7 +524,7 @@ export function InteractiveTerminal() {
               <Bell className="w-4 h-4 text-ink-2 fill-ink/10" />
               <span>Saved searches</span>
               {unreadAlertCount > 0 && (
-                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-[10px] font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
+                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-label font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
                   {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
                 </span>
               )}
@@ -660,7 +660,7 @@ export function InteractiveTerminal() {
                     value is null on both sides, so the grid silently keeps its
                     default order while the control claims "Highest". Say so. */}
                 {unrankedSortReason ? (
-                  <p role="status" data-testid="sort-unranked-notice" className="text-[11px] font-medium text-catch-ink">
+                  <p role="status" data-testid="sort-unranked-notice" className="text-label font-medium text-catch-ink">
                     {unrankedSortReason}
                   </p>
                 ) : null}
@@ -702,7 +702,7 @@ export function InteractiveTerminal() {
                 <div className="pt-3 border-t border-line grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 animate-in fade-in duration-150">
                   {/* Min Deal Score */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Deal Score
                     </label>
                     <select
@@ -719,7 +719,7 @@ export function InteractiveTerminal() {
 
                   {/* Minimum modeled bid spread */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Min Bid Spread
                     </label>
                     <select
@@ -737,7 +737,7 @@ export function InteractiveTerminal() {
 
                   {/* Max Opening Bid */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Max Opening Bid
                     </label>
                     <select
@@ -755,7 +755,7 @@ export function InteractiveTerminal() {
 
                   {/* Property Type */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Property Type
                     </label>
                     <select
@@ -773,7 +773,7 @@ export function InteractiveTerminal() {
 
                   {/* Senior Lien / Title Risk */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Senior Title Risk
                     </label>
                     <select
@@ -789,7 +789,7 @@ export function InteractiveTerminal() {
 
                   {/* Statutory Redemption */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1">
+                    <label className="block text-label font-bold uppercase tracking-wider text-ink-3 mb-1">
                       Redemption Status
                     </label>
                     <select
@@ -808,10 +808,10 @@ export function InteractiveTerminal() {
               {/* Active Filter Chips */}
               {activeFiltersCount > 0 && (
                 <div className="pt-2 border-t border-line flex flex-wrap items-center gap-1.5 text-xs">
-                  <span className="text-[11px] font-bold text-ink-3 mr-1">Active:</span>
-                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
+                  <span className="text-label font-bold text-ink-3 mr-1">Active:</span>
+                  {observedOnly && <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-label font-semibold text-white">Source-observed<button type="button" onClick={() => dispatchFilters({ type: "set", key: "observedOnly", value: false })} aria-label="Remove observed-only filter"><CloseIcon className="h-3 w-3" /></button></span>}
                   {selectedState !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       State: {selectedState}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedState", value: "all" })} aria-label="Remove state filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -819,7 +819,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {selectedSource !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Source: {sourceDisplayText(SOURCES[selectedSource]?.label || selectedSource)}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "selectedSource", value: "all" })} aria-label="Remove source filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -827,7 +827,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {minDealScore > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Score: ≥{minDealScore}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minDealScore", value: 0 })} aria-label="Remove score filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -835,7 +835,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {minEquity > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Bid spread: ≥${(minEquity / 1000).toFixed(0)}k
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "minEquity", value: 0 })} aria-label="Remove bid spread filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -843,7 +843,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {maxOpeningBid !== null && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Bid: ≤${(maxOpeningBid / 1000).toFixed(0)}k
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "maxOpeningBid", value: null })} aria-label="Remove max bid filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -851,7 +851,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {propertyType !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Type: {propertyType}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "propertyType", value: "all" })} aria-label="Remove property type filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -859,7 +859,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {seniorLienFilter !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Title: {seniorLienFilter === "clean" ? "Low lien flag" : "High junior-lien flag"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "seniorLienFilter", value: "all" })} aria-label="Remove title risk filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -867,7 +867,7 @@ export function InteractiveTerminal() {
                     </span>
                   )}
                   {redemptionFilter !== "all" && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-[11px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-ink text-white text-label font-semibold">
                       Redemption: {redemptionFilter === "immediate" ? "Published 0-day term" : "Published window"}
                       <button type="button" onClick={() => dispatchFilters({ type: "set", key: "redemptionFilter", value: "all" })} aria-label="Remove redemption filter">
                         <CloseIcon className="w-3 h-3 hover:text-white/60" />
@@ -885,7 +885,7 @@ export function InteractiveTerminal() {
                   <LayoutGrid className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Filtered Pipeline</p>
+                  <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Filtered Pipeline</p>
                   <p className="text-base font-extrabold text-ink">{filtered.length} Records</p>
                 </div>
               </div>
@@ -895,7 +895,7 @@ export function InteractiveTerminal() {
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Median Opening Bid</p>
+                  <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Median Opening Bid</p>
                   <p className="text-base font-extrabold text-ink">{displayMoney(medianBid)}</p>
                 </div>
               </div>
@@ -905,14 +905,14 @@ export function InteractiveTerminal() {
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider">Avg Bid Spread</p>
+                  <p className="text-ink-3 text-label font-bold uppercase tracking-wider">Avg Bid Spread</p>
                   <p className="text-base font-extrabold text-ink">{avgEquity === null ? "Not modeled" : `+${avgEquity.toLocaleString()}`}</p>
                 </div>
               </div>
 
               {/* Interactive Deal Score Band Spectrum */}
               <div className="flex flex-col justify-center">
-                <p className="text-ink-3 text-[10px] font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
+                <p className="text-ink-3 text-label font-bold uppercase tracking-wider mb-1.5">Score Distribution</p>
                 <div className="flex items-center gap-1">
                   {scoreBandCounts.map(({ band, count }) => (
                     <button
@@ -927,7 +927,7 @@ export function InteractiveTerminal() {
                       // action wording, include the visible text verbatim.
                       aria-label={`Filter Deal Score band ${band.label}: ${count} deals`}
                       className={cn(
-                        "px-2 py-0.5 rounded text-[10px] font-extrabold transition",
+                        "px-2 py-0.5 rounded text-label font-extrabold transition",
                         minDealScore === band.min
                           ? "text-white ring-2 ring-ink"
                           : "text-ink-2 hover:opacity-90",
@@ -944,7 +944,7 @@ export function InteractiveTerminal() {
                     </button>
                   ))}
                 </div>
-                <p className="mt-1 text-[10px] leading-4 text-ink-3" title={DEAL_SCORE_MEANING}>
+                <p className="mt-1 text-label leading-4 text-ink-3" title={DEAL_SCORE_MEANING}>
                   {DEAL_SCORE_MEANING}
                 </p>
               </div>
@@ -1036,13 +1036,13 @@ export function InteractiveTerminal() {
                         <ListingThumbnail listingId={listing.id} address={listing.address} photo={cardPhoto} observed={isObserved} photoProvider={secondaryMedia?.accepted ? secondaryMedia.provider : undefined} photoSourceUrl={secondaryMedia?.accepted ? secondaryMedia.sourceRecordUrl : undefined} />
                         <div className="absolute top-3 left-3 flex items-center gap-1.5">
                           <span
-                            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
+                            className="text-label font-extrabold uppercase px-2 py-0.5 rounded-md text-white shadow-sm"
                             style={{ backgroundColor: src.color }}
                           >
                             {src.label}
                           </span>
                           <span className={cn(
-                            "rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase shadow-sm",
+                            "rounded-md px-2 py-0.5 text-label font-extrabold uppercase shadow-sm",
                             isObserved ? "bg-paper text-ink-2" : "bg-catch-wash text-catch-ink",
                           )}>
                             {isObserved ? "Observed" : "Demo / unverified"}
