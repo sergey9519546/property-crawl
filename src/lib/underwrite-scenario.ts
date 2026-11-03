@@ -24,6 +24,8 @@ export interface UnderwriteScenario {
   targetMargin: number;
   customValuation?: string;
   customOpeningBid?: string;
+  holdingMonths?: number;
+  maxAllowableOffer?: number | null;
 }
 
 function blankScenario(): UnderwriteScenario {
@@ -66,6 +68,22 @@ export function readUnderwriteScenario(listingId: string): UnderwriteScenario | 
     const margin = Number(source.targetMargin);
     if (Number.isFinite(rehab) && rehab >= 0 && rehab <= 150_000) scenario.rehabBudget = rehab;
     if (Number.isFinite(margin) && margin >= 10 && margin <= 40) scenario.targetMargin = margin;
+    if (source.holdingMonths !== undefined) {
+      const holding = Number(source.holdingMonths);
+      if (Number.isFinite(holding) && holding >= 1 && holding <= 120) {
+        scenario.holdingMonths = Math.round(holding);
+      }
+    }
+    if (source.maxAllowableOffer !== undefined) {
+      if (source.maxAllowableOffer === null) {
+        scenario.maxAllowableOffer = null;
+      } else {
+        const mao = Number(source.maxAllowableOffer);
+        if (Number.isFinite(mao) && mao >= 0) {
+          scenario.maxAllowableOffer = mao;
+        }
+      }
+    }
     return scenario;
   } catch {
     return null;

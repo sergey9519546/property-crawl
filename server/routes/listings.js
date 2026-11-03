@@ -274,6 +274,7 @@ async function handleAssessorLookup(encodedId, res) {
   if (!countyKey) {
     return res.json({
       listingId: listing.id,
+      parcelKey: listing.parcelKey || null,
       lookedUpAt: new Date().toISOString(),
       ...interpretAssessorParcel({ countyKey: null, parcel: null, openingBid: listing.openingBid }),
     });
@@ -295,8 +296,15 @@ async function handleAssessorLookup(encodedId, res) {
     parcel = null;
   }
 
+  const resolvedParcelKey = listing.parcelKey || (parcel?.canonicalApn ? buildParcelKey({ apn: parcel.canonicalApn, countyFips: parcel.countyFips }) : null);
+  if (!listing.parcelKey && resolvedParcelKey && typeof db.createListing === 'function') {
+    listing.parcelKey = resolvedParcelKey;
+    try { await db.createListing(listing); } catch (_) {}
+  }
+
   return res.json({
     listingId: listing.id,
+    parcelKey: resolvedParcelKey || null,
     lookedUpAt: new Date().toISOString(),
     ...(parcel?.situsAddress ? { situsAddress: parcel.situsAddress } : {}),
     ...interpretAssessorParcel({ countyKey, parcel, openingBid: listing.openingBid }),

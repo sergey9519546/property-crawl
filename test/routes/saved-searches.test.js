@@ -19,7 +19,8 @@ process.env.SCRAPER_ADMIN_TOKEN = 'test-secret';
 delete require.cache[require.resolve('../../server/security/workspace-identity')];
 delete require.cache[require.resolve('../../server/routes/saved-searches')];
 
-const { createSavedSearchesHandler, validateFilters } = require('../../server/routes/saved-searches');
+const { createSavedSearchesHandler, validateFilters, compileSavedSearchToHuntCriteria } = require('../../server/routes/saved-searches');
+const { validateHuntInput } = require('../../server/intelligence/hunts');
 
 function makeRes() {
   return {
@@ -763,5 +764,91 @@ test('saved-searches: POST and PATCH reject non-HTTPS or private/loopback webhoo
   assert.match(badPatch.body.error, /webhookUrl/i);
 });
 
+test('compileSavedSearchToHuntCriteria: maps all 10 saved search filter dimensions into canonical Hunt discoveryFilters', () => {
+  const search = {
+    label: 'TX & FL Hot Deals',
+    webhookUrl: 'https://example.com/alerts/webhook',
+    filters: {
+      states: ['TX', 'FL'],
+      sources: ['sheriff', 'treasury'],
+      propTypes: ['Single Family', 'Condo'],
+      keywords: ['waterfront', 'pool'],
+      minScore: 80,
+      maxBid: 450000,
+      minEquity: 35000,
+      occupancy: 'vacant',
+      seniorLien: 'clean',
+      redemption: 'immediate'
+    }
+  };
 
+  const huntPayload = compileSavedSearchToHuntCriteria(search);
+
+  assert.equal(huntPayload.name, 'TX & FL Hot Deals');
+  assert.equal(huntPayload.enabled, true);
+  assert.equal(huntPayload.webhookUrl, 'https://example.com/alerts/webhook');
+  assert.ok(huntPayload.criteria && typeof huntPayload.criteria === 'object');
+  assert.ok(huntPayload.criteria.discoveryFilters && typeof huntPayload.criteria.discoveryFilters === 'object');
+
+  const df = huntPayload.criteria.discoveryFilters;
+  assert.equal(df.state, 'TX,FL');
+  assert.equal(df.source, 'sheriff,treasury');
+  assert.equal(df.type, 'Single Family,Condo');
+  assert.equal(df.q, 'waterfront pool');
+  assert.equal(df.minScore, '80');
+  assert.equal(df.maxBid, '450000');
+  assert.equal(df.minEquity, '35000');
+  assert.equal(df.occupancy, 'vacant');
+  assert.equal(df.seniorLien, 'clean');
+  assert.equal(df.redemption, 'immediate');
+
+  const validation = validateHuntInput(huntPayload);
+  assert.equal(validation.isValid, true, 'compiled hunt payload must be valid per validateHuntInput');
+  assert.deepEqual(validation.errors, []);
+});
+
+test('compileSavedSearchToHuntCriteria: handles empty, all-values, and nested filter edge cases', () => {
+  // Empty search defaults
+  const emptyPayload = compileSavedSearchToHuntCriteria({});
+  assert.equal(emptyPayload.name, 'Saved search');
+  assert.equal(emptyPayload.enabled, true);
+  assert.equal(emptyPayload.webhookUrl, undefined);
+  assert.deepEqual(emptyPayload.criteria, { discoveryFilters: {} });
+  const emptyValidation = validateHuntInput(emptyPayload);
+  assert.equal(emptyValidation.isValid, true);
+
+  // 'all' values and empty arrays are filtered out
+  const allPayload = compileSavedSearchToHuntCriteria({
+    label: 'All states search',
+    filters: {
+      states: ['all'],
+      sources: ['all'],
+      propTypes: ['all'],
+      occupancy: 'all',
+      seniorLien: 'all',
+      redemption: 'all',
+      webhookUrl: 'https://hooks.example.com/endpoint'
+    }
+  });
+  assert.equal(allPayload.name, 'All states search');
+  assert.equal(allPayload.webhookUrl, 'https://hooks.example.com/endpoint');
+  assert.deepEqual(allPayload.criteria.discoveryFilters, {});
+
+  // Pass-through extra discovery filters and single values
+  const extraPayload = compileSavedSearchToHuntCriteria({
+    label: 'OH Special',
+    filters: {
+      states: ['OH'],
+      county: 'Franklin',
+      freshness: 'observed',
+      hasDocuments: 'true',
+      minScore: 50
+    }
+  });
+  assert.equal(extraPayload.criteria.discoveryFilters.state, 'OH');
+  assert.equal(extraPayload.criteria.discoveryFilters.county, 'Franklin');
+  assert.equal(extraPayload.criteria.discoveryFilters.freshness, 'observed');
+  assert.equal(extraPayload.criteria.discoveryFilters.hasDocuments, 'true');
+  assert.equal(extraPayload.criteria.discoveryFilters.minScore, '50');
+});
 

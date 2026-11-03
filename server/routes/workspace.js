@@ -73,6 +73,7 @@ function createWorkspaceHandler(dependencies = {}) {
           const result = research.createCase({
             listing, sourceRef: req.body?.sourceRef, origin: req.body?.origin,
             dossier: await dossierFor(listing, timestamp),
+            underwriteScenario: req.body?.underwriteScenario,
           }, { filePath, now: timestamp });
           return res.status(result.created ? 201 : 200).json(result);
         }

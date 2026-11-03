@@ -8,6 +8,10 @@ function optionalText(raw: unknown): string | null {
   return rendered || null;
 }
 
+function formatMoney(amount: number): string {
+  return `$${Math.round(amount).toLocaleString("en-US")}`;
+}
+
 function publishedBoolean(raw: unknown): string | null {
   return typeof raw === "boolean" ? (raw ? "Yes" : "No") : null;
 }
@@ -25,6 +29,8 @@ export function SaleMechanics({ listing, exactSourceUrl }: { listing: PropertyLi
     ["Interior access available", publishedBoolean(sourceFacts.interiorAccessAvailable)],
     ["Cleared for sale", sourceFacts.clearedForSale],
     ["Deposit / payment terms", listing.deposit],
+    ["Execution judgment", listing.judgment && Number(listing.judgment) > 0 ? formatMoney(Number(listing.judgment)) : null],
+    ["Opening bid timing", listing.openingBid == null && listing.judgment && Number(listing.judgment) > 0 ? "Announced morning of sale (upset price pending)" : null],
     ["Publisher documents", documents?.count != null ? `${documents.count} reference${documents.count === 1 ? "" : "s"} captured` : null],
   ];
   const facts = factCandidates.flatMap(([label, raw]) => {

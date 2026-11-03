@@ -285,7 +285,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   let valuationProvenance = hasDirectRange ? 'publisher_reported' : null;
   let valuationLabel = null;
 
-  if (!hasDirectRange && publisherObserved && bid > 0) {
+  if (!hasDirectRange && publisherObserved) {
     // 1. Attempt enrolled county assessor registry conversion
     const countyKey = resolveCountyKey(listing.state, listing.county);
     const assessorRes = countyKey ? interpretAssessorParcel({
@@ -368,16 +368,34 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       });
     }
   } else {
-    signals.push({
-      key: 'bid_to_value_ratio',
-      label: 'Valuation ratio unavailable',
-      status: 'unknown',
-      evidenceClass: 'unresolved',
-      sourceUrl,
-      observedAt,
-      reason: 'Opening bid or valuation estimate band is missing; ratio cannot be computed.',
-      nextAction: 'Gather verified comp sales and publisher opening bid.',
-    });
+    const judgment = Number(listing.judgment);
+    if (Number.isFinite(judgment) && judgment > 0) {
+      const formattedJudgment = `$${Math.round(judgment).toLocaleString()}`;
+      const reason = mid > 0
+        ? `Opening bid is unannounced prior to sale. Published court execution judgment is ${formattedJudgment} against valuation midpoint of $${Math.round(mid).toLocaleString()} (${((judgment / mid) * 100).toFixed(1)}%).`
+        : `Opening bid is unannounced prior to sale. Published court execution judgment is ${formattedJudgment}.`;
+      signals.push({
+        key: 'bid_to_value_ratio',
+        label: 'Opening bid pending (judgment amount on record)',
+        status: 'unknown',
+        evidenceClass: 'unresolved',
+        sourceUrl,
+        observedAt,
+        reason,
+        nextAction: 'Monitor morning-of-sale announcements for plaintiff upset price or reserve credit bid.',
+      });
+    } else {
+      signals.push({
+        key: 'bid_to_value_ratio',
+        label: 'Valuation ratio unavailable',
+        status: 'unknown',
+        evidenceClass: 'unresolved',
+        sourceUrl,
+        observedAt,
+        reason: 'Opening bid or valuation estimate band is missing; ratio cannot be computed.',
+        nextAction: 'Gather verified comp sales and publisher opening bid.',
+      });
+    }
   }
 
   // 5. Building Area Discrepancy

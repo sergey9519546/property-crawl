@@ -176,6 +176,102 @@ function historyEvent(type, item, timestamp, details = {}) {
   return event;
 }
 
+const CASH_FIELDS = [
+  'registrationFunds',
+  'creditedDeposit',
+  'buyersPremium',
+  'sheriffPoundage',
+  'transferTax',
+  'delinquentTaxes',
+  'settlementCosts',
+];
+
+function sanitizeUnderwriteScenario(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+  const result = {};
+  let hasAny = false;
+
+  if (raw.rehabBudget !== undefined && raw.rehabBudget !== null && raw.rehabBudget !== '') {
+    const num = Number(raw.rehabBudget);
+    if (Number.isFinite(num) && num >= 0 && num <= 10_000_000) {
+      result.rehabBudget = num;
+      hasAny = true;
+    }
+  }
+
+  if (raw.targetMargin !== undefined && raw.targetMargin !== null && raw.targetMargin !== '') {
+    const num = Number(raw.targetMargin);
+    if (Number.isFinite(num) && num >= 0 && num <= 100) {
+      result.targetMargin = num;
+      hasAny = true;
+    }
+  }
+
+  if (raw.maxAllowableOffer !== undefined) {
+    if (raw.maxAllowableOffer === null) {
+      result.maxAllowableOffer = null;
+      hasAny = true;
+    } else if (raw.maxAllowableOffer !== '') {
+      const num = Number(raw.maxAllowableOffer);
+      if (Number.isFinite(num) && num >= 0 && num <= 1_000_000_000) {
+        result.maxAllowableOffer = num;
+        hasAny = true;
+      }
+    }
+  }
+
+  if (raw.holdingMonths !== undefined && raw.holdingMonths !== null && raw.holdingMonths !== '') {
+    const num = Number(raw.holdingMonths);
+    if (Number.isFinite(num) && num >= 1 && num <= 120) {
+      result.holdingMonths = Math.round(num);
+      hasAny = true;
+    }
+  }
+
+  if (typeof raw.customValuation === 'string' && raw.customValuation.trim()) {
+    const clean = raw.customValuation.trim().slice(0, 32);
+    if (/^\d*(?:\.\d{0,2})?$/.test(clean)) {
+      result.customValuation = clean;
+      hasAny = true;
+    }
+  } else if (typeof raw.customValuation === 'number' && Number.isFinite(raw.customValuation) && raw.customValuation >= 0) {
+    result.customValuation = String(raw.customValuation);
+    hasAny = true;
+  }
+
+  if (typeof raw.customOpeningBid === 'string' && raw.customOpeningBid.trim()) {
+    const clean = raw.customOpeningBid.trim().slice(0, 32);
+    if (/^\d*(?:\.\d{0,2})?$/.test(clean)) {
+      result.customOpeningBid = clean;
+      hasAny = true;
+    }
+  } else if (typeof raw.customOpeningBid === 'number' && Number.isFinite(raw.customOpeningBid) && raw.customOpeningBid >= 0) {
+    result.customOpeningBid = String(raw.customOpeningBid);
+    hasAny = true;
+  }
+
+  for (const field of CASH_FIELDS) {
+    const val = raw[field];
+    if (val !== undefined && val !== null && val !== '') {
+      if (typeof val === 'number') {
+        if (Number.isFinite(val) && val >= 0 && val <= 1_000_000_000) {
+          result[field] = val;
+          hasAny = true;
+        }
+      } else if (typeof val === 'string') {
+        const clean = val.trim();
+        if (/^\d*(?:\.\d{0,2})?$/.test(clean) && clean !== '') {
+          result[field] = clean;
+          hasAny = true;
+        }
+      }
+    }
+  }
+
+  return hasAny ? result : null;
+}
+
 function caseSummary(item) {
   return {
     id: item.id, identityKey: item.identityKey, sourceRef: item.sourceRef,
@@ -188,6 +284,7 @@ function caseSummary(item) {
     saleDate: item.listingSnapshot?.saleDate || null,
     openingBid: typeof item.listingSnapshot?.openingBid === 'number' ? item.listingSnapshot.openingBid : null,
     publishedStatus: item.listingSnapshot?.status || null,
+    underwriteScenario: item.underwriteScenario || null,
     evidenceCount: item.evidenceLinks.length, createdAt: item.createdAt, updatedAt: item.updatedAt,
   };
 }
@@ -358,6 +455,13 @@ function createCase(input, options = {}) {
         };
         changed = true;
       }
+      if (input.underwriteScenario !== undefined) {
+        const sanitized = sanitizeUnderwriteScenario(input.underwriteScenario);
+        if (canonicalJson(existing.underwriteScenario || null) !== canonicalJson(sanitized)) {
+          existing.underwriteScenario = sanitized;
+          changed = true;
+        }
+      }
       if (!changed) return { changed: false, value: { case: caseSummary(existing), created: false, sourceCheck } };
       existing.revision += 1;
       existing.updatedAt = timestamp;
@@ -376,6 +480,7 @@ function createCase(input, options = {}) {
       address: listingSnapshot.address || null, state: 'inbox', revision: 1,
       decision: null, reconsideration: null, reconsiderationRequired: false, latestTrigger: null,
       origins: [origin], evidenceLinks: [], listingSnapshot, dossierSnapshot: dossier,
+      underwriteScenario: sanitizeUnderwriteScenario(input.underwriteScenario),
       createdAt: timestamp, updatedAt: timestamp, history: [],
     };
     item.history.push(historyEvent('case_created', item, timestamp, { originId: origin.id }));
@@ -420,6 +525,7 @@ function workspaceDossier(item) {
       decision: item.decision, reconsideration: item.reconsideration,
       reconsiderationRequired: item.reconsiderationRequired, latestTrigger: item.latestTrigger || null,
       sourceRef: item.sourceRef,
+      underwriteScenario: item.underwriteScenario || null,
     },
     claimGroups: { publisher: publisherClaims, official: officialClaims },
     reviewedEvidence: item.evidenceLinks.map((link) => ({ ...link, evidenceClass: 'reviewed_attachment', promotesFacts: false })),
@@ -463,14 +569,19 @@ function updateCase(id, input, options = {}) {
     const item = findCase(store, id);
     if (item.revision !== expectedRevision) throw new ResearchCaseError('RESEARCH_REVISION_CONFLICT', 'Research case changed; reload before saving', { expectedRevision, currentRevision: item.revision });
     const decision = input.state === 'inbox' ? null : { state: input.state, reasonCodes, note, decidedAt: timestamp, actor: 'local_operator' };
+    const scenarioChanged = input.underwriteScenario !== undefined
+      && canonicalJson(item.underwriteScenario || null) !== canonicalJson(sanitizeUnderwriteScenario(input.underwriteScenario));
     if (item.state === input.state && canonicalJson(item.decision) === canonicalJson(decision)
-      && canonicalJson(item.reconsideration) === canonicalJson(reconsideration) && !item.reconsiderationRequired) {
+      && canonicalJson(item.reconsideration) === canonicalJson(reconsideration) && !item.reconsiderationRequired && !scenarioChanged) {
       return { changed: false, value: caseSummary(item) };
     }
     const previousState = item.state;
     item.state = input.state;
     item.decision = decision;
     item.reconsideration = reconsideration;
+    if (scenarioChanged) {
+      item.underwriteScenario = sanitizeUnderwriteScenario(input.underwriteScenario);
+    }
     item.revision += 1;
     item.updatedAt = timestamp;
     item.reconsiderationRequired = false;
@@ -673,6 +784,7 @@ module.exports = {
   normalizeReconsideration,
   packetToMarkdown,
   previewBrowserImport,
+  sanitizeUnderwriteScenario,
   sha,
   sourceRefFromListing,
   unlinkEvidence,

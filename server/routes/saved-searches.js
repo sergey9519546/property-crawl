@@ -314,8 +314,103 @@ function createSavedSearchesHandler(dependencies = {}) {
   };
 }
 
+
+function compileSavedSearchToHuntCriteria(search = {}) {
+  const name = (typeof search?.label === 'string' && search.label.trim())
+    || (typeof search?.name === 'string' && search.name.trim())
+    || 'Saved search';
+
+  const rawFilters = (search && typeof search === 'object' && search.filters && typeof search.filters === 'object' && !Array.isArray(search.filters))
+    ? search.filters
+    : {};
+
+  const getVal = (key) => (rawFilters[key] !== undefined ? rawFilters[key] : (search && typeof search === 'object' ? search[key] : undefined));
+
+  const webhookUrl = (typeof search?.webhookUrl === 'string' && search.webhookUrl.trim())
+    || (typeof rawFilters?.webhookUrl === 'string' && rawFilters.webhookUrl.trim())
+    || undefined;
+
+  const discoveryFilters = {};
+
+  const rawStates = getVal('states');
+  const rawState = getVal('state');
+  const states = Array.isArray(rawStates)
+    ? rawStates.filter((s) => typeof s === 'string' && s.trim() && s.trim().toLowerCase() !== 'all').map((s) => s.trim().toUpperCase())
+    : (typeof rawState === 'string' && rawState.trim() && rawState.trim().toLowerCase() !== 'all' ? [rawState.trim().toUpperCase()] : []);
+  if (states.length > 0) discoveryFilters.state = states.join(',');
+
+  const rawSources = getVal('sources');
+  const rawSource = getVal('source');
+  const sources = Array.isArray(rawSources)
+    ? rawSources.filter((s) => typeof s === 'string' && s.trim() && s.trim().toLowerCase() !== 'all').map((s) => s.trim().toLowerCase())
+    : (typeof rawSource === 'string' && rawSource.trim() && rawSource.trim().toLowerCase() !== 'all' ? [rawSource.trim().toLowerCase()] : []);
+  if (sources.length > 0) discoveryFilters.source = sources.join(',');
+
+  const rawPropTypes = getVal('propTypes');
+  const rawType = getVal('type') || getVal('propType');
+  const propTypes = Array.isArray(rawPropTypes)
+    ? rawPropTypes.filter((t) => typeof t === 'string' && t.trim() && t.trim().toLowerCase() !== 'all').map((t) => t.trim())
+    : (typeof rawType === 'string' && rawType.trim() && rawType.trim().toLowerCase() !== 'all' ? [rawType.trim()] : []);
+  if (propTypes.length > 0) discoveryFilters.type = propTypes.join(',');
+
+  const rawKeywords = getVal('keywords');
+  const rawQ = getVal('q');
+  const keywords = Array.isArray(rawKeywords)
+    ? rawKeywords.filter((k) => typeof k === 'string' && k.trim()).map((k) => k.trim())
+    : (typeof rawQ === 'string' && rawQ.trim() ? [rawQ.trim()] : []);
+  if (keywords.length > 0) discoveryFilters.q = keywords.join(' ');
+
+  const rawMinScore = getVal('minScore');
+  if (rawMinScore !== undefined && rawMinScore !== null && rawMinScore !== '') {
+    const num = Number(rawMinScore);
+    if (Number.isFinite(num)) discoveryFilters.minScore = String(num);
+  }
+
+  const rawMaxBid = getVal('maxBid');
+  if (rawMaxBid !== undefined && rawMaxBid !== null && rawMaxBid !== '') {
+    const num = Number(rawMaxBid);
+    if (Number.isFinite(num)) discoveryFilters.maxBid = String(num);
+  }
+
+  const rawMinEquity = getVal('minEquity');
+  if (rawMinEquity !== undefined && rawMinEquity !== null && rawMinEquity !== '') {
+    const num = Number(rawMinEquity);
+    if (Number.isFinite(num)) discoveryFilters.minEquity = String(num);
+  }
+
+  const rawOccupancy = getVal('occupancy');
+  if (typeof rawOccupancy === 'string' && rawOccupancy.trim() && rawOccupancy.trim().toLowerCase() !== 'all') {
+    discoveryFilters.occupancy = rawOccupancy.trim();
+  }
+
+  const rawSeniorLien = getVal('seniorLien');
+  if (typeof rawSeniorLien === 'string' && rawSeniorLien.trim() && rawSeniorLien.trim().toLowerCase() !== 'all') {
+    discoveryFilters.seniorLien = rawSeniorLien.trim();
+  }
+
+  const rawRedemption = getVal('redemption');
+  if (typeof rawRedemption === 'string' && rawRedemption.trim() && rawRedemption.trim().toLowerCase() !== 'all') {
+    discoveryFilters.redemption = rawRedemption.trim();
+  }
+
+  for (const extraKey of ['county', 'program', 'lifecycle', 'freshness', 'hasDocuments', 'saleFrom', 'saleTo']) {
+    const val = getVal(extraKey);
+    if (typeof val === 'string' && val.trim() && val.trim().toLowerCase() !== 'all') {
+      discoveryFilters[extraKey] = val.trim();
+    }
+  }
+
+  return {
+    name,
+    enabled: true,
+    webhookUrl,
+    criteria: { discoveryFilters },
+  };
+}
+
 module.exports = {
   createSavedSearchesHandler,
   validateFilters,
-  serializeSearch
+  serializeSearch,
+  compileSavedSearchToHuntCriteria
 };

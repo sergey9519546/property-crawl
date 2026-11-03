@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BookOpenCheck, Loader2 } from "lucide-react";
 import { useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import { cn } from "@/lib/utils";
+import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 
 export function CaseAction({ listingId, className, label = "Research" }: { listingId: string; className?: string; label?: string }) {
   const router = useRouter();
@@ -16,7 +17,17 @@ export function CaseAction({ listingId, className, label = "Research" }: { listi
     if (!session.authenticated) { session.requestUnlock(); return; }
     setBusy(true); setError("");
     try {
-      const response = await fetch("/api/workspace/cases", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ listingId, origin: { type: "manual" } }) });
+      const underwriteScenario = readUnderwriteScenario(listingId);
+      const response = await fetch("/api/workspace/cases", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          listingId,
+          origin: { type: "manual" },
+          underwriteScenario: underwriteScenario || undefined,
+        }),
+      });
       const result = await response.json();
       if (response.status === 401) {
         session.requestUnlock();

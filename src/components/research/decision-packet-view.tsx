@@ -17,35 +17,56 @@ function withOperatorScenario(packet: any) {
   const listingId = packet?.property?.id;
   const scenario = typeof listingId === 'string' ? readUnderwriteScenario(listingId) : null;
   if (!scenario) return packet;
-  const entered = scenarioCashInput(scenario);
-  if (Object.keys(entered).length === 0) return packet;
-  const openingBid = typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null;
-  const cash = computeCashToClose({ openingBid, purchasePrice: openingBid, ...entered });
-  const cashDueReady = cash.registrationFunds !== null && cash.creditedDeposit !== null && cash.cashDueAtSettlement !== null;
-  return {
-    ...packet,
-    underwriting: {
-      ...packet.underwriting,
-      cashToClose: {
-        model: cash.model,
-        acquisitionCostStatus: cash.acquisitionCostStatus,
-        fundingTimingStatus: cash.fundingTimingStatus,
-        totalAcquisitionCost: cash.totalAcquisitionCost,
-        buyersPremium: cash.buyersPremium,
-        sheriffPoundage: cash.sheriffPoundage,
-        transferTax: cash.transferTax,
-        delinquentTaxes: cash.delinquentTaxes,
-        settlementCosts: cash.settlementCosts,
-        registrationFunds: cash.registrationFunds,
-        creditedDeposit: cash.creditedDeposit,
-        cashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
-        netCashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
-        missingInputs: cash.missingInputs,
-        assumptions: cash.assumptions,
-        scenarioSource: 'listing-bid-cost-model',
-      },
-    },
+
+  let nextPacket = { ...packet };
+
+  const existingAssumptions = packet?.underwritingAssumptions || {};
+  nextPacket.underwritingAssumptions = {
+    ...existingAssumptions,
+    ...(typeof scenario.rehabBudget === 'number' && Number.isFinite(scenario.rehabBudget) ? { rehabBudget: scenario.rehabBudget } : {}),
+    ...(typeof scenario.targetMargin === 'number' && Number.isFinite(scenario.targetMargin) ? { targetMarginPct: scenario.targetMargin } : {}),
+    ...(scenario.maxAllowableOffer !== undefined ? { maxAllowableOffer: scenario.maxAllowableOffer } : {}),
   };
+
+  if (typeof scenario.maxAllowableOffer === 'number' && Number.isFinite(scenario.maxAllowableOffer)) {
+    nextPacket.dispositionSignOff = {
+      ...nextPacket.dispositionSignOff,
+      maxAllowableOffer: nextPacket.dispositionSignOff?.maxAllowableOffer ?? scenario.maxAllowableOffer,
+    };
+  }
+
+  const entered = scenarioCashInput(scenario);
+  if (Object.keys(entered).length > 0) {
+    const openingBid = typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null;
+    const cash = computeCashToClose({ openingBid, purchasePrice: openingBid, ...entered });
+    const cashDueReady = cash.registrationFunds !== null && cash.creditedDeposit !== null && cash.cashDueAtSettlement !== null;
+    nextPacket = {
+      ...nextPacket,
+      underwriting: {
+        ...nextPacket.underwriting,
+        cashToClose: {
+          model: cash.model,
+          acquisitionCostStatus: cash.acquisitionCostStatus,
+          fundingTimingStatus: cash.fundingTimingStatus,
+          totalAcquisitionCost: cash.totalAcquisitionCost,
+          buyersPremium: cash.buyersPremium,
+          sheriffPoundage: cash.sheriffPoundage,
+          transferTax: cash.transferTax,
+          delinquentTaxes: cash.delinquentTaxes,
+          settlementCosts: cash.settlementCosts,
+          registrationFunds: cash.registrationFunds,
+          creditedDeposit: cash.creditedDeposit,
+          cashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
+          netCashDueAtSettlement: cashDueReady ? cash.cashDueAtSettlement : null,
+          missingInputs: cash.missingInputs,
+          assumptions: cash.assumptions,
+          scenarioSource: 'listing-bid-cost-model',
+        },
+      },
+    };
+  }
+
+  return nextPacket;
 }
 
 export function DecisionPacketView({ packet }: DecisionPacketViewProps) {

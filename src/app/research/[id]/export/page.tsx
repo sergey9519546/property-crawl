@@ -109,19 +109,56 @@ export default async function DecisionPacketExportPage({
     );
   }
 
+  const scenario = caseDecision?.underwriteScenario || null;
+
   const operatorInput: {
     disposition?: string;
     operatorNotes?: string;
     operatorId?: string;
     maxAllowableOffer?: number;
-  } = {};
+    rehabBudget?: number;
+    targetMargin?: number;
+    registrationFunds?: number;
+    creditedDeposit?: number;
+    buyersPremium?: number;
+    sheriffPoundage?: number;
+    transferTax?: number;
+    delinquentTaxes?: number;
+    settlementCosts?: number;
+  } = {
+    maxAllowableOffer: caseDecision?.decision?.maxOffer ?? scenario?.maxAllowableOffer ?? undefined,
+    rehabBudget: scenario?.rehabBudget ?? undefined,
+    targetMargin: scenario?.targetMargin ?? undefined,
+  };
+
   if (caseDecision?.state === 'pursue') operatorInput.disposition = 'BID';
   else if (caseDecision?.state === 'pass') operatorInput.disposition = 'PASS';
   if (typeof caseDecision?.decision?.note === 'string' && caseDecision.decision.note.trim()) {
     operatorInput.operatorNotes = caseDecision.decision.note;
   }
   if (caseDecision?.decision?.reviewer) operatorInput.operatorId = caseDecision.decision.reviewer;
-  if (caseDecision?.decision?.maxOffer) operatorInput.maxAllowableOffer = caseDecision.decision.maxOffer;
+
+  const cashFields = [
+    'registrationFunds',
+    'creditedDeposit',
+    'buyersPremium',
+    'sheriffPoundage',
+    'transferTax',
+    'delinquentTaxes',
+    'settlementCosts',
+  ] as const;
+
+  if (scenario) {
+    for (const field of cashFields) {
+      const raw = scenario[field];
+      if (raw !== undefined && raw !== null && raw !== '') {
+        const num = Number(raw);
+        if (Number.isFinite(num) && num >= 0) {
+          operatorInput[field] = num;
+        }
+      }
+    }
+  }
 
   const decisionPacket = buildDecisionPacket(listing, operatorInput);
 

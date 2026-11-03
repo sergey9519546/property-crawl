@@ -15,6 +15,7 @@ type CatchInput = {
   redemptionWarning?: string | null;
   seniorLienRisk?: string | null;
   sourceFreshness?: { ageHours: number | null; status: string } | null;
+  judgment?: unknown;
 };
 
 export type ListingCatch = { flags: string[]; notes: string[] };
@@ -44,7 +45,12 @@ export function listingCatch(listing: CatchInput, titleWarnings: string[] = []):
   } else if (bid !== null && bid > 0) {
     flags.push(`Opens at ${money(bid)}, but no value range was published, so the listing alone can't tell you whether that is a discount.`);
   } else {
-    flags.push("No opening amount was published, so the price is unknown until the sale.");
+    const judgment = num(listing.judgment);
+    if (judgment !== null && judgment > 0) {
+      flags.push(`No opening bid is published prior to sale (typical for sheriff sales). Court judgment on execution is ${money(judgment)}; the upset price/reserve is announced morning of the sale.`);
+    } else {
+      flags.push("No opening amount was published, so the price is unknown until the sale.");
+    }
   }
 
   const occupancy = text(listing.occupancy);

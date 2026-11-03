@@ -100,6 +100,8 @@ test('backfill harvests roll-less stored rows and persists each roll as it attac
   assert.equal(roll.parcel.assessedValue.total, 10205862);
   assert.equal(roll.taxYear, 2026);
   assert.equal(roll.valuationYear, 2027);
+  assert.equal(rollLess.parcelKey, '04013-10101010');
+  assert.equal(rollLess.provenance.derivedFields.parcelKey, true);
 });
 
 test('backfill is bounded by the candidate cap and tolerant of db and fetch failures', async () => {
@@ -178,4 +180,45 @@ test('backfill skips candidates whose miss is negatively cached within the TTL',
   assert.equal(result.harvested, 0);
   assert.deepEqual(db.persisted, []);
   fs.rmSync(path.dirname(cachePath), { recursive: true, force: true });
+});
+
+test('backfillAssessorRolls populates and persists listing.parcelKey when roll parcel apn is harvested', async () => {
+  const row = {
+    id: 'servicelink:mar-parcelkey-test',
+    source: 'servicelink',
+    state: 'AZ',
+    county: 'Maricopa',
+    countyFips: '04013',
+    lat: 33.4452,
+    lng: -112.303,
+    openingBid: 100000,
+    provenance: { origin: 'live', observed: true, publisher: 'ServiceLink', recordId: 'mar-pk-1' },
+  };
+  const persistedListings = [];
+  const db = {
+    async getListings() {
+      return { total: 1, listings: [row] };
+    },
+    async createListing(listing) {
+      persistedListings.push(listing);
+      return listing;
+    },
+  };
+  const result = await backfillAssessorRolls({
+    db,
+    cachePath: temporaryCachePath(),
+    fetchFn: async () => arcgisFetchReturning({
+      APN: '101-01-010',
+      FullCashValue: 250000,
+      TaxYear: 2026,
+    })(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(result.harvested, 1);
+  assert.equal(result.persisted, 1);
+  assert.equal(persistedListings.length, 1);
+  assert.equal(persistedListings[0].parcelKey, '04013-10101010');
+  assert.equal(persistedListings[0].provenance?.derivedFields?.parcelKey, true);
+  assert.equal(row.parcelKey, '04013-10101010');
 });

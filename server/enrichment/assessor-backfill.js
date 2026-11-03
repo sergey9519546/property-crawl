@@ -11,7 +11,7 @@
 // A backfill failure must never affect ingest or serving.
 
 const { harvestAssessorRolls, loadCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
-const { extractRawApn, normalizeApn } = require('../scrapers/normalization');
+const { extractRawApn, normalizeApn, buildParcelKey } = require('../scrapers/normalization');
 const { MARKET_CONVERSION } = require('./assessor-reading');
 const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
 
@@ -111,7 +111,20 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       now,
       cachePath,
       onHarvested: async (listing) => {
-        if (!listing?.provenance?.derivedFields?.assessorRoll) return;
+        const derivedFields = listing?.provenance?.derivedFields;
+        const roll = derivedFields?.assessorRoll;
+        if (!roll) return;
+        const apn = roll.parcel?.apn || roll.parcel?.canonicalApn || roll.apn;
+        if (!listing.parcelKey && apn) {
+          const derivedParcelKey = buildParcelKey({
+            apn: roll.parcel?.apn || apn,
+            countyFips: roll.parcel?.countyFips || listing.countyFips,
+          });
+          if (derivedParcelKey) {
+            listing.parcelKey = derivedParcelKey;
+            derivedFields.parcelKey = true;
+          }
+        }
         try {
           await db.createListing(listing);
           result.persisted += 1;

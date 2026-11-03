@@ -77,6 +77,9 @@ export function SaveSearchButton({ filters }: { filters: DiscoveryFilters }) {
       }
       if (!response.ok) throw new Error(result.error || result.details?.[0] || "The search could not be saved.");
       setSavedId(result.hunt.id);
+      if (result?.hunt?.id) {
+        void fetch(`/api/hunts/${encodeURIComponent(result.hunt.id)}/evaluate`, { method: "POST", credentials: "same-origin" }).catch(() => {});
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The search could not be saved.");
     } finally {

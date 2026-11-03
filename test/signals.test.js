@@ -86,6 +86,26 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(missingMid.signals.find(s => s.key === 'bid_to_value_ratio').status, 'unknown');
   });
 
+  test('evaluates bid_to_value_ratio for sheriff sale with unannounced opening bid and judgment amount', () => {
+    // Sheriff sale: openingBid: null, judgment: 245000, estLow: 300000, estHigh: 400000 -> mid: 350000
+    // 245,000 / 350,000 = 70.0%
+    const sheriffListing = sampleListing({
+      openingBid: null,
+      judgment: 245000,
+      estLow: 300000,
+      estHigh: 400000,
+    });
+    const evalRes = evaluateOpportunitySignals(sheriffListing);
+    const ratioSig = evalRes.signals.find(s => s.key === 'bid_to_value_ratio');
+    assert.equal(ratioSig.status, 'unknown');
+    assert.equal(ratioSig.label, 'Opening bid pending (judgment amount on record)');
+    assert.ok(ratioSig.reason.includes('70.0%'));
+    assert.ok(ratioSig.reason.includes('$245,000'));
+    assert.ok(ratioSig.reason.includes('$350,000'));
+    assert.equal(evalRes.componentScores.bidToValueRatio.earnedPoints, 0);
+    assert.equal(ratioSig.nextAction, 'Monitor morning-of-sale announcements for plaintiff upset price or reserve credit bid.');
+  });
+
   test('does not support unsupported valuation, unmatched parcel, or unknown lien evidence', () => {
     const result = evaluateOpportunitySignals(sampleListing({
       estLow: 200000,

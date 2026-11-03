@@ -78,31 +78,22 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     if (stored.customOpeningBid) {
       setCustomOpeningBid(stored.customOpeningBid);
     }
+    if (typeof stored.holdingMonths === "number" && stored.holdingMonths > 0) {
+      setHoldingMonths(stored.holdingMonths);
+    }
   }, [listing.id]);
 
   useEffect(() => {
+    const stored = readUnderwriteScenario(listing.id);
+    if (typeof stored?.holdingMonths === "number" && stored.holdingMonths > 0) {
+      return;
+    }
     if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
       setHoldingMonths(Math.max(1, Math.round(listing.redemptionDays / 30)));
     } else {
       setHoldingMonths(6);
     }
   }, [listing.id, listing.redemptionDays]);
-
-  const persistScenario = (
-    next: Record<ScenarioField, string>,
-    rehab = rehabBudget,
-    margin = targetMargin,
-    customVal = customValuation,
-    customBid = customOpeningBid,
-  ) => {
-    writeUnderwriteScenario(listing.id, {
-      ...next,
-      rehabBudget: rehab,
-      targetMargin: margin,
-      customValuation: customVal,
-      customOpeningBid: customBid,
-    });
-  };
 
   const publishedOpeningBid = positiveNumber(listing.openingBid);
   const customOpeningBidNum = enteredAmount(customOpeningBid);
@@ -112,6 +103,47 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const customValuationNum = enteredAmount(customValuation);
   const estimatedValue = customValuationNum ?? publisherValuation;
   const isCustomValuation = customValuationNum !== null;
+
+  const amounts = Object.fromEntries(Object.entries(scenario).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
+  const cash = computeCashToClose({ openingBid: openingBid ?? 0, purchasePrice: openingBid ?? 0, ...amounts });
+  const otherAcquisitionCosts = acquisitionFields.every((field) => amounts[field] !== null)
+    ? acquisitionFields.reduce((total, field) => total + (amounts[field] ?? 0), 0)
+    : null;
+  const reverseScenario = openingBid !== null
+    ? computeTargetPriceScenario({ estimatedValue, targetMarginPct: targetMargin, rehabBudget, currentPrice: openingBid, otherAcquisitionCosts })
+    : null;
+
+  const persistScenario = (
+    next: Record<ScenarioField, string>,
+    rehab = rehabBudget,
+    margin = targetMargin,
+    customVal = customValuation,
+    customBid = customOpeningBid,
+    months = holdingMonths,
+  ) => {
+    writeUnderwriteScenario(listing.id, {
+      ...next,
+      rehabBudget: rehab,
+      targetMargin: margin,
+      customValuation: customVal,
+      customOpeningBid: customBid,
+      holdingMonths: months,
+      maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? null,
+    });
+  };
+
+  const updateHoldingMonths = (months: number) => {
+    setHoldingMonths(months);
+    writeUnderwriteScenario(listing.id, {
+      ...scenario,
+      rehabBudget,
+      targetMargin,
+      customValuation,
+      customOpeningBid,
+      holdingMonths: months,
+      maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? null,
+    });
+  };
 
   // The bid-cost model and the max-allowable-offer calculation do not need the
   // same inputs. Cost to close is arithmetic over the PUBLISHED opening amount
@@ -160,12 +192,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     );
   }
 
-  const amounts = Object.fromEntries(Object.entries(scenario).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
-  const cash = computeCashToClose({ openingBid, purchasePrice: openingBid, ...amounts });
-  const otherAcquisitionCosts = acquisitionFields.every((field) => amounts[field] !== null)
-    ? acquisitionFields.reduce((total, field) => total + (amounts[field] ?? 0), 0)
-    : null;
-  const reverseScenario = computeTargetPriceScenario({ estimatedValue, targetMarginPct: targetMargin, rehabBudget, currentPrice: openingBid, otherAcquisitionCosts });
+
 
   const updateScenario = (field: ScenarioField, value: string) => {
     if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
@@ -457,7 +484,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                     <button
                       key={mo}
                       type="button"
-                      onClick={() => setHoldingMonths(mo)}
+                      onClick={() => updateHoldingMonths(mo)}
                       className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
                         holdingMonths === mo
                           ? "bg-go text-white border-go shadow-xs"
@@ -476,7 +503,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                   max="24"
                   step="1"
                   value={holdingMonths}
-                  onChange={(e) => setHoldingMonths(Number(e.target.value))}
+                  onChange={(e) => updateHoldingMonths(Number(e.target.value))}
                   className="w-full accent-go"
                   aria-label="Holding duration in months"
                 />

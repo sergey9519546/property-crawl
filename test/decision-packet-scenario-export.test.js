@@ -205,9 +205,149 @@ test('API route & BiddingSimulator: correctly wires query parameters and dynamic
   assert.match(compSrc, /Export Decision Packet/);
   assert.match(compSrc, /Download JSON Packet/);
   assert.match(compSrc, /Download Markdown Memo/);
-  assert.match(compSrc, /\/api\/listings\/\$\{encodeURIComponent\(listing\.id\)\}\/packet\?format=json&disposition=UNDERWRITE/);
-  assert.match(compSrc, /\/api\/listings\/\$\{encodeURIComponent\(listing\.id\)\}\/packet\?format=markdown&disposition=UNDERWRITE/);
-  assert.match(compSrc, /maxAllowableOffer=\$\{encodeURIComponent\(String\(reverseScenario\?\.maxPurchasePrice \?\? openingBid \?\? ""\)\)\}/);
-  assert.match(compSrc, /rehabBudget=\$\{encodeURIComponent\(String\(rehabBudget\)\)\}/);
-  assert.match(compSrc, /targetMargin=\$\{encodeURIComponent\(String\(targetMargin\)\)\}/);
+  assert.match(compSrc, /\/api\/listings\/\${encodeURIComponent\(listing\.id\)}\/packet\?format=json&disposition=UNDERWRITE/);
+  assert.match(compSrc, /\/api\/listings\/\${encodeURIComponent\(listing\.id\)}\/packet\?format=markdown&disposition=UNDERWRITE/);
+  assert.match(compSrc, /maxAllowableOffer=\${encodeURIComponent\(String\(reverseScenario\?\.maxPurchasePrice \?\? openingBid \?\? ""\)\)}/);
+  assert.match(compSrc, /rehabBudget=\${encodeURIComponent\(String\(rehabBudget\)\)}/);
+  assert.match(compSrc, /targetMargin=\${encodeURIComponent\(String\(targetMargin\)\)}/);
+});
+
+test('createCase: persists underwriteScenario and updates existing case on re-open', (t) => {
+  const fsNode = require('node:fs');
+  const osNode = require('node:os');
+  const pathNode = require('node:path');
+  const researchCases = require('../server/intelligence/research-cases');
+
+  const dir = fsNode.mkdtempSync(pathNode.join(osNode.tmpdir(), 'property-test-case-'));
+  t.after(() => fsNode.rmSync(dir, { recursive: true, force: true }));
+  const filePath = pathNode.join(dir, 'workspace.json');
+  const now = '2026-11-03T20:00:00.000Z';
+
+  // 1. Verify sanitizeUnderwriteScenario
+  assert.equal(researchCases.sanitizeUnderwriteScenario(null), null);
+  assert.equal(researchCases.sanitizeUnderwriteScenario({}), null);
+  assert.equal(researchCases.sanitizeUnderwriteScenario({ registrationFunds: '' }), null);
+
+  const rawScenario = {
+    registrationFunds: '5000',
+    creditedDeposit: '5000',
+    buyersPremium: '2500',
+    sheriffPoundage: '1200',
+    transferTax: '1800',
+    delinquentTaxes: '3000',
+    settlementCosts: '950',
+    rehabBudget: 35000,
+    targetMargin: 25,
+    customValuation: '240000',
+    customOpeningBid: '120000',
+    holdingMonths: 8,
+    maxAllowableOffer: 115000,
+  };
+
+  const sanitized = researchCases.sanitizeUnderwriteScenario(rawScenario);
+  assert.ok(sanitized);
+  assert.equal(sanitized.rehabBudget, 35000);
+  assert.equal(sanitized.targetMargin, 25);
+  assert.equal(sanitized.holdingMonths, 8);
+  assert.equal(sanitized.maxAllowableOffer, 115000);
+  assert.equal(sanitized.customValuation, '240000');
+  assert.equal(sanitized.customOpeningBid, '120000');
+  assert.equal(sanitized.registrationFunds, '5000');
+
+  // 2. Create case with underwriteScenario
+  const observedAt = '2026-11-03T19:00:00.000Z';
+  const listing = {
+    id: 'CIV-NJ-7-2128964683',
+    source: 'civilview',
+    state: 'NJ',
+    county: 'Bergen',
+    city: 'Park Ridge',
+    zip: '07656',
+    address: '19 West Park Avenue, Park Ridge, NJ 07656',
+    openingBid: 120000,
+    saleDate: '2026-12-15',
+    status: 'scheduled',
+    propType: 'Single Family',
+    sqft: 1200,
+    assessed: 180000,
+    raw: 'Test-only publisher notice record for underwriteScenario test.',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683',
+    sourceObservedAt: observedAt,
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'CivilView',
+      recordId: '2128964683',
+      observedAt,
+    },
+  };
+
+  const created = researchCases.createCase({
+    listing,
+    origin: { type: 'manual' },
+    underwriteScenario: rawScenario,
+  }, { filePath, now });
+
+  assert.equal(created.created, true);
+  assert.ok(created.case.underwriteScenario);
+  assert.equal(created.case.underwriteScenario.rehabBudget, 35000);
+  assert.equal(created.case.underwriteScenario.targetMargin, 25);
+  assert.equal(created.case.underwriteScenario.maxAllowableOffer, 115000);
+  assert.equal(created.case.underwriteScenario.holdingMonths, 8);
+
+  // 3. getCase detail preserves underwriteScenario
+  const retrieved = researchCases.getCase(created.case.id, { filePath });
+  assert.ok(retrieved.case.underwriteScenario);
+  assert.equal(retrieved.case.underwriteScenario.maxAllowableOffer, 115000);
+  assert.ok(retrieved.dossier.workspace.underwriteScenario);
+  assert.equal(retrieved.dossier.workspace.underwriteScenario.rehabBudget, 35000);
+
+  // 4. Re-opening existing case updates underwriteScenario
+  const updatedScenario = {
+    ...rawScenario,
+    rehabBudget: 45000,
+    maxAllowableOffer: 105000,
+  };
+
+  const reopened = researchCases.createCase({
+    listing,
+    origin: { type: 'manual' },
+    underwriteScenario: updatedScenario,
+  }, { filePath, now: '2026-11-03T20:05:00.000Z' });
+
+  assert.equal(reopened.created, false);
+  assert.equal(reopened.case.id, created.case.id);
+  assert.equal(reopened.case.underwriteScenario.rehabBudget, 45000);
+  assert.equal(reopened.case.underwriteScenario.maxAllowableOffer, 105000);
+});
+
+test('DecisionPacketView and case-action.tsx: wire readUnderwriteScenario and underwriting assumptions', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  // Verify DecisionPacketView wires readUnderwriteScenario and updates underwritingAssumptions
+  const viewSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/decision-packet-view.tsx'), 'utf8');
+  assert.match(viewSrc, /import\s+.*readUnderwriteScenario.*from\s+["']@\/lib\/underwrite-scenario["']/);
+  assert.match(viewSrc, /withOperatorScenario/);
+  assert.match(viewSrc, /packet\?\.underwritingAssumptions/);
+  assert.match(viewSrc, /rehabBudget:\s*scenario\.rehabBudget/);
+  assert.match(viewSrc, /targetMarginPct:\s*scenario\.targetMargin/);
+  assert.match(viewSrc, /maxAllowableOffer:\s*scenario\.maxAllowableOffer/);
+  assert.match(viewSrc, /data-testid="lien-waterfall-schedule"/);
+  assert.match(viewSrc, /data-testid="hud-safmr-card"/);
+  assert.match(viewSrc, /data-testid="statutory-deadlines-carry"/);
+
+  // Verify CaseAction wires readUnderwriteScenario and POSTs underwriteScenario
+  const actionSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/case-action.tsx'), 'utf8');
+  assert.match(actionSrc, /import\s+.*readUnderwriteScenario.*from\s+["']@\/lib\/underwrite-scenario["']/);
+  assert.match(actionSrc, /readUnderwriteScenario\(listingId\)/);
+  assert.match(actionSrc, /underwriteScenario:\s*underwriteScenario\s*\|\|\s*undefined/);
+
+  // Verify DecisionPacketExportPage falls back to caseDecision.underwriteScenario
+  const exportPageSrc = fs.readFileSync(path.join(__dirname, '../src/app/research/[id]/export/page.tsx'), 'utf8');
+  assert.match(exportPageSrc, /caseDecision\?\.underwriteScenario/);
+  assert.match(exportPageSrc, /maxAllowableOffer:\s*caseDecision\?\.decision\?\.maxOffer\s*\?\?\s*scenario\?\.maxAllowableOffer/);
+  assert.match(exportPageSrc, /rehabBudget:\s*scenario\?\.rehabBudget/);
+  assert.match(exportPageSrc, /targetMargin:\s*scenario\?\.targetMargin/);
 });
