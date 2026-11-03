@@ -368,8 +368,8 @@ function readSnapshot({sourceKey,recordId,snapshotDir = process.env.PROPERTY_EVI
   const raw = JSON.parse(rawText);
   let markdown = null, markdownPath = null;
   if (latest.metadata.markdownFile) {
-    markdownPath=path.join(snapshotDir,safeSource,path.basename(latest.metadata.markdownFile));
-    markdown=fs.readFileSync(markdownPath,'utf8');
+    markdownPath=path.join(/*turbopackIgnore: true*/ snapshotDir,safeSource,path.basename(latest.metadata.markdownFile));
+    markdown=fs.readFileSync(/*turbopackIgnore: true*/ markdownPath,'utf8');
     if (crypto.createHash('sha256').update(markdown).digest('hex') !== latest.metadata.markdownSha256) throw new Error('Markdown evidence hash mismatch');
   }
   return {raw,markdown,rawPath,markdownPath,ledgerBlock:latest};
