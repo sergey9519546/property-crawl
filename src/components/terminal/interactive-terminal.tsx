@@ -585,9 +585,9 @@ export function InteractiveTerminal() {
               </div>
             </div>
 
-            {inventoryNotice && <p role="status" className="mb-4 rounded-xl border border-line-strong bg-paper p-3 text-sm text-ink-2">{inventoryNotice}</p>}
+            {inventoryNotice && <p role="status" className="mb-4 rounded-control border border-line-strong bg-paper p-3 text-sm text-ink-2">{inventoryNotice}</p>}
             {/* Filter Bar */}
-            <div className="p-4 bg-card rounded-2xl border border-line shadow-sm mb-4 space-y-3">
+            <div className="p-4 bg-card rounded-card border border-line shadow-card mb-4 space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 {/* Search */}
                 <div className="relative flex-1 min-w-[240px]">
@@ -598,7 +598,7 @@ export function InteractiveTerminal() {
                     onChange={(e) => dispatchFilters({ type: "set", key: "searchQuery", value: e.target.value })}
                     aria-label="Search listings"
                     placeholder="Search address, county, court docket..."
-                    className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-line-strong bg-card focus:outline-none focus:border-ink"
+                    className="w-full pl-9 pr-4 py-2 text-xs rounded-control border border-line-strong bg-card focus:outline-none focus:border-ink"
                   />
                 </div>
 
@@ -607,7 +607,7 @@ export function InteractiveTerminal() {
                   value={selectedState}
                   onChange={(e) => dispatchFilters({ type: "set", key: "selectedState", value: e.target.value })}
                   aria-label="State filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="all">All States</option>
                   {availableStates.map((state) => (
@@ -622,7 +622,7 @@ export function InteractiveTerminal() {
                   value={selectedSource}
                   onChange={(e) => dispatchFilters({ type: "set", key: "selectedSource", value: e.target.value })}
                   aria-label="Source filter"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="all">All Sources</option>
                   {availableSources.map((key) => {
@@ -640,13 +640,13 @@ export function InteractiveTerminal() {
                   type="button"
                   aria-pressed={observedOnly}
                   onClick={() => dispatchFilters({ type: "toggleObservedOnly" })}
-                  className={cn("rounded-xl border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-ink bg-ink text-white" : "border-line-strong bg-card text-ink-2")}
+                  className={cn("rounded-control border px-3 py-2 text-xs font-semibold transition", observedOnly ? "border-ink bg-ink text-white" : "border-line-strong bg-card text-ink-2")}
                 >Source-observed only</button>
                 <select
                   value={sortBy}
                   onChange={(e) => dispatchFilters({ type: "set", key: "sortBy", value: e.target.value as TerminalSort })}
                   aria-label="Sort listings"
-                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
+                  className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 outline-none focus:outline-none focus:ring-2 focus:ring-ink/20"
                 >
                   <option value="date">Published Deadline (Soonest)</option>
                   <option value="equity">Bid Spread (Highest)</option>
@@ -670,7 +670,7 @@ export function InteractiveTerminal() {
                   type="button"
                   onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
                   className={cn(
-                    "px-3 py-2 text-xs font-semibold rounded-xl border transition flex items-center gap-1.5 shadow-sm",
+                    "px-3 py-2 text-xs font-semibold rounded-control border transition flex items-center gap-1.5 shadow-sm",
                     isAdvancedOpen || activeFiltersCount > 0
                       ? "bg-ink text-white border-ink"
                       : "bg-card border-line-strong text-ink-2 hover:bg-paper"
@@ -688,7 +688,7 @@ export function InteractiveTerminal() {
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-line-strong bg-card text-ink-2 hover:bg-paper transition flex items-center gap-1"
+                    className="px-3 py-2 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2 hover:bg-paper transition flex items-center gap-1"
                     aria-label="Reset all filters"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -708,7 +708,7 @@ export function InteractiveTerminal() {
                     <select
                       value={minDealScore}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minDealScore", value: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value={0}>Any Score</option>
                       <option value={70}>70+ (Elite Only)</option>
@@ -725,7 +725,7 @@ export function InteractiveTerminal() {
                     <select
                       value={minEquity}
                       onChange={(e) => dispatchFilters({ type: "set", key: "minEquity", value: Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value={0}>Any Bid Spread</option>
                       <option value={25000}>$25,000+</option>
@@ -743,7 +743,7 @@ export function InteractiveTerminal() {
                     <select
                       value={maxOpeningBid === null ? "all" : maxOpeningBid}
                       onChange={(e) => dispatchFilters({ type: "set", key: "maxOpeningBid", value: e.target.value === "all" ? null : Number(e.target.value) })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">Any Opening Bid</option>
                       <option value={50000}>Under $50k</option>
@@ -761,7 +761,7 @@ export function InteractiveTerminal() {
                     <select
                       value={propertyType}
                       onChange={(e) => dispatchFilters({ type: "set", key: "propertyType", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All Types</option>
                       <option value="Single Family">Single Family</option>
@@ -779,7 +779,7 @@ export function InteractiveTerminal() {
                     <select
                       value={seniorLienFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "seniorLienFilter", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All lien flags</option>
                       <option value="clean">Low lien flag</option>
@@ -795,7 +795,7 @@ export function InteractiveTerminal() {
                     <select
                       value={redemptionFilter}
                       onChange={(e) => dispatchFilters({ type: "set", key: "redemptionFilter", value: e.target.value })}
-                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-line-strong bg-card text-ink-2"
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-control border border-line-strong bg-card text-ink-2"
                     >
                       <option value="all">All Jurisdictions</option>
                       <option value="immediate">Published 0-day term</option>
@@ -879,9 +879,9 @@ export function InteractiveTerminal() {
             </div>
 
             {/* Triage Analytics Summary Bar */}
-            <div className="mb-6 p-4 bg-card rounded-2xl border border-line shadow-sm grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="mb-6 p-4 bg-card rounded-card border border-line shadow-card grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
+                <div className="w-9 h-9 rounded-control bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <LayoutGrid className="w-4 h-4" />
                 </div>
                 <div>
@@ -891,7 +891,7 @@ export function InteractiveTerminal() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
+                <div className="w-9 h-9 rounded-control bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <Calendar className="w-4 h-4" />
                 </div>
                 <div>
@@ -901,7 +901,7 @@ export function InteractiveTerminal() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-ink/5 flex items-center justify-center text-ink shrink-0">
+                <div className="w-9 h-9 rounded-control bg-ink/5 flex items-center justify-center text-ink shrink-0">
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <div>
@@ -957,7 +957,7 @@ export function InteractiveTerminal() {
             ) : (
             /* Listings Grid */
             filtered.length === 0 ? (
-              <div className="p-12 text-center bg-card rounded-2xl border border-line shadow-sm space-y-4">
+              <div className="p-12 text-center bg-card rounded-card border border-line shadow-card space-y-4">
                 <SlidersHorizontal className="w-10 h-10 mx-auto text-ink-3" />
                 {/* An empty list because the load FAILED is not an empty list
                     because the filters are narrow. Telling the user to adjust
@@ -982,7 +982,7 @@ export function InteractiveTerminal() {
                 )}
 
                 {searchQuery.trim() && (
-                  <div className="pt-2 max-w-md mx-auto p-4 rounded-xl bg-ink text-white space-y-2 border border-white/10 shadow-md text-left">
+                  <div className="pt-2 max-w-md mx-auto p-4 rounded-control bg-ink text-white space-y-2 border border-white/10 shadow-md text-left">
                     <div className="flex items-center gap-2 text-white text-xs font-bold uppercase tracking-wider">
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>Address research workspace</span>
@@ -993,7 +993,7 @@ export function InteractiveTerminal() {
                     <button
                       type="button"
                       onClick={() => handleDeepCheckAddress(searchQuery)}
-                      className="w-full mt-2 py-2 px-4 rounded-lg bg-ink-2 hover:bg-ink-3 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition border border-white/20"
+                      className="w-full mt-2 py-2 px-4 rounded-control bg-ink-2 hover:bg-ink-3 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition border border-white/20"
                     >
                       <Scale className="w-3.5 h-3.5" />
                       <span>Open evidence checklist for &quot;{searchQuery}&quot;</span>
@@ -1005,7 +1005,7 @@ export function InteractiveTerminal() {
                   <button
                     type="button"
                     onClick={resetFilters}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-line hover:bg-line-strong text-ink text-xs font-bold rounded-xl transition shadow-sm"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-line hover:bg-line-strong text-ink text-xs font-bold rounded-control transition shadow-sm"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Reset All Filters</span>
@@ -1111,7 +1111,7 @@ export function InteractiveTerminal() {
                         aria-label={`${compare.ids.includes(listing.id) ? "Remove from" : "Add to"} compare: ${listing.address}`}
                         disabled={compare.full && !compare.ids.includes(listing.id)}
                         onClick={() => compare.toggle(listing.id)}
-                        className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-line-strong bg-card px-3 text-xs font-bold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex min-h-11 w-full items-center justify-center rounded-control border border-line-strong bg-card px-3 text-xs font-bold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {compare.ids.includes(listing.id) ? "In compare" : compare.full ? "Compare is full" : "Compare"}
                       </button>

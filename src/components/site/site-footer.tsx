@@ -83,10 +83,10 @@ export function SiteFooter() {
       <div id="contact" className="bg-line">
         <div className="mx-auto grid max-w-[1240px] gap-8 px-6 py-14 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,0.8fr)] lg:items-center lg:gap-20 lg:py-16">
           <div className="max-w-[600px]">
-            <p className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[28px]">
+            <p className="text-title font-semibold leading-tight tracking-[-0.02em] text-ink sm:text-[28px]">
               Subscribe for source coverage notes
             </p>
-            <p className="mt-2 max-w-[520px] text-[15px] leading-6 text-ink-3">
+            <p className="mt-2 max-w-[520px] text-body text-ink-3">
               Occasional notes on which sources we added or fixed. We write them by hand, so there is no regular schedule. Always check a sale at its source before you bid.
             </p>
           </div>
@@ -94,7 +94,7 @@ export function SiteFooter() {
             onSubmit={handleNewsletterSubmit}
             className="w-full"
           >
-            <label htmlFor="footer-email" className="mb-2 block text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-2">
+            <label htmlFor="footer-email" className="mb-2 block text-label font-bold uppercase tracking-wider text-ink-2">
               Work email
             </label>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -109,11 +109,11 @@ export function SiteFooter() {
                 }}
                 aria-describedby="newsletter-status"
                 placeholder="you@company.com"
-                className="h-12 min-w-0 flex-1 rounded-[12px] border border-line-strong bg-card px-4 text-[14px] text-ink shadow-sm placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
+                className="h-12 min-w-0 flex-1 rounded-control border border-line-strong bg-card px-4 text-meta text-ink shadow-sm placeholder:text-ink-3 focus:border-ink focus:outline-none focus:ring-2 focus:ring-ink/20"
               />
               <button
                 type="submit"
-                className="inline-flex h-12 shrink-0 items-center justify-center rounded-[12px] bg-ink px-5 text-[14px] font-semibold text-white transition-colors hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                className="inline-flex h-12 shrink-0 items-center justify-center rounded-control bg-ink px-5 text-meta font-semibold text-white transition-colors hover:bg-ink-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
               >
                 Subscribe
                 <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden />
@@ -123,7 +123,7 @@ export function SiteFooter() {
               id="newsletter-status"
               data-testid="newsletter-status"
               aria-live="polite"
-              className="mt-2 min-h-5 text-[12px] font-medium text-ink-3"
+              className="mt-2 min-h-5 text-label font-medium text-ink-3"
             >
               {newsletterStatus}
             </p>
@@ -137,9 +137,9 @@ export function SiteFooter() {
           {/* Brand column */}
           <div className="col-span-2 lg:col-span-1">
             <Link href="/" className="flex items-center" aria-label="PerfectProperty home">
-              <Logo className="text-[16px]" />
+              <Logo className="text-base" />
             </Link>
-            <p className="mt-4 max-w-[230px] text-[14px] leading-6 text-ink-2">
+            <p className="mt-4 max-w-[230px] text-meta leading-6 text-ink-2">
               Auction and government-sold homes in one place, with the catch spelled out.
             </p>
             <div className="mt-5 flex items-center gap-3">
@@ -155,7 +155,7 @@ export function SiteFooter() {
                   href={href}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-line text-ink-2 transition-colors hover:bg-paper hover:text-ink"
+                  className="flex h-8 w-8 items-center justify-center rounded-control border border-line text-ink-2 transition-colors hover:bg-paper hover:text-ink"
                   aria-label={label}
                 >
                   <Icon className="h-4 w-4" />
@@ -166,7 +166,7 @@ export function SiteFooter() {
 
           {COLUMNS.map((col) => (
             <div key={col.title}>
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+              <p className="text-label font-bold uppercase tracking-wider text-ink-3">
                 {col.title}
               </p>
               <ul className="mt-3 space-y-2.5">
@@ -174,7 +174,7 @@ export function SiteFooter() {
                   <li key={l.label}>
                     <Link
                       href={l.href}
-                      className="text-[14px] font-medium text-ink-2 transition-colors hover:text-ink"
+                      className="text-meta font-medium text-ink-2 transition-colors hover:text-ink"
                     >
                       {l.label}
                     </Link>
@@ -187,17 +187,17 @@ export function SiteFooter() {
 
         {/* Legal row */}
         <div className="mt-16 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <p className="text-[13px] text-ink-3">
+          <p className="text-meta text-ink-3">
             &copy; {new Date().getFullYear()} PerfectProperty. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
-            <Link href="/terms" className="text-[13px] font-medium text-ink-2 hover:text-ink">
+            <Link href="/terms" className="text-meta font-medium text-ink-2 hover:text-ink">
               Terms
             </Link>
-            <Link href="/privacy" className="text-[13px] font-medium text-ink-2 hover:text-ink">
+            <Link href="/privacy" className="text-meta font-medium text-ink-2 hover:text-ink">
               Privacy
             </Link>
-            <Link href="/security" className="text-[13px] font-medium text-ink-2 hover:text-ink">
+            <Link href="/security" className="text-meta font-medium text-ink-2 hover:text-ink">
               Security
             </Link>
           </div>

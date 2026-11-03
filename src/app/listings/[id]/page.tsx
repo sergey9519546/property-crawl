@@ -179,7 +179,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
         <div>
           <h1 className="text-3xl font-bold text-ink">Listing unavailable</h1>
           <p className="mt-3 text-ink-3">The listing service could not provide this record. Try again or return to results.</p>
-          <Link href={returnTo} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-ink px-4 py-3 text-sm font-bold text-white">
+          <Link href={returnTo} className="mt-6 inline-flex items-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-bold text-white">
             <ArrowLeft className="h-4 w-4" /> Back to results
           </Link>
         </div>
@@ -326,7 +326,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <h1 className="text-4xl font-bold tracking-tight text-ink sm:text-5xl">{headlineAddress}</h1>
           <p className="mt-2 flex min-w-0 items-start gap-2 text-lg text-ink-3"><MapPin className="mt-1 h-4 w-4 shrink-0" /><span className="min-w-0 break-words">{[publishedText(listing.city, ""), publishedText(listing.state, ""), publishedText(listing.zip, ""), publishedText(listing.county, "") ? `${publishedText(listing.county, "").replace(/\s+county$/i, "")} County` : null].filter(Boolean).join(" · ") || "Location not published"}</span></p>
           <p className="mt-2 text-sm text-ink-3"><span className="font-semibold text-ink">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}</span>{observedAt ? <> <span aria-hidden>·</span> Source observed {observedAt} UTC</> : null}</p>
-          <section data-testid="listing-catch" aria-label="Deal Score and the catch" className="mt-5 rounded-2xl border border-line bg-card p-5 shadow-sm">
+          <section data-testid="listing-catch" aria-label="Deal Score and the catch" className="mt-5 rounded-card border border-line bg-card p-5 shadow-card">
             <div className="flex flex-wrap items-center gap-3">
               {scoreBand ? (
                 <span data-testid="deal-score-badge" className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: `${scoreBand.color}${scoreBand.alpha}`, color: scoreBand.color }}>
@@ -352,7 +352,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           )}
         </div>
         <section className="min-w-0">
-          <div className="overflow-hidden rounded-3xl border border-line bg-card shadow-sm">
+          <div className="overflow-hidden rounded-card border border-line bg-card shadow-card">
             <ListingMedia
               listingId={listing.id}
               address={listing.address}
@@ -369,31 +369,31 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
 
           {hasPublishedAccessState && (
-            <div data-testid="publisher-access-notice" className={`mt-5 flex items-start gap-3 rounded-2xl border p-4 text-sm leading-relaxed ${accessNeedsAttention ? "border-catch/30 bg-catch-wash text-catch-ink" : "border-line bg-card text-ink-2"}`}>
+            <div data-testid="publisher-access-notice" className={`mt-5 flex items-start gap-3 rounded-control border p-4 text-sm leading-relaxed ${accessNeedsAttention ? "border-catch/30 bg-catch-wash text-catch-ink" : "border-line bg-card text-ink-2"}`}>
               <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${accessNeedsAttention ? "text-catch-ink" : "text-ink-3"}`} />
               <p><strong className="text-ink">{accessHeadline}</strong><span className="block text-xs">Publisher reported. Confirm current access and inspection rules on the exact listing.</span></p>
             </div>
           )}
 
-          <div className="mt-5 rounded-2xl border border-line bg-card p-5 text-ink shadow-sm lg:hidden">
+          <div className="mt-5 rounded-card border border-line bg-card p-5 text-ink shadow-card lg:hidden">
             <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Auction details</h2><span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span></div>
             <p className="mt-4 text-3xl font-bold tracking-tight">{openingBid !== null ? formatMoney(openingBid) : reportedSaleSchedule}</p><p className="mt-1 text-sm text-ink-3">{openingBid !== null ? "Published opening amount" : "Reported sale"}</p>
             <dl className="mt-4 divide-y divide-line border-y border-line">{openingBid !== null ? <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Reported sale</dt><dd className="text-right font-semibold"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" />{[saleTime, saleTimezone].filter(Boolean).length ? ` · ${[saleTime, saleTimezone].filter(Boolean).join(" ")}` : null}</dd></div> : <div className="flex items-center justify-between gap-4 py-3 text-sm"><dt className="text-ink-3">Opening amount</dt><dd className="font-semibold"><Fact value={openingBid} format="money" /></dd></div>}{saleLocation ? <div className="py-3 text-sm"><dt className="text-ink-3">Sale location</dt><dd className="mt-1 font-semibold leading-relaxed">{saleLocation}</dd></div> : null}</dl>
-            {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-ink-3"><strong className="text-ink">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
+            {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-control bg-ink px-4 py-3 text-sm font-semibold text-white hover:bg-ink-2">Open exact source listing <ExternalLink className="h-4 w-4" /></a> : <p className="mt-4 text-xs text-ink-3"><strong className="text-ink">Exact upstream record not supplied. </strong>No generic portal link is shown.</p>}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
-            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
+            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-control" label="Open research workspace" /></div>
             <div className="mt-2 flex flex-col gap-1.5">
               <a
                 href="#due-diligence-binder"
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-paper px-4 text-xs font-semibold text-ink shadow-xs transition hover:bg-line"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong bg-paper px-4 text-xs font-semibold text-ink shadow-xs transition hover:bg-line"
               >
                 <FileCheck2 className="h-4 w-4 text-ink-3" />
                 7-Point Due Diligence & Waterfall
               </a>
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-card px-4 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong bg-card px-4 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
               >
                 <FileText className="h-4 w-4 text-ink-3" />
                 View Decision Packet Dossier
@@ -404,7 +404,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   download={`decision-packet-${listing.id}.json`}
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-control border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
                 >
                   <Download className="h-3.5 w-3.5 text-ink-3" />
                   JSON Packet
@@ -414,7 +414,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   download={`decision-packet-${listing.id}.md`}
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-control border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
                 >
                   <Download className="h-3.5 w-3.5 text-ink-3" />
                   Markdown
@@ -452,26 +452,26 @@ export default async function ListingPage({ params, searchParams }: Props) {
           <SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} />
           <div className="mt-6"><PropertyDocuments evidence={listing.documentEvidence} publisherUrl={exactSourceUrl} /></div>
 
-          <details id="documents-title" className="mt-6 scroll-mt-6 rounded-2xl border border-line bg-card px-5 shadow-sm">
+          <details id="documents-title" className="mt-6 scroll-mt-6 rounded-card border border-line bg-card px-5 shadow-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-ink"><span>Publisher record and identifiers</span><span className={`text-xs font-semibold ${exactSourceUrl ? "text-ink-2" : "text-catch-ink"}`}>{exactSourceUrl ? "Exact page linked" : "Exact URL unavailable"}</span></summary>
             <div className="border-t border-line pb-5 pt-3">
               {sourceIdentifiers.length ? <dl className="divide-y divide-line text-sm">{sourceIdentifiers.map(([label, identifier]) => <div key={label} className="flex justify-between gap-4 py-3"><dt className="text-ink-3">{label}</dt><dd className="break-words text-right font-semibold text-ink">{String(identifier)}</dd></div>)}</dl> : <p className="py-3 text-sm text-ink-3">No additional publisher identifiers were supplied.</p>}
               {exactSourceUrl ? <a href={exactSourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-ink underline hover:text-ink-2">Open exact publisher page <ExternalLink className="h-4 w-4" /></a> : null}
-              {listing.source === "civilview" && provenance.detailUrlRequiresCountySession === true ? <p className="mt-4 rounded-xl bg-paper p-4 text-xs leading-relaxed text-ink">CivilView detail pages use a county browser session. If the exact link redirects to the source index, open the county search first and then return to the exact record link.</p> : null}
+              {listing.source === "civilview" && provenance.detailUrlRequiresCountySession === true ? <p className="mt-4 rounded-control bg-paper p-4 text-xs leading-relaxed text-ink">CivilView detail pages use a county browser session. If the exact link redirects to the source index, open the county search first and then return to the exact record link.</p> : null}
             </div>
           </details>
 
-          <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-3xl border border-line bg-card p-6 sm:p-8">
+          <div id="market-evidence" className="mt-6 scroll-mt-6 rounded-card border border-line bg-card p-6 shadow-card sm:p-8">
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-ink-2">Decision evidence</p>
             <h2 className="mt-1 text-xl font-bold">Market evidence</h2>
             {positiveNumber(listing.assessed) !== null || (estLow !== null && estHigh !== null) ? (
               <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Stored assessed value</dt><dd className="mt-1 text-lg font-bold text-ink">{formatMoney(positiveNumber(listing.assessed))}</dd></div>
-                <div className="rounded-2xl bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Stored valuation range</dt><dd className="mt-1 text-lg font-bold text-ink">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "—"}</dd></div>
+                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Stored assessed value</dt><dd className="mt-1 text-lg font-bold text-ink">{formatMoney(positiveNumber(listing.assessed))}</dd></div>
+                <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Stored valuation range</dt><dd className="mt-1 text-lg font-bold text-ink">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "—"}</dd></div>
               </dl>
             ) : null}
             <AssessorReading listingId={listing.id} />
-            <div className="mt-5 rounded-2xl border border-line bg-paper p-4 text-xs leading-relaxed text-ink-2" data-testid="title-rules-check">
+            <div className="mt-5 rounded-control border border-line bg-paper p-4 text-xs leading-relaxed text-ink-2" data-testid="title-rules-check">
               <p className="font-bold text-ink">Rules check from the published plaintiff and the state table. Not a title opinion, not a bid instruction, and not a statement that this auction is open.</p>
               <p className="mt-2">Plaintiff: {publishedText(listing.plaintiff)}</p>
               {occupancy ? <p className="mt-2">Occupancy published as {occupancy}.</p> : null}
@@ -497,7 +497,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   {titleRules.titleWarnings.filter((warning): warning is string => typeof warning === "string" && warning.length > 0).map((warning) => <li key={warning}>{warning}</li>)}
                 </ul>
                 {titleRules.firstMortgageSurvives && (
-                  <div className="mt-3 rounded-lg border border-catch/30 bg-catch-wash p-3 font-bold text-catch-ink">
+                  <div className="mt-3 rounded-control border border-catch/30 bg-catch-wash p-3 font-bold text-catch-ink">
                     CRITICAL TITLE DEFECT: Foreclosing party is a junior lienholder. Senior 1st mortgage survives this auction!
                   </div>
                 )}
@@ -530,19 +530,19 @@ export default async function ListingPage({ params, searchParams }: Props) {
 
           {/* Cross-source bake-off: when multiple sources publish the same parcel. */}
           {Array.isArray(listing.crossSourceMatches) && listing.crossSourceMatches.length > 0 && (
-            <div className="mt-8 rounded-2xl border border-line bg-paper p-5 shadow-sm">
+            <div className="mt-8 rounded-card border border-line bg-paper p-5 shadow-card">
               <h2 className="text-sm font-bold text-ink">Cross-source observations</h2>
               <p className="mt-1 text-xs leading-relaxed text-ink-2">
                 Multiple sources publish records for this parcel. Both observations are retained; the fresher record is preferred.
               </p>
               <dl className="mt-4 space-y-3">
-                <div className="rounded-xl border border-line bg-card p-3">
+                <div className="rounded-control border border-line bg-card p-3">
                   <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(publishedText(provenance.publisher, source?.label ?? listing.source))}{listing.bakeOff?.preferredSource === listing.source ? <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">Preferred</span> : null}</dt>
                   <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(listing.openingBid)}</dd>
                   {observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {observedAt} UTC</dd> : null}
                 </div>
                 {listing.crossSourceMatches.map((match) => (
-                  <div key={match.listingId} className="rounded-xl border border-line bg-card p-3">
+                  <div key={match.listingId} className="rounded-control border border-line bg-card p-3">
                     <dt className="text-xs font-semibold text-ink-3">{sourceDisplayText(match.source)}{listing.bakeOff?.preferredSource === match.source ? <span className="ml-2 rounded bg-line px-1.5 py-0.5 text-[10px] font-bold text-ink-2">Preferred</span> : null}</dt>
                     <dd className="mt-1 text-lg font-bold text-ink">{formatMoney(match.openingBid)}</dd>
                     {match.observedAt ? <dd className="mt-0.5 text-xs text-ink-3">Observed {formatObservedAt(match.observedAt)}</dd> : null}
@@ -558,12 +558,12 @@ export default async function ListingPage({ params, searchParams }: Props) {
           )}
 
           {/* Modeled title-risk signal; never presented as a completed title search. */}
-            <details id="modeled-research" className="mt-8 rounded-2xl border border-line bg-card px-5 py-1 shadow-sm">
+            <details id="modeled-research" className="mt-8 rounded-card border border-line bg-card px-5 py-1 shadow-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-base font-bold text-ink">Modeled research scenarios <span className="text-sm font-normal text-ink-3">Assumptions, not verified property facts</span></summary>
             <div className="border-t border-line pb-5 pt-5">
           {/* Modeled redemption review; confirm against official sale terms. */}
           {showRedemptionReview && (
-            <div className="mt-6 rounded-lg border border-catch/30 bg-catch-wash p-5 text-xs text-catch-ink space-y-3">
+            <div className="mt-6 rounded-control border border-catch/30 bg-catch-wash p-5 text-xs text-catch-ink space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold flex items-center gap-2 text-catch-ink">
                   <Clock className="h-5 w-5 text-catch-ink" />
@@ -601,7 +601,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
         </section>
 
         <aside className="hidden min-w-0 space-y-5 lg:sticky lg:top-8 lg:block lg:self-start">
-          <div className="rounded-2xl border border-line bg-card p-6 text-ink shadow-sm sm:p-7">
+          <div className="rounded-card border border-line bg-card p-6 text-ink shadow-card sm:p-7">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold">Auction details</h2>
               <span data-testid="listing-status" data-status-tone={statusTone} className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span>
@@ -614,7 +614,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
             </dl>
             <p className="mt-5 text-xs leading-relaxed text-ink-3">Confirm current sale terms with the publisher.</p>
             {exactSourceUrl ? (
-              <a href={exactSourceUrl} target="_blank" rel="noreferrer" data-testid="exact-source-listing-link" className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-lg bg-ink px-5 py-3 text-center text-sm font-semibold text-white hover:bg-ink-2">
+              <a href={exactSourceUrl} target="_blank" rel="noreferrer" data-testid="exact-source-listing-link" className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-control bg-ink px-5 py-3 text-center text-sm font-semibold text-white hover:bg-ink-2">
                 Open exact source listing <ExternalLink className="h-4 w-4" />
               </a>
             ) : (
@@ -622,18 +622,18 @@ export default async function ListingPage({ params, searchParams }: Props) {
             )}
             <div className="mt-3"><ListingWatchlistToggle listingId={listing.id} /></div>
             <div className="mt-2"><ListingCompareToggle listingId={listing.id} className="h-12 w-full" /></div>
-            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-lg" label="Open research workspace" /></div>
+            <div className="mt-2"><CaseAction listingId={listing.id} className="h-12 rounded-control" label="Open research workspace" /></div>
             <div className="mt-2 flex flex-col gap-1.5">
               <a
                 href="#due-diligence-binder"
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-paper px-4 text-xs font-semibold text-ink shadow-xs transition hover:bg-line"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong bg-paper px-4 text-xs font-semibold text-ink shadow-xs transition hover:bg-line"
               >
                 <FileCheck2 className="h-4 w-4 text-ink-3" />
                 7-Point Due Diligence & Waterfall
               </a>
               <Link
                 href={`/research/${encodeURIComponent(listing.id)}/export`}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-card px-4 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong bg-card px-4 text-xs font-semibold text-ink-2 shadow-sm transition hover:bg-paper"
               >
                 <FileText className="h-4 w-4 text-ink-3" />
                 View Decision Packet Dossier
@@ -644,7 +644,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   download={`decision-packet-${listing.id}.json`}
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-control border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
                 >
                   <Download className="h-3.5 w-3.5 text-ink-3" />
                   JSON Packet
@@ -654,7 +654,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                   target="_blank"
                   rel="noreferrer"
                   download={`decision-packet-${listing.id}.md`}
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
+                  className="flex h-9 items-center justify-center gap-1.5 rounded-control border border-line bg-paper px-2 text-xs font-medium text-ink-2 transition hover:bg-line"
                 >
                   <Download className="h-3.5 w-3.5 text-ink-3" />
                   Markdown

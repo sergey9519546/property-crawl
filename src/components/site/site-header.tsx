@@ -99,7 +99,7 @@ function MegaPanel({ group }: { group: MenuGroup }) {
             <Link
               key={l.label}
               href={l.href}
-              className="rounded-lg px-3 py-2 text-[14px] font-medium text-ink hover:bg-paper"
+              className="rounded-control px-3 py-2 text-meta font-medium text-ink hover:bg-paper"
             >
               {l.label}
             </Link>
@@ -117,19 +117,19 @@ function MegaPanel({ group }: { group: MenuGroup }) {
               <Link
                 key={l.label}
                 href={l.href}
-                className="group flex items-start gap-3 rounded-xl p-2.5 hover:bg-paper"
+                className="group flex items-start gap-3 rounded-control p-2.5 hover:bg-paper"
               >
                 <span
-                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-control"
                   style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
                 >
                   <l.icon className="h-[18px] w-[18px] text-ink" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-[14px] font-semibold text-ink">
+                  <span className="block text-meta font-semibold text-ink">
                     {l.label}
                   </span>
-                  <span className="block text-[13px] leading-snug text-ink-3">
+                  <span className="block text-label leading-snug text-ink-3">
                     {l.desc}
                   </span>
                 </span>
@@ -172,7 +172,7 @@ export function SiteHeader() {
         {/* Inner capsule: the visual nav shell. Transparent at top, white+blur+rounded when scrolled.
             Arcade: transition 0.2s, scroll threshold ~100px, wider container, tighter nav spacing */}
         <header
-          className={`relative flex items-center justify-between rounded-[16px] px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
+          className={`relative flex items-center justify-between rounded-control px-4 py-3 sm:px-8 transition-all duration-500 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] ${
             scrolled || open
               ? "bg-card/70 backdrop-blur-2xl backdrop-saturate-[2] border border-white/40 shadow-[0_8px_32px_rgba(0,0,0,0.08),inset_0_1px_0_rgba(255,255,255,0.8)]"
               : "bg-transparent shadow-none border border-transparent"
@@ -186,7 +186,7 @@ export function SiteHeader() {
             brand's box ran under the trigger by a pixel. */}
         <div className="flex min-w-0 items-center">
           <Link href="/" className="flex min-w-0 items-center gap-3" aria-label="PerfectProperty home">
-            <Logo className="text-[14px] min-[375px]:text-[16px] sm:text-[20px]" />
+            <Logo className="text-sm min-[375px]:text-base sm:text-lg" />
           </Link>
         </div>
 
@@ -202,7 +202,7 @@ export function SiteHeader() {
                 onClick={() => setOpen(g.key)}
                 aria-haspopup="menu"
                 aria-expanded={open === g.key}
-                className="inline-flex h-10 items-center text-[14px] font-semibold text-ink-2 transition-colors hover:text-ink"
+                className="inline-flex h-10 items-center text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
               >
                 {g.label}
               </button>
@@ -210,18 +210,18 @@ export function SiteHeader() {
             <Link
               href="/#pricing"
               onMouseEnter={() => setOpen(null)}
-              className="inline-flex h-10 items-center text-[14px] font-semibold text-ink-2 transition-colors hover:text-ink"
+              className="inline-flex h-10 items-center text-meta font-semibold text-ink-2 transition-colors hover:text-ink"
             >
               Pricing
             </Link>
         </nav>
 
-        {/* Right: CTA — single dark button, rounded-[12px] */}
+        {/* Right: CTA — single dark button, rounded-control */}
         <div className="hidden xl:flex items-center gap-2">
           <Link
             href="/listings"
             onMouseEnter={() => setOpen(null)}
-            className="inline-flex h-10 items-center justify-center rounded-[12px] bg-ink px-4 text-[14px] font-bold text-white transition-colors hover:bg-ink-2"
+            className="inline-flex h-10 items-center justify-center rounded-control bg-ink px-4 text-meta font-bold text-white transition-colors hover:bg-ink-2"
           >
             Browse listings
           </Link>
@@ -229,7 +229,7 @@ export function SiteHeader() {
             href="/account"
             onMouseEnter={() => setOpen(null)}
             title="Members sign in with a one-time email link"
-            className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-3 text-[13px] font-semibold text-ink-2 transition-colors hover:bg-card"
+            className="inline-flex h-10 items-center justify-center rounded-control border border-line-strong px-3 text-meta font-semibold text-ink-2 transition-colors hover:bg-card"
           >
             Sign in
           </Link>
@@ -237,7 +237,7 @@ export function SiteHeader() {
 
         {/* Mobile trigger */}
         <button
-          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-ink hover:bg-paper"
+          className="xl:hidden inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-ink hover:bg-paper"
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
         >
@@ -260,7 +260,7 @@ export function SiteHeader() {
             onMouseLeave={() => setOpen(null)}
           >
             <div className="mx-auto w-[calc(100%-32px)] sm:w-[calc(100%-48px)] lg:w-[calc(100%-64px)]">
-              <div className="mt-2 overflow-hidden rounded-2xl border border-line bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
+              <div className="mt-2 overflow-hidden rounded-card border border-line bg-card shadow-[0_1px_2px_rgba(0,0,0,0.05),0_12px_32px_rgba(0,0,0,0.08)]">
                 {GROUPS.filter((g) => g.key === open).map((g) => (
                   <MegaPanel key={g.key} group={g} />
                 ))}
@@ -280,25 +280,25 @@ export function SiteHeader() {
             <SheetHeader className="flex flex-row items-center border-b border-paper px-5 py-4 pr-12">
               <SheetTitle asChild>
                 <span className="flex items-center">
-                  <Logo className="text-[16px]" />
+                  <Logo className="text-base" />
                 </span>
               </SheetTitle>
             </SheetHeader>
             <Accordion type="multiple" className="px-2 py-2">
               {GROUPS.map((g) => (
                 <AccordionItem key={g.key} value={g.key} className="border-b-0">
-                  <AccordionTrigger className="px-3 text-[15px] font-semibold text-ink hover:no-underline">
+                  <AccordionTrigger className="px-3 text-body font-semibold text-ink hover:no-underline">
                     {g.label}
                   </AccordionTrigger>
-                  <AccordionContent className="px-1 pb-2">
-                    <div className="grid gap-0.5">
+                  <AccordionContent className="pb-2 pt-1">
+                    <div className="grid gap-1 px-1">
                       {g.simple
                         ? g.simple.map((l) => (
                             <Link
                               key={l.label}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
-                              className="rounded-lg px-3 py-2 text-[14px] text-ink-2 hover:bg-paper"
+                              className="rounded-control px-3 py-2 text-meta text-ink-2 hover:bg-paper"
                             >
                               {l.label}
                             </Link>
@@ -308,19 +308,19 @@ export function SiteHeader() {
                               key={l.label}
                               href={l.href}
                               onClick={() => setMobileOpen(false)}
-                              className="flex items-start gap-3 rounded-lg px-3 py-2 hover:bg-paper"
+                              className="flex items-start gap-3 rounded-control px-3 py-2 hover:bg-paper"
                             >
                               <span
-                                className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg"
+                                className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-control"
                                 style={{ backgroundColor: l.tint ?? "#F3F4F6" }}
                               >
                                 <l.icon className="h-4 w-4 text-ink" />
                               </span>
                               <span>
-                                <span className="block text-[14px] font-semibold text-ink">
+                                <span className="block text-meta font-semibold text-ink">
                                   {l.label}
                                 </span>
-                                <span className="block text-[12px] text-ink-3">
+                                <span className="block text-label text-ink-3">
                                   {l.desc}
                                 </span>
                               </span>
@@ -330,7 +330,7 @@ export function SiteHeader() {
                   </AccordionContent>
                 </AccordionItem>
               ))}
-              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-lg px-3 py-3 text-[15px] font-semibold text-ink hover:bg-paper">
+              <Link href="/#pricing" onClick={() => setMobileOpen(false)} className="block rounded-control px-3 py-3 text-body font-semibold text-ink hover:bg-paper">
                 Pricing
               </Link>
             </Accordion>
@@ -338,14 +338,14 @@ export function SiteHeader() {
               <Link
                 href="/listings"
                 onClick={() => setMobileOpen(false)}
-                className="inline-flex h-10 items-center justify-center rounded-[12px] bg-ink px-4 text-[14px] font-semibold text-white"
+                className="inline-flex h-10 items-center justify-center rounded-control bg-ink px-4 text-meta font-semibold text-white"
               >
                 Browse listings
               </Link>
               <Link
                 href="/account"
                 onClick={() => setMobileOpen(false)}
-                className="inline-flex h-10 items-center justify-center rounded-[12px] border border-line-strong px-4 text-[14px] font-semibold text-ink-2"
+                className="inline-flex h-10 items-center justify-center rounded-control border border-line-strong px-4 text-meta font-semibold text-ink-2"
               >
                 Sign in
               </Link>

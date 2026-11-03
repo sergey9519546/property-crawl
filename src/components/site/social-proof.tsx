@@ -51,29 +51,29 @@ export function SocialProof() {
   const counts = useLiveCounts();
   return (
     <section id="proof" className="px-5 pt-12 pb-16 lg:px-8">
-      <GsapReveal className="mx-auto max-w-[1080px] rounded-3xl border border-line bg-card/70 p-6 backdrop-blur sm:p-8">
+      <GsapReveal className="mx-auto max-w-[1080px] rounded-card border border-line bg-card p-6 shadow-card sm:p-8">
         <div className="grid gap-8 lg:grid-cols-[auto_1fr] lg:items-center lg:gap-12">
           <dl className="flex gap-8 sm:gap-12">
             {counts.map((c) => (
               <div key={c.label} className="flex flex-col-reverse">
-                <dt className="mt-1 text-[13px] text-ink-3">
-                  <span className="mr-1.5 inline-flex rounded bg-go-wash px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-go">Live count</span>
+                <dt className="mt-1 text-meta text-ink-3">
+                  <span className="mr-1.5 inline-flex rounded-full bg-go-wash px-2 py-0.5 text-label font-bold uppercase tracking-wider text-go">Live count</span>
                   {c.label}
                 </dt>
-                <dd className="text-[34px] font-semibold tracking-[-0.03em] text-ink tabular-nums">{c.value}</dd>
+                <dd className="text-title font-semibold tracking-[-0.02em] text-ink tabular-nums">{c.value}</dd>
               </div>
             ))}
           </dl>
           <div>
-            <h2 className="text-[15px] font-semibold text-ink">Where the listings come from</h2>
+            <h2 className="text-lead font-semibold text-ink">Where the listings come from</h2>
             <ul className="mt-3 flex flex-wrap gap-2">
               {SOURCES.map((name) => (
-                <li key={name} className="rounded-full border border-line bg-card px-3 py-1.5 text-[13px] font-medium text-ink">
+                <li key={name} className="rounded-full border border-line bg-paper px-3 py-1.5 text-meta font-medium text-ink">
                   {name}
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[12px] leading-5 text-ink-3">
+            <p className="mt-3 text-meta leading-5 text-ink-3">
               Public sale notices and government listings. Coverage varies by county. Names are for reference, not endorsements.
             </p>
           </div>

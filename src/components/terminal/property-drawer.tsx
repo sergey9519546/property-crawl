@@ -462,7 +462,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {activeTab === "underwrite" && (
             <div id="panel-underwrite" role="tabpanel" aria-labelledby="tab-underwrite" className="space-y-6">
               {/* Core Valuation Matrix */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-paper rounded-2xl border border-line">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-paper rounded-control border border-line">
                 <div>
                   <p className="text-[11px] font-bold text-ink-3 uppercase">Opening Bid</p>
                   <p className="text-lg font-extrabold text-ink">{displayMoney(openingBid)}</p>
@@ -490,7 +490,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               <ListingCompare listingId={listing.id} label={listing.address} />
 
               {/* AI Deal Intelligence */}
-              <div className="p-5 rounded-2xl border border-ink/10 bg-paper space-y-3">
+              <div className="p-5 rounded-card border border-ink/10 bg-paper space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-ink-3 fill-ink-3" />
@@ -579,7 +579,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </span>
                 </div>
 
-                <div className="p-4 rounded-2xl border border-line bg-card space-y-3 text-xs">
+                <div className="p-4 rounded-control border border-line bg-card space-y-3 text-xs">
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="text-ink-3 block text-[11px]">Normalized source category:</span>
@@ -643,7 +643,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     <span className="text-xs font-extrabold text-ink">{displayMoney(cashToClose.totalAcquisitionCost)}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-ink-3">Every amount below is tagged as published evidence or an explicit scenario assumption. Missing terms remain unresolved.</p>
-                  <div className="divide-y divide-line border border-line rounded-2xl bg-card text-xs">
+                  <div className="divide-y divide-line border border-line rounded-card bg-card text-xs">
                     {([
                       ["Purchase-price scenario", "purchasePrice", cashToClose.purchasePrice],
                       ["Registration funds (separate)", "registrationFunds", cashToClose.registrationFunds],
@@ -664,14 +664,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-line-strong bg-paper p-4 text-xs text-ink-3">
+                <div className="rounded-control border border-dashed border-line-strong bg-paper p-4 text-xs text-ink-3">
                   Cash requirements are unresolved. No fee is inferred from the source name or state. Open the Price Scenario tab to enter published terms or explicit assumptions.
                 </div>
               )}
 
               {/* Commercial & Multi-Family CRE Underwriting */}
               {creMetrics && (
-                <div className="p-4 rounded-2xl border border-line bg-paper space-y-3">
+                <div className="p-4 rounded-card border border-line bg-paper space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Scale className="w-4 h-4 text-ink-2" />
@@ -698,7 +698,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 </div>
               )}
 
-              <button type="button" onClick={() => setActiveTab("bidding")} className="w-full rounded-2xl border border-ink/15 bg-paper p-4 text-left transition hover:border-ink">
+              <button type="button" onClick={() => setActiveTab("bidding")} className="w-full rounded-control border border-ink/15 bg-paper p-4 text-left transition hover:border-ink">
                 <span className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-ink"><Calculator className="h-4 w-4" />Price and cost reverse scenario</span>
                 <span className="mt-1 block text-xs leading-relaxed text-ink-3">Enter the costs you can support, then see the maximum price or cost reduction that meets your target. Unknown fees and debt stay unresolved.</span>
               </button>
@@ -713,12 +713,12 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   <span className="text-xs text-ink-3">{displayText(listing.city)}, {listing.state}</span>
                 </div>
                 {compsLoading ? (
-                  <div className="rounded-2xl border border-line bg-paper p-4 text-xs text-ink-3">
+                  <div className="rounded-control border border-line bg-paper p-4 text-xs text-ink-3">
                     Scanning active proximity &amp; square-footage comparables within 16 km...
                   </div>
                 ) : compsData && compsData.comps.length > 0 ? (
                   <div className="space-y-2.5">
-                    <div className="grid grid-cols-3 gap-2 rounded-2xl border border-line bg-paper p-3 text-center text-xs">
+                    <div className="grid grid-cols-3 gap-2 rounded-control border border-line bg-paper p-3 text-center text-xs">
                       <div>
                         <p className="text-[10px] font-bold uppercase text-ink-3">Active Comps</p>
                         <p className="mt-0.5 font-extrabold text-ink">{compsData.stats.count}</p>
@@ -738,7 +738,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                         </p>
                       </div>
                     </div>
-                    <div className="divide-y divide-line rounded-2xl border border-line bg-card text-xs">
+                    <div className="divide-y divide-line rounded-control border border-line bg-card text-xs">
                       {compsData.comps.map((item, idx) => {
                         const row = item.listing || item;
                         const compId = row.id || `comp-${idx}`;
@@ -775,7 +775,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-line-strong bg-card p-4 text-xs leading-relaxed text-ink-3">
+                  <div className="rounded-control border border-dashed border-line-strong bg-card p-4 text-xs leading-relaxed text-ink-3">
                     No verified comparable-sale records were captured within {compsData?.radiusKm ?? 16} km of this source record. The valuation band above is shown only when supplied by the ingestion pipeline; it is not a substitute for dated, address-level comps.
                   </div>
                 )}
@@ -784,7 +784,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
               {/* Court & Legal Specifics */}
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-ink uppercase tracking-wide">Legal Docket & Deposit Terms</h3>
-                <div className="divide-y divide-line border border-line rounded-2xl bg-card text-xs">
+                <div className="divide-y divide-line border border-line rounded-card bg-card text-xs">
                   <div className="p-3.5 flex justify-between">
                     <span className="text-ink-3 font-semibold">Plaintiff</span>
                     <span className="font-medium text-ink">{displayText(listing.plaintiff)}</span>
@@ -855,7 +855,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {activeTab === "3d" && (
             <div id="panel-3d" role="tabpanel" aria-labelledby="tab-3d" className="space-y-4 animate-in fade-in">
               <Parcel3DVisualizer listing={listing} />
-              <div className="p-4 bg-paper rounded-2xl border border-line text-xs text-ink-3 space-y-1.5">
+              <div className="p-4 bg-paper rounded-control border border-line text-xs text-ink-3 space-y-1.5">
                 <span className="font-bold text-ink block">Concept visualization only</span>
                 <p>This view is not a boundary survey, elevation certificate, zoning determination, or FEMA flood finding. Attach official parcel geometry and hazard records before relying on dimensions or setbacks.</p>
               </div>

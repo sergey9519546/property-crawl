@@ -103,7 +103,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       }
     : null;
 
-  return <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-line bg-card shadow-sm transition-shadow hover:shadow-md" aria-label={listing.address}>
+  return <article className="flex min-w-0 flex-col overflow-hidden rounded-card border border-line bg-card shadow-card transition-shadow hover:shadow-raised" aria-label={listing.address}>
     <div className="relative shrink-0">
       <ListingThumbnail listingId={listing.id} address={listing.address} photo={listing.photo} observed={observed} layout="card" />
       {program ? <span className="absolute left-3 top-3 max-w-[calc(100%-5rem)] rounded-md bg-card/95 px-2.5 py-1.5 text-xs font-semibold text-ink-2 shadow-sm">{sourceDisplayText(program)}</span> : null}

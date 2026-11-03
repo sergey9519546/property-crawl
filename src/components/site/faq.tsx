@@ -44,14 +44,14 @@ export function Faq() {
         <SectionHeading eyebrow="Questions" title="What first-time bidders ask us.">
           Short answers. The <Link href="/resources" className="font-semibold text-ink underline underline-offset-4">buyer&apos;s guide</Link> has the long ones.
         </SectionHeading>
-        <div className="mt-12 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-card">
+        <div className="mt-12 divide-y divide-line overflow-hidden rounded-card border border-line bg-card shadow-card">
           {QUESTIONS.map(({ q, a }) => (
             <details key={q} className="faq-item group">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 px-6 py-5 text-[16px] font-semibold text-ink transition-colors hover:bg-paper sm:px-7">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 px-6 py-5 text-body font-semibold text-ink transition-colors hover:bg-paper sm:px-7">
                 {q}
                 <Plus aria-hidden className="faq-icon h-5 w-5 shrink-0 text-ink-3 transition-transform duration-200" />
               </summary>
-              <p className="px-6 pb-6 text-[15px] leading-7 text-ink-2 sm:px-7">{a}</p>
+              <p className="px-6 pb-6 text-body leading-relaxed text-ink-2 sm:px-7">{a}</p>
             </details>
           ))}
         </div>

@@ -3,13 +3,18 @@ name: PerfectProperty
 description: Evidence-first discovery and triage layer for distressed and government-sold real estate
 colors:
   primary: "#181529"
+  ink-2: "#3d3a4f"
+  ink-3: "#5f5c6e"
   neutral-bg: "#f5f6f7"
   card: "#ffffff"
   line: "#e5e7eb"
   line-strong: "#d1d5db"
   catch: "#a92e14"
+  catch-ink: "#a92e14"
+  catch-strong: "#ff5533"
   catch-wash: "rgba(255, 85, 51, 0.08)"
   yours: "#3651e0"
+  yours-ink: "#3651e0"
   yours-wash: "rgba(79, 107, 246, 0.08)"
   go: "#0b7a56"
   go-fill: "#12b981"
@@ -52,6 +57,11 @@ typography:
     fontFamily: "var(--font-geist-mono), monospace"
     fontSize: "0.875rem"
     fontWeight: 400
+  editorial:
+    fontFamily: "Droid Serif, Georgia, serif"
+    fontSize: "1.125rem"
+    fontWeight: 400
+    lineHeight: 1.6
 rounded:
   control: "12px"
   card: "24px"

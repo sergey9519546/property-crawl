@@ -278,7 +278,7 @@ export function Storyteller() {
           The same order an experienced bidder follows. Click through them with a real listing.
         </SectionHeading>
 
-        <div className="mt-14 overflow-hidden rounded-[28px] border border-card/90 bg-card/90 shadow-raised backdrop-blur-xl">
+        <div className="mt-14 overflow-hidden rounded-card border border-card/90 bg-card/90 shadow-raised backdrop-blur-xl">
             <div className="flex flex-col gap-3 border-b border-line bg-card/90 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
               <div>
                 <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-ink">
@@ -328,7 +328,7 @@ export function Storyteller() {
                     />
                     <span className="flex items-start gap-2 sm:gap-3">
                       <span
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-[10px] font-extrabold transition-colors sm:h-9 sm:w-9 sm:rounded-xl sm:text-[11px] ${
+                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-control text-[10px] font-extrabold transition-colors sm:h-9 sm:w-9 sm:rounded-control sm:text-[11px] ${
                           selected
                             ? "bg-ink text-white"
                             // The step number was once flagged for insufficient
@@ -473,7 +473,7 @@ function VerificationPanel() {
         </div>
       </article>
 
-      <article className="rounded-[24px] border border-line bg-card p-5 shadow-sm sm:p-7">
+      <article className="rounded-card border border-line bg-card p-5 shadow-sm sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-3">Quick check</p>
@@ -581,7 +581,7 @@ function UnderwritePanel() {
 
   return (
     <div data-testid="storyteller-underwrite" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-      <article className="rounded-[24px] border border-line bg-card p-6 shadow-sm sm:p-8">
+      <article className="rounded-card border border-line bg-card p-6 shadow-sm sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink">Your numbers</p>
@@ -689,7 +689,7 @@ function ActionPanel() {
 
   return (
     <div data-testid="storyteller-act" className="grid min-h-[480px] gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-      <article className="overflow-hidden rounded-[24px] border border-line bg-card shadow-sm">
+      <article className="overflow-hidden rounded-card border border-line bg-card shadow-sm">
         <div className="flex items-start justify-between gap-4 border-b border-line bg-ink px-6 py-5 text-white">
           <div>
             <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-white/75">Listing</p>
@@ -739,7 +739,7 @@ function ActionPanel() {
         </div>
       </article>
 
-      <article className="rounded-[24px] border border-line bg-paper p-5 sm:p-7">
+      <article className="rounded-card border border-line bg-paper p-5 sm:p-7">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink">Your to-do list</p>

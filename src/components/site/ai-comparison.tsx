@@ -73,47 +73,47 @@ export function AiComparison() {
             <div
               key={col.name}
               data-stagger-item
-              className={`flex flex-col rounded-3xl border p-7 ${
+              className={`flex flex-col rounded-card border p-7 ${
                 col.highlight
                   ? "border-ink bg-card ring-1 ring-ink shadow-raised"
-                  : "border-line bg-card/70"
+                  : "border-line bg-card shadow-card"
               }`}
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-[18px] font-semibold text-ink">{col.name}</h3>
+                <h3 className="text-title font-semibold text-ink">{col.name}</h3>
                 {col.highlight && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-0.5 text-label font-bold text-white">
                     <Sparkles className="h-3 w-3" /> Alerts
                   </span>
                 )}
               </div>
-              <p className="mt-3 text-[28px] font-semibold tracking-[-0.02em] text-ink">
+              <p className="mt-3 text-title font-semibold tracking-[-0.02em] text-ink sm:text-display">
                 {col.cta ? memberPrice ?? "Membership" : "$0"}
               </p>
-              <p className="text-[13px] font-medium text-ink-3">{col.cta ? "Cancel any time from your account" : col.tag}</p>
+              <p className="text-meta font-medium text-ink-3">{col.cta ? "Cancel any time from your account" : col.tag}</p>
               <ul className="mt-6 flex-1 space-y-3">
                 {col.features.map((f) => (
                   <li key={f.label} className="flex items-start gap-2.5">
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ink/10">
                       <Check className="h-3 w-3 text-ink" />
                     </span>
-                    <span className="text-[14px] leading-6 text-ink">{f.label}</span>
+                    <span className="text-body leading-6 text-ink">{f.label}</span>
                   </li>
                 ))}
               </ul>
               {col.cta ? (
-                <Link href="/account" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl bg-ink text-sm font-semibold text-white hover:bg-ink-2">
+                <Link href="/account" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-control bg-ink text-meta font-semibold text-white hover:bg-ink-2">
                   Become a member
                 </Link>
               ) : (
-                <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-xl border border-line-strong text-sm font-semibold text-ink hover:bg-card">
+                <Link href="/listings" className="mt-7 inline-flex h-11 w-full items-center justify-center rounded-control border border-line-strong text-meta font-semibold text-ink hover:bg-card">
                   Start searching
                 </Link>
               )}
             </div>
           ))}
         </GsapStaggerGroup>
-        <p className="mt-6 text-center text-[13px] text-ink-3">
+        <p className="mt-6 text-center text-meta text-ink-3">
           Not included in either plan: title reports, sold-price comparables, or a sale in every county. <a href="#faq" className="font-semibold text-ink underline underline-offset-4">Why?</a>
         </p>
       </div>
