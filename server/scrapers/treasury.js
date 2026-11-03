@@ -135,7 +135,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
     const titleMatch = detailHtml.match(/<title>([^<]+)<\/title>/);
     if (!titleMatch) return null;
     const fullAddress = titleMatch[1].trim();
-    if (!/^\d/.test(fullAddress)) return null; // skip non-property titles
+    if (!/^\s*(?:(?:LOT|PARCEL|TRACT|UNIT)\s+[^:]+:\s*)?\d/i.test(fullAddress)) return null; // skip non-property titles
 
     // When Scrapling is enabled, delegate the labeled-field extraction to
     // the Python venv and use the structured record instead of the regex

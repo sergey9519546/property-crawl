@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS listings (
     defendant TEXT,
     judgment_amount NUMERIC(14, 2),
     attorney TEXT,
-    occupancy VARCHAR(64),
+    occupancy TEXT,
     deposit_terms TEXT,
     photo_url TEXT,
     images TEXT[],

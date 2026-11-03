@@ -1779,7 +1779,7 @@
     {
       "table": "listings",
       "column": "occupancy",
-      "type": "character varying",
+      "type": "text",
       "nullable": true,
       "default": null
     },
