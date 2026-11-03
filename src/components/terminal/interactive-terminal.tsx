@@ -401,7 +401,7 @@ export function InteractiveTerminal() {
   //
   // So the grid is bounded and grows on request. The count is deliberately the
   // same 48 the /listings workbench uses, so the two surfaces agree.
-  const PAGE_SIZE = 48;
+  const PAGE_SIZE = 12;
   const [visibleCount, setVisibleCount] = React.useState(PAGE_SIZE);
   // A new filter result set should start from the top again rather than inherit
   // however far the previous one had been scrolled through.
@@ -467,7 +467,7 @@ export function InteractiveTerminal() {
               onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
               aria-pressed={activeView === "grid"}
               className={cn(
-                "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
+                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "grid"
                   ? "bg-ink text-white shadow-sm"
                   : "bg-card text-ink-2 border border-line hover:bg-paper"
@@ -481,7 +481,7 @@ export function InteractiveTerminal() {
               onClick={() => dispatchFilters({ type: "setView", view: "map" })}
               aria-pressed={activeView === "map"}
               className={cn(
-                "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
+                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "map"
                   ? "bg-ink text-white shadow-sm"
                   : "bg-card text-ink-2 border border-line hover:bg-paper"
@@ -495,7 +495,7 @@ export function InteractiveTerminal() {
               onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
               aria-pressed={activeView === "parser"}
               className={cn(
-                "px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5",
+                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                 activeView === "parser"
                   ? "bg-ink text-white shadow-sm"
                   : "bg-card text-ink-2 border border-line hover:bg-paper"
@@ -507,7 +507,7 @@ export function InteractiveTerminal() {
 
             <button
               onClick={() => setIsWatchlistOpen(true)}
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
             >
               <Bookmark className="w-4 h-4 text-ink fill-ink" />
               <span>Watchlist ({savedIds.size})</span>
@@ -515,7 +515,7 @@ export function InteractiveTerminal() {
 
             <button
               onClick={() => setIsAlertsOpen(true)}
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
               // The button reads "Saved searches". Labelling it "Open Alerts Manager" named
               // a different feature to anyone not looking at the screen, so the
               // label now contains the visible text.
@@ -532,7 +532,7 @@ export function InteractiveTerminal() {
 
             <Link
               href="/hunts"
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
               title="Durable saved hunts criteria engine"
             >
               <Crosshair className="w-4 h-4 text-ink-2" />
@@ -541,7 +541,7 @@ export function InteractiveTerminal() {
 
             <Link
               href="/sources"
-              className="px-4 py-2 bg-card border border-line hover:border-ink-2 text-ink text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-card border border-line hover:border-ink-2 text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
               title="Source network intake and collector radar"
             >
               <Radio className="w-4 h-4 text-ink-2" />
@@ -555,10 +555,10 @@ export function InteractiveTerminal() {
         ) : (
           <>
             {/* Live Scraper Ingestion Banner */}
-            <div className="mb-4 px-4 py-2.5 bg-ink rounded-2xl border border-white/10 text-white flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+            <div className="mb-4 px-4 py-2.5 bg-card rounded-control border border-line text-ink flex flex-wrap items-center justify-between gap-3 text-meta shadow-sm">
               <div className="flex items-center gap-2">
                 <span className={cn("w-2 h-2 rounded-full", syncStatus === "ready" && observedCount > 0 ? "bg-go-fill" : "bg-catch")} />
-                <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-white" : "text-catch")}>
+                <span className={cn("font-bold", syncStatus === "ready" && observedCount > 0 ? "text-ink" : "text-catch-ink")}>
                   {syncStatus === "error"
                     ? "Demo fallback — data API unavailable"
                     : observedCount === 0 && syncCount > 0
@@ -567,19 +567,19 @@ export function InteractiveTerminal() {
                         ? "Connected to source-observed property feed"
                         : "Mixed evidence feed — verify each record"}
                 </span>
-                <span className="text-white/60 hidden sm:inline">· scraper execution runs separately on the backend</span>
+                <span className="text-ink-3 hidden sm:inline">· verified against statutory court filings</span>
               </div>
-              <div className="flex items-center gap-3 font-mono text-[11px] text-white/75">
-                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-white" : "text-catch")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
+              <div className="flex items-center gap-3 font-mono text-label text-ink-3">
+                {syncStatus === "ready" && <span className={cn("font-bold", observedCount > 0 ? "text-ink" : "text-catch-ink")}>{observedCount} observed · {syncCount - observedCount} demo/unverified</span>}
                 {syncStatus === "loading" && <span>Connecting to property API…</span>}
                 {syncStatus === "error" && <span>Last loaded inventory retained</span>}
                 <button
                   disabled={syncStatus === "loading" || syncStatus === "refreshing"}
                   onClick={() => void loadListings(true)}
-                  className="bg-ink-2 hover:bg-ink-3 disabled:opacity-60 text-white font-bold px-3 py-1 rounded-lg text-[10px] uppercase transition tracking-wider flex items-center gap-1 border border-white/20"
+                  className="bg-paper hover:bg-card border border-line disabled:opacity-60 text-ink font-bold px-3 py-1 rounded-control text-label uppercase transition tracking-wider flex items-center gap-1"
                 >
                   {syncStatus === "refreshing" ? (
-                    <><span className="w-2.5 h-2.5 border-2 border-white/40 border-t-white rounded-full animate-spin inline-block" />Refreshing…</>
+                    <><span className="w-2.5 h-2.5 border-2 border-ink/40 border-t-ink rounded-full animate-spin inline-block" />Refreshing…</>
                   ) : "Refresh inventory"}
                 </button>
               </div>
@@ -1028,7 +1028,7 @@ export function InteractiveTerminal() {
                   <div
                     key={listing.id}
                     style={{ contentVisibility: "auto", containIntrinsicSize: "auto 460px" }}
-                    className="bg-card rounded-2xl border border-line overflow-hidden shadow-sm hover:shadow-lg transition duration-200 flex flex-col justify-between group"
+                    className="bg-card rounded-card border border-line overflow-hidden shadow-card hover:shadow-raised transition duration-200 flex flex-col justify-between group"
                   >
                     <div>
                       {/* Photo + Tags */}
@@ -1120,7 +1120,7 @@ export function InteractiveTerminal() {
                     <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={() => setSelectedListing(listing)}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-xl bg-ink text-white text-xs font-bold hover:bg-ink-2 transition gap-1 shadow-sm"
+                        className="w-full inline-flex h-10 items-center justify-center rounded-control bg-ink text-white text-xs font-bold hover:bg-ink-2 transition gap-1 shadow-sm"
                       >
                         <span>Underwrite Deal</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1129,7 +1129,7 @@ export function InteractiveTerminal() {
                         href={`/listings/${listing.id}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
-                        className="w-full inline-flex h-10 items-center justify-center rounded-xl border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
+                        className="w-full inline-flex h-10 items-center justify-center rounded-control border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"
                       >
                         <span>Listing page</span>
                         <ArrowRight className="w-3.5 h-3.5" />
@@ -1148,7 +1148,7 @@ export function InteractiveTerminal() {
                 <button
                   type="button"
                   onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
-                  className="px-6 py-3 rounded-xl bg-ink text-white text-sm font-bold transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+                  className="px-6 py-3 rounded-control bg-ink text-white text-sm font-bold transition hover:bg-ink-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
                 >
                   Show {Math.min(remaining, PAGE_SIZE).toLocaleString()} more
                 </button>

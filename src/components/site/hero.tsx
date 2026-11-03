@@ -276,7 +276,7 @@ export function Hero() {
         detail: { query, scope: selectedMarket?.kind || "search" },
       }),
     );
-    window.location.hash = "live-feed";
+    window.location.hash = "live-search";
     setSuggestionsOpen(false);
     setStatus(`Showing listings for ${label}.`);
   };
@@ -292,12 +292,12 @@ export function Hero() {
       {/* Arcade panel: rounded rectangle, inset 16px, #F9FAFB, overflow hidden */}
       <div
         aria-hidden
-        className="absolute inset-4 z-0 overflow-hidden rounded-2xl bg-[#F5F6F7]"
+        className="absolute inset-4 z-0 overflow-hidden rounded-card border border-line bg-[#F5F6F7]"
       >
         {/* Fallback static image while shader loads */}
         <div
           aria-hidden
-          className="absolute inset-0 z-0 bg-cover bg-no-repeat"
+          className="absolute inset-0 z-0 bg-cover bg-no-repeat opacity-40 mix-blend-multiply"
           style={{
             backgroundImage: "url(/hero-blob.jpg)",
             backgroundPosition: "center bottom",
@@ -307,7 +307,7 @@ export function Hero() {
         <motion.div
           aria-hidden
           data-testid="hero-shader-field"
-          className="pointer-events-none absolute -inset-[5%] z-[1] will-change-transform"
+          className="pointer-events-none absolute -inset-[5%] z-[1] will-change-transform opacity-35 mix-blend-soft-light"
           style={{ x: shaderX, y: shaderY, scale: 1.06 }}
         >
           <ErrorBoundary>
@@ -316,12 +316,14 @@ export function Hero() {
         </motion.div>
 
         {/* A local light field keeps the architecture legible without separating it from the shader. */}
+        {/* Cadastral plat survey grid overlay */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(#181529_0.75px,transparent_0.75px)] [background-size:20px_20px] opacity-15" />
         <div aria-hidden className="hero-property-backlight absolute inset-0 z-[2]" />
 
         {/* Property layer: the supplied transparent villa is colorized by the live shader. */}
         <div
           data-testid="hero-property-blueprint"
-          className="hero-property-art absolute inset-0 z-[3]"
+          className="hero-property-art absolute inset-0 z-[3] opacity-65 mix-blend-luminosity filter contrast-125"
         >
           <Image
             src="/hero-modern-villa.png"
@@ -377,7 +379,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.24, ease: EASE_OUT }}
           onSubmit={handleSubmit}
-          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-3xl px-6 sm:mt-16 xl:mt-4"
+          className="hero-search-shell relative z-20 mt-8 flex h-[68px] items-center self-center rounded-card px-6 sm:mt-16 xl:mt-4"
           style={{
             width: "100%",
             maxWidth: "min(620px, calc(100vw - 40px))",
@@ -453,7 +455,7 @@ export function Hero() {
               id="hero-address-suggestions"
               role="listbox"
               aria-label="Market and address suggestions"
-              className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-2xl border border-white/80 bg-white/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.2)] backdrop-blur-xl"
+              className="absolute left-0 right-0 top-[calc(100%+8px)] overflow-hidden rounded-card border border-white/80 bg-white/95 p-1.5 text-left shadow-[0_18px_48px_rgba(15,23,42,0.2)] backdrop-blur-xl"
             >
               {suggestions.map((suggestion, index) => (
                 <li
@@ -466,7 +468,7 @@ export function Hero() {
                     selectSuggestion(suggestion);
                   }}
                   onClick={() => selectSuggestion(suggestion)}
-                  className={`flex cursor-pointer items-center gap-3 rounded-xl px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
+                  className={`flex cursor-pointer items-center gap-3 rounded-control px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
                     activeSuggestion === index ? "bg-[#F1F5F9]" : "hover:bg-[#F3F4F6]"
                   }`}
                 >
