@@ -257,7 +257,7 @@ function ledgerError(message, code = 'EVIDENCE_LEDGER_CORRUPT') {
 function loadLedgerFromFile(filePath) {
   const target = filePath || DEFAULT_LEDGER_PATH;
   try {
-    const raw = fs.readFileSync(target, 'utf8');
+    const raw = fs.readFileSync(/*turbopackIgnore: true*/ target, 'utf8');
     if (!raw.trim()) throw ledgerError('Empty ledger file');
     const parsed = raw.trimStart().startsWith('[')
       ? JSON.parse(raw) : raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));

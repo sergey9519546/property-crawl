@@ -11,15 +11,15 @@ function emptyStore() {
 }
 
 function resolveStorePath(filePath) {
-  return path.resolve(filePath || process.env.PROPERTY_SOURCE_INTAKE_PATH || DEFAULT_STORE_PATH);
+  return path.resolve(/*turbopackIgnore: true*/ filePath || process.env.PROPERTY_SOURCE_INTAKE_PATH || DEFAULT_STORE_PATH);
 }
 
 function loadStore(filePath) {
   const resolved = resolveStorePath(filePath);
   if (!fs.existsSync(resolved)) return emptyStore();
-  const stats = fs.statSync(resolved);
+  const stats = fs.statSync(/*turbopackIgnore: true*/ resolved);
   if (!stats.isFile() || stats.size > MAX_STORE_BYTES) throw new Error('Source intake store exceeds its safe size limit');
-  const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  const parsed = JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ resolved, 'utf8'));
   if (parsed?.version !== 1 || !Array.isArray(parsed.records)) throw new Error('Invalid source intake store');
   if (parsed.records.length > MAX_RECORDS) throw new Error('Source intake store exceeds its record limit');
   const ids = new Set();

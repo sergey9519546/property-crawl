@@ -328,18 +328,18 @@ async function recordSnapshot(input = {}, options = {}) {
   const rawRecord = {sourceKey,recordId,observedAt,payloadSha256,provenance:input.provenance || options.provenance || {},rawPayload,metadata:input.metadata || options.metadata || {}};
   const rawText = JSON.stringify(rawRecord, null, 2);
   const rawFileSha256 = crypto.createHash('sha256').update(rawText).digest('hex');
-  const sourceDir = path.join(snapshotDir, sourceKey);
+  const sourceDir = path.join(/*turbopackIgnore: true*/ snapshotDir, sourceKey);
   fs.mkdirSync(sourceDir, {recursive:true});
-  const rawPath = path.join(sourceDir, `${rawFileSha256}.json`);
+  const rawPath = path.join(/*turbopackIgnore: true*/ sourceDir, `${rawFileSha256}.json`);
   const writeImmutable = (target, text) => {
     try { const fd=fs.openSync(target,'wx',0o600); try { fs.writeFileSync(fd,text,'utf8'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
-    catch (error) { if (error.code !== 'EEXIST') throw error; if (fs.readFileSync(target,'utf8') !== text) throw new Error('Snapshot content collision'); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; if (fs.readFileSync(/*turbopackIgnore: true*/ target,'utf8') !== text) throw new Error('Snapshot content collision'); }
   };
   writeImmutable(rawPath,rawText);
   let markdownSnapshot = null, markdownPath = null;
   if (Boolean(input.saveMarkdown ?? options.saveMarkdown) && html) {
     markdownSnapshot = createMarkdownEvidenceSnapshot({sourceKey,recordId,html,title:input.title || options.title,metadata:{...rawRecord.metadata,observedAt,payloadSha256}});
-    markdownPath = path.join(sourceDir,`${rawFileSha256}-${markdownSnapshot.sha256}.md`);
+    markdownPath = path.join(/*turbopackIgnore: true*/ sourceDir,`${rawFileSha256}-${markdownSnapshot.sha256}.md`);
     writeImmutable(markdownPath,markdownSnapshot.markdown);
   }
   let reviewIntakeId = null;
@@ -362,14 +362,14 @@ function readSnapshot({sourceKey,recordId,snapshotDir = process.env.PROPERTY_EVI
   const chain = loadLedgerFromFile(path.join(snapshotDir,'evidence-ledger.jsonl'));
   const latest = chain.filter(entry=>entry.source===safeSource && entry.recordId===String(recordId) && (!entryHash || entry.entryHash===entryHash)).at(-1);
   if (!latest) return {raw:null,markdown:null,rawPath:null,markdownPath:null,ledgerBlock:null};
-  const rawPath = path.join(snapshotDir,safeSource,path.basename(latest.metadata.rawFile));
-  const rawText = fs.readFileSync(rawPath,'utf8');
+  const rawPath = path.join(/*turbopackIgnore: true*/ snapshotDir,safeSource,path.basename(latest.metadata.rawFile));
+  const rawText = fs.readFileSync(/*turbopackIgnore: true*/ rawPath,'utf8');
   if (crypto.createHash('sha256').update(rawText).digest('hex') !== latest.metadata.rawFileSha256) throw new Error('Evidence snapshot hash mismatch');
   const raw = JSON.parse(rawText);
   let markdown = null, markdownPath = null;
   if (latest.metadata.markdownFile) {
-    markdownPath=path.join(snapshotDir,safeSource,path.basename(latest.metadata.markdownFile));
-    markdown=fs.readFileSync(markdownPath,'utf8');
+    markdownPath=path.join(/*turbopackIgnore: true*/ snapshotDir,safeSource,path.basename(latest.metadata.markdownFile));
+    markdown=fs.readFileSync(/*turbopackIgnore: true*/ markdownPath,'utf8');
     if (crypto.createHash('sha256').update(markdown).digest('hex') !== latest.metadata.markdownSha256) throw new Error('Markdown evidence hash mismatch');
   }
   return {raw,markdown,rawPath,markdownPath,ledgerBlock:latest};

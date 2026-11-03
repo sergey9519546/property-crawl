@@ -9,8 +9,8 @@ export const metadata: Metadata = {
     "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
 };
 
-const card = "rounded-3xl border border-line bg-card p-6 shadow-sm sm:p-8";
-const catchCard = "rounded-2xl border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5";
+const card = "rounded-card border border-line bg-card p-6 shadow-sm sm:p-8";
+const catchCard = "rounded-card border border-[var(--catch-border)] bg-[var(--catch-bg)] p-5";
 
 const steps = [
   { n: "1", title: "Notice", body: "The sale is announced in a public notice. It gives the date, place and often the deposit." },
@@ -54,14 +54,14 @@ export default function ResourcesPage() {
       </Link>
 
       <header className="mt-8 border-b border-line pb-10">
-        <p className="inline-flex items-center gap-2 rounded-full border border-[var(--catch-border)] bg-[var(--catch-bg)] px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-[var(--catch-ink)]">
+        <p className="inline-flex items-center gap-2 rounded-full border border-[var(--catch-border)] bg-[var(--catch-bg)] px-3 py-1 text-label font-semibold uppercase tracking-[0.12em] text-[var(--catch-ink)]">
           <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-catch" />
           Buyer&apos;s guide
         </p>
-        <h1 className="mt-5 text-balance text-[34px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink sm:text-[46px]">
+        <h1 className="mt-5 text-balance text-display font-semibold tracking-tight text-ink sm:text-5xl">
           Every deal has a catch. Learn where to look.
         </h1>
-        <p className="mt-4 max-w-[620px] text-pretty text-[17px] leading-[1.65] text-ink-2">
+        <p className="mt-4 max-w-[620px] text-pretty text-lead leading-relaxed text-ink-2">
           A short path for first-time auction buyers: the kinds of sales, how a sale works, the catches to check, and what to do before you bid. Rules change, so check your county&apos;s rules first.
         </p>
       </header>
@@ -111,7 +111,7 @@ export default function ResourcesPage() {
           <div className={`${card} space-y-4`}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
               <h3 className="text-lg font-semibold text-ink">How the rules differ in ten states</h3>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Summary only</span>
+              <span className="text-label font-semibold uppercase tracking-wider text-ink-3">Summary only</span>
             </div>
             <p className="text-sm leading-relaxed text-ink-2">
               Each state sets its own deposit, waiting period after the sale, and fees. This table is a summary, not legal advice.
@@ -124,7 +124,7 @@ export default function ResourcesPage() {
               <li><strong className="text-ink">Fees and taxes:</strong> transfer taxes and sale fees you pay on top.</li>
             </ul>
             <div className="overflow-x-auto">
-              <table className="w-full divide-y divide-line overflow-hidden rounded-xl border border-line text-left text-xs">
+              <table className="w-full divide-y divide-line overflow-hidden rounded-control border border-line text-left text-xs">
                 <thead className="bg-paper font-semibold text-ink">
                   <tr>
                     <th className={th}>State</th>
@@ -258,17 +258,17 @@ export default function ResourcesPage() {
           </div>
 
           {/* 5. Next step */}
-          <div className="rounded-3xl bg-ink p-8 text-white sm:p-10">
-            <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/60">Step 5</p>
-            <h2 className="mt-3 text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[34px]">Find a sale and read its catch</h2>
-            <p className="mt-3 max-w-[560px] text-[16px] leading-relaxed text-white/75">
+          <div className="rounded-card bg-ink p-8 text-white sm:p-10">
+            <p className="text-label font-semibold uppercase tracking-[0.12em] text-white/60">Step 5</p>
+            <h2 className="mt-3 text-title sm:text-display font-semibold leading-tight tracking-tight">Find a sale and read its catch</h2>
+            <p className="mt-3 max-w-[560px] text-body leading-relaxed text-white/75">
               Search is free. Every listing shows the catch first. Members can add hunts with email alerts.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/listings" className="rounded-xl bg-card px-5 py-3 text-sm font-semibold text-ink transition hover:bg-paper">
+              <Link href="/listings" className="rounded-control bg-card px-5 py-3 text-sm font-semibold text-ink transition hover:bg-paper">
                 Search listings
               </Link>
-              <Link href="/states" className="rounded-xl border border-white/30 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
+              <Link href="/states" className="rounded-control border border-white/30 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
                 Browse by state
               </Link>
             </div>
@@ -298,10 +298,10 @@ export default function ResourcesPage() {
       </div>
 
       <div className="mt-14 flex flex-wrap gap-4 border-t border-line pt-8">
-        <Link href="/listings" className="rounded-xl bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink-2">
+        <Link href="/listings" className="rounded-control bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-ink-2">
           Browse listings
         </Link>
-        <Link href="/contact" className="rounded-xl border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 transition hover:bg-paper">
+        <Link href="/contact" className="rounded-control border border-line-strong bg-card px-5 py-3 text-sm font-semibold text-ink-2 transition hover:bg-paper">
           Send us feedback
         </Link>
       </div>
