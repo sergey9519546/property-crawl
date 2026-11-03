@@ -324,7 +324,7 @@ export function SavedHunts() {
           records. See why each property matches, what remains unknown, and what
           changed since your last run.
         </p>
-        <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-xl border border-line bg-card p-5">
+        <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-card p-5">
           <div>
             <p className="text-sm font-semibold">{session.member?.entitled && !session.authenticated ? `Your hunts · ${session.member.email}` : "Hunts"}</p>
             <p className="mt-1 text-xs leading-5 text-ink-3">
@@ -362,7 +362,7 @@ export function SavedHunts() {
         {error && (
           <p
             role="alert"
-            className="mt-5 rounded-xl bg-catch-wash p-4 text-sm text-catch-ink"
+            className="mt-5 rounded-control bg-catch-wash p-4 text-sm text-catch-ink"
           >
             {error}
           </p>
@@ -375,7 +375,7 @@ export function SavedHunts() {
         )}
         {connected && (
           <section
-            className="mt-6 rounded-2xl border border-line bg-paper p-5"
+            className="mt-6 rounded-card border border-line bg-paper p-5"
             aria-label="Hunt change inbox"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -397,7 +397,7 @@ export function SavedHunts() {
                   <Link
                     key={event.id}
                     href={`/listings/${encodeURIComponent(event.listingId)}`}
-                    className="rounded-xl border border-line bg-card p-3 text-sm hover:border-ink-3"
+                    className="rounded-control border border-line bg-card p-3 text-sm hover:border-ink-3"
                   >
                     <strong className="block">
                       {sourceDisplayText(event.address || event.listingId)}
@@ -421,7 +421,7 @@ export function SavedHunts() {
           </section>
         )}
         {connected && (
-          <section className="mt-7 rounded-2xl border border-line bg-card p-5">
+          <section className="mt-7 rounded-card border border-line bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">
@@ -481,7 +481,7 @@ export function SavedHunts() {
                       `${template.name} loaded. Edit the criteria, then save it.`,
                     );
                   }}
-                  className="rounded-xl border border-line p-3 text-left hover:border-ink"
+                  className="rounded-control border border-line p-3 text-left hover:border-ink"
                 >
                   <span className="block text-xs font-semibold">
                     {template.name}
@@ -498,7 +498,7 @@ export function SavedHunts() {
           <div className="mt-8 grid items-start gap-6 lg:grid-cols-[340px_1fr]">
             <aside className="space-y-6">
               <form
-                className="rounded-2xl border border-line bg-card p-5"
+                className="rounded-card border border-line bg-card p-5"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void run(async () => {
@@ -537,7 +537,7 @@ export function SavedHunts() {
                   />
                 </label>
                 <label className="mt-4 block text-xs font-semibold">
-                  Email alerts <span className="text-[10px] font-normal text-ink-3">(Sent when a later run finds a new match or a changed fact.)</span>
+                  Email alerts <span className="text-label font-normal text-ink-3">(Sent when a later run finds a new match or a changed fact.)</span>
                   <input
                     type="email"
                     placeholder="you@example.com"
@@ -548,7 +548,7 @@ export function SavedHunts() {
                   />
                 </label>
                 <label className="mt-4 block text-xs font-semibold">
-                  Webhook URL <span className="text-[10px] font-normal text-ink-3">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
+                  Webhook URL <span className="text-label font-normal text-ink-3">(Public https address. Posted when a later run finds a new match or a changed fact.)</span>
                   <input
                     type="url"
                     placeholder="https://example.com/api/webhooks/property-alerts"
@@ -579,9 +579,9 @@ export function SavedHunts() {
                     return (
                       <fieldset
                         key={index}
-                        className="space-y-2 rounded-xl border border-line p-3"
+                        className="space-y-2 rounded-control border border-line p-3"
                       >
-                        <legend className="px-1 text-[10px] font-semibold">
+                        <legend className="px-1 text-label font-semibold">
                           Criterion {index + 1}
                         </legend>
                         <div className="flex gap-2">
@@ -696,7 +696,7 @@ export function SavedHunts() {
                       key={hunt.id}
                       disabled={busy}
                       onClick={() => void run(() => openHunt(hunt))}
-                      className={`w-full rounded-xl border p-4 text-left ${selected?.id === hunt.id ? "border-ink bg-paper" : "border-line bg-card"}`}
+                      className={`w-full rounded-control border p-4 text-left ${selected?.id === hunt.id ? "border-ink bg-paper" : "border-line bg-card"}`}
                     >
                       <span className="block text-sm font-semibold">
                         {hunt.name}
@@ -718,27 +718,27 @@ export function SavedHunts() {
             <section
               ref={selectedSectionRef}
               tabIndex={-1}
-              className="rounded-2xl border border-line bg-card p-5 sm:p-7"
+              className="rounded-card border border-line bg-card p-5 sm:p-7"
               aria-label="Hunt evidence"
             >
               {selected ? (
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-ink">
+                      <p className="text-label font-bold uppercase tracking-widest text-ink">
                         Evidence search · Version {selected.version}
                       </p>
                       <h2 className="mt-2 text-2xl font-semibold">
                         {selected.name}
                       </h2>
                       {selected.notifyEmail && (
-                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-2">
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-label text-ink-2">
                           <span className="rounded bg-go-wash px-1.5 py-0.5 font-semibold text-go">Email</span>
                           <span className="truncate max-w-sm">{selected.notifyEmail}</span>
                         </p>
                       )}
                       {selected.webhookUrl && (
-                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] text-ink-2">
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-label text-ink-2">
                           <span className="rounded bg-go-wash px-1.5 py-0.5 font-semibold text-go">Webhook</span>
                           <span className="truncate max-w-sm">{selected.webhookUrl}</span>
                         </p>
@@ -796,14 +796,14 @@ export function SavedHunts() {
                   <div className="mt-5 flex flex-wrap gap-2">
                     {"discoveryFilters" in selected.criteria
                       ? Object.entries(selected.criteria.discoveryFilters ?? {}).map(([key, value]) => (
-                        <span key={key} className="rounded-full bg-line px-3 py-1.5 text-[11px]">
+                        <span key={key} className="rounded-full bg-line px-3 py-1.5 text-label">
                           {discoveryFilterLabels[key] || key.replaceAll("_", " ")}: {value === "unknown" ? "Unknown" : display(value)}
                         </span>
                       ))
                       : selected.criteria.rules.map((rule, index) => (
                       <span
                         key={index}
-                        className="rounded-full bg-line px-3 py-1.5 text-[11px]"
+                        className="rounded-full bg-line px-3 py-1.5 text-label"
                       >
                         {label(rule.field)} {rule.operator.replaceAll("_", " ")}{" "}
                         {!["known", "unknown"].includes(rule.operator) &&
@@ -811,7 +811,7 @@ export function SavedHunts() {
                       </span>
                     ))}
                     {"discoveryFilters" in selected.criteria && !Object.keys(selected.criteria.discoveryFilters ?? {}).length && (
-                      <span className="rounded-full bg-line px-3 py-1.5 text-[11px]">All discovered properties</span>
+                      <span className="rounded-full bg-line px-3 py-1.5 text-label">All discovered properties</span>
                     )}
                   </div>
                   <button
@@ -846,12 +846,12 @@ export function SavedHunts() {
                         ].map(([key, title]) => (
                           <div
                             key={key}
-                            className="rounded-xl bg-paper p-4"
+                            className="rounded-control bg-paper p-4"
                           >
                             <p className="text-2xl font-semibold">
                               {evaluation.counts[key] || 0}
                             </p>
-                            <p className="mt-1 text-[11px] text-ink-3">
+                            <p className="mt-1 text-label text-ink-3">
                               {title}
                             </p>
                           </div>
@@ -865,7 +865,7 @@ export function SavedHunts() {
                         or disappearance is inferred.
                       </p>
                       {evaluation.rankingNote ? (
-                        <p className="mt-2 text-[11px] leading-5 text-ink-3">
+                        <p className="mt-2 text-label leading-5 text-ink-3">
                           {evaluation.rankingNote}
                         </p>
                       ) : null}
@@ -910,7 +910,7 @@ export function SavedHunts() {
                         {results.map((result) => (
                           <article
                             key={result.listingId}
-                            className="rounded-xl border border-line p-4"
+                            className="rounded-control border border-line p-4"
                           >
                             <div className="flex flex-wrap justify-between gap-2">
                               <Link
@@ -948,7 +948,7 @@ export function SavedHunts() {
                               {new Date(result.observedAt).toLocaleString()}
                             </p>
                             {result.status === "match" && result.relevance ? (
-                              <p className="mt-2 text-[11px] leading-5 text-ink-3">
+                              <p className="mt-2 text-label leading-5 text-ink-3">
                                 Triage rank uses criterion closeness, evidence quality
                                 {result.relevance.researchQualityScore != null
                                   ? ` (${result.relevance.researchQualityScore}/100)`
@@ -969,12 +969,12 @@ export function SavedHunts() {
                               <div className="mt-3 space-y-3">
                                 {result.relevance?.factors?.length ? (
                                   <div className="rounded-lg bg-paper p-3">
-                                    <p className="text-[10px] font-bold uppercase tracking-wider text-ink-3">
+                                    <p className="text-label font-bold uppercase tracking-wider text-ink-3">
                                       Ranking factors
                                     </p>
                                     <ul className="mt-2 space-y-1.5">
                                       {result.relevance.factors.map((factor) => (
-                                        <li key={factor.factor} className="text-[11px] leading-4 text-ink-2">
+                                        <li key={factor.factor} className="text-label leading-4 text-ink-2">
                                           <span className="font-semibold">{factor.factor.replaceAll("_", " ")}</span>
                                           {" · "}
                                           {factor.detail}
@@ -997,7 +997,7 @@ export function SavedHunts() {
                                     <p className="mt-1 text-xs leading-5 text-ink-3">
                                       {sourceDisplayText(clause.reason)}
                                     </p>
-                                    <p className="mt-1 text-[10px] text-ink-3">
+                                    <p className="mt-1 text-label text-ink-3">
                                       Observed value: {display(clause.actual)} ·{" "}
                                       {clause.evidenceClass.replaceAll(
                                         "_",
@@ -1029,7 +1029,7 @@ export function SavedHunts() {
                           </article>
                         ))}
                         {!results.length && (
-                          <p className="rounded-xl bg-paper p-5 text-sm leading-6 text-ink-3">
+                          <p className="rounded-control bg-paper p-5 text-sm leading-6 text-ink-3">
                             No returned results in this category. Try another
                             filter or collect more source evidence.
                           </p>
@@ -1044,7 +1044,7 @@ export function SavedHunts() {
                       )}
                     </>
                   ) : (
-                    <div className="mt-6 rounded-xl bg-paper p-6">
+                    <div className="mt-6 rounded-control bg-paper p-6">
                       <h3 className="font-semibold">Start with a comparison</h3>
                       <p className="mt-2 text-sm leading-6 text-ink-3">
                         Run this hunt to inspect the available evidence and save
@@ -1060,7 +1060,7 @@ export function SavedHunts() {
                         {events.slice(0, 30).map((event) => (
                           <div
                             key={event.id}
-                            className="rounded-xl bg-paper p-4"
+                            className="rounded-control bg-paper p-4"
                           >
                             <p className="text-xs font-semibold">
                               {event.type.replaceAll("_", " ")} ·{" "}

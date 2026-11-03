@@ -209,13 +209,13 @@ export function PortfolioView() {
         <div className="mt-6 flex justify-center gap-4">
           <button
             onClick={() => session.requestUnlock()}
-            className="rounded-xl bg-ink px-6 py-3 text-sm font-semibold text-white hover:bg-ink-2 transition"
+            className="rounded-control bg-ink px-6 py-3 text-sm font-semibold text-white hover:bg-ink-2 transition"
           >
             Unlock Workspace
           </button>
           <Link
             href="/listings"
-            className="rounded-xl border border-line-strong bg-card px-6 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
+            className="rounded-control border border-line-strong bg-card px-6 py-3 text-sm font-semibold text-ink-2 hover:bg-paper transition"
           >
             Explore Listings
           </Link>
@@ -270,7 +270,7 @@ export function PortfolioView() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-8">
         <div>
-          <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-ink-3">Capital & Portfolio Management</p>
+          <p className="text-label font-bold uppercase tracking-[0.14em] text-ink-3">Capital & Portfolio Management</p>
           <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
             Institutional Capital Pipeline
           </h1>
@@ -282,7 +282,7 @@ export function PortfolioView() {
           <a
             href="/api/export?format=markdown&saved=true"
             download="perfectproperty_dossiers.md"
-            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+            className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
             title="Download printable Markdown Underwriting Dossiers for saved deals"
           >
             <Download className="h-3.5 w-3.5" />
@@ -291,7 +291,7 @@ export function PortfolioView() {
           <a
             href="/api/export?format=csv&saved=true"
             download="perfectproperty_portfolio.csv"
-            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+            className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition"
             title="Download CSV table of all saved deals"
           >
             <Download className="h-3.5 w-3.5" />
@@ -303,14 +303,14 @@ export function PortfolioView() {
               loadData();
             }}
             disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-xl border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-control border border-line-strong bg-card px-3.5 py-2.5 text-xs font-semibold text-ink-2 hover:bg-paper transition disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </button>
           <Link
             href="/listings"
-            className="flex items-center gap-1.5 rounded-xl bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
+            className="flex items-center gap-1.5 rounded-control bg-ink px-4 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Listings
@@ -319,7 +319,7 @@ export function PortfolioView() {
       </div>
 
       {error && (
-        <div className="mt-6 flex items-center gap-2 rounded-xl border border-caution/40 bg-caution/10 p-4 text-xs font-medium text-caution">
+        <div className="mt-6 flex items-center gap-2 rounded-control border border-caution/40 bg-caution/10 p-4 text-xs font-medium text-caution">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -327,16 +327,16 @@ export function PortfolioView() {
 
       {/* KPI Cards */}
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
+        <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
             <span>Pipeline Capital Exposure</span>
             <DollarSign className="h-4 w-4 text-ink-3" />
           </div>
           <p className="mt-3 text-3xl font-extrabold text-ink">{formatMoney(totalPipelineCapital)}</p>
-          <p className="mt-1 text-[11px] text-ink-3">Across {deals.length} tracked opportunities</p>
+          <p className="mt-1 text-label text-ink-3">Across {deals.length} tracked opportunities</p>
         </div>
 
-        <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
+        <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
             <span>Modeled Spread</span>
             <Building className="h-4 w-4 text-ink-3" />
@@ -344,10 +344,10 @@ export function PortfolioView() {
           <p className="mt-3 text-3xl font-extrabold text-ink">
             {formatMoney(dashboard?.totalEstimatedEquity)}
           </p>
-          <p className="mt-1 text-[11px] text-ink-3">Total modeled spread vs mid</p>
+          <p className="mt-1 text-label text-ink-3">Total modeled spread vs mid</p>
         </div>
 
-        <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
+        <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
             <span>Median Deal Score</span>
             <ShieldCheck className="h-4 w-4 text-ink-3" />
@@ -355,12 +355,12 @@ export function PortfolioView() {
           <p className="mt-3 text-3xl font-extrabold text-ink" style={{ color: bandForScore(dashboard?.medianDealScore)?.color }}>
             {dashboard?.medianDealScore != null ? Math.round(dashboard.medianDealScore) : "—"}
           </p>
-          <p className="mt-1 text-[11px] text-ink-3">
+          <p className="mt-1 text-label text-ink-3">
             {dashboard?.medianDiscount != null ? `${Math.round(dashboard.medianDiscount * 100)}% median discount` : "Weighted quality index"}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-line bg-card p-5 shadow-sm">
+        <div className="rounded-card border border-line bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-semibold text-ink-3">
             <span>Upcoming Auctions</span>
             <CalendarDays className="h-4 w-4 text-ink-3" />
@@ -368,7 +368,7 @@ export function PortfolioView() {
           <p className="mt-3 text-3xl font-extrabold text-ink">
             {dashboard?.upcomingSales?.length ?? 0}
           </p>
-          <p className="mt-1 text-[11px] text-ink-3">Sales scheduled in next 30 days</p>
+          <p className="mt-1 text-label text-ink-3">Sales scheduled in next 30 days</p>
         </div>
       </div>
 
@@ -438,7 +438,7 @@ export function PortfolioView() {
         {tab === "pipeline" && (
           <div className="space-y-6">
             {deals.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-line bg-card p-12 text-center">
+              <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Kanban className="mx-auto h-8 w-8 text-ink-3 mb-3" />
                 <h3 className="text-base font-bold text-ink">No deals in pipeline</h3>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
@@ -447,7 +447,7 @@ export function PortfolioView() {
                 <div className="mt-5">
                   <Link
                     href="/listings"
-                    className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
+                    className="inline-flex items-center gap-2 rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
                   >
                     Browse Opportunities <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
@@ -462,7 +462,7 @@ export function PortfolioView() {
                   return (
                     <div
                       key={stage.id}
-                      className="rounded-2xl border border-line bg-card/60 p-3.5 flex flex-col min-h-[460px] shadow-sm"
+                      className="rounded-card border border-line bg-card/60 p-3.5 flex flex-col min-h-[460px] shadow-sm"
                     >
                       {/* Column Header */}
                       <div className="border-b border-line pb-3">
@@ -472,7 +472,7 @@ export function PortfolioView() {
                             {stageDeals.length}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-[11px] text-ink-3">
+                        <div className="mt-1.5 flex items-center justify-between text-label text-ink-3">
                           <span>Committed Capital:</span>
                           <span className="font-bold text-ink">{formatMoney(stageCapital)}</span>
                         </div>
@@ -484,7 +484,7 @@ export function PortfolioView() {
                       {/* Cards Container */}
                       <div className="mt-3 space-y-3 flex-1 overflow-y-auto">
                         {stageDeals.length === 0 ? (
-                          <div className="py-8 text-center text-[11px] text-ink-3 border border-dashed border-line/60 rounded-xl">
+                          <div className="py-8 text-center text-label text-ink-3 border border-dashed border-line/60 rounded-control">
                             No assets in {stage.label.toLowerCase()}
                           </div>
                         ) : (
@@ -495,7 +495,7 @@ export function PortfolioView() {
                             return (
                               <div
                                 key={dealId}
-                                className="group rounded-xl border border-line bg-card p-3 shadow-xs hover:border-line-strong transition"
+                                className="group rounded-control border border-line bg-card p-3 shadow-xs hover:border-line-strong transition"
                               >
                                 <div className="flex items-center justify-between text-[10px] text-ink-3">
                                   <span className="font-semibold">{sourceDisplayText(deal.source || "Auction")}</span>
@@ -582,7 +582,7 @@ export function PortfolioView() {
         {tab === "watchlist" && (
           <div>
             {deals.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-line bg-card p-12 text-center">
+              <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <Building className="mx-auto h-8 w-8 text-ink-3 mb-3" />
                 <h3 className="text-base font-bold text-ink">No saved properties yet</h3>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
@@ -591,7 +591,7 @@ export function PortfolioView() {
                 <div className="mt-5">
                   <Link
                     href="/listings"
-                    className="inline-flex items-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
+                    className="inline-flex items-center gap-2 rounded-control bg-ink px-5 py-2.5 text-xs font-semibold text-white hover:bg-ink-2 transition"
                   >
                     Browse Listings <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
@@ -607,7 +607,7 @@ export function PortfolioView() {
                   return (
                     <div
                       key={dealId}
-                      className="group flex flex-col justify-between rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:shadow-md"
+                      className="group flex flex-col justify-between rounded-card border border-line bg-card p-5 shadow-sm transition hover:shadow-md"
                     >
                       <div>
                         <div className="flex items-center justify-between text-xs text-ink-3">
@@ -685,7 +685,7 @@ export function PortfolioView() {
         {tab === "drops" && (
           <div className="space-y-4">
             {priceDrops.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-line bg-card p-12 text-center">
+              <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <TrendingDown className="mx-auto h-8 w-8 text-ink-3 mb-3" />
                 <h3 className="text-base font-bold text-ink">No price drops recorded</h3>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
@@ -694,7 +694,7 @@ export function PortfolioView() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-line rounded-2xl border border-line bg-card shadow-sm overflow-hidden">
+              <div className="divide-y divide-line rounded-card border border-line bg-card shadow-sm overflow-hidden">
                 {priceDrops.map((drop) => (
                   <div key={drop.listingId} className="flex items-center justify-between p-5 hover:bg-paper transition">
                     <div>
@@ -711,7 +711,7 @@ export function PortfolioView() {
                     </div>
                     <Link
                       href={`/listings/${encodeURIComponent(drop.listingId)}`}
-                      className="rounded-xl border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-paper transition"
+                      className="rounded-control border border-line-strong bg-card px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-paper transition"
                     >
                       View Update
                     </Link>
@@ -726,7 +726,7 @@ export function PortfolioView() {
         {tab === "schedule" && (
           <div className="space-y-4">
             {!dashboard?.upcomingSales?.length ? (
-              <div className="rounded-2xl border border-dashed border-line bg-card p-12 text-center">
+              <div className="rounded-card border border-dashed border-line bg-card p-12 text-center">
                 <CalendarDays className="mx-auto h-8 w-8 text-ink-3 mb-3" />
                 <h3 className="text-base font-bold text-ink">No sales in the next 30 days</h3>
                 <p className="mt-1 text-xs text-ink-3 max-w-sm mx-auto">
@@ -734,7 +734,7 @@ export function PortfolioView() {
                 </p>
               </div>
             ) : (
-              <div className="divide-y divide-line rounded-2xl border border-line bg-card shadow-sm overflow-hidden">
+              <div className="divide-y divide-line rounded-card border border-line bg-card shadow-sm overflow-hidden">
                 {dashboard.upcomingSales.map((sale) => (
                   <div key={sale.id} className="flex items-center justify-between p-5 hover:bg-paper transition">
                     <div>
@@ -752,7 +752,7 @@ export function PortfolioView() {
                     </div>
                     <Link
                       href={`/listings/${encodeURIComponent(sale.id)}`}
-                      className="rounded-xl bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2 transition"
+                      className="rounded-control bg-ink px-3.5 py-2 text-xs font-semibold text-white hover:bg-ink-2 transition"
                     >
                       Prepare Bid
                     </Link>
@@ -767,7 +767,7 @@ export function PortfolioView() {
         {tab === "allocation" && (
           <div className="grid gap-6 sm:grid-cols-3">
             {/* By State */}
-            <div className="rounded-2xl border border-line bg-card p-5 shadow-sm space-y-3">
+            <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
                 <Layers className="h-4 w-4" /> Jurisdiction (State)
               </h3>
@@ -790,7 +790,7 @@ export function PortfolioView() {
             </div>
 
             {/* By Source */}
-            <div className="rounded-2xl border border-line bg-card p-5 shadow-sm space-y-3">
+            <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
                 <Building className="h-4 w-4" /> Source Agency / Feed
               </h3>
@@ -813,7 +813,7 @@ export function PortfolioView() {
             </div>
 
             {/* By Property Type */}
-            <div className="rounded-2xl border border-line bg-card p-5 shadow-sm space-y-3">
+            <div className="rounded-card border border-line bg-card p-5 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-ink-3 flex items-center gap-2">
                 <PieChart className="h-4 w-4" /> Asset Classification
               </h3>
