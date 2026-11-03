@@ -225,8 +225,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
       const data = await response.json();
       setAiAnalysis(data.analysis);
       setAiSource('backend');
-    } catch (error) {
-      console.error('Error fetching AI analysis:', error);
+    } catch {
       setAiAnalysis('An error occurred while fetching the analysis.');
       setAiSource('backend');
     } finally {
