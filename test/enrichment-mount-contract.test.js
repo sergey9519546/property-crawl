@@ -171,5 +171,29 @@ test('labeled APN in raw notice text and county FIPS registry enrich parcelKey w
   assert.equal(resolved.countyFips, '39035');
   assert.equal(resolved.canonicalApn, '10123045');
   assert.equal(resolved.parcelKey, '39035-10123045');
+  assert.equal(resolved.parcelKey, '39035-10123045');
   assert.equal(resolved.matchBasis, 'cadastral_point_in_polygon');
+});
+
+test('AssessorReading dynamically mounts EnrichmentView when parcelKey is resolved on the fly', () => {
+  const assessorReading = fs.readFileSync(
+    path.join(ROOT, 'src', 'components', 'listings', 'assessor-reading.tsx'),
+    'utf8'
+  );
+  assert.match(
+    assessorReading,
+    /import \{ EnrichmentView \} from ["']@\/components\/listings\/enrichment-view["']/,
+    'AssessorReading must import EnrichmentView for dynamic client hydration'
+  );
+  assert.match(
+    assessorReading,
+    /!hasServerParcelKey\s*&&\s*reading\.parcelKey\s*\?\s*<EnrichmentView parcelKey=\{reading\.parcelKey\}/,
+    'AssessorReading must mount EnrichmentView when reading.parcelKey is resolved and hasServerParcelKey is false'
+  );
+  const page = fs.readFileSync(PAGE, 'utf8');
+  assert.match(
+    page,
+    /<AssessorReading listingId=\{listing\.id\} hasServerParcelKey=\{Boolean\(listing\.parcelKey\)\} \/>/,
+    'listing detail page must pass hasServerParcelKey={Boolean(listing.parcelKey)} to prevent duplicate EnrichmentView mounts'
+  );
 });

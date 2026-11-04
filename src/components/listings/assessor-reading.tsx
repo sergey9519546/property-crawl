@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { EnrichmentView } from "@/components/listings/enrichment-view";
 
 type AssessorReadingResponse = {
   enrolled?: boolean;
@@ -9,6 +10,7 @@ type AssessorReadingResponse = {
   field?: string | null;
   endpoint?: string | null;
   apn?: string | null;
+  parcelKey?: string | null;
   landUse?: string | null;
   evidenceClass?: string | null;
   rawFigure?: number | null;
@@ -26,7 +28,7 @@ function money(value: number | null | undefined): string {
   return `$${Math.round(value).toLocaleString()}`;
 }
 
-export function AssessorReading({ listingId }: { listingId: string }) {
+export function AssessorReading({ listingId, hasServerParcelKey = false }: { listingId: string; hasServerParcelKey?: boolean }) {
   const [reading, setReading] = React.useState<AssessorReadingResponse | null>(null);
   const [status, setStatus] = React.useState<"loading" | "ready" | "error">("loading");
 
@@ -95,6 +97,7 @@ export function AssessorReading({ listingId }: { listingId: string }) {
         {host ? ` ${host}.` : ""}
         {" "}Assessor figure, not an appraisal. Evidence class {reading.evidenceClass || "assessor-figure-v1"}.
       </p>
+      {!hasServerParcelKey && reading.parcelKey ? <EnrichmentView parcelKey={reading.parcelKey} /> : null}
     </div>
   );
 }

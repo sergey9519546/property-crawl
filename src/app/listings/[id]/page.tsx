@@ -470,7 +470,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
                 <div className="rounded-control bg-paper p-4"><dt className="text-xs font-bold uppercase tracking-wide text-ink-3">Stored valuation range</dt><dd className="mt-1 text-lg font-bold text-ink">{estLow !== null && estHigh !== null ? `${formatMoney(estLow)}–${formatMoney(estHigh)}` : "—"}</dd></div>
               </dl>
             ) : null}
-            <AssessorReading listingId={listing.id} />
+            <AssessorReading listingId={listing.id} hasServerParcelKey={Boolean(listing.parcelKey)} />
             <div className="mt-5 rounded-control border border-line bg-paper p-4 text-xs leading-relaxed text-ink-2" data-testid="title-rules-check">
               <p className="font-bold text-ink">Rules check from the published plaintiff and the state table. Not a title opinion, not a bid instruction, and not a statement that this auction is open.</p>
               <p className="mt-2">Plaintiff: {publishedText(listing.plaintiff)}</p>

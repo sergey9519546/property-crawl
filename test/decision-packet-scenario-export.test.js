@@ -336,7 +336,14 @@ test('DecisionPacketView and case-action.tsx: wire readUnderwriteScenario and un
   assert.match(viewSrc, /maxAllowableOffer:\s*scenario\.maxAllowableOffer/);
   assert.match(viewSrc, /data-testid="lien-waterfall-schedule"/);
   assert.match(viewSrc, /data-testid="hud-safmr-card"/);
+  assert.match(viewSrc, /data-testid="lien-waterfall-schedule"/);
+  assert.match(viewSrc, /data-testid="hud-safmr-card"/);
   assert.match(viewSrc, /data-testid="statutory-deadlines-carry"/);
+  assert.match(viewSrc, /data-testid="underwriting-assumptions-section"/);
+  assert.match(viewSrc, /Underwriting Assumptions &amp; Strategy/);
+  assert.match(viewSrc, /Max Allowable Offer \(MAO\)/);
+  assert.match(viewSrc, /Estimated Rehab Budget/);
+  assert.match(viewSrc, /Target Profit Margin/);
 
   // Verify CaseAction wires readUnderwriteScenario and POSTs underwriteScenario
   const actionSrc = fs.readFileSync(path.join(__dirname, '../src/components/research/case-action.tsx'), 'utf8');

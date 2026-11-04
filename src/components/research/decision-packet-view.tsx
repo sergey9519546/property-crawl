@@ -35,6 +35,22 @@ function withOperatorScenario(packet: any) {
     };
   }
 
+  const scenarioPrice = (typeof scenario.maxAllowableOffer === 'number' && Number.isFinite(scenario.maxAllowableOffer) && scenario.maxAllowableOffer > 0)
+    ? scenario.maxAllowableOffer
+    : (Number(scenario.customOpeningBid) > 0 ? Number(scenario.customOpeningBid) : (typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null));
+  if (scenarioPrice !== null && nextPacket.underwriting) {
+    nextPacket.underwriting = {
+      ...nextPacket.underwriting,
+      statutoryDeadlinesAndCarry: computeStatutoryDeadlinesAndCarry({
+        saleDate: packet?.property?.saleDate,
+        state: packet?.property?.state,
+        purchasePrice: scenarioPrice,
+        redemptionDays: nextPacket.underwriting?.titleRisk?.statutoryRedemptionDays,
+        hasIrsLien: Boolean(nextPacket.underwriting?.titleRisk?.hasIrsTaxLien),
+      }),
+    };
+  }
+
   const entered = scenarioCashInput(scenario);
   if (Object.keys(entered).length > 0) {
     const openingBid = typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null;
@@ -90,6 +106,7 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
   const t = u.titleRisk || {};
   const c = u.cashToClose || {};
   const d = livePacket.dispositionSignOff || {};
+  const a = livePacket.underwritingAssumptions || {};
   const m = u.macroValuation;
   const municipal = u.municipalSurvivability || {};
   const municipalCount = Number.isFinite(municipal.activeViolationsCount) ? municipal.activeViolationsCount : null;
@@ -262,6 +279,37 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
               <span>Cash to close:</span>
               <span className="text-slate-950">{moneyOrBlank(c.cashDueAtSettlement, "Blank until registration funds and the credited deposit are both entered")}</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Section 4: Underwriting Assumptions & Strategy */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3" data-testid="underwriting-assumptions-section">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <FileText className="w-4 h-4 text-slate-700" />
+            <h3 className="font-bold text-sm text-slate-900">Underwriting Assumptions &amp; Strategy</h3>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+            Buyer Scenario Parameters
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+            <span className="block text-slate-500">Max Allowable Offer (MAO)</span>
+            <span className="mt-1 block text-sm font-bold text-slate-900">{moneyOrBlank(a.maxAllowableOffer ?? d.maxAllowableOffer)}</span>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+            <span className="block text-slate-500">Estimated Rehab Budget</span>
+            <span className="mt-1 block text-sm font-bold text-slate-900">{moneyOrBlank(a.rehabBudget)}</span>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+            <span className="block text-slate-500">Target Profit Margin</span>
+            <span className="mt-1 block text-sm font-bold text-slate-900">{typeof a.targetMarginPct === 'number' && Number.isFinite(a.targetMarginPct) ? `${a.targetMarginPct}%` : 'Not entered'}</span>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-100">
+            <span className="block text-slate-500">Strategy Disposition</span>
+            <span className="mt-1 block text-sm font-bold text-slate-900">{a.disposition || (decisionRecorded ? d.decision : 'Not recorded')}</span>
           </div>
         </div>
       </div>

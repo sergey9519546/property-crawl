@@ -852,3 +852,19 @@ test('compileSavedSearchToHuntCriteria: handles empty, all-values, and nested fi
   assert.equal(extraPayload.criteria.discoveryFilters.minScore, '50');
 });
 
+test('AlertsModal and saved-searches client library expose one-click Promote to Hunt action', () => {
+  const savedSearchesClient = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'src', 'lib', 'saved-searches.ts'),
+    'utf8'
+  );
+  const alertsModal = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'src', 'components', 'terminal', 'alerts-modal.tsx'),
+    'utf8'
+  );
+  assert.match(savedSearchesClient, /buildHuntFromSavedSearch/);
+  assert.match(savedSearchesClient, /promoteSavedSearchToHunt/);
+  assert.match(alertsModal, /Promote to Hunt/);
+  assert.match(alertsModal, /\/hunts\?hunt=/);
+// end promote test
+});
+

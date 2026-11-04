@@ -16,6 +16,7 @@ import {
   runSavedSearch,
   listAlertMatches,
   markAlertMatchesRead,
+  promoteSavedSearchToHunt,
   type AlertMatch
 } from "@/lib/saved-searches";
 
@@ -39,6 +40,8 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
   const [notifyEmail, setNotifyEmail] = useState("");
   const [feedback, setFeedback] = useState("");
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [promotedHunts, setPromotedHunts] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Strict server-backed load on open. No silent local-only fallback for the list.
@@ -131,6 +134,21 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
       setError(e?.message || "Run failed.");
     } finally {
       setRunningId(null);
+    }
+  }
+
+  async function handlePromote(search: SavedSearch, server?: ServerSavedSearch) {
+    setPromotingId(search.id); setFeedback(""); setError("");
+    try {
+      const hunt = await promoteSavedSearchToHunt(search, server);
+      setPromotedHunts((prev) => ({ ...prev, [search.id]: hunt.id }));
+      setFeedback(`Promoted "${search.name}" to an automated Hunt with baseline tracking.`);
+    } catch (e: any) {
+      const status = (e as any)?.status;
+      if (status === 401) setError("Unlock the workspace first.");
+      else setError(e?.message || "Failed to promote search to Hunt.");
+    } finally {
+      setPromotingId(null);
     }
   }
 
@@ -278,6 +296,22 @@ export function AlertsModal({ isOpen, onClose, availableStates, listings, onAppl
                     <button type="button" onClick={() => handleRun(search.id)} disabled={runningId === search.id} className="inline-flex items-center gap-1 rounded-lg border border-go/30 bg-go-wash px-2 py-1 text-xs font-semibold text-go hover:bg-go-fill/20 disabled:opacity-60">
                       {runningId === search.id ? "Running…" : "Run against live pool"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePromote(search, server)}
+                      disabled={promotingId === search.id}
+                      className="inline-flex items-center gap-1 rounded-lg border border-line-strong bg-paper px-2 py-1 text-xs font-semibold text-ink-2 hover:bg-line disabled:opacity-60"
+                    >
+                      {promotingId === search.id ? "Promoting…" : promotedHunts[search.id] ? "Promoted to Hunt" : "Promote to Hunt"}
+                    </button>
+                    {promotedHunts[search.id] && (
+                      <a
+                        href={`/hunts?hunt=${encodeURIComponent(promotedHunts[search.id])}`}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-go hover:underline"
+                      >
+                        Open Hunt →
+                      </a>
+                    )}
                     {matchCountForSearch > 0 && (
                       <span className="text-label text-ink-3">· {matchCountForSearch} recorded match{matchCountForSearch === 1 ? "" : "es"}</span>
                     )}

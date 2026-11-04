@@ -64,6 +64,35 @@ export function buildServerFilters(state: string, minScore: number, maxBid: numb
   return filters;
 }
 
+export function buildHuntFromSavedSearch(search: SavedSearch, server?: ServerSavedSearch) {
+  const discoveryFilters: Record<string, string> = {};
+  const f = (server?.filters || {}) as Record<string, unknown>;
+  if (Array.isArray(f.states) && f.states.length > 0) {
+    const cleanStates = f.states.map((s) => String(s).trim()).filter((s) => s && s.toLowerCase() !== "all");
+    if (cleanStates.length > 0) discoveryFilters.state = cleanStates.join(",");
+  } else if (search.state && search.state !== "All") {
+    discoveryFilters.state = search.state.toLowerCase();
+  }
+  if (search.minScore > 0) discoveryFilters.minScore = String(search.minScore);
+  if (search.maxBid > 0) discoveryFilters.maxBid = String(search.maxBid);
+  if (typeof f.minEquity === "number" && Number.isFinite(f.minEquity) && f.minEquity > 0) {
+    discoveryFilters.minEquity = String(f.minEquity);
+  }
+  for (const key of ["occupancy", "seniorLien", "redemption"] as const) {
+    const val = f[key];
+    if (typeof val === "string" && val.trim() && val.trim().toLowerCase() !== "all") {
+      discoveryFilters[key] = val.trim();
+    }
+  }
+  return {
+    name: (search.name || server?.label || "Promoted search").trim().slice(0, 80),
+    enabled: true,
+    webhookUrl: typeof f.webhookUrl === "string" && f.webhookUrl.trim() ? f.webhookUrl.trim() : undefined,
+    notifyEmail: typeof f.notifyEmail === "string" && f.notifyEmail.trim() ? f.notifyEmail.trim() : undefined,
+    criteria: { discoveryFilters },
+  };
+}
+
 // --- Client API helpers (authenticated via workspace session cookie) ---
 
 export type ApiError = { status: number; error: string };
@@ -129,6 +158,23 @@ export async function deleteSavedSearch(id: string): Promise<{ success: boolean;
 
 export async function runSavedSearch(id: string): Promise<{ searchId: string; label: string | null; newMatches: number; scanned: number }> {
   return api(`/api/saved-searches/${encodeURIComponent(id)}/run`);
+}
+
+export async function promoteSavedSearchToHunt(search: SavedSearch, server?: ServerSavedSearch): Promise<{ id: string; name: string }> {
+  const payload = buildHuntFromSavedSearch(search, server);
+  const res = await api<{ hunt?: { id: string; name: string }; id?: string; name?: string }>("/api/hunts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const hunt = res.hunt || (res.id ? { id: res.id, name: res.name || payload.name } : null);
+  if (!hunt?.id) {
+    throw new Error("Hunt response did not include an id.");
+  }
+  void fetch(`/api/hunts/${encodeURIComponent(hunt.id)}/evaluate`, {
+    method: "POST",
+    credentials: "same-origin",
+  }).catch(() => {});
+  return hunt;
 }
 
 export type AlertMatch = {
