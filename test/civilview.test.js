@@ -457,7 +457,7 @@ test('CivilView nationwide mode accepts multi-state records and attaches determi
   assert.equal(listing.state, 'PA');
   assert.equal(listing.county, 'Lehigh County');
   assert.equal(listing.apn, '02-5497-8123-0001');
-  assert.equal(listing.parcelKey, 'PA:LEHIGH:02-5497-8123-0001');
+  assert.equal(listing.parcelKey, '02549781230001');
   assert.equal(nationwideScraper.passesFilter(listing), true, 'nationwide mode must accept non-NJ state records');
 
   const singleStateNjScraper = scraper({ nationwide: false, targetState: 'NJ' });

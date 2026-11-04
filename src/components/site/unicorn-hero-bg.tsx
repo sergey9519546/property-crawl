@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useNonce } from "@/components/security/nonce-context";
 
 /**
  * Unicorn Studio hero background — exact replica of arcade.software's setup.
@@ -28,6 +29,7 @@ declare global {
 
 export function UnicornHeroBg() {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const nonce = useNonce();
 
   // Load the UMD script exactly like arcade does (inline script that appends to head)
   React.useEffect(() => {
@@ -71,6 +73,7 @@ export function UnicornHeroBg() {
     const script = document.createElement("script");
     script.src = "/unicornStudio.umd.js";
     script.async = true;
+    if (nonce) script.nonce = nonce;
     script.onload = () => {
       if (window.UnicornStudio && !window.UnicornStudio.isInitialized) {
         try {

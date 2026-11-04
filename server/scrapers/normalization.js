@@ -437,6 +437,7 @@ module.exports = {
   extractRawApn,
   extractCountyFips,
   buildParcelKey,
+  attachParcelIdentity,
   computeTriage,
   mapDistressStage
 };

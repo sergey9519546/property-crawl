@@ -972,11 +972,11 @@ test('Option B Multi-County Platform Expansion: CivilView nationwide, RealAuctio
     assert.ok(cookItem);
     assert.equal(cookItem.id, 'TRUSTEE-IL-COO-2419823412');
     assert.equal(cookItem.openingBid, null, 'Zero-Fabrication: Cook recorder notice never fabricates openingBid');
-    assert.equal(cookItem.parcelKey, 'IL:COOK:17-10-305-012-0000');
+    assert.equal(cookItem.parcelKey, '17031-17103050120000');
     assert.ok(miamiItem);
     assert.equal(miamiItem.id, 'TRUSTEE-FL-MIA-2026R044812');
     assert.equal(miamiItem.openingBid, null, 'Zero-Fabrication: Miami-Dade clerk notice never fabricates openingBid');
-    assert.equal(miamiItem.parcelKey, 'FL:MIAMI DADE:30-4018-001-0120');
+    assert.equal(miamiItem.parcelKey, '12086-3040180010120');
   } finally {
     trustee.fetchText = origFetch;
   }
