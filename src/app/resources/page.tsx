@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
+import { InteractiveBuyerChecklist } from "@/components/resources/interactive-buyer-checklist";
 
 export const metadata: Metadata = {
   title: "Buyer's Guide to Foreclosure and Auction Homes | PerfectProperty",
@@ -245,16 +246,9 @@ export default function ResourcesPage() {
           {/* 4. Checklist */}
           <div className="space-y-8">
             <SectionHeading eyebrow="Step 4" title="Before you bid: your checklist" align="left">
-              Work down the list for every property.
+              Work down the list for every property. Check off items as you verify them; your progress is saved on this device.
             </SectionHeading>
-            <ul className={`${card} space-y-3`}>
-              {checklist.map((item) => (
-                <li key={item} className="flex gap-3 text-sm leading-relaxed text-ink-2">
-                  <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-line-strong bg-card" />
-                  {item}
-                </li>
-              ))}
-            </ul>
+            <InteractiveBuyerChecklist />
           </div>
 
           {/* 5. Next step */}
