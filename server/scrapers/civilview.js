@@ -20,7 +20,8 @@ const { ScraperResponseError } = require('./circuit-breaker');
 const { readResponseText } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
-const { ALL_COUNTY_MAP } = require('./adapters/civilview');
+const { ALL_COUNTY_MAP, NATIONWIDE_COUNTY_MAP } = require('./adapters/civilview');
+const { attachParcelIdentity } = require('./normalization');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -789,6 +790,12 @@ class CivilViewScraper extends BaseScraper {
       sourceObservedAt,
       apn: field(fields, 'parcel #') || null,
       parcelId: field(fields, 'parcel #') || null,
+      parcelKey: attachParcelIdentity({
+        state: parsedAddress.state || summary.county.state,
+        county: summary.county.name,
+        apn: field(fields, 'parcel #') || null,
+        parcelId: field(fields, 'parcel #') || null,
+      }),
       sourceFacts,
       provenance: {
         origin: 'live',
@@ -843,7 +850,11 @@ class CivilViewScraper extends BaseScraper {
   passesFilter(item) {
     if (!item) return false;
     if (!/^CIV-[A-Z]{2}-\d+-\d+$/.test(item.id || '')) return false;
-    if (item.state !== this.targetState) return false;
+    if (this.nationwide) {
+      if (!/^[A-Z]{2}$/.test(item.state || '')) return false;
+    } else if (item.state !== this.targetState) {
+      return false;
+    }
     if (!item.address || item.address.length < 8) return false;
     if (item.openingBid != null && (!Number.isFinite(item.openingBid) || item.openingBid <= 0)) return false;
     if (!this._resolveDetailUrl(item.sourceUrl, this.baseUrl)) return false;
@@ -867,3 +878,4 @@ module.exports.CivilViewScraper = CivilViewScraper;
 module.exports.orderCounties = orderCounties;
 module.exports.rotateCounties = rotateCounties;
 module.exports.ALL_COUNTY_MAP = ALL_COUNTY_MAP;
+module.exports.NATIONWIDE_COUNTY_MAP = NATIONWIDE_COUNTY_MAP;

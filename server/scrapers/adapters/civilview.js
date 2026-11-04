@@ -9,6 +9,27 @@
  */
 
 const { normalizeOcrText } = require('../../ai/notice-parser');
+const { CIVILVIEW_NATIONWIDE } = require('../../../config/nationwide-civilview');
+
+function cleanCivilViewCountyName(rawName = '') {
+  return String(rawName || '')
+    .replace(/,\s*[A-Z]{2}(?:\s*,.*)?$/i, '')
+    .replace(/\s+(?:County|Parish)\b.*$/i, '')
+    .trim();
+}
+
+const NATIONWIDE_COUNTY_MAP = Object.freeze(
+  Object.fromEntries(
+    (CIVILVIEW_NATIONWIDE.counties || []).map((entry) => [
+      Number(entry.id),
+      Object.freeze({
+        county: cleanCivilViewCountyName(entry.name),
+        state: entry.state,
+        fullName: entry.name,
+      }),
+    ]),
+  ),
+);
 
 const NJ_COUNTY_MAP = Object.freeze({
   1: { county: 'Bergen', state: 'NJ' },
@@ -64,6 +85,7 @@ const PA_COUNTY_MAP = Object.freeze({
 });
 
 const ALL_COUNTY_MAP = Object.freeze({
+  ...NATIONWIDE_COUNTY_MAP,
   ...NJ_COUNTY_MAP,
   ...PA_COUNTY_MAP,
 });
@@ -205,6 +227,7 @@ module.exports = {
   analyzeCivilViewStatusHistory,
   NJ_COUNTY_MAP,
   PA_COUNTY_MAP,
+  NATIONWIDE_COUNTY_MAP,
   ALL_COUNTY_MAP,
   getCivilViewUrl,
   parseCivilViewRow,

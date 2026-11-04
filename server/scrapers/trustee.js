@@ -28,6 +28,18 @@ const {
   HARRIS_DOC_TYPES,
 } = require('./adapters/harris-clerk-foreclosure');
 const {
+  getCookRecorderSearchUrl,
+  parseCookRecordRow,
+  parseCookSearchHtml,
+  COOK_DOC_TYPES,
+} = require('./adapters/cook-recorder');
+const {
+  getMiamiDadeClerkSearchUrl,
+  parseMiamiDadeRecordRow,
+  parseMiamiDadeSearchHtml,
+  MIAMI_DADE_DOC_TYPES,
+} = require('./adapters/miami-dade-clerk');
+const {
   createRunReport,
   recordUnitFailure,
   recordUnitSuccess,
@@ -83,6 +95,32 @@ class TrusteeSaleScraper extends BaseScraper {
 
   calculateTexasForeclosureSaleDate(postingDate) {
     return calculateTexasForeclosureSaleDate(postingDate);
+  }
+
+  // Cook County, IL Clerk recorder helpers
+  getCookRecorderSearchUrl(docType, options) {
+    return getCookRecorderSearchUrl(docType, options);
+  }
+
+  parseCookRecordRow(rowHtml, options) {
+    return parseCookRecordRow(rowHtml, options);
+  }
+
+  parseCookSearchHtml(html, options) {
+    return parseCookSearchHtml(html, options);
+  }
+
+  // Miami-Dade County, FL Clerk Official Records helpers
+  getMiamiDadeClerkSearchUrl(options) {
+    return getMiamiDadeClerkSearchUrl(options);
+  }
+
+  parseMiamiDadeRecordRow(rowHtml, options) {
+    return parseMiamiDadeRecordRow(rowHtml, options);
+  }
+
+  parseMiamiDadeSearchHtml(html, options) {
+    return parseMiamiDadeSearchHtml(html, options);
   }
 
   async scrapeFeed(options = {}) {
@@ -298,7 +336,189 @@ class TrusteeSaleScraper extends BaseScraper {
       }
 
       // -----------------------------------------------------------------------
-      // 3. AcclaimWeb Multi-County Jurisdictions (Clark, Washoe, etc.)
+      // 3. Cook County, IL Clerk Recording Division (recording.cookcountyclerkil.gov)
+      // -----------------------------------------------------------------------
+      if (jurKey === 'cook') {
+        const cookDocTypes = options.docType
+          ? [options.docType]
+          : [COOK_DOC_TYPES.SHERIFF_SALE_NOTICE, COOK_DOC_TYPES.LIS_PENDENS_FORECLOSURE];
+
+        for (const docType of cookDocTypes) {
+          report.statesRequested.push(`cook:${docType}`);
+          report.endpointsTried++;
+          try {
+            const targetUrl = this.getCookRecorderSearchUrl(docType, options);
+            const html = await this.fetchText(targetUrl);
+            const records = this.parseCookSearchHtml(html, { ...options, docType });
+            let added = 0;
+
+            for (const rec of records) {
+              if (!rec || (!rec.recordingNumber && !rec.pin && !rec.caseNumber)) continue;
+              const recId = rec.recordingNumber || rec.caseNumber || rec.pin;
+              await recordSnapshot(
+                {
+                  sourceKey: 'trustee',
+                  recordId: `cook:${recId}`,
+                  rawPayload: rec,
+                  metadata: { sourceUrl: rec.sourceUrl, recordedDate: rec.recordedDate || null },
+                },
+                { snapshotDir: options.snapshotDir }
+              );
+              if (!rec.sourceUrl) continue;
+              const ref = String(recId).replace(/[^A-Za-z0-9-]/g, '');
+              const itemKey = `IL-Cook-${ref}-${rec.docType}`;
+              if (seenRefs.has(itemKey)) continue;
+              seenRefs.add(itemKey);
+
+              const sourceFacts = {
+                apn: rec.pin || rec.apn || null,
+                pin: rec.pin || null,
+                caseNumber: rec.caseNumber || null,
+                docType: rec.docType || null,
+                distressStage: rec.distressStage || null,
+                recordedDate: rec.recordedDate || null,
+                grantor: rec.grantor || rec.defendant || null,
+                grantee: rec.grantee || rec.plaintiff || null,
+                recordingNumber: rec.recordingNumber || null,
+                instrumentNumber: rec.instrumentNumber || null,
+              };
+
+              standardized.push(this.standardizeListing({
+                id: `TRUSTEE-IL-COO-${ref}`,
+                source: 'trustee',
+                state: 'IL',
+                county: 'Cook',
+                city: 'Chicago',
+                zip: null,
+                address: rec.legalDescription || `Cook County Recorded Instrument ${recId}`,
+                apn: rec.pin || rec.apn || null,
+                openingBid: null, // Zero-Fabrication: statutory recorder notice records suit/sale notice, never opening bid
+                estLow: null,
+                estHigh: null,
+                assessed: null,
+                saleDate: null,
+                plaintiff: rec.plaintiff || rec.grantee || null,
+                defendant: rec.defendant || rec.grantor || null,
+                judgment: null,
+                attorney: null,
+                occupancy: null,
+                deposit: null,
+                sourceUrl: rec.sourceUrl,
+                raw: JSON.stringify(rec),
+                sourceFacts,
+                provenance: {
+                  origin: 'live',
+                  observed: true,
+                  publisher: 'Cook County Clerk Recording Division',
+                  recordId: String(recId),
+                  platform: 'cook-recorder',
+                  sourceFacts,
+                },
+              }));
+              added++;
+            }
+            recordUnitSuccess(report, `cook:${docType}`, added);
+          } catch (err) {
+            recordUnitFailure(report, `cook:${docType}`, err);
+            console.warn(`[${this.name}] Failed Cook County search on docType ${docType}: ${err.message}`);
+          }
+        }
+        continue;
+      }
+
+      // -----------------------------------------------------------------------
+      // 4. Miami-Dade County, FL Clerk Official Records (onrecords.miamidadeclerk.gov)
+      // -----------------------------------------------------------------------
+      if (jurKey === 'miami-dade' || jurKey === 'miamidade') {
+        const miamiDocTypes = options.docType
+          ? [options.docType]
+          : [MIAMI_DADE_DOC_TYPES.NOTICE_OF_SALE, MIAMI_DADE_DOC_TYPES.LIS_PENDENS];
+
+        for (const docType of miamiDocTypes) {
+          report.statesRequested.push(`miamidade:${docType}`);
+          report.endpointsTried++;
+          try {
+            const targetUrl = this.getMiamiDadeClerkSearchUrl({ ...options, docType });
+            const html = await this.fetchText(targetUrl);
+            const records = this.parseMiamiDadeSearchHtml(html, { ...options, docType });
+            let added = 0;
+
+            for (const rec of records) {
+              if (!rec || (!rec.cfn && !rec.folio && !rec.caseNumber)) continue;
+              const recId = rec.cfn || rec.caseNumber || rec.folio;
+              await recordSnapshot(
+                {
+                  sourceKey: 'trustee',
+                  recordId: `miamidade:${recId}`,
+                  rawPayload: rec,
+                  metadata: { sourceUrl: rec.sourceUrl, recordedDate: rec.recordedDate || null },
+                },
+                { snapshotDir: options.snapshotDir }
+              );
+              if (!rec.sourceUrl) continue;
+              const ref = String(recId).replace(/[^A-Za-z0-9-]/g, '');
+              const itemKey = `FL-MiamiDade-${ref}-${rec.docType}`;
+              if (seenRefs.has(itemKey)) continue;
+              seenRefs.add(itemKey);
+
+              const sourceFacts = {
+                apn: rec.folio || rec.apn || null,
+                folio: rec.folio || null,
+                caseNumber: rec.caseNumber || null,
+                docType: rec.docType || null,
+                distressStage: rec.distressStage || null,
+                recordedDate: rec.recordedDate || null,
+                grantor: rec.grantor || rec.defendant || null,
+                grantee: rec.grantee || rec.plaintiff || null,
+                recordingNumber: rec.cfn || rec.recordingNumber || null,
+                instrumentNumber: rec.instrumentNumber || null,
+              };
+
+              standardized.push(this.standardizeListing({
+                id: `TRUSTEE-FL-MIA-${ref}`,
+                source: 'trustee',
+                state: 'FL',
+                county: 'Miami-Dade',
+                city: 'Miami',
+                zip: null,
+                address: rec.address || rec.legalDescription || `Miami-Dade Recorded CFN ${recId}`,
+                apn: rec.folio || rec.apn || null,
+                openingBid: null, // Zero-Fabrication: Official Records Lis Pendens/Notice never fabricates openingBid
+                estLow: null,
+                estHigh: null,
+                assessed: null,
+                saleDate: rec.saleDate || null,
+                plaintiff: rec.plaintiff || rec.grantee || null,
+                defendant: rec.defendant || rec.grantor || null,
+                judgment: null,
+                attorney: null,
+                occupancy: null,
+                deposit: null,
+                sourceUrl: rec.sourceUrl,
+                raw: JSON.stringify(rec),
+                sourceFacts,
+                provenance: {
+                  origin: 'live',
+                  observed: true,
+                  publisher: 'Miami-Dade County Clerk of Courts',
+                  recordId: String(recId),
+                  platform: 'miami-dade-clerk',
+                  sourceFacts,
+                },
+              }));
+              added++;
+            }
+            recordUnitSuccess(report, `miamidade:${docType}`, added);
+          } catch (err) {
+            recordUnitFailure(report, `miamidade:${docType}`, err);
+            console.warn(`[${this.name}] Failed Miami-Dade Clerk search on docType ${docType}: ${err.message}`);
+          }
+        }
+        continue;
+      }
+
+      // -----------------------------------------------------------------------
+      // 5. AcclaimWeb Multi-County Jurisdictions (Clark, Washoe, Collin, etc.)
       // -----------------------------------------------------------------------
       const docTypes = options.docType
         ? [options.docType]
@@ -389,4 +609,6 @@ module.exports.DEFAULT_JURISDICTIONS = DEFAULT_JURISDICTIONS;
 module.exports.RECORD_DOC_TYPES = RECORD_DOC_TYPES;
 module.exports.MARICOPA_DOC_TYPES = MARICOPA_DOC_TYPES;
 module.exports.HARRIS_DOC_TYPES = HARRIS_DOC_TYPES;
+module.exports.COOK_DOC_TYPES = COOK_DOC_TYPES;
+module.exports.MIAMI_DADE_DOC_TYPES = MIAMI_DADE_DOC_TYPES;
 module.exports.calculateTexasForeclosureSaleDate = calculateTexasForeclosureSaleDate;

@@ -16,7 +16,7 @@ const REALAUCTION_OHIO_COUNTIES = Object.freeze([
   'cuyahoga', 'franklin', 'hamilton', 'summit', 'montgomery',
   'lucas', 'butler', 'stark', 'lorain', 'mahoning', 'warren',
   'clermont', 'delaware', 'lake', 'trumbull', 'wood', 'allen',
-  'fairfield', 'clark', 'licking',
+  'fairfield', 'clark', 'licking', 'portage', 'union', 'wayne', 'miami', 'greene',
 ]);
 
 const REALAUCTION_FLORIDA_COUNTIES = Object.freeze([
@@ -34,6 +34,22 @@ const REALAUCTION_FLORIDA_TAXDEED_COUNTIES = Object.freeze([
   'palmbeach', 'pasco', 'pinellas', 'polk', 'santarosa', 'sarasota', 'seminole',
   'stjohns', 'stlucie', 'volusia',
 ]);
+
+const REALAUCTION_MULTI_STATE_PORTALS = Object.freeze({
+  'az:maricopa:taxlien': { county: 'Maricopa', state: 'AZ', domain: 'maricopa.realtaxlien.com', mode: 'taxlien' },
+  'az:yavapai:taxlien': { county: 'Yavapai', state: 'AZ', domain: 'yavapai.realtaxlien.com', mode: 'taxlien' },
+  'az:coconino:taxlien': { county: 'Coconino', state: 'AZ', domain: 'coconino.realtaxlien.com', mode: 'taxlien' },
+  'az:mohave:taxlien': { county: 'Mohave', state: 'AZ', domain: 'mohave.realtaxlien.com', mode: 'taxlien' },
+  'co:denver:foreclosure': { county: 'Denver', state: 'CO', domain: 'denver.realforeclose.com', mode: 'foreclosure' },
+  'co:arapahoe:foreclosure': { county: 'Arapahoe', state: 'CO', domain: 'arapahoe.realforeclose.com', mode: 'foreclosure' },
+  'co:adams:foreclosure': { county: 'Adams', state: 'CO', domain: 'adams.realforeclose.com', mode: 'foreclosure' },
+  'co:jefferson:foreclosure': { county: 'Jefferson', state: 'CO', domain: 'jefferson.realforeclose.com', mode: 'foreclosure' },
+  'co:elpaso:foreclosure': { county: 'El Paso', state: 'CO', domain: 'elpasoco.realforeclose.com', mode: 'foreclosure' },
+  'co:weld:foreclosure': { county: 'Weld', state: 'CO', domain: 'weld.realforeclose.com', mode: 'foreclosure' },
+  'nj:monmouth:foreclosure': { county: 'Monmouth', state: 'NJ', domain: 'monmouth.realforeclose.com', mode: 'foreclosure' },
+  'md:baltimore:taxlien': { county: 'Baltimore', state: 'MD', domain: 'baltimore.realtaxlien.com', mode: 'taxlien' },
+  'wi:milwaukee:foreclosure': { county: 'Milwaukee', state: 'WI', domain: 'milwaukee.realforeclose.com', mode: 'foreclosure' },
+});
 
 /**
  * RealAuction ColdFusion retHTML macro decompression dictionary.
@@ -95,12 +111,17 @@ function parseCurrency(str) {
 function getRealAuctionUrl(county = 'cuyahoga', state = 'OH', options = {}) {
   const cleanCounty = String(county || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const st = String(state || 'OH').toUpperCase();
-  const mode = options && options.mode === 'taxdeed' ? 'taxdeed' : 'foreclosure';
+  const mode = options && (options.mode === 'taxdeed' || options.mode === 'taxlien') ? options.mode : 'foreclosure';
+  const portalLookup = REALAUCTION_MULTI_STATE_PORTALS[`${st.toLowerCase()}:${cleanCounty}:${mode}`];
   let domain;
   if (options && typeof options.domain === 'string' && options.domain.trim()) {
     domain = options.domain.trim().replace(/^https?:\/\//i, '');
+  } else if (portalLookup && portalLookup.domain) {
+    domain = portalLookup.domain;
   } else if (mode === 'taxdeed') {
     domain = `${cleanCounty}.realtaxdeed.com`;
+  } else if (mode === 'taxlien') {
+    domain = `${cleanCounty}.realtaxlien.com`;
   } else if (st === 'OH') {
     domain = `${cleanCounty}.sheriffsaleauction.ohio.gov`;
   } else {
@@ -363,6 +384,7 @@ module.exports = {
   REALAUCTION_OHIO_COUNTIES,
   REALAUCTION_FLORIDA_COUNTIES,
   REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
+  REALAUCTION_MULTI_STATE_PORTALS,
   decodeRealAuctionMacros,
   parseAdTabTable,
   getRealAuctionUrl,

@@ -867,3 +867,118 @@ test('Bid4Assets extractAuctionJsonRecords parses nested JSON, braces in titles,
   assert.equal(records[1].AuctionID, 104929);
 });
 
+test('Option B Multi-County Platform Expansion: CivilView nationwide, RealAuction 25 OH + multi-state, AcclaimWeb + Cook/Miami-Dade Trustee integration', async () => {
+  const { ALL_COUNTY_MAP, NATIONWIDE_COUNTY_MAP } = require('../server/scrapers/adapters/civilview');
+  const { REALAUCTION_MULTI_STATE_PORTALS } = require('../server/scrapers/adapters/realauction');
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const trustee = require('../server/scrapers/trustee');
+
+  // 1. CivilView nationwide map covers 15+ states (AR, AZ, CO, DE, FL, GA, IA, ID, IL, KS, LA, MN, NJ, OH, OR, PA, TX, WA)
+  assert.ok(Object.keys(NATIONWIDE_COUNTY_MAP).length >= 60);
+  assert.equal(ALL_COUNTY_MAP[47].state, 'AZ');
+  assert.equal(ALL_COUNTY_MAP[47].county, 'Maricopa');
+  assert.equal(ALL_COUNTY_MAP[93].state, 'TX');
+  assert.equal(ALL_COUNTY_MAP[93].county, 'Dallas');
+  assert.equal(ALL_COUNTY_MAP[26].state, 'WA');
+  assert.equal(ALL_COUNTY_MAP[26].county, 'Snohomish');
+
+  // 2. RealAuction 25 Ohio counties + multi-state portals
+  assert.equal(REALAUCTION_OHIO_COUNTIES.length, 25);
+  for (const extraOh of ['portage', 'union', 'wayne', 'miami', 'greene']) {
+    assert.ok(REALAUCTION_OHIO_COUNTIES.includes(extraOh), `REALAUCTION_OHIO_COUNTIES missing ${extraOh}`);
+  }
+  assert.equal(
+    getRealAuctionUrl('denver', 'CO', { mode: 'foreclosure', auctionId: '701' }),
+    'https://denver.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=701',
+  );
+  assert.equal(
+    getRealAuctionUrl('maricopa', 'AZ', { mode: 'taxlien', auctionId: '802' }),
+    'https://maricopa.realtaxlien.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=802',
+  );
+  assert.equal(inspectSourceRecordUrl('sheriff', 'https://maricopa.realtaxlien.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=802').isValid, true);
+  assert.ok(REALAUCTION_MULTI_STATE_PORTALS['co:denver:foreclosure']);
+
+  // SheriffSaleScraper deduplicates counties when SHERIFF_EXTRA_COUNTIES overlaps DEFAULT_OH_COUNTIES
+  const prevExtra = process.env.SHERIFF_EXTRA_COUNTIES;
+  try {
+    process.env.SHERIFF_EXTRA_COUNTIES = 'Portage:portage.sheriffsaleauction.ohio.gov:OH,Union:union.sheriffsaleauction.ohio.gov:OH';
+    const sheriffScraper = new SheriffSaleScraper();
+    const portageEntries = sheriffScraper.counties.filter((c) => c.domain === 'portage.sheriffsaleauction.ohio.gov');
+    assert.equal(portageEntries.length, 1, 'SheriffSaleScraper must deduplicate overlapping county domains');
+  } finally {
+    if (prevExtra === undefined) delete process.env.SHERIFF_EXTRA_COUNTIES;
+    else process.env.SHERIFF_EXTRA_COUNTIES = prevExtra;
+  }
+
+  // 3. AcclaimWeb multi-state jurisdictions + Cook & Miami-Dade wiring in TrusteeSaleScraper
+  assert.equal(DEFAULT_JURISDICTIONS.collin.state, 'TX');
+  assert.equal(DEFAULT_JURISDICTIONS.duval.state, 'FL');
+  assert.equal(DEFAULT_JURISDICTIONS.arapahoe.state, 'CO');
+  assert.equal(
+    inspectSourceRecordUrl('trustee', 'https://collin.tx.publicsearch.us/AcclaimWeb/details?id=2026-009182').isValid,
+    true,
+  );
+  assert.equal(
+    inspectSourceRecordUrl('trustee', 'https://recording.cookcountyclerkil.gov/details?id=2419823412').isValid,
+    true,
+  );
+  assert.equal(
+    inspectSourceRecordUrl('trustee', 'https://onrecords.miamidadeclerk.gov/details?id=2026R044812').isValid,
+    true,
+  );
+
+  const cookHtml = `
+    <table class="search-results">
+      <tr class="cook-record-row">
+        <td class="col-doc">Doc #: 2419823412<a href="https://recording.cookcountyclerkil.gov/details?id=2419823412"></a></td>
+        <td class="col-date">10/18/2026</td>
+        <td class="col-type">SHERIFF SALE NOTICE</td>
+        <td class="col-case">2024-CH-04821</td>
+        <td class="col-pin">17-10-305-012-0000</td>
+        <td class="col-plaintiff">WELLS FARGO BANK, N.A.</td>
+        <td class="col-defendant">MARTINEZ, CARLOS</td>
+        <td class="col-legal">LOT 14 IN BLOCK 2 IN WEST CHICAGO ADDITION</td>
+      </tr>
+    </table>
+  `;
+  const miamiHtml = `
+    <table class="search-results">
+      <tr class="miamidade-record-row">
+        <td class="col-cfn">CFN: 2026R044812<a href="https://onrecords.miamidadeclerk.gov/details?id=2026R044812"></a></td>
+        <td class="col-date">10/19/2026</td>
+        <td class="col-type">NOTICE OF SALE</td>
+        <td class="col-grantor">GOMEZ, ELENA</td>
+        <td class="col-grantee">US BANK TRUST NA</td>
+        <td>Folio: 30-4018-001-0120</td>
+        <td class="col-legal">CORAL GABLES SEC 4 LOT 12 BLK 3</td>
+      </tr>
+    </table>
+  `;
+
+  const origFetch = trustee.fetchText;
+  try {
+    trustee.fetchText = async (url) => {
+      if (url.includes('cookcountyclerkil.gov')) return cookHtml;
+      if (url.includes('miamidadeclerk.gov')) return miamiHtml;
+      return '';
+    };
+    const combined = await trustee.scrapeFeed({
+      jurisdictions: ['cook', 'miami-dade'],
+      docType: 'NOTICE OF SALE',
+    });
+    assert.equal(combined.length, 2);
+    const cookItem = combined.find((l) => l.state === 'IL');
+    const miamiItem = combined.find((l) => l.state === 'FL');
+    assert.ok(cookItem);
+    assert.equal(cookItem.id, 'TRUSTEE-IL-COO-2419823412');
+    assert.equal(cookItem.openingBid, null, 'Zero-Fabrication: Cook recorder notice never fabricates openingBid');
+    assert.equal(cookItem.parcelKey, 'IL:COOK:17-10-305-012-0000');
+    assert.ok(miamiItem);
+    assert.equal(miamiItem.id, 'TRUSTEE-FL-MIA-2026R044812');
+    assert.equal(miamiItem.openingBid, null, 'Zero-Fabrication: Miami-Dade clerk notice never fabricates openingBid');
+    assert.equal(miamiItem.parcelKey, 'FL:MIAMI DADE:30-4018-001-0120');
+  } finally {
+    trustee.fetchText = origFetch;
+  }
+});
+

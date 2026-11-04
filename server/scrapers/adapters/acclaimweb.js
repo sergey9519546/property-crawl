@@ -38,6 +38,72 @@ const DEFAULT_JURISDICTIONS = Object.freeze({
       NOTICE_OF_TRUSTEE_SALE: 'NOTS',
     },
   },
+  collin: {
+    county: 'Collin',
+    state: 'TX',
+    portalUrl: process.env.COLLIN_ACCLAIM_URL || 'https://collin.tx.publicsearch.us/AcclaimWeb',
+    livePortalUrl: 'https://collin.tx.publicsearch.us/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
+  denton: {
+    county: 'Denton',
+    state: 'TX',
+    portalUrl: process.env.DENTON_ACCLAIM_URL || 'https://denton.tx.publicsearch.us/AcclaimWeb',
+    livePortalUrl: 'https://denton.tx.publicsearch.us/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
+  travis: {
+    county: 'Travis',
+    state: 'TX',
+    portalUrl: process.env.TRAVIS_ACCLAIM_URL || 'https://travis.tx.publicsearch.us/AcclaimWeb',
+    livePortalUrl: 'https://travis.tx.publicsearch.us/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
+  duval: {
+    county: 'Duval',
+    state: 'FL',
+    portalUrl: process.env.DUVAL_ACCLAIM_URL || 'https://oncore.duvalclerk.com/AcclaimWeb',
+    livePortalUrl: 'https://oncore.duvalclerk.com/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
+  brevard: {
+    county: 'Brevard',
+    state: 'FL',
+    portalUrl: process.env.BREVARD_ACCLAIM_URL || 'https://vaclmweb1.brevardclerk.us/AcclaimWeb',
+    livePortalUrl: 'https://vaclmweb1.brevardclerk.us/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
+  arapahoe: {
+    county: 'Arapahoe',
+    state: 'CO',
+    portalUrl: process.env.ARAPAHOE_ACCLAIM_URL || 'https://clerk.arapahoegov.com/AcclaimWeb',
+    livePortalUrl: 'https://clerk.arapahoegov.com/AcclaimWeb',
+    docTypeCodes: {
+      LIS_PENDENS: 'LP',
+      NOTICE_OF_DEFAULT: 'NOD',
+      NOTICE_OF_TRUSTEE_SALE: 'NOTS',
+    },
+  },
 });
 
 function getAcclaimSearchUrl(jurisdiction = 'clark', docType = 'NOTICE_OF_TRUSTEE_SALE') {

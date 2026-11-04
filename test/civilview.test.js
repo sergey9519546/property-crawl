@@ -434,3 +434,32 @@ test('CivilView early county-index failure replaces a prior complete report', as
   assert.equal(subject.lastRunReport.truncated, true);
   assert.deepEqual(subject.lastRunReport.scope.filters, { state: 'NJ', countyId: '7' });
 });
+
+test('CivilView nationwide mode accepts multi-state records and attaches deterministic parcelKey', () => {
+  const nationwideScraper = scraper({ nationwide: true, targetState: 'NJ' });
+  const paCounty = { id: '51', name: 'Lehigh County', state: 'PA', fullName: 'Lehigh County, PA' };
+  const paSummary = {
+    propertyId: '99887766',
+    county: paCounty,
+    countySearchUrl: 'https://salesweb.civilview.com/Sales/SalesSearch?countyId=51',
+    detailUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=99887766',
+    sheriffNumber: 'S-2026-4411',
+    plaintiff: 'PNC BANK, NATIONAL ASSOCIATION',
+    defendant: 'JANE DOE',
+  };
+  const paDetailHtml = DETAIL_HTML
+    .replace('19 WEST PARK AVENUE<br/>PARK RIDGE NJ 07656', '742 HAMILTON STREET<br/>ALLENTOWN PA 18101')
+    .replace('LOT 7, BLOCK 1203', '02-5497-8123-0001');
+
+  const listing = nationwideScraper.parseDetailPage(paDetailHtml, paSummary);
+  assert.ok(listing);
+  assert.equal(listing.id, 'CIV-PA-51-99887766');
+  assert.equal(listing.state, 'PA');
+  assert.equal(listing.county, 'Lehigh County');
+  assert.equal(listing.apn, '02-5497-8123-0001');
+  assert.equal(listing.parcelKey, 'PA:LEHIGH:02-5497-8123-0001');
+  assert.equal(nationwideScraper.passesFilter(listing), true, 'nationwide mode must accept non-NJ state records');
+
+  const singleStateNjScraper = scraper({ nationwide: false, targetState: 'NJ' });
+  assert.equal(singleStateNjScraper.passesFilter(listing), false, 'single-state NJ scraper must still reject PA records');
+});

@@ -76,6 +76,11 @@ const DEFAULT_OH_COUNTIES = [
   { name: 'Fairfield', domain: 'fairfield.sheriffsaleauction.ohio.gov', state: 'OH' },
   { name: 'Clark', domain: 'clark.sheriffsaleauction.ohio.gov', state: 'OH' },
   { name: 'Licking', domain: 'licking.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Portage', domain: 'portage.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Union', domain: 'union.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Wayne', domain: 'wayne.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Miami', domain: 'miami.sheriffsaleauction.ohio.gov', state: 'OH' },
+  { name: 'Greene', domain: 'greene.sheriffsaleauction.ohio.gov', state: 'OH' },
 ];
 
 const DEFAULT_TX_COUNTIES = Object.freeze(
@@ -163,13 +168,23 @@ class SheriffSaleScraper extends BaseScraper {
     const txCounties = (options.includeTexas || process.env.SHERIFF_INCLUDE_TX === '1')
       ? DEFAULT_TX_COUNTIES
       : (process.env.SHERIFF_INCLUDE_TX === '0' ? [] : DEFAULT_TX_COUNTIES);
-    this.counties = options.counties
+    const rawCounties = options.counties
       || [
         ...DEFAULT_OH_COUNTIES,
         ...flCounties,
         ...txCounties,
         ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES),
       ];
+    const seenCountyKeys = new Set();
+    this.counties = [];
+    for (const c of rawCounties) {
+      const dedupeKey = c && c.domain
+        ? `${String(c.state || '').toUpperCase()}:${String(c.domain).toLowerCase()}`
+        : `${String(c?.state || '').toUpperCase()}:${String(c?.name || c).toLowerCase()}`;
+      if (seenCountyKeys.has(dedupeKey)) continue;
+      seenCountyKeys.add(dedupeKey);
+      this.counties.push(c);
+    }
     this.timeoutMs = 30000;
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
