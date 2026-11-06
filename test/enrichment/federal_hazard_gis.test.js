@@ -123,7 +123,8 @@ test('FEMA Flood: Spatial query returns mock attributes and caches', async () =>
     lat: 29.951065,
     lng: -90.071533,
     cachePath: testCache,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
 
   assert.equal(res1.status, 'success');
@@ -137,35 +138,14 @@ test('FEMA Flood: Spatial query returns mock attributes and caches', async () =>
     lat: 29.951065,
     lng: -90.071533,
     cachePath: testCache,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
 
   assert.equal(res2.status, 'success');
   assert.equal(res2.fromCache, true);
   assert.equal(res2.floodRisk.baseFloodElevation, 14.5);
   assert.equal(fetchCalled, 1);
-});
-
-test('FEMA Flood: Unmapped rural area with empty features returns Zone D undetermined risk', async () => {
-  const testCache = path.join(TEMP_CACHE_DIR, 'fema-unmapped-cache.json');
-  const emptyFeaturesFetch = async () => ({
-    ok: true,
-    json: async () => ({ features: [] })
-  });
-
-  const res = await queryFemaFloodZone({
-    lat: 38.8951,
-    lng: -77.0364,
-    cachePath: testCache,
-    fetchFn: emptyFeaturesFetch
-  });
-
-  assert.equal(res.status, 'success');
-  assert.equal(res.floodRisk.riskTier, 'undetermined');
-  assert.equal(res.floodRisk.zone, 'D');
-  assert.equal(res.floodRisk.subtype, 'UNSTUDIED / UNMAPPED AREA');
-  assert.equal(res.nfipReserve.basis, 'unknown');
-  assert.equal(res.nfipReserve.estimatedAnnualPremiumReserve, 0);
 });
 
 test('FEMA Flood: Network error fails closed without fabricating zone', async () => {
@@ -265,7 +245,8 @@ test('EPA Hazard: Spatial query handles API response and caches', async () => {
     lat: 39.7392,
     lng: -104.9903,
     cachePath: testCache,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
 
   assert.equal(res.status, 'success');
@@ -318,7 +299,8 @@ test('USGS Terrain: 5-point elevation query calculates slope gradient and caches
     lng: -118.2437,
     offsetMeters: 30,
     cachePath: testCache,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
 
   assert.equal(res.status, 'success');
@@ -331,7 +313,8 @@ test('USGS Terrain: 5-point elevation query calculates slope gradient and caches
     lat: 34.0522,
     lng: -118.2437,
     cachePath: testCache,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
   assert.equal(resCached.status, 'success');
   assert.equal(resCached.fromCache, true);
@@ -381,7 +364,8 @@ test('Federal Hazards: Composite aggregator synthesizes layers and impacts', asy
   const result = await assessFederalHazards({
     lat: 29.95,
     lng: -90.07,
-    fetchFn: mockFetch
+    fetchFn: mockFetch,
+    cachePaths: isolatedHazardCaches()
   });
 
   assert.equal(result.status, 'success');
@@ -390,4 +374,109 @@ test('Federal Hazards: Composite aggregator synthesizes layers and impacts', asy
   assert.equal(result.underwritingImpact.phaseOneEsaRequired, false);
   assert.equal(result.underwritingImpact.gradingContingencyRequired, false);
   assert.ok(result.compositeScore < 100);
+});
+
+
+function isolatedHazardCaches() {
+  return Object.fromEntries(['femaFlood', 'epaHazard', 'usgsTerrain'].map((layer) => [layer, path.join(TEMP_CACHE_DIR, layer + '.json')]));
+}
+
+function hazardFetch({ flood = 'X', femaError = false, epa = [], terrain = 150 } = {}) {
+  return async (url) => {
+    const body = url.includes('hazards.fema.gov')
+      ? femaError ? { error: { code: 500 } } : { features: [{ attributes: { FLD_ZONE: flood, SFHA_TF: flood === 'X' ? 'F' : 'T' } }] }
+      : url.includes('data.epa.gov') ? epa : { value: terrain };
+    return { ok: true, json: async () => body };
+  };
+}
+
+function hazardResponse() {
+  return { statusCode: 200, headers: {}, body: null,
+    setHeader(name, value) { this.headers[name] = value; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; } };
+}
+
+test('Federal hazard route uses the real aggregator for observed high and minimal hazard controls', async () => {
+  const { createFederalHazardsHandler } = require('../../server/routes/federal-hazards');
+  for (const [flood, score] of [['AE', 75], ['X', 100]]) {
+    for (const cacheFile of Object.values(isolatedHazardCaches())) fs.rmSync(cacheFile, { force: true });
+    const handler = createFederalHazardsHandler({ assess: (input) => assessFederalHazards({
+      ...input, fetchFn: hazardFetch({ flood }), cachePaths: isolatedHazardCaches(),
+    }) });
+    const res = hazardResponse();
+    await handler({ method: 'GET', url: '/api/federal-hazards?lat=29.95&lng=-90.07', headers: {} }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.compositeScore, score);
+    assert.equal(res.body.layers.femaFlood.floodRisk.zone, flood === 'X' ? 'X (Unshaded)' : flood);
+    assert.match(res.headers['Cache-Control'], /public/);
+  }
+});
+
+test('Federal hazards: failed providers withhold score, tier and costs rather than reporting clean', async () => {
+  const { createFederalHazardsHandler } = require('../../server/routes/federal-hazards');
+  const handler = createFederalHazardsHandler({ assess: (input) => assessFederalHazards({
+    ...input, fetchFn: async () => { throw new Error('offline control'); }, cachePaths: isolatedHazardCaches(),
+  }) });
+  const res = hazardResponse();
+  await handler({ method: 'GET', url: '/api/federal-hazards?lat=29.95&lng=-90.07', headers: {} }, res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.status, 'unavailable');
+  assert.equal(res.body.compositeScore, null);
+  assert.equal(res.body.overallTier, 'unknown');
+  assert.deepEqual(res.body.underwritingImpact, { nfipAnnualReserve: null, phaseOneEsaRequired: null, gradingContingencyRequired: null });
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+});
+
+test('Federal hazards: a partial assessment exposes observed layers without a complete score', async () => {
+  const { createFederalHazardsHandler } = require('../../server/routes/federal-hazards');
+  const handler = createFederalHazardsHandler({ assess: (input) => assessFederalHazards({
+    ...input, fetchFn: hazardFetch({ femaError: true }), cachePaths: isolatedHazardCaches(),
+  }) });
+  const res = hazardResponse();
+  await handler({ method: 'GET', url: '/api/federal-hazards?lat=29.95&lng=-90.07', headers: {} }, res);
+  assert.equal(res.body.status, 'partial');
+  assert.equal(res.body.compositeScore, null);
+  assert.equal(res.body.underwritingImpact.nfipAnnualReserve, null);
+  assert.equal(res.body.layers.epaHazard.status, 'success');
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+});
+
+test('Federal hazard route validates requests and resolves listing coordinates before assessment', async () => {
+  const { createFederalHazardsHandler } = require('../../server/routes/federal-hazards');
+  let calls = 0;
+  const handler = createFederalHazardsHandler({
+    database: { getListingById: async () => ({ lat: 29.95, lng: -90.07 }) },
+    assess: async (input) => { calls++; assert.deepEqual(input, { lat: 29.95, lng: -90.07 }); return { status: 'success' }; },
+  });
+  for (const [method, url, expected] of [['POST', '/', 405], ['GET', '/?lat=bad&lng=bad', 400], ['GET', '/?listingId=known', 200]]) {
+    const res = hazardResponse();
+    await handler({ method, url, headers: {} }, res);
+    assert.equal(res.statusCode, expected);
+  }
+  assert.equal(calls, 1);
+});
+
+test('Federal hazard sources: absent flood polygons and malformed EPA responses are unknown', async () => {
+  for (const payload of [{ error: { code: 500 } }, {}, { features: [] }, { features: [{ attributes: {} }] }]) {
+    const result = await queryFemaFloodZone({ lat: 29.95, lng: -90.07, cachePath: path.join(TEMP_CACHE_DIR, 'absent-fema.json'), fetchFn: async () => ({ ok: true, json: async () => payload }) });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.floodRisk, null);
+  }
+  const invalidEpa = await queryEpaHazards({ lat: 29.95, lng: -90.07, cachePath: path.join(TEMP_CACHE_DIR, 'bad-epa.json'), fetchFn: async () => ({ ok: true, json: async () => ({ error: 'provider failed' }) }) });
+  assert.equal(invalidEpa.status, 'unavailable');
+  assert.equal(invalidEpa.environmentalLiability, null);
+  const emptyEpa = await queryEpaHazards({ lat: 29.95, lng: -90.07, cachePath: path.join(TEMP_CACHE_DIR, 'empty-epa.json'), fetchFn: async () => ({ ok: true, json: async () => [] }) });
+  assert.equal(emptyEpa.status, 'success');
+});
+
+test('Federal hazard sources: blank elevation is unavailable, while measured zero is valid', async () => {
+  for (const terrain of ['', ' ', null]) {
+    const result = await queryTerrainSlope({ lat: 29.95, lng: -90.07, cachePath: path.join(TEMP_CACHE_DIR, 'bad-terrain.json'), fetchFn: hazardFetch({ terrain }) });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.slopeAnalysis, null);
+  }
+  const zero = await queryTerrainSlope({ lat: 29.95, lng: -90.07, cachePath: path.join(TEMP_CACHE_DIR, 'zero-terrain.json'), fetchFn: hazardFetch({ terrain: 0 }) });
+  assert.equal(zero.status, 'success');
+  assert.equal(zero.elevationMeters, 0);
 });

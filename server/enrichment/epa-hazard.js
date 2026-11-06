@@ -172,7 +172,7 @@ async function queryEpaHazards({
 
   const key = hashCoords(coords, radiusMiles);
   const cache = loadCache(cachePath);
-  if (cache[key]) {
+  if (cache[key]?.schemaVersion === 2 && cache[key]) {
     return {
       status: 'success',
       fromCache: true,
@@ -228,6 +228,8 @@ async function queryEpaHazards({
       rawList = data.Results.FRSFacet;
     } else if (data && Array.isArray(data.Facility)) {
       rawList = data.Facility;
+    } else {
+      return { status: 'unavailable', reason: 'epa_invalid_response', environmentalLiability: null, provenance: 'epa-envirofacts-spatial-query' };
     }
 
     const facilities = rawList.map((item) => {
@@ -261,6 +263,7 @@ async function queryEpaHazards({
     const environmentalLiability = evaluateEnvironmentalLiability(facilities);
 
     const record = {
+      schemaVersion: 2,
       observedAt: new Date(now).toISOString(),
       environmentalLiability,
       facilities

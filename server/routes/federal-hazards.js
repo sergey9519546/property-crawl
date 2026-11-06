@@ -9,7 +9,8 @@ function parseCoordinate(value, min, max) {
   return Number.isFinite(num) && num >= min && num <= max ? num : null;
 }
 
-async function handleFederalHazards(req, res) {
+function createFederalHazardsHandler({ database = db, assess = assessFederalHazards } = {}) {
+return async function handleFederalHazards(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed. GET only.' });
   }
@@ -22,7 +23,7 @@ async function handleFederalHazards(req, res) {
 
   if ((lat === null || lng === null) && listingId) {
     try {
-      const listing = await db.getListingById(listingId);
+      const listing = await database.getListingById(listingId);
       if (listing) {
         if (lat === null) lat = parseCoordinate(listing.lat, 15, 72);
         if (lng === null) lng = parseCoordinate(listing.lng, -180, -65);
@@ -41,59 +42,13 @@ async function handleFederalHazards(req, res) {
     });
   }
 
-  if (process.env.NODE_ENV === 'test' && !process.env.DISCOVERY_TEST_ALLOW_REMOTE) {
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-    return res.json({
-      status: 'success',
-      evaluatedAt: new Date().toISOString(),
-      compositeScore: 92,
-      overallTier: 'minimal_hazard',
-      flags: [],
-      layers: {
-        femaFlood: {
-          status: 'success',
-          floodRisk: {
-            zone: 'X',
-            riskTier: 'minimal',
-            description: 'Area of minimal flood hazard (outside 500-year floodplain)',
-            isSpecialFloodHazardArea: false,
-            mandatoryFloodInsurance: false
-          },
-          nfipReserve: { estimatedAnnualPremiumReserve: 0, tier: 'minimal' }
-        },
-        epaHazard: {
-          status: 'success',
-          environmentalLiability: {
-            liabilityTier: 'clean',
-            summary: 'No active Superfund (NPL) or Brownfield facilities within 1.0 mile.',
-            phaseOneRecommended: false
-          },
-          facilities: [],
-          superfundSites: []
-        },
-        usgsTerrain: {
-          status: 'success',
-          slopeAnalysis: {
-            slopePct: 3.2,
-            classification: 'gentle_slope',
-            summary: 'Gentle buildable slope (< 5%)'
-          }
-        }
-      },
-      underwritingImpact: {
-        nfipAnnualReserve: 0,
-        phaseOneEsaRequired: false,
-        gradingContingencyRequired: false
-      },
-      provenance: 'federal-environmental-physical-gis-v1'
-    });
-  }
 
   try {
-    const assessment = await assessFederalHazards({ lat, lng });
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-    return res.json(assessment);
+    const assessment = await assess({ lat, lng });
+    res.setHeader('Cache-Control', assessment.status === 'success' ? 'public, max-age=86400, stale-while-revalidate=604800' : 'no-store');
+    return res.status(assessment.status === 'unavailable' ? 503 : 200).json(assessment);
   } catch (err) {
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(503).json({
       error: 'Federal GIS hazard query failed',
       status: 'unavailable',
@@ -101,6 +56,8 @@ async function handleFederalHazards(req, res) {
       provenance: 'federal-environmental-physical-gis-v1'
     });
   }
+};
 }
 
-module.exports = handleFederalHazards;
+module.exports = createFederalHazardsHandler();
+module.exports.createFederalHazardsHandler = createFederalHazardsHandler;

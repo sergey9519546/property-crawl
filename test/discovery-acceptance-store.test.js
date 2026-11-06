@@ -4,17 +4,18 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const test = require('node:test');
 const { DiscoveryStore } = require('../server/discovery/store');
+const { createIsolatedDatabase } = require('./discovery-acceptance-db');
 
 const databaseUrl = process.env.DISCOVERY_TEST_DATABASE_URL || process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || process.env.DISCOVERY_DATABASE_URL;
 
 async function withStore(fn) {
   if (!databaseUrl) return;
-  const { Pool } = require('pg');
-  const pool = new Pool({ connectionString: databaseUrl });
+  const isolated = await createIsolatedDatabase({ url: databaseUrl, prefix: 'acceptance_store' });
+  const pool = isolated.pool;
   try {
     await fn(pool, new DiscoveryStore(pool));
   } finally {
-    await pool.end();
+    await isolated.close();
   }
 }
 

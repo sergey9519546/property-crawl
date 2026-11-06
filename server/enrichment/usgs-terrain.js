@@ -115,7 +115,8 @@ async function fetchSingleElevation(lat, lng, fetchFn, signal) {
 
   if (!res.ok) throw new Error(`USGS EPQS HTTP ${res.status}`);
   const json = await res.json();
-  const elev = Number(json.value ?? json.Value ?? json.elevation);
+  const rawElevation = json?.value ?? json?.Value ?? json?.elevation;
+  const elev = rawElevation === null || rawElevation === undefined || (typeof rawElevation === 'string' && !rawElevation.trim()) ? NaN : Number(rawElevation);
   if (!Number.isFinite(elev) || elev === -1000000) {
     throw new Error('USGS EPQS returned invalid elevation value');
   }

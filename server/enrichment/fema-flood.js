@@ -203,7 +203,7 @@ async function queryFemaFloodZone({
 
   const key = hashCoords(coords);
   const cache = loadCache(cachePath);
-  if (cache[key]) {
+  if (cache[key]?.schemaVersion === 2 && cache[key]) {
     return {
       status: 'success',
       fromCache: true,
@@ -264,15 +264,15 @@ async function queryFemaFloodZone({
     }
 
     const json = await res.json();
-    const features = Array.isArray(json.features) ? json.features : [];
-    
-    let bestFeature = null;
-    if (features.length > 0) {
-      bestFeature = features[0].attributes || {};
+    if (!json || json.error || !Array.isArray(json.features)) {
+      return { status: 'unavailable', reason: 'fema_invalid_response', floodRisk: null, provenance: 'fema-nfhl-spatial-query' };
     }
-
-    const fldZone = bestFeature ? bestFeature.FLD_ZONE : 'D';
-    const zoneSubty = bestFeature ? bestFeature.ZONE_SUBTY : 'UNSTUDIED / UNMAPPED AREA';
+    const bestFeature = json.features[0]?.attributes;
+    if (typeof bestFeature?.FLD_ZONE !== 'string' || !bestFeature.FLD_ZONE.trim()) {
+      return { status: 'unavailable', reason: 'fema_zone_not_observed', floodRisk: null, provenance: 'fema-nfhl-spatial-query' };
+    }
+    const fldZone = bestFeature.FLD_ZONE;
+    const zoneSubty = bestFeature ? bestFeature.ZONE_SUBTY : null;
     const sfhaTf = bestFeature ? bestFeature.SFHA_TF : 'F';
     const staticBfe = bestFeature && Number.isFinite(Number(bestFeature.STATIC_BFE)) ? Number(bestFeature.STATIC_BFE) : null;
     const depth = bestFeature && Number.isFinite(Number(bestFeature.DEPTH)) ? Number(bestFeature.DEPTH) : null;
@@ -285,6 +285,7 @@ async function queryFemaFloodZone({
     const nfipReserve = estimateNfipReserve(floodRisk);
 
     const record = {
+      schemaVersion: 2,
       observedAt: new Date(now).toISOString(),
       floodRisk,
       nfipReserve,

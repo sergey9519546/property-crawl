@@ -10,14 +10,15 @@ const { queryTerrainSlope } = require('./usgs-terrain');
 async function assessFederalHazards({
   lat,
   lng,
-  fetchFn = globalThis.fetch,
+  fetchFn = process.env.NODE_ENV === 'test' && !process.env.DISCOVERY_TEST_ALLOW_REMOTE ? null : globalThis.fetch,
+  cachePaths = {},
   timeoutMs = 8000,
   now = Date.now()
 } = {}) {
   const [floodResult, epaResult, terrainResult] = await Promise.all([
-    queryFemaFloodZone({ lat, lng, fetchFn, timeoutMs, now }),
-    queryEpaHazards({ lat, lng, fetchFn, timeoutMs, now }),
-    queryTerrainSlope({ lat, lng, fetchFn, timeoutMs, now })
+    queryFemaFloodZone({ lat, lng, fetchFn, timeoutMs, now, cachePath: cachePaths.femaFlood }),
+    queryEpaHazards({ lat, lng, fetchFn, timeoutMs, now, cachePath: cachePaths.epaHazard }),
+    queryTerrainSlope({ lat, lng, fetchFn, timeoutMs, now, cachePath: cachePaths.usgsTerrain })
   ]);
 
   const flags = [];
@@ -120,11 +121,13 @@ async function assessFederalHazards({
   else if (compositeScore < 70) overallTier = 'high_hazard';
   else if (compositeScore < 85) overallTier = 'moderate_hazard';
 
+  const availableLayers = [floodResult, epaResult, terrainResult].filter((layer) => layer.status === 'success').length;
+  const complete = availableLayers === 3;
   return {
-    status: (floodResult.status === 'success' || epaResult.status === 'success' || terrainResult.status === 'success') ? 'success' : 'unavailable',
+    status: complete ? 'success' : availableLayers > 0 ? 'partial' : 'unavailable',
     evaluatedAt: new Date(now).toISOString(),
-    compositeScore,
-    overallTier,
+    compositeScore: complete ? compositeScore : null,
+    overallTier: complete ? overallTier : 'unknown',
     flags,
     layers: {
       femaFlood: floodResult,
@@ -132,9 +135,9 @@ async function assessFederalHazards({
       usgsTerrain: terrainResult
     },
     underwritingImpact: {
-      nfipAnnualReserve: floodResult.nfipReserve?.estimatedAnnualPremiumReserve || 0,
-      phaseOneEsaRequired: epaResult.environmentalLiability?.phaseOneRecommended || false,
-      gradingContingencyRequired: terrainResult.slopeAnalysis?.slopePct > 15
+      nfipAnnualReserve: floodResult.status === 'success' ? floodResult.nfipReserve?.estimatedAnnualPremiumReserve ?? null : null,
+      phaseOneEsaRequired: epaResult.status === 'success' ? epaResult.environmentalLiability?.phaseOneRecommended ?? null : null,
+      gradingContingencyRequired: terrainResult.status === 'success' && Number.isFinite(terrainResult.slopeAnalysis?.slopePct) ? terrainResult.slopeAnalysis.slopePct > 15 : null
     },
     provenance: 'federal-environmental-physical-gis-v1'
   };
