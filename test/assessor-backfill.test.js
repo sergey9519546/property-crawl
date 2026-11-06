@@ -222,3 +222,32 @@ test('backfillAssessorRolls populates and persists listing.parcelKey when roll p
   assert.equal(persistedListings[0].provenance?.derivedFields?.parcelKey, true);
   assert.equal(row.parcelKey, '04013-10101010');
 });
+test('backfill round-robins across states so no single state starves others', async () => {
+  const rows = [
+    { id: 'tx-1', source: 'servicelink', state: 'TX', county: 'Bexar', lat: 29.1, lng: -98.4, openingBid: 100000, provenance: { origin: 'live', observed: true, publisher: 'ServiceLink', recordId: 'tx-1' } },
+    { id: 'tx-2', source: 'servicelink', state: 'TX', county: 'Bexar', lat: 29.2, lng: -98.5, openingBid: 100000, provenance: { origin: 'live', observed: true, publisher: 'ServiceLink', recordId: 'tx-2' } },
+    { id: 'az-1', source: 'servicelink', state: 'AZ', county: 'Maricopa', lat: 33.4, lng: -112.3, openingBid: 100000, provenance: { origin: 'live', observed: true, publisher: 'ServiceLink', recordId: 'az-1' } },
+    { id: 'fl-1', source: 'servicelink', state: 'FL', county: 'Miami-Dade', lat: 25.7, lng: -80.2, openingBid: 100000, provenance: { origin: 'live', observed: true, publisher: 'ServiceLink', recordId: 'fl-1' } },
+  ];
+  const db = {
+    async getListings({ state }) {
+      const matches = rows.filter(r => r.state === state);
+      return { total: matches.length, listings: matches };
+    },
+    async createListing(listing) {
+      return listing;
+    },
+  };
+  const consideredOrder = [];
+  const result = await backfillAssessorRolls({
+    db,
+    limit: 3,
+    cachePath: temporaryCachePath(),
+    fetchFn: async (url) => {
+      return { ok: true, json: async () => ({ features: [] }) };
+    },
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+
+  assert.equal(result.considered, 3);
+});

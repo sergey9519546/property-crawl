@@ -623,9 +623,9 @@ test('sheriff parsePublicNoticeHtml: extracts case + address + minimum bid from 
   assert.equal(out[0].county, 'Cuyahoga');
 });
 
-test('sheriff DEFAULT_OH_COUNTIES contains the documented 20 Ohio counties', () => {
+test('sheriff DEFAULT_OH_COUNTIES contains the documented 25 Ohio counties', () => {
   assert.ok(Array.isArray(DEFAULT_OH_COUNTIES));
-  assert.equal(DEFAULT_OH_COUNTIES.length, 20);
+  assert.equal(DEFAULT_OH_COUNTIES.length, 25);
   assert.equal(DEFAULT_OH_COUNTIES[0].name, 'Cuyahoga');
   assert.equal(DEFAULT_OH_COUNTIES.every((c) => c.state === 'OH'), true);
 });

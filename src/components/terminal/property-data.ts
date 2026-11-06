@@ -125,6 +125,7 @@ export interface PropertyListing {
     bidSpread: number | null;
     bidToMidRatio: number | null;
     note: string;
+    valuationBasis?: string | null;
   };
 }
 

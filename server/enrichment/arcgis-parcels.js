@@ -555,13 +555,14 @@ const COUNTY_ARCGIS_REGISTRY = {
   'TX-BEXAR': {
     name: 'Bexar County / San Antonio (BCAD)',
     fips: '48029',
-    endpoint: 'https://maps.bexar.org/arcgis/rest/services/Cadastral/Parcels/MapServer/0/query',
-    apnField: 'PROP_ID',
-    landUseField: 'STATE_CD',
-    assessedTotalField: 'APPRAISED_VAL',
-    assessedLandField: 'LAND_VAL',
-    assessedImprvField: 'IMPRV_VAL',
-    legalDescField: 'LEGAL_DESC'
+    endpoint: 'https://maps.bexar.org/arcgis/rest/services/Parcels/MapServer/0/query',
+    apnField: 'PropID',
+    landUseField: 'State_cd',
+    assessedTotalField: 'TotVal',
+    assessedLandField: 'LandVal',
+    assessedImprvField: 'ImprVal',
+    legalDescField: 'LglDesc',
+    situsAddressField: 'Situs'
   },
   'OH-CUYAHOGA': {
     name: 'Cuyahoga County Fiscal Officer (Cleveland)',
@@ -632,13 +633,15 @@ const COUNTY_ARCGIS_REGISTRY = {
   'TX-HARRIS': {
     name: 'Harris County Appraisal District (HCAD)',
     fips: '48201',
-    endpoint: 'https://gis.hcad.org/arcgis/rest/services/Public/Parcels/MapServer/0/query',
+    endpoint: 'https://www.gis.hctx.net/arcgis/rest/services/HCAD/Parcels/MapServer/0/query',
     apnField: 'HCAD_NUM',
-    landUseField: 'State_Class',
-    assessedTotalField: 'Tot_Appr_Val',
-    assessedLandField: 'Land_Val',
-    assessedImprvField: 'Bld_Val',
-    legalDescField: 'Legal_Desc'
+    landUseField: 'state_class',
+    assessedTotalField: 'total_appraised_val',
+    assessedLandField: 'land_value',
+    assessedImprvField: 'bld_value',
+    legalDescField: 'legal_dscr_1',
+    taxYearField: 'tax_year',
+    situsAddressField: 'site_str_name'
   },
   // Endpoints below were verified live against each service's layer metadata
   // and a sampled spatial query on 2026-10-21 (see

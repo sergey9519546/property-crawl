@@ -21,6 +21,7 @@ const hudUspsVacancy = require('./hud-usps-vacancy');
 const publicNoticesEmail = require('./email-ingest');
 const governmentLand = require('./government-land');
 const localSurplus = require('./local-surplus');
+const trustee = require('./trustee');
 const db = require('../db/client');
 const { telemetryInstance } = require('./telemetry');
 const { validateListingForIngestion } = require('./validation');
@@ -153,6 +154,7 @@ class IngestionScheduler {
       bid4assets,
       servicelink,
       sheriff,
+      trustee,
       hud,
       fannie,
       freddie,

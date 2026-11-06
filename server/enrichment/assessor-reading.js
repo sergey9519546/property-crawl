@@ -16,7 +16,7 @@ const MARKET_CONVERSION = Object.freeze({
   // Texas CADs
   'TX-BEXAR': Object.freeze({
     mode: 'market-figure',
-    citation: 'Bexar CAD APPRAISED_VAL, compared 1:1 with the published opening amount.',
+    citation: 'Bexar CAD TotVal (appraised value), compared 1:1 with the published opening amount.',
   }),
   'TX-HARRIS': Object.freeze({
     mode: 'market-figure',

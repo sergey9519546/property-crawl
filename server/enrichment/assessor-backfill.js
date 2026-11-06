@@ -73,8 +73,8 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   const nowMs = Number.isFinite(now) ? now : Date.now();
   const seen = new Set();
   const candidates = [];
+  const stateBuckets = [];
   for (const state of CONVERTED_STATES) {
-    if (candidates.length >= limit) break;
     let page = { listings: [] };
     try {
       page = await db.getListings({ state, missingAssessorRoll: true, limit: perStateLimit });
@@ -82,8 +82,8 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
       if (logger?.warn) logger.warn(`[AssessorBackfill] ${state} query failed (non-fatal): ${error.message}`);
       continue;
     }
+    const bucket = [];
     for (const row of page.listings || []) {
-      if (candidates.length >= limit) break;
       if (!row || typeof row !== 'object' || !row.id || seen.has(row.id)) continue;
       if (!candidateReady(row)) continue;
       const countyKey = resolveCountyKey(row.state, row.county);
@@ -97,8 +97,20 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
         if (entry.parcel ? age < cacheTtlMs : age < missTtlMs) continue;
       }
       seen.add(row.id);
-      candidates.push(row);
+      bucket.push(row);
     }
+    if (bucket.length) stateBuckets.push(bucket);
+  }
+  // Fair round-robin interleave across states so no single state starves the others:
+  let idx = 0;
+  while (candidates.length < limit && stateBuckets.some(b => idx < b.length)) {
+    for (const bucket of stateBuckets) {
+      if (candidates.length >= limit) break;
+      if (idx < bucket.length) {
+        candidates.push(bucket[idx]);
+      }
+    }
+    idx++;
   }
   if (!candidates.length) return result;
   result.considered = candidates.length;

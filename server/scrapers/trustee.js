@@ -50,7 +50,7 @@ class TrusteeSaleScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'TrusteeSaleScraper', sourceKey: 'trustee', ...options });
     this.timeoutMs = 15000;
-    this.fixtureOnly = options.fixtureOnly !== false && process.env.TRUSTEE_LIVE !== '1';
+    this.fixtureOnly = Boolean(options.fixtureOnly);
     this.lastRunReport = null;
   }
 

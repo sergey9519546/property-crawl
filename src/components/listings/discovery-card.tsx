@@ -83,6 +83,7 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
   const completeness = listing.evidenceCompleteness;
   const quality = listing.researchQuality;
   const opportunity = listing.opportunity;
+  const effectiveDealScore = knownNumber(listing.dealScore) ?? knownNumber(listing.opportunity?.dealScore);
   const qualityBadge = quality
     ? quality.band === 'strong'
       ? { label: `Evidence ${quality.score}`, className: 'bg-paper text-ink' }
@@ -174,18 +175,37 @@ export const DiscoveryCard = React.memo(function DiscoveryCard({ listing, href, 
       <TriageChips listing={listing} className="mt-1.5" />
       {facts.length ? <p className="mt-2 text-xs text-ink-3">{facts.join(" · ")}</p> : null}
       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-line py-3">
-        <div><dt className="text-xs text-ink-3">Opening amount</dt><dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd></div>
-        <div><dt className="text-xs text-ink-3">Sale date</dt><dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" /></dd></div>
+        <div>
+          <dt className="text-xs text-ink-3">Opening amount</dt>
+          <dd className="mt-1 min-h-7 text-xl font-semibold tracking-tight text-ink"><Fact origin={listingFactOrigin(listing, "openingBid")} value={listing.openingBid} format="money" /></dd>
+          {knownNumber(listing.openingBid) === null && knownNumber(listing.judgment) !== null ? (
+            <p className="mt-1 text-xs text-ink-3">Judgment: <span className="font-semibold text-ink">${Number(listing.judgment).toLocaleString("en-US")}</span></p>
+          ) : knownNumber(listing.assessed) !== null ? (
+            <p className="mt-1 text-xs text-ink-3">Assessed: <span className="font-medium text-ink-2">${Number(listing.assessed).toLocaleString("en-US")}</span></p>
+          ) : null}
+        </div>
+        <div>
+          <dt className="text-xs text-ink-3">Sale date</dt>
+          <dd className="mt-1 min-h-7 text-sm font-semibold leading-7 text-ink"><Fact origin={listingFactOrigin(listing, "saleDate")} value={listing.saleDate} format="date" /></dd>
+          {opportunity && knownNumber(opportunity.rank) !== null ? (
+            <p className="mt-1 text-xs text-ink-3">Rank: <span className="font-medium text-ink-2">{opportunity.rank}/100</span></p>
+          ) : null}
+        </div>
       </dl>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-label text-ink-3">
         <span title={sourceDisplayText(listing.discoveryStatus || "Freshness unknown")} className={stale ? "font-medium text-catch-ink" : ""}>{archived ? "Archived source record" : stale ? "Source refresh due" : observed ? "Source record observed" : "Source record unverified"}{listing.sourceObservedAt ? ` · ${displayDate(listing.sourceObservedAt)}` : " · date unavailable"}</span>
         {completeness ? <span title={completeness.missing.length ? `Not available in this record: ${completeness.missing.map(field => field.replace(/([A-Z])/g, " $1").toLowerCase()).join(", ")}` : "All tracked details are available in this record"}>{completeness.known} of {completeness.total} details available</span> : null}
         {listing.hasDocuments === true ? <span className="inline-flex items-center gap-1"><FileText size={12} /> Documents</span> : null}
-        {knownNumber(listing.dealScore) !== null ? (() => {
-          const band = bandForScore(listing.dealScore);
+        {effectiveDealScore !== null ? (() => {
+          const band = bandForScore(effectiveDealScore);
+          const isAssessor = listing.opportunity?.valuationBasis === 'enrolled_assessor_registry';
           return (
-            <span title={band?.desc || "Modeled Deal Score. Review the inputs in property details."}>
-              {band ? `${band.label} ${listing.dealScore}` : `Modeled score ${listing.dealScore}/99`}
+            <span
+              className={band ? 'font-semibold text-ink' : ''}
+              title={band?.desc || (isAssessor ? 'Assessor-benchmarked deal score' : 'Modeled Deal Score')}
+            >
+              {band ? `${band.label} ${effectiveDealScore}` : `Deal score ${effectiveDealScore}/99`}
+              {isAssessor ? ' (Assessor)' : ''}
             </span>
           );
         })() : null}
