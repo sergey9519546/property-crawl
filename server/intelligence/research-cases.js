@@ -98,7 +98,7 @@ function sourceRefFromListing(listing, referenceNow = Date.now()) {
 function safeListingSnapshot(listing) {
   const allowed = [
     'id', 'address', 'state', 'county', 'city', 'zip', 'source', 'sourceUrl', 'sourceObservedAt',
-    'propType', 'status', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'sqft', 'assessed',
+    'propType', 'status', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'sqft', 'assessed', 'assessedValue',
     'estLow', 'estHigh', 'dealScore', 'redemptionDays', 'redemptionWarning', 'seniorLienRisk',
   ];
   const snapshot = {};
@@ -358,7 +358,9 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
     if (condition.operator === 'bid_to_assessed_lte') {
       if (trigger.type !== 'origin') return false;
       const currentBid = item.listingSnapshot?.openingBid;
-      const assessed = item.listingSnapshot?.assessed ?? Number(item.dossierSnapshot?.publicRecords?.parcel?.properties?.assessedValue);
+      const assessed = item.listingSnapshot?.assessedValue ?? item.listingSnapshot?.assessed ??
+        Number(item.dossierSnapshot?.publicRecords?.parcel?.assessedValue?.total) ??
+        Number(item.dossierSnapshot?.publicRecords?.parcel?.properties?.assessedValue);
       if (typeof currentBid !== 'number' || !Number.isFinite(assessed) || assessed <= 0) return false;
       const ratioPct = (currentBid / assessed) * 100;
       return ratioPct - 1e-9 <= condition.value;

@@ -449,8 +449,8 @@ export default async function ListingPage({ params, searchParams }: Props) {
             {missingOptionalPropertyFacts.length ? <p className="mt-3 text-sm text-ink-3">Not published: {missingOptionalPropertyFacts.join(", ")}.</p> : null}
           </div>
 
-          <SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} />
-          <div className="mt-6"><PropertyDocuments evidence={listing.documentEvidence} publisherUrl={exactSourceUrl} /></div>
+          <div id="auction-details" className="scroll-mt-6"><SaleMechanics listing={listing} exactSourceUrl={exactSourceUrl} /></div>
+          <div id="property-documents" className="mt-6 scroll-mt-6"><PropertyDocuments evidence={listing.documentEvidence} publisherUrl={exactSourceUrl} /></div>
 
           <details id="documents-title" className="mt-6 scroll-mt-6 rounded-card border border-line bg-card px-5 shadow-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 text-sm font-bold text-ink"><span>Publisher record and identifiers</span><span className={`text-xs font-semibold ${exactSourceUrl ? "text-ink-2" : "text-catch-ink"}`}>{exactSourceUrl ? "Exact page linked" : "Exact URL unavailable"}</span></summary>
@@ -593,7 +593,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </details>
           <div className="mt-8 space-y-8">
             <BiddingSimulator listing={listing} />
-            <DueDiligenceChecklist listing={listing} />
+            <div id="due-diligence-binder" className="scroll-mt-6"><DueDiligenceChecklist listing={listing} /></div>
             <ListingCompare listingId={listing.id} label={listing.address} />
             <Parcel3DVisualizer listing={listing} />
             <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />

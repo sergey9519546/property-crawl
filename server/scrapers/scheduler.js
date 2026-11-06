@@ -537,13 +537,18 @@ const scheduler = new IngestionScheduler({
     // database this throws and the caller logs "Could not persist source
     // history" — there is deliberately no local file to fall back to, so a
     // dead database can never read as "no observations recorded".
-    const observationResult = await recordSourceRun(db.pool, sourceId, run);
+    let observationResult = null;
+    try {
+      observationResult = await recordSourceRun(db.pool, sourceId, run);
+    } catch (obsErr) {
+      console.warn('[Scheduler] Source observation run was not recorded to PostgreSQL:', obsErr.message);
+    }
 
     // Refresh the triage_priority cache for the listings this run advanced.
     // The route's write-through covers listings people evaluate; this fills
     // the rest the moment their evidence changes, so hunt sorting does not
     // wait on views. Best-effort and bounded per run.
-    if (observationResult.snapshots && observationResult.snapshots.length) {
+    if (observationResult?.snapshots && observationResult.snapshots.length) {
       try {
         const { recomputeTriageForListings } = require('../db/observations-persistence');
         const advancedIds = new Set(observationResult.snapshots.map((snapshot) => snapshot.listingId));

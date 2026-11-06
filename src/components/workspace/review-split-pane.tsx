@@ -87,6 +87,7 @@ export function ReviewSplitPane({
   const [editMode, setEditMode] = useState(false);
   const [editedFields, setEditedFields] = useState<any>({});
   const [reviewNote, setReviewNote] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [activeFieldKey, setActiveFieldKey] = useState<string | null>(null);
 
   const currentItem = items[currentIndex];
@@ -122,6 +123,11 @@ export function ReviewSplitPane({
 
   const handleRejectCurrent = useCallback(async () => {
     if (!currentItem) return;
+    if (!reviewNote.trim()) {
+      setValidationError('A reviewer note is required before rejecting a legal notice.');
+      return;
+    }
+    setValidationError(null);
     const fields = editMode ? editedFields : currentItem.extractedFields;
     const result = await onReject(currentItem.id, reviewNote.trim() || undefined, fields);
     if (result !== false) handleNext();
@@ -491,6 +497,7 @@ export function ReviewSplitPane({
                 placeholder="State verification findings or rejection reason…"
                 className="w-full border border-slate-300 rounded px-2.5 py-1.5 text-xs"
               />
+              {validationError && <p className="text-xs text-rose-600 mt-1 font-semibold">{validationError}</p>}
             </div>
           </div>
 

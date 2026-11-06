@@ -113,6 +113,26 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     ? computeTargetPriceScenario({ estimatedValue, targetMarginPct: targetMargin, rehabBudget, currentPrice: openingBid, otherAcquisitionCosts })
     : null;
 
+  const calculateMao = (rehab: number, margin: number, customVal: string | null, customBid: string | null, scenarioMap: Record<ScenarioField, string>) => {
+    const customValNum = customVal !== null && customVal !== "" && Number.isFinite(Number(customVal)) ? Number(customVal) : null;
+    const activeEstimatedValue = customValNum ?? (listing.estLow !== null && listing.estLow !== undefined && listing.estHigh !== null && listing.estHigh !== undefined ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : publisherValuation);
+    const customBidNum = customBid !== null && customBid !== "" && Number.isFinite(Number(customBid)) ? Number(customBid) : null;
+    const activeOpeningBid = customBidNum ?? (listing.openingBid !== null && listing.openingBid !== undefined ? Number(listing.openingBid) : null);
+    if (activeOpeningBid === null) return null;
+    const activeAmounts = Object.fromEntries(Object.entries(scenarioMap).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
+    const activeOtherAcquisitionCosts = acquisitionFields.every((field) => activeAmounts[field] !== null)
+      ? acquisitionFields.reduce((total, field) => total + (activeAmounts[field] ?? 0), 0)
+      : null;
+    const freshScenario = computeTargetPriceScenario({
+      estimatedValue: activeEstimatedValue,
+      targetMarginPct: margin,
+      rehabBudget: rehab,
+      currentPrice: activeOpeningBid,
+      otherAcquisitionCosts: activeOtherAcquisitionCosts,
+    });
+    return freshScenario?.maxPurchasePrice ?? null;
+  };
+
   const persistScenario = (
     next: Record<ScenarioField, string>,
     rehab = rehabBudget,
@@ -128,7 +148,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       customValuation: customVal,
       customOpeningBid: customBid,
       holdingMonths: months,
-      maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? null,
+      maxAllowableOffer: calculateMao(rehab, margin, customVal, customBid, next),
     });
   };
 
@@ -141,7 +161,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
       customValuation,
       customOpeningBid,
       holdingMonths: months,
-      maxAllowableOffer: reverseScenario?.maxPurchasePrice ?? null,
+      maxAllowableOffer: calculateMao(rehabBudget, targetMargin, customValuation, customOpeningBid, scenario),
     });
   };
 

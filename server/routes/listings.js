@@ -280,6 +280,18 @@ async function handleAssessorLookup(encodedId, res) {
     });
   }
 
+  const cachedParcel = listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel;
+  if (cachedParcel) {
+    const resolvedParcelKey = listing.parcelKey || (cachedParcel?.canonicalApn ? buildParcelKey({ apn: cachedParcel.canonicalApn, countyFips: cachedParcel.countyFips }) : null);
+    return res.json({
+      listingId: listing.id,
+      parcelKey: resolvedParcelKey || null,
+      lookedUpAt: listing.provenance?.derivedFields?.assessorRoll?.observedAt || new Date().toISOString(),
+      ...(cachedParcel?.situsAddress ? { situsAddress: cachedParcel.situsAddress } : {}),
+      ...interpretAssessorParcel({ countyKey, parcel: cachedParcel, openingBid: listing.openingBid }),
+    });
+  }
+
   const lat = Number(listing.lat);
   const lng = Number(listing.lng);
   let parcel = null;
@@ -296,9 +308,22 @@ async function handleAssessorLookup(encodedId, res) {
     parcel = null;
   }
 
+  if (parcel) {
+    listing.assessorParcel = parcel;
+    listing.provenance = listing.provenance || {};
+    listing.provenance.derivedFields = listing.provenance.derivedFields || {};
+    listing.provenance.derivedFields.assessorRoll = {
+      parcel,
+      countyKey,
+      apn: parcel.canonicalApn || parcel.rawApn || publishedApn(listing) || null,
+      observedAt: new Date().toISOString(),
+      found: true,
+    };
+  }
+
   const resolvedParcelKey = listing.parcelKey || (parcel?.canonicalApn ? buildParcelKey({ apn: parcel.canonicalApn, countyFips: parcel.countyFips }) : null);
-  if (!listing.parcelKey && resolvedParcelKey && typeof db.createListing === 'function') {
-    listing.parcelKey = resolvedParcelKey;
+  if ((!listing.parcelKey && resolvedParcelKey || parcel) && typeof db.createListing === 'function') {
+    if (resolvedParcelKey) listing.parcelKey = resolvedParcelKey;
     try { await db.createListing(listing); } catch (_) {}
   }
 

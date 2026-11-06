@@ -149,11 +149,10 @@ test('CLI parsers keep imports bounded and preserve CivilView collection options
 test('collector support is derived from production scheduler scrapers only', () => {
   const sources = supportedSources();
   assert.deepEqual(sources, [...sources].sort());
-  for (const source of ['bid4assets', 'civilview', 'fannie', 'freddie', 'gsa', 'hud', 'irs', 'landbank', 'marshals', 'sheriff', 'treasury', 'usda', 'va']) {
+  for (const source of ['bid4assets', 'civilview', 'fannie', 'freddie', 'gsa', 'hud', 'irs', 'landbank', 'marshals', 'sheriff', 'treasury', 'trustee', 'usda', 'va']) {
     assert.ok(sources.includes(source), `missing scheduler collector ${source}`);
   }
   assert.equal(sources.includes('fdic'), false);
-  assert.equal(sources.includes('trustee'), false);
 });
 
 test('collector writes successful and failed source-run observations without admitting unsupported keys', async () => {

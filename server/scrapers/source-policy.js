@@ -39,6 +39,8 @@ const SOURCE_HOSTS = Object.freeze({
   fannie: ['homepath.fanniemae.com'],
   'fhfa-hpi': ['www.fhfa.gov'],
   'fl-dor-cadastral': ['services9.arcgis.com'],
+  'government-land': ['www.usa.gov', 'www.blm.gov'],
+  'local-surplus': ['www.usa.gov'],
   freddie: ['homesteps.com'],
   gsa: ['realestatesales.gov', 'www.gsa.gov'],
   hud: ['hudhomestore.gov', 'egis.hud.gov'],

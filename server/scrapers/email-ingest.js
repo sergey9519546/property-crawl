@@ -255,6 +255,9 @@ class ImapClient {
       const onError = (err) => reject(err);
       const onReady = () => {
         this.socket.removeListener('error', onError);
+        this.socket.on('error', (err) => {
+          this.lastSocketError = err;
+        });
         resolve();
       };
       if (this.cfg.tls) {
@@ -278,6 +281,10 @@ class ImapClient {
     return new Promise((resolve, reject) => {
       const deadline = Date.now() + 30000;
       const tick = () => {
+        if (this.lastSocketError) {
+          reject(this.lastSocketError);
+          return;
+        }
         if (this.buffer.includes(prefix)) {
           resolve(this.buffer);
           return;
@@ -317,8 +324,11 @@ class ImapClient {
       try {
         this.socket.write('A99 LOGOUT\r\n');
       } catch (_) {}
-      this.socket.end();
-      setTimeout(() => resolve(), 50);
+      try { this.socket.end(); } catch (_) {}
+      setTimeout(() => {
+        try { if (!this.socket.destroyed) this.socket.destroy(); } catch (_) {}
+        resolve();
+      }, 50);
     });
   }
 }
@@ -420,6 +430,8 @@ class PublicNoticesEmailScraper {
     this.sourceId = SOURCE_ID;
     this.env = options.env || process.env;
     this.corpusDir = options.corpusDir || options.env?.IMAP_CORPUS_DIR || process.env.IMAP_CORPUS_DIR || '';
+    this.circuitBreaker = null;
+    this.lastRunReport = null;
   }
 
   getCollectionScope() {

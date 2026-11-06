@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-10-31T20:59:26.635Z",
+  "generatedAt": "2026-11-06T14:05:02.449Z",
   "guarantee": {
     "catalogSources": 288,
-    "scheduledAdapters": 21,
+    "scheduledAdapters": 22,
     "scraplingEnabledAdapters": 52,
     "seedListingsIndexed": 2130,
     "endCoverageRequired": 10,
@@ -23,12 +23,13 @@
     ]
   },
   "tiers": {
-    "P0_CATALOG_ONLY": 228,
+    "P0_CATALOG_ONLY": 227,
     "P4_LIVE_STRONG": 5,
     "P3_SCOPE_LIMITED": 3,
     "P2_DISCOVERY_ADAPTER": 12,
     "P2_BLOCKED_PUBLISHER": 2,
-    "P2_LOCAL_ROUTE": 38
+    "P2_LOCAL_ROUTE": 38,
+    "P0_NO_LIVE_ADAPTER": 1
   },
   "categories": {
     "tax_sale": {
@@ -43,7 +44,7 @@
     },
     "foreclosure_auction": {
       "total": 25,
-      "scheduled": 7,
+      "scheduled": 8,
       "strong": 1
     },
     "government_reo": {
@@ -243,9 +244,9 @@
       "label": "Foreclosure/sheriff/trustee auction",
       "required": true,
       "catalogEntries": 25,
-      "scheduledAdapters": 7,
+      "scheduledAdapters": 8,
       "strongAdapters": 1,
-      "opportunityScheduled": 7,
+      "opportunityScheduled": 8,
       "coveredByCode": true,
       "honestGap": null,
       "memberIds": [
@@ -253,7 +254,7 @@
         "civilview*",
         "bid4assets*",
         "ohio-sheriff-sale*",
-        "county-trustee-sale",
+        "county-trustee-sale*",
         "civilview-nationwide*",
         "realeauction-sheriff-multi-state*",
         "sheriff-cook-il-civil-services",
@@ -648,6 +649,7 @@
     "servicelink",
     "sheriff",
     "treasury",
+    "trustee",
     "usda",
     "va"
   ],
@@ -1187,19 +1189,21 @@
       "category": "foreclosure_auction",
       "role": "opportunity",
       "status": "LOCAL_ROUTE",
-      "adapterKey": null,
+      "adapterKey": "trustee",
       "access": "jurisdiction",
       "discoveryUrl": "https://www.usa.gov/state-local-governments",
       "power": {
-        "tier": "P0_CATALOG_ONLY",
+        "tier": "P0_NO_LIVE_ADAPTER",
         "score": 1,
-        "inScheduler": false,
+        "inScheduler": true,
         "scrapling": null,
         "flags": [
-          "lastRunReport"
+          "scheduled",
+          "lastRunReport",
+          "limitation"
         ]
       },
-      "weakness": null,
+      "weakness": "fixtureOnly=true — no live universal trustee endpoint",
       "seedListings": 0
     },
     {

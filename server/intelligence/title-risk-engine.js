@@ -16,7 +16,8 @@
  * 5. 50-State Statutory Redemption & Upset Bid periods (AL, MI, NJ, NC, etc.).
  */
 
-const { STATE_REDEMPTION_RULES } = require('../ai/legal-rules');
+const { STATE_REDEMPTION_RULES, getRedemptionRule } = require('../ai/legal-rules');
+const { analyzeMunicipalViolations } = require('./municipal-liens');
 const {
   HOA_SUPER_PRIORITY_RULES,
   HOA_SUPER_PRIORITY_STATES,
@@ -31,8 +32,13 @@ const { evaluateIrsNoticeRule } = require('./irs-notice');
 function classifyForeclosingParty(plaintiff = '', noticeText = '') {
   const combined = `${plaintiff} ${noticeText}`.toLowerCase();
 
-  // 1. Municipal or property tax authority
-  if (/(?:county\s*treasurer|tax\s*collector|city\s*of|dept\s*of\s*revenue|internal\s*revenue|\birs\b|tax\s*lien|delinquent\s*tax)/i.test(combined)) {
+  // 1a. Federal IRS Tax Lien (governed by 26 U.S.C. § 6323; does not prime prior recorded private mortgages)
+  if (/(?:internal\s*revenue|\birs\b)/i.test(combined)) {
+    return 'IRS_TAX_LIEN';
+  }
+
+  // 1b. Municipal or property tax authority
+  if (/(?:county\s*treasurer|tax\s*collector|city\s*of|dept\s*of\s*revenue|tax\s*lien|delinquent\s*tax)/i.test(combined)) {
     return 'TAX_AUTHORITY';
   }
 
@@ -106,7 +112,19 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
 
   const partyType = classifyForeclosingParty(plaintiff, notice);
   const instrumentSignals = extractInstrumentPrioritySignals(notice);
-  const redemptionRule = (STATE_REDEMPTION_RULES || {})[state] || { days: 0, label: 'Standard statutory confirmation' };
+  const irsNoticeEval = evaluateIrsNoticeRule({
+    hasFederalTaxLien: listing.hasIrsLien ?? listing.hasFederalTaxLien ?? (partyType === 'IRS_TAX_LIEN' || /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien)/i.test(notice)),
+    saleDate: listing.saleDate,
+    irsNoticeDate: listing.irsNoticeDate,
+    noticeProvided: listing.irsNoticeProvided ?? listing.irsNoticeGiven,
+    noticeMethod: listing.irsNoticeMethod,
+    noticeText: notice,
+  });
+  const redemptionRule = typeof getRedemptionRule === 'function' ? getRedemptionRule(state, {
+    hasFederalTaxLien: irsNoticeEval.hasFederalTaxLien,
+    noticeText: notice,
+    saleType: listing.saleType,
+  }) : ((STATE_REDEMPTION_RULES || {})[state] || { days: 0, label: 'Standard statutory confirmation' });
 
   // 1. Evaluate 50-State HOA Super-Lien Priority
   const hoaEval = evaluateHoaSuperLien({
@@ -119,15 +137,6 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
   });
 
   // 2. Evaluate IRS Federal Tax Lien 25-Day Notice Rule (26 U.S.C. § 7425)
-  const irsNoticeEval = evaluateIrsNoticeRule({
-    hasFederalTaxLien: listing.hasIrsLien ?? listing.hasFederalTaxLien,
-    saleDate: listing.saleDate,
-    irsNoticeDate: listing.irsNoticeDate,
-    noticeProvided: listing.irsNoticeProvided ?? listing.irsNoticeGiven,
-    noticeMethod: listing.irsNoticeMethod,
-    noticeText: notice,
-  });
-
   const irsLien = {
     hasIrsLien: irsNoticeEval.hasFederalTaxLien,
     hasLien: irsNoticeEval.hasFederalTaxLien,
@@ -189,6 +198,11 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     riskLevel = 'CRITICAL';
     canProceedWithBid = false;
     warnings.push("CRITICAL TITLE DEFECT: Mechanic's/Construction lien foreclosure. Senior mortgages recorded prior to commencement of work survive sale in full; verify contractor commencement affidavit.");
+  } else if (partyType === 'IRS_TAX_LIEN') {
+    firstMortgageSurvives = true;
+    riskLevel = 'HIGH';
+    canProceedWithBid = false;
+    warnings.push('FEDERAL TAX LIEN FORECLOSURE: Under 26 U.S.C. § 6323, federal tax liens do not prime prior recorded private mortgages. Senior recorded mortgages and encumbrances survive the sale in full.');
   } else if (partyType === 'TAX_AUTHORITY') {
     riskLevel = 'LOW';
     warnings.push('TAX SALE PRIORITY: Property tax foreclosures generally prime all private mortgages and deeds of trust.');

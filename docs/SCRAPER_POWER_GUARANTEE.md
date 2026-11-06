@@ -1,6 +1,6 @@
 # Scraper power & source amount — coverage guarantee
 
-> Generated 2026-10-31T20:59:26.635Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
+> Generated 2026-11-06T14:05:02.449Z from `server/sources/catalog.js` + `server/scrapers/scheduler.js` + `data.js`.
 > **Code guarantee ≠ live inventory guarantee.** Volume depends on publisher reachability.
 
 ## Headline numbers
@@ -8,7 +8,7 @@
 | Metric | Value |
 |---|---:|
 | Catalog sources (all ends) | **288** |
-| Scheduled production adapters | **21** |
+| Scheduled production adapters | **22** |
 | Adapters with Scrapling profiles | **52** |
 | Seed listings in data.js | **2130** |
 | Required end coverage (scheduled) | **10/10** |
@@ -21,7 +21,7 @@
 | Federal seizure/forfeiture | 5 | 3 | 2 | yes | ✅ adapter |
 | Federal/state surplus real property | 54 | 1 | 1 | yes | ✅ adapter |
 | Federal/state land sales | 2 | 1 | 0 | yes | ✅ adapter |
-| Foreclosure/sheriff/trustee auction | 25 | 7 | 1 | yes | ✅ adapter |
+| Foreclosure/sheriff/trustee auction | 25 | 8 | 1 | yes | ✅ adapter |
 | Tax lien/deed sale | 132 | 37 | 0 | yes | ✅ adapter |
 | Land bank inventory | 12 | 1 | 0 | yes | ✅ adapter |
 | County/municipal surplus | 1 | 1 | 0 | yes | ✅ adapter |
@@ -42,7 +42,8 @@
 | P4_LIVE_STRONG | Scheduled + Scrapling optional + fail-closed + lastRunReport | 5 |
 | P2_DISCOVERY_ADAPTER | Adapter registered but DISCOVERY_ONLY (canaries pending) | 12 |
 | P2_BLOCKED_PUBLISHER | Publisher blocked/challenged; fail-closed in code | 2 |
-| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 228 |
+| P0_CATALOG_ONLY | Catalog workflow/enrollment template only | 227 |
+| P0_NO_LIVE_ADAPTER | Explicitly no live collector (trustee / historical FDIC) | 1 |
 
 ## Scheduled adapters (power scorecard)
 
@@ -108,6 +109,7 @@
 | `sheriff` (Travis County TX (Austin) — Tax Sale) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `sheriff` (Miami-Dade FL — Foreclosure Auction (RealForeclose)) | P2_LOCAL_ROUTE | table-extract | 0 | OH Realauction default + SHERIFF_EXTRA_COUNTIES enrollment |
 | `va` (VA REO / VRM Properties) | P2_DISCOVERY_ADAPTER | table-extract | 0 | Historical host 404; VA_REO_BASE_URL operator-configured; fail-closed |
+| `trustee` (County Trustee Sale Publisher) | P0_NO_LIVE_ADAPTER | — | 0 | fixtureOnly=true — no live universal trustee endpoint |
 
 ## What we guarantee (code)
 

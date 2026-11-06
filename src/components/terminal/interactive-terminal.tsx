@@ -272,11 +272,15 @@ export function InteractiveTerminal() {
 
   useEffect(() => {
     const handleHeroSearch = (event: Event) => {
-      const detail = (event as CustomEvent<{ query?: string }>).detail;
+      const detail = (event as CustomEvent<{ query?: string; scope?: string }>).detail;
       if (typeof detail?.query !== "string") return;
       const query = detail.query.trim();
 
-      dispatchFilters({ type: "setSearch", query, view: "grid" });
+      if (detail?.scope === "state" && query.length === 2) {
+        dispatchFilters({ type: "patch", patch: { selectedState: query.toUpperCase(), searchQuery: "", activeView: "grid" } });
+      } else {
+        dispatchFilters({ type: "setSearch", query, view: "grid" });
+      }
     };
 
     window.addEventListener("perfectproperty:search", handleHeroSearch);
@@ -1126,7 +1130,7 @@ export function InteractiveTerminal() {
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <Link
-                        href={`/listings/${listing.id}`}
+                        href={`/listings/${encodeURIComponent(listing.id)}`}
                         data-testid="listing-detail-link"
                         aria-label={`Open listing page for ${listing.address}`}
                         className="w-full inline-flex h-10 items-center justify-center rounded-control border border-line-strong bg-card text-ink text-xs font-bold hover:bg-paper transition gap-1 shadow-sm"

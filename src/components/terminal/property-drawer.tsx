@@ -664,9 +664,14 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                   </div>
                 </div>
               ) : (
-                <div className="rounded-control border border-dashed border-line-strong bg-paper p-4 text-xs text-ink-3">
-                  Cash requirements are unresolved. No fee is inferred from the source name or state. Open the Price Scenario tab to enter published terms or explicit assumptions.
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("bidding")}
+                  className="w-full text-left rounded-control border border-dashed border-line-strong bg-paper p-4 text-xs text-ink-3 hover:border-ink transition"
+                >
+                  Cash requirements are unresolved. No fee is inferred from the source name or state.{" "}
+                  <span className="font-bold text-ink underline">Switch to Bidding Simulator &amp; Reverse Scenario &rarr;</span>
+                </button>
               )}
 
               {/* Commercial & Multi-Family CRE Underwriting */}
@@ -814,16 +819,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-ink bg-ink text-white text-xs font-bold hover:bg-ink-2 transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download Standard LOI</span>
-                  </button>
-
-                  <button
-                    onClick={handleGenerateAiLoi}
-                    disabled={generatingAiLoi || openingBid === null}
-                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-go bg-go text-white text-xs font-bold hover:bg-go/90 transition shadow-sm disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{generatingAiLoi ? "Generating…" : "Download LOI"}</span>
+                    <span>Download LOI (.txt)</span>
                   </button>
 
                   <button
@@ -832,16 +828,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                     className="flex items-center justify-center gap-2 h-10 px-3 rounded-control border border-line bg-card text-ink text-xs font-bold hover:bg-paper transition shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Export Standard IC Memo</span>
-                  </button>
-
-                  <button
-                    onClick={handleGenerateAiMemo}
-                    disabled={generatingAiMemo || openingBid === null || estHigh === null}
-                    className="flex items-center justify-center gap-2 h-10 px-3 rounded-control bg-ink text-white text-xs font-bold hover:bg-ink-2 transition shadow-sm disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>{generatingAiMemo ? "Generating…" : "Download IC Memo"}</span>
+                    <span>Export IC Memo (.md)</span>
                   </button>
                 </div>
                 {(openingBid === null || estHigh === null) && (

@@ -429,7 +429,8 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
       if (triageFilters.isNew && !t.isNew) return false;
       if (triageFilters.priceDropped && !t.priceDropped) return false;
       if (triageFilters.hasDocs && !t.hasDocs) return false;
-      if (triageFilters.stale && !(t.staleDays > 30)) return false;
+      const isStale = listing.sourceFreshness?.status ? listing.sourceFreshness.status === "stale" : Boolean(t.staleDays > 30);
+      if (triageFilters.stale && !isStale) return false;
       if (triageFilters.occupancyKnown && !t.occupancyKnown) return false;
       return true;
     });
@@ -520,7 +521,15 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
   // Same words as the sort menu below, never the raw URL key ("bid-asc").
   // No "triage" entry: discovery-query.ts drops sort=triage and the discovery
   // SQL rejects it, so offering it would sort by score while claiming triage.
-  const sortLabel = `Sorted by ${({ quality: "most complete listing", opportunity: "highest Deal Score", date: "sale date", "bid-asc": "opening bid, low to high" } as Record<string, string>)[filters.sort ?? ""] ?? "Deal Score, highest first"}.`;
+  const sortLabel = `Sorted by ${({
+    score: "Deal Score, highest first",
+    opportunity: "opportunity rank",
+    triage: "triage research priority",
+    equity: "bid spread",
+    quality: "most complete listing",
+    date: "sale date",
+    "bid-asc": "opening bid, low to high",
+  } as Record<string, string>)[filters.sort ?? ""] ?? "Deal Score, highest first"}.`;
 
   return (
     <section className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8">
@@ -708,7 +717,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
               && (filters.sort || "score") === "score"
               && summarizeInventoryHonesty(payload.listings).dealScorePresent === 0
               && payload.listings.length > 0
-              ? "No listing on this page has a Deal Score yet, so this order isn't ranking by score. A Deal Score needs a published opening bid and a value range."
+              ? "No listing on this page has a Deal Score yet; ranking prioritizes soonest upcoming auction sales and research triage signals."
               : payload?.listings
                 ? sortLabel
                 : "Checking which listings have a Deal Score…"}
@@ -723,7 +732,9 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           >
             <option value="score">Deal Score</option>
             <option value="quality">Most complete listing</option>
-            <option value="opportunity">Highest Deal Score</option>
+            <option value="opportunity">Opportunity rank</option>
+            <option value="triage">Triage research priority</option>
+            <option value="equity">Bid spread / equity</option>
             <option value="date">Sale date</option>
             <option value="bid-asc">Opening bid, low to high</option>
           </select>

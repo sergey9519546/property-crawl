@@ -47,6 +47,7 @@ class TreasuryForfeitureScraper extends BaseScraper {
 
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
+      if (this._spiderDetailCache) this._spiderDetailCache.clear();
 
       const listHtml = await this.fetchText(`${this.baseUrl}/realprop.shtml`);
 

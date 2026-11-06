@@ -26,7 +26,7 @@ const keys = ["q", "state", "county", "source", "type", "program", "lifecycle", 
 export const DISCOVERY_FILTER_VALUES = Object.freeze({
   freshness: Object.freeze(["all", "observed", "unverified"]),
   hasDocuments: Object.freeze(["true", "false", "unknown"]),
-  sort: Object.freeze(["score", "quality", "opportunity", "date", "bid-asc", "equity", "bid"]),
+  sort: Object.freeze(["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "bid"]),
   seniorLien: Object.freeze(["all", "clean", "risk"]),
   redemption: Object.freeze(["all", "immediate", "redemption_active"]),
 });

@@ -21,6 +21,7 @@
 const { getHpiIndex, getAppreciationMultiplier, DEFAULT_CURRENT_PERIOD } = require('./hpi');
 const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
+const { resolveCountyKey } = require('./arcgis-parcels');
 
 const DISCLAIMER = 'Public record consensus benchmarks are statutory and administrative observations, not an appraisal, valuation opinion, or buyer bid recommendation.';
 
@@ -66,11 +67,12 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
 
   if (rawParcel) {
     let reading = null;
+    const countyKey = rawParcel.countyKey || resolveCountyKey(state, ctx.county);
     try {
-      reading = interpretAssessorParcel(rawParcel, {
+      reading = interpretAssessorParcel({
+        countyKey,
+        parcel: rawParcel,
         openingBid: openingBid || 0,
-        state,
-        county: ctx.county,
       });
     } catch {
       reading = null;
@@ -142,7 +144,11 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
           hpiAppreciationPct: appreciationPct,
           hpiAdjustedAssessedValue,
           source: 'FHFA House Price Index (HPI) Quarterly Series',
-          provenance: { sourceUrl: options.hpiSeries.sourceUrl, retrievedAt: options.hpiSeries.retrievedAt, datasetSha256: options.hpiSeries.datasetSha256 },
+          provenance: {
+            sourceUrl: options.hpiSeries?.sourceUrl || 'https://www.fhfa.gov/data/hpi',
+            retrievedAt: options.hpiSeries?.retrievedAt || new Date().toISOString(),
+            datasetSha256: options.hpiSeries?.datasetSha256 || null,
+          },
         };
         sourcesAvailable.push('fhfa_hpi');
       } else {
