@@ -307,7 +307,7 @@ export function Hero() {
         <motion.div
           aria-hidden
           data-testid="hero-shader-field"
-          className="pointer-events-none absolute -inset-[5%] z-[1] will-change-transform opacity-35 mix-blend-soft-light"
+          className="pointer-events-none absolute -inset-[5%] z-[1] will-change-transform"
           style={{ x: shaderX, y: shaderY, scale: 1.06 }}
         >
           <ErrorBoundary>
@@ -323,7 +323,7 @@ export function Hero() {
         {/* Property layer: the supplied transparent villa is colorized by the live shader. */}
         <div
           data-testid="hero-property-blueprint"
-          className="hero-property-art absolute inset-0 z-[3] opacity-65 mix-blend-luminosity filter contrast-125"
+          className="hero-property-art absolute inset-0 z-[3]"
         >
           <Image
             src="/hero-modern-villa.png"
@@ -442,9 +442,9 @@ export function Hero() {
           <button
             type="submit"
             aria-label="Search market"
-            className="inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-[#0F172A] text-white transition-colors hover:bg-[#1E293B]"
+            className="inline-flex h-[44px] w-[44px] sm:h-[34px] sm:w-[34px] shrink-0 items-center justify-center rounded-full bg-ink text-white transition-colors hover:bg-ink-2"
             style={{
-              boxShadow: "0 0 0 1px rgb(15,23,42), 0 4px 8px rgba(15,23,42,0.18)",
+              boxShadow: "0 0 0 1px rgb(24,21,41), 0 4px 8px rgba(24,21,41,0.18)",
             }}
           >
             <ArrowUp className="h-[19px] w-[19px]" />
@@ -469,7 +469,7 @@ export function Hero() {
                   }}
                   onClick={() => selectSuggestion(suggestion)}
                   className={`flex cursor-pointer items-center gap-3 rounded-control px-3.5 py-3 text-sm font-medium text-ink transition-colors ${
-                    activeSuggestion === index ? "bg-[#F1F5F9]" : "hover:bg-[#F3F4F6]"
+                    activeSuggestion === index ? "bg-paper-2" : "hover:bg-paper"
                   }`}
                 >
                   {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
@@ -492,7 +492,7 @@ export function Hero() {
                     window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`);
                   }}
                   onClick={() => window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`)}
-                  className="flex cursor-pointer items-center justify-between border-t border-slate-100 bg-go/10 px-3.5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-go/20"
+                  className="flex cursor-pointer items-center justify-between border-t border-line bg-go/10 px-3.5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-go/20"
                 >
                   <span className="flex items-center gap-2">
                     <Database className="h-4 w-4 text-go" />
@@ -526,19 +526,19 @@ export function Hero() {
             initial={{ opacity: 1, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-            className="flex items-center gap-1.5 text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
+            className="flex items-center gap-1.5 text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
           >
             <Undo2 className="h-4 w-4 text-ink" />
             Try Cleveland, OH
           </motion.button>
-          <span className="hidden text-slate-400 sm:inline" aria-hidden>•</span>
+          <span className="hidden text-ink-3 sm:inline" aria-hidden>•</span>
           <Link
             href={listingsHref}
-            className="flex items-center gap-1.5 font-semibold text-slate-900 underline underline-offset-4 hover:text-emerald-700"
+            className="flex items-center gap-1.5 font-semibold text-ink underline underline-offset-4 hover:text-ink-2"
           >
-            <Database className="h-4 w-4 text-emerald-600" />
+            <Database className="h-4 w-4 text-ink-2" />
             Browse listings
-            <ArrowRight className="h-3.5 w-3.5 text-slate-700" />
+            <ArrowRight className="h-3.5 w-3.5 text-ink-2" />
           </Link>
         </div>
         <p className="sr-only" aria-live="polite">{status}</p>

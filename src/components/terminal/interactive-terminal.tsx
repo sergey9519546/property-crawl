@@ -472,6 +472,7 @@ export function InteractiveTerminal() {
               <button
                 onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
                 aria-pressed={activeView === "grid"}
+                aria-label={`Deal Grid (${filtered.length} records)`}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "grid"
@@ -480,12 +481,13 @@ export function InteractiveTerminal() {
                 )}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Grid ({filtered.length})</span>
+                <span>Deal Grid ({filtered.length} records)</span>
               </button>
 
               <button
                 onClick={() => dispatchFilters({ type: "setView", view: "map" })}
                 aria-pressed={activeView === "map"}
+                aria-label={`Map (${filtered.length} records)`}
                 className={cn(
                   "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
                   activeView === "map"
@@ -494,7 +496,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <MapIcon className="w-3.5 h-3.5" />
-                <span>Map ({filtered.length})</span>
+                <span>Map ({filtered.length} records)</span>
               </button>
 
               <button
@@ -508,7 +510,7 @@ export function InteractiveTerminal() {
                 )}
               >
                 <Sparkles className="w-3.5 h-3.5 fill-current" />
-                <span>Parser</span>
+                <span>Notice Parser</span>
               </button>
             </div>
 
