@@ -239,6 +239,7 @@ test('every facet bucket the workbench offers can be selected and reproduces its
     sale_date date, opening_bid numeric, equity_spread numeric,
     senior_lien_risk text, redemption_days int,
     est_low numeric, est_high numeric,
+    triage_priority int,
     latitude float8, longitude float8
   )`);
 
@@ -400,7 +401,7 @@ test('paging returns the same rows in the same order on both backends', async ()
   };
   const pgDatabase = { isPg: true, pool, listingSelect: 'id, deal_score::float8 AS "dealScore", opening_bid::float8 AS "openingBid"' };
 
-  for (const sort of ['score', 'date', 'bid-asc']) {
+  for (const sort of ['score', 'date', 'bid-asc', 'opportunity', 'triage']) {
     const walk = async (database) => {
       const seen = [];
       let cursor;
@@ -420,4 +421,52 @@ test('paging returns the same rows in the same order on both backends', async ()
     assert.deepEqual(postgres, memory, `the two backends page differently under sort=${sort}`);
     assert.equal(postgres.length, rows.length, `sort=${sort} lost rows across pages`);
   }
+});
+
+test('unvalued score sort falls back to upcoming sale date and triage priority with PG/memory parity', async () => {
+  await pool.query('DELETE FROM listings');
+  const now = Date.now();
+  const iso = (offsetDays) => new Date(now + offsetDays * 86_400_000).toISOString().slice(0, 10);
+  const testRows = [
+    { id: 'past-sale', sale_date: iso(-10), triage_priority: 50 },
+    { id: 'soon-high-triage', sale_date: iso(3), triage_priority: 90 },
+    { id: 'soon-low-triage', sale_date: iso(3), triage_priority: 20 },
+    { id: 'later-sale', sale_date: iso(20), triage_priority: 80 },
+    { id: 'undated', sale_date: null, triage_priority: 95 },
+  ];
+  for (const r of testRows) {
+    await pool.query(
+      'INSERT INTO listings (id, sale_date, triage_priority, source_key) VALUES ($1, $2, $3, $4)',
+      [r.id, r.sale_date, r.triage_priority, 'servicelink'],
+    );
+  }
+  const memoryDatabase = {
+    getListings: async () => ({
+      total: testRows.length,
+      listings: testRows.map((r) => ({
+        ...r,
+        source: 'servicelink',
+        dealScore: null,
+        saleDate: r.sale_date,
+        triagePriority: r.triage_priority,
+        provenance: { origin: 'live' },
+        sourceObservedAt: '2026-10-06T00:00:00.000Z',
+      })),
+    }),
+  };
+  const pgDatabase = { isPg: true, pool, listingSelect: 'id, sale_date::text AS "saleDate", triage_priority::int AS "triagePriority"' };
+
+  const memoryResult = await query.search(memoryDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+  const pgResult = await query.search(pgDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+
+  const expectedOrder = [
+    'soon-high-triage',
+    'soon-low-triage',
+    'later-sale',
+    'past-sale',
+    'undated',
+  ];
+  assert.deepEqual(memoryResult.listings.map((l) => l.id), expectedOrder, 'in-memory order must match expected fallback');
+  assert.deepEqual(pgResult.listings.map((l) => l.id), expectedOrder, 'PostgreSQL order must match expected fallback');
+  assert.deepEqual(pgResult.listings.map((l) => l.id), memoryResult.listings.map((l) => l.id), 'both backends must agree on fallback order');
 });

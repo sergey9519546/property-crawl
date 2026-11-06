@@ -432,7 +432,7 @@ async function handleListings(req, res) {
         // Intelligence sorts (quality/opportunity) are applied after annotation.
         // The discovery SQL layer only understands score/date/bid-asc/equity.
         const discoveryUrl = new URL(url);
-        if (INTELLIGENCE_SORTS.has(String(filters.sort))) {
+        if (String(filters.sort) === 'quality') {
           discoveryUrl.searchParams.set('sort', 'score');
         }
         result = await discovery.search(db, discovery.queryFromUrl(discoveryUrl));

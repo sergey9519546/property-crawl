@@ -26,6 +26,10 @@ const MARKET_CONVERSION = Object.freeze({
     mode: 'market-figure',
     citation: 'Tarrant Appraisal District appraised value (APPRAISED_VALUE via the Fort Worth public parcels layer), compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01. Sampled 2026-roll records show APPRAISED_VALUE equal to MARKET_VALUE.',
   }),
+  'TX-TRAVIS': Object.freeze({
+    mode: 'market-figure',
+    citation: 'Travis Central Appraisal District (TCAD) appraised value (appraised_val via TCAD MapServer), compared 1:1 with the published opening amount pursuant to Tex. Tax Code § 23.01.',
+  }),
 
   // Arizona County Assessors. A.R.S. § 42-11001(6) makes full cash value the
   // assessor's market-value estimate and caps it at market value ("Full cash

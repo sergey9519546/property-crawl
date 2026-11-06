@@ -166,6 +166,7 @@ test('an empty feature list is a miss, not an error, and is negatively cached', 
   assert.equal(first.notFound, 1);
   assert.equal(first.harvested, 0);
   assert.equal(listing.assessorParcel, undefined);
+  assert.equal(listing.provenance?.derivedFields?.assessorRoll?.found, false);
 
   // Within the miss TTL the same parcel is not re-fetched: a county whose
   // parcels persistently miss must not consume the candidate budget again.

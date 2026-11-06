@@ -82,3 +82,10 @@ test('queryFromUrl treats empty coordinate and numeric strings as null', () => {
   assert.equal(q.minEquity, null);
   assert.equal(q.radiusKm, 100);
 });
+
+test('queryFromUrl accepts opportunity and triage sorts without 400', () => {
+  const qOpp = discovery.queryFromUrl(new URL('http://localhost/api/listings?sort=opportunity'));
+  assert.equal(qOpp.sort, 'opportunity');
+  const qTriage = discovery.queryFromUrl(new URL('http://localhost/api/listings?sort=triage'));
+  assert.equal(qTriage.sort, 'triage');
+});

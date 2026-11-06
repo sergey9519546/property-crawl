@@ -684,6 +684,32 @@ const COUNTY_ARCGIS_REGISTRY = {
     assessedImprvField: 'IMPR_VAL',
     legalDescField: 'PARCEL_LEGAL_DESCRIPTION'
   },
+  'TX-DALLAS': {
+    name: 'Dallas County / City of Dallas Regional Tax Parcels',
+    fips: '48113',
+    endpoint: 'https://gis.dallascityhall.com/arcgis/rest/services/Basemap/DallasTaxParcels/MapServer/0/query',
+    apnField: 'ACCT',
+    landUseField: 'SPTBCODE',
+    assessedTotalField: null,
+    assessedLandField: null,
+    assessedImprvField: null,
+    legalDescField: 'LEGAL_1',
+    situsAddressField: 'ST_NAME'
+  },
+  'TX-TRAVIS': {
+    name: 'Travis Central Appraisal District (TCAD / Austin)',
+    fips: '48453',
+    endpoint: 'https://gis.traviscountytx.gov/server1/rest/services/Boundaries_and_Jurisdictions/TCAD/MapServer/0/query',
+    apnField: 'geo_id',
+    apnNumericField: 'PROP_ID',
+    landUseField: 'land_state_cd',
+    assessedTotalField: 'appraised_val',
+    assessedLandField: 'land_homesite_val',
+    assessedImprvField: 'imprv_homesite_val',
+    legalDescField: 'legal_desc',
+    situsAddressField: 'situs_address',
+    spatialFallback: 'envelope'
+  },
   'NV-WASHOE': {
     name: 'Washoe County Assessor (Reno)',
     fips: '32031',
@@ -1234,7 +1260,7 @@ function resolveFeatureCountyFips(attributes, config) {
 function normalizeArcgisAttributes(attributes, config) {
   if (!attributes || !config) return null;
 
-  const rawApn = String(getAttributeCaseInsensitive(attributes, config.apnField) || '').trim();
+  const rawApn = String(getAttributeCaseInsensitive(attributes, config.apnField) || (config.apnNumericField ? getAttributeCaseInsensitive(attributes, config.apnNumericField) : '') || '').trim();
   const canonicalApn = normalizeApn(rawApn);
 
   const rawTotal = parseNumericAttribute(getAttributeCaseInsensitive(attributes, config.assessedTotalField));
@@ -1353,6 +1379,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
     const clean = normalizeApn(apn);
     if (!clean) return null;
     let whereClause = `UPPER(${config.apnField}) LIKE '%${clean}%'`;
+    if (config.apnNumericField && /^\d+$/.test(clean)) whereClause = `(${whereClause} OR ${config.apnNumericField} = ${clean})`;
     if (config.apnSeparatorRetry) {
       // Rolls that store the APN with separators ("15008031-3") can never
       // match the normalized LIKE. The bounded retry compares with every

@@ -106,10 +106,16 @@ function readYearField(rawAttributes, field) {
   return null;
 }
 
-function candidateListing(listing) {
+function candidateListing(listing, now = Date.now()) {
   if (!listing || typeof listing !== 'object') return null;
   if (!listing.provenance || listing.provenance.origin !== 'live') return null;
-  if (listing.assessorParcel || listing.provenance.derivedFields?.assessorRoll) return null;
+  if (listing.assessorParcel) return null;
+  const roll = listing.provenance.derivedFields?.assessorRoll;
+  if (roll) {
+    if (roll.parcel) return null;
+    const rollAge = now - Date.parse(roll.observedAt || '');
+    if (Number.isFinite(rollAge) && rollAge < DEFAULT_MISS_TTL_MS) return null;
+  }
 
   const hasCoords = typeof listing.lat === 'number' && typeof listing.lng === 'number' && Number.isFinite(listing.lat) && Number.isFinite(listing.lng) && !(listing.lat === 0 && listing.lng === 0);
   const rawApn = extractRawApn(listing);
@@ -188,7 +194,7 @@ async function harvestAssessorRolls(listings, options = {}) {
   const missTtlMs = Number.isFinite(options.missTtlMs) ? options.missTtlMs : DEFAULT_MISS_TTL_MS;
   const now = Number.isFinite(options.now) ? options.now : Date.now();
   const candidates = (Array.isArray(listings) ? listings : [])
-    .map(candidateListing)
+    .map((l) => candidateListing(l, now))
     .filter(Boolean);
   const results = { considered: 0, harvested: 0, cacheHits: 0, fetched: 0, failed: 0, notFound: 0 };
   if (!candidates.length) return results;
@@ -248,7 +254,23 @@ async function harvestAssessorRolls(listings, options = {}) {
       // Negatively cache the miss (short TTL): the retry window keeps a
       // transient failure from being permanent while stopping a failing
       // parcel from consuming the candidate budget every run.
-      cache[key] = { parcel: null, observedAt: new Date(now).toISOString() };
+      const observedAt = new Date(now).toISOString();
+      cache[key] = { parcel: null, observedAt };
+      cacheDirty = true;
+      candidate.listing.provenance = candidate.listing.provenance || {};
+      candidate.listing.provenance.derivedFields = candidate.listing.provenance.derivedFields || {};
+      candidate.listing.provenance.derivedFields.assessorRoll = {
+        parcel: null,
+        countyKey: candidate.countyKey,
+        apn: candidate.cleanApn || null,
+        observedAt,
+        found: false,
+        note: 'County assessor roll queried; no parcel record matched.'
+      };
+      if (typeof options.onHarvested === 'function') {
+        try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
+      }
+      continue;
       cacheDirty = true;
       continue;
     }

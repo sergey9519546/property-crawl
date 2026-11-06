@@ -129,7 +129,7 @@ function queryFromUrl(url) {
   if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 20000)
     throw new DiscoveryQueryError(400, "radiusKm must be between 0 and 20000");
   const sort = get("sort") === "bid" ? "bid-asc" : (get("sort") || "score");
-  if (!['score', 'date', 'bid-asc', 'equity'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
+  if (!['score', 'date', 'bid-asc', 'equity', 'opportunity', 'triage'].includes(sort)) throw new DiscoveryQueryError(400, "Invalid sort");
   // Also dropped by the a58f76f refactor. A zoom outside the map's usable range
   // silently produces a query the map layer cannot render; an offset combined
   // with a cursor is ambiguous, because the two describe different positions
@@ -354,6 +354,23 @@ function compare(a, b, sort) {
   if (ak !== bk) return ak ? -1 : 1;
   if (ak && Number(av) !== Number(bv))
     return asc ? Number(av) - Number(bv) : Number(bv) - Number(av);
+  if (sort === "score" || sort === "opportunity" || sort === "triage") {
+    const aDateRaw = a.saleDate || a.sale_date || null;
+    const bDateRaw = b.saleDate || b.sale_date || null;
+    const aDate = aDateRaw ? Date.parse(aDateRaw) : null;
+    const bDate = bDateRaw ? Date.parse(bDateRaw) : null;
+    const aValid = aDate !== null && Number.isFinite(aDate);
+    const bValid = bDate !== null && Number.isFinite(bDate);
+    const aUpcoming = aValid && aDate >= now;
+    const bUpcoming = bValid && bDate >= now;
+    if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+    if (aUpcoming && bUpcoming && aDate !== bDate) return aDate - bDate;
+    if (!aUpcoming && !bUpcoming && aValid !== bValid) return aValid ? -1 : 1;
+    if (!aUpcoming && !bUpcoming && aValid && bValid && aDate !== bDate) return bDate - aDate;
+    const aTriage = Number(a.triagePriority ?? a.triage_priority ?? 0);
+    const bTriage = Number(b.triagePriority ?? b.triage_priority ?? 0);
+    if (aTriage !== bTriage) return bTriage - aTriage;
+  }
   // The id tie-break has to follow the sort direction, because pgSearch orders
   // `expr ${dir}, id ${dir}`. It used to always compare ascending, so every
   // DESC sort - score and equity, the two defaults that matter - returned
@@ -572,7 +589,23 @@ function pgSort(f) {
   // 1..99, so nothing real collides with the sentinel.
   if (f.sort === "equity")
     return { expr: `coalesce(${derivedEquity},-1)`, dir: sortDirection("equity") };
-  if (f.sort === "score") return { expr: `coalesce(${derivedScore},-1)`, dir: sortDirection("score") };
+  if (f.sort === "triage")
+    return {
+      expr: "(CASE "
+        + "WHEN triage_priority IS NOT NULL THEN (triage_priority * 1e8) + (CASE WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) ELSE 0 END) "
+        + "WHEN sale_date >= CURRENT_DATE THEN 1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE))) "
+        + "ELSE -1 END)",
+      dir: sortDirection("triage"),
+    };
+  if (f.sort === "score" || f.sort === "opportunity")
+    return {
+      expr: "(CASE "
+        + `WHEN ${derivedScore} IS NOT NULL THEN 1e11 + (${derivedScore} * 1e8) + coalesce(triage_priority, 0) `
+        + "WHEN sale_date >= CURRENT_DATE THEN 1e9 + (1e7 - LEAST(1e7, GREATEST(0, (sale_date - CURRENT_DATE)))) * 100 + coalesce(triage_priority, 0) "
+        + "WHEN sale_date < CURRENT_DATE THEN 1e6 + LEAST(1e6, GREATEST(0, (CURRENT_DATE - sale_date))) * 10 + coalesce(triage_priority, 0) "
+        + "ELSE coalesce(triage_priority, 0) END)",
+      dir: sortDirection("score"),
+    };
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
 async function pgRevision(database) {
