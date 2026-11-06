@@ -83,8 +83,8 @@ const GROUPS: MenuGroup[] = [
       ],
       [
         { label: "What's new", desc: "Recent changes to the site", icon: History, href: "/resources#changelog", tint: "#e5e7eb" },
-        { label: "Data sources (staff)", desc: "Staff view of where listings come from", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
-        { label: "Staff sign-in", desc: "For the team that runs this site", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
+        { label: "Public Records & Radar", desc: "How we collect, verify and normalize auction notices", icon: BarChart3, href: "/sources", tint: "#e5e7eb" },
+        { label: "Operator sign-in", desc: "Secure portal for authorized reviewers", icon: KeyRound, href: "/sign-in", tint: "#e5e7eb" },
       ],
     ],
   },

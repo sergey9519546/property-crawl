@@ -472,11 +472,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           </div>
         )}
         {redemptionYield && (
-          <div className="rounded-xl border border-go/40 bg-go-wash p-3.5 text-xs text-ink space-y-3">
+          <div className="rounded-xl rounded-xl border border-line bg-card p-3.5 text-xs text-ink space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-go">Tax Deed Redemption Yield &amp; Penalty Model</span>
-                <span className="rounded-md bg-go/20 px-2 py-0.5 text-xs font-extrabold text-go border border-go/30">
+                <span className="font-bold text-ink">Tax Deed Redemption Yield &amp; Penalty Model</span>
+                <span className="rounded-md bg-paper px-2 py-0.5 text-xs font-extrabold text-ink-2 border border-line">
                   {redemptionYield.legalRegime}
                 </span>
                 {redemptionYield.instrumentBadge && (
@@ -486,11 +486,11 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                 )}
               </div>
               {redemptionYield.regime === "post_redemption_deed" ? (
-                <span className="rounded-md bg-go/10 px-2 py-0.5 font-bold text-go">
+                <span className="rounded-md bg-paper px-2 py-0.5 font-bold text-ink border border-line">
                   0-Day Post-Sale Redemption (Immediate Fee-Simple Title)
                 </span>
               ) : (
-                <span className="rounded-md bg-go/10 px-2 py-0.5 font-extrabold text-go">
+                <span className="rounded-md bg-paper px-2 py-0.5 font-extrabold text-ink border border-line">
                   +{redemptionYield.penaltyRatePct}% {redemptionYield.isFlatPenalty ? "statutory penalty" : "annual yield"} ({redemptionYield.annualizedYieldPct}% annualized)
                 </span>
               )}
@@ -507,7 +507,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                       onClick={() => updateHoldingMonths(mo)}
                       className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
                         holdingMonths === mo
-                          ? "bg-go text-white border-go shadow-xs"
+                          ? "bg-ink text-white border-ink shadow-xs"
                           : "bg-card text-ink border-line hover:border-ink/30"
                       }`}
                     >
@@ -524,7 +524,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
                   step="1"
                   value={holdingMonths}
                   onChange={(e) => updateHoldingMonths(Number(e.target.value))}
-                  className="w-full accent-go"
+                  className="w-full accent-ink"
                   aria-label="Holding duration in months"
                 />
                 <span className="text-xs font-bold text-ink whitespace-nowrap min-w-[3.5rem] text-right">
@@ -550,13 +550,13 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
                 <span className="text-xs text-ink-3 uppercase font-semibold block">Investor Yield / Profit</span>
-                <span className={`text-sm font-bold ${redemptionYield.penaltyAmount > 0 ? "text-go" : "text-ink"}`}>
+                <span className="text-sm font-bold text-ink">
                   {redemptionYield.penaltyAmount > 0 ? `+${displayMoney(redemptionYield.penaltyAmount)}` : "$0 (Direct Title Acquisition)"}
                 </span>
               </div>
               <div className="rounded-lg border border-line bg-card p-2.5">
                 <span className="text-xs text-ink-3 uppercase font-semibold block">Annualized Return (IRR)</span>
-                <span className="text-sm font-bold text-go">
+                <span className="text-sm font-bold text-ink">
                   {redemptionYield.annualizedYieldPct}% annualized
                 </span>
               </div>

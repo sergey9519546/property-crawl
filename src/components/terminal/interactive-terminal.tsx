@@ -466,91 +466,94 @@ export function InteractiveTerminal() {
             <h2 className="text-3xl font-bold text-ink">Property Intelligence Engine</h2>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
-              aria-pressed={activeView === "grid"}
-              className={cn(
-                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
-                activeView === "grid"
-                  ? "bg-ink text-white shadow-sm"
-                  : "bg-card text-ink-2 border border-line hover:bg-paper"
-              )}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              <span>Deal Grid ({filtered.length} records)</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* View switcher segmented control (<=3 choices per Cowan working memory rule) */}
+            <div className="inline-flex p-1 bg-paper border border-line rounded-control shadow-xs" role="tablist" aria-label="Terminal views">
+              <button
+                onClick={() => dispatchFilters({ type: "setView", view: "grid" })}
+                aria-pressed={activeView === "grid"}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
+                  activeView === "grid"
+                    ? "bg-ink text-white shadow-xs"
+                    : "text-ink-2 hover:text-ink"
+                )}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Grid ({filtered.length})</span>
+              </button>
 
-            <button
-              onClick={() => dispatchFilters({ type: "setView", view: "map" })}
-              aria-pressed={activeView === "map"}
-              className={cn(
-                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
-                activeView === "map"
-                  ? "bg-ink text-white shadow-sm"
-                  : "bg-card text-ink-2 border border-line hover:bg-paper"
-              )}
-            >
-              <MapIcon className="w-4 h-4" />
-              <span>Map ({filtered.length} records)</span>
-            </button>
+              <button
+                onClick={() => dispatchFilters({ type: "setView", view: "map" })}
+                aria-pressed={activeView === "map"}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
+                  activeView === "map"
+                    ? "bg-ink text-white shadow-xs"
+                    : "text-ink-2 hover:text-ink"
+                )}
+              >
+                <MapIcon className="w-3.5 h-3.5" />
+                <span>Map ({filtered.length})</span>
+              </button>
 
-            <button
-              onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
-              aria-pressed={activeView === "parser"}
-              className={cn(
-                "px-4 py-2 rounded-control text-xs font-bold transition flex items-center gap-1.5",
-                activeView === "parser"
-                  ? "bg-ink text-white shadow-sm"
-                  : "bg-card text-ink-2 border border-line hover:bg-paper"
-              )}
-            >
-              <Sparkles className="w-4 h-4 fill-current" />
-              <span>Notice Parser</span>
-            </button>
+              <button
+                onClick={() => dispatchFilters({ type: "setView", view: "parser" })}
+                aria-pressed={activeView === "parser"}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5",
+                  activeView === "parser"
+                    ? "bg-ink text-white shadow-xs"
+                    : "text-ink-2 hover:text-ink"
+                )}
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-current" />
+                <span>Parser</span>
+              </button>
+            </div>
 
-            <button
-              onClick={() => setIsWatchlistOpen(true)}
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
-            >
-              <Bookmark className="w-4 h-4 text-ink fill-ink" />
-              <span>Watchlist ({savedIds.size})</span>
-            </button>
+            {/* Operator tools suite */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsWatchlistOpen(true)}
+                className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
+              >
+                <Bookmark className="w-3.5 h-3.5 text-ink fill-ink" />
+                <span>Watchlist ({savedIds.size})</span>
+              </button>
 
-            <button
-              onClick={() => setIsAlertsOpen(true)}
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
-              // The button reads "Saved searches". Labelling it "Open Alerts Manager" named
-              // a different feature to anyone not looking at the screen, so the
-              // label now contains the visible text.
-              aria-label="Open Saved Searches Manager"
-            >
-              <Bell className="w-4 h-4 text-ink-2 fill-ink/10" />
-              <span>Saved searches</span>
-              {unreadAlertCount > 0 && (
-                <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-label font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
-                  {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => setIsAlertsOpen(true)}
+                className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
+                aria-label="Open Saved Searches Manager"
+              >
+                <Bell className="w-3.5 h-3.5 text-ink-2 fill-ink/10" />
+                <span>Saved searches</span>
+                {unreadAlertCount > 0 && (
+                  <span className="ml-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-ink px-1 text-label font-bold text-white" aria-label={`${unreadAlertCount} unread alerts`}>
+                    {unreadAlertCount > 9 ? "9+" : unreadAlertCount}
+                  </span>
+                )}
+              </button>
 
-            <Link
-              href="/hunts"
-              className="px-4 py-2 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
-              title="Durable saved hunts criteria engine"
-            >
-              <Crosshair className="w-4 h-4 text-ink-2" />
-              <span>Saved Hunts</span>
-            </Link>
+              <Link
+                href="/hunts"
+                className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
+                title="Durable saved hunts criteria engine"
+              >
+                <Crosshair className="w-3.5 h-3.5 text-ink-2" />
+                <span>Hunts</span>
+              </Link>
 
-            <Link
-              href="/sources"
-              className="px-4 py-2 bg-card border border-line hover:border-ink-2 text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-sm"
-              title="Source network intake and collector radar"
-            >
-              <Radio className="w-4 h-4 text-ink-2" />
-              <span>Source Radar</span>
-            </Link>
+              <Link
+                href="/sources"
+                className="px-3 py-1.5 bg-card border border-line hover:border-ink text-ink text-xs font-bold rounded-control transition flex items-center gap-1.5 shadow-xs"
+                title="Source network intake and collector radar"
+              >
+                <Radio className="w-3.5 h-3.5 text-ink-2" />
+                <span>Radar</span>
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -1147,6 +1150,41 @@ export function InteractiveTerminal() {
             {/* Bounded render, stated plainly. Silently truncating the grid
                 would make listings unreachable; this keeps every result one
                 click away while keeping the initial DOM at 48 cards. */}
+            
+            {/* Conversion Funnel Gateway to /listings Workbench */}
+            <div className="mt-10 rounded-card border border-line bg-card p-6 sm:p-8 text-center shadow-card flex flex-col items-center gap-4">
+              <div className="max-w-xl space-y-1.5">
+                <span className="text-label font-mono font-bold tracking-wider text-go uppercase">INSTITUTIONAL WORKBENCH // 2,130+ LISTINGS</span>
+                <h3 className="text-2xl font-bold text-ink">Need the full institutional triage desk?</h3>
+                <p className="text-xs text-ink-3">
+                  Filter across 16 federal &amp; county sources, calculate statutory cash-to-close carry, and inspect title priority signals across all 50 states.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                <Link
+                  href="/listings"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-control bg-ink px-6 text-xs font-bold text-white shadow-sm hover:bg-ink-2 transition"
+                >
+                  <span>Launch Discovery Workbench</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href="/listings?view=map"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-control border border-line bg-paper px-4 text-xs font-bold text-ink hover:bg-card transition"
+                >
+                  <MapIcon className="w-3.5 h-3.5 text-ink-2" />
+                  <span>Map View</span>
+                </Link>
+                <Link
+                  href="/hunts"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-control border border-line bg-paper px-4 text-xs font-bold text-ink hover:bg-card transition"
+                >
+                  <Crosshair className="w-3.5 h-3.5 text-ink-2" />
+                  <span>Automated Hunts</span>
+                </Link>
+              </div>
+            </div>
+
             {remaining > 0 ? (
               <div className="mt-8 flex flex-col items-center gap-3">
                 <button

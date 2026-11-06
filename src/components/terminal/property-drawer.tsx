@@ -461,6 +461,9 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
           {/* TAB 1: Underwrite & Legal */}
           {activeTab === "underwrite" && (
             <div id="panel-underwrite" role="tabpanel" aria-labelledby="tab-underwrite" className="space-y-6">
+              <div className="flex items-center gap-2 pt-2 text-label font-mono font-bold tracking-wider text-ink-3">
+                <span>SEC 01 // EXECUTIVE TRIAGE &amp; VALUATION</span>
+              </div>
               {/* Core Valuation Matrix */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-paper rounded-control border border-line">
                 <div>
@@ -539,6 +542,9 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 )}
               </div>
 
+              <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
+                <span>SEC 04 // OFFICIAL DOCKET &amp; EVIDENCE</span>
+              </div>
               {/* Fail-closed official-record evidence check. */}
               <PropertyIntelligence key={listing.id} listingId={listing.id} />
               <DocketAgent listing={listing} />
@@ -562,6 +568,9 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <Parcel3DVisualizer listing={listing} />
               </div>
 
+              <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
+                <span>SEC 02 // TITLE RISK &amp; STATUTORY ENCUMBRANCES</span>
+              </div>
               {/* Modeled title-risk signal; not a completed title search. */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -632,6 +641,9 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 </div>
               )}
 
+              <div className="flex items-center gap-2 pt-4 border-t border-line text-label font-mono font-bold tracking-wider text-ink-3">
+                <span>SEC 03 // ACQUISITION CASH-TO-CLOSE &amp; CARRY</span>
+              </div>
               {/* Evidence-backed cash requirement. */}
               {cashToClose ? (
                 <div className="space-y-3">

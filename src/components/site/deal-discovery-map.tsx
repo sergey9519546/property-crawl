@@ -533,7 +533,7 @@ export function DealDiscoveryMap() {
     opening: "—",
     arv: "—",
     spread: "—",
-    color: "#0F172A",
+    color: "#181529",
     lng: CLEVELAND_CENTER[0],
     lat: CLEVELAND_CENTER[1],
   };
@@ -581,7 +581,7 @@ export function DealDiscoveryMap() {
         {mapUnavailable ? (
           <div
             role="status"
-            className="absolute left-3 top-[72px] z-20 rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-[11px] font-semibold text-[#475569] shadow-sm backdrop-blur sm:left-5"
+            className="absolute left-3 top-[72px] z-20 rounded-xl border border-white/80 bg-white/90 px-3 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur sm:left-5"
           >
             Map tiles are unavailable. Opportunity coordinates and ranked list remain active.
           </div>
@@ -642,10 +642,10 @@ export function DealDiscoveryMap() {
               <MapPinned className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-900">
+              <p className="truncate text-xs font-extrabold uppercase tracking-[0.12em] text-slate-900">
                 Map preview
               </p>
-              <p className="truncate text-[12px] font-semibold text-[#111827]">
+              <p className="truncate text-xs font-semibold text-[#111827]">
                 {deals.length ? `${deals.length} published in this window` : "Cleveland window"}
               </p>
             </div>
@@ -659,7 +659,7 @@ export function DealDiscoveryMap() {
                 ? "Market discovery animation disabled by reduced motion preference"
                 : "Replay market discovery"
             }
-            className="opportunity-replay inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 text-[12px] font-bold text-[#111827] shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md disabled:cursor-default disabled:opacity-70"
+            className="opportunity-replay inline-flex h-11 shrink-0 items-center gap-2 rounded-xl border border-white/85 bg-white/92 px-3 text-xs font-bold text-[#111827] shadow-[0_8px_26px_rgba(15,23,42,0.1)] backdrop-blur-md disabled:cursor-default disabled:opacity-70"
           >
             {shouldReduceMotion ? (
               <Crosshair className="h-3.5 w-3.5" aria-hidden />
@@ -672,7 +672,7 @@ export function DealDiscoveryMap() {
           </button>
         </div>
 
-        <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-[10px] font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
+        <div className="absolute bottom-3 left-3 z-20 hidden items-center gap-2 rounded-lg border border-white/80 bg-white/86 px-2.5 py-2 text-xs font-semibold text-[#475569] shadow-sm backdrop-blur md:flex lg:bottom-5 lg:left-5">
           Pin = published listing
         </div>
       </div>
@@ -686,22 +686,22 @@ export function DealDiscoveryMap() {
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-slate-900">
+            <p className="text-xs font-extrabold uppercase tracking-[0.13em] text-slate-900">
               {sourceDisplayText(shown.source)}
             </p>
-            <h3 className="mt-1 truncate text-[20px] font-bold tracking-[-0.02em] text-[#111827]">
+            <h3 className="mt-1 truncate text-xl font-bold tracking-[-0.02em] text-[#111827]">
               {shown.address}
             </h3>
-            <p className="mt-1 text-[12px] font-medium text-[#5B6472]">
+            <p className="mt-1 text-xs font-medium text-[#5B6472]">
               {shown.area}
             </p>
           </div>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-50 px-3 py-2 text-[16px] font-extrabold tabular-nums text-emerald-700">
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-50 px-3 py-2 text-base font-extrabold tabular-nums text-emerald-700">
             <TrendingUp className="h-4 w-4" aria-hidden /> {pinText(shown.score)}
           </span>
         </div>
 
-        <p className="mt-4 rounded-xl bg-[#F8FAFC] px-3.5 py-3 text-[12px] font-medium leading-[1.45] text-[#475569]">
+        <p className="mt-4 rounded-xl bg-[#F8FAFC] px-3.5 py-3 text-xs font-medium leading-[1.45] text-[#475569]">
           {shown.signal}. {shown.insight}
         </p>
 
@@ -713,17 +713,17 @@ export function DealDiscoveryMap() {
 
         <a
           href={shown.id ? `/listings/${encodeURIComponent(shown.id)}` : "/listings"}
-          className="opportunity-primary-action mt-3 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] px-4 text-[12px] font-bold text-white"
+          className="opportunity-primary-action mt-3 inline-flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-ink hover:bg-ink-2 px-4 text-xs font-bold text-white"
         >
           {shown.id ? "Open listing" : "Open the feed"} <ArrowRight className="h-3.5 w-3.5" aria-hidden />
         </a>
 
         <div className="mt-5 border-t border-[#E8EDF3] pt-4">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">
+            <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#5B6472]">
               Next opportunities
             </p>
-            <span className="text-[10px] font-semibold text-[#5B6472]">
+            <span className="text-xs font-semibold text-[#5B6472]">
               Feed order
             </span>
           </div>
@@ -744,14 +744,14 @@ export function DealDiscoveryMap() {
                     style={{ backgroundColor: deal.color }}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] font-bold text-[#111827]">
+                    <span className="block truncate text-xs font-bold text-[#111827]">
                       {deal.address}
                     </span>
-                    <span className="block truncate text-[10px] font-medium text-[#5B6472]">
+                    <span className="block truncate text-xs font-medium text-[#5B6472]">
                       {sourceDisplayText(deal.source)}
                     </span>
                   </span>
-                  <span className="text-[12px] font-extrabold tabular-nums text-[#334155]">
+                  <span className="text-xs font-extrabold tabular-nums text-[#334155]">
                     {pinText(deal.score)}
                   </span>
                 </button>
@@ -779,11 +779,11 @@ function OpportunityStat({
 }) {
   return (
     <div className="rounded-xl bg-[#F3F6F9] px-2 py-2.5">
-      <p className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#5B6472]">
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#5B6472]">
         {label}
       </p>
       <p
-        className={`mt-0.5 text-[15px] font-extrabold tabular-nums ${
+        className={`mt-0.5 text-sm font-extrabold tabular-nums ${
           green ? "text-emerald-600" : "text-[#111827]"
         }`}
       >

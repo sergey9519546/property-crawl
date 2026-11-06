@@ -344,7 +344,7 @@ export function Hero() {
       >
         <div data-testid="hero-content-stack" className="flex w-full flex-col items-center">
         <motion.h1
-          className="text-[32px] font-semibold leading-[36px] tracking-[-0.02em] text-[#111827] sm:text-[48px] sm:leading-[52px]"
+          className="text-display font-semibold tracking-[-0.02em] text-ink sm:text-[48px] sm:leading-[52px]"
           style={{ margin: 0, maxWidth: 620 }}
         >
           <span className="sr-only">Find the deal before everyone else.</span>
@@ -367,7 +367,7 @@ export function Hero() {
           initial={{ opacity: 1, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15, ease: EASE_OUT }}
-          className="mt-4 max-w-[620px] text-[16px] font-normal leading-[1.5] text-[rgba(17,24,39,0.8)] sm:mt-[28px] xl:mt-3 xl:max-w-[820px]"
+          className="mt-4 max-w-[620px] text-body font-normal leading-[1.5] text-ink/80 sm:mt-[28px] xl:mt-3 xl:max-w-[820px]"
         >
           Search any market or address. See the best opportunities, the catch,
           and your next move &mdash; before you bid.
@@ -437,7 +437,7 @@ export function Hero() {
             }
             placeholder={placeholder}
             autoComplete="off"
-            className="min-w-0 flex-1 bg-transparent text-[18px] leading-none text-[#111827] placeholder:text-[#5B6472] focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-lead leading-none text-ink placeholder:text-ink-3 focus:outline-none"
           />
           <button
             type="submit"
@@ -468,18 +468,18 @@ export function Hero() {
                     selectSuggestion(suggestion);
                   }}
                   onClick={() => selectSuggestion(suggestion)}
-                  className={`flex cursor-pointer items-center gap-3 rounded-control px-3.5 py-3 text-[14px] font-medium text-[#111827] transition-colors ${
+                  className={`flex cursor-pointer items-center gap-3 rounded-control px-3.5 py-3 text-sm font-medium text-ink transition-colors ${
                     activeSuggestion === index ? "bg-[#F1F5F9]" : "hover:bg-[#F3F4F6]"
                   }`}
                 >
-                  {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
-                  {suggestion.kind === "city" ? <Building2 className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
-                  {suggestion.kind === "county" ? <MapIcon className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
-                  {suggestion.kind === "state" ? <Flag className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
-                  {suggestion.kind === "area" ? <MapPin className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
-                  {suggestion.kind === "country" ? <Globe2 className="h-4 w-4 shrink-0 text-[#0F172A]" aria-hidden /> : null}
+                  {suggestion.kind === "address" ? <House className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
+                  {suggestion.kind === "city" ? <Building2 className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
+                  {suggestion.kind === "county" ? <MapIcon className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
+                  {suggestion.kind === "state" ? <Flag className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
+                  {suggestion.kind === "area" ? <MapPin className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
+                  {suggestion.kind === "country" ? <Globe2 className="h-4 w-4 shrink-0 text-ink" aria-hidden /> : null}
                   <span className="min-w-0 flex-1">{suggestion.label}</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[#7B8493]">
+                  <span className="text-xs font-semibold uppercase tracking-[0.06em] text-ink-3">
                     {suggestion.description}
                   </span>
                 </li>
@@ -492,13 +492,13 @@ export function Hero() {
                     window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`);
                   }}
                   onClick={() => window.location.assign(`/listings?q=${encodeURIComponent(deferredUrl)}`)}
-                  className="flex cursor-pointer items-center justify-between border-t border-slate-100 bg-emerald-50/60 px-3.5 py-3 text-[13px] font-semibold text-emerald-950 transition-colors hover:bg-emerald-100/70"
+                  className="flex cursor-pointer items-center justify-between border-t border-slate-100 bg-go/10 px-3.5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-go/20"
                 >
                   <span className="flex items-center gap-2">
-                    <Database className="h-4 w-4 text-emerald-700" />
+                    <Database className="h-4 w-4 text-go" />
                     Search all listings for &ldquo;{deferredUrl}&rdquo;
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700">
+                  <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-go">
                     All listings <ArrowRight className="h-3.5 w-3.5" />
                   </span>
                 </li>
@@ -508,7 +508,7 @@ export function Hero() {
         </motion.form>
 
         {/* Quick actions: sample market and nationwide database */}
-        <div className="relative mt-[30px] flex flex-wrap items-center justify-center gap-4 self-center text-[14px] font-medium xl:mt-5">
+        <div className="relative mt-[30px] flex flex-wrap items-center justify-center gap-4 self-center text-sm font-medium xl:mt-5">
           <motion.button
             type="button"
             onClick={() => {
@@ -526,9 +526,9 @@ export function Hero() {
             initial={{ opacity: 1, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.36, ease: EASE_OUT }}
-            className="flex items-center gap-1.5 text-[#0F172A] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
+            className="flex items-center gap-1.5 text-ink hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0F172A]"
           >
-            <Undo2 className="h-4 w-4 text-[#0F172A]" />
+            <Undo2 className="h-4 w-4 text-ink" />
             Try Cleveland, OH
           </motion.button>
           <span className="hidden text-slate-400 sm:inline" aria-hidden>•</span>
