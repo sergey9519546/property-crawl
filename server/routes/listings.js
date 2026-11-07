@@ -13,6 +13,7 @@ const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
 // so its records answer the same 404 an absent record answers.
 const { servesListings } = require('../sources/catalog');
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
+const { isWorkspaceAuthorized } = require('../security/workspace-identity');
 const { getHudSafmrBenchmark } = require('../enrichment/hud-safmr');
 
 function mediaEntries() {
@@ -257,7 +258,7 @@ function publishedApn(listing) {
   return extractRawApn(listing) || null;
 }
 
-async function handleAssessorLookup(encodedId, res) {
+async function handleAssessorLookup(encodedId, req, res) {
   let id;
   try { id = decodeURIComponent(encodedId); }
   catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
@@ -308,21 +309,29 @@ async function handleAssessorLookup(encodedId, res) {
     parcel = null;
   }
 
+  const authorizedToPersist = isWorkspaceAuthorized(req);
   if (parcel) {
-    listing.assessorParcel = parcel;
-    listing.provenance = listing.provenance || {};
-    listing.provenance.derivedFields = listing.provenance.derivedFields || {};
-    listing.provenance.derivedFields.assessorRoll = {
-      parcel,
-      countyKey,
-      apn: parcel.canonicalApn || parcel.rawApn || publishedApn(listing) || null,
-      observedAt: new Date().toISOString(),
-      found: true,
-    };
+    // A lookup response is public (the listing page reads it anonymously),
+    // but caching the parcel onto the listing and upserting it is a state
+    // mutation: gate it behind the operator credential so an unauthenticated
+    // GET cannot poison parcel identity. The server-side backfill
+    // (server/enrichment/assessor-backfill.js) still covers bulk refresh.
+    if (authorizedToPersist) {
+      listing.assessorParcel = parcel;
+      listing.provenance = listing.provenance || {};
+      listing.provenance.derivedFields = listing.provenance.derivedFields || {};
+      listing.provenance.derivedFields.assessorRoll = {
+        parcel,
+        countyKey,
+        apn: parcel.canonicalApn || parcel.rawApn || publishedApn(listing) || null,
+        observedAt: new Date().toISOString(),
+        found: true,
+      };
+    }
   }
 
   const resolvedParcelKey = listing.parcelKey || (parcel?.canonicalApn ? buildParcelKey({ apn: parcel.canonicalApn, countyFips: parcel.countyFips }) : null);
-  if ((!listing.parcelKey && resolvedParcelKey || parcel) && typeof db.createListing === 'function') {
+  if (authorizedToPersist && ((!listing.parcelKey && resolvedParcelKey || parcel)) && typeof db.createListing === 'function') {
     if (resolvedParcelKey) listing.parcelKey = resolvedParcelKey;
     try { await db.createListing(listing); } catch (_) {}
   }
@@ -342,7 +351,7 @@ async function handleListings(req, res) {
 
   if (method === 'GET') {
     const assessorMatch = url.pathname.match(/^\/api\/listings\/([^/]+)\/assessor$/);
-    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], res);
+    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], req, res);
     if (url.pathname === '/api/listings/map') {
       try {
         // The map view is fed by the same filter state as the grid, so it can
@@ -498,12 +507,11 @@ async function handleListings(req, res) {
     // the whole payload, and it is a 1,103-element array per listing -- the
     // publisher's entire raw feed, carried on every card.
     //
-    // Nothing reads it. Not the workbench, not the card, not the detail page,
-    // not the watchlist, and no script: `grep` for `.raw` across src/ and
-    // scripts/ finds only `String.raw` in a stylesheet and one write. It is
-    // evidence the product keeps rather than evidence it shows, and shipping a
-    // quarter-megabyte of it per page to render 48 cards is the kind of cost
-    // nobody questions once it is already on the wire.
+    // The grid does not serve it to card consumers: the workbench and cards
+    // never read `raw` (test/list-response-payload.test.mjs pins that). Two
+    // readers remain and both are deliberate: the watchlist import modal
+    // (watchlist-modal.tsx, guarded typeof check) and the single-listing
+    // detail route. Keep the strip grid-only, not global.
     //
     // The detail route keeps it deliberately. That is where inspecting the raw
     // publisher record is a real capability rather than a dead field, and

@@ -517,7 +517,10 @@ test('InteractiveTerminal wires AlertsModal and Alerts button', () => {
   const terminalContent = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
   assert.ok(terminalContent.includes('AlertsModal'), 'AlertsModal missing from interactive-terminal.tsx');
   assert.ok(terminalContent.includes('isAlertsOpen'), 'isAlertsOpen state missing from interactive-terminal.tsx');
-  assert.ok(terminalContent.includes('Open Alerts Manager'), 'Alerts button missing from interactive-terminal.tsx');
+  // The visible label is "Saved searches" (matches the modal title); the stable
+  // contract is the accessible name plus the actual open wiring.
+  assert.ok(terminalContent.includes('aria-label="Open Saved Searches Manager"'), 'Alerts button missing from interactive-terminal.tsx');
+  assert.ok(terminalContent.includes('setIsAlertsOpen(true)'), 'Alerts button does not open the modal');
 });
 
 test('AlertsModal provides state, minScore, and maxBid criteria filters', () => {

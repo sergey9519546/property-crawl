@@ -95,10 +95,21 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     requiredDeposit: calculateRequiredDeposit(listing),
   };
   const auctionMicrostructure = evaluateAuctionProceedProbability(listing, null);
-  const surplusWaterfall = calculateSurplusEquityWaterfall({
-    winningBid: listing.openingBid,
-    openingBid: listing.openingBid,
-    judgmentAmount: listing.judgmentAmount,
+  // Zero-Fabrication: a published opening bid is a minimum asking term, not a
+  // realized gavel price, and the canonical judgment column is `judgment`
+  // (LISTING_SELECT in server/db/client.js); `judgmentAmount` is only a legacy
+  // alias. The statutory surplus waterfall allocates *actual* auction proceeds,
+  // so it stays null until a verified transaction outcome supplies the realized
+  // sale price. Otherwise every pre-sale listing would assert fabricated
+  // former-owner equity (Tyler waterfall) from an asking price.
+  const judgmentDebt = known(listing.judgment) ? listing.judgment : listing.judgmentAmount;
+  const realizedWinningBid = known(listing.transactionOutcome)
+    && Number.isFinite(Number(listing.winningBid)) && Number(listing.winningBid) > 0
+    ? Number(listing.winningBid)
+    : null;
+  const surplusWaterfall = realizedWinningBid === null ? null : calculateSurplusEquityWaterfall({
+    winningBid: realizedWinningBid,
+    totalAdjudgedDebt: judgmentDebt,
     propertyAddress: listing.address,
     state: listing.state,
     liens: listing.liens || publicRecords?.liens || [],

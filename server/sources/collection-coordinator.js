@@ -126,6 +126,15 @@ function sourceRunUnsafe(result) {
 
 function sourceScopeComplete(result) { const report=result?.report||{};return report.complete===true&&report.fullSweepComplete===true&&report.truncated!==true&&report.scope&&typeof report.scope==='object'&&!Array.isArray(report.scope)&&Object.keys(report.scope).length>0; }
 
+function collectionCyclePartial(result = {}, evaluations = []) {
+  const sources = Array.isArray(result?.sourceResults) ? result.sourceResults : [];
+  if (sources.some((entry) => entry?.report?.truncated === true)) return true;
+  if (sources.some((entry) => entry?.accepted === 0 && (entry?.error || entry?.observationError))) return true;
+  if (!sources.some((entry) => (entry?.accepted || 0) > 0)) return true;
+  if (Array.isArray(evaluations) && evaluations.some((entry) => entry?.evaluation?.resultsTruncated === true)) return true;
+  return false;
+}
+
 function huntSafety(result = {}) {
   if (result.skipped) return { safe: false, reason: 'scheduler_skipped', safePositiveSourceIds: [], unsafeSourceIds: [] };
   if (!Array.isArray(result.sourceResults) || !result.sourceResults.length) return { safe: false, reason: 'no_source_results', safePositiveSourceIds: [], unsafeSourceIds: [] };
@@ -227,7 +236,7 @@ class CollectionCoordinator {
     await this.store.update(id, { stage: { name: 'observations', value: { status: observationIssue ? 'failed' : result.skipped ? 'skipped' : 'completed', ...(observationIssue ? { error: observationIssue.observationError } : {}) } }, ...(observationIssue ? { error: { stage: 'observations', message: observationIssue.observationError } } : {}) });
     const safety = huntSafety(result);
     if (!safety.safe) {
-      return this.store.update(id, { status: result.skipped || result.sourceResults?.some((entry) => entry.error) ? 'partial' : 'completed', completed: true, result: { ...result, huntSafety: safety }, stage: { name: 'hunts', value: { status: 'skipped', reason: safety.reason, ...(safety.sourceId ? { sourceId: safety.sourceId } : {}) } }, stageCases: undefined });
+      return this.store.update(id, { status: (result.skipped || (result.sourceResults || []).some((entry) => entry?.error) || collectionCyclePartial(result)) ? 'partial' : 'completed', completed: true, result: { ...result, huntSafety: safety }, stage: { name: 'hunts', value: { status: 'skipped', reason: safety.reason, ...(safety.sourceId ? { sourceId: safety.sourceId } : {}) } }, stageCases: undefined });
     }
     let inventory;
     try {
@@ -272,7 +281,7 @@ class CollectionCoordinator {
       const caseSink = this.caseSink || optionalCaseSink();
       if (caseSink?.upsertFromHunt) this.caseSink = caseSink;
       if (!caseSink?.upsertFromHunt) {
-        return this.store.update(id, { status: 'completed', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, stage: { name: 'cases', value: { status: 'skipped', reason: 'case_sink_unavailable' } } });
+        return this.store.update(id, { status: collectionCyclePartial(result, evaluations) ? 'partial' : 'completed', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, stage: { name: 'cases', value: { status: 'skipped', reason: 'case_sink_unavailable' } } });
       }
       try {
         let handoffs = 0, upserted = 0, skipped = 0;
@@ -283,7 +292,7 @@ class CollectionCoordinator {
           upserted += Math.max(0, Number(handoff?.upserted) || 0);
           if (handoff?.skipped) skipped++;
         }
-        return this.store.update(id, { status: 'completed', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, stage: { name: 'cases', value: { status: 'completed', handoffs, upserted, skipped } } });
+        return this.store.update(id, { status: collectionCyclePartial(result, evaluations) ? 'partial' : 'completed', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, stage: { name: 'cases', value: { status: 'completed', handoffs, upserted, skipped } } });
       } catch (error) {
         if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error;
         return this.store.update(id, { status: 'partial', completed: true, result: { ...result, huntSafety: safety, hunts: { evaluated: evaluations.length } }, error: { stage: 'cases', message: error }, stage: { name: 'cases', value: { status: 'failed', error: safeError(error) } } });

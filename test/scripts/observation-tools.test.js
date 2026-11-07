@@ -75,5 +75,5 @@ test('measure argument parsing: --limit and --json, unknown flags rejected', () 
 });
 
 test('measure ratio buckets cover the evaluator evidence classes', () => {
-  assert.deepEqual(Object.keys(measure.emptyBuckets()).sort(), ['calculated_ratio', 'macro_housing_index', 'official_parcel_roll']);
+  assert.deepEqual(Object.keys(measure.emptyBuckets()).sort(), ['calculated_ratio', 'official_parcel_roll']);
 });

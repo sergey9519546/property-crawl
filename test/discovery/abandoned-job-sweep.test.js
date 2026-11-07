@@ -66,8 +66,7 @@ function sweepPool(rows) {
       const floorSeconds = Number(params[0]);
       const swept = [];
       for (const row of jobs.values()) {
-        const leaseExpired = row.status === 'running' && !!row.lease_expires_at
-          && Date.parse(row.lease_expires_at) < Date.now();
+        const leaseExpired = row.status === 'running' && (row.lease_expires_at == null || Date.parse(row.lease_expires_at) < Date.now());
         const startedLongAgo = !row.started_at || Date.now() - Date.parse(row.started_at) > floorSeconds * 1000;
         if (!leaseExpired || !startedLongAgo) continue;
         const updated = {
@@ -107,6 +106,17 @@ test('a job whose worker is still alive is never swept', async () => {
   assert.equal(pool.jobs.get(JOB_ID).status, 'running', 'a live lease is not abandonment');
 });
 
+test('a running row with a NULL lease is abandoned and swept', async () => {
+  // A partial claim (status set without a lease, e.g. by a file-backend path
+  // or a manual edit) used to be invisible to both the sweep and the health
+  // count: NULL<NOW() is NULL, so the row froze at running forever.
+  const pool = sweepPool([jobRow({ lease_owner: null, lease_expires_at: null })]);
+  const store = new DiscoveryStore(pool);
+
+  assert.deepEqual(await store.failAbandonedJobs(), [JOB_ID]);
+  assert.equal(pool.jobs.get(JOB_ID).status, 'failed');
+});
+
 test('a job claimed this instant is not swept out from under itself', async () => {
   const pool = sweepPool([jobRow({ started_at: new Date().toISOString(), lease_expires_at: hoursAgo(0.001) })]);
   const store = new DiscoveryStore(pool);
@@ -122,7 +132,7 @@ test('the sweep and the reported count use the same predicate', async () => {
   const store = new DiscoveryStore(pool);
   await store.failAbandonedJobs();
   const sweepSql = pool.calls[0].sql;
-  assert.match(sweepSql, /status='running' AND lease_expires_at<NOW\(\)/);
+  assert.ok(sweepSql.includes("status='running' AND (lease_expires_at IS NULL OR lease_expires_at<NOW())"), sweepSql);
 
   const healthSql = [];
   const healthPool = {
@@ -136,8 +146,7 @@ test('the sweep and the reported count use the same predicate', async () => {
   await new DiscoveryStore(healthPool).collectionHealth();
   const count = healthSql.find(text => /count\(\*\) FILTER/.test(text));
   assert.ok(count, 'expected collectionHealth to count the backlog');
-  assert.match(count, /status='running' AND lease_expires_at<NOW\(\)/,
-    'the displayed count and the swept set must be the same set of rows');
+  assert.ok(count.includes("status='running' AND (lease_expires_at IS NULL OR lease_expires_at<NOW())"), count);
 });
 
 test('an expired lease makes the worker degraded, even when the worker itself is healthy', async () => {

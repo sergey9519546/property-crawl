@@ -83,24 +83,55 @@ class ProviderCircuit {
 }
 
 class FixedWindowRateLimiter {
-  constructor({ maxRequests = 30, windowMs = 60_000, now = Date.now } = {}) {
+  constructor({ maxRequests = 30, windowMs = 60_000, now = Date.now, trustedProxyCount = 0 } = {}) {
     this.maxRequests = clampInteger(maxRequests, 1, 120, 30);
     this.windowMs = clampInteger(windowMs, 1_000, 10 * 60_000, 60_000);
     this.now = now;
-    this.count = 0;
-    this.resetAt = 0;
+    // Forwarded headers are caller-controlled without a trusted edge. When
+    // TRUSTED_PROXY_COUNT > 0 we parse X-Forwarded-For from the right (the
+    // address seen by the innermost trusted proxy); otherwise we fall back to
+    // the direct socket address so an attacker cannot mint per-IP buckets.
+    this.trustedProxyCount = Math.max(0, Math.floor(Number(trustedProxyCount) || 0));
+    this.buckets = new Map();
+
+    // Periodic eviction so stale IP records are removed regardless of traffic
+    // volume. .unref() ensures this timer doesn't keep the Node process alive
+    // after all other async work has completed (e.g. in tests).
+    this._evictTimer = setInterval(() => {
+      const now = this.now();
+      for (const [key, record] of this.buckets.entries()) {
+        if (now > record.resetAt) this.buckets.delete(key);
+      }
+    }, this.windowMs).unref();
   }
 
-  consume() {
-    const timestamp = this.now();
-    if (!this.resetAt || timestamp >= this.resetAt) {
-      this.count = 0;
-      this.resetAt = timestamp + this.windowMs;
+  // Best-effort client IP. Without a trusted proxy count we never trust
+  // caller-controlled X-Forwarded-For and use the direct socket address.
+  static clientIp(req, trustedProxyCount = 0) {
+    const count = Math.max(0, Math.floor(Number(trustedProxyCount) || 0));
+    if (count > 0) {
+      const forwarded = String(req?.headers?.['x-forwarded-for'] || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const idx = forwarded.length - count;
+      const ip = (idx >= 0 && forwarded[idx]) || req?.socket?.remoteAddress || 'unknown';
+      return ip;
     }
-    this.count += 1;
-    if (this.count > this.maxRequests) {
+    return req?.socket?.remoteAddress || 'unknown';
+  }
+
+  consume(key = 'global') {
+    const timestamp = this.now();
+    let record = this.buckets.get(key);
+    if (!record || timestamp >= record.resetAt) {
+      record = { count: 0, resetAt: timestamp + this.windowMs };
+    }
+    record.count += 1;
+    this.buckets.set(key, record);
+    if (record.count > this.maxRequests) {
       throw new PropertyImageError(429, 'rate_limited', 'Property image lookup rate limit exceeded.', {
-        retryAfterSeconds: Math.max(1, Math.ceil((this.resetAt - timestamp) / 1000)),
+        retryAfterSeconds: Math.max(1, Math.ceil((record.resetAt - timestamp) / 1000)),
       });
     }
   }
@@ -841,7 +872,9 @@ function createPropertyImageService(options = {}) {
     maxRequests: env.PROPERTY_IMAGE_RATE_LIMIT,
     windowMs: env.PROPERTY_IMAGE_RATE_WINDOW_MS,
     now,
+    trustedProxyCount: env.TRUSTED_PROXY_COUNT,
   });
+  const trustedProxyCount = Math.max(0, Math.floor(Number(env.TRUSTED_PROXY_COUNT) || 0));
   const gate = options.gate || new BoundedConcurrencyGate({
     concurrency: env.PROPERTY_IMAGE_CONCURRENCY,
     maxQueue: env.PROPERTY_IMAGE_MAX_QUEUE,
@@ -960,7 +993,7 @@ function createPropertyImageService(options = {}) {
         throw new PropertyImageError(400, 'invalid_mode', 'mode must be metadata, walkthrough, image, or alternatives.');
       }
 
-      limiter.consume();
+      limiter.consume(FixedWindowRateLimiter.clientIp(req, trustedProxyCount));
       const listing = await database.getListingById(listingId);
       if (!listing) throw new PropertyImageError(404, 'listing_not_found', 'Listing not found.');
       if (mode === 'alternatives') {

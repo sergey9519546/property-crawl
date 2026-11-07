@@ -18,6 +18,7 @@
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
 const { readResponseText } = require('./http');
+const { assertFetchableUrl } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
 const { ALL_COUNTY_MAP, NATIONWIDE_COUNTY_MAP } = require('./adapters/civilview');
@@ -528,6 +529,18 @@ class CivilViewScraper extends BaseScraper {
         redirect: 'follow',
         signal: controller.signal,
       });
+      // redirect: "follow" can land on a private host; re-validate before any
+      // body bytes are read so a publisher redirect cannot reach internal
+      // services or leak their responses.
+      const ssrfCheck = assertFetchableUrl(response.url || url);
+      if (!ssrfCheck.ok) {
+        throw new ScraperResponseError(`${ssrfCheck.reason} after redirect for ${url} -> ${response.url || '(no final url)'}`, {
+          code: ssrfCheck.reason,
+          status: response.status,
+          haltScraper: false,
+          circuitRecorded: false,
+        });
+      }
       const body = await readResponseText(response, controller.signal);
       const validation = this.circuitBreaker.validateResponse({
         status: response.status,

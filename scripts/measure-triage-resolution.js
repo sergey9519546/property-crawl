@@ -14,7 +14,7 @@
 //   - records carrying a direct publisher estLow/estHigh band;
 //   - records carrying a harvested assessor roll (provenance.derivedFields.assessorRoll);
 //   - bid_to_value_ratio supported rate, split by evidenceClass
-//     (official_parcel_roll / macro_housing_index / calculated_ratio);
+//     (official_parcel_roll / calculated_ratio);
 //   - supported counts for bid_reduction and returned_to_market;
 //   - triage_priority distribution against src/lib/triage-bands.ts;
 //   - per-county roll coverage, to choose the next enrollment candidates.
@@ -35,7 +35,7 @@ function parseArgs(argv) {
 }
 
 function emptyBuckets() {
-  return { official_parcel_roll: 0, macro_housing_index: 0, calculated_ratio: 0 };
+  return { official_parcel_roll: 0, calculated_ratio: 0 };
 }
 
 if (require.main === module) main().catch((error) => {

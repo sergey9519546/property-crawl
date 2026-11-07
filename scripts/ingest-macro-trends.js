@@ -14,6 +14,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
+const crypto = require('node:crypto');
 const { normalizeCountyKey, classifyMarketTemperature } = require('../server/enrichment/macro-valuation-data');
 const { isUsStateOrTerritoryCode } = require('../server/state-codes');
 
@@ -88,7 +89,9 @@ function parseMacroRecord(row) {
   const marketTemperature = classifyMarketTemperature(yoyPct);
   const sign = (yoyPct || 0) >= 0 ? '+' : '';
   const domPart = medianDom !== null ? `, ${medianDom} median DOM` : '';
-  const trendLabel = `${marketTemperature.toUpperCase()} Market (${sign}${yoyPct ?? 0}% YoY${domPart})`;
+  const trendLabel = yoyPct === null
+    ? `YoY Unobserved Market${domPart}`
+    : `${marketTemperature.toUpperCase()} Market (${sign}${yoyPct}% YoY${domPart})`;
 
   return {
     key,
@@ -102,11 +105,40 @@ function parseMacroRecord(row) {
   };
 }
 
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/i;
+
+/**
+ * Builds the provenance block for the output envelope. Status is 'observed'
+ * ONLY when both a 64-hex inputSha256 and a parseable retrievedAt are
+ * supplied; anything else is honestly recorded as 'unverified_legacy' so the
+ * runtime loader's fail-closed rule can reject it.
+ *
+ * @param {Object} [options={}]
+ * @returns {Object} provenance block
+ */
+function buildProvenance(options = {}) {
+  const inputSha256 = typeof options.inputSha256 === 'string' && SHA256_HEX_RE.test(options.inputSha256)
+    ? options.inputSha256
+    : null;
+  const retrievedAt = typeof options.retrievedAt === 'string' && Number.isFinite(Date.parse(options.retrievedAt))
+    ? options.retrievedAt
+    : null;
+  const observed = inputSha256 !== null && retrievedAt !== null;
+  return {
+    status: observed ? 'observed' : 'unverified_legacy',
+    sourceLabel: typeof options.sourceLabel === 'string' && options.sourceLabel.trim() !== ''
+      ? options.sourceLabel
+      : null,
+    inputSha256,
+    retrievedAt,
+  };
+}
+
 /**
  * Ingests an array of row objects and generates the county benchmarks map.
  *
  * @param {Array<Object>} rows
- * @param {Object} [options={}]
+ * @param {Object} [options={}] - optional provenance inputs: sourceLabel, inputSha256, retrievedAt
  * @returns {Object} map of normalized county keys to benchmark data
  */
 function ingestMacroRecords(rows, options = {}) {
@@ -130,8 +162,15 @@ function ingestMacroRecords(rows, options = {}) {
 
   if (options.saveToFile !== false) {
     const outputPath = options.outputPath || OUTPUT_PATH;
+    const envelope = {
+      version: 1,
+      generator: 'scripts/ingest-macro-trends.js',
+      generatedAt: new Date().toISOString(),
+      provenance: buildProvenance(options),
+      benchmarks,
+    };
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, JSON.stringify(benchmarks, null, 2), 'utf8');
+    fs.writeFileSync(outputPath, JSON.stringify(envelope, null, 2), 'utf8');
   }
 
   return benchmarks;
@@ -176,8 +215,14 @@ async function runCli() {
   if (fileArg) {
     const filePath = fileArg.split('=')[1];
     console.log(`Ingesting macro trends from ${filePath}...`);
+    const inputBytes = fs.readFileSync(filePath);
+    const inputSha256 = crypto.createHash('sha256').update(inputBytes).digest('hex');
     const rows = await parseCsvStream(filePath);
-    const benchmarks = ingestMacroRecords(rows);
+    const benchmarks = ingestMacroRecords(rows, {
+      inputSha256,
+      retrievedAt: new Date().toISOString(),
+      sourceLabel: `operator CSV ingest: ${path.basename(filePath)}`,
+    });
     console.log(`Successfully ingested ${Object.keys(benchmarks).length} county benchmarks into ${OUTPUT_PATH}`);
   } else {
     console.log('Usage: node scripts/ingest-macro-trends.js --file=<path-to-csv>');
@@ -195,5 +240,6 @@ module.exports = {
   parseMacroRecord,
   ingestMacroRecords,
   parseCsvStream,
+  buildProvenance,
   OUTPUT_PATH,
 };

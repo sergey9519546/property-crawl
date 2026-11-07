@@ -67,14 +67,14 @@ test('buildProviderSnapshot marks a configured provider with keyLength > 0', () 
   const env = { MOCK_API_KEY: 'abc123' };
   const snap = buildProviderSnapshot({ provider, env });
   assert.equal(snap.keyConfigured, true);
-  assert.equal(snap.keyLength, 6);
+  assert.equal(Object.prototype.hasOwnProperty.call(snap, 'keyLength'), false);
 });
 
 test('buildProviderSnapshot marks a configured provider without a keyEnvVar as keyConfigured:true with length 0', () => {
   const provider = { id: 'panoramax', label: 'Panoramax', role: 'streetview-alternative' };
   const snap = buildProviderSnapshot({ provider, env: {} });
   assert.equal(snap.keyConfigured, true);
-  assert.equal(snap.keyLength, 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(snap, 'keyLength'), false);
 });
 
 test('createProviderStatusHandler wires the cache stats for cacheable providers', () => {

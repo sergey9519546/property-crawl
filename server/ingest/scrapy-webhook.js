@@ -209,26 +209,13 @@ async function ingestScrapyItems(items, options = {}) {
   let totalLive = 0;
   let liveMergeError = false;
 
-  if (admissibleItems.length > 0) {
-    try {
-      const merged = mergeLiveRecordsImpl(
-        liveStorePath,
-        admissibleItems,
-        sourceKey ? { sourceKey } : {}
-      );
-      liveAccepted = merged?.accepted || 0;
-      liveRejected = merged?.rejected || 0;
-      totalLive = merged?.retained || 0;
-    } catch (err) {
-      logger.error?.('[Scrapy Ingest] Live record store merge failed:', err?.message);
-      liveMergeError = true;
-    }
-  }
-
   let isPostgres = Boolean(options.isPostgres);
   let pgAccepted = 0;
   let pgFailed = 0;
+  const pgFailedIds = [];
   let postgresPersistError = false;
+  let memoryPersistFailures = 0;
+  let memoryPersistError = false;
 
   try {
     const db = options.db !== undefined ? options.db : require('../db/client');
@@ -241,19 +228,66 @@ async function ingestScrapyItems(items, options = {}) {
       }
       if (admissibleItems.length > 0 && typeof db.createListing === 'function') {
         if (isPostgres) {
-          for (const validListing of admissibleItems) {
-            try {
-              await db.createListing(validListing);
-              pgAccepted++;
-            } catch (createErr) {
-              pgFailed++;
-              logger.error?.(
-                `[Scrapy Ingest] PostgreSQL createListing failed for ${validListing.id}:`,
-                createErr?.message
-              );
+          // Postgres: one transaction for the whole batch. Per-row failures are
+          // isolated with savepoints and still counted; the transaction either
+          // commits all surviving rows or rolls back everything. The live file
+          // is merged only after a successful commit, with committed rows only.
+          if (typeof db.transaction !== 'function') {
+            throw new Error('Postgres DatabaseClient has no transaction() method');
+          }
+          const committedListings = [];
+          await db.transaction(async (client) => {
+            for (const [index, validListing] of admissibleItems.entries()) {
+              const savepointName = 'sp_scrapy_item_' + index;
+              await client.query('SAVEPOINT ' + savepointName);
+              try {
+                await db.createListing(validListing, { client });
+                pgAccepted++;
+                committedListings.push(validListing);
+                await client.query('RELEASE SAVEPOINT ' + savepointName);
+              } catch (createErr) {
+                pgFailed++;
+                pgFailedIds.push(validListing.id);
+                logger.error?.(
+                  `[Scrapy Ingest] PostgreSQL createListing failed for ${validListing.id}:`,
+                  createErr?.message
+                );
+                await client.query('ROLLBACK TO SAVEPOINT ' + savepointName);
+              }
             }
+          });
+          // COMMIT succeeded inside transaction(). Merge the live file with the
+          // committed rows only - never on a PG failure.
+          try {
+            const merged = mergeLiveRecordsImpl(
+              liveStorePath,
+              committedListings,
+              sourceKey ? { sourceKey } : {}
+            );
+            liveAccepted = committedListings.length;
+            liveRejected = merged?.rejected || 0;
+            totalLive = merged?.retained || 0;
+          } catch (mergeErr) {
+            logger.error?.('[Scrapy Ingest] Live record store merge failed after PG commit:', mergeErr?.message);
+            liveMergeError = true;
           }
         } else {
+          // Memory mode: live-first merge, then per-row createListing (unchanged).
+          if (admissibleItems.length > 0) {
+            try {
+              const merged = mergeLiveRecordsImpl(
+                liveStorePath,
+                admissibleItems,
+                sourceKey ? { sourceKey } : {}
+              );
+              liveAccepted = merged?.accepted || 0;
+              liveRejected = merged?.rejected || 0;
+              totalLive = merged?.retained || 0;
+            } catch (err) {
+              logger.error?.('[Scrapy Ingest] Live record store merge failed:', err?.message);
+              liveMergeError = true;
+            }
+          }
           for (const validListing of admissibleItems) {
             try {
               await db.createListing(validListing);
@@ -262,6 +296,7 @@ async function ingestScrapyItems(items, options = {}) {
                 `[Scrapy Ingest] In-memory createListing failed for ${validListing.id}:`,
                 memErr?.message
               );
+              memoryPersistFailures++;
             }
           }
         }
@@ -274,6 +309,7 @@ async function ingestScrapyItems(items, options = {}) {
     postgresPersistError = true;
   }
 
+  if (!isPostgres && memoryPersistFailures > 0) memoryPersistError = true;
   const accepted = isPostgres ? pgAccepted : liveAccepted;
   const rejected = isPostgres ? gateRejected + pgFailed : gateRejected + liveRejected;
 
@@ -285,6 +321,8 @@ async function ingestScrapyItems(items, options = {}) {
     isPostgres,
     liveMergeError,
     postgresPersistError,
+    memoryPersistError,
+    memoryPersistFailures,
     postgresAccepted: pgAccepted,
     postgresRejected: gateRejected,
     postgresFailed: pgFailed,

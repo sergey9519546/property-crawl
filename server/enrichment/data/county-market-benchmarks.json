@@ -1,20 +1,31 @@
 {
-  "NJ-CAMDEN": {
-    "state": "NJ",
-    "county": "Camden",
-    "medianSalePrice": 310000,
-    "yoyPriceChangePct": 6.5,
-    "marketTemperature": "hot",
-    "medianDom": 29,
-    "trendLabel": "HOT Market (+6.5% YoY, 29 median DOM)"
+  "version": 1,
+  "generator": "scripts/ingest-macro-trends.js",
+  "generatedAt": "2026-11-07T05:20:00.000Z",
+  "provenance": {
+    "status": "unverified_legacy",
+    "sourceLabel": "pre-provenance operator ETL run; source CSV not retained",
+    "inputSha256": null,
+    "retrievedAt": null
   },
-  "NJ-BERGEN": {
-    "state": "NJ",
-    "county": "Bergen",
-    "medianSalePrice": 640000,
-    "yoyPriceChangePct": 4.9,
-    "marketTemperature": "hot",
-    "medianDom": 27,
-    "trendLabel": "HOT Market (+4.9% YoY, 27 median DOM)"
+  "benchmarks": {
+    "NJ-CAMDEN": {
+      "state": "NJ",
+      "county": "Camden",
+      "medianSalePrice": 310000,
+      "yoyPriceChangePct": 6.5,
+      "marketTemperature": "hot",
+      "medianDom": 29,
+      "trendLabel": "HOT Market (+6.5% YoY, 29 median DOM)"
+    },
+    "NJ-BERGEN": {
+      "state": "NJ",
+      "county": "Bergen",
+      "medianSalePrice": 640000,
+      "yoyPriceChangePct": 4.9,
+      "marketTemperature": "hot",
+      "medianDom": 27,
+      "trendLabel": "HOT Market (+4.9% YoY, 27 median DOM)"
+    }
   }
 }

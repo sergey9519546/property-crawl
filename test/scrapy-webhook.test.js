@@ -252,6 +252,52 @@ test('ingestScrapyItems: a live-store merge failure is flagged, not silently swa
   }
 });
 
+test('ingestScrapyItems: memory-mode createListing failures are counted, not silently swallowed', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-mem-fail-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-MEMFAIL-1', propertyId: '3005001' });
+    const mockDb = {
+      isPg: false,
+      dataMode: () => 'memory',
+      createListing: async () => { throw new Error('memory store write failed'); },
+    };
+
+    const result = await ingestScrapyItems([valid], {
+      db: mockDb,
+      isPostgres: false,
+      liveStorePath,
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.memoryPersistFailures, 1, 'the memory write failure must be counted');
+    assert.equal(result.memoryPersistError, true, 'the memory write failure must set the outage flag');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: a clean memory run reports zero memory failures', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-mem-ok-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-MEMOK-1', propertyId: '3006001' });
+    const result = await ingestScrapyItems([valid], {
+      db: { isPg: false, dataMode: () => 'memory', createListing: async () => {} },
+      isPostgres: false,
+      liveStorePath,
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.memoryPersistFailures, 0);
+    assert.equal(result.memoryPersistError, false);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('ingestScrapyItems: a Postgres persistence outage is flagged (postgresPersistError)', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-outage-'));
   const liveStorePath = path.join(tmpDir, 'live-listings.json');
@@ -261,6 +307,10 @@ test('ingestScrapyItems: a Postgres persistence outage is flagged (postgresPersi
     const mockDb = {
       isPg: true,
       dataMode: () => 'postgres',
+      transaction: async (fn) => {
+        const client = { query: async () => {} };
+        await fn(client);
+      },
       createListing: async () => { throw new Error('connection refused'); },
     };
 
@@ -330,6 +380,10 @@ test('ingestScrapyItems: enforces servesListings + validateListingForIngestion b
       isPg: true,
       postgresReachable: true,
       dataMode: () => 'postgres',
+      transaction: async (fn) => {
+        const client = { query: async () => {} };
+        await fn(client);
+      },
       createListing: async (listing) => {
         if (listing.id === 'CIV-NJ-007-2002') {
           throw new Error('simulated postgres constraint failure');
@@ -352,16 +406,150 @@ test('ingestScrapyItems: enforces servesListings + validateListingForIngestion b
     assert.equal(persistedToPostgres.length, 1);
     assert.equal(persistedToPostgres[0].id, 'CIV-NJ-007-2001');
 
-    // Even though mergeLiveRecords accepted both valid1 and valid2 into file cache (liveAccepted = 2),
-    // Postgres mode must report accepted = pgAccepted (1) and rejected = gateRejected (2) + pgFailed (1) = 3.
+    // mergeLiveRecords ran after the PG commit with committed rows only (valid1);
+    // valid2 failed its savepoint, so the live file never sees it.
+    // Postgres mode reports accepted = pgAccepted (1) and rejected = gateRejected (2) + pgFailed (1) = 3.
     assert.equal(result.isPostgres, true);
     assert.equal(result.received, 4);
-    assert.equal(result.liveAccepted, 2);
+    // valid2 failed its savepoint and was never committed, so the live merge
+    // only sees valid1: liveAccepted = committed count = 1.
+    assert.equal(result.liveAccepted, 1);
     assert.equal(result.postgresAccepted, 1);
     assert.equal(result.postgresRejected, 2);
     assert.equal(result.postgresFailed, 1);
     assert.equal(result.accepted, 1);
     assert.equal(result.rejected, 3);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: PG failure before commit rolls back and never touches the live file', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-precommit-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid = buildValidCivilviewItem({ id: 'CIV-NJ-007-PRE-1', propertyId: '3010001' });
+    let mergeCalled = false;
+    const mockDb = {
+      isPg: true,
+      postgresReachable: true,
+      dataMode: () => 'postgres',
+      // The transaction cannot even begin: the whole batch must fail closed.
+      transaction: async () => { throw new Error('could not begin transaction'); },
+      createListing: async () => { throw new Error('must not run'); },
+    };
+
+    const result = await ingestScrapyItems([valid], {
+      db: mockDb,
+      isPostgres: true,
+      liveStorePath,
+      mergeLiveRecordsImpl: () => { mergeCalled = true; },
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(mergeCalled, false, 'mergeLiveRecords must not run when the PG commit fails');
+    assert.equal(result.accepted, 0);
+    assert.equal(result.postgresAccepted, 0);
+    assert.equal(result.postgresFailed, 0);
+    assert.equal(result.postgresPersistError, true);
+    assert.equal(result.liveMergeError, false);
+    assert.equal(fs.existsSync(liveStorePath), false, 'the live file must not be created or touched');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: savepoint isolation keeps one bad row from aborting the batch', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-savepoint-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid1 = buildValidCivilviewItem({ id: 'CIV-NJ-007-SP-1', propertyId: '3011001' });
+    const valid2 = buildValidCivilviewItem({ id: 'CIV-NJ-007-SP-2', propertyId: '3011002' });
+    const committed = [];
+    const queries = [];
+    const mockDb = {
+      isPg: true,
+      postgresReachable: true,
+      dataMode: () => 'postgres',
+      transaction: async (fn) => {
+        const client = {
+          query: async (sql) => {
+            queries.push(String(sql));
+            return { rows: [] };
+          },
+        };
+        await fn(client);
+        queries.push('COMMIT');
+        await client.query('COMMIT');
+      },
+      createListing: async (listing, options) => {
+        assert.ok(options && options.client, 'createListing must execute inside the transaction client');
+        if (listing.id === valid2.id) throw new Error('simulated postgres constraint failure');
+        committed.push(listing);
+      },
+    };
+
+    let mergeItems = null;
+    const result = await ingestScrapyItems([valid1, valid2], {
+      db: mockDb,
+      isPostgres: true,
+      liveStorePath,
+      mergeLiveRecordsImpl: (_path, items) => { mergeItems = items; return { accepted: items.length, rejected: 0, retained: items.length }; },
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.postgresAccepted, 1);
+    assert.equal(result.postgresFailed, 1);
+    assert.equal(result.accepted, 1, 'accepted counts only committed rows');
+    assert.ok(queries.includes('COMMIT'), 'the transaction must commit after savepoint isolation');
+    assert.equal(queries.filter((q) => q.startsWith('SAVEPOINT ')).length, 2, 'one savepoint per admissible item');
+    assert.equal(queries.filter((q) => q.startsWith('RELEASE SAVEPOINT ')).length, 1, 'only the surviving row releases its savepoint');
+    assert.equal(queries.filter((q) => q.startsWith('ROLLBACK TO SAVEPOINT ')).length, 1, 'the failed row rolls back to its savepoint');
+    assert.deepStrictEqual(committed.map((l) => l.id), [valid1.id]);
+    assert.deepStrictEqual(mergeItems.map((l) => l.id), [valid1.id], 'the live file merges committed rows only');
+    assert.equal(result.liveAccepted, 1);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('ingestScrapyItems: live-merge failure after PG commit keeps PG accepted (route 207)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scrapy-ingest-pg-merge-fail-'));
+  const liveStorePath = path.join(tmpDir, 'live-listings.json');
+
+  try {
+    const valid1 = buildValidCivilviewItem({ id: 'CIV-NJ-007-LM-1', propertyId: '3012001' });
+    const valid2 = buildValidCivilviewItem({ id: 'CIV-NJ-007-LM-2', propertyId: '3012002' });
+    const persisted = [];
+    const mockDb = {
+      isPg: true,
+      postgresReachable: true,
+      dataMode: () => 'postgres',
+      transaction: async (fn) => {
+        const client = { query: async () => ({ rows: [] }) };
+        await fn(client);
+      },
+      createListing: async (listing, options) => {
+        assert.ok(options && options.client, 'createListing must execute inside the transaction client');
+        persisted.push(listing);
+      },
+    };
+
+    const result = await ingestScrapyItems([valid1, valid2], {
+      db: mockDb,
+      isPostgres: true,
+      liveStorePath,
+      mergeLiveRecordsImpl: () => { throw new Error('live store locked'); },
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    assert.equal(result.postgresPersistError, false);
+    assert.equal(result.liveMergeError, true);
+    assert.equal(result.postgresAccepted, 2);
+    assert.equal(result.accepted, 2, 'accepted stays pgAccepted when the live merge fails after commit');
+    assert.equal(result.postgresFailed, 0);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -387,5 +575,6 @@ test('scrapy webhook route handler declares GET and POST with HMAC verification,
   assert.match(source, /hasPostgresFailures\s*\|\|\s*hasPersistenceErrors\s*\?\s*207\s*:\s*200/);
   assert.match(source, /liveMergeError/);
   assert.match(source, /postgresPersistError/);
+  assert.match(source, /memoryPersistFailures/);
   assert.doesNotMatch(source, /issueWorkspaceSession|SCRAPER_ADMIN_TOKEN/);
 });

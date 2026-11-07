@@ -52,7 +52,12 @@ function saveCache(cache, cachePath = DEFAULT_CACHE_PATH) {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8');
+    // Crash-safe write: a killed process must never truncate the cache file.
+    // Write to a temp sibling and rename over the target (same directory, so
+    // the rename stays on one filesystem).
+    const tmpPath = `${cachePath}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(cache, null, 2), 'utf8');
+    fs.renameSync(tmpPath, cachePath);
   } catch (err) {
     // Non-fatal if cache cannot be written
   }

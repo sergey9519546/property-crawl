@@ -53,3 +53,52 @@ test('waterfallFetch still succeeds when native returns non-empty HTML', async (
   assert.equal(result.tier, 'native');
   assert.match(result.html, /ok/);
 });
+
+test('native fetch tier refuses private, loopback, metadata, and credential URLs before any request', async () => {
+  const { fetchTextWithPolicy, assertFetchableUrl } = require('../server/scrapers/http');
+  for (const [url, reason] of [
+    ['http://169.254.169.254/latest/meta-data/', 'SSRF_BLOCKED_HOST'],
+    ['https://127.0.0.1/admin', 'SSRF_BLOCKED_HOST'],
+    ['https://10.0.0.5/x', 'SSRF_BLOCKED_HOST'],
+    ['https://user:pass@example.com/x', 'SSRF_CREDENTIALS_IN_URL'],
+    ['file:///etc/passwd', 'SSRF_UNSUPPORTED_PROTOCOL'],
+  ]) {
+    assert.equal(assertFetchableUrl(url).reason, reason, url);
+  }
+  let fetchCalls = 0;
+  await assert.rejects(
+    fetchTextWithPolicy('http://169.254.169.254/latest/meta-data/', {
+      fetchImpl: async () => { fetchCalls++; return { text: async () => 'secret' }; },
+      autoThrottle: false,
+    }),
+    (error) => error.code === 'SSRF_BLOCKED_HOST'
+  );
+  assert.equal(fetchCalls, 0, 'a blocked host must be refused before the transport is used');
+});
+
+test('native fetch tier re-validates the final URL after redirects and never reads a private body', async () => {
+  const { fetchTextWithPolicy } = require('../server/scrapers/http');
+  let bodyReads = 0;
+  await assert.rejects(
+    fetchTextWithPolicy('https://publisher.example/start', {
+      fetchImpl: async () => ({
+      url: 'http://169.254.169.254/latest/meta-data/',
+      status: 200,
+      headers: { get: () => null },
+      text: async () => { bodyReads++; return 'secret'; },
+      }),
+      autoThrottle: false,
+    }),
+    (error) => error.code === 'SSRF_BLOCKED_HOST'
+  );
+  assert.equal(bodyReads, 0, 'a redirect onto a private host must not leak the internal response body');
+});
+
+test('native fetch tier still succeeds for a public publisher URL', async () => {
+  const { fetchTextWithPolicy } = require('../server/scrapers/http');
+  const body = await fetchTextWithPolicy('https://salesweb.civilview.com/Sales/SaleDetails', {
+    fetchImpl: async () => ({ url: 'https://salesweb.civilview.com/Sales/SaleDetails', status: 200, headers: { get: () => null }, text: async () => '<html>public</html>' }),
+    autoThrottle: false,
+  });
+  assert.match(body, /public/);
+});

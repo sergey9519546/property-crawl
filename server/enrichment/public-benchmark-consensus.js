@@ -8,7 +8,8 @@
  * 1. County Certified Assessor Tax Roll (assessedValue, landValue, improvementValue)
  *    via server/enrichment/assessor-reading.js / parcel data.
  * 2. FHFA House Price Index (HPI) appreciation benchmarks
- *    via server/intelligence/fhfa-hpi.js or server/enrichment/hpi.js.
+ *    via server/enrichment/hpi.js (observed series only; the fabricated
+ *    index table and the HPI-to-dollar-band path are removed).
  * 3. HUD Small Area Fair Market Rent (SAFMR) published rent benchmark
  *    via server/enrichment/hud-safmr.js.
  *
@@ -18,7 +19,7 @@
  * - Clearly label all metrics as PUBLIC_RECORD_BENCHMARK, never as appraisal or buyer bid authority.
  */
 
-const { getHpiIndex, getAppreciationMultiplier, DEFAULT_CURRENT_PERIOD } = require('./hpi');
+const { getHpiIndex, getAppreciationMultiplier, getLatestObservedPeriod } = require('./hpi');
 const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
 const { resolveCountyKey } = require('./arcgis-parcels');
@@ -42,7 +43,7 @@ const DISCLAIMER = 'Public record consensus benchmarks are statutory and adminis
  * @param {Object} [options]
  * @param {Object} [options.assessorParcel] - Pre-interpreted assessor parcel
  * @param {Object} [options.hudSafmr] - Pre-computed SAFMR benchmark override
- * @param {string} [options.currentPeriod] - Target HPI period (defaults to '2026Q1')
+ * @param {string} [options.currentPeriod] - Target HPI period (defaults to the latest period in options.hpiSeries)
  * @returns {Object} Public Benchmark Consensus structure
  */
 function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
@@ -55,7 +56,7 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   const openingBid = Number.isFinite(Number(ctx.openingBid)) && Number(ctx.openingBid) > 0
     ? Number(ctx.openingBid)
     : null;
-  const currentPeriod = options.currentPeriod || DEFAULT_CURRENT_PERIOD;
+  const currentPeriod = options.currentPeriod || getLatestObservedPeriod(options.hpiSeries);
 
   // -------------------------------------------------------------
   // 1. County Certified Assessor Tax Roll

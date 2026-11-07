@@ -1,5 +1,6 @@
 import { persistFormSubmission, sanitize } from "@/lib/form-submissions";
 import { checkFormRateLimit } from "@/lib/form-rate-limit";
+import { rateLimitKey } from "@/lib/client-ip";
 
 const responseHeaders = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
   if (Number(request.headers.get("content-length")) > 4096) {
     return Response.json({ error: "Request body too large" }, { status: 413, headers: responseHeaders });
   }
-  const rate = checkFormRateLimit("newsletter");
+  const rate = checkFormRateLimit("newsletter", { key: rateLimitKey("newsletter", request) });
   if (!rate.allowed) {
     return Response.json(
       { error: "Too many newsletter submissions. Retry later." },

@@ -928,8 +928,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         hero_input.fill(state_name)
         self.page.get_by_role("option", name=f"{state_name} State").click()
         self.page.get_by_role("button", name="Search market").click()
+        # A state-scope handoff routes to the terminal's State filter control
+        # (the search box stays empty by design; text scopes use the search box).
         expect(
-            self.page.get_by_placeholder("Search address, county, court docket...")
+            self.page.get_by_role("combobox", name="State filter")
         ).to_have_value(state, timeout=15_000)
         # The grid renders a page of results; state_result_count is computed from
         # setUp's limit=1000 sample of a much larger inventory, so neither is the

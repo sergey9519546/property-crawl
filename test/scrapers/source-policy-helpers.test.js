@@ -121,11 +121,18 @@ test('hasSourceRecordShape: unknown source returns false (no shape to match)', (
 
 // --- hasSourceRecordShape: fhfa-hpi ---------------------------------
 
-test('hasSourceRecordShape: fhfa-hpi CSV path requires geo+period query with valid US state', () => {
-  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv?geo=OH&period=2024Q1')), true);
-  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv?geo=ZZ&period=2024Q1')), false, 'invalid state');
-  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv?geo=OH&period=2024')), false, 'invalid period');
-  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv')), false, 'no geo+period');
+test('hasSourceRecordShape: fhfa-hpi accepts only /hpi-state/csv with an optional valid geo', () => {
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv?geo=OH')), true);
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('https://www.fhfa.gov/hpi-state/csv?geo=OH')), true);
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv?geo=ZZ')), false, 'invalid state');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv?geo=OH&period=2024Q1')), false, 'period is not part of the shape');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv?period=2024Q1')), false, 'geo-only shape');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv?geo=')), false, 'empty geo value');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv')), true, 'empty query allowed');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/hpi-state/csv/')), true, 'trailing slash');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv?geo=OH&period=2024Q1')), false, 'retired DataTools path');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/datatools/downloads/documents/hpi/hpi_at_state.csv')), false, 'retired DataTools path without query');
+  assert.equal(hasSourceRecordShape('fhfa-hpi', url('/some/other/path.csv?geo=OH')), false, 'wrong path');
 });
 
 // --- hasSourceRecordShape: hud-egis ----------------------------------

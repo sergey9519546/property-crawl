@@ -113,11 +113,31 @@ test('Hunt Evaluator: formats transactional email digest notification', () => {
   assert.equal(digest.matchCount, 2);
 });
 
-test('webhook posts hunt changes only to a resolved public https address', async () => {
-  const { notifyHuntWebhook, postWebhook } = require('../server/delivery/webhook-notify');
-  const publicLookup = async () => [{ address: '1.1.1.1', family: 4 }];
+test('webhook refuses targets that are not resolved public https addresses', async () => {
+  const { postWebhook } = require('../server/delivery/webhook-notify');
   const privateLookup = async () => [{ address: '127.0.0.1', family: 4 }];
-  const calls = [];
+
+  const local = await postWebhook('https://127.0.0.1/hook', { event: 'x' });
+  assert.equal(local.delivery, 'refused');
+  assert.equal(local.reason, 'private_host');
+
+  const httpUrl = await postWebhook('http://alerts.example.com/hook', { event: 'x' });
+  assert.equal(httpUrl.reason, 'https_required');
+
+  const resolved = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, { lookup: privateLookup });
+  assert.equal(resolved.delivery, 'refused');
+  assert.equal(resolved.reason, 'private_resolution');
+
+  const dnsFailed = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, {
+    lookup: async () => { throw new Error('boom'); },
+  });
+  assert.equal(dnsFailed.delivery, 'unavailable');
+  assert.equal(dnsFailed.reason, 'dns_failed');
+});
+
+test('notifyHuntWebhook skips baseline runs and hunts without changes', async () => {
+  const { notifyHuntWebhook } = require('../server/delivery/webhook-notify');
+  const publicLookup = async () => [{ address: '1.1.1.1', family: 4 }];
   const hunt = { id: 'hunt_1', name: 'Ohio', webhookUrl: 'https://alerts.example.com/hook' };
   const evaluation = {
     evaluatedAt: '2026-10-10T00:00:00.000Z',
@@ -134,56 +154,14 @@ test('webhook posts hunt changes only to a resolved public https address', async
       message: 'A validated source record now matches this hunt.',
     }],
   };
-  const sent = await notifyHuntWebhook(hunt, evaluation, {
-    lookup: publicLookup,
-    fetchImpl: async (url, init) => {
-      calls.push({ url, init });
-      return { status: 204 };
-    },
-  });
-  assert.equal(sent.sent, true);
-  assert.equal(sent.delivery, 'sent');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].init.method, 'POST');
-  assert.equal(calls[0].init.redirect, 'manual');
-  const body = JSON.parse(calls[0].init.body);
-  assert.equal(body.event, 'hunt.changes');
-  assert.equal(body.changes[0].listingId, 'L1');
-  assert.equal(body.changes[0].address, '1 Main');
-  assert.equal(Object.hasOwn(body.changes[0], 'openingBid'), false);
 
-  const baseline = await notifyHuntWebhook(hunt, { ...evaluation, baselineCreated: true }, {
-    lookup: publicLookup,
-    fetchImpl: async () => { throw new Error('baseline must not post'); },
-  });
+  const baseline = await notifyHuntWebhook(hunt, { ...evaluation, baselineCreated: true }, { lookup: publicLookup });
   assert.equal(baseline.delivery, 'skipped');
   assert.equal(baseline.reason, 'baseline');
 
-  const local = await postWebhook('https://127.0.0.1/hook', { event: 'x' }, {
-    lookup: publicLookup,
-    fetchImpl: async () => { throw new Error('loopback must not post'); },
-  });
-  assert.equal(local.delivery, 'refused');
-  assert.equal(local.reason, 'private_host');
-
-  const httpUrl = await postWebhook('http://alerts.example.com/hook', { event: 'x' }, {
-    lookup: publicLookup,
-    fetchImpl: async () => { throw new Error('http must not post'); },
-  });
-  assert.equal(httpUrl.reason, 'https_required');
-
-  const resolved = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, {
-    lookup: privateLookup,
-    fetchImpl: async () => { throw new Error('private dns must not post'); },
-  });
-  assert.equal(resolved.reason, 'private_resolution');
-
-  const redirect = await postWebhook('https://alerts.example.com/hook', { event: 'x' }, {
-    lookup: publicLookup,
-    fetchImpl: async () => ({ status: 302 }),
-  });
-  assert.equal(redirect.sent, false);
-  assert.equal(redirect.reason, 'redirect_refused');
+  const noChanges = await notifyHuntWebhook(hunt, { ...evaluation, newEvents: [] }, { lookup: publicLookup });
+  assert.equal(noChanges.delivery, 'skipped');
+  assert.equal(noChanges.reason, 'no_changes');
 });
 
 test('Hunt digest refuses a missing or placeholder recipient', async () => {

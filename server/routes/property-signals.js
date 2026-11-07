@@ -2,12 +2,14 @@
 const db = require('../db/client');
 const { evaluateOpportunitySignals } = require('../intelligence/signals');
 const { loadObservationsForRecord, updateTriagePriority } = require('../db/observations-persistence');
+const { isWorkspaceAuthorized } = require('../security/workspace-identity');
 
 function createPropertySignalsHandler(dependencies = {}) {
   const database = dependencies.database || db;
   const readDbHistory = dependencies.loadObservationsForRecord || loadObservationsForRecord;
   const persistTriagePriority = dependencies.persistTriagePriority
     || ((client, listingId, priority) => updateTriagePriority(client.pool, listingId, priority));
+  const isAuthorized = dependencies.isAuthorized || ((req) => isWorkspaceAuthorized(req));
 
   return async function handlePropertySignals(req, res) {
     res.setHeader('Cache-Control', 'no-store');
@@ -53,7 +55,13 @@ function createPropertySignalsHandler(dependencies = {}) {
       // just-computed value keeps the column current exactly when it was
       // produced. A score computed over an unreadable history is a degraded
       // view, not a fact about the listing, and is never persisted.
-      if (!historyUnavailable && database.isPg && database.pool) {
+      // Persisting is a state mutation: only an authenticated operator request
+      // may refresh the persisted triage_priority. Anonymous callers still
+      // receive the full evaluation, but an unauthenticated GET/POST must not
+      // be able to poison ranking. The scraper scheduler
+      // (recomputeTriageForListings) refreshes the column server-side when
+      // evidence changes, so this gate does not starve it.
+      if (!historyUnavailable && database.isPg && database.pool && isAuthorized(req)) {
         try {
           await persistTriagePriority(database, id, evaluation.triagePriority);
         } catch (error) {

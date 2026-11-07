@@ -3,6 +3,24 @@ const {
   ScraperResponseError
 } = require('./circuit-breaker');
 const { autoThrottle, noteRetryAfter, recordHostLatency } = require('./auto-throttle');
+const { isBlockedSsrfHost } = require('./zyte-client');
+
+// SSRF guard for the native scraper fetch tier. zyte-client validates its own
+// egress; this path (BaseScraper.requestText / waterfallFetch native tier)
+// previously fetched any URL with redirect-follow and no host validation, so
+// a publisher URL (or an open redirect / DNS rebinding to 169.254.169.254,
+// 10/172.16/192.168, loopback, ::1, mapped IPv4) could reach internal
+// services. Validate the request URL, then re-validate the FINAL URL before
+// reading any body: undici follows redirects transparently, so a publisher
+// redirect onto a private host must not leak the internal response.
+function assertFetchableUrl(url) {
+  let parsed;
+  try { parsed = new URL(String(url)); } catch { return { ok: false, reason: 'SSRF_INVALID_URL' }; }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return { ok: false, reason: 'SSRF_UNSUPPORTED_PROTOCOL' };
+  if (parsed.username || parsed.password) return { ok: false, reason: 'SSRF_CREDENTIALS_IN_URL' };
+  if (isBlockedSsrfHost(parsed.hostname)) return { ok: false, reason: 'SSRF_BLOCKED_HOST' };
+  return { ok: true };
+}
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const RETRYABLE_TRANSPORT_CODES = new Set(['EAI_AGAIN','ECONNRESET','ECONNREFUSED','ENETDOWN','ENETUNREACH','EHOSTUNREACH','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','UND_ERR_SOCKET']);
@@ -145,6 +163,15 @@ async function fetchTextWithPolicy(url, options = {}) {
   const effectiveTimeoutMs = normalizeRequestTimeout(timeoutMs);
   const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
+  const requestCheck = assertFetchableUrl(url);
+  if (!requestCheck.ok) {
+    throw new ScraperResponseError(`${requestCheck.reason} for ${url}`, {
+      code: requestCheck.reason,
+      haltScraper: false,
+      circuitRecorded: false
+    });
+  }
+
   try {
     if (options.autoThrottle !== false) {
       await autoThrottle(url, { minIntervalMs: options.minIntervalMs });
@@ -155,6 +182,17 @@ async function fetchTextWithPolicy(url, options = {}) {
       controller.signal
     );
     recordHostLatency(url, Date.now() - requestStart);
+    // Redirects were followed transparently; re-validate the final host
+    // before any body bytes are read.
+    const finalCheck = assertFetchableUrl(response.url || url);
+    if (!finalCheck.ok) {
+      cancelResponseBody(response, finalCheck.reason);
+      throw new ScraperResponseError(`${finalCheck.reason} after redirect for ${url} -> ${response.url || '(no final url)'}`, {
+        code: finalCheck.reason,
+        haltScraper: false,
+        circuitRecorded: false
+      });
+    }
     const retryAfter = response.headers?.get?.('retry-after') ?? null;
     if (retryAfter) noteRetryAfter(url, retryAfter);
     const body = await readResponseText(response, controller.signal);
@@ -211,6 +249,7 @@ async function fetchJsonWithPolicy(url, options = {}) {
 }
 
 module.exports = {
+  assertFetchableUrl,
   DEFAULT_JITTER_MAX_MS,
   DEFAULT_JITTER_MIN_MS,
   DEFAULT_REQUEST_TIMEOUT_MS,

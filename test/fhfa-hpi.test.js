@@ -12,29 +12,51 @@ const {
   DEFAULT_MAX_RECORDS,
   MAX_RECORDS_CAP,
   MAX_CSV_BYTES,
-  STATE_LEVEL_PREFIX,
+  MIN_STATE_ROWS,
   sanitizeCsvUrl,
-  parseCsv,
-  headerIndexMap,
   buildRecordSourceUrl,
   truncateRaw
 } = require('../server/scrapers/fhfa-hpi');
 
 const fhfaScraper = require('../server/scrapers/fhfa-hpi');
 
-const SAMPLE_CSV = [
-  'Series,Geography,Geo_short,Period,Index_nsa,Index_sa',
-  'ST-CA,California,CA,2026Q1,418.7,420.1',
-  'ST-NY,New York,NY,2026Q1,395.4,397.8',
-  'ST-TX,Texas,TX,2026Q1,328.9,330.2',
-  'ST-FL,Florida,FL,2026Q1,402.5,404.6',
-  'ME-12420,New York-Newark-Jersey City,NY,2026Q1,389.1,391.4',
-  'DV-2,Mid-Atlantic,NJ,2026Q1,372.8,374.2',
-  'US,United States,US,2026Q1,335.6,337.0',
-  'ST-CA,California,CA,2025Q4,415.2,418.0',
-  'ST-CA,California,CA,2025Q3,412.9,415.1',
-  ',,,,,' // empty row should be ignored
-].join('\n');
+const { sha256Hex, STATE_NAME_TO_CODE } = require('../server/enrichment/fhfa-state-hpi');
+
+// Live publisher shape: one row per state, seasonally-adjusted percent
+// changes for the current release. No period column, no index levels.
+const LIVE_HEADER = 'State,Rank,"1 Quarter","1 Year","5 Year","Since 1991"';
+
+// The live endpoint publishes 50 states + DC. Puerto Rico is not part of
+// the published state index; exclude it from the happy-path fixture.
+const PUBLISHED_STATE_NAMES = Object.keys(STATE_NAME_TO_CODE)
+  .filter((name) => name !== 'Puerto Rico');
+
+function fixtureValues(index) {
+  return {
+    rank: index + 1,
+    quarterPct: Number(((index % 12) - 6).toFixed(1)),
+    yoyPct: Number(((index % 15) - 7).toFixed(1)),
+    fiveYearPct: Number(((index % 20) + 1).toFixed(1)),
+    since1991Pct: Number(((index % 25) + 40).toFixed(1))
+  };
+}
+
+function buildStateCsv(names = PUBLISHED_STATE_NAMES) {
+  const rows = names.map((name, index) => {
+    const values = fixtureValues(index);
+    return [
+      name,
+      values.rank,
+      `"${values.quarterPct.toFixed(1)}"`,
+      `"${values.yoyPct.toFixed(1)}"`,
+      `"${values.fiveYearPct.toFixed(1)}"`,
+      `"${values.since1991Pct.toFixed(1)}"`
+    ].join(',');
+  });
+  return [LIVE_HEADER, ...rows].join('\n');
+}
+
+const SAMPLE_CSV = buildStateCsv();
 
 function makeFetch(text = SAMPLE_CSV, { ok = true, status = 200 } = {}) {
   return async (input, init) => {
@@ -66,19 +88,32 @@ test('module exports the singleton and the class with the right shape', () => {
   assert.equal(typeof fhfaScraper.buildRecordSourceUrl, 'function');
   assert.equal(SOURCE_KEY, 'fhfa-hpi');
   assert.equal(PUBLISHER, 'FHFA');
-  assert.match(DEFAULT_CSV_URL, /^https:\/\/www\.fhfa\.gov\/DataTools\/Downloads\/Documents\/HPI\/HPI_AT_state\.csv$/);
-  assert.equal(DEFAULT_MAX_RECORDS, 50);
+  assert.equal(DEFAULT_CSV_URL, 'https://www.fhfa.gov/hpi-state/csv');
+  assert.equal(DEFAULT_MAX_RECORDS, 100);
   assert.equal(MAX_RECORDS_CAP, 5_000);
   assert.equal(MAX_CSV_BYTES, 1_048_576);
-  assert.equal(STATE_LEVEL_PREFIX, 'ST-');
+  assert.equal(MIN_STATE_ROWS, 50);
+  assert.equal(STATE_NAME_TO_CODE.Ohio, 'OH');
 });
 
 test('reads FHFA_HPI_CSV_URL from environment when not passed as option', () => {
   const original = process.env.FHFA_HPI_CSV_URL;
   try {
+    process.env.FHFA_HPI_CSV_URL = 'https://fhfa.gov/hpi-state/csv';
+    const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch() });
+    assert.equal(scraper.csvUrl, 'https://fhfa.gov/hpi-state/csv');
+  } finally {
+    if (original === undefined) delete process.env.FHFA_HPI_CSV_URL;
+    else process.env.FHFA_HPI_CSV_URL = original;
+  }
+});
+
+test('a retired DataTools URL from the environment falls back to the live endpoint', () => {
+  const original = process.env.FHFA_HPI_CSV_URL;
+  try {
     process.env.FHFA_HPI_CSV_URL = 'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv';
     const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch() });
-    assert.equal(scraper.csvUrl, 'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv');
+    assert.equal(scraper.csvUrl, DEFAULT_CSV_URL);
   } finally {
     if (original === undefined) delete process.env.FHFA_HPI_CSV_URL;
     else process.env.FHFA_HPI_CSV_URL = original;
@@ -101,7 +136,7 @@ test('constructor option overrides env vars', () => {
   const originalCsv = process.env.FHFA_HPI_CSV_URL;
   const originalMax = process.env.FHFA_HPI_MAX_RECORDS;
   try {
-    process.env.FHFA_HPI_CSV_URL = 'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv';
+    process.env.FHFA_HPI_CSV_URL = 'https://fhfa.gov/hpi-state/csv';
     process.env.FHFA_HPI_MAX_RECORDS = '999';
     const scraper = new FhfaHpiScraper({
       fetchImpl: makeFetch(),
@@ -145,115 +180,67 @@ test('falls back to MAX_CSV_BYTES when maxCsvBytes is invalid', () => {
   assert.equal(scraper.maxCsvBytes, MAX_CSV_BYTES);
 });
 
-test('sanitizeCsvUrl accepts canonical published URLs', () => {
+test('sanitizeCsvUrl accepts only the live hpi-state/csv endpoint', () => {
   assert.equal(
-    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv'),
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv'
+    sanitizeCsvUrl('https://www.fhfa.gov/hpi-state/csv'),
+    'https://www.fhfa.gov/hpi-state/csv'
   );
   assert.equal(
-    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv'),
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv'
+    sanitizeCsvUrl('https://fhfa.gov/hpi-state/csv'),
+    'https://fhfa.gov/hpi-state/csv'
   );
   assert.equal(
-    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_division.csv'),
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_division.csv'
-  );
-  assert.equal(
-    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_national.csv'),
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_national.csv'
+    sanitizeCsvUrl('https://www.fhfa.gov/hpi-state/csv/'),
+    'https://www.fhfa.gov/hpi-state/csv/'
   );
 });
 
-test('sanitizeCsvUrl rejects unrelated hosts and non-CSV paths', () => {
-  assert.equal(sanitizeCsvUrl('https://example.com/HPI_AT_state.csv'), DEFAULT_CSV_URL);
-  assert.equal(sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/'), DEFAULT_CSV_URL);
+test('sanitizeCsvUrl rejects the retired DataTools path and unrelated URLs', () => {
+  assert.equal(
+    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv'),
+    DEFAULT_CSV_URL,
+    'retired per-(state, period) file path'
+  );
+  assert.equal(
+    sanitizeCsvUrl('https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_metro.csv'),
+    DEFAULT_CSV_URL,
+    'retired metro file path'
+  );
+  assert.equal(sanitizeCsvUrl('https://example.com/hpi-state/csv'), DEFAULT_CSV_URL);
+  assert.equal(sanitizeCsvUrl('https://www.fhfa.gov/some/other/path.csv'), DEFAULT_CSV_URL);
   assert.equal(sanitizeCsvUrl('https://www.fhfa.gov/'), DEFAULT_CSV_URL);
+  assert.equal(sanitizeCsvUrl('https://www.fhfa.gov/hpi-state'), DEFAULT_CSV_URL);
+  assert.equal(sanitizeCsvUrl('https://www.fhfa.gov/hpi-state/csv?geo=OH'), DEFAULT_CSV_URL);
+  assert.equal(sanitizeCsvUrl('http://www.fhfa.gov/hpi-state/csv'), DEFAULT_CSV_URL);
   assert.equal(sanitizeCsvUrl(''), DEFAULT_CSV_URL);
   assert.equal(sanitizeCsvUrl(null), DEFAULT_CSV_URL);
   assert.equal(sanitizeCsvUrl(undefined), DEFAULT_CSV_URL);
   assert.equal(sanitizeCsvUrl(42), DEFAULT_CSV_URL);
 });
 
-test('sanitizeCsvUrl rejects HTTP (non-HTTPS) URLs', () => {
-  assert.equal(
-    sanitizeCsvUrl('http://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv'),
-    DEFAULT_CSV_URL
-  );
-});
-
 test('getCollectionScope returns a stable, comparable descriptor', () => {
   const scraper = makeScraper();
   const scope = scraper.getCollectionScope();
   assert.deepEqual(scope, {
-    endpoint: '/DataTools/Downloads/Documents/HPI',
+    endpoint: '/hpi-state/csv',
     csvUrl: DEFAULT_CSV_URL,
     level: 'state',
-    stateLevelPrefix: 'ST-',
     maxRecords: DEFAULT_MAX_RECORDS,
     maxCsvBytes: MAX_CSV_BYTES
   });
 });
 
-test('parseCsv handles a simple FHFA-shaped CSV correctly', () => {
-  const rows = parseCsv(SAMPLE_CSV);
-  assert.equal(rows.length, 11);
-  assert.deepEqual(rows[0], ['Series', 'Geography', 'Geo_short', 'Period', 'Index_nsa', 'Index_sa']);
-  assert.deepEqual(rows[1], ['ST-CA', 'California', 'CA', '2026Q1', '418.7', '420.1']);
-});
-
-test('parseCsv handles quoted fields with embedded commas', () => {
-  const text = 'Series,Geography,Period\n"ST-CA","San Francisco, Bay Area","2026Q1"\n';
-  const rows = parseCsv(text);
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows[1], ['ST-CA', 'San Francisco, Bay Area', '2026Q1']);
-});
-
-test('parseCsv handles escaped double quotes inside quoted fields', () => {
-  const text = 'Series,Geography,Period\n"ST-CA","He said ""hi""","2026Q1"\n';
-  const rows = parseCsv(text);
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows[1], ['ST-CA', 'He said "hi"', '2026Q1']);
-});
-
-test('parseCsv ignores empty trailing lines', () => {
-  const text = 'Series,Geography,Period\nST-CA,California,2026Q1\n\n';
-  const rows = parseCsv(text);
-  assert.equal(rows.length, 2);
-});
-
-test('parseCsv handles \\r\\n line endings', () => {
-  const text = 'Series,Geography,Period\r\nST-CA,California,2026Q1\r\n';
-  const rows = parseCsv(text);
-  assert.equal(rows.length, 2);
-  assert.deepEqual(rows[1], ['ST-CA', 'California', '2026Q1']);
-});
-
-test('headerIndexMap normalizes column keys to lowercase', () => {
-  const map = headerIndexMap(['Series', 'Geography', 'Geo_short', 'Period', 'Index_nsa', 'Index_sa']);
-  assert.equal(map.series, 0);
-  assert.equal(map.geography, 1);
-  assert.equal(map.geo_short, 2);
-  assert.equal(map.period, 3);
-  assert.equal(map.index_nsa, 4);
-  assert.equal(map.index_sa, 5);
-});
-
-test('headerIndexMap accepts GeoShort (no underscore) variant', () => {
-  const map = headerIndexMap(['Series', 'Geography', 'GeoShort', 'Period']);
-  assert.equal(map.geoshort, 2);
-});
-
-test('buildRecordSourceUrl produces a stable per-row URL', () => {
+test('buildRecordSourceUrl identifies the state row of the live CSV', () => {
   const url = buildRecordSourceUrl({
     csvUrl: DEFAULT_CSV_URL,
-    geography: 'CA',
-    period: '2026Q1'
+    state: 'CA'
   });
   const parsed = new URL(url);
   assert.equal(parsed.origin, 'https://www.fhfa.gov');
-  assert.equal(parsed.pathname, '/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv');
+  assert.equal(parsed.pathname, '/hpi-state/csv');
   assert.equal(parsed.searchParams.get('geo'), 'CA');
-  assert.equal(parsed.searchParams.get('period'), '2026Q1');
+  assert.equal([...parsed.searchParams.keys()].length, 1);
+  assert.equal(parsed.searchParams.get('period'), null);
 });
 
 test('truncateRaw passes through short payloads unchanged', () => {
@@ -282,35 +269,79 @@ test('FhfaHpiError defaults to UPSTREAM_UNAVAILABLE code', () => {
   assert.equal(err.code, 'FHFA_HPI_UPSTREAM_UNAVAILABLE');
 });
 
-test('scrapeFeed returns one record per state/period (state-level only)', async () => {
-  const scraper = makeScraper();
+test('scrapeFeed returns one record per published state', async () => {
+  const scraper = makeScraper({ maxRecords: 60 });
   const records = await scraper.scrapeFeed();
-  // 4 state-level rows in 2026Q1 (CA/NY/TX/FL) + 2 state-level rows for CA in 2025Q4 + 2025Q3 = 6
-  assert.equal(records.length, 6);
+  assert.equal(records.length, PUBLISHED_STATE_NAMES.length);
   assert.ok(records.every((record) => record.source === SOURCE_KEY));
   assert.ok(records.every((record) => /^[A-Z]{2}$/.test(record.state)));
+  assert.equal(new Set(records.map((record) => record.id)).size, records.length);
 });
 
-test('scrapeFeed skips non-state-level rows (metro, division, national)', async () => {
+test('the default run covers every published state row and reports success', async () => {
   const scraper = makeScraper();
   const records = await scraper.scrapeFeed();
-  const seriesList = records.map((record) => record.provenance.sourceFacts.series);
-  assert.ok(seriesList.every((series) => series.startsWith('ST-')));
-  assert.ok(!seriesList.includes('ME-12420'));
-  assert.ok(!seriesList.includes('DV-2'));
-  assert.ok(!seriesList.includes('US'));
+  assert.equal(records.length, PUBLISHED_STATE_NAMES.length);
+  assert.ok(records.length <= DEFAULT_MAX_RECORDS);
+  assert.equal(scraper.lastRunReport.outcome, 'success');
+  assert.equal(scraper.lastRunReport.complete, true);
+  assert.equal(scraper.lastRunReport.recordsDiscovered, PUBLISHED_STATE_NAMES.length);
 });
 
-test('scrapeFeed emits the canonical sourceUrl pointing at the (geo, period) row', async () => {
+test('scrapeFeed emits the live state-summary address label', async () => {
   const scraper = makeScraper();
   const records = await scraper.scrapeFeed();
-  const ca = records.find((record) => record.state === 'CA' && /2026Q1/.test(record.address));
+  const ca = records.find((record) => record.state === 'CA');
+  assert.ok(ca);
+  assert.equal(ca.id, 'fhfa-hpi-CA');
+  assert.equal(ca.address, 'FHFA HPI State Summary for California (SA percent changes)');
+});
+
+test('scrapeFeed emits the canonical sourceUrl pointing at the state row', async () => {
+  const scraper = makeScraper();
+  const records = await scraper.scrapeFeed();
+  const ca = records.find((record) => record.state === 'CA');
   assert.ok(ca);
   const url = new URL(ca.sourceUrl);
   assert.equal(url.hostname, 'www.fhfa.gov');
-  assert.equal(url.pathname, '/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv');
+  assert.equal(url.pathname, '/hpi-state/csv');
   assert.equal(url.searchParams.get('geo'), 'CA');
-  assert.equal(url.searchParams.get('period'), '2026Q1');
+  assert.deepEqual([...url.searchParams.keys()], ['geo']);
+  assert.equal(url.searchParams.get('period'), null);
+});
+
+test('scrapeFeed emits observed seasonally-adjusted percent changes with the dataset sha256', async () => {
+  const scraper = makeScraper();
+  const records = await scraper.scrapeFeed();
+  const ca = records.find((record) => record.state === 'CA');
+  const expected = fixtureValues(PUBLISHED_STATE_NAMES.indexOf('California'));
+  assert.ok(ca);
+  const facts = ca.provenance.sourceFacts;
+  assert.equal(facts.indexType, 'SA');
+  assert.equal(facts.quarterPct, expected.quarterPct);
+  assert.equal(facts.yoyPct, expected.yoyPct);
+  assert.equal(facts.fiveYearPct, expected.fiveYearPct);
+  assert.equal(facts.since1991Pct, expected.since1991Pct);
+  assert.equal(facts.rank, expected.rank);
+  assert.equal(facts.state, 'CA');
+  assert.equal(facts.stateName, 'California');
+  assert.match(facts.datasetSha256, /^[a-f0-9]{64}$/);
+  assert.equal(facts.datasetSha256, sha256Hex(SAMPLE_CSV));
+  assert.equal(facts.csvUrl, DEFAULT_CSV_URL);
+  assert.equal(facts.recordUrl, ca.sourceUrl);
+});
+
+test('sourceFacts never carry period, geo_short, series, or index levels', async () => {
+  const scraper = makeScraper();
+  const records = await scraper.scrapeFeed();
+  for (const record of records) {
+    const facts = record.provenance.sourceFacts;
+    for (const banned of ['period', 'geo_short', 'geoshort', 'series', 'indexNsa', 'indexSa', 'index_nsa', 'index_sa']) {
+      assert.equal(Object.prototype.hasOwnProperty.call(facts, banned), false, `unexpected key ${banned}`);
+    }
+    assert.equal(typeof facts.quarterPct, 'number');
+    assert.equal(typeof facts.yoyPct, 'number');
+  }
 });
 
 test('mapped listings pass the ingestion validation contract when state is known', async () => {
@@ -324,36 +355,12 @@ test('mapped listings pass the ingestion validation contract when state is known
   }
 });
 
-test('mapped listings fail ingestion when state is unknown (defensive check)', async () => {
-  const { validateListingForIngestion } = require('../server/scrapers/validation');
-  const header = headerIndexMap(['Series', 'Geography', 'Geo_short', 'Period', 'Index_nsa', 'Index_sa']);
+test('mapStateRecord returns null for an unknown state code', async () => {
   const scraper = makeScraper();
-  const bogusRow = ['ST-XX', 'Nowhere', 'XX', '2026Q1', '100.0', '101.0'];
-  const listing = scraper.mapHpiRecord(bogusRow, header, {
+  const listing = scraper.mapStateRecord('ZZ', { rank: 1, quarterPct: 1, yoyPct: 2, fiveYearPct: 3, since1991Pct: 4 }, {
     csvUrl: DEFAULT_CSV_URL,
-    observedAt: new Date().toISOString()
-  });
-  assert.equal(listing, null);
-});
-
-test('mapped listings skip rows with bad period strings', () => {
-  const header = headerIndexMap(['Series', 'Geography', 'Geo_short', 'Period', 'Index_nsa', 'Index_sa']);
-  const scraper = makeScraper();
-  const bad = ['ST-CA', 'California', 'CA', '2026Q5', '418.7', '420.1']; // Q5 is invalid
-  const listing = scraper.mapHpiRecord(bad, header, {
-    csvUrl: DEFAULT_CSV_URL,
-    observedAt: new Date().toISOString()
-  });
-  assert.equal(listing, null);
-});
-
-test('mapped listings skip rows where neither index_nsa nor index_sa is present', () => {
-  const header = headerIndexMap(['Series', 'Geography', 'Geo_short', 'Period', 'Index_nsa', 'Index_sa']);
-  const scraper = makeScraper();
-  const bad = ['ST-CA', 'California', 'CA', '2026Q1', '', ''];
-  const listing = scraper.mapHpiRecord(bad, header, {
-    csvUrl: DEFAULT_CSV_URL,
-    observedAt: new Date().toISOString()
+    observedAt: new Date().toISOString(),
+    datasetSha256: sha256Hex(SAMPLE_CSV)
   });
   assert.equal(listing, null);
 });
@@ -366,7 +373,8 @@ test('mapped listings emit provenance.observed=true and a publisher label', asyn
     assert.equal(record.provenance.origin, 'live');
     assert.equal(record.provenance.observed, true);
     assert.equal(record.provenance.publisher, PUBLISHER);
-    assert.match(record.provenance.recordId, /^fhfa-hpi-[A-Z]{2}-\d{4}Q[1-4]$/);
+    assert.equal(record.provenance.recordId, `fhfa-hpi-${record.state}`);
+    assert.equal(typeof Date.parse(record.provenance.observedAt), 'number');
   }
 });
 
@@ -395,14 +403,20 @@ test('mapped listings leave property-shape fields null (no bid, year, beds, etc.
 });
 
 test('raw payload is retained on the WeakMap and retrievable by listing', async () => {
+  const stateCodeToName = Object.fromEntries(
+    Object.entries(STATE_NAME_TO_CODE).map(([name, code]) => [code, name])
+  );
   const scraper = makeScraper();
   const records = await scraper.scrapeFeed();
   for (const listing of records) {
     const raw = scraper.getRawPublisherRecord(listing);
     assert.ok(raw);
-    assert.match(raw.series, /^ST-[A-Z]{2}$/);
-    assert.match(raw.period, /^\d{4}Q[1-4]$/);
-    assert.equal(raw.geo_short, listing.state);
+    assert.equal(raw.state, listing.state);
+    assert.equal(raw.stateName, stateCodeToName[listing.state]);
+    assert.equal(raw.indexType, 'SA');
+    assert.equal(typeof raw.quarterPct, 'number');
+    assert.ok(!('period' in raw));
+    assert.ok(!('series' in raw));
   }
 });
 
@@ -422,17 +436,17 @@ test('lastRunReport is null before scrapeFeed runs', () => {
 });
 
 test('lastRunReport is populated after a successful scrape', async () => {
-  const scraper = makeScraper({ maxRecords: 10 });
+  const scraper = makeScraper({ maxRecords: 60 });
   await scraper.scrapeFeed();
   const report = scraper.lastRunReport;
   assert.ok(report);
+  assert.equal(report.outcome, 'success');
   assert.equal(report.fixtureFallbackUsed, false);
   assert.equal(typeof report.bytes, 'number');
   assert.ok(report.bytes > 0);
-  assert.equal(report.recordsDiscovered, 10); // 10 non-empty data rows in SAMPLE_CSV
-  assert.ok(report.recordsEmitted > 0);
-  assert.ok(report.recordsEmitted <= 10);
-  assert.equal(typeof report.recordsRejected, 'number');
+  assert.equal(report.recordsDiscovered, PUBLISHED_STATE_NAMES.length);
+  assert.equal(report.recordsEmitted, PUBLISHED_STATE_NAMES.length);
+  assert.equal(report.recordsRejected, 0);
   assert.equal(report.complete, true);
   assert.equal(report.fullSweepComplete, true);
 });
@@ -442,6 +456,7 @@ test('lastRunReport marks the run partial when maxRecords truncates the discover
   await scraper.scrapeFeed();
   const report = scraper.lastRunReport;
   assert.equal(report.recordsEmitted, 2);
+  assert.equal(report.outcome, 'partial_success');
   assert.equal(report.complete, false);
   assert.equal(report.fullSweepComplete, false);
 });
@@ -476,17 +491,8 @@ test('rejects when the CSV response is too large', async () => {
   );
 });
 
-test('rejects when the CSV has no data rows (header only)', async () => {
-  const csv = 'Series,Geography,Geo_short,Period,Index_nsa,Index_sa\n';
-  const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch(csv), maxRecords: 5 });
-  await assert.rejects(
-    scraper.scrapeFeed(),
-    (err) => err instanceof FhfaHpiError && err.code === 'FHFA_HPI_EMPTY_RESPONSE'
-  );
-});
-
-test('rejects when a required CSV column is missing', async () => {
-  const csv = 'Series,Geography,Geo_short,Period\nST-CA,California,CA,2026Q1\n';
+test('rejects with MISSING_COLUMN when a metric column is absent', async () => {
+  const csv = 'State,Rank,"1 Quarter","5 Year","Since 1991"\nAlabama,1,"1.0","15.0","120.0"\n';
   const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch(csv), maxRecords: 5 });
   await assert.rejects(
     scraper.scrapeFeed(),
@@ -494,12 +500,30 @@ test('rejects when a required CSV column is missing', async () => {
   );
 });
 
-test('rejects when the CSV lacks the geo_short column', async () => {
-  const csv = 'Series,Geography,Period,Index_nsa,Index_sa\nST-CA,California,2026Q1,418.7,420.1\n';
+test('rejects the retired DataTools header shape with MISSING_COLUMN', async () => {
+  const csv = 'Series,Geography,Geo_short,Period,Index_nsa,Index_sa\nST-CA,California,CA,2026Q1,418.7,420.1\n';
   const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch(csv), maxRecords: 5 });
   await assert.rejects(
     scraper.scrapeFeed(),
     (err) => err instanceof FhfaHpiError && err.code === 'FHFA_HPI_MISSING_COLUMN'
+  );
+});
+
+test('rejects with INSUFFICIENT_ROWS when fewer than 50 states are published', async () => {
+  const csv = buildStateCsv(PUBLISHED_STATE_NAMES.slice(0, 3));
+  const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch(csv), maxRecords: 5 });
+  await assert.rejects(
+    scraper.scrapeFeed(),
+    (err) => err instanceof FhfaHpiError && err.code === 'FHFA_HPI_INSUFFICIENT_ROWS'
+  );
+});
+
+test('rejects with INSUFFICIENT_ROWS when the CSV is header-only', async () => {
+  const csv = `${LIVE_HEADER}\n`;
+  const scraper = new FhfaHpiScraper({ fetchImpl: makeFetch(csv), maxRecords: 5 });
+  await assert.rejects(
+    scraper.scrapeFeed(),
+    (err) => err instanceof FhfaHpiError && err.code === 'FHFA_HPI_INSUFFICIENT_ROWS'
   );
 });
 
@@ -512,85 +536,89 @@ test('rejects when the CSV response is empty (base layer rejects empty text)', a
   );
 });
 
-test('mapped listings never fabricate a property class, year, beds, baths, or sqft', async () => {
+test('mapped listings never fabricate a property value and carry the area-index caveat', async () => {
   const scraper = makeScraper();
   const records = await scraper.scrapeFeed();
   for (const record of records) {
     const caveat = record.provenance.sourceFacts.caveat;
-    assert.match(caveat, /No bid, sale date, occupancy, year, beds, baths, sqft/);
-    assert.equal(record.provenance.sourceFacts.enrichmentSource, true);
+    assert.match(caveat, /Not index levels and not the value of any specific property/);
+    assert.match(caveat, /no bid, sale date, occupancy, or property facts are implied/);
     assert.equal(record.provenance.sourceFacts.evidenceClass, 'area_house_price_index');
+    assert.equal(record.openingBid, null);
+    assert.equal(record.price, null);
+    assert.equal(record.estLow, null);
+    assert.equal(record.estHigh, null);
   }
 });
 
-test('source-policy accepts canonical FHFA HPI per-row URLs', () => {
+test('source-policy accepts the live per-state record URLs', () => {
   const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
-  const ok = inspectSourceRecordUrl(
-    'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026Q1'
-  );
+  const ok = inspectSourceRecordUrl('fhfa-hpi', 'https://www.fhfa.gov/hpi-state/csv?geo=CA');
   assert.equal(ok.isValid, true, JSON.stringify(ok));
-  assert.match(ok.url, /^https:\/\/www\.fhfa\.gov\/DataTools\/Downloads\/Documents\/HPI\/HPI_AT_state\.csv\?geo=CA&period=2026Q1$/);
+  assert.match(ok.url, /^https:\/\/www\.fhfa\.gov\/hpi-state\/csv\?geo=CA$/);
+  const bare = inspectSourceRecordUrl('fhfa-hpi', 'https://www.fhfa.gov/hpi-state/csv');
+  assert.equal(bare.isValid, true, JSON.stringify(bare));
 });
 
 test('source-policy rejects FHFA HPI URLs on unrelated hosts', () => {
   const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
   const bad = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://example.com/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026Q1'
+    'https://example.com/hpi-state/csv?geo=CA'
   );
   assert.equal(bad.isValid, false);
   assert.equal(bad.error, 'source_host_mismatch');
 });
 
-test('source-policy rejects FHFA HPI URLs on a different file path', () => {
+test('source-policy rejects FHFA HPI URLs on the retired DataTools path', () => {
   const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
   const bad = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/some/other/path.csv?geo=CA&period=2026Q1'
+    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026Q1'
   );
   assert.equal(bad.isValid, false);
   assert.equal(bad.error, 'source_url_not_exact_record');
 });
 
-test('source-policy rejects FHFA HPI URLs without both geo and period', () => {
+test('source-policy rejects FHFA HPI URLs with unknown query keys or bad geo', () => {
   const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
-  const noGeo = inspectSourceRecordUrl(
+  const period = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?period=2026Q1'
+    'https://www.fhfa.gov/hpi-state/csv?geo=CA&period=2026Q1'
   );
-  assert.equal(noGeo.isValid, false);
-  const noPeriod = inspectSourceRecordUrl(
+  assert.equal(period.isValid, false, 'period is not part of the shape');
+  const extra = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA'
+    'https://www.fhfa.gov/hpi-state/csv?geo=CA&extra=x'
   );
-  assert.equal(noPeriod.isValid, false);
-  const extras = inspectSourceRecordUrl(
+  assert.equal(extra.isValid, false);
+  const onlyPeriod = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026Q1&extra=x'
+    'https://www.fhfa.gov/hpi-state/csv?period=2026Q1'
   );
-  assert.equal(extras.isValid, false);
-});
-
-test('source-policy rejects FHFA HPI URLs with malformed geo or period', () => {
-  const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
+  assert.equal(onlyPeriod.isValid, false);
   const badGeo = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=ZZ&period=2026Q1'
+    'https://www.fhfa.gov/hpi-state/csv?geo=ZZ'
   );
   assert.equal(badGeo.isValid, false);
-  const badPeriod = inspectSourceRecordUrl(
+  const emptyGeo = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'https://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026-04'
+    'https://www.fhfa.gov/hpi-state/csv?geo='
   );
-  assert.equal(badPeriod.isValid, false);
+  assert.equal(emptyGeo.isValid, false);
+  const otherPath = inspectSourceRecordUrl(
+    'fhfa-hpi',
+    'https://www.fhfa.gov/some/other/path.csv?geo=CA'
+  );
+  assert.equal(otherPath.isValid, false, 'only /hpi-state/csv is accepted');
 });
 
 test('source-policy rejects FHFA HPI URLs on http (not https)', () => {
   const { inspectSourceRecordUrl } = require('../server/scrapers/source-policy');
   const bad = inspectSourceRecordUrl(
     'fhfa-hpi',
-    'http://www.fhfa.gov/DataTools/Downloads/Documents/HPI/HPI_AT_state.csv?geo=CA&period=2026Q1'
+    'http://www.fhfa.gov/hpi-state/csv?geo=CA'
   );
   assert.equal(bad.isValid, false);
   assert.equal(bad.error, 'unsafe_source_url');

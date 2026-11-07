@@ -31,6 +31,8 @@ function buildProviderSnapshot({ provider, env = process.env, circuits = {}, cac
   const keyLength = requiresKey && typeof env[keyEnvVar] === 'string' ? env[keyEnvVar].trim().length : 0;
   // A provider is "configured" if it either doesn't require a key
   // (community/free providers like Panoramax) or its required key is set.
+  // The actual key length is internal and is not exposed publicly; only the
+  // configured boolean is returned.
   const keyConfigured = !requiresKey || keyLength > 0;
   const circuit = circuits[provider.id] || null;
   const status = snapshotCircuit(circuit, now);
@@ -41,7 +43,6 @@ function buildProviderSnapshot({ provider, env = process.env, circuits = {}, cac
     keyEnvVar,
     requiresKey,
     keyConfigured,
-    keyLength: keyConfigured ? keyLength : 0,
     circuit: status,
     cache: cache && provider.cacheable ? cache.stats() : null,
     lastCheckedAt: new Date(now()).toISOString()

@@ -1,149 +1,248 @@
 'use strict';
 
+// test/enrichment/macro-valuation-data.test.js
+//
+// County macro trends after the fabricated 21-county benchmark table was
+// removed. Trends are observed context only, never a per-property dollar
+// band:
+//   - an ETL-produced dynamic county benchmark (county-market-benchmarks.json)
+//     is served when present (source PUBLIC_COUNTY_BENCHMARKS, observed true);
+//   - otherwise the observed statewide FHFA HPI summary is the context
+//     (source FHFA_STATE_HPI_SUMMARY), and an unobserved state fails closed
+//     (null temperature, null source, observed false);
+//   - classifyMarketTemperature(null) no longer lies 'balanced';
+//   - the module exports no COUNTY_MARKET_BENCHMARKS and no output may
+//     contain the retired 'FHFA_AND_PUBLIC_BENCHMARKS' source label.
+
 const test = require('node:test');
+const { before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
-const {
-  DISCLAIMER,
-  COUNTY_MARKET_BENCHMARKS,
-  normalizeCountyKey,
-  deriveStateHpiYoy,
-  classifyMarketTemperature,
-  getCountyMarketTrends,
-  enrichListingWithMacroTrends
-} = require('../../server/enrichment/macro-valuation-data');
+const stateHpi = require('../../server/enrichment/fhfa-state-hpi');
+const macroData = require('../../server/enrichment/macro-valuation-data');
 
-test('getCountyMarketTrends retrieves verified benchmarks for major counties', () => {
-  // 1. Cuyahoga County, OH
-  const cuyahoga = getCountyMarketTrends('OH', 'Cuyahoga');
-  assert.equal(cuyahoga.state, 'OH');
-  assert.equal(cuyahoga.county, 'Cuyahoga');
-  assert.equal(cuyahoga.medianSalePrice, 215000);
-  assert.equal(cuyahoga.yoyPriceChangePct, 5.4);
-  assert.equal(cuyahoga.marketTemperature, 'hot');
-  assert.ok(cuyahoga.trendLabel.includes('+5.4% YoY'));
-  assert.equal(cuyahoga.source, 'FHFA_AND_PUBLIC_BENCHMARKS');
-  assert.equal(cuyahoga.disclaimer, DISCLAIMER);
+const FIXED_RETRIEVED_AT = '2026-01-05T00:00:00.000Z';
 
-  // Normalization with "County" suffix
-  const cuyahogaSuffix = getCountyMarketTrends('OH', 'Cuyahoga County');
-  assert.equal(cuyahogaSuffix.medianSalePrice, 215000);
+// --- offline observed-snapshot fixture (no network) ----------------------
 
-  // 2. Cook County, IL
-  const cook = getCountyMarketTrends('IL', 'Cook');
-  assert.equal(cook.state, 'IL');
-  assert.equal(cook.county, 'Cook');
-  assert.equal(cook.medianSalePrice, 335000);
-  assert.equal(cook.yoyPriceChangePct, 4.2);
-  assert.equal(cook.marketTemperature, 'balanced');
-  assert.ok(cook.trendLabel.includes('+4.2% YoY'));
+function buildFixtureCsv() {
+  const lines = ['State,Rank,"1 Quarter","1 Year","5 Year","Since 1991"'];
+  const explicitYoy = { OH: '4.41', AK: '8.30', CA: '-0.20' };
+  let index = 0;
+  for (const [name, code] of Object.entries(stateHpi.STATE_NAME_TO_CODE)) {
+    index += 1;
+    const yoy = explicitYoy[code] !== undefined
+      ? explicitYoy[code]
+      : (index / 10 - 3).toFixed(2); // deterministic, distinct per state
+    const quarterPct = ((index % 5) * 0.2).toFixed(2);
+    const fiveYearPct = (index * 1.1).toFixed(2);
+    const since1991Pct = (100 + index * 2).toFixed(2);
+    lines.push(`${name},${index},${quarterPct},${yoy},${fiveYearPct},${since1991Pct}`);
+  }
+  return lines.join('\n');
+}
 
-  // 3. Orange County, FL
-  const orange = getCountyMarketTrends('FL', 'Orange County');
-  assert.equal(orange.state, 'FL');
-  assert.equal(orange.county, 'Orange');
-  assert.equal(orange.medianSalePrice, 425000);
-  assert.equal(orange.yoyPriceChangePct, 3.8);
-  assert.equal(orange.marketTemperature, 'hot');
-  assert.ok(orange.trendLabel.includes('+3.8% YoY'));
-
-  // 4. Philadelphia County, PA
-  const phila = getCountyMarketTrends('PA', 'Philadelphia');
-  assert.equal(phila.state, 'PA');
-  assert.equal(phila.county, 'Philadelphia');
-  assert.equal(phila.medianSalePrice, 240000);
-  assert.equal(phila.yoyPriceChangePct, 3.1);
-  assert.equal(phila.marketTemperature, 'balanced');
-
-  // 5. Bexar County, TX
-  const bexar = getCountyMarketTrends('TX', 'Bexar');
-  assert.equal(bexar.state, 'TX');
-  assert.equal(bexar.county, 'Bexar');
-  assert.equal(bexar.medianSalePrice, 305000);
-  assert.equal(bexar.yoyPriceChangePct, 2.5);
-  assert.equal(bexar.marketTemperature, 'balanced');
+const FIXTURE_SNAPSHOT = stateHpi.buildStateHpiSnapshot({
+  sourceUrl: 'https://www.fhfa.gov/hpi-state/csv',
+  retrievedAt: FIXED_RETRIEVED_AT,
+  csvText: buildFixtureCsv(),
 });
 
-test('getCountyMarketTrends provides clean fallback for unbenchmarked rural counties', () => {
-  // Rural county in Nebraska (Cherry County)
-  const ruralNe = getCountyMarketTrends('NE', 'Cherry');
-  assert.equal(ruralNe.state, 'NE');
-  assert.equal(ruralNe.county, 'Cherry');
-  assert.equal(ruralNe.medianSalePrice, null, 'Unbenchmarked rural county median sale price must be null');
-  assert.equal(typeof ruralNe.yoyPriceChangePct, 'number', 'Derives YoY from statewide FHFA HPI index');
-  assert.ok(['hot', 'balanced', 'cold'].includes(ruralNe.marketTemperature));
-  assert.ok(ruralNe.trendLabel.includes('Statewide FHFA Trend'));
-  assert.equal(ruralNe.source, 'FHFA_AND_PUBLIC_BENCHMARKS');
-  assert.equal(ruralNe.disclaimer, DISCLAIMER);
+let fixtureDirectory = null;
+let previousEnvValue;
 
-  // Unknown state/county
-  const unknown = getCountyMarketTrends('XX', 'Nowhere');
-  assert.equal(unknown.state, 'XX');
-  assert.equal(unknown.county, 'Nowhere');
-  assert.equal(unknown.medianSalePrice, null);
-  assert.equal(unknown.yoyPriceChangePct, null);
-  assert.equal(unknown.marketTemperature, 'balanced');
-  assert.equal(unknown.trendLabel, 'Macro Trend Unavailable');
-  assert.equal(unknown.source, 'FHFA_AND_PUBLIC_BENCHMARKS');
+before(() => {
+  fixtureDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'macro-valuation-data-fixture-'));
+  const fixturePath = path.join(fixtureDirectory, 'fhfa-state-hpi.json');
+  fs.writeFileSync(fixturePath, JSON.stringify(FIXTURE_SNAPSHOT), 'utf8');
+  previousEnvValue = process.env.FHFA_STATE_HPI_PATH;
+  process.env.FHFA_STATE_HPI_PATH = fixturePath;
+  stateHpi.invalidateStateHpiCache();
+  macroData.invalidateDynamicBenchmarksCache();
 });
 
-test('enrichListingWithMacroTrends safely attaches macroTrends and preserves honesty invariants', () => {
-  // Listing with existing estLow and estHigh
-  const listingWithEstimates = {
+after(() => {
+  if (previousEnvValue === undefined) delete process.env.FHFA_STATE_HPI_PATH;
+  else process.env.FHFA_STATE_HPI_PATH = previousEnvValue;
+  stateHpi.invalidateStateHpiCache();
+  if (fixtureDirectory) fs.rmSync(fixtureDirectory, { recursive: true, force: true });
+});
+
+// --- module contract -----------------------------------------------------
+
+test('module contract: exports the observed-context API and no fabricated benchmark table', () => {
+  assert.equal(typeof macroData.DISCLAIMER, 'string');
+  for (const key of [
+    'normalizeCountyKey',
+    'deriveStateHpiYoy',
+    'classifyMarketTemperature',
+    'getCountyMarketTrends',
+    'enrichListingWithMacroTrends',
+    'loadDynamicBenchmarks',
+    'invalidateDynamicBenchmarksCache',
+  ]) {
+    assert.equal(typeof macroData[key], 'function', `${key} must be exported`);
+  }
+  assert.ok(!('COUNTY_MARKET_BENCHMARKS' in macroData), 'the hand-written 21-county table must not be exported');
+  assert.equal(macroData.COUNTY_MARKET_BENCHMARKS, undefined);
+});
+
+// --- deriveStateHpiYoy: observed, fixture-based ---------------------------
+
+test('deriveStateHpiYoy: returns the observed statewide FHFA YoY and matches the state HPI module', () => {
+  assert.equal(macroData.deriveStateHpiYoy('OH'), 4.41);
+  assert.equal(macroData.deriveStateHpiYoy('OH'), stateHpi.getStateHpiYoy('OH'));
+  assert.equal(macroData.deriveStateHpiYoy('XX'), null, 'placeholder state codes are never observed');
+});
+
+// --- getCountyMarketTrends ------------------------------------------------
+
+test('getCountyMarketTrends: no county benchmark falls back to observed statewide HPI context', () => {
+  const trends = macroData.getCountyMarketTrends('OH', 'Cuyahoga');
+  assert.equal(trends.state, 'OH');
+  assert.equal(trends.county, 'Cuyahoga');
+  assert.equal(trends.medianSalePrice, null, 'no county benchmark means no county median sale price');
+  assert.equal(trends.yoyPriceChangePct, 4.41);
+  assert.equal(trends.marketTemperature, 'balanced');
+  assert.ok(trends.trendLabel.includes('4.41'), `trendLabel: ${trends.trendLabel}`);
+  assert.equal(trends.source, 'FHFA_STATE_HPI_SUMMARY');
+  assert.equal(trends.observed, true);
+  assert.equal(trends.disclaimer, macroData.DISCLAIMER);
+});
+
+test('getCountyMarketTrends: the committed unverified_legacy envelope is NOT served (fail closed)', () => {
+  // The committed county file predates provenance capture and its source CSV
+  // was not retained, so it is recorded as unverified_legacy and the loader
+  // refuses it: Camden must fall back to the observed statewide context
+  // instead of serving unprovenanced numbers.
+  const trends = macroData.getCountyMarketTrends('NJ', 'Camden');
+  assert.equal(trends.state, 'NJ');
+  assert.equal(trends.county, 'Camden');
+  assert.equal(trends.medianSalePrice, null);
+  assert.notEqual(trends.source, 'PUBLIC_COUNTY_BENCHMARKS');
+  assert.equal(trends.disclaimer, macroData.DISCLAIMER);
+});
+
+test('getCountyMarketTrends: an observed envelope is served via COUNTY_BENCHMARKS_PATH', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'county-env-'));
+  const envelopePath = path.join(tmpDir, 'county-market-benchmarks.json');
+  const originalEnv = process.env.COUNTY_BENCHMARKS_PATH;
+  try {
+    fs.writeFileSync(envelopePath, JSON.stringify({
+      version: 1,
+      generator: 'test fixture',
+      generatedAt: '2026-11-07T00:00:00.000Z',
+      provenance: {
+        status: 'observed',
+        sourceLabel: 'test fixture CSV',
+        inputSha256: 'c'.repeat(64),
+        retrievedAt: '2026-11-07T00:00:00.000Z',
+      },
+      benchmarks: {
+        'NJ-CAMDEN': {
+          state: 'NJ', county: 'Camden', medianSalePrice: 310000,
+          yoyPriceChangePct: 6.5, marketTemperature: 'hot', medianDom: 29,
+          trendLabel: 'HOT Market (+6.5% YoY, 29 median DOM)',
+        },
+      },
+    }), 'utf8');
+    process.env.COUNTY_BENCHMARKS_PATH = envelopePath;
+    macroData.invalidateDynamicBenchmarksCache();
+    const trends = macroData.getCountyMarketTrends('NJ', 'Camden');
+    assert.equal(trends.state, 'NJ');
+    assert.equal(trends.county, 'Camden');
+    assert.equal(trends.medianSalePrice, 310000);
+    assert.equal(trends.yoyPriceChangePct, 6.5);
+    assert.equal(trends.marketTemperature, 'hot');
+    assert.equal(trends.source, 'PUBLIC_COUNTY_BENCHMARKS');
+    assert.equal(trends.observed, true);
+    assert.equal(trends.disclaimer, macroData.DISCLAIMER);
+  } finally {
+    if (originalEnv === undefined) delete process.env.COUNTY_BENCHMARKS_PATH;
+    else process.env.COUNTY_BENCHMARKS_PATH = originalEnv;
+    macroData.invalidateDynamicBenchmarksCache();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('getCountyMarketTrends: an unobserved state fails closed instead of lying balanced', () => {
+  const trends = macroData.getCountyMarketTrends('XX', 'Nowhere');
+  assert.equal(trends.state, 'XX');
+  assert.equal(trends.county, 'Nowhere');
+  assert.equal(trends.medianSalePrice, null);
+  assert.equal(trends.yoyPriceChangePct, null);
+  assert.equal(trends.marketTemperature, null);
+  assert.equal(trends.trendLabel, 'Statewide FHFA trend unobserved');
+  assert.equal(trends.source, null);
+  assert.equal(trends.observed, false);
+  assert.equal(trends.disclaimer, macroData.DISCLAIMER);
+});
+
+// --- classifyMarketTemperature --------------------------------------------
+
+test('classifyMarketTemperature: null/NaN/non-number fail closed; hot/cold/balanced boundaries hold', () => {
+  assert.equal(macroData.classifyMarketTemperature(null), null);
+  assert.equal(macroData.classifyMarketTemperature(Number.NaN), null);
+  assert.equal(macroData.classifyMarketTemperature('5'), null, 'a numeric string is not a number');
+  assert.equal(macroData.classifyMarketTemperature(5), 'hot');
+  assert.equal(macroData.classifyMarketTemperature(4.8), 'hot');
+  assert.equal(macroData.classifyMarketTemperature(1.0), 'cold');
+  assert.equal(macroData.classifyMarketTemperature(3), 'balanced');
+});
+
+// --- normalizeCountyKey ----------------------------------------------------
+
+test('normalizeCountyKey: strips the County suffix into the registry key shape', () => {
+  assert.equal(macroData.normalizeCountyKey('OH', 'Cuyahoga County'), 'OH-CUYAHOGA');
+  assert.equal(macroData.normalizeCountyKey('oh', 'cuyahoga'), 'OH-CUYAHOGA');
+});
+
+// --- enrichListingWithMacroTrends ------------------------------------------
+
+test('enrichListingWithMacroTrends: preserves publisher estimates, never invents them, attaches macroTrends', () => {
+  const withEstimates = macroData.enrichListingWithMacroTrends({
     id: 'listing-oh-101',
-    address: '1234 E 55th St',
-    city: 'Cleveland',
-    county: 'Cuyahoga',
     state: 'OH',
+    county: 'Cuyahoga',
     openingBid: 45000,
     estLow: 110000,
-    estHigh: 135000
-  };
+    estHigh: 135000,
+  });
+  assert.equal(withEstimates.estLow, 110000, 'existing estLow must be preserved');
+  assert.equal(withEstimates.estHigh, 135000, 'existing estHigh must be preserved');
+  assert.ok(withEstimates.macroTrends, 'macroTrends must be attached');
+  assert.equal(withEstimates.macroTrends.state, 'OH');
+  assert.equal(withEstimates.macroTrends.county, 'Cuyahoga');
+  assert.equal(withEstimates.macroTrends.medianSalePrice, null);
+  assert.equal(withEstimates.macroTrends.yoyPriceChangePct, 4.41);
+  assert.equal(withEstimates.macroTrends.source, 'FHFA_STATE_HPI_SUMMARY');
 
-  const enriched1 = enrichListingWithMacroTrends(listingWithEstimates);
-
-  // Original fields preserved
-  assert.equal(enriched1.id, 'listing-oh-101');
-  assert.equal(enriched1.address, '1234 E 55th St');
-  assert.equal(enriched1.openingBid, 45000);
-
-  // Strict honesty invariants: estLow & estHigh are NOT overwritten
-  assert.equal(enriched1.estLow, 110000);
-  assert.equal(enriched1.estHigh, 135000);
-
-  // Attached macroTrends
-  assert.ok(enriched1.macroTrends);
-  assert.equal(enriched1.macroTrends.county, 'Cuyahoga');
-  assert.equal(enriched1.macroTrends.medianSalePrice, 215000);
-  assert.equal(enriched1.macroTrends.marketTemperature, 'hot');
-
-  // Listing WITHOUT estLow or estHigh
-  const listingWithoutEstimates = {
-    id: 'listing-fl-202',
-    address: '500 Orange Ave',
-    city: 'Orlando',
-    county: 'Orange',
-    state: 'FL',
-    openingBid: 120000
-  };
-
-  const enriched2 = enrichListingWithMacroTrends(listingWithoutEstimates);
-
-  // Strict honesty invariant: estLow & estHigh are NEVER fabricated
-  assert.equal(enriched2.estLow, undefined);
-  assert.equal(enriched2.estHigh, undefined);
-  assert.ok(!('estLow' in enriched2));
-  assert.ok(!('estHigh' in enriched2));
-
-  // Attached macroTrends
-  assert.ok(enriched2.macroTrends);
-  assert.equal(enriched2.macroTrends.county, 'Orange');
-  assert.equal(enriched2.macroTrends.medianSalePrice, 425000);
-  assert.equal(enriched2.macroTrends.marketTemperature, 'hot');
+  const withoutEstimates = macroData.enrichListingWithMacroTrends({
+    id: 'listing-oh-102',
+    state: 'OH',
+    county: 'Cuyahoga',
+    openingBid: 45000,
+  });
+  assert.ok(!('estLow' in withoutEstimates), 'estLow must never be invented');
+  assert.ok(!('estHigh' in withoutEstimates), 'estHigh must never be invented');
+  assert.ok(withoutEstimates.macroTrends);
+  assert.equal(withoutEstimates.macroTrends.yoyPriceChangePct, 4.41);
 });
 
-test('enrichListingWithMacroTrends handles null or non-object inputs safely', () => {
-  assert.equal(enrichListingWithMacroTrends(null), null);
-  assert.equal(enrichListingWithMacroTrends(undefined), undefined);
-  assert.equal(enrichListingWithMacroTrends('invalid'), 'invalid');
+// --- retired source label must never reappear -------------------------------
+
+test('retired source label: no trend or enrichment output contains FHFA_AND_PUBLIC_BENCHMARKS', () => {
+  const outputs = [
+    macroData.getCountyMarketTrends('OH', 'Cuyahoga'),
+    macroData.getCountyMarketTrends('XX', 'Nowhere'),
+    macroData.getCountyMarketTrends('NJ', 'Camden'),
+    macroData.enrichListingWithMacroTrends({ state: 'OH', county: 'Cuyahoga', openingBid: 1 }),
+    macroData.enrichListingWithMacroTrends({ state: 'XX', county: 'Nowhere', openingBid: 1 }),
+    macroData.enrichListingWithMacroTrends({ state: 'NJ', county: 'Camden', openingBid: 1 }),
+  ];
+  const serialized = JSON.stringify(outputs);
+  assert.ok(!serialized.includes('FHFA_AND_PUBLIC_BENCHMARKS'), 'the retired source label must never appear in any output');
 });

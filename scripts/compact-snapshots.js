@@ -114,9 +114,14 @@ function runCompaction(options = {}) {
     );
 
     if (apply && result.removedCount > 0) {
+      // Evidence preservation: keep the pre-compaction backup, and replace
+      // the live file atomically (tmp + rename) so an interrupted compaction
+      // can never leave a truncated observations file behind.
       const backupPath = `${filePath}.backup.${Date.now()}`;
       fs.writeFileSync(backupPath, content, 'utf8');
-      fs.writeFileSync(filePath, compactedJson, 'utf8');
+      const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+      fs.writeFileSync(tmpPath, compactedJson, 'utf8');
+      fs.renameSync(tmpPath, filePath);
     }
   }
 

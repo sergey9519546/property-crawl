@@ -381,12 +381,31 @@ test('buildPropertyDossier attaches possession timeline, auction deposit terms, 
   assert.equal(dossier.auctionMicrostructure.statutoryContext, null);
   assert.equal(dossier.auctionMicrostructure.notes.includes('Zero-Fabrication Invariant'), true);
 
-  // Surplus Waterfall
-  assert.ok(dossier.surplusWaterfall);
-  assert.equal(dossier.surplusWaterfall.grossSurplus, 15000); // 100k - 85k
-  assert.equal(dossier.surplusWaterfall.adjudgedDebtSatisfied, 85000);
-  assert.equal(dossier.surplusWaterfall.formerOwnerEquity, 15000);
-  assert.equal(dossier.surplusWaterfall.constitutionalBasis.landmarkCase, 'Tyler v. Hennepin County, 598 U.S. 631 (2023)');
+  // Surplus Waterfall — Zero-Fabrication: a scheduled sale has no gavel price,
+  // so the dossier must not assert surplus/deficiency from the opening bid.
+  assert.equal(dossier.surplusWaterfall, null);
+});
+
+test('surplus waterfall computes only from a verified sale price and the canonical judgment field', () => {
+  const sold = buildPropertyDossier(publisherFixture({
+    transactionOutcome: 'sold',
+    winningBid: 140000,
+    judgment: 85000,
+  }), { now: NOW });
+  assert.ok(sold.surplusWaterfall);
+  assert.equal(sold.surplusWaterfall.winningBid, 140000);
+  assert.equal(sold.surplusWaterfall.totalAdjudgedDebt, 85000);
+  assert.equal(sold.surplusWaterfall.grossSurplus, 55000);
+  assert.equal(sold.surplusWaterfall.formerOwnerEquity, 55000);
+  assert.equal(sold.surplusWaterfall.constitutionalBasis.landmarkCase, 'Tyler v. Hennepin County, 598 U.S. 631 (2023)');
+
+  // A verified outcome without a realized sale price still refuses to impute one
+  // from the opening bid, and debt is read from the canonical `judgment` column.
+  const closed = buildPropertyDossier(publisherFixture({
+    transactionOutcome: 'closed',
+    judgment: 85000,
+  }), { now: NOW });
+  assert.equal(closed.surplusWaterfall, null);
 });
 
 test('unsupported method, malformed ID and absent listing return bounded client errors without enrichment', async () => {

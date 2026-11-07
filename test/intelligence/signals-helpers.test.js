@@ -459,22 +459,42 @@ test('bid_to_value_ratio: resolves from enrolled assessor registry when publishe
   assert.match(ratioSig.reason, /derived from Ohio Rev\. Code § 5715\.01/);
 });
 
-test('bid_to_value_ratio: resolves from explicit assessed basis + FHFA HPI when publisher estimate is missing', () => {
+test('bid_to_value_ratio: explicit assessed basis alone stays unresolved (no macro housing index valuation)', () => {
+  // The fhfa_hpi_macro_trend branch was removed: an index is not a
+  // per-house dollar band, so an explicit assessed basis without a
+  // publisher estimate or a harvested assessor roll must fail closed as
+  // unknown/unresolved with NO valuationProvenance.
   const listing = liveListing({
     state: 'OH',
-    county: 'Franklin',
-    openingBid: 120000,
-    estLow: null,
-    estHigh: null,
-    assessedValue: 150000,
+    county: 'Cuyahoga',
+    openingBid: 80000,
+    assessedValue: 120000,
     assessmentYear: 2020,
   });
 
   const result = evaluateOpportunitySignals(listing, { now: NOW });
   const ratioSig = signalFor(result, 'bid_to_value_ratio');
+  assert.equal(ratioSig.status, 'unknown');
+  assert.equal(ratioSig.evidenceClass, 'unresolved');
+  assert.equal(ratioSig.valuationProvenance, undefined);
+  const serialized = JSON.stringify(result);
+  assert.ok(!serialized.includes('macro_housing_index'), 'no signal may carry the macro_housing_index evidence class');
+  assert.ok(!serialized.includes('fhfa_hpi_macro_trend'), 'no signal may carry the fhfa_hpi_macro_trend provenance');
+});
+
+test('bid_to_value_ratio: publisher estLow/estHigh band yields a supported calculated_ratio signal', () => {
+  const listing = liveListing({
+    state: 'OH',
+    county: 'Cuyahoga',
+    openingBid: 80000,
+    estLow: 100000,
+    estHigh: 140000,
+  });
+
+  const result = evaluateOpportunitySignals(listing, { now: NOW });
+  const ratioSig = signalFor(result, 'bid_to_value_ratio');
   assert.equal(ratioSig.status, 'supported');
-  assert.equal(ratioSig.valuationProvenance, 'fhfa_hpi_macro_trend');
-  assert.match(ratioSig.reason, /FHFA.*Macro Trend/);
+  assert.equal(ratioSig.evidenceClass, 'calculated_ratio');
 });
 
 test('returned_to_market: detects relisting from observation store structured snapshot events', () => {

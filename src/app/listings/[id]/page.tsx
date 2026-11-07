@@ -593,7 +593,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </details>
           <div className="mt-8 space-y-8">
             <BiddingSimulator listing={listing} />
-            <div id="due-diligence-binder" className="scroll-mt-6"><DueDiligenceChecklist listing={listing} /></div>
+            <DueDiligenceChecklist listing={listing} className="scroll-mt-6" />
             <ListingCompare listingId={listing.id} label={listing.address} />
             <Parcel3DVisualizer listing={listing} />
             <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />

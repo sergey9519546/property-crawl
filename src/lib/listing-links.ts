@@ -45,6 +45,22 @@ const RECORD_QUERY_KEYS = new Set([
   "saleid",
 ]);
 
+// Mirror of server/state-codes.js US_STATE_OR_TERRITORY_CODES (50 states +
+// DC + the 5 territories). The closed set subsumes the USPS regex and the
+// XX/US placeholder exclusions, so membership alone is the validity check.
+const US_STATE_OR_TERRITORY_CODES = new Set([
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA",
+  "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY",
+  "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX",
+  "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+  "PR", "VI", "GU", "MP", "AS",
+]);
+
+function isUsStateOrTerritoryCode(value: string) {
+  return US_STATE_OR_TERRITORY_CODES.has(value.trim().toUpperCase());
+}
+
 const SOURCE_ALLOWED_HOSTS: Record<string, string[]> = {
   bid4assets: ["bid4assets.com"],
   "ca-controller-tax-sale": ["sco.ca.gov"],
@@ -137,21 +153,11 @@ function hasSourceRecordShape(source: string, url: URL): boolean {
     case "fannie":
       return /^\/(property|property-details)\/[^/]+$/.test(path) && hasStablePathToken(url);
     case "fhfa-hpi": {
-      const csvPath = /^\/datatools\/downloads\/documents\/hpi\/hpi_at_(?:state|metro|division|national)\.csv$/i;
-      if (!csvPath.test(path)) return false;
-      const allowed = new Set(["geo", "period"]);
+      if (path !== "/hpi-state/csv") return false;
       const entries = Array.from(url.searchParams.keys());
-      const geo = (url.searchParams.get("geo") ?? "").toUpperCase();
-      return (
-        entries.every((key) => allowed.has(key)) &&
-        new Set(entries).size === entries.length &&
-        (entries.length === 0 ||
-          (entries.length === 2 && entries.includes("geo") && entries.includes("period"))) &&
-        /^(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/.test(
-          geo,
-        ) &&
-        /^\d{4}Q[1-4]$/.test(url.searchParams.get("period") ?? "")
-      );
+      if (entries.length === 0) return true;
+      if (entries.length !== 1 || entries[0] !== "geo") return false;
+      return isUsStateOrTerritoryCode(url.searchParams.get("geo") ?? "");
     }
     case "fl-dor-cadastral": {
       const featureMatch = path.match(

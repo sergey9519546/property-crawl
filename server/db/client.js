@@ -678,6 +678,28 @@ class DatabaseClient {
     return this.memoryInventoryRequested() ? 'memory' : 'unavailable';
   }
 
+  async transaction(fn) {
+    if (!this.isPg || !this.pool) {
+      throw new Error("DatabaseClient.transaction requires a PostgreSQL pool");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (_) {
+        // Best-effort rollback; the connection may already be dead.
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   /**
    * How much of the inventory is stale, and how stale is the rest?
    *
@@ -1981,8 +2003,9 @@ class DatabaseClient {
         sql += ` AND redemption_days > 0 AND provenance #> '{derivedFields,redemption}' IS NULL`;
       }
       if (q) {
-        sql += ` AND (address ILIKE $${paramIdx} OR city ILIKE $${paramIdx} OR county ILIKE $${paramIdx} OR plaintiff ILIKE $${paramIdx} OR defendant ILIKE $${paramIdx} OR attorney ILIKE $${paramIdx})`;
-        params.push(`%${q}%`);
+        const literalQuery = q.replace(/[\\%_]/g, (ch) => '\\' + ch);
+        sql += ` AND (address ILIKE $${paramIdx} ESCAPE '\\' OR city ILIKE $${paramIdx} ESCAPE '\\' OR county ILIKE $${paramIdx} ESCAPE '\\' OR state ILIKE $${paramIdx} ESCAPE '\\' OR plaintiff ILIKE $${paramIdx} ESCAPE '\\' OR defendant ILIKE $${paramIdx} ESCAPE '\\' OR attorney ILIKE $${paramIdx} ESCAPE '\\' OR occupancy ILIKE $${paramIdx} ESCAPE '\\' OR deposit_terms ILIKE $${paramIdx} ESCAPE '\\' OR EXISTS (SELECT 1 FROM sources s WHERE s.key = listings.source_key AND s.label ILIKE $${paramIdx} ESCAPE '\\'))`;
+        params.push(`%${literalQuery}%`);
         paramIdx++;
       }
       if (filters.hasDocuments) {
@@ -2104,7 +2127,7 @@ class DatabaseClient {
     return null;
   }
 
-  async createListing(listing) {
+  async createListing(listing, options = {}) {
     let enriched = prepareListingForPersistence(listing);
 
     if (this.isPg) {
@@ -2181,7 +2204,7 @@ class DatabaseClient {
         senior_lien_warning = COALESCE(EXCLUDED.senior_lien_warning, listings.senior_lien_warning),
         cash_to_close = COALESCE(EXCLUDED.cash_to_close, listings.cash_to_close),
         cash_to_close_details = COALESCE(EXCLUDED.cash_to_close_details, listings.cash_to_close_details),
-        status = EXCLUDED.status,
+        status = CASE WHEN EXCLUDED.status IS NOT NULL AND EXCLUDED.status <> 'unknown' THEN EXCLUDED.status ELSE listings.status END,
         auction_program = COALESCE(EXCLUDED.auction_program, listings.auction_program),
         lifecycle_status = COALESCE(EXCLUDED.lifecycle_status, listings.lifecycle_status),
         transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
@@ -2207,7 +2230,8 @@ class DatabaseClient {
         enriched.auctionProgram ?? null, enriched.lifecycleStatus ?? null, enriched.transactionOutcome ?? null,
         enriched.hasDocuments === true
       ];
-      const result = await this.pool.query(sql, params);
+      const queryClient = options.client || this.pool;
+      const result = await queryClient.query(sql, params);
       if (result.rows[0]) return mapPgListingRow(result.rows[0]);
       // UPSERT WHERE can reject a stale partial refresh (e.g. null observedAt
       // on an existing newer row). Surface the retained record instead of null.

@@ -138,3 +138,67 @@ test('partial clean observations remain safe for positive matching but never cla
   const safety=huntSafety({ skipped: false, sourceResults: [{ sourceId: 'treasury', accepted: 16, rejected: 0, report: null }] });
   assert.equal(safety.safe,true);assert.deepEqual(safety.safePositiveSourceIds,['treasury']);assert.deepEqual(safety.completeSourceIds,[]);
 });
+test('a truncated source report makes the collection job partial', async () => {
+  const { directory, filePath } = temporaryStore();
+  try {
+    const result = fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 2, rejected: 0, error: null, observationError: null, report: { outcome: 'success', complete: true, fullSweepComplete: true, truncated: true, scope: { endpoint: '/hud-feed' } } }] });
+    const coordinator = createCollectionCoordinator({
+      scheduler: { async runAll() { return result; } },
+      database: { async getListings() { return { total: 2, listings: [{ id: 'A', source: 'hud' }, { id: 'B', source: 'hud' }] }; } },
+      hunts: { listHunts: () => [{ id: 'hunt_0123456789abcdef01234567', enabled: true }], runHunt: () => ({ results: [], newEvents: [] }) },
+      caseSink: null, filePath,
+    });
+    const job = await coordinator.start({ idempotencyKey: 'truncated-report-20260905' });
+    await coordinator.inFlight.get(job.id);
+    const final = coordinator.store.get(job.id);
+    assert.equal(final.status, 'partial');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a source with accepted 0 and an error makes the collection job partial', async () => {
+  const { directory, filePath } = temporaryStore();
+  try {
+    const coordinator = createCollectionCoordinator({
+      scheduler: { async runAll() { return fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 0, rejected: 0, error: 'upstream unavailable', observationError: null, report: { outcome: 'success', complete: true, fullSweepComplete: true, truncated: false, scope: { endpoint: '/hud-feed' } } }] }); } },
+      database: { async getListings() { throw new Error('unsafe cycle must not read inventory'); } },
+      hunts: { listHunts: () => [{ id: 'hunt_0123456789abcdef01234567', enabled: true }], runHunt: () => { throw new Error('should not run'); } },
+      caseSink: null, filePath,
+    });
+    const job = await coordinator.start({ idempotencyKey: 'accepted0-error-20260905' });
+    await coordinator.inFlight.get(job.id);
+    const final = coordinator.store.get(job.id);
+    assert.equal(final.status, 'partial');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('an empty sweep (no accepted records) makes the collection job partial', async () => {
+  const { directory, filePath } = temporaryStore();
+  try {
+    const coordinator = createCollectionCoordinator({
+      scheduler: { async runAll() { return fullResult({ sourceResults: [{ sourceId: 'hud', accepted: 0, rejected: 0, error: null, observationError: null, report: { outcome: 'success', complete: true, fullSweepComplete: true, truncated: false, scope: { endpoint: '/hud-feed' } } }] }); } },
+      database: { async getListings() { throw new Error('empty sweep must not read inventory'); } },
+      hunts: { listHunts: () => [{ id: 'hunt_0123456789abcdef01234567', enabled: true }], runHunt: () => { throw new Error('should not run'); } },
+      caseSink: null, filePath,
+    });
+    const job = await coordinator.start({ idempotencyKey: 'empty-sweep-20260905' });
+    await coordinator.inFlight.get(job.id);
+    const final = coordinator.store.get(job.id);
+    assert.equal(final.status, 'partial');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a truncated hunt evaluation makes the collection job partial', async () => {
+  const { directory, filePath } = temporaryStore();
+  try {
+    const coordinator = createCollectionCoordinator({
+      scheduler: { async runAll() { return fullResult(); } },
+      database: { async getListings() { return { total: 2, listings: [{ id: 'A', source: 'hud' }, { id: 'B', source: 'hud' }] }; } },
+      hunts: { listHunts: () => [{ id: 'hunt_0123456789abcdef01234567', enabled: true }], runHunt: () => ({ results: [], newEvents: [], resultsTruncated: true }) },
+      caseSink: null, filePath,
+    });
+    const job = await coordinator.start({ idempotencyKey: 'truncated-eval-20260905' });
+    await coordinator.inFlight.get(job.id);
+    const final = coordinator.store.get(job.id);
+    assert.equal(final.status, 'partial');
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});

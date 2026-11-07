@@ -433,6 +433,7 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
       database: mockDb,
       loadObservations: () => { throw new Error('filesystem store must not be consulted when Postgres history exists'); },
       loadObservationsForRecord: async () => durableHistory,
+      isAuthorized: () => true,
       persistTriagePriority: async (client, listingId, priority) => persisted.push({ client, listingId, priority }),
     });
 
@@ -446,6 +447,27 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
     assert.equal(persisted[0].client, mockDb);
     assert.equal(persisted[0].listingId, 'MOCK-1');
     assert.equal(persisted[0].priority, body.triagePriority);
+  });
+
+  test('an anonymous request is evaluated but never persists the triage score', async () => {
+    const persisted = [];
+    const mockDb = {
+      isPg: true,
+      pool: {},
+      getListingById: async (id) => (id === 'MOCK-1' ? sampleListing({ id: 'MOCK-1' }) : null),
+    };
+    const handler = createPropertySignalsHandler({
+      database: mockDb,
+      loadObservationsForRecord: async () => ({ records: {}, signals: [] }),
+      persistTriagePriority: async (client, listingId, priority) => persisted.push({ listingId, priority }),
+    });
+
+    let body = null;
+    const res = { setHeader: () => {}, status: () => res, json: (data) => { body = data; return res; } };
+    await handler({ method: 'GET', url: '/api/property-signals?listingId=MOCK-1', headers: {} }, res);
+    assert.ok(body, 'anonymous callers still get the evaluation');
+    assert.equal(body.historyUnavailable, false);
+    assert.equal(persisted.length, 0, 'an unauthenticated request must not write triage_priority');
   });
 
   test('an empty Postgres history is no history, never backfilled from a file', async () => {
@@ -481,6 +503,7 @@ describe('Opportunity-Signal Evaluator (Priority Upgrade 3)', () => {
       database: mockDb,
       loadObservations: () => { throw new Error('store exceeds size limit'); },
       loadObservationsForRecord: async () => { throw new Error('connection refused'); },
+      isAuthorized: () => true,
       persistTriagePriority: async (client, listingId, priority) => persisted.push({ listingId, priority }),
     });
 

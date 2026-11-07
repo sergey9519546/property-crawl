@@ -1,5 +1,6 @@
 import { checkFormRateLimit } from "@/lib/form-rate-limit";
 import { accountsApi } from "@/lib/member-account";
+import { rateLimitKey } from "@/lib/client-ip";
 import { workspaceMutationAllowed } from "@/lib/workspace-session";
 import { sendOutboundMail } from "@server/delivery/outbound-mail";
 
@@ -23,9 +24,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "A valid email is required" }, { status: 400, headers });
   }
   const perEmail = checkFormRateLimit("account-login", { key: email, maxPerWindow: 5 });
+  const perIp = checkFormRateLimit("account-login", { key: rateLimitKey("account-login", request, "ip"), maxPerWindow: 20 });
   const global = checkFormRateLimit("account-login", { maxPerWindow: 200 });
-  if (!perEmail.allowed || !global.allowed) {
-    const retry = Math.max(perEmail.retryAfterSeconds, global.retryAfterSeconds);
+  if (!perEmail.allowed || !perIp.allowed || !global.allowed) {
+    const retry = Math.max(perEmail.retryAfterSeconds, perIp.retryAfterSeconds, global.retryAfterSeconds);
     return Response.json({ error: "Too many sign-in requests. Retry later." }, { status: 429, headers: { ...headers, "Retry-After": String(retry) } });
   }
   const origin = appOrigin(request);

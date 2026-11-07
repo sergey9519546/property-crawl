@@ -11,7 +11,6 @@
 const crypto = require('node:crypto');
 const { resolveCountyKey } = require('../enrichment/arcgis-parcels');
 const { interpretAssessorParcel } = require('../enrichment/assessor-reading');
-const { calculateMacroValuation, explicitDollarBasis } = require('../enrichment/macro-valuation');
 const { getCountyMarketTrends } = require('../enrichment/macro-valuation-data');
 const { analyzeMunicipalViolations } = require('./municipal-liens');
 const { buildDocumentEvidence } = require('./document-evidence');
@@ -272,7 +271,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
     });
   }
 
-  // 4. Bid-to-Supported-Value Ratio (with Assessor Registry + FHFA HPI fallback & Macro-trend caveat)
+  // 4. Bid-to-Supported-Value Ratio (publisher range or enrolled assessor registry only)
   const bid = Number(listing.openingBid);
   const hasDirectRange = Number.isFinite(Number(listing.estLow))
     && Number(listing.estLow) > 0
@@ -300,19 +299,6 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       estHigh = Math.round(mid * 1.08);
       valuationProvenance = 'enrolled_assessor_registry';
       valuationLabel = assessorRes.citation || 'Enrolled county assessor market conversion (±8% band)';
-    } else {
-      // 2. Attempt explicit dollar basis + FHFA HPI
-      const basis = explicitDollarBasis(listing);
-      if (basis) {
-        const macro = calculateMacroValuation(basis);
-        if (macro) {
-          estLow = macro.estLow;
-          estHigh = macro.estHigh;
-          mid = Math.round((estLow + estHigh) / 2);
-          valuationProvenance = 'fhfa_hpi_macro_trend';
-          valuationLabel = macro.label || 'FHFA HPI Macro Trend (±8% band)';
-        }
-      }
     }
   }
 
@@ -331,18 +317,14 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   if (publisherObserved && bid > 0 && mid > 0) {
     const ratio = bid / mid;
     const discountPct = Math.round((1 - ratio) * 100);
-    const evidenceClass = valuationProvenance === 'enrolled_assessor_registry'
-      ? 'official_parcel_roll'
-      : valuationProvenance === 'fhfa_hpi_macro_trend'
-      ? 'macro_housing_index'
-      : 'calculated_ratio';
+    const evidenceClass = valuationProvenance === 'enrolled_assessor_registry' ? 'official_parcel_roll' : 'calculated_ratio';
     const provenanceSuffix = valuationLabel ? ` [derived from ${valuationLabel}]` : '';
 
     if (ratio <= 1) {
       signals.push({
         key: 'bid_to_value_ratio',
-        label: valuationProvenance && valuationProvenance !== 'publisher_reported'
-          ? 'Bid-to-supported-value ratio established (assessor/FHFA model)'
+        label: valuationProvenance === 'enrolled_assessor_registry'
+          ? 'Bid-to-supported-value ratio established (assessor model)'
           : 'Bid-to-supported-value ratio established',
         status: 'supported',
         evidenceClass,

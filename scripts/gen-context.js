@@ -198,7 +198,7 @@ ${facts.scripts.map((s) => s).join('\n')}
 \`\`\`
 
 ## Invariants (do not violate)
-- Every dynamic/AI/user string renders through \`esc()\` / \`mdToHtml()\` (XSS invariant).
+- In the v0 static PWA (app.js), every dynamic/AI/user string renders through \`esc()\` / \`mdToHtml()\` (XSS invariant). The v2 Next UI (src/) relies on React JSX auto-escaping instead; never inject listing/scraper/AI strings via dangerouslySetInnerHTML outside \`serializeJsonLd\`.
 - \`SCORE_BANDS\` is the single source of truth for Deal Score color/label/alpha.
 - Listing contract is camelCase (dealScore, openingBid, propType, ...); Postgres stores
   snake_case and \`server/db/client.js\` aliases back — production-only breakage risk.

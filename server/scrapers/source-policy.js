@@ -1,3 +1,5 @@
+const { isUsStateOrTerritoryCode } = require('../state-codes');
+
 const RECORD_QUERY_KEYS = new Set([
   'aid',
   'auctionid',
@@ -141,23 +143,15 @@ function hasSourceRecordShape(source, url) {
     case 'fannie':
       return /^\/(property|property-details)\/[^/]+$/.test(path) && hasStablePathToken(url);
     case 'fhfa-hpi': {
-      // FHFA House Price Index published CSV tables (state, metro, division,
-      // national). Per-row URLs identify a single (geo, period) observation
-      // against the public published file. The csv path is the canonical
-      // record; the geo + period query keys identify the row.
-      const csvPath = /^\/datatools\/downloads\/documents\/hpi\/hpi_at_(?:state|metro|division|national)\.csv$/i;
-      if (!csvPath.test(path)) return false;
-      const allowed = new Set(['geo', 'period']);
+      // FHFA state HPI summary CSV. Per-row URLs identify a single state
+      // observation against the publisher's public /hpi-state/csv
+      // endpoint via a geo query key. The retired DataTools per-(state,
+      // period) file path is rejected; no other query keys are allowed.
+      if (path !== '/hpi-state/csv') return false;
       const entries = [...url.searchParams.keys()];
-      const geo = (url.searchParams.get('geo') || '').toUpperCase();
-      return entries.every((key) => allowed.has(key))
-        && new Set(entries).size === entries.length
-        && (
-          entries.length === 0
-          || (entries.length === 2 && entries.includes('geo') && entries.includes('period'))
-        )
-        && /^(?:AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/.test(geo)
-        && /^\d{4}Q[1-4]$/.test(url.searchParams.get('period') || '');
+      if (entries.length === 0) return true;
+      if (entries.length !== 1 || entries[0] !== 'geo') return false;
+      return isUsStateOrTerritoryCode(url.searchParams.get('geo') || '');
     }
     case 'fl-dor-cadastral': {
       // Exact FDOR statewide-cadastral feature URL, never the service root or

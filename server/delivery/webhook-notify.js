@@ -1,6 +1,8 @@
 'use strict';
 
 const dns = require('node:dns').promises;
+const http = require('node:http');
+const https = require('node:https');
 const { isPrivateOrLocalHost } = require('../scrapers/scrapling-bridge');
 
 const MAX_CHANGES = 20;
@@ -26,18 +28,102 @@ function webhookTargetError(raw) {
   return null;
 }
 
-async function resolutionError(hostname, lookup) {
+/**
+ * Resolve DNS exactly once and validate every resolved address before any
+ * socket is opened. The resolved records are returned so the transport can
+ * pin them: resolving again at connect time would reopen the DNS-rebinding
+ * TOCTOU this pre-check exists to close.
+ */
+async function resolveAndValidate(hostname, lookup) {
   let records;
   try {
     records = await lookup(hostname, { all: true, verbatim: true });
   } catch {
-    return 'dns_failed';
+    return { reason: 'dns_failed', records: null };
   }
-  if (!Array.isArray(records) || records.length === 0) return 'dns_failed';
+  if (!Array.isArray(records) || records.length === 0) return { reason: 'dns_failed', records: null };
   for (const record of records) {
-    if (isPrivateOrLocalHost(record?.address)) return 'private_resolution';
+    if (isPrivateOrLocalHost(record?.address)) return { reason: 'private_resolution', records: null };
   }
-  return null;
+  return { reason: null, records };
+}
+
+async function resolutionError(hostname, lookup) {
+  return (await resolveAndValidate(hostname, lookup)).reason;
+}
+
+/**
+ * Connect only to the pinned records that passed the resolution pre-check.
+ * The node:http/node:https lookup option hands the stack exactly those
+ * addresses, so a rebinded answer can never be dialed. The original Host
+ * header and TLS servername/SNI are preserved from the publisher URL, and
+ * the response is wrapped into a fetch-like shape the caller already knows.
+ */
+function pinnedFetch(url, records, { method, headers, body, signal }) {
+  return new Promise((resolve, reject) => {
+    const isHttps = url.protocol === 'https:';
+    const requestOptions = {
+      hostname: url.hostname,
+      port: Number(url.port) || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method,
+      headers: { ...(headers ?? {}), host: url.hostname },
+      agent: false,
+      lookup: (_hostname, _options, callback) => {
+        callback(null, records.map((record) => ({ address: record.address, family: record.family })));
+      },
+    };
+    if (isHttps) requestOptions.servername = url.hostname;
+
+    let settled = false;
+    const req = (isHttps ? https : http).request(requestOptions, (res) => {
+      const responseHeaders = {};
+      for (const [key, value] of Object.entries(res.headers ?? {})) {
+        responseHeaders[String(key).toLowerCase()] = value;
+      }
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        if (settled) return;
+        settled = true;
+        resolve({
+          status: res.statusCode ?? 0,
+          ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+          url: url.href,
+          headers: {
+            get: (name) => responseHeaders[String(name).toLowerCase()],
+          },
+          text: () => Promise.resolve(Buffer.concat(chunks).toString('utf8')),
+        });
+      });
+      res.on('error', (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      });
+    });
+
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+
+    if (signal) {
+      const onAbort = () => {
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        req.destroy(abortError);
+      };
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+
+    req.end(body);
+  });
 }
 
 async function postWebhook(rawUrl, body, options = {}) {
@@ -45,20 +131,18 @@ async function postWebhook(rawUrl, body, options = {}) {
   if (reason) return { delivery: 'refused', sent: false, reason };
   const url = new URL(String(rawUrl).trim());
   const lookup = options.lookup || dns.lookup;
-  const resolved = await resolutionError(url.hostname, lookup);
-  if (resolved === 'dns_failed') return { delivery: 'unavailable', sent: false, reason: resolved };
-  if (resolved) return { delivery: 'refused', sent: false, reason: resolved };
+  const { reason: resolutionReason, records } = await resolveAndValidate(url.hostname, lookup);
+  if (resolutionReason === 'dns_failed') return { delivery: 'unavailable', sent: false, reason: resolutionReason };
+  if (resolutionReason) return { delivery: 'refused', sent: false, reason: resolutionReason };
 
-  const fetchImpl = options.fetchImpl || fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || DEFAULT_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(url.href, {
+    const response = await pinnedFetch(url, records, {
       method: 'POST',
-      redirect: 'manual',
-      signal: controller.signal,
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
+      signal: controller.signal,
     });
     if (response.status >= 300 && response.status < 400) {
       return { delivery: 'refused', sent: false, reason: 'redirect_refused', status: response.status };

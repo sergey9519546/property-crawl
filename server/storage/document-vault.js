@@ -24,6 +24,31 @@ const DEFAULT_VAULT_DIR = path.resolve(process.cwd(), '.cache/vault');
 const MAX_KEY_LENGTH = 512;
 const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024; // 50 MB safety clamp
 
+// Atomic file write: temp file -> fsync -> rename -> fsync directory.
+// Keeps the target file whole: a crash during the write never leaves a
+// truncated destination, and the caller can rely on the rename being durable.
+function fsyncDir(dir) {
+  try {
+    const fd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  } catch {} // best-effort; directory fsync may not be supported everywhere
+}
+
+function atomicWrite(filePath, data) {
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tempFile = `${filePath}.${crypto.randomUUID()}.tmp`;
+  const fd = fs.openSync(tempFile, 'wx');
+  try {
+    fs.writeSync(fd, data);
+    fs.fdatasyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tempFile, filePath);
+  fsyncDir(dir);
+}
+
 function sanitizeKey(rawKey) {
   if (typeof rawKey !== 'string') throw new Error('Document key must be a string');
   const trimmed = rawKey.trim().replace(/^[\/\\]+/, '');
@@ -92,15 +117,15 @@ class DocumentVault {
     const contentType = options.contentType || 'application/octet-stream';
     const storedAt = new Date().toISOString();
 
-    // 1. Always store locally as fast local cache / durable backup
+    // 1. Always store locally as fast local cache / durable backup.
+    //    Payload is committed first so a crash can never leave meta without
+    //    payload; meta is written second and degraded gracefully if absent.
     const localPath = this._localFilePath(key);
-    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    atomicWrite(localPath, buffer);
 
-    const tempFile = `${localPath}.${crypto.randomUUID()}.tmp`;
-    fs.writeFileSync(tempFile, buffer);
-    fs.renameSync(tempFile, localPath);
-
-    // Write sidecar metadata
+    // Write sidecar metadata atomically. The vault tolerates a missing meta
+    // file on read (recomputes sha from payload), so a crash between the two
+    // renames leaves an intact, readable payload with degraded metadata.
     const metaPath = `${localPath}.meta.json`;
     const meta = {
       key,
@@ -110,7 +135,7 @@ class DocumentVault {
       storedAt,
       metadata: options.metadata || {},
     };
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+    atomicWrite(metaPath, JSON.stringify(meta, null, 2));
 
     // 2. If R2 is configured, also push to S3/R2 bucket
     let remoteStored = false;
@@ -162,12 +187,9 @@ class DocumentVault {
     const storedAt = new Date().toISOString();
 
     const localPath = this._localFilePath(key);
-    fs.mkdirSync(path.dirname(localPath), { recursive: true });
+    atomicWrite(localPath, buffer);
 
-    const tempFile = `${localPath}.${crypto.randomUUID()}.tmp`;
-    fs.writeFileSync(tempFile, buffer);
-    fs.renameSync(tempFile, localPath);
-
+    // Atomic sidecar metadata (see putDocument for crash-recovery rationale).
     const metaPath = `${localPath}.meta.json`;
     const meta = {
       key,
@@ -177,7 +199,7 @@ class DocumentVault {
       storedAt,
       metadata: options.metadata || {},
     };
-    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+    atomicWrite(metaPath, JSON.stringify(meta, null, 2));
 
     return {
       key,

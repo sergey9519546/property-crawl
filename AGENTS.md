@@ -148,7 +148,7 @@ npm run discovery:local  # local Postgres + migration stack for discovery
 - **Hack #2 — Platform-level parsers**: Counties buy the same vendors (`salesweb.civilview.com` for NJ sheriff sales; `Realauction` for OH; `AcclaimWeb` for NV). One parser per platform = dozens of counties.
 - **Hack #3 — LLM-as-parser, self-healing ingestion**: Fetch → raw HTML/text → cheap model (Gemini Flash / Claude Haiku) with strict JSON schema → Pydantic validate → insert. When a site changes layout, the model reads the new layout — maintain ~40 prompts + schemas, not 40 brittle XPath scrapers. Failures route to a review queue.
 - **Hack #4 — Free enrichment stack** (replaces $1,000/mo APIs): US Census Geocoder (free, no key); County ArcGIS REST endpoints (free JSON parcel queries); FHFA House Price Index (free CSVs); no paid geocoding required.
-- **Hack #5 — Deal Score (`SCORE_BANDS`)**: Single source of truth for color/label/alpha. Every dynamic/AI/user string renders through `esc()` / `mdToHtml()` (XSS invariant). (`CONTEXT.md` invariants)
+- **Hack #5 — Deal Score (`SCORE_BANDS`)**: Single source of truth for color/label/alpha. XSS: the v0 PWA (`app.js`) escapes every dynamic/AI/user string through `esc()` / `mdToHtml()`; the v2 Next UI (`src/`) relies on React JSX auto-escaping (JSON-LD goes through `serializeJsonLd`). (`CONTEXT.md` invariants)
 
 ## 6. Audit / evidence trail (do not claim without evidence)
 Every durability/coverage claim must match code + `/api/health` + Source Radar. Audit artifacts (`audit/`):

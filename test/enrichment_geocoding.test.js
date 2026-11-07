@@ -151,12 +151,12 @@ test('ArcGIS Resolver: executes spatial parcel queries and normalizes assessment
         features: [
           {
             attributes: {
-              PROP_ID: '04120-105-0010',
-              STATE_CD: 'A1 - Single Family Residence',
-              APPRAISED_VAL: 245000,
-              LAND_VAL: 45000,
-              IMPRV_VAL: 200000,
-              LEGAL_DESC: 'LOT 1 BLK 5 NCB 4120'
+              PropID: '04120-105-0010',
+              State_cd: 'A1 - Single Family Residence',
+              TotVal: 245000,
+              LandVal: 45000,
+              ImprVal: 200000,
+              LglDesc: 'LOT 1 BLK 5 NCB 4120'
             }
           }
         ]

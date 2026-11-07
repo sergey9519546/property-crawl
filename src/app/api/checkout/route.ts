@@ -1,5 +1,6 @@
 import { checkFormRateLimit } from "@/lib/form-rate-limit";
 import { accountsApi, currentMember } from "@/lib/member-account";
+import { rateLimitKey } from "@/lib/client-ip";
 import { workspaceMutationAllowed } from "@/lib/workspace-session";
 import { checkoutConfigured, createCheckoutSession, createCustomer, getPrice } from "@server/billing/stripe-checkout";
 
@@ -17,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!workspaceMutationAllowed(request)) return Response.json({ error: "Same-origin request required" }, { status: 403, headers: responseHeaders });
-  const rate = checkFormRateLimit("checkout");
+  const rate = checkFormRateLimit("checkout", { key: rateLimitKey("checkout", request) });
   if (!rate.allowed) {
     return Response.json(
       { error: "Too many checkout attempts. Retry later." },

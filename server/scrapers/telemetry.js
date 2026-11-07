@@ -226,8 +226,25 @@ class ScraperTelemetry {
       if (state.driftDetected) report.scrapersWithDrift += 1;
       
       report.details[sourceName] = {
-        ...state,
-        // Format yields as percentages for the report
+        runs: state.runs,
+        lastRunAt: state.lastRunAt,
+        successes: state.successes,
+        failures: state.failures,
+        consecutiveFailures: state.consecutiveFailures,
+        zeroYieldRuns: state.zeroYieldRuns,
+        consecutiveZeroYieldRuns: state.consecutiveZeroYieldRuns,
+        lastYieldCount: state.lastYieldCount,
+        rejectedListings: state.rejectedListings,
+        lastRejectedCount: state.lastRejectedCount,
+        circuitBreakerTripped: state.circuitBreakerTripped,
+        driftDetected: state.driftDetected,
+        lastErrorCode: state.lastErrorCode,
+        circuitBreakerReason: state.circuitBreakerReason,
+        media: state.media || undefined,
+        // Redacted from the public report: lastError may leak source URLs and
+        // internals; baselines / domHashes reveal page structure and prior
+        // field-yield baselines. Yield percentages, breaker state, codes and
+        // test-derived telemetry remain visible.
         yieldMetrics: {
           totalListings: state.yieldMetrics.totalListings,
           addressYieldPct: Math.round(state.yieldMetrics.addressYield * 100) + '%',

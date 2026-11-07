@@ -473,9 +473,15 @@ function pgWhere(f, start = 1) {
     // exists in provenance is findable by keyword there and was invisible here,
     // which the parity matrix caught (q=hud reo returned [] against memory's
     // ["b"]).
+    //
+    // ILIKE treats %, _ and backslash as pattern metacharacters, but the
+    // in-memory matcher is a literal .includes() substring test (see matches()
+    // above). Unescaped, q=100% matched every Postgres row and none in memory.
+    // Escape the metacharacters so both backends apply the same literal rule.
+    const literalQuery = f.q.replace(/[\\%_]/g, (ch) => '\\' + ch);
     add(
-      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ?`,
-      `%${f.q}%`,
+      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ? ESCAPE '\\'`,
+      `%${literalQuery}%`,
     );
   }
   if (f.saleFrom) add("sale_date>=?", f.saleFrom);
@@ -559,7 +565,7 @@ function pgSort(f) {
   // page was entirely past sales. The served legacy UI has always labelled this
   // "Soonest sale date", which the plain ascending sort contradicted outright.
   //
-  // Past dates are pushed beyond every future one by adding 1e30 to their
+  // Past dates are pushed beyond every future one by adding 1e12 to their
   // epoch, which keeps the expression a SINGLE float8 scalar: the cursor builds
   // a row-comparison `(${expr}, id) < ($n, $m)` and selects `${expr}::float8`,
   // so a tuple expression would break pagination. Undated rows stay NULL and
