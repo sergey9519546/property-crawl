@@ -74,7 +74,7 @@ test('Accessibility (a11y): Triage chips enforce accessible list semantics and h
 
 test('Due Diligence Binder: component is mounted on listing detail page with accessible landmarks', () => {
   const listingPageSrc = read('src/app/listings/[id]/page.tsx');
-  assert.match(listingPageSrc, /<DueDiligenceChecklist listing=\{listing\} \/>/, 'DueDiligenceChecklist must be mounted on listing detail page');
+  assert.match(listingPageSrc, /<DueDiligenceChecklist\s+listing=\{listing\}[^>]*\/>/, 'DueDiligenceChecklist must be mounted on listing detail page');
 
   const checklistSrc = read('src/components/terminal/due-diligence-checklist.tsx');
   assert.match(checklistSrc, /aria-labelledby="due-diligence-heading"/, 'Checklist section must declare accessible heading landmark');
