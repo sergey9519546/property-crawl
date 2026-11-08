@@ -175,7 +175,7 @@ export function Hero() {
             {
               id: `address:${listing.id}`,
               label: listing.address,
-              query: listing.address,
+              query: listing.city,
               kind: "address",
               description: `Address nearby ${listing.city}`,
             },

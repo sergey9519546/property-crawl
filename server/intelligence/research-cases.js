@@ -435,7 +435,8 @@ function createCase(input, options = {}) {
         };
         changed = true;
       }
-      if (!existing.origins.some((entry) => entry.id === origin.id)) {
+      const originAdded = !existing.origins.some((entry) => entry.id === origin.id);
+      if (originAdded) {
         existing.origins.push(origin);
         existing.origins = existing.origins.slice(-MAX_ORIGINS);
         changed = true;
@@ -457,11 +458,13 @@ function createCase(input, options = {}) {
         };
         changed = true;
       }
+      let scenarioUpdated = false;
       if (input.underwriteScenario !== undefined) {
         const sanitized = sanitizeUnderwriteScenario(input.underwriteScenario);
         if (canonicalJson(existing.underwriteScenario || null) !== canonicalJson(sanitized)) {
           existing.underwriteScenario = sanitized;
           changed = true;
+          scenarioUpdated = true;
         }
       }
       if (!changed) return { changed: false, value: { case: caseSummary(existing), created: false, sourceCheck } };
@@ -471,7 +474,8 @@ function createCase(input, options = {}) {
         || (origin.type === 'material_change' && (origin.changedFields || []).length > 0);
       applyReconsiderationTrigger(existing, { type: 'origin', origin, substantive, previousSnapshot }, timestamp);
       if (listingAliasChange) existing.history.unshift(historyEvent('listing_alias_updated', existing, timestamp, listingAliasChange));
-      existing.history.unshift(historyEvent('origin_recorded', existing, timestamp, { originId: origin.id }));
+      if (scenarioUpdated) existing.history.unshift(historyEvent('underwrite_scenario_updated', existing, timestamp, { underwriteScenario: existing.underwriteScenario }));
+      if (originAdded) existing.history.unshift(historyEvent('origin_recorded', existing, timestamp, { originId: origin.id }));
       existing.history = existing.history.slice(0, MAX_CASE_HISTORY);
       return { value: { case: caseSummary(existing), created: false, sourceCheck } };
     }
@@ -504,6 +508,7 @@ function listCases(filters = {}, options = {}) {
   const items = loadStore(options.filePath).cases
     .filter((item) => !filters.state || item.state === filters.state)
     .filter((item) => !filters.sourceId || item.sourceRef.sourceId === filters.sourceId)
+    .filter((item) => !filters.listingId || item.listingId === filters.listingId || (item.listingAliases || []).includes(filters.listingId))
     .sort((left, right) => Number(right.reconsiderationRequired) - Number(left.reconsiderationRequired)
       || (eventPriority[left.origins[0]?.type] ?? 99) - (eventPriority[right.origins[0]?.type] ?? 99)
       || deadline(left) - deadline(right)
@@ -668,6 +673,7 @@ function buildPacket(idOrCase, options = {}) {
       listingId: item.listingId, listingAliases: item.listingAliases || [item.listingId], address: item.address, decision: item.decision,
       reconsideration: item.reconsideration, reconsiderationRequired: item.reconsiderationRequired,
       latestTrigger: item.latestTrigger || null, origins: item.origins, timeline: item.history,
+      underwriteScenario: item.underwriteScenario || null,
       createdAt: item.createdAt, updatedAt: item.updatedAt,
     },
     dossier: workspaceDossier(item),
@@ -711,6 +717,36 @@ function packetToMarkdown(packet) {
   lines.push('', '## Open research questions', '');
   if (!gaps.length) lines.push('- No open questions were recorded in this dossier snapshot.');
   for (const gap of gaps) lines.push(`- **${markdown(gap.title)}:** ${markdown(gap.reason)} Next: ${markdown(gap.nextAction)}`);
+  if (packet.case.decision) {
+    lines.push('', '## Decision details', '');
+    lines.push(`- State: ${markdown(packet.case.decision.state)}`);
+    if (packet.case.decision.decidedAt) lines.push(`- Decided at: ${markdown(packet.case.decision.decidedAt)}`);
+    if (Array.isArray(packet.case.decision.reasonCodes) && packet.case.decision.reasonCodes.length) {
+      lines.push(`- Reason codes: ${packet.case.decision.reasonCodes.map(markdown).join(', ')}`);
+    }
+    if (packet.case.decision.note) {
+      lines.push(`- Note: ${markdown(packet.case.decision.note)}`);
+    }
+  }
+  const scenario = packet.case.underwriteScenario;
+  if (scenario && typeof scenario === 'object') {
+    lines.push('', '## Saved underwriting assumptions', '');
+    if (scenario.customValuation) lines.push(`- Custom valuation: $${markdown(scenario.customValuation)}`);
+    if (scenario.customOpeningBid) lines.push(`- Assumed opening bid: $${markdown(scenario.customOpeningBid)}`);
+    if (typeof scenario.maxAllowableOffer === 'number') lines.push(`- Max allowable offer: $${markdown(scenario.maxAllowableOffer)}`);
+    if (typeof scenario.rehabBudget === 'number') lines.push(`- Rehab budget: $${markdown(scenario.rehabBudget)}`);
+    if (typeof scenario.targetMargin === 'number') lines.push(`- Target margin: ${markdown(scenario.targetMargin)}%`);
+    if (typeof scenario.holdingMonths === 'number') lines.push(`- Holding period: ${markdown(scenario.holdingMonths)} months`);
+    const closingCosts = [];
+    if (scenario.transferTax) closingCosts.push(`transfer tax: $${markdown(scenario.transferTax)}`);
+    if (scenario.delinquentTaxes) closingCosts.push(`delinquent taxes: $${markdown(scenario.delinquentTaxes)}`);
+    if (scenario.settlementCosts) closingCosts.push(`settlement costs: $${markdown(scenario.settlementCosts)}`);
+    if (scenario.buyersPremium) closingCosts.push(`buyer's premium: $${markdown(scenario.buyersPremium)}`);
+    if (scenario.sheriffPoundage) closingCosts.push(`sheriff poundage: $${markdown(scenario.sheriffPoundage)}`);
+    if (closingCosts.length) {
+      lines.push(`- Itemized costs: ${closingCosts.join(', ')}`);
+    }
+  }
   lines.push('', '## Evidence boundary', '', packet.interpretation, '');
   return lines.join('\n');
 }

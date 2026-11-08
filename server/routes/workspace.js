@@ -58,6 +58,7 @@ function createWorkspaceHandler(dependencies = {}) {
           return res.json(research.listCases({
             state: url.searchParams.get('state') || undefined,
             sourceId: url.searchParams.get('sourceId') || undefined,
+            listingId: url.searchParams.get('listingId') || undefined,
             limit: url.searchParams.get('limit'), offset: url.searchParams.get('offset'),
           }, { filePath }));
         }

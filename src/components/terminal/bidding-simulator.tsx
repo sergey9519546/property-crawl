@@ -165,6 +165,28 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     });
   };
 
+  const updateScenario = (field: ScenarioField, value: string) => {
+    if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
+    const next = { ...scenario, [field]: value };
+    setScenario(next);
+    persistScenario(next, rehabBudget, targetMargin, customValuation, customOpeningBid);
+    setAiStrategy(null);
+  };
+
+  const updateCustomValuation = (val: string) => {
+    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
+    setCustomValuation(val);
+    persistScenario(scenario, rehabBudget, targetMargin, val, customOpeningBid);
+    setAiStrategy(null);
+  };
+
+  const updateCustomOpeningBid = (val: string) => {
+    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
+    setCustomOpeningBid(val);
+    persistScenario(scenario, rehabBudget, targetMargin, customValuation, val);
+    setAiStrategy(null);
+  };
+
   // The bid-cost model and the max-allowable-offer calculation do not need the
   // same inputs. Cost to close is arithmetic over the PUBLISHED opening amount
   // plus costs the buyer enters, so it is answerable whenever the publisher gave
@@ -213,28 +235,6 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   }
 
 
-
-  const updateScenario = (field: ScenarioField, value: string) => {
-    if (value !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(value) || Number(value) < 0)) return;
-    const next = { ...scenario, [field]: value };
-    setScenario(next);
-    persistScenario(next, rehabBudget, targetMargin, customValuation, customOpeningBid);
-    setAiStrategy(null);
-  };
-
-  const updateCustomValuation = (val: string) => {
-    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
-    setCustomValuation(val);
-    persistScenario(scenario, rehabBudget, targetMargin, val, customOpeningBid);
-    setAiStrategy(null);
-  };
-
-  const updateCustomOpeningBid = (val: string) => {
-    if (val !== "" && (!/^\d*(?:\.\d{0,2})?$/.test(val) || Number(val) < 0)) return;
-    setCustomOpeningBid(val);
-    persistScenario(scenario, rehabBudget, targetMargin, customValuation, val);
-    setAiStrategy(null);
-  };
 
   const handleImportAssessor = async () => {
     setIsImportingAssessor(true);

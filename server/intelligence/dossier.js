@@ -1,5 +1,6 @@
 const { verifiedSnapshotReceipt } = require('../scrapers/discovery-snapshots');
 const { computePublicBenchmarkConsensus } = require('../enrichment/public-benchmark-consensus');
+const { loadObservedHpiSeries } = require('../enrichment/hpi-series');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { evaluateOpportunitySignals } = require('./signals');
 const { buildDocumentEvidence } = require('./document-evidence');
@@ -116,7 +117,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   });
   return {
     evidenceReceipt: verifiedSnapshotReceipt(listing),
-    publicBenchmarks: computePublicBenchmarkConsensus({...listing,parcel:publicRecords?.parcel || null}),
+    publicBenchmarks: computePublicBenchmarkConsensus({ ...listing, parcel: publicRecords?.parcel || null }, { hpiSeries: loadObservedHpiSeries() }),
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),

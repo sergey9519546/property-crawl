@@ -26,6 +26,9 @@ function withOperatorScenario(packet: any) {
     ...(typeof scenario.rehabBudget === 'number' && Number.isFinite(scenario.rehabBudget) ? { rehabBudget: scenario.rehabBudget } : {}),
     ...(typeof scenario.targetMargin === 'number' && Number.isFinite(scenario.targetMargin) ? { targetMarginPct: scenario.targetMargin } : {}),
     ...(scenario.maxAllowableOffer !== undefined ? { maxAllowableOffer: scenario.maxAllowableOffer } : {}),
+    ...(scenario.customValuation ? { customValuation: scenario.customValuation } : {}),
+    ...(scenario.customOpeningBid ? { customOpeningBid: scenario.customOpeningBid } : {}),
+    ...(typeof scenario.holdingMonths === 'number' && scenario.holdingMonths > 0 ? { holdingMonths: scenario.holdingMonths } : {}),
   };
 
   if (typeof scenario.maxAllowableOffer === 'number' && Number.isFinite(scenario.maxAllowableOffer)) {
@@ -53,8 +56,10 @@ function withOperatorScenario(packet: any) {
 
   const entered = scenarioCashInput(scenario);
   if (Object.keys(entered).length > 0) {
-    const openingBid = typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null;
-    const cash = computeCashToClose({ openingBid, purchasePrice: openingBid, ...entered });
+    const publishedOpeningBid = typeof packet?.property?.openingBid === 'number' ? packet.property.openingBid : null;
+    const assumedOpeningBid = Number(scenario.customOpeningBid) > 0 ? Number(scenario.customOpeningBid) : null;
+    const effectiveOpeningBid = publishedOpeningBid ?? assumedOpeningBid;
+    const cash = computeCashToClose({ openingBid: effectiveOpeningBid, purchasePrice: effectiveOpeningBid, ...entered });
     const cashDueReady = cash.registrationFunds !== null && cash.creditedDeposit !== null && cash.cashDueAtSettlement !== null;
     nextPacket = {
       ...nextPacket,

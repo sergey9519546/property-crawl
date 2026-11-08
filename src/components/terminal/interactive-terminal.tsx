@@ -76,6 +76,7 @@ import {
   type TerminalView,
 } from "@/lib/terminal-filter-store";
 import { DEAL_SCORE_MEANING, SCORE_BANDS, bandForScore } from "@/lib/score-bands";
+import { terminalFiltersToDiscovery } from "@/lib/discovery-query";
 
 function isObservedSourceRecord(listing: PropertyListing) {
   const provenance = listing.provenance;
@@ -1156,7 +1157,9 @@ export function InteractiveTerminal() {
             {/* Conversion Funnel Gateway to /listings Workbench */}
             <div className="mt-10 rounded-card border border-line bg-card p-6 sm:p-8 text-center shadow-card flex flex-col items-center gap-4">
               <div className="max-w-xl space-y-1.5">
-                <span className="text-label font-mono font-bold tracking-wider text-go uppercase">INSTITUTIONAL WORKBENCH // 2,130+ LISTINGS</span>
+                <span className="text-label font-mono font-bold tracking-wider text-ink-2 uppercase">
+                  INSTITUTIONAL WORKBENCH // {(syncCount || listings.length || 2000).toLocaleString()}+ DISPOSITIONS
+                </span>
                 <h3 className="text-2xl font-bold text-ink">Need the full institutional triage desk?</h3>
                 <p className="text-xs text-ink-3">
                   Filter across 16 federal &amp; county sources, calculate statutory cash-to-close carry, and inspect title priority signals across all 50 states.
@@ -1164,14 +1167,14 @@ export function InteractiveTerminal() {
               </div>
               <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
                 <Link
-                  href="/listings"
+                  href={terminalFiltersToDiscovery(filters)}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-control bg-ink px-6 text-xs font-bold text-white shadow-sm hover:bg-ink-2 transition"
                 >
                   <span>Launch Discovery Workbench</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
                 <Link
-                  href="/listings?view=map"
+                  href={terminalFiltersToDiscovery(filters, { view: "map" })}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-control border border-line bg-paper px-4 text-xs font-bold text-ink hover:bg-card transition"
                 >
                   <MapIcon className="w-3.5 h-3.5 text-ink-2" />

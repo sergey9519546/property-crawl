@@ -34,7 +34,44 @@ async function fetchListingOrCase(id: string) {
     // API down or network issue
   }
 
-  // 2. If not found, try fetching as research case ID (gated on authenticated workspace session)
+  // 2. If listing was found, check if an authenticated operator has an active research case for this listing
+  if (listing) {
+    try {
+      const incomingHeaders = await headers();
+      const cookieHeader = incomingHeaders.get('cookie') || '';
+      const sessionRequest = new Request(`${baseUrl}/research/${encodeURIComponent(decodedId)}/export`, {
+        headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      });
+      const configuration = workspaceSessionConfiguration();
+      const session = readWorkspaceSession(sessionRequest);
+      if (configuration.configured && session.authenticated) {
+        const caseListRes = await fetch(`${baseUrl}/api/workspace/cases?listingId=${encodeURIComponent(listing.id)}`, {
+          cache: 'no-store',
+          headers: { 'x-operator-token': configuration.credential },
+        });
+        if (caseListRes.ok) {
+          const caseListData = await caseListRes.json();
+          const firstCase = Array.isArray(caseListData?.items) ? caseListData.items[0] : null;
+          if (firstCase?.id) {
+            const caseDetailRes = await fetch(`${baseUrl}/api/workspace/cases/${encodeURIComponent(firstCase.id)}`, {
+              cache: 'no-store',
+              headers: { 'x-operator-token': configuration.credential },
+            });
+            if (caseDetailRes.ok) {
+              const caseDetailData = await caseDetailRes.json();
+              if (caseDetailData?.case) {
+                caseDecision = caseDetailData.case;
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  // 3. If not found directly, try fetching as research case ID (gated on authenticated workspace session)
   if (!listing) {
     try {
       const incomingHeaders = await headers();

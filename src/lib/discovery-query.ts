@@ -61,3 +61,40 @@ export function discoveryUrl(filters: DiscoveryFilters) {
   const query = discoverySearchParams(filters).toString();
   return query ? `/listings?${query}` : "/listings";
 }
+
+export function terminalFiltersToDiscovery(
+  filters: {
+    searchQuery?: string;
+    selectedState?: string;
+    selectedSource?: string;
+    observedOnly?: boolean;
+    sortBy?: string;
+    minDealScore?: number;
+    minEquity?: number;
+    maxOpeningBid?: number | null;
+    propertyType?: string;
+    occupancy?: string;
+    seniorLienFilter?: string;
+    redemptionFilter?: string;
+  },
+  extras: Record<string, string | number | boolean | undefined> = {}
+): string {
+  const discoveryFilters: DiscoveryFilters = {};
+  if (filters.searchQuery?.trim()) discoveryFilters.q = filters.searchQuery.trim();
+  if (filters.selectedState && filters.selectedState !== "all") discoveryFilters.state = filters.selectedState;
+  if (filters.selectedSource && filters.selectedSource !== "all") discoveryFilters.source = filters.selectedSource;
+  if (filters.observedOnly) discoveryFilters.freshness = "observed";
+  if (typeof filters.minDealScore === "number" && filters.minDealScore > 0) discoveryFilters.minScore = String(filters.minDealScore);
+  if (typeof filters.minEquity === "number" && filters.minEquity > 0) discoveryFilters.minEquity = String(filters.minEquity);
+  if (typeof filters.maxOpeningBid === "number" && filters.maxOpeningBid > 0) discoveryFilters.maxBid = String(filters.maxOpeningBid);
+  if (filters.propertyType && filters.propertyType !== "all") discoveryFilters.type = filters.propertyType;
+  if (filters.occupancy && filters.occupancy !== "all") discoveryFilters.occupancy = filters.occupancy;
+  if (filters.seniorLienFilter && filters.seniorLienFilter !== "all") discoveryFilters.seniorLien = filters.seniorLienFilter;
+  if (filters.redemptionFilter && filters.redemptionFilter !== "all") discoveryFilters.redemption = filters.redemptionFilter;
+  if (filters.sortBy && ["score", "quality", "opportunity", "triage", "date", "bid-asc", "equity", "bid"].includes(filters.sortBy)) {
+    discoveryFilters.sort = filters.sortBy;
+  }
+  const params = discoverySearchParams(discoveryFilters, extras);
+  const qs = params.toString();
+  return qs ? `/listings?${qs}` : "/listings";
+}

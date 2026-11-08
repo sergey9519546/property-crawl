@@ -1,3 +1,5 @@
+import type { UnderwriteScenario } from "./underwrite-scenario";
+
 export type SourceRecordRef = { sourceId: string; recordId: string };
 
 export type CaseOrigin = {
@@ -39,6 +41,7 @@ export type ResearchCaseSummary = {
   originCount: number;
   evidenceCount: number;
   createdAt: string;
+  underwriteScenario?: UnderwriteScenario | null;
   updatedAt: string;
 };
 

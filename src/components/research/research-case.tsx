@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, Clock3, Download, ExternalLink, FileCheck2, GitCompareArrows, History, Link2, Loader2, RotateCcw, Save, ShieldQuestion, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Calculator, Check, Clock3, Download, ExternalLink, FileCheck2, GitCompareArrows, History, Link2, Loader2, RotateCcw, Save, ShieldQuestion, Trash2 } from "lucide-react";
+import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import type { Claim, ReconsiderationCondition, ResearchCaseDetail, ResearchDossier } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
@@ -83,17 +84,37 @@ export function ResearchCase({ caseId }: { caseId: string }) {
   // Re-POSTing the listing upserts this case; the server keeps the newer snapshot.
   async function recheckSource() {
     if (!detail) return;
-    const result = await mutate("/api/workspace/cases", "POST", { listingId: detail.case.listingId, origin: { type: "manual" } });
+    const local = readUnderwriteScenario(detail.case.listingId);
+    const result = await mutate("/api/workspace/cases", "POST", {
+      listingId: detail.case.listingId,
+      origin: { type: "manual" },
+      ...(local ? { underwriteScenario: local } : {}),
+    });
     if (result) setMessage(result.sourceCheck?.updated === true ? "A newer saved publisher observation was found and the snapshot was updated." : "No newer saved publisher observation was found. This check does not contact the publisher.");
+  }
+
+  async function syncLocalScenario() {
+    if (!detail) return;
+    const local = readUnderwriteScenario(detail.case.listingId);
+    if (!local) return;
+    const result = await mutate("/api/workspace/cases", "POST", {
+      listingId: detail.case.listingId,
+      origin: { type: "manual" },
+      underwriteScenario: local,
+    });
+    if (result) setMessage("Local underwriting assumptions synced to research case.");
   }
 
   async function saveDecision() {
     if (!detail) return;
+    const local = readUnderwriteScenario(detail.case.listingId);
+    const scenarioToPersist = local || detail.case.underwriteScenario || undefined;
     const result = await mutate(`/api/workspace/cases/${encodeURIComponent(caseId)}`, "PATCH", {
       expectedRevision: detail.case.revision,
       state: decisionState,
       reasonCodes: decisionState === "inbox" ? [] : reasonCodes,
       note: note || undefined,
+      ...(scenarioToPersist ? { underwriteScenario: scenarioToPersist } : {}),
       ...(decisionState === "pass" ? { reconsideration: { mode, conditions } } : {}),
     });
     if (result) setMessage(decisionState === "pass" ? "Pass saved. The case returns only when a supported condition is met." : "Decision saved to this case revision.");
@@ -165,6 +186,87 @@ export function ResearchCase({ caseId }: { caseId: string }) {
 
         <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_390px]">
           <div className="space-y-6">
+            {(() => {
+              const localScenario = detail.case.listingId ? readUnderwriteScenario(detail.case.listingId) : null;
+              const serverScenario = detail.case.underwriteScenario || null;
+              const effectiveScenario = localScenario || serverScenario;
+              const hasDiff = localScenario && serverScenario && JSON.stringify(localScenario) !== JSON.stringify(serverScenario);
+              return (
+                <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Calculator size={19} className="text-slate-900" />
+                      <h2 className="text-xl font-semibold">Underwriting scenario &amp; acquisition model</h2>
+                    </div>
+                    {localScenario && (hasDiff || !serverScenario) && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void syncLocalScenario()}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                      >
+                        <Save size={13} />
+                        Sync local model to case
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                    Investor assumptions modeled in the bidding terminal. These inputs govern Max Allowable Offer and statutory cash-to-close calculations.
+                  </p>
+                  {effectiveScenario ? (
+                    <div className="mt-5 space-y-4">
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <div className="rounded-xl bg-[#F8FAFC] p-3.5 border border-slate-200/60">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">Valuation</span>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            {effectiveScenario.customValuation ? `$${Number(effectiveScenario.customValuation).toLocaleString()}` : "Market benchmark"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-[#F8FAFC] p-3.5 border border-slate-200/60">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">Assumed Opening Bid</span>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            {effectiveScenario.customOpeningBid ? `$${Number(effectiveScenario.customOpeningBid).toLocaleString()}` : (typeof detail.case.openingBid === "number" ? `$${detail.case.openingBid.toLocaleString()}` : "Unpublished")}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-[#F8FAFC] p-3.5 border border-slate-200/60">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">Max Allowable Offer</span>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            {typeof effectiveScenario.maxAllowableOffer === "number" ? `$${effectiveScenario.maxAllowableOffer.toLocaleString()}` : "Requires valuation"}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-[#F8FAFC] p-3.5 border border-slate-200/60">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6472]">Rehab &amp; Margin</span>
+                          <p className="mt-1 text-sm font-bold text-slate-900">
+                            ${effectiveScenario.rehabBudget.toLocaleString()} · {effectiveScenario.targetMargin}%
+                          </p>
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-[#F1F5F9] p-4 text-xs text-[#5B6472] space-y-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-slate-800 font-semibold">
+                          <span>Holding period assumption: {effectiveScenario.holdingMonths || 6} months</span>
+                          <Link href={`/listings/${encodeURIComponent(detail.case.listingId)}#due-diligence-binder`} className="text-slate-900 underline hover:text-slate-700 text-xs font-semibold">
+                            Tune in terminal →
+                          </Link>
+                        </div>
+                        <p className="text-[11px] text-slate-500">
+                          Transfer tax: ${effectiveScenario.transferTax || "0"} · Delinquent taxes: ${effectiveScenario.delinquentTaxes || "0"} · Settlement: ${effectiveScenario.settlementCosts || "0"} · Buyer premium: ${effectiveScenario.buyersPremium || "0"} · Sheriff poundage: ${effectiveScenario.sheriffPoundage || "0"}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-xl bg-[#F8FAFC] p-4 text-xs text-[#5B6472] border border-slate-200/60">
+                      <p>No customized underwriting scenario has been attached to this case yet.</p>
+                      <p className="mt-1">
+                        <Link href={`/listings/${encodeURIComponent(detail.case.listingId)}#due-diligence-binder`} className="text-slate-900 underline font-semibold">
+                          Open listing bidding simulator
+                        </Link>{" "}
+                        to model target price, rehab budget, and statutory fees.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
             <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"><div className="flex items-center gap-2"><GitCompareArrows size={19} className="text-slate-900" /><h2 className="text-xl font-semibold">Evidence comparison</h2></div><p className="mt-2 text-xs leading-5 text-[#5B6472]">Publisher claims and matched official-record claims remain separate. A blank side means the evidence is still unknown.</p><div className="mt-5 grid gap-4 md:grid-cols-2"><ClaimColumn title="Publisher record" claims={detail.dossier.claimGroups?.publisher || []} empty="No publisher claims were retained in this dossier snapshot." /><ClaimColumn title="Official records" claims={detail.dossier.claimGroups?.official || []} empty="No parcel-level official record has been matched." /></div>{(detail.dossier.signals || []).length > 0 && <div className="mt-5 border-t border-[#F3F4F6] pt-5"><h3 className="text-sm font-semibold">Conflicts and cautions</h3><div className="mt-3 space-y-2">{detail.dossier.signals?.map((signal, index) => <div key={index} className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-950"><p className="font-semibold">{sourceDisplayText(signal.title || signal.type || "Evidence signal")}</p><p className="mt-1">{sourceDisplayText(signal.reason || "Review the underlying evidence.")}</p></div>)}</div></div>}</section>
 
             <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7"><div className="flex items-center gap-2"><ShieldQuestion size={19} className="text-slate-900" /><h2 className="text-xl font-semibold">What to investigate next</h2></div><div className="mt-4 space-y-3">{(detail.dossier.gaps || []).map((gap, index) => <article key={gap.key || index} className="rounded-xl bg-[#F1F5F9] p-4"><h3 className="text-sm font-semibold">{sourceDisplayText(gap.title || gap.key || "Open question")}</h3><p className="mt-2 text-xs leading-5 text-[#5B6472]">{sourceDisplayText(gap.reason || "Supporting evidence has not been linked.")}</p>{gap.nextAction && <p className="mt-2 text-xs font-semibold text-slate-900">Next: {sourceDisplayText(gap.nextAction)}</p>}</article>)}{!(detail.dossier.gaps || []).length && <p className="text-sm text-[#5B6472]">No open questions were recorded in this snapshot. Recheck source freshness before acting.</p>}<button type="button" disabled={busy} onClick={() => void recheckSource()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-50"><RotateCcw size={14} />Check latest saved observation</button></div></section>

@@ -68,10 +68,10 @@ export function buildHuntFromSavedSearch(search: SavedSearch, server?: ServerSav
   const discoveryFilters: Record<string, string> = {};
   const f = (server?.filters || {}) as Record<string, unknown>;
   if (Array.isArray(f.states) && f.states.length > 0) {
-    const cleanStates = f.states.map((s) => String(s).trim()).filter((s) => s && s.toLowerCase() !== "all");
+    const cleanStates = f.states.map((s) => String(s).trim().toUpperCase()).filter((s) => s && s !== "ALL");
     if (cleanStates.length > 0) discoveryFilters.state = cleanStates.join(",");
   } else if (search.state && search.state !== "All") {
-    discoveryFilters.state = search.state.toLowerCase();
+    discoveryFilters.state = search.state.trim().toUpperCase();
   }
   if (search.minScore > 0) discoveryFilters.minScore = String(search.minScore);
   if (search.maxBid > 0) discoveryFilters.maxBid = String(search.maxBid);
