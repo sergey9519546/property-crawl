@@ -49,7 +49,7 @@ Progress: [██████████] 100%
 - [Phase 3]: Deployed and verified commit `ac61b611077c8a02145c0f5dcf76fb8a9151d7f9` live on Render (deploy `dep-dboqsh8473hc73auc8g0`). Passed full 9/9 source-bound release gate, fixed Docker runtime missing directories (config/ and src/), bounded health check DB queries to 2.5s, and shortened boot readiness probe.
 - [Phase 4]: Built Growth & Discovery Division under Chief of Staff: created `marketing_strategist` and `seo_specialist` agent roles with playbooks (`.kilo/agent/`), registered 4 new capabilities (`synthesize_customer_empathy`, `map_customer_journey`, `optimize_seo_titles_and_serp`, `generate_growth_campaign`) and 2 swarm strategies (`growth`, `seo`) into `scripts/swarm/config.js` and `scripts/capability-graph.js`.
 - [Phase 4]: Deployed site-wide SERP title tag optimization adhering to the 40–55 char budget across `/`, `/listings`, `/states`, `/states/[state]`, `/hunts`, `/research`, `/resources`, `/about`, `/sources`, `/[slug]`, and `/listings/[id]`.
-- [Phase 4]: Injected `FAQPage` JSON-LD schema into `faq.tsx`, added local matrix fallback to `sitemap.ts`, and expanded `robots.txt` to explicitly grant indexing access to PerplexityBot, GPTBot, and ClaudeBot.
+- [Database Migration]: Successfully migrated production database to Supabase PostgreSQL 17.11 (us-west-2, project `icxjpoudcwqfsobaohjz`). Replicated all 15,033+ listings and 76,360 observation records with 100% parity. Production cutover on Render verified live at `https://property-crawl.onrender.com/api/health` with `dataMode: postgres`, `postgresReachable: true`, and continuous background crawling active.
 
 ### Pending Todos
 
@@ -57,7 +57,7 @@ None. All roadmap phases and Chief of Staff growth commands 100% complete and ve
 
 ### Blockers/Concerns
 
-- Render free PostgreSQL instance (`dpg-dbbc8su7bikc73819uo0-a`) expires 2026-11-19 (full 35.74 MB dump is safely stored in `.secrets/hosted-backups/property-crawl-render-2026-11-09.dump`). Free target restore ready.
+None. Render expiring PostgreSQL instance replaced with permanent Supabase PostgreSQL 17 database ($0/month hosting guarantee fully preserved). Render instance `dpg-dbbc8su7bikc73819uo0-a` is decommissioned from production routing.
 
 ## Deferred Items
 
