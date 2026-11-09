@@ -1,24 +1,25 @@
 import { serializeJsonLd } from "@/lib/json-ld";
 
 export function SeoSchema({ nonce }: { nonce?: string | null }) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com";
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "Organization",
-        "@id": "https://perfectproperty.ai/#organization",
+        "@id": `${baseUrl}/#organization`,
         "name": "PerfectProperty",
-        "url": "https://perfectproperty.ai",
-        "logo": "https://perfectproperty.ai/logo.svg",
+        "url": baseUrl,
+        "logo": `${baseUrl}/logo.svg`,
         "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out."
       },
       {
         "@type": "WebSite",
-        "@id": "https://perfectproperty.ai/#website",
-        "url": "https://perfectproperty.ai",
+        "@id": `${baseUrl}/#website`,
+        "url": baseUrl,
         "name": "PerfectProperty",
         "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out.",
-        "publisher": { "@id": "https://perfectproperty.ai/#organization" }
+        "publisher": { "@id": `${baseUrl}/#organization` }
       }
     ]
   };

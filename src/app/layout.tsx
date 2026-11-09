@@ -51,7 +51,7 @@ export const metadata: Metadata = {
     "off-market",
     "real estate investing",
   ],
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://property-crawl.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || process.env.PUBLIC_APP_ORIGIN || "https://property-crawl.onrender.com"),
   authors: [{ name: "PerfectProperty" }],
   icons: {
     icon: "/logo-icon.svg",
