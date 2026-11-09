@@ -8,6 +8,7 @@ import { getExactSourceListingUrl } from "@/lib/listing-links";
 import { displayDate, safeImageUrl } from "@/lib/listing-display";
 import { combineStatusTones, listingOfferAvailability, listingStatusClass, listingStatusTone } from "@/lib/listing-status";
 import { serializeJsonLd } from "@/lib/json-ld";
+import { getCountyCadastralGisLink } from "@/lib/county-seo";
 import { redemptionLabel } from "@/lib/underwriting";
 import { Fact } from "@/components/evidence/fact";
 import { GapLedger } from "@/components/evidence/gap-ledger";
@@ -189,6 +190,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   }
 
   const source = SOURCES[listing.source];
+  const gisLink = getCountyCadastralGisLink(listing.state, listing.county);
   const exactSourceUrl = getExactSourceListingUrl(listing, source?.websiteUrl);
   const openingBid = positiveNumber(listing.openingBid);
   const estLow = positiveNumber(listing.estLow);
@@ -596,6 +598,32 @@ export default async function ListingPage({ params, searchParams }: Props) {
             <DueDiligenceChecklist listing={listing} className="scroll-mt-6" />
             <ListingCompare listingId={listing.id} label={listing.address} />
             <Parcel3DVisualizer listing={listing} />
+            {gisLink && (
+              <div className="rounded-card border border-line bg-card p-5 text-ink shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2">
+                      <MapPin className="h-3 w-3 text-go" />
+                      {gisLink.authorityType === "county_assessor_gis" ? "Official County Assessor GIS" : "Statewide Cadastral GIS"}
+                    </div>
+                    <h3 className="text-sm font-bold text-ink">
+                      {gisLink.portalName}
+                    </h3>
+                    <p className="text-xs text-ink-3 max-w-xl leading-relaxed">
+                      Cross-reference this property&apos;s parcel boundaries, lot dimensions, and official assessed value directly with county tax records.
+                    </p>
+                  </div>
+                  <a
+                    href={gisLink.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-control border border-line-strong bg-paper px-3.5 py-2 text-xs font-semibold text-ink-2 hover:bg-line transition"
+                  >
+                    Open County GIS <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              </div>
+            )}
             <NearbyComps listingId={listing.id} targetAddress={listing.address} targetSqft={listing.sqft} targetOpeningBid={openingBid} />
           </div>
         </section>

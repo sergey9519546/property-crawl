@@ -197,6 +197,7 @@ test('POST /api/alerts (subscribe_county_digest): subscribes to county alert dig
   assert.deepEqual(savedSearch.filters.states, ['TX']);
   assert.deepEqual(savedSearch.filters.counties, ['travis']);
   assert.equal(savedSearch.filters.email, 'investor@example.com');
+  assert.equal(savedSearch.filters.notifyEmail, 'investor@example.com');
   assert.equal(savedSearch.filters.cadence, 'daily');
 });
 
@@ -323,4 +324,58 @@ test('POST /api/alerts (subscribe_county_digest): rejects invalid cadence', asyn
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.error, 'Invalid cadence; must be instant, daily, or weekly');
+});
+
+test('runAlertsForUser: dispatches rich email alert to county subscriber on new matches', async () => {
+  const { runAlertsForUser } = require('../server/intelligence/alerts-runner');
+  const sentCalls = [];
+  const stubMailOptions = {
+    env: { RESEND_API_KEY: 're_test_suite_key', RESEND_FROM: 'alerts@perfectproperty.org' },
+    fetchImpl: async (url, init) => {
+      sentCalls.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ id: 'email_test_123' }) };
+    }
+  };
+
+  const uidSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const userId = `device:test_device_subscriber_${uidSuffix}`;
+  const createdSearch = await db.createSavedSearch(userId, {
+    label: 'Wake, NC Notice Alerts',
+    filters: {
+      states: ['NC'],
+      counties: ['wake'],
+      notifyEmail: 'subscriber@example.com',
+      cadence: 'daily'
+    }
+  });
+
+  const sampleListing = {
+    id: `NC-WAKE-TEST-${uidSuffix}`,
+    address: '123 Fayetteville St',
+    city: 'Raleigh',
+    county: 'wake',
+    state: 'NC',
+    openingBid: 245000,
+    dealScore: 84,
+    saleDate: '2026-11-20'
+  };
+
+  const alertResult = await runAlertsForUser({
+    userId,
+    listings: [sampleListing],
+    database: db,
+    mailOptions: stubMailOptions
+  });
+
+  assert.equal(alertResult.totalNewMatches, 1);
+  assert.equal(sentCalls.length, 1);
+  const call = sentCalls[0];
+  assert.deepEqual(call.to, ['subscriber@example.com']);
+  assert.match(call.subject, /1 new notice\(s\)/);
+  assert.match(call.text, /123 Fayetteville St/);
+  assert.match(call.text, /\$245,000/);
+  assert.match(call.text, /Score 84\/99/);
+  assert.match(call.text, /Sale: 2026-11-20/);
+  assert.match(call.text, new RegExp(sampleListing.id));
+  assert.equal(alertResult.results[0].mailDelivery, 'sent');
 });

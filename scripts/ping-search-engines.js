@@ -12,7 +12,7 @@
  *   node scripts/ping-search-engines.js [--dry-run]
  */
 
-const { submitIndexNowUrls, pingSitemap, DEFAULT_HOST, DEFAULT_SITEMAP_URL } = require('../server/seo/indexing-ping.js');
+const { submitIndexNowUrls, pingSitemap, resolveDefaultHost, resolveDefaultSitemapUrl } = require('../server/seo/indexing-ping.js');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -20,7 +20,9 @@ async function main() {
 
   console.log(`[SEO-Ping] Starting Search Engine Notification (${isDryRun ? 'DRY RUN' : 'LIVE'})...`);
 
-  const baseUrl = `https://${DEFAULT_HOST}`;
+  const host = resolveDefaultHost();
+  const sitemapUrl = resolveDefaultSitemapUrl();
+  const baseUrl = `https://${host}`;
   const coreUrls = [
     `${baseUrl}/`,
     `${baseUrl}/listings`,
@@ -42,7 +44,7 @@ async function main() {
   console.log(`[SEO-Ping] Preparing IndexNow payload for ${urlsToPing.length} core URLs...`);
 
   const indexNowResult = await submitIndexNowUrls({
-    host: DEFAULT_HOST,
+    host,
     urls: urlsToPing,
     dryRun: isDryRun,
   });
@@ -53,10 +55,10 @@ async function main() {
     console.warn(`[SEO-Ping] IndexNow submission encountered errors:`, indexNowResult.errors);
   }
 
-  console.log(`[SEO-Ping] Pinging sitemap (${DEFAULT_SITEMAP_URL}) to Google and Bing...`);
+  console.log(`[SEO-Ping] Pinging sitemap (${sitemapUrl}) to Google and Bing...`);
 
   const sitemapResult = await pingSitemap({
-    sitemapUrl: DEFAULT_SITEMAP_URL,
+    sitemapUrl,
     engines: ['google', 'bing'],
     dryRun: isDryRun,
   });

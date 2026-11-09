@@ -14,6 +14,19 @@ const MAX_URLS_PER_CHUNK = 10000;
 const DEFAULT_HOST = 'perfectproperty.org';
 const DEFAULT_SITEMAP_URL = 'https://perfectproperty.org/sitemap.xml';
 
+function resolveDefaultHost(env = process.env) {
+  const origin = env.PUBLIC_APP_ORIGIN || env.NEXT_PUBLIC_APP_URL || '';
+  if (origin && typeof origin === 'string') {
+    return origin.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  }
+  return DEFAULT_HOST;
+}
+
+function resolveDefaultSitemapUrl(env = process.env) {
+  const host = resolveDefaultHost(env);
+  return `https://${host}/sitemap.xml`;
+}
+
 const SITEMAP_PING_ENDPOINTS = Object.freeze({
   google: 'https://www.google.com/ping?sitemap=',
   bing: 'https://www.bing.com/ping?sitemap=',
@@ -33,7 +46,7 @@ const SITEMAP_PING_ENDPOINTS = Object.freeze({
  */
 async function submitIndexNowUrls(options = {}) {
   const {
-    host = DEFAULT_HOST,
+    host = resolveDefaultHost(),
     key = process.env.INDEXNOW_KEY || 'default_test_key',
     urls = [],
     dryRun = false,
@@ -140,7 +153,7 @@ async function submitIndexNowUrls(options = {}) {
  */
 async function pingSitemap(options = {}) {
   const {
-    sitemapUrl = DEFAULT_SITEMAP_URL,
+    sitemapUrl = resolveDefaultSitemapUrl(),
     engines = ['google', 'bing'],
     dryRun = false,
     fetchFn = globalThis.fetch,
@@ -212,6 +225,8 @@ module.exports = {
   MAX_URLS_PER_CHUNK,
   DEFAULT_HOST,
   DEFAULT_SITEMAP_URL,
+  resolveDefaultHost,
+  resolveDefaultSitemapUrl,
   SITEMAP_PING_ENDPOINTS,
   submitIndexNowUrls,
   pingSitemap,

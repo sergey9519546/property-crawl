@@ -84,6 +84,7 @@ async function handleAlerts(req, res) {
         filters: {
           states: [cleanState],
           counties: [cleanCounty],
+          notifyEmail: cleanEmail,
           email: cleanEmail,
           cadence: resolvedCadence,
         },

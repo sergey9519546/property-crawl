@@ -576,7 +576,7 @@ const scheduler = new IngestionScheduler({
         for (const userId of userIds) {
           // Members get saved-search alerts only while their subscription is active.
           if (userId.startsWith('account:') && !(await accounts.get(userId.slice(8)))?.entitled) continue;
-          if (!userId.startsWith('workspace:') && !userId.startsWith('account:')) continue;
+          if (!userId.startsWith('workspace:') && !userId.startsWith('account:') && !userId.startsWith('device:')) continue;
           const alertResult = await runAlertsForUser({ userId, listings: run.listings, database: db });
           if (alertResult && alertResult.totalNewMatches > 0) {
             console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);

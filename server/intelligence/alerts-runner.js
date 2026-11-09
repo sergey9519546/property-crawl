@@ -70,13 +70,26 @@ async function runAlertsForUser({ userId, listings, database, mailOptions, webho
         row.webhookError = String(error?.message || error || 'webhook-failed');
       }
     }
-    const notify = isEmail(search?.filters?.notifyEmail);
+    const notify = isEmail(search?.filters?.notifyEmail) || isEmail(search?.filters?.email) || isEmail(search?.notifyEmail);
     if (newCount > 0 && notify) {
       try {
+        const baseUrl = process.env.PUBLIC_APP_ORIGIN || process.env.NEXT_PUBLIC_APP_URL || 'https://property-crawl.onrender.com';
+        const formattedItems = fresh.slice(0, 15).map((l) => {
+          const addr = l.address || 'Address unlisted';
+          const location = [l.city, l.state].filter(Boolean).join(', ');
+          const bid = l.openingBid != null ? `$${Math.round(Number(l.openingBid)).toLocaleString('en-US')}` : 'Opening bid unlisted';
+          const score = l.dealScore != null ? `Score ${Math.round(Number(l.dealScore))}/99` : 'Unscored';
+          const date = l.saleDate || l.auctionDate ? `Sale: ${(l.saleDate || l.auctionDate).slice(0, 10)}` : 'Sale date TBD';
+          const url = `${baseUrl}/listings/${encodeURIComponent(l.id)}`;
+          return `• ${addr}${location ? ` (${location})` : ''}\n  ${bid} | ${score} | ${date}\n  Details: ${url}`;
+        }).join('\n\n');
+
+        const emailText = `${newCount} new foreclosure or auction notice(s) matching "${search.label || search.id}":\n\n${formattedItems}\n\nNotice: Listings convey "as-is, where-is". Verify all civil dockets and title encumbrances prior to bidding. Manage your alert subscriptions at ${baseUrl}/hunts.`;
+
         const mail = await sendOutboundMail({
           to: notify,
-          subject: `Saved search matches: ${newCount}`,
-          text: `${newCount} new match(es) were recorded for "${search.label || search.id}". Open the workspace to review them. This note is not a sale or a valuation.`,
+          subject: `${newCount} new notice(s): ${search.label || 'Saved Search Alert'}`,
+          text: emailText,
           kind: 'saved-search',
         }, mailOptions || {});
         row.mailDelivery = mail.delivery;
