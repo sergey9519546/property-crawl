@@ -13,10 +13,15 @@ const {
   formatCountyDisplayName,
   computeCountyStats,
   getStatutoryRedemption,
+  getStatutoryFeeSchedule,
+  generateHighCtrCountyTitle,
   generateCountyMetadata,
   buildCountyBreadcrumbs,
   buildCountyItemList,
+  buildCountyFaqSchema,
 } = require('../../src/lib/county-seo.js');
+
+const serverSeo = require('../../server/seo/index.js');
 
 function loadTs(relative) {
   const filename = path.resolve(__dirname, '../..', relative);
@@ -113,6 +118,103 @@ test('County SEO: getStatutoryRedemption resolves accurate state statutory redem
   assert.match(xx.label, /Statutory redemption details require review/);
 });
 
+test('County SEO: getStatutoryRedemption resolves upset bid periods and homestead distinctions', () => {
+  // North Carolina: 10-day upset bid under N.C.G.S. § 45-21.27
+  const nc = getStatutoryRedemption('NC');
+  assert.equal(nc.days, 10);
+  assert.ok(nc.upsetBid);
+  assert.equal(nc.upsetBid.hasUpsetBid, true);
+  assert.equal(nc.upsetBid.windowDays, 10);
+  assert.equal(nc.upsetBid.minDepositPct, 0.05);
+  assert.equal(nc.upsetBid.minDepositFloor, 750);
+  assert.match(nc.upsetBid.statute, /45-21\.27/);
+
+  // South Carolina: 30-day upset bid under S.C. Code § 15-39-720
+  const sc = getStatutoryRedemption('SC');
+  assert.equal(sc.days, 30);
+  assert.ok(sc.upsetBid);
+  assert.equal(sc.upsetBid.hasUpsetBid, true);
+  assert.equal(sc.upsetBid.windowDays, 30);
+  assert.match(sc.upsetBid.statute, /15-39-720/);
+
+  // Alabama: 180-day homestead vs 365-day non-homestead under Ala. Code § 6-5-248
+  const al = getStatutoryRedemption('AL');
+  assert.equal(al.days, 180);
+  assert.ok(al.homesteadDistinction);
+  assert.equal(al.homesteadDistinction.hasDistinction, true);
+  assert.equal(al.homesteadDistinction.homesteadDays, 180);
+  assert.equal(al.homesteadDistinction.nonHomesteadDays, 365);
+  assert.equal(al.homesteadDistinction.interestRatePct, 12);
+  assert.match(al.homesteadDistinction.statute, /6-5-248/);
+
+  // Texas: 2-year (730-day) homestead/ag vs 180-day non-homestead under Tex. Tax Code § 34.21
+  const tx = getStatutoryRedemption('TX');
+  assert.equal(tx.days, 180);
+  assert.ok(tx.homesteadDistinction);
+  assert.equal(tx.homesteadDistinction.hasDistinction, true);
+  assert.equal(tx.homesteadDistinction.homesteadDays, 730);
+  assert.equal(tx.homesteadDistinction.nonHomesteadDays, 180);
+  assert.match(tx.homesteadDistinction.statute, /34\.21/);
+});
+
+test('County SEO: getStatutoryFeeSchedule resolves statutory transfer taxes, poundage, and citations', () => {
+  // New Jersey: N.J.S.A. 22A:4-8 poundage & N.J.S.A. 46:15-7 Realty Transfer Fee
+  const nj = getStatutoryFeeSchedule('NJ', 200000);
+  assert.equal(nj.isSupported, true);
+  assert.match(nj.scheduleLabel, /New Jersey/);
+  assert.match(nj.transferTaxCitation, /N\.J\.S\.A\. 46:15-7/);
+  assert.match(nj.sheriffPoundageCitation, /N\.J\.S\.A\. 22A:4-8/);
+  assert.match(nj.depositRequirement, /20%/);
+  assert.equal(nj.settlementWindowHours, 720);
+  assert.ok(nj.estimatedFees.transferTax > 0);
+  assert.ok(nj.estimatedFees.sheriffPoundage > 0);
+
+  // Ohio: ORC § 319.54 conveyance fee & ORC § 311.17 poundage
+  const oh = getStatutoryFeeSchedule('OH', 100000);
+  assert.equal(oh.isSupported, true);
+  assert.match(oh.transferTaxCitation, /ORC § 319\.54/);
+  assert.match(oh.sheriffPoundageCitation, /ORC § 311\.17/);
+
+  // Florida: Fla. Stat. § 201.02 doc stamps & Fla. Stat. § 28.24 registry fee
+  const fl = getStatutoryFeeSchedule('FL', 100000);
+  assert.equal(fl.isSupported, true);
+  assert.match(fl.transferTaxCitation, /Fla\. Stat\. § 201\.02/);
+  assert.match(fl.sheriffPoundageCitation, /Fla\. Stat\. § 28\.24/);
+  assert.match(fl.depositRequirement, /5%/);
+  assert.equal(fl.settlementWindowHours, 24);
+
+  // Pennsylvania: 72 P.S. § 8102-C (2% transfer tax) & 42 Pa.C.S. § 21107 (sheriff poundage)
+  const pa = getStatutoryFeeSchedule('PA', 150000);
+  assert.equal(pa.isSupported, true);
+  assert.match(pa.transferTaxCitation, /72 P\.S\. § 8102-C/);
+  assert.match(pa.sheriffPoundageCitation, /42 Pa\.C\.S\. § 21107/);
+
+  // North Carolina: N.C.G.S. § 105-228.30 excise tax & N.C.G.S. § 45-21.15 commission cap
+  const nc = getStatutoryFeeSchedule('NC', 150000);
+  assert.equal(nc.isSupported, true);
+  assert.match(nc.transferTaxCitation, /N\.C\.G\.S\. § 105-228\.30/);
+  assert.match(nc.sheriffPoundageCitation, /N\.C\.G\.S\. § 45-21\.15/);
+  assert.match(nc.depositRequirement, /N\.C\.G\.S\. § 45-21\.27/);
+
+  // Texas: Texas Const. art. VIII § 29 ($0 transfer tax)
+  const tx = getStatutoryFeeSchedule('TX', 250000);
+  assert.equal(tx.isSupported, true);
+  assert.equal(tx.transferTaxRatePerThousand, 0);
+  assert.match(tx.transferTaxCitation, /Texas Const\. art\. VIII § 29/);
+
+  // California: Cal. Rev. & Tax Code § 11911 documentary transfer tax
+  const ca = getStatutoryFeeSchedule('CA', 500000);
+  assert.equal(ca.isSupported, true);
+  assert.match(ca.transferTaxCitation, /Cal\. Rev\. & Tax Code § 11911/);
+  assert.match(ca.sheriffPoundageCitation, /Cal\. Civ\. Code § 2924h/);
+
+  // Alabama: Ala. Code § 40-22-1 deed tax & Ala. Code § 12-19-90 execution fee
+  const al = getStatutoryFeeSchedule('AL', 120000);
+  assert.equal(al.isSupported, true);
+  assert.match(al.transferTaxCitation, /Ala\. Code § 40-22-1/);
+  assert.match(al.sheriffPoundageCitation, /Ala\. Code § 12-19-90/);
+});
+
 test('County SEO: generateCountyMetadata creates compliant title, description, and canonical tags', () => {
   const meta = generateCountyMetadata({
     state: 'NJ',
@@ -134,6 +236,11 @@ test('County SEO: generateCountyMetadata creates compliant title, description, a
     siteName: 'PerfectProperty',
     type: 'website',
   });
+
+  // High-CTR title generation
+  const highCtrTitle = generateHighCtrCountyTitle('Essex', 'NJ');
+  assert.equal(highCtrTitle, 'Essex County Sheriff Sales & Tax Deeds | PerfectProperty');
+  assert.ok(highCtrTitle.length >= 40 && highCtrTitle.length <= 57);
 });
 
 test('County SEO: schema.org BreadcrumbList structure is valid and compliant', () => {
@@ -216,4 +323,64 @@ test('County SEO: schema.org ItemList structure is valid and sanitizes against s
   assert.doesNotMatch(serialized, /<script>/);
   assert.doesNotMatch(serialized, /<\/script>/);
   assert.match(serialized, /\\u003cscript\\u003e/);
+});
+
+test('County SEO: schema.org FAQPage structured data generates statutory Q&A and neutralizes XSS', () => {
+  const faqSchema = buildCountyFaqSchema({
+    state: 'NC',
+    county: 'Wake',
+    baseUrl: 'https://perfectproperty.org',
+  });
+
+  assert.equal(faqSchema['@context'], 'https://schema.org');
+  assert.equal(faqSchema['@type'], 'FAQPage');
+  assert.ok(Array.isArray(faqSchema.mainEntity));
+  assert.equal(faqSchema.mainEntity.length, 4);
+
+  // Q1: Statutory redemption and upset bid
+  const q1 = faqSchema.mainEntity[0];
+  assert.equal(q1['@type'], 'Question');
+  assert.match(q1.name, /statutory redemption and upset bid rules/i);
+  assert.equal(q1.acceptedAnswer['@type'], 'Answer');
+  assert.match(q1.acceptedAnswer.text, /N\.C\.G\.S\. § 45-21\.27/);
+  assert.match(q1.acceptedAnswer.text, /10-day upset bid period/);
+
+  // Q2: Transfer taxes and sheriff execution poundage
+  const q2 = faqSchema.mainEntity[1];
+  assert.match(q2.name, /transfer taxes, sheriff execution poundage/i);
+  assert.match(q2.acceptedAnswer.text, /N\.C\.G\.S\. § 105-228\.30/);
+
+  // Q3: Senior liens and property taxes
+  const q3 = faqSchema.mainEntity[2];
+  assert.match(q3.name, /extinguish prior mortgages or delinquent property taxes/i);
+  assert.match(q3.acceptedAnswer.text, /26 U\.S\.C\. § 7425/);
+  assert.match(q3.acceptedAnswer.text, /super-priority/);
+
+  // Q4: Funds and deposit procedures
+  const q4 = faqSchema.mainEntity[3];
+  assert.match(q4.name, /participate in Wake County/i);
+  assert.match(q4.acceptedAnswer.text, /certified funds/i);
+
+  // Verify serializeJsonLd on FAQPage
+  const serialized = serializeJsonLd(faqSchema);
+  assert.doesNotMatch(serialized, /<script>/);
+  assert.doesNotMatch(serialized, /<\/script>/);
+});
+
+test('County SEO: server/seo re-exports match src/lib/county-seo', () => {
+  assert.equal(typeof serverSeo.getStatutoryRedemption, 'function');
+  assert.equal(typeof serverSeo.getStatutoryFeeSchedule, 'function');
+  assert.equal(typeof serverSeo.buildCountyFaqSchema, 'function');
+  assert.equal(typeof serverSeo.generateHighCtrCountyTitle, 'function');
+  assert.equal(typeof serverSeo.generateCountyMetadata, 'function');
+
+  // Verify function parity
+  assert.deepEqual(
+    serverSeo.getStatutoryRedemption('NC'),
+    getStatutoryRedemption('NC')
+  );
+  assert.deepEqual(
+    serverSeo.getStatutoryFeeSchedule('NJ', 180000),
+    getStatutoryFeeSchedule('NJ', 180000)
+  );
 });

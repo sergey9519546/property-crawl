@@ -137,14 +137,19 @@ function detectNoticeState(email = {}) {
 /**
  * Score the completeness and evidentiary reliability of an extracted legal notice
  */
-function evaluateNoticeConfidence(parsed = {}) {
+function evaluateNoticeConfidence(parsed = {}, options = {}) {
   let score = 0;
   const reasons = [];
 
-  if (parsed.property_address && parsed.property_address.length > 5) {
+  const hasAddress = Boolean(parsed.property_address && parsed.property_address.length > 5);
+  const hasLegalLandTerms = /\b(?:Township|Range|Section|Quarter|Tract|Survey|Block)\b/i.test(parsed.property_address || '');
+  const hasStreetSuffix = /\b(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Blvd|Boulevard|Dr(?:ive)?|Ln|Lane|Way|Ct|Court|Cir(?:cle)?|Hwy|Highway|Pkwy|Parkway|Pl(?:ace)?|Terr(?:ace)?)\b/i.test(parsed.property_address || '');
+  const isAmbiguousAddress = !hasAddress || !/\d+/.test(parsed.property_address) || hasLegalLandTerms || !hasStreetSuffix;
+
+  if (hasAddress && !isAmbiguousAddress) {
     score += 0.35;
   } else {
-    reasons.push('MISSING_PROPERTY_ADDRESS');
+    reasons.push(hasAddress ? 'AMBIGUOUS_ADDRESS' : 'MISSING_PROPERTY_ADDRESS');
   }
 
   if (parsed.case_number && parsed.case_number.length >= 3) {
@@ -167,10 +172,48 @@ function evaluateNoticeConfidence(parsed = {}) {
     score += 0.10;
   }
 
+  const hasParcelId = Boolean(parsed.apn && parsed.apn.trim().length >= 3);
+  if (!hasParcelId) {
+    reasons.push('MISSING_PARCEL_ID');
+  }
+
+  const hasAdversarial = Boolean(
+    options.adversarialInjectionDetected ||
+    parsed.adversarialInjectionDetected ||
+    (typeof options.rawText === 'string' && (
+      /ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/i.test(options.rawText) ||
+      /system\s+(?:instruction|prompt|directive):?/i.test(options.rawText) ||
+      options.rawText.includes('[REDACTED_ADVERSARIAL_PAYLOAD]')
+    ))
+  );
+  if (hasAdversarial) {
+    reasons.push('ADVERSARIAL_INJECTION_DETECTED');
+  }
+
+  // Check verified character spans if requested
+  const spans = parsed.evidenceSpans || parsed.evidence_spans;
+  if (options.requireVerifiedSpans && spans) {
+    const addrSpanVerified = Boolean(spans.property_address?.verified);
+    const caseSpanVerified = Boolean(spans.case_number?.verified);
+    if (!addrSpanVerified || !caseSpanVerified) {
+      reasons.push('UNVERIFIED_CHARACTER_SPANS');
+    }
+  }
+
   const confidence = Math.min(1.0, Math.round(score * 100) / 100);
+  const requireParcelId = options.requireParcelId !== undefined ? Boolean(options.requireParcelId) : false;
+  const requireVerifiedSpans = options.requireVerifiedSpans !== undefined ? Boolean(options.requireVerifiedSpans) : false;
+
+  const isConfident = confidence >= CONFIDENCE_THRESHOLD &&
+    hasAddress &&
+    !isAmbiguousAddress &&
+    !hasAdversarial &&
+    (!requireParcelId || hasParcelId) &&
+    (!requireVerifiedSpans || !reasons.includes('UNVERIFIED_CHARACTER_SPANS'));
+
   return {
     confidence,
-    isConfident: confidence >= CONFIDENCE_THRESHOLD && Boolean(parsed.property_address),
+    isConfident,
     reasons,
   };
 }
@@ -182,6 +225,17 @@ function parseNoticeEmail(email = {}, options = {}) {
   const rawBody = String(email.body || '');
   let state = detectNoticeState(email);
   let feedInfo = FEED_CONFIG[state] || null;
+
+  const injectionPatterns = [
+    /ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+    /disregard\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+    /system\s+(?:instruction|prompt|directive):?/gi,
+    /override\s+(?:all\s+)?prior\s+rules/gi,
+    /you\s+must\s+output\s+deal\s+score\s+[0-9]+/gi,
+    /tell\s+the\s+user\s+this\s+property\s+has\s+\$?[0-9,]+\s+equity/gi
+  ];
+  const xmlPattern = /<\/?(raw_legal_notice|system|system_prompt|instruction|context|prompt|script)[^>]*>/gi;
+  const hasAdversarialPayload = injectionPatterns.some((p) => p.test(rawBody)) || xmlPattern.test(rawBody);
 
   // 1. Defend against prompt injection and normalize OCR text
   const safeText = neutralizePromptInjection(rawBody);
@@ -210,7 +264,15 @@ function parseNoticeEmail(email = {}, options = {}) {
       parsed.redemption_warning = redemptionInfo.warning;
     }
 
-    const evaluation = evaluateNoticeConfidence(parsed);
+    const snippetHasAdversarial = hasAdversarialPayload ||
+      injectionPatterns.some((p) => p.test(snippet)) ||
+      snippet.includes('[REDACTED_ADVERSARIAL_PAYLOAD]');
+
+    const evaluation = evaluateNoticeConfidence(parsed, {
+      ...options,
+      adversarialInjectionDetected: snippetHasAdversarial,
+      rawText: snippet,
+    });
     const contentHash = hashNotice(snippet);
     const noticeId = `notice-${state.toLowerCase()}-${contentHash.slice(0, 12)}-${i}`;
 
@@ -232,6 +294,7 @@ function parseNoticeEmail(email = {}, options = {}) {
       reviewRequired: !evaluation.isConfident,
       reviewStatus: evaluation.isConfident ? 'AUTO_ACCEPTED' : 'PENDING_DOCUMENT_REVIEW',
       feedInfo,
+      rawSnippet: snippet,
     };
 
     records.push(record);
@@ -270,20 +333,37 @@ function routeNoticeResult(batchResult = {}, options = {}) {
         openingBid: record.parsed.opening_bid || null,
         judgment: record.parsed.judgment_amount || null,
         saleDate: record.parsed.sale_date,
-        raw: record.contentHash,
+        raw: record.rawSnippet || record.contentHash,
       });
     } else {
       reviewQueueItems.push({
         reviewId: `rev-${record.id}`,
+        id: record.id,
+        listingId: record.id,
         source: 'email-notices',
         state: record.feedState,
         headline: record.emailSubject || `Legal Notice (${record.feedState})`,
-        documentText: record.parsed.property_address || '[Unextracted Notice]',
+        documentText: record.rawSnippet || record.parsed.property_address || '[Unextracted Notice]',
+        rawText: record.rawSnippet || null,
         reasons: record.reasons,
+        reason: 'LOW_CONFIDENCE_NOTICE',
         confidence: record.confidence,
         rawHash: record.contentHash,
         status: 'PENDING',
         createdAt: new Date().toISOString(),
+        extractedFields: {
+          address: record.parsed.property_address || '',
+          caseNumber: record.parsed.case_number || '',
+          apn: record.parsed.apn || '',
+          openingBid: record.parsed.opening_bid || 0,
+          judgmentAmount: record.parsed.judgment_amount || 0,
+          saleDate: record.parsed.sale_date || '',
+          plaintiff: record.parsed.plaintiff_or_seller || '',
+          defendant: record.parsed.defendant || '',
+          state: record.parsed.state || record.feedState,
+          confidenceScore: record.parsed.confidence_score,
+          evidenceSpans: record.parsed.evidenceSpans || record.parsed.evidence_spans || {},
+        },
       });
     }
   }

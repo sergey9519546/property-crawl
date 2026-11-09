@@ -13,8 +13,8 @@ export type CaseOrigin = {
 };
 
 export type ReconsiderationCondition = {
-  field: "openingBid" | "saleDate" | "status" | "sqft" | "requiredEvidence";
-  operator: "changed" | "lte" | "gte" | "dropped_by_pct" | "bid_to_assessed_lte" | "within_days" | "available";
+  field: "openingBid" | "saleDate" | "status" | "sqft" | "requiredEvidence" | "titleRisk";
+  operator: "changed" | "lte" | "gte" | "dropped_by_pct" | "bid_to_assessed_lte" | "within_days" | "available" | "junior_lien_surviving_mortgage" | "irs_redemption_active" | "hoa_super_priority";
   value?: string | number;
 };
 
@@ -33,7 +33,18 @@ export type ResearchCaseSummary = {
   decision: { state: string; reasonCodes: string[]; note?: string | null; decidedAt: string } | null;
   reconsideration: ReconsiderationPolicy | null;
   reconsiderationRequired: boolean;
-  latestTrigger: { at: string; type: string; matchedConditions?: ReconsiderationCondition[] } | null;
+  latestTrigger: {
+    at: string;
+    type: string;
+    matchedConditions?: ReconsiderationCondition[];
+    alerts?: string[];
+    flags?: string[];
+    titleRiskAlert?: string | null;
+    irsRedemptionActive?: boolean;
+    hoaSuperPriorityRisk?: boolean;
+    reason?: string;
+    events?: Array<{ type: string; label: string; severity?: string; [key: string]: unknown }>;
+  } | null;
   latestOrigin?: CaseOrigin | null;
   saleDate?: string | null;
   openingBid?: number | null;
@@ -52,7 +63,18 @@ export type ResearchCaseDetail = ResearchCaseSummary & {
   origins: CaseOrigin[];
   evidenceLinks: EvidenceLink[];
   listingSnapshot: Record<string, unknown>;
-  latestTrigger?: { at: string; type: string; matchedConditions?: ReconsiderationCondition[] } | null;
+  latestTrigger?: {
+    at: string;
+    type: string;
+    matchedConditions?: ReconsiderationCondition[];
+    alerts?: string[];
+    flags?: string[];
+    titleRiskAlert?: string | null;
+    irsRedemptionActive?: boolean;
+    hoaSuperPriorityRisk?: boolean;
+    reason?: string;
+    events?: Array<{ type: string; label: string; severity?: string; [key: string]: unknown }>;
+  } | null;
   dossierSnapshot: Record<string, unknown>;
   history: CaseHistory[];
   timeline: CaseHistory[];

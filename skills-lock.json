@@ -13,6 +13,12 @@
       "skillPath": "agent-skill/Scrapling-Skill/SKILL.md",
       "computedHash": "b8803b94c1cdcda827372df1b4b9d60f6bbcff6f31971c48d7b4a6c7e63292e3"
     },
+    "seo-title-optimization": {
+      "source": "Illyism/seo-skills",
+      "sourceType": "github",
+      "skillPath": "seo/seo-title-optimization/SKILL.md",
+      "computedHash": "8015fe50b62957fcb7cfdfd38c53c743c104dd2f9fb5eb00ee132e8532f43a53"
+    },
     "understand-customers": {
       "source": "Illyism/seo-skills",
       "sourceType": "github",

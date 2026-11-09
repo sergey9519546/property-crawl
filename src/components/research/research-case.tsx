@@ -181,13 +181,189 @@ export function ResearchCase({ caseId }: { caseId: string }) {
           : detail && <>
         <header className="mt-6 rounded-3xl bg-[#0F172A] p-6 text-white sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-5"><div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">{detail.case.state}</span>{detail.case.reconsiderationRequired && <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-900"><RotateCcw size={12} />Second Look</span>}</div><h1 className="mt-4 text-3xl font-semibold sm:text-5xl">{sourceDisplayText(detail.case.address || detail.case.listingId)}</h1><p className="mt-3 text-xs text-slate-200/70">{sourceDisplayText(detail.case.sourceRef.sourceId)} · {sourceDisplayText(detail.case.sourceRef.recordId)} · Case revision {detail.case.revision}</p></div><div className="flex flex-wrap gap-2"><Link href={`/research/${encodeURIComponent(caseId)}/export`} className="inline-flex items-center gap-2 rounded-lg border border-white/25 px-3 py-2 text-xs font-semibold">Decision packet dossier</Link><button type="button" aria-label="Download JSON decision packet" disabled={busy} onClick={() => void downloadPacket("json")} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-[#0F172A]"><Download size={14} />JSON</button><button type="button" aria-label="Download print-ready decision report" disabled={busy} onClick={() => void downloadPacket("md")} className="inline-flex items-center gap-2 rounded-lg border border-white/25 px-3 py-2 text-xs font-semibold"><Download size={14} />Print-ready report</button></div></div>
-          {detail.case.reconsiderationRequired && <div className="mt-5 rounded-xl bg-slate-800 p-4 text-sm leading-6 text-slate-200"><p>Relevant evidence changed. Your saved pass remains intact until you review and save a new decision.</p>{(detail.case.latestTrigger?.matchedConditions || []).length > 0 && <ul data-testid="matched-conditions" className="mt-2 list-disc pl-5 text-xs text-slate-300">{detail.case.latestTrigger!.matchedConditions!.map((condition, index) => <li key={index}>{sourceDisplayText(String(condition.field))} {sourceDisplayText(String(condition.operator).replace(/_/g, " "))}{"value" in condition && condition.value !== undefined ? ` ${sourceDisplayText(String(condition.value))}` : ""}</li>)}</ul>}</div>}
+          {detail.case.reconsiderationRequired && (
+            <div className="mt-5 rounded-xl bg-slate-800 p-4 text-sm leading-6 text-slate-200">
+              <p>Relevant evidence changed. Your saved pass remains intact until you review and save a new decision.</p>
+              {(detail.case.latestTrigger?.matchedConditions || []).length > 0 && (
+                <ul data-testid="matched-conditions" className="mt-2 list-disc pl-5 text-xs text-slate-300">
+                  {detail.case.latestTrigger!.matchedConditions!.map((condition, index) => (
+                    <li key={index}>
+                      {sourceDisplayText(String(condition.field))} {sourceDisplayText(String(condition.operator).replace(/_/g, " "))}
+                      {"value" in condition && condition.value !== undefined ? ` ${sourceDisplayText(String(condition.value))}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Title Risk & Senior Lien Survival Second-Look Alerts */}
+              {(detail.case.latestTrigger?.titleRiskAlert === "JUNIOR_LIEN_SURVIVING_MORTGAGE" || detail.case.latestTrigger?.alerts?.includes("JUNIOR_LIEN_SURVIVING_MORTGAGE")) && (
+                <div data-testid="junior-lien-survival-alert" className="mt-3 rounded-lg border border-red-500/50 bg-red-950/80 p-3.5 text-xs text-red-200">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert size={16} className="mt-0.5 shrink-0 text-red-400" />
+                    <div>
+                      <strong className="block font-bold uppercase tracking-wider text-red-100">
+                        CRITICAL TITLE ALERT: Junior Lien Surviving Mortgage Trap (JUNIOR_LIEN_SURVIVING_MORTGAGE)
+                      </strong>
+                      <p className="mt-1 leading-relaxed text-red-200/90">
+                        Apparent price drop is a value trap. The foreclosing plaintiff is a subordinate lienholder (2nd Mortgage, HELOC, or Mechanic&apos;s Lien). Under common law recording acts, the senior 1st mortgage survives the auction in full against the winning bidder!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(detail.case.latestTrigger?.irsRedemptionActive || detail.case.latestTrigger?.flags?.includes("IRS_REDEMPTION_WINDOW_ACTIVE")) && (
+                <div data-testid="irs-redemption-alert" className="mt-3 rounded-lg border border-amber-500/50 bg-amber-950/80 p-3.5 text-xs text-amber-200">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+                    <div>
+                      <strong className="block font-bold uppercase tracking-wider text-amber-200">
+                        CASE FLAG: IRS 120-Day Redemption Window Active (IRS_REDEMPTION_WINDOW_ACTIVE)
+                      </strong>
+                      <p className="mt-1 leading-relaxed text-amber-200/90">
+                        Active federal tax lien recorded under 26 U.S.C. § 7425(d). The United States holds a statutory 120-day super-priority post-sale right of redemption.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {(detail.case.latestTrigger?.hoaSuperPriorityRisk || detail.case.latestTrigger?.flags?.includes("HOA_SUPER_PRIORITY_RISK")) && (
+                <div data-testid="hoa-super-priority-alert" className="mt-3 rounded-lg border border-sky-500/50 bg-sky-950/80 p-3.5 text-xs text-sky-200">
+                  <div className="flex items-start gap-2">
+                    <Scale size={16} className="mt-0.5 shrink-0 text-sky-400" />
+                    <div>
+                      <strong className="block font-bold uppercase tracking-wider text-sky-200">
+                        CASE FLAG: HOA Super-Priority Assessment Risk (HOA_SUPER_PRIORITY_RISK)
+                      </strong>
+                      <p className="mt-1 leading-relaxed text-sky-200/90">
+                        Property is in a statutory super-priority state (UCIOA / NV / FL). Common expense assessments hold statutory priority over private deeds; verify whether senior mortgage is extinguished (NV NRS 116.3116) or survives with safe harbor payoffs.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {(() => { const snap = detail.case.listingSnapshot as Parameters<typeof listingCatch>[0]; const band = bandForScore(snap.dealScore); const catchSummary = listingCatch(snap); return <section data-testid="case-catch" className="mt-5 rounded-xl bg-white/5 p-4 text-sm leading-6 text-slate-100"><p className="font-semibold">{band ? `Deal Score ${Math.round(Number(snap.dealScore))}/99 · ${band.label}` : "Deal Score unavailable"} · {catchSummary.flags.length ? `${catchSummary.flags.length} thing${catchSummary.flags.length === 1 ? "" : "s"} to check` : "no published red flags"}</p><p className="mt-1 text-xs text-slate-300">{sourceDisplayText([...catchSummary.notes, ...catchSummary.flags].join(" "))}</p></section>; })()}
         </header>
         {error && <p role="alert" className="mt-4 rounded-xl bg-amber-100 p-4 text-sm text-amber-950">{error}</p>}{message && <p role="status" className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-950"><Check size={16} />{message}</p>}
 
         <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_390px]">
           <div className="space-y-6">
+            {/* Title Risk & Senior Lien Survival Analysis Card */}
+            {(() => {
+              const snap = (detail.case.listingSnapshot || {}) as Record<string, unknown>;
+              const plaintiff = String(snap.plaintiff || "");
+              const state = String(snap.state || detail.case.state || "").toUpperCase();
+              const isJuniorLien =
+                /^(?:high|critical)$/i.test(String(snap.seniorLienRisk || "").trim()) ||
+                /(?:second\s*(?:mortgage|deed)|2nd\s*(?:mortgage|deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien)|mechanic'?s?\s*lien|construction\s*lien)/i.test(
+                  String(snap.seniorLienWarning || "")
+                ) ||
+                /(?:second\s*(?:mortgage|deed)|2nd\s*(?:mortgage|deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien)|mechanic'?s?\s*lien|construction\s*lien)/i.test(
+                  plaintiff
+                );
+              const isHoaPlaintiff =
+                /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b|master\s*association|community\s*association|property\s*owners\s*association)/i.test(
+                  plaintiff
+                ) ||
+                /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b)/i.test(
+                  String(snap.seniorLienWarning || "")
+                );
+              const isIrsLien =
+                Boolean(snap.hasIrsLien || snap.hasFederalTaxLien) ||
+                detail.case.sourceRef.sourceId === "irs" ||
+                /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien|26\s*u\.?s\.?c\.?\s*§?\s*7425)/i.test(
+                  `${String(snap.rawNotice || "")} ${String(snap.notes || "")} ${plaintiff}`
+                );
+              const isSuperState = ["NV", "FL", "CO", "CT", "DC", "MD", "PA", "WA", "MA", "MN", "MO", "NJ", "OR", "RI", "TN", "VT", "WV", "AL", "AK", "HI", "IL", "NY"].includes(state);
+
+              return (
+                <section data-testid="case-title-risk-section" className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert size={19} className="text-slate-900" />
+                      <h2 className="text-xl font-semibold">Title Risk &amp; Senior Lien Survival</h2>
+                    </div>
+                    {isJuniorLien && decisionState !== "pass" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setDecisionState("pass");
+                          setReasonCodes((prev) => [...new Set([...prev, "title_risk_unresolved"])]);
+                          if (!note) setNote("Pass: Junior lien foreclosure value trap. Senior mortgage survives sale.");
+                          setMessage("Applied Title Risk Unresolved pass recommendation.");
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-900 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <ShieldAlert size={13} />
+                        Pass: Title Risk Trap
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                    Deterministic title risk arbitration checking senior deed survival, 26 U.S.C. § 7425(d) federal tax liens, and state HOA super-priority rules.
+                  </p>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Foreclosing Party &amp; Priority</span>
+                      <p className="mt-1 font-bold text-slate-900 truncate">
+                        {plaintiff ? sourceDisplayText(plaintiff) : "Unpublished plaintiff"}
+                      </p>
+                      <span className={cn(
+                        "mt-1.5 inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded",
+                        isJuniorLien ? "bg-red-100 text-red-900 border border-red-200" :
+                        isHoaPlaintiff ? "bg-amber-100 text-amber-900 border border-amber-200" :
+                        "bg-slate-200 text-slate-800"
+                      )}>
+                        {isJuniorLien ? "Junior Lien (Senior Survives)" : isHoaPlaintiff ? "HOA Assessment Lien" : "Senior Mortgage Position"}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Federal Tax Lien (26 U.S.C. § 7425)</span>
+                      <p className="mt-1 font-bold text-slate-900">
+                        {isIrsLien ? "120-Day IRS Redemption Active" : "No Federal Tax Lien Flag"}
+                      </p>
+                      <span className={cn(
+                        "mt-1.5 inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded",
+                        isIrsLien ? "bg-amber-100 text-amber-900 border border-amber-200" : "bg-slate-200 text-slate-700"
+                      )}>
+                        {isIrsLien ? "Active Redemption Window" : "Clear of IRS Citations"}
+                      </span>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">HOA Super-Priority Status</span>
+                      <p className="mt-1 font-bold text-slate-900">
+                        {state === "NV" ? "NV 9-Mo Super-Priority (NRS 116.3116)" : state === "FL" ? "FL Safe Harbor (Fla. Stat. § 718.116)" : isSuperState ? `${state} UCIOA Super-Priority` : `${state} Standard Subordinate`}
+                      </p>
+                      <span className={cn(
+                        "mt-1.5 inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded",
+                        isSuperState ? "bg-sky-100 text-sky-900 border border-sky-200" : "bg-slate-200 text-slate-700"
+                      )}>
+                        {state === "NV" ? "Extinguishes Senior Mortgage" : isSuperState ? "Super-Priority Assessment" : "Subordinate to 1st Deed"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isJuniorLien && (
+                    <div className="mt-4 rounded-xl border border-red-300 bg-red-50/90 p-4 text-xs text-red-950">
+                      <strong className="block font-bold uppercase tracking-wide text-red-900">
+                        VALUE TRAP WARNING: Junior Lien Foreclosure
+                      </strong>
+                      <p className="mt-1 text-[11px] leading-relaxed text-red-800">
+                        The foreclosing plaintiff holds a subordinate instrument (2nd mortgage, HELOC, or mechanic&apos;s construction lien). A steep price drop or low opening bid does not reflect total encumbrances. The winning bidder takes title subject to the underlying senior 1st mortgage in full.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              );
+            })()}
+
             {(() => {
               const docket = detail.case.listingSnapshot
                 ? evaluateAdversarialDocket(detail.case.listingSnapshot as any)
@@ -437,6 +613,34 @@ export function ResearchCase({ caseId }: { caseId: string }) {
                 </div>
               );
             })()}
+
+            {(detail.case.latestTrigger?.titleRiskAlert === "JUNIOR_LIEN_SURVIVING_MORTGAGE" || detail.case.latestTrigger?.alerts?.includes("JUNIOR_LIEN_SURVIVING_MORTGAGE")) && (
+              <div data-testid="junior-lien-aside-warning" className="mt-4 rounded-xl border border-catch/40 bg-catch-wash/70 p-3.5 text-xs text-catch-ink">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert size={16} className="mt-0.5 shrink-0 text-catch-ink" />
+                  <div className="space-y-1">
+                    <strong className="block font-bold uppercase tracking-wider">VALUE TRAP DETECTED</strong>
+                    <p className="text-[11px] leading-relaxed">
+                      Junior lien foreclosure (2nd mortgage / HELOC / mechanic&apos;s lien). Senior 1st mortgage survives sale in full!
+                    </p>
+                    {decisionState !== "pass" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDecisionState("pass");
+                          setReasonCodes((prev) => [...new Set([...prev, "title_risk_unresolved"])]);
+                          if (!note) setNote("Pass: Junior lien foreclosure value trap. Senior mortgage survives sale.");
+                        }}
+                        className="mt-1.5 inline-flex items-center gap-1 rounded bg-catch-ink px-2.5 py-1 text-[11px] font-semibold text-white hover:opacity-90"
+                      >
+                        Pass: Value Trap
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {decisionState !== "inbox" && <fieldset className="mt-5"><legend className="text-xs font-semibold">Reasons {decisionState === "pass" ? "(choose at least one)" : ""}</legend><div className="mt-3 space-y-2">{reasonChoices.map(([value, title]) => <label key={value} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={reasonCodes.includes(value)} onChange={(event) => setReasonCodes(event.target.checked ? [...reasonCodes, value] : reasonCodes.filter((item) => item !== value))} />{title}</label>)}</div></fieldset>}
             <label className="mt-5 block text-xs font-semibold">Decision note<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={4} className="mt-2 w-full rounded-lg border border-[#E5E7EB] p-3 text-sm font-normal" placeholder="What matters, what is unresolved, and what you will verify." /></label>
             {decisionState === "pass" && <div className="mt-5 border-t border-[#F3F4F6] pt-5"><div className="flex items-center gap-2"><RotateCcw size={16} className="text-slate-900" /><h3 className="text-sm font-semibold">Bring it back when…</h3></div><select aria-label="Reconsideration matching" value={mode} onChange={(event) => setMode(event.target.value as "any" | "all")} className="mt-3 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs"><option value="any">Any condition matches</option><option value="all">Every condition matches</option></select><div className="mt-3 space-y-3">{conditions.map((condition, index) => <ConditionEditor key={index} condition={condition} onChange={(next) => setConditions(conditions.map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={conditions.length > 1 ? () => setConditions(conditions.filter((_, itemIndex) => itemIndex !== index)) : undefined} />)}</div><button type="button" disabled={conditions.length >= 10} onClick={() => setConditions([...conditions, { field: "saleDate", operator: "changed" }])} className="mt-3 text-xs font-semibold text-slate-900 underline hover:text-slate-700 disabled:opacity-50">Add return condition</button></div>}
@@ -456,6 +660,29 @@ function ClaimColumn({ title, claims, empty }: { title: string; claims: Claim[];
 function ConditionEditor({ condition, onChange, onRemove }: { condition: ReconsiderationCondition; onChange: (value: ReconsiderationCondition) => void; onRemove?: () => void }) {
   const numeric = condition.field === "openingBid" || condition.field === "sqft";
   const evidence = condition.field === "requiredEvidence";
-  const operatorOptions = evidence ? [["available", "becomes available"]] : condition.field === "openingBid" ? [["changed", "changes"], ["lte", "is at most ($)"], ["gte", "is at least ($)"], ["dropped_by_pct", "drops by at least (%)"], ["bid_to_assessed_lte", "is at most % of assessed"]] : condition.field === "saleDate" ? [["changed", "changes"], ["within_days", "is within N days"]] : numeric ? [["changed", "changes"], ["lte", "is at most"], ["gte", "is at least"]] : [["changed", "changes"]];
-  return <div className="rounded-xl bg-[#F1F5F9] p-3"><div className="flex gap-2"><select aria-label="Reconsideration field" value={condition.field} onChange={(event) => { const field = event.target.value as ReconsiderationCondition["field"]; onChange(field === "requiredEvidence" ? { field, operator: "available", value: "any" } : { field, operator: "changed" }); }} className="min-w-0 flex-1 rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs"><option value="openingBid">Opening amount</option><option value="saleDate">Sale date</option><option value="status">Published status</option><option value="sqft">Building area</option><option value="requiredEvidence">Required evidence</option></select>{onRemove && <button type="button" aria-label="Remove condition" onClick={onRemove} className="rounded-lg px-2 hover:bg-white"><Trash2 size={14} /></button>}</div><select aria-label="Reconsideration operator" value={condition.operator} onChange={(event) => { const operator = event.target.value as ReconsiderationCondition["operator"]; const needsNumeric = operator === "lte" || operator === "gte" || operator === "dropped_by_pct" || operator === "bid_to_assessed_lte" || operator === "within_days"; onChange({ field: condition.field, operator, ...(needsNumeric ? { value: typeof condition.value === "number" && condition.value > 0 ? condition.value : operator === "dropped_by_pct" ? 10 : operator === "bid_to_assessed_lte" ? 65 : operator === "within_days" ? 14 : 0 } : operator === "available" ? { value: typeof condition.value === "string" ? condition.value : "any" } : {}) }); }} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs">{operatorOptions.map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>{(condition.operator === "lte" || condition.operator === "gte" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" || condition.operator === "within_days") && <input aria-label="Reconsideration threshold" type="number" min={condition.operator === "within_days" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 1 : 0} max={condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 100 : condition.operator === "within_days" ? 365 : undefined} value={typeof condition.value === "number" ? condition.value : 0} onChange={(event) => onChange({ ...condition, value: Number(event.target.value) })} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs" />}{condition.operator === "available" && <select aria-label="Required evidence type" value={typeof condition.value === "string" ? condition.value : "any"} onChange={(event) => onChange({ ...condition, value: event.target.value })} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs"><option value="any">Any reviewed evidence</option><option value="sale_terms">Sale terms</option><option value="title_research">Title research</option><option value="occupancy_research">Occupancy research</option><option value="valuation_research">Valuation research</option></select>}</div>;
+  const titleRisk = condition.field === "titleRisk";
+  const operatorOptions = evidence
+    ? [["available", "becomes available"]]
+    : titleRisk
+    ? [
+        ["junior_lien_surviving_mortgage", "Junior lien surviving mortgage trap"],
+        ["irs_redemption_active", "Active IRS 120-day redemption window"],
+        ["hoa_super_priority", "HOA super-priority assessment risk (UCIOA/NV/FL)"],
+        ["changed", "Title risk status changes"],
+      ]
+    : condition.field === "openingBid"
+    ? [
+        ["changed", "changes"],
+        ["lte", "is at most ($)"],
+        ["gte", "is at least ($)"],
+        ["dropped_by_pct", "drops by at least (%)"],
+        ["bid_to_assessed_lte", "is at most % of assessed"],
+      ]
+    : condition.field === "saleDate"
+    ? [["changed", "changes"], ["within_days", "is within N days"]]
+    : numeric
+    ? [["changed", "changes"], ["lte", "is at most"], ["gte", "is at least"]]
+    : [["changed", "changes"]];
+
+  return <div className="rounded-xl bg-[#F1F5F9] p-3"><div className="flex gap-2"><select aria-label="Reconsideration field" value={condition.field} onChange={(event) => { const field = event.target.value as ReconsiderationCondition["field"]; onChange(field === "requiredEvidence" ? { field, operator: "available", value: "any" } : field === "titleRisk" ? { field, operator: "junior_lien_surviving_mortgage" } : { field, operator: "changed" }); }} className="min-w-0 flex-1 rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs"><option value="openingBid">Opening amount</option><option value="saleDate">Sale date</option><option value="status">Published status</option><option value="sqft">Building area</option><option value="requiredEvidence">Required evidence</option><option value="titleRisk">Title risk &amp; senior lien</option></select>{onRemove && <button type="button" aria-label="Remove condition" onClick={onRemove} className="rounded-lg px-2 hover:bg-white"><Trash2 size={14} /></button>}</div><select aria-label="Reconsideration operator" value={condition.operator} onChange={(event) => { const operator = event.target.value as ReconsiderationCondition["operator"]; const needsNumeric = operator === "lte" || operator === "gte" || operator === "dropped_by_pct" || operator === "bid_to_assessed_lte" || operator === "within_days"; onChange({ field: condition.field, operator, ...(needsNumeric ? { value: typeof condition.value === "number" && condition.value > 0 ? condition.value : operator === "dropped_by_pct" ? 10 : operator === "bid_to_assessed_lte" ? 65 : operator === "within_days" ? 14 : 0 } : operator === "available" ? { value: typeof condition.value === "string" ? condition.value : "any" } : {}) }); }} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs">{operatorOptions.map(([value, title]) => <option key={value} value={value}>{title}</option>)}</select>{(condition.operator === "lte" || condition.operator === "gte" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" || condition.operator === "within_days") && <input aria-label="Reconsideration threshold" type="number" min={condition.operator === "within_days" || condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 1 : 0} max={condition.operator === "dropped_by_pct" || condition.operator === "bid_to_assessed_lte" ? 100 : condition.operator === "within_days" ? 365 : undefined} value={typeof condition.value === "number" ? condition.value : 0} onChange={(event) => onChange({ ...condition, value: Number(event.target.value) })} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs" />}{condition.operator === "available" && <select aria-label="Required evidence type" value={typeof condition.value === "string" ? condition.value : "any"} onChange={(event) => onChange({ ...condition, value: event.target.value })} className="mt-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-2 py-2 text-xs"><option value="any">Any reviewed evidence</option><option value="sale_terms">Sale terms</option><option value="title_research">Title research</option><option value="occupancy_research">Occupancy research</option><option value="valuation_research">Valuation research</option></select>}</div>;
 }

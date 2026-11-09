@@ -25,6 +25,7 @@ const RECONSIDERATION_FIELDS = Object.freeze({
   status: new Set(['changed']),
   sqft: new Set(['changed', 'lte', 'gte']),
   requiredEvidence: new Set(['available']),
+  titleRisk: new Set(['changed', 'junior_lien_surviving_mortgage', 'irs_redemption_active', 'hoa_super_priority']),
 });
 
 class ResearchCaseError extends Error {
@@ -99,12 +100,12 @@ function safeListingSnapshot(listing) {
   const allowed = [
     'id', 'address', 'state', 'county', 'city', 'zip', 'source', 'sourceUrl', 'sourceObservedAt',
     'propType', 'status', 'openingBid', 'saleDate', 'deposit', 'occupancy', 'sqft', 'assessed', 'assessedValue',
-    'estLow', 'estHigh', 'dealScore', 'redemptionDays', 'redemptionWarning', 'seniorLienRisk',
+    'estLow', 'estHigh', 'dealScore', 'redemptionDays', 'redemptionWarning', 'seniorLienRisk', 'seniorLienWarning', 'plaintiff', 'rawNotice', 'notes', 'hasIrsLien', 'hasFederalTaxLien', 'bankruptcy', 'hoaDues', 'monthlyHoa', 'titleRisk', 'judgment', 'judgmentAmount',
   ];
   const snapshot = {};
   for (const field of allowed) {
     const value = listing[field];
-    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) snapshot[field] = value;
+    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) snapshot[field] = value; else if (value && typeof value === 'object' && !Array.isArray(value)) { try { snapshot[field] = JSON.parse(JSON.stringify(value)); } catch {} }
   }
   snapshot.provenance = {
     origin: 'live', observed: true,
@@ -324,8 +325,10 @@ function normalizeReconsideration(value) {
       if (!/^[a-z][a-z0-9_]{0,63}$/.test(normalized.value)) {
         throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}].value must be an evidence relationship or requirement key`);
       }
-    } else if (Object.hasOwn(condition, 'value') && condition.value !== undefined) {
+    } else if (condition.operator === 'changed' && Object.hasOwn(condition, 'value') && condition.value !== undefined) {
       throw new ResearchCaseError('RESEARCH_RECONSIDERATION_INVALID', `reconsideration.conditions[${index}].value must be omitted for changed`);
+    } else if (['junior_lien_surviving_mortgage', 'irs_redemption_active', 'hoa_super_priority'].includes(condition.operator)) {
+      if (condition.value !== undefined && condition.value !== null) normalized.value = cleanText(String(condition.value), 64, `reconsideration.conditions[${index}].value`);
     }
     return normalized;
   });
@@ -379,6 +382,34 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
       return item.evidenceLinks.some((link) => condition.value === 'any'
         || link.relationship === condition.value || link.relationship === `${condition.value}_research`);
     }
+    if (condition.field === 'titleRisk') {
+
+      const { arbitrateTitleRisk } = require('./title-risk-engine');
+      const { HOA_SUPER_PRIORITY_STATES } = require('./hoa-super-lien');
+      const risk = arbitrateTitleRisk(item.listingSnapshot || {});
+      const plaintiff = String(item.listingSnapshot?.plaintiff || '');
+      const state = String(item.listingSnapshot?.state || item.state || 'OH').toUpperCase();
+      if (condition.operator === 'junior_lien_surviving_mortgage') {
+        const isJunior = risk.firstMortgageSurvives && (
+          risk.plaintiffType === 'SECOND_MORTGAGE_HELOC' ||
+          risk.plaintiffType === 'MECHANICS_LIEN' ||
+          risk.instrumentPriority?.explicitlySubjectToSeniorMortgage ||
+          /(?:second[_\s]*mortgage|heloc|mechanic'?s?[_\s]*lien)/i.test(plaintiff)
+        );
+        return Boolean(isJunior);
+      }
+      if (condition.operator === 'irs_redemption_active') {
+        return Boolean(risk.irsTaxLienRedemption?.hasIrsLien || risk.irsNoticeEvaluation?.hasFederalTaxLien || item.listingSnapshot?.hasIrsLien || item.listingSnapshot?.hasFederalTaxLien);
+      }
+      if (condition.operator === 'hoa_super_priority') {
+        const isSuperState = risk.hoaSuperPriority?.isSuperPriorityState || ['NV', 'FL'].includes(state) || Boolean(HOA_SUPER_PRIORITY_STATES[state]);
+        const isHoa = risk.plaintiffType === 'HOA_ASSESSMENT' || /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b)/i.test(plaintiff);
+        return Boolean(isSuperState && (isHoa || risk.hoaSuperPriority?.isSuperPriorityState));
+      }
+      if (condition.operator === 'changed') {
+        return changed.has('titleRisk') || changed.has('seniorLienRisk') || changed.has('plaintiff') || changed.has('hasIrsLien');
+      }
+    }
     return false;
   });
   const satisfied = policy.mode === 'all' ? matches.length === policy.conditions.length : matches.length > 0;
@@ -389,12 +420,54 @@ function applyReconsiderationTrigger(item, trigger, timestamp) {
   if (item.state !== 'pass') return false;
   const matchedConditions = matchedReconsiderationConditions(item, trigger, timestamp);
   if (!matchedConditions.length) return false;
+  const { arbitrateTitleRisk } = require('./title-risk-engine');
+  const { HOA_SUPER_PRIORITY_STATES } = require('./hoa-super-lien');
+  const titleRisk = arbitrateTitleRisk(item.listingSnapshot || {});
+  const plaintiff = String(item.listingSnapshot?.plaintiff || '');
+  const state = String(item.listingSnapshot?.state || item.state || 'OH').toUpperCase();
+  const alerts = [];
+  const flags = [];
+  const isJuniorLien = Boolean(titleRisk.firstMortgageSurvives && (
+    titleRisk.plaintiffType === 'SECOND_MORTGAGE_HELOC' ||
+    titleRisk.plaintiffType === 'MECHANICS_LIEN' ||
+    titleRisk.instrumentPriority?.explicitlySubjectToSeniorMortgage ||
+    /(?:second[_\s]*mortgage|heloc|mechanic'?s?[_\s]*lien)/i.test(plaintiff)
+  ));
+  const priceDropDetected = matchedConditions.some((c) =>
+    (c.field === 'openingBid' && ['dropped_by_pct', 'bid_to_assessed_lte', 'lte', 'changed'].includes(c.operator)) ||
+    (c.field === 'titleRisk' && c.operator === 'junior_lien_surviving_mortgage')
+  ) || (trigger.type === 'origin' && Number(trigger.origin?.changes?.openingBid?.previous) > Number(trigger.origin?.changes?.openingBid?.current));
+  if (isJuniorLien && (priceDropDetected || matchedConditions.some((c) => c.field === 'titleRisk'))) {
+    alerts.push('JUNIOR_LIEN_SURVIVING_MORTGAGE');
+  }
+  const hasIrsLien = Boolean(
+    titleRisk.irsTaxLienRedemption?.hasIrsLien ||
+    titleRisk.irsNoticeEvaluation?.hasFederalTaxLien ||
+    item.listingSnapshot?.hasIrsLien ||
+    item.listingSnapshot?.hasFederalTaxLien ||
+    titleRisk.plaintiffType === 'IRS_TAX_LIEN'
+  );
+  if (hasIrsLien) {
+    flags.push('IRS_REDEMPTION_WINDOW_ACTIVE');
+  }
+  const isSuperState = Boolean(
+    titleRisk.hoaSuperPriority?.isSuperPriorityState ||
+    ['NV', 'FL'].includes(state) ||
+    Boolean(HOA_SUPER_PRIORITY_STATES[state])
+  );
+  const isHoa = Boolean(
+    titleRisk.plaintiffType === 'HOA_ASSESSMENT' ||
+    /(?:homeowners?\s*association|condominium\s*association|\bhoa\b|\bcoa\b)/i.test(plaintiff)
+  );
+  if (isSuperState && (isHoa || titleRisk.hoaSuperPriority?.isSuperPriorityState)) {
+    flags.push('HOA_SUPER_PRIORITY_RISK');
+  }
   item.reconsiderationRequired = true;
   item.latestTrigger = {
     at: timestamp, type: trigger.type,
     ...(trigger.origin ? { originId: trigger.origin.id } : {}),
     ...(trigger.intakeId ? { intakeId: trigger.intakeId } : {}),
-    matchedConditions,
+    matchedConditions, alerts, flags, titleRiskAlert: alerts.includes('JUNIOR_LIEN_SURVIVING_MORTGAGE') ? 'JUNIOR_LIEN_SURVIVING_MORTGAGE' : null, irsRedemptionActive: flags.includes('IRS_REDEMPTION_WINDOW_ACTIVE'), hoaSuperPriorityRisk: flags.includes('HOA_SUPER_PRIORITY_RISK'),
   };
   return true;
 }
@@ -726,6 +799,18 @@ function packetToMarkdown(packet) {
     }
     if (packet.case.decision.note) {
       lines.push(`- Note: ${markdown(packet.case.decision.note)}`);
+    }
+  }
+  if (packet.case.latestTrigger?.titleRiskAlert || packet.case.latestTrigger?.irsRedemptionActive || packet.case.latestTrigger?.hoaSuperPriorityRisk) {
+    lines.push('', '## Title risk second-look signals', '');
+    if (packet.case.latestTrigger?.titleRiskAlert) {
+      lines.push(`- **CRITICAL ALERT:** ${markdown(packet.case.latestTrigger.titleRiskAlert)}: Senior mortgage survives foreclosure sale.`);
+    }
+    if (packet.case.latestTrigger?.irsRedemptionActive) {
+      lines.push('- **CASE FLAG:** IRS_REDEMPTION_WINDOW_ACTIVE: 120-day super-priority IRS redemption right under 26 U.S.C. § 7425(d).');
+    }
+    if (packet.case.latestTrigger?.hoaSuperPriorityRisk) {
+      lines.push('- **CASE FLAG:** HOA_SUPER_PRIORITY_RISK: Property subject to statutory HOA super-priority assessment in UCIOA / NV / FL.');
     }
   }
   const scenario = packet.case.underwriteScenario;

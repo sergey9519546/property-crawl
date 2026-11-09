@@ -30,7 +30,8 @@ const {
   deterministicParse,
   parseLegalNotice,
 } = require('../ai/notice-parser');
-const { detectNoticeState } = require('./email-notice-collector');
+const { detectNoticeState, evaluateNoticeConfidence, CONFIDENCE_THRESHOLD } = require('./email-notice-collector');
+const { getStore, documentId } = require('../routes/document-review');
 const { validateListingForIngestion } = require('../scrapers/validation');
 const { parseRfc822 } = require('../scrapers/email-ingest');
 const defaultDb = require('../db/client');
@@ -243,6 +244,8 @@ class EmailNoticesPipeline {
     this.allowedDomains = options.allowedDomains || PRESS_ASSOCIATION_DOMAINS;
     this.now = options.now || (() => new Date());
     this.maxMessages = Number(options.maxMessages || this.env.IMAP_MAX_MESSAGES || 50);
+    this.vault = options.vault || defaultVault;
+    this.documentReviewStore = options.documentReviewStore || options.store || null;
 
     const host = options.host || this.env.IMAP_HOST || '';
     const user = options.user || this.env.IMAP_USER || '';
@@ -390,6 +393,18 @@ class EmailNoticesPipeline {
     const state = detectNoticeState(email);
     const feedInfo = FEED_CONFIG[state] || null;
 
+    // Detect adversarial prompt injection patterns before sanitization
+    const injectionPatterns = [
+      /ignore\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+      /disregard\s+(?:all\s+)?(?:previous|prior|earlier)\s+(?:instructions|directives|prompts|rules)/gi,
+      /system\s+(?:instruction|prompt|directive):?/gi,
+      /override\s+(?:all\s+)?prior\s+rules/gi,
+      /you\s+must\s+output\s+deal\s+score\s+[0-9]+/gi,
+      /tell\s+the\s+user\s+this\s+property\s+has\s+\$?[0-9,]+\s+equity/gi
+    ];
+    const xmlInjectionPattern = /<\/?(raw_legal_notice|system|system_prompt|instruction|context|prompt|script)[^>]*>/gi;
+    const hasAdversarialPayload = injectionPatterns.some((p) => p.test(rawBody)) || xmlInjectionPattern.test(rawBody);
+
     // 1. Defend against prompt injection and normalize OCR text
     const safeText = neutralizePromptInjection(rawBody);
     const normalizedText = normalizeOcrText(safeText);
@@ -397,6 +412,7 @@ class EmailNoticesPipeline {
     // 2. Disambiguate multi-parcel dockets
     const parcelSnippets = splitMultiParcelNotice(normalizedText);
     const listings = [];
+    const lowConfidenceNotices = [];
     const observedAt = new Date(this.now()).toISOString();
 
     for (let i = 0; i < parcelSnippets.length; i++) {
@@ -406,6 +422,17 @@ class EmailNoticesPipeline {
       if (state !== 'UNKNOWN' && (!parsed.state || parsed.state === 'OH')) {
         parsed.state = state;
       }
+
+      const snippetHasAdversarial = hasAdversarialPayload ||
+        injectionPatterns.some((p) => p.test(snippet)) ||
+        snippet.includes('[REDACTED_ADVERSARIAL_PAYLOAD]');
+
+      const evaluation = evaluateNoticeConfidence(parsed, {
+        requireParcelId: true,
+        requireVerifiedSpans: true,
+        adversarialInjectionDetected: snippetHasAdversarial,
+        rawText: snippet,
+      });
 
       const contentHash = hashNotice(snippet);
       const listing = standardizeEmailNoticeListing(parsed, {
@@ -420,13 +447,34 @@ class EmailNoticesPipeline {
         observedAt,
       });
 
-      listings.push(listing);
+      const portalUrl = feedInfo?.portalUrl || `https://www.${PRESS_ASSOCIATION_DOMAINS[0]}`;
+      const noticeUrl = listing.sourceUrl || `${portalUrl.replace(/\/+$/, '')}/notice/${listing.id}`;
+
+      if (evaluation.isConfident) {
+        listings.push(listing);
+      } else {
+        lowConfidenceNotices.push({
+          id: listing.id,
+          recordId: listing.id,
+          noticeUrl,
+          state,
+          reasons: evaluation.reasons,
+          rawSnippet: snippet,
+          contentHash,
+          observedAt,
+          parsed,
+          listing,
+          email,
+          confidence: evaluation.confidence,
+        });
+      }
     }
 
     return {
       state,
       feedInfo,
       listings,
+      lowConfidenceNotices,
     };
   }
 
@@ -441,21 +489,25 @@ class EmailNoticesPipeline {
       throw new Error(`IMAP ingestion failed: ${err.message}`);
     }
 
+    const reviewStore = this.documentReviewStore || (typeof getStore === 'function' ? getStore(this.db) : null);
+
     const report = {
       ok: true,
       messagesFound: unreadMessages.length,
       listingsGenerated: 0,
       listingsAccepted: 0,
       listingsRejected: 0,
+      reviewsRouted: 0,
       upserted: [],
       rejected: [],
+      reviews: [],
       errors: [],
     };
 
     for (const email of unreadMessages) {
       try {
-        const { listings } = this.processEmail(email);
-        report.listingsGenerated += listings.length;
+        const { listings, lowConfidenceNotices } = this.processEmail(email);
+        report.listingsGenerated += (listings.length + (lowConfidenceNotices?.length || 0));
 
         for (const candidate of listings) {
           const validation = validateListingForIngestion(candidate, { expectedSource: 'email-notices' });
@@ -481,8 +533,89 @@ class EmailNoticesPipeline {
           report.listingsAccepted += 1;
           report.upserted.push(saved || validation.listing);
         }
+
+        for (const item of (lowConfidenceNotices || [])) {
+          const docId = typeof documentId === 'function'
+            ? documentId(item.recordId, 0, item.noticeUrl)
+            : item.recordId;
+          const vault = this.vault || defaultVault;
+          if (vault && item.rawSnippet) {
+            try {
+              if (typeof vault.putDocumentSync === 'function') {
+                vault.putDocumentSync(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
+                  contentType: 'text/plain',
+                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
+                });
+                vault.putDocumentSync(`reviews/${encodeURIComponent(item.recordId)}.txt`, item.rawSnippet, {
+                  contentType: 'text/plain',
+                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
+                });
+              } else if (typeof vault.putDocument === 'function') {
+                await vault.putDocument(`reviews/${encodeURIComponent(docId)}.txt`, item.rawSnippet, {
+                  contentType: 'text/plain',
+                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
+                });
+                await vault.putDocument(`reviews/${encodeURIComponent(item.recordId)}.txt`, item.rawSnippet, {
+                  contentType: 'text/plain',
+                  metadata: { recordId: item.recordId, source: 'email-notices', reason: 'LOW_CONFIDENCE_NOTICE' },
+                });
+              }
+            } catch (_) {}
+          }
+
+          const reviewEntry = {
+            id: docId,
+            listingId: item.recordId,
+            documentIndex: 0,
+            documentUrl: item.noticeUrl,
+            status: 'pending',
+            reason: 'LOW_CONFIDENCE_NOTICE',
+            reasons: item.reasons,
+            notes: `LOW_CONFIDENCE_NOTICE: ${item.reasons.join(', ')}`,
+            reviewer: null,
+            reviewedAt: null,
+            revision: 0,
+            priorStatus: null,
+            extractedAt: item.observedAt,
+            contentHash: item.contentHash,
+            rawText: item.rawSnippet,
+            extractedFields: {
+              property_address: item.parsed.property_address || '',
+              address: item.parsed.property_address || '',
+              caseNumber: item.parsed.case_number || '',
+              apn: item.parsed.apn || '',
+              plaintiff: item.parsed.plaintiff_or_seller || '',
+              defendant: item.parsed.defendant || '',
+              judgmentAmount: item.parsed.judgment_amount || 0,
+              openingBid: item.parsed.opening_bid || 0,
+              saleDate: item.parsed.sale_date || '',
+              depositTerms: item.parsed.deposit_terms || '',
+              state: item.parsed.state || item.state,
+              county: item.parsed.county || '',
+              city: item.parsed.city || '',
+              zip: item.parsed.zip || '',
+              confidenceScore: item.parsed.confidence_score,
+              evidenceSpans: item.parsed.evidenceSpans || item.parsed.evidence_spans || {},
+            },
+          };
+
+          if (reviewStore && reviewStore.map) {
+            reviewStore.map.set(docId, reviewEntry);
+          }
+
+          report.reviewsRouted += 1;
+          report.reviews.push(reviewEntry);
+        }
       } catch (err) {
         report.errors.push({ emailId: email.id, error: err.message });
+      }
+    }
+
+    if (reviewStore && report.reviewsRouted > 0) {
+      if (typeof reviewStore.persistAsync === 'function') {
+        await reviewStore.persistAsync();
+      } else if (typeof reviewStore.persist === 'function') {
+        reviewStore.persist();
       }
     }
 

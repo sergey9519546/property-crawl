@@ -27,6 +27,8 @@ const { defaultVault } = require('../storage/document-vault');
 const { scanAllListings } = require('../db/listings-scan');
 const { resolveOperatorToken } = require('../security/operator-token');
 const { presentedRunToken, tokensMatch } = require('./scrapers');
+const emailFeeds = require('../sources/email-feeds.json');
+const FEED_CONFIG = emailFeeds.feeds || {};
 
 const MAX_DOCUMENT_ID_LENGTH = 200;
 const MAX_LISTING_ID_LENGTH = 200;
@@ -272,6 +274,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       rawText: record.rawText || null,
       extractedFields: record.extractedFields || null,
       updatedFields: record.updatedFields || null,
+      reason: record.reason || null,
+      reasons: record.reasons || null,
       id,
       ...normalizeReview(record),
       listingId: record.listingId || id.split('~')[0],
@@ -332,6 +336,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
           documentIndex: entry.documentIndex ?? null,
           documentUrl: entry.documentUrl ?? null,
           label: entry.label || null,
+          reason: entry.reason || null,
+          reasons: entry.reasons || null,
           review,
           contentHash: entry.contentHash || null,
           rawText: rawText || null,
@@ -401,6 +407,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
         ? body.documentUrl.trim().slice(0, MAX_DOCUMENT_ID_LENGTH)
         : null,
       contentHash: contentHash || previousRaw?.contentHash || null,
+      reason: previousRaw?.reason || body.reason || null,
+      reasons: previousRaw?.reasons || body.reasons || null,
     });
     const persisted = typeof store.persistAsync === 'function'
       ? await store.persistAsync()
@@ -415,21 +423,135 @@ async function handleDocumentReview(req, res, dependencies = {}) {
         id,
         listingId,
         contentHash: contentHash || previousRaw?.contentHash || null,
+      reason: previousRaw?.reason || body.reason || null,
+      reasons: previousRaw?.reasons || body.reasons || null,
       review: result,
         persisted: false,
         requiredConfiguration: 'writable document-review store (PostgreSQL or .cache)',
       });
     }
+    let listingPacket = null;
+    let savedListing = null;
+
+    if (result.status === 'approved' && database) {
+      const mergedFields = {
+        ...(previousRaw?.extractedFields || {}),
+        ...(body.extractedFields || {}),
+        ...(updatedFields || {}),
+      };
+      const rawSnippet = rawContent || body.rawText || previousRaw?.rawText || '';
+      const stateMatch = listingId.match(/email-notice-([a-z]{2})/i);
+      const state = mergedFields.state || (stateMatch ? stateMatch[1].toUpperCase() : 'OH');
+      const feedInfo = FEED_CONFIG ? FEED_CONFIG[state] : null;
+      const publisherName = feedInfo?.name || `${state} Press Association`;
+      const portalUrl = feedInfo?.portalUrl || 'https://publicnotice.org';
+      const noticeUrl = body.documentUrl || previousRaw?.documentUrl || `${portalUrl}/notice/${listingId}`;
+      const nowIso = new Date().toISOString();
+
+      let existingListing = null;
+      if (typeof database.getListingById === 'function') {
+        try {
+          existingListing = await database.getListingById(listingId);
+        } catch (_) {}
+      } else if (Array.isArray(database.inMemoryData?.listings)) {
+        existingListing = database.inMemoryData.listings.find((l) => l.id === listingId);
+      }
+
+      const openingBid = Number(mergedFields.openingBid) > 0
+        ? Number(mergedFields.openingBid)
+        : (existingListing?.openingBid ?? null);
+      const judgment = Number(mergedFields.judgmentAmount || mergedFields.judgment) > 0
+        ? Number(mergedFields.judgmentAmount || mergedFields.judgment)
+        : (existingListing?.judgment ?? null);
+
+      listingPacket = {
+        id: listingId,
+        source: existingListing?.source || previousRaw?.source || 'email-notices',
+        state: existingListing?.state || state,
+        county: mergedFields.county || existingListing?.county || null,
+        city: mergedFields.city || existingListing?.city || null,
+        zip: mergedFields.zip || existingListing?.zip || null,
+        address: mergedFields.address || mergedFields.property_address || existingListing?.address || '',
+        apn: mergedFields.apn || existingListing?.apn || null,
+        openingBid,
+        judgment,
+        saleDate: mergedFields.saleDate || existingListing?.saleDate || null,
+        plaintiff: mergedFields.plaintiff || mergedFields.plaintiff_or_seller || existingListing?.plaintiff || null,
+        defendant: mergedFields.defendant || existingListing?.defendant || null,
+        status: existingListing?.status || 'scheduled',
+        sourceUrl: existingListing?.sourceUrl || noticeUrl,
+        raw: rawSnippet || existingListing?.raw || null,
+        sourceObservedAt: existingListing?.sourceObservedAt || previousRaw?.extractedAt || body.extractedAt || nowIso,
+        provenance: {
+          ...(existingListing?.provenance || {}),
+          origin: existingListing?.provenance?.origin || 'email_notice',
+          observed: true,
+          operatorReviewed: true,
+          reviewedBy: result.reviewer || body.reviewer || 'operator',
+          reviewedAt: result.reviewedAt || nowIso,
+          reviewNotes: result.notes || body.notes || null,
+          reviewStatus: 'approved',
+          publisher: existingListing?.provenance?.publisher || publisherName,
+          recordId: listingId,
+          observedAt: existingListing?.provenance?.observedAt || previousRaw?.extractedAt || body.extractedAt || nowIso,
+          exactSourceUrl: existingListing?.provenance?.exactSourceUrl || noticeUrl,
+          sourceFacts: {
+            ...(existingListing?.provenance?.sourceFacts || {}),
+            caseNumber: mergedFields.caseNumber || existingListing?.provenance?.sourceFacts?.caseNumber || null,
+            parcelId: mergedFields.apn || existingListing?.provenance?.sourceFacts?.parcelId || null,
+            documents: [
+              ...(existingListing?.provenance?.sourceFacts?.documents || []),
+            ],
+          },
+        },
+      };
+
+      const docIndex = Number.isInteger(body.documentIndex) ? body.documentIndex : 0;
+      const docEvidence = {
+        title: `Statutory Legal Notice Evidence - ${mergedFields.caseNumber || listingId}`,
+        url: noticeUrl,
+        rawText: rawSnippet || null,
+        evidenceSpans: mergedFields.evidenceSpans || {},
+        confidenceScore: typeof mergedFields.confidenceScore === 'number' ? mergedFields.confidenceScore : 1.0,
+        reviewStatus: 'approved',
+        reviewer: result.reviewer || body.reviewer || 'operator',
+        reviewedAt: result.reviewedAt || nowIso,
+        notes: result.notes || body.notes || null,
+      };
+
+      if (listingPacket.provenance.sourceFacts.documents.length > docIndex) {
+        listingPacket.provenance.sourceFacts.documents[docIndex] = {
+          ...listingPacket.provenance.sourceFacts.documents[docIndex],
+          ...docEvidence,
+        };
+      } else {
+        listingPacket.provenance.sourceFacts.documents.push(docEvidence);
+      }
+
+      try {
+        if (typeof database.createListing === 'function') {
+          savedListing = await database.createListing(listingPacket);
+        } else if (typeof database.upsertListing === 'function') {
+          savedListing = await database.upsertListing(listingPacket);
+        }
+      } catch (saveErr) {
+        console.warn('[document-review] Listing creation/update on approval warning:', saveErr.message);
+      }
+    }
+
     return res.status(200).json({
       id,
       listingId,
       documentIndex: body.documentIndex,
       documentUrl: body.documentUrl || null,
       contentHash: contentHash || previousRaw?.contentHash || null,
+      reason: previousRaw?.reason || body.reason || null,
+      reasons: previousRaw?.reasons || body.reasons || null,
       review: result,
       persisted,
       updatedFields: updatedFields || undefined,
       extractedFields: extractedFields || undefined,
+      listing: savedListing || listingPacket || undefined,
     });
   }
 
@@ -465,6 +587,8 @@ async function handleDocumentReview(req, res, dependencies = {}) {
       rawText: record.rawText || vaultDocument?.content || null,
       extractedFields: record.extractedFields || null,
       updatedFields: record.updatedFields || null,
+      reason: record.reason || null,
+      reasons: record.reasons || null,
       hydration: 'store',
     });
   }
@@ -495,6 +619,7 @@ module.exports.handleDocumentReview = handleDocumentReview;
 module.exports.REVIEW_STATES = REVIEW_STATES;
 module.exports._resetForTests = _resetForTests;
 module.exports._getStore = _getStore;
+module.exports.getStore = getStore;
 Object.defineProperty(module.exports, '_store', {
   enumerable: true,
   get() { return store.map; },

@@ -21,6 +21,8 @@ type ReviewEntry = {
   documentIndex?: number | null;
   documentUrl?: string | null;
   review: Review;
+  reason?: string | null;
+  reasons?: string[] | null;
   rawText?: string | null;
   extractedFields?: {
     caseNumber?: string;
@@ -365,6 +367,18 @@ export function DocumentReviewQueue() {
                     <p className="mt-1 text-xs text-[#5B6472]">
                       Extracted {formatDate(entry.review.extractedAt)}{entry.review.reviewedAt ? ` · Last decision ${formatDate(entry.review.reviewedAt)}` : ""}{entry.review.reviewer ? ` · ${entry.review.reviewer}` : ""}
                     </p>
+                    {entry.reason && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                          {entry.reason}
+                        </span>
+                        {entry.reasons?.map((r) => (
+                          <span key={r} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {entry.review.notes && (
                       <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-[#374151]">
                         <strong>Latest note:</strong> {entry.review.notes}

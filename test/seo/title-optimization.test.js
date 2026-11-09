@@ -8,6 +8,8 @@
  *   4. Dynamic state directory metadata generation (/states/[state])
  *   5. Dynamic info page metadata generation (/[slug])
  *   6. Dynamic listing detail metadata generation (/listings/[id])
+ *   7. Dynamic county page metadata generation (/states/[state]/[county])
+ *   8. Foreclosure alias redirect verification (/foreclosure)
  */
 
 const test = require('node:test');
@@ -84,4 +86,29 @@ test('SEO Title Gate: /listings/[id] exports generateMetadata with Sheriff Sale 
 
   assert.match(source, /export async function generateMetadata/);
   assert.match(source, /Sheriff Sale \| PerfectProperty/);
+});
+
+test('SEO Title Gate: /states/[state]/[county] exports generateMetadata with zero-fabrication metadata', () => {
+  const countyPagePath = path.join(ROOT, 'src/app/states/[state]/[county]/page.tsx');
+  const source = fs.readFileSync(countyPagePath, 'utf8');
+
+  assert.match(source, /export async function generateMetadata/);
+  assert.match(source, /generateCountyMetadata/);
+});
+
+test('SEO Title Gate: /foreclosure routes permanently redirect to canonical /states paths', () => {
+  const foreclosureIndex = path.join(ROOT, 'src/app/foreclosure/page.tsx');
+  const foreclosureState = path.join(ROOT, 'src/app/foreclosure/[state]/page.tsx');
+  const foreclosureCounty = path.join(ROOT, 'src/app/foreclosure/[state]/[county]/page.tsx');
+
+  const indexSource = fs.readFileSync(foreclosureIndex, 'utf8');
+  assert.match(indexSource, /permanentRedirect\(['"]\/states['"]\)/);
+
+  const stateSource = fs.readFileSync(foreclosureState, 'utf8');
+  assert.match(stateSource, /permanentRedirect\(`/);
+  assert.match(stateSource, /\/states\/\$\{cleanState\}/);
+
+  const countySource = fs.readFileSync(foreclosureCounty, 'utf8');
+  assert.match(countySource, /permanentRedirect\(`/);
+  assert.match(countySource, /\/states\/\$\{cleanState\}\/\$\{cleanCounty\}/);
 });
