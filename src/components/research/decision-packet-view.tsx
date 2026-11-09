@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Printer, ShieldAlert, CheckCircle2, DollarSign, Scale, FileText, Clock, Calendar, Building } from 'lucide-react';
+import { Download, Printer, ShieldAlert, CheckCircle2, DollarSign, Scale, FileText, Clock, Calendar, Building, Gavel, ShieldCheck } from 'lucide-react';
 import { computeCashToClose, computeLienWaterfall, computeStatutoryDeadlinesAndCarry } from '@/lib/underwriting';
 import { readUnderwriteScenario, scenarioCashInput } from '@/lib/underwrite-scenario';
+import { evaluateAdversarialDocket } from '@/lib/adversarial-docket';
+import { cn } from '@/lib/utils';
 
 interface DecisionPacketViewProps {
   packet: any;
@@ -211,6 +213,62 @@ export function DecisionPacketView({ packet }: DecisionPacketViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Adversarial Trial Docket Audit */}
+      {(() => {
+        const docket = p ? evaluateAdversarialDocket(p) : null;
+        if (!docket) return null;
+        return (
+          <div data-testid="packet-trial-docket-section" className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-2">
+                <Scale className="w-4 h-4 text-slate-800" />
+                <h3 className="font-bold text-sm text-slate-900">Adversarial Trial Docket (Prosecution vs. Defense)</h3>
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border",
+                docket.badgeClass
+              )}>
+                {docket.headline}
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">{docket.verdictDescription}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 space-y-1.5">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Gavel className="w-3.5 h-3.5 text-rose-700" />
+                  Prosecution Deal-Killers ({docket.fatalCount} fatal, {docket.cautionCount} cautions)
+                </span>
+                <ul className="space-y-1 text-[11px] text-slate-600">
+                  {docket.prosecutionPoints.filter(pt => pt.status === "disqualified" || pt.status === "caution").slice(0, 3).map(pt => (
+                    <li key={pt.id} className="flex items-start gap-1">
+                      <span className="text-rose-700 font-bold">·</span>
+                      <span><strong>{pt.title}:</strong> {pt.statute}</span>
+                    </li>
+                  ))}
+                  {docket.fatalCount === 0 && docket.cautionCount === 0 && (
+                    <li className="text-slate-500 italic">No fatal title defects detected.</li>
+                  )}
+                </ul>
+              </div>
+              <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 space-y-1.5">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-slate-700" />
+                  Defense Shields ({docket.defenseCount} of {docket.defensePoints.length} verified)
+                </span>
+                <ul className="space-y-1 text-[11px] text-slate-600">
+                  {docket.defensePoints.map(pt => (
+                    <li key={pt.id} className="flex items-start gap-1">
+                      <span className="text-slate-700 font-bold">·</span>
+                      <span><strong>{pt.title}:</strong> {pt.status === "verified" ? "Verified" : "Pending"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Underwriting Grids */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

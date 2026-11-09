@@ -3,13 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Calculator, Check, Clock3, Download, ExternalLink, FileCheck2, GitCompareArrows, History, Link2, Loader2, RotateCcw, Save, ShieldQuestion, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Calculator, Check, Clock3, Download, ExternalLink, FileCheck2, Gavel, GitCompareArrows, History, Link2, Loader2, RotateCcw, Save, Scale, ShieldAlert, ShieldCheck, ShieldQuestion, Trash2 } from "lucide-react";
 import { readUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { PrivateWorkspaceGate, useWorkspaceSession } from "@/components/workspace/workspace-shell";
 import type { Claim, ReconsiderationCondition, ResearchCaseDetail, ResearchDossier } from "@/lib/workspace-types";
 import { sourceDisplayText } from "@/lib/source-display";
 import { listingCatch } from "@/lib/listing-catch";
 import { bandForScore } from "@/lib/score-bands";
+import { evaluateAdversarialDocket } from "@/lib/adversarial-docket";
+import { cn } from "@/lib/utils";
 
 type DetailResponse = { case: ResearchCaseDetail; dossier: ResearchDossier };
 type IntakeItem = { id: string; sourceId: string; sourceUrl: string; capturedAt: string; review?: { decision?: string }; status?: string };
@@ -187,6 +189,132 @@ export function ResearchCase({ caseId }: { caseId: string }) {
         <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_390px]">
           <div className="space-y-6">
             {(() => {
+              const docket = detail.case.listingSnapshot
+                ? evaluateAdversarialDocket(detail.case.listingSnapshot as any)
+                : null;
+              if (!docket) return null;
+              return (
+                <section data-testid="case-adversarial-docket" className="rounded-2xl border border-[#E5E7EB] bg-white p-5 sm:p-7">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Scale size={19} className="text-slate-900" />
+                      <h2 className="text-xl font-semibold">Adversarial Trial Docket: Prosecution vs. Defense</h2>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setDecisionState(docket.recommendedDecision);
+                        setReasonCodes((prev) => [...new Set([...prev, ...docket.recommendedReasonCodes])]);
+                        if (!note) {
+                          setNote(docket.docketSummaryNote);
+                        } else if (!note.includes(docket.headline)) {
+                          setNote(`${docket.docketSummaryNote}\n\n${note}`);
+                        }
+                        setMessage(`Applied trial recommendation: ${docket.recommendedDecision.toUpperCase()} with ${docket.recommendedReasonCodes.length} reason code(s). Review reasons and click Save Decision to commit.`);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      <Gavel size={13} />
+                      Apply Trial Recommendation
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-[#5B6472]">
+                    Adversarial audit pitting 7 statutory deal-killers against recording acts, cadastral verification, and walk-away math.
+                  </p>
+
+                  <div className={cn("mt-4 rounded-xl border p-4 text-xs", docket.badgeClass)}>
+                    <div className="flex items-start gap-2.5">
+                      {docket.verdict === "fatal" ? (
+                        <ShieldAlert size={18} className="shrink-0 text-catch-ink" />
+                      ) : docket.verdict === "conditional" ? (
+                        <AlertTriangle size={18} className="shrink-0 text-amber-800" />
+                      ) : (
+                        <ShieldCheck size={18} className="shrink-0 text-slate-700" />
+                      )}
+                      <div>
+                        <span className="font-extrabold uppercase text-xs tracking-wide">{docket.headline}</span>
+                        <p className="mt-1 leading-relaxed font-medium">{docket.verdictDescription}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-3 gap-3 text-center text-xs">
+                    <div className="rounded-xl border border-catch/30 bg-catch-wash/70 p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-catch-ink">Fatal Deal-Killers</span>
+                      <p className="mt-0.5 text-lg font-black text-slate-900">{docket.fatalCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900">Caution Points</span>
+                      <p className="mt-0.5 text-lg font-black text-slate-900">{docket.cautionCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-800">Defenses Verified</span>
+                      <p className="mt-0.5 text-lg font-black text-slate-900">{docket.defenseCount} of {docket.defensePoints.length}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-2 text-xs">
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                          <Gavel size={14} className="text-catch-ink" />
+                          <span>Prosecution Attack Vectors</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate-500">7 checkpoints</span>
+                      </div>
+                      <ul className="space-y-2 pt-1">
+                        {docket.prosecutionPoints.map((item) => (
+                          <li key={item.id} className="rounded-lg bg-white p-2.5 border border-slate-200/60 shadow-2xs">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-semibold text-slate-900">{item.title}</span>
+                              <span className={cn(
+                                "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
+                                item.status === "disqualified" ? "bg-catch/15 text-catch-ink" :
+                                item.status === "caution" ? "bg-amber-100 text-amber-900" :
+                                "bg-slate-100 text-slate-600"
+                              )}>
+                                {item.status === "disqualified" ? "Disqualified" : item.status === "caution" ? "Caution" : "Pre-Auction"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[#5B6472]">{item.finding}</p>
+                            <span className="mt-1 block text-[10px] text-slate-400">Statute: {item.statute}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                          <ShieldCheck size={14} className="text-slate-800" />
+                          <span>Defense Value Shields</span>
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate-500">4 defenses</span>
+                      </div>
+                      <ul className="space-y-2 pt-1">
+                        {docket.defensePoints.map((item) => (
+                          <li key={item.id} className="rounded-lg bg-white p-2.5 border border-slate-200/60 shadow-2xs">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-semibold text-slate-900">{item.title}</span>
+                              <span className={cn(
+                                "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
+                                item.status === "verified" ? "bg-slate-200 text-slate-800" : "bg-slate-100 text-slate-600"
+                              )}>
+                                {item.status === "verified" ? "Verified" : "Pending"}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[#5B6472]">{item.finding}</p>
+                            <span className="mt-1 block text-[10px] text-slate-400">Authority: {item.statute}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+              );
+            })()}
+            {(() => {
               const localScenario = detail.case.listingId ? readUnderwriteScenario(detail.case.listingId) : null;
               const serverScenario = detail.case.underwriteScenario || null;
               const effectiveScenario = localScenario || serverScenario;
@@ -277,6 +405,38 @@ export function ResearchCase({ caseId }: { caseId: string }) {
           </div>
 
           <aside className="rounded-2xl border border-[#E5E7EB] bg-white p-5 xl:sticky xl:top-24"><h2 className="text-xl font-semibold">Record your decision</h2><p className="mt-2 text-xs leading-5 text-[#5B6472]">The decision and its reasons are versioned with the same evidence snapshot used by exports.</p><div className="mt-5 grid grid-cols-3 gap-2">{(["inbox", "pursue", "pass"] as const).map((value) => <button key={value} type="button" aria-pressed={decisionState === value} onClick={() => setDecisionState(value)} className={`rounded-lg px-3 py-2.5 text-xs font-semibold capitalize ${decisionState === value ? "bg-[#0F172A] text-white" : "border border-[#E5E7EB]"}`}>{value}</button>)}</div>
+            {(() => {
+              const docket = detail.case.listingSnapshot
+                ? evaluateAdversarialDocket(detail.case.listingSnapshot as any)
+                : null;
+              if (docket?.verdict !== "fatal") return null;
+              return (
+                <div data-testid="prosecution-fatal-aside-alert" className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3.5 text-xs text-red-950">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert size={16} className="mt-0.5 shrink-0 text-red-700" />
+                    <div className="space-y-1">
+                      <strong className="block font-bold">Prosecution Verdict: FATAL DISQUALIFIER</strong>
+                      <p className="text-[11px] leading-relaxed text-red-900">
+                        Senior lien or bankruptcy stay detected. Recommended decision: <strong>PASS</strong>.
+                      </p>
+                      {decisionState !== "pass" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDecisionState("pass");
+                            setReasonCodes((prev) => [...new Set([...prev, ...docket.recommendedReasonCodes])]);
+                            if (!note) setNote(docket.docketSummaryNote);
+                          }}
+                          className="mt-1.5 inline-flex items-center gap-1 rounded bg-red-900 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-red-800"
+                        >
+                          Apply Injunctive Pass
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
             {decisionState !== "inbox" && <fieldset className="mt-5"><legend className="text-xs font-semibold">Reasons {decisionState === "pass" ? "(choose at least one)" : ""}</legend><div className="mt-3 space-y-2">{reasonChoices.map(([value, title]) => <label key={value} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={reasonCodes.includes(value)} onChange={(event) => setReasonCodes(event.target.checked ? [...reasonCodes, value] : reasonCodes.filter((item) => item !== value))} />{title}</label>)}</div></fieldset>}
             <label className="mt-5 block text-xs font-semibold">Decision note<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={4} className="mt-2 w-full rounded-lg border border-[#E5E7EB] p-3 text-sm font-normal" placeholder="What matters, what is unresolved, and what you will verify." /></label>
             {decisionState === "pass" && <div className="mt-5 border-t border-[#F3F4F6] pt-5"><div className="flex items-center gap-2"><RotateCcw size={16} className="text-slate-900" /><h3 className="text-sm font-semibold">Bring it back when…</h3></div><select aria-label="Reconsideration matching" value={mode} onChange={(event) => setMode(event.target.value as "any" | "all")} className="mt-3 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs"><option value="any">Any condition matches</option><option value="all">Every condition matches</option></select><div className="mt-3 space-y-3">{conditions.map((condition, index) => <ConditionEditor key={index} condition={condition} onChange={(next) => setConditions(conditions.map((item, itemIndex) => itemIndex === index ? next : item))} onRemove={conditions.length > 1 ? () => setConditions(conditions.filter((_, itemIndex) => itemIndex !== index)) : undefined} />)}</div><button type="button" disabled={conditions.length >= 10} onClick={() => setConditions([...conditions, { field: "saleDate", operator: "changed" }])} className="mt-3 text-xs font-semibold text-slate-900 underline hover:text-slate-700 disabled:opacity-50">Add return condition</button></div>}
