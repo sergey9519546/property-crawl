@@ -12,6 +12,10 @@ const {
   streamArchiveRecords,
   importArchive,
 } = require('../scripts/import-servicelink-archive');
+const {
+  ServiceLinkScraper,
+  collectServiceLink,
+} = require('../server/scrapers/servicelink');
 
 function fixtureRecord(overrides = {}) {
   const listingId = overrides.listingId || 'a1c3k000001nwWYAAY';
@@ -307,4 +311,87 @@ test('CLI / Function runner: importArchive executes dry run cleanly', async () =
   assert.equal(stats.estLowNull, 10);
   assert.ok(stats.totalImages > 0);
   assert.ok(stats.fakeBidsStripped > 0);
+});
+
+test('ServiceLink collector supports options.cursor and setCheckpoint continuation', () => {
+  const scraper1 = new ServiceLinkScraper({ cursor: 'cursor-token-123' });
+  assert.equal(scraper1.resumeToken, 'cursor-token-123');
+
+  const scraper2 = new ServiceLinkScraper();
+  scraper2.setCheckpoint('direct-token-456');
+  assert.equal(scraper2.resumeToken, 'direct-token-456');
+
+  scraper2.setCheckpoint({ cursor: 'cursor-token-789' });
+  assert.equal(scraper2.resumeToken, 'cursor-token-789');
+
+  scraper2.setCheckpoint({ continuationToken: 'continuation-token-abc' });
+  assert.equal(scraper2.resumeToken, 'continuation-token-abc');
+
+  scraper2.setCheckpoint(null);
+  assert.equal(scraper2.resumeToken, null);
+});
+
+test('ServiceLink collector emits explicit partialSweep and nextCursor on bounded page caps vs full sweep', async () => {
+  const page1Listing = fixtureRecord({ listingId: 'a1c3k000001page1' });
+  const page2Listing = fixtureRecord({ listingId: 'a1c3k000002page2' });
+  const requestedUrls = [];
+
+  function jsonResponse(data) {
+    return {
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: async () => JSON.stringify(data),
+    };
+  }
+
+  // Run 1: Bounded page sweep (maxPages: 1), publisher has more records (token: 'token-page-2')
+  const scraperRun1 = new ServiceLinkScraper({
+    maxPages: 1,
+    random: () => 0,
+    sleep: async () => {},
+    fetchImpl: async (url) => {
+      requestedUrls.push(url);
+      return jsonResponse({
+        searchResultCount: 2,
+        model: 'list',
+        continuationToken: 'token-page-2',
+        data: [page1Listing],
+      });
+    },
+  });
+
+  const listingsRun1 = await scraperRun1.scrapeFeed();
+  assert.equal(requestedUrls.length, 1);
+  assert.equal(scraperRun1.lastRunReport.partialSweep, true, 'Run stopping at maxPages budget must report partialSweep = true');
+  assert.equal(scraperRun1.lastRunReport.nextCursor, 'token-page-2', 'Run stopping with more records must report nextCursor');
+  assert.equal(scraperRun1.lastRunReport.nextContinuationToken, 'token-page-2');
+  assert.equal(listingsRun1.partialSweep, true, 'Listings array must carry partialSweep metadata');
+  assert.equal(listingsRun1.nextCursor, 'token-page-2', 'Listings array must carry nextCursor metadata');
+
+  // Run 2: Resume continuation using options.cursor from run 1
+  const scraperRun2 = new ServiceLinkScraper({
+    maxPages: 1,
+    cursor: listingsRun1.nextCursor,
+    random: () => 0,
+    sleep: async () => {},
+    fetchImpl: async (url) => {
+      requestedUrls.push(url);
+      return jsonResponse({
+        searchResultCount: 1,
+        model: 'list',
+        continuationToken: null,
+        data: [page2Listing],
+      });
+    },
+  });
+
+  const listingsRun2 = await scraperRun2.scrapeFeed();
+  assert.equal(requestedUrls.length, 2);
+  const secondUrl = new URL(requestedUrls[1]);
+  assert.equal(secondUrl.searchParams.get('continuationToken'), 'token-page-2', 'Second run must request with resumed cursor');
+  assert.equal(scraperRun2.lastRunReport.partialSweep, false, 'Completing the catalog sweep must report partialSweep = false');
+  assert.equal(scraperRun2.lastRunReport.nextCursor, null, 'Completing the catalog sweep must report nextCursor = null');
+  assert.equal(scraperRun2.lastRunReport.nextContinuationToken, null);
+  assert.equal(listingsRun2.partialSweep, false);
+  assert.equal(listingsRun2.nextCursor, null);
 });

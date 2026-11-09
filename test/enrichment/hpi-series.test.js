@@ -15,6 +15,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const hpi = require('../../server/enrichment/hpi');
 const {
@@ -23,6 +24,10 @@ const {
   loadObservedHpiSeries,
   invalidateHpiSeriesCache,
 } = require('../../server/enrichment/hpi-series');
+const {
+  buildHpiSeriesSnapshot,
+  ingestHpiSeries,
+} = require('../../scripts/ingest-fhfa-hpi');
 
 const VALID_SERIES = {
   version: 1,
@@ -148,4 +153,147 @@ test('the default path is the .cache drop location and the env var name is stabl
   assert.equal(SERIES_PATH_ENV, 'FHFA_HPI_SERIES_PATH');
   assert.equal(path.basename(DEFAULT_SERIES_PATH), 'fhfa-hpi-series.json');
   assert.equal(path.basename(path.dirname(DEFAULT_SERIES_PATH)), '.cache');
+});
+
+// --- Zero-Fabrication Versioned State-Quarter Series Validation & Helpers ---
+
+test('quarter ordering helpers: compareQuarters, areQuartersChronological, sortQuarters', () => {
+  // compareQuarters
+  assert.equal(hpi.compareQuarters('2020Q1', '2020Q2') < 0, true);
+  assert.equal(hpi.compareQuarters('2020Q2', '2020Q1') > 0, true);
+  assert.equal(hpi.compareQuarters('2024Q3', '2024Q3'), 0);
+  assert.equal(hpi.compareQuarters('2020Q4', '2021Q1') < 0, true);
+  assert.equal(hpi.compareQuarters('invalid', '2020Q1'), null);
+  assert.equal(hpi.compareQuarters('2020Q1', null), null);
+
+  // areQuartersChronological
+  assert.equal(hpi.areQuartersChronological(['2018Q1', '2020Q2', '2024Q4', '2026Q1']), true);
+  assert.equal(hpi.areQuartersChronological(['2026Q1', '2020Q2']), false);
+  assert.equal(hpi.areQuartersChronological(['2020Q2', '2020Q2'], { strictlyAscending: true }), false);
+  assert.equal(hpi.areQuartersChronological(['2020Q2', '2020Q2'], { strictlyAscending: false }), true);
+  assert.equal(hpi.areQuartersChronological([]), false);
+  assert.equal(hpi.areQuartersChronological(['2020Q1', 'not-a-quarter']), false);
+
+  // sortQuarters
+  const unsorted = ['2026Q1', '2019Q4', '2020Q2', '2023Q3', 'bogus'];
+  assert.deepEqual(hpi.sortQuarters(unsorted), ['2019Q4', '2020Q2', '2023Q3', '2026Q1']);
+});
+
+test('validateStateQuarterSeries: verifies full contract including sha256 and chronological keys', () => {
+  assert.equal(hpi.validateStateQuarterSeries(VALID_SERIES), true);
+  assert.equal(hpi.validateStateQuarterSeries(null), false);
+  assert.equal(hpi.validateStateQuarterSeries(undefined), false);
+
+  // requireChronologicalKeys option
+  const chronological = {
+    ...VALID_SERIES,
+    values: { FL: { '2020Q1': 200, '2020Q2': 210, '2026Q1': 450 } },
+  };
+  assert.equal(hpi.validateStateQuarterSeries(chronological, { requireChronologicalKeys: true }), true);
+
+  // Sha256 digest verification when rawJson is embedded
+  const rawPayload = JSON.stringify({ FL: { '2020Q2': 300, '2026Q1': 450 } });
+  const rawSha = crypto.createHash('sha256').update(rawPayload, 'utf8').digest('hex');
+  const embeddedSeries = {
+    ...VALID_SERIES,
+    datasetSha256: rawSha,
+    rawJson: rawPayload,
+  };
+  assert.equal(hpi.validateStateQuarterSeries(embeddedSeries), true);
+
+  // Tampered rawJson fails closed
+  const tamperedSeries = {
+    ...embeddedSeries,
+    rawJson: rawPayload + ' tampered',
+  };
+  assert.equal(hpi.validateStateQuarterSeries(tamperedSeries), false);
+});
+
+test('scripts/ingest-fhfa-hpi.js: buildHpiSeriesSnapshot constructs valid versioned snapshot with sha256', () => {
+  const values = { OH: { '2021Q1': 250.5, '2026Q1': 350.2 } };
+  const snapshot = buildHpiSeriesSnapshot({
+    sourceUrl: 'https://www.fhfa.gov/data/hpi',
+    retrievedAt: '2026-11-09T00:00:00.000Z',
+    values,
+  });
+
+  assert.equal(snapshot.version, 1);
+  assert.equal(snapshot.sourceUrl, 'https://www.fhfa.gov/data/hpi');
+  assert.ok(/^[a-f0-9]{64}$/i.test(snapshot.datasetSha256));
+  assert.equal(hpi.validateStateQuarterSeries(snapshot), true);
+});
+
+test('scripts/ingest-fhfa-hpi.js: ingestHpiSeries normalizes quarters chronologically and verifies digest', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hpi-ingest-test-'));
+  const srcFile = path.join(dir, 'input-series.json');
+  const outFile = path.join(dir, 'output-series.json');
+
+  // Input series with unordered quarter keys
+  const inputSeries = {
+    version: 1,
+    sourceUrl: 'https://www.fhfa.gov/data/hpi',
+    retrievedAt: '2026-11-09T00:00:00.000Z',
+    values: {
+      FL: { '2026Q1': 450, '2020Q2': 300, '2022Q4': 380 },
+    },
+  };
+  fs.writeFileSync(srcFile, JSON.stringify(inputSeries), 'utf8');
+
+  try {
+    const ingested = ingestHpiSeries({ seriesFile: srcFile, outPath: outFile });
+    assert.ok(ingested);
+    assert.equal(ingested.version, 1);
+    assert.ok(fs.existsSync(outFile));
+
+    // Verify quarters were ordered chronologically
+    const writtenKeys = Object.keys(ingested.values.FL);
+    assert.deepEqual(writtenKeys, ['2020Q2', '2022Q4', '2026Q1']);
+
+    // Verify sha256 matches written rawJson
+    const expectedSha = crypto.createHash('sha256').update(ingested.rawJson, 'utf8').digest('hex');
+    assert.equal(ingested.datasetSha256, expectedSha);
+
+    // Verify it passes validateStateQuarterSeries
+    assert.equal(hpi.validateStateQuarterSeries(ingested), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('scripts/ingest-fhfa-hpi.js: ingestHpiSeries fails closed on missing file or invalid series', () => {
+  assert.throws(
+    () => ingestHpiSeries({ seriesFile: 'C:/nonexistent/file.json' }),
+    /Series source file not found/
+  );
+
+  assert.throws(
+    () => ingestHpiSeries({}),
+    /No series data or file supplied/
+  );
+
+  // Invalid state code 'US'
+  assert.throws(
+    () => ingestHpiSeries({
+      seriesData: {
+        version: 1,
+        sourceUrl: 'https://www.fhfa.gov/data/hpi',
+        retrievedAt: '2026-11-09T00:00:00.000Z',
+        values: { US: { '2026Q1': 450 } },
+      },
+    }),
+    /Series validation failed/
+  );
+
+  // Non-quarter period key
+  assert.throws(
+    () => ingestHpiSeries({
+      seriesData: {
+        version: 1,
+        sourceUrl: 'https://www.fhfa.gov/data/hpi',
+        retrievedAt: '2026-11-09T00:00:00.000Z',
+        values: { FL: { '2026-01': 450 } },
+      },
+    }),
+    /Non-chronological or invalid quarter keys/
+  );
 });

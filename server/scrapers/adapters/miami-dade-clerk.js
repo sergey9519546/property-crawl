@@ -331,6 +331,16 @@ function parseMiamiDadeTaxDeedCard(cardHtml = '', options = {}) {
     }
   }
 
+  // 10. Judgment / Adjudged Amount (if specified on docket)
+  const jdCell = getCellForLabel('(?:Final\\s*)?Judgment|Adjudged\\s*Taxes');
+  let judgment = jdCell ? parseOpeningBid(jdCell) : null;
+  if (judgment === null) {
+    const jMatch = raw.match(/\b(?:Judgment(?:\s*Amount)?|Final\s*Judgment|Adjudged\s*Taxes)\s*:(?:<[^>]+>|\s)*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (jMatch) {
+      judgment = parseOpeningBid(jMatch[1]);
+    }
+  }
+
   // Identity gate: require folio, auctionId, caseNumber, or certificateNumber
   if (!folio && !auctionId && !caseNumber && !certificateNumber) {
     return null;
@@ -353,6 +363,7 @@ function parseMiamiDadeTaxDeedCard(cardHtml = '', options = {}) {
     apn: folio || null, // alias for pipeline standard
     saleDate: saleDate || null,
     openingBid: openingBid !== null ? openingBid : null,
+    judgment: judgment !== null ? judgment : null,
     legalDescription: legalDescription || null,
     applicant: applicant || null,
     plaintiff: applicant || null,
@@ -510,6 +521,21 @@ function parseMiamiDadeRecordRow(rowHtml = '', options = {}) {
     }
   }
 
+  // 9. Judgment / Final Judgment Amount (if recorded)
+  let judgment = null;
+  const classJudgment = raw.match(
+    /<(?:td|div|span)\b[^>]*class="[^"]*(?:col-judgment|judgment-amount)[^"]*"[^>]*>([\s\S]*?)<\/(?:td|div|span)>/i
+  );
+  if (classJudgment) {
+    judgment = parseOpeningBid(cleanCellText(classJudgment[1]));
+  }
+  if (judgment === null) {
+    const jMatch = raw.match(/\b(?:Judgment(?:\s*Amount)?|Final\s*Judgment)\s*:(?:<[^>]+>|\s)*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (jMatch) {
+      judgment = parseOpeningBid(jMatch[1]);
+    }
+  }
+
   // Identity gate: require cfn, folio, caseNumber, or grantor
   if (!cfn && !folio && !caseNumber && !grantor) {
     return null;
@@ -541,6 +567,7 @@ function parseMiamiDadeRecordRow(rowHtml = '', options = {}) {
     sourceUrl,
     // Zero-Fabrication Invariant: Lis Pendens records notice of pending litigation, never an auction bid or valuation
     openingBid: null,
+    judgment: judgment !== null ? judgment : null,
     saleDate: null,
     estLow: null,
     estHigh: null,
@@ -625,6 +652,7 @@ module.exports = {
   extractMiamiDadeCaseNumber,
   extractMiamiDadeCertificateNumber,
   parseOpeningBid,
+  parseMiamiJudgment: parseOpeningBid,
   identifyDistressStage,
   cleanCellText,
   getMiamiDadeClerkSearchUrl,

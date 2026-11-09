@@ -253,6 +253,7 @@ class ServiceLinkScraper extends BaseScraper {
     this.circuitBreaker = options.circuitBreaker || this.circuitBreaker;
     this.maxPages = boundedPositiveInt(options.maxPages ?? process.env.SERVICELINK_MAX_PAGES, DEFAULT_MAX_PAGES, MAX_PAGES);
     this.limit = boundedPositiveInt(options.limit ?? process.env.SERVICELINK_PAGE_SIZE, DEFAULT_LIMIT, MAX_LIMIT);
+    this.startPage = boundedPositiveInt(options.startPage, 1, MAX_PAGES);
     this.now = options.now || (() => new Date());
     this.resumeToken = null;
     this.sweepStartedAt = null;
@@ -272,15 +273,19 @@ class ServiceLinkScraper extends BaseScraper {
       this.checkpointPath = null;
     }
 
+    const explicitToken = options.cursor ?? options.continuationToken ?? options.checkpoint;
     if (this.checkpointPath) {
       if (this.restart) {
         clearCheckpointFile(this.checkpointPath);
-      } else if (!options.continuationToken && !options.checkpoint) {
+      } else if (!explicitToken) {
         const saved = readCheckpointFile(this.checkpointPath);
         if (saved) {
           this.setCheckpoint(saved);
         }
       }
+    }
+    if (explicitToken && !this.restart) {
+      this.setCheckpoint(explicitToken);
     }
   }
 
@@ -426,7 +431,22 @@ class ServiceLinkScraper extends BaseScraper {
     return listing;
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
+    if (options && typeof options === 'object') {
+      const runCursor = options.cursor ?? options.continuationToken ?? options.checkpoint;
+      if (runCursor != null && !this.restart) {
+        this.setCheckpoint(runCursor);
+      }
+      if (options.startPage) {
+        this.startPage = boundedPositiveInt(options.startPage, 1, MAX_PAGES);
+      }
+      if (options.maxPages) {
+        this.maxPages = boundedPositiveInt(options.maxPages, DEFAULT_MAX_PAGES, MAX_PAGES);
+      }
+      if (options.limit) {
+        this.limit = boundedPositiveInt(options.limit, DEFAULT_LIMIT, MAX_LIMIT);
+      }
+    }
     this.sweepStartedAt = this.sweepStartedAt || new Date(this.now()).toISOString();
     const report = {
       outcome: 'failed',
@@ -451,6 +471,16 @@ class ServiceLinkScraper extends BaseScraper {
         const emitted = [];
         const seenListingIds = new Set();
         let continuationToken = validContinuationToken(this.resumeToken);
+
+        if (!continuationToken && this.startPage > 1) {
+          for (let skip = 1; skip < this.startPage; skip += 1) {
+            report.pagesRequested += 1;
+            const skipPayload = await this.fetchPage(continuationToken);
+            report.pagesFetched += 1;
+            continuationToken = validContinuationToken(skipPayload?.continuationToken);
+            if (!continuationToken) break;
+          }
+        }
 
         for (let pageNumber = 1; pageNumber <= this.maxPages; pageNumber += 1) {
           report.pagesRequested += 1;
@@ -494,10 +524,24 @@ class ServiceLinkScraper extends BaseScraper {
       report.truncated = report.continuationStopped === true;
       report.complete = report.truncated !== true && report.failures.length === 0;
       report.fullSweepComplete = report.complete && Boolean(this.sweepStartedAt);
+      const hasMoreRecords = report.continuationStopped === true && Boolean(report.nextContinuationToken);
+      report.partialSweep = report.truncated === true;
+      report.nextCursor = hasMoreRecords ? report.nextContinuationToken : null;
+      if (!hasMoreRecords && report.complete) {
+        report.nextContinuationToken = null;
+      }
+      Object.defineProperties(listings, {
+        partialSweep: { value: report.partialSweep, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: report.nextCursor, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: report.nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        report: { value: report, enumerable: false, writable: true, configurable: true },
+      });
       this.persistFileCheckpoint(report);
       return listings;
     } catch (error) {
       report.outcome = 'failed';
+      report.partialSweep = true;
+      report.nextCursor = null;
       report.failures.push({ scope: 'upstream', error: error.message, code: error.code || null });
       throw error;
     }
@@ -511,7 +555,7 @@ class ServiceLinkScraper extends BaseScraper {
       return;
     }
     if (report?.truncated !== true) return;
-    const token = validContinuationToken(report.nextContinuationToken);
+    const token = validContinuationToken(report.nextCursor || report.nextContinuationToken);
     if (!token) return;
     writeCheckpointFile(this.checkpointPath, {
       continuationToken: token,
@@ -521,16 +565,24 @@ class ServiceLinkScraper extends BaseScraper {
   }
 
   setCheckpoint(checkpoint) {
-    this.resumeToken = validContinuationToken(checkpoint?.continuationToken);
-    this.sweepStartedAt = typeof checkpoint?.sweepStartedAt === 'string' ? checkpoint.sweepStartedAt : null;
-    this.pagesCommitted = Math.max(0, Math.floor(Number(checkpoint?.pagesCommitted) || 0));
+    if (typeof checkpoint === 'string') {
+      this.resumeToken = validContinuationToken(checkpoint);
+    } else if (checkpoint && typeof checkpoint === 'object') {
+      this.resumeToken = validContinuationToken(
+        checkpoint.continuationToken ?? checkpoint.cursor ?? checkpoint.nextCursor ?? checkpoint.token
+      );
+      this.sweepStartedAt = typeof checkpoint.sweepStartedAt === 'string' ? checkpoint.sweepStartedAt : null;
+      this.pagesCommitted = Math.max(0, Math.floor(Number(checkpoint.pagesCommitted) || 0));
+    } else {
+      this.resumeToken = null;
+    }
     return this;
   }
 }
 
 async function collectServiceLink(options = {}) {
   const scraper = new ServiceLinkScraper(options);
-  return scraper.scrapeFeed();
+  return scraper.scrapeFeed(options);
 }
 
 const defaultScraper = new ServiceLinkScraper();

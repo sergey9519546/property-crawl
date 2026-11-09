@@ -235,12 +235,13 @@ function standardizeGsaAuctionItem(rawItem = {}, options = {}) {
   const cleanAuctionNum = String(auctionNumber).replace(/[^a-zA-Z0-9-_]/g, '');
   const listingId = `GSA-${state}-${cleanAuctionNum}-${zip || '00000'}`.slice(0, 64);
 
-  const auctionUrl =
+  const rawAuctionUrl =
     rawItem.auctionUrl ||
     rawItem.auction_url ||
     rawItem.itemUrl ||
     rawItem.item_url ||
     null;
+  const auctionUrl = (rawAuctionUrl && !String(rawAuctionUrl).includes('/our-listing')) ? rawAuctionUrl : null;
 
   return {
     id: listingId,
@@ -336,9 +337,21 @@ function parseGsaAuctionsApiResponse(jsonOrObject, options = {}) {
 
     // Filter real estate / real property if specified or default
     const cat = String(raw.propertyType || raw.property_type || raw.itemCategory || raw.item_category || raw.category || '').toLowerCase();
-    const isRealEstate =
-      /real|commercial|land|residential|house|building|property|office|warehouse|facility|acre/i.test(cat) ||
-      /real\s*estate|real\s*property|building|parcel|acre/i.test(raw.propertyDescription || raw.itemDescription || '');
+    const desc = String(raw.propertyDescription || raw.property_description || raw.itemDescription || raw.item_description || '').toLowerCase();
+
+    // Explicit non-real-estate categories (personal property, vehicles, furniture, equipment, etc.)
+    const isExplicitNonRealEstate =
+      /\b(?:personal\s*property|vehicle|automobile|car|truck|van|suv|motorcycle|aircraft|airplane|helicopter|boat|vessel|watercraft|trailer|furniture|equipment|machinery|tools|computer|laptop|hardware|software|electronics|appliance|supplies|scrap|metal|clothing|apparel|textiles|jewelry|firearms|weapons|ammo|ammunition)\b/i.test(cat) ||
+      (/\b(?:vehicle|automobile|truck|aircraft|boat|vessel|furniture|equipment|machinery|computer|laptop|electronics)\b/i.test(desc) &&
+       !/\b(?:real\s*estate|real\s*property|vacant\s*land|land\s*parcel|commercial\s*building|office\s*building)\b/i.test(desc));
+
+    const isRealEstateCategory =
+      /\b(?:real\s*estate|real\s*property|commercial|residential|single\s*family|condo|duplex|triplex|land|lot|acreage|acre|parcel|office|warehouse|industrial|housing|courthouse|depot|station)\b/i.test(cat);
+
+    const isRealEstateDesc =
+      /\b(?:real\s*estate|real\s*property|vacant\s*land|land\s*parcel|parcel\s*of\s*land|commercial\s*building|office\s*building|single\s*family\s*home|residential\s*property)\b/i.test(desc);
+
+    const isRealEstate = !isExplicitNonRealEstate && (isRealEstateCategory || isRealEstateDesc);
 
     if (options.realEstateOnly !== false && !isRealEstate) {
       // Non-real-estate GSA item (e.g. vehicles, surplus equipment, or unverified category)

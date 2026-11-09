@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { DatabaseClient } = require('../../server/db/client');
+const scheduler = require('../../server/scrapers/scheduler');
+const { isPartialOrContinuationRun } = scheduler;
 
 const NOW = Date.parse('2026-10-05T12:00:00Z');
 const HOUR = 3_600_000;
@@ -230,4 +232,112 @@ test('reconcilePublisherAbsence marks absent records on complete sweeps and sati
   const restored = await db.reconcilePublisherAbsence('hud', ['HUD-1', 'HUD-2'], { runCompleted: true, at: new Date(NOW + 30 * HOUR).toISOString() });
   assert.equal(restored.restored, 1);
   assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence, undefined);
+});
+
+test('isPartialOrContinuationRun correctly identifies partial, paginated, and continuation sweeps', () => {
+  assert.equal(isPartialOrContinuationRun({ truncated: true }), true);
+  assert.equal(isPartialOrContinuationRun({ nextCursor: 'page-2' }), true);
+  assert.equal(isPartialOrContinuationRun({ continuationToken: 'tok-123' }), true);
+  assert.equal(isPartialOrContinuationRun({ nextContinuationToken: 'tok-456' }), true);
+  assert.equal(isPartialOrContinuationRun({ partialSweep: true }), true);
+
+  assert.equal(isPartialOrContinuationRun(null, { truncated: true }), true);
+  assert.equal(isPartialOrContinuationRun(null, { nextCursor: 'page-2' }), true);
+  assert.equal(isPartialOrContinuationRun(null, { continuationToken: 'tok-123' }), true);
+  assert.equal(isPartialOrContinuationRun(null, { partialSweep: true }), true);
+
+  assert.equal(isPartialOrContinuationRun(null, { listings: Object.assign([], { nextCursor: 'p2' }) }), true);
+  assert.equal(isPartialOrContinuationRun(null, { listings: Object.assign([], { partialSweep: true }) }), true);
+
+  // Complete sweep with empty or null cursor/token must not be flagged partial
+  assert.equal(isPartialOrContinuationRun({ complete: true, truncated: false, nextCursor: null, continuationToken: null, partialSweep: false }), false);
+  assert.equal(isPartialOrContinuationRun({ complete: true, fullSweepComplete: true }), false);
+});
+
+test('scheduler onSourceRun skips publisher absence reconciliation on partial/paginated sweeps and reconciles on complete sweeps', async () => {
+  const iso = (ageHours) => new Date(NOW - ageHours * HOUR).toISOString();
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, liveCachePath: null, workspaceStorePath: null });
+  db.inMemoryData.listings = [
+    { id: 'HUD-1', source: 'hud', sourceKey: 'hud', sourceObservedAt: iso(1), provenance: { origin: 'live', recordKind: 'source_record' } },
+    { id: 'HUD-2', source: 'hud', sourceKey: 'hud', sourceObservedAt: iso(72), provenance: { origin: 'live', recordKind: 'source_record' } },
+  ];
+
+  const prevDb = scheduler.database;
+  scheduler.database = db;
+
+  try {
+    // 1. Partial sweep with truncated: true
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      error: null,
+      report: { complete: true, truncated: true }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'truncated sweep must not mark absent');
+
+    // 2. Paginated sweep with nextCursor
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      error: null,
+      report: { complete: true, nextCursor: 'page-2' }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'nextCursor sweep must not mark absent');
+
+    // 3. Paginated sweep with continuationToken
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      error: null,
+      report: { complete: true, continuationToken: 'token-abc' }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'continuationToken sweep must not mark absent');
+
+    // 4. Sweep with partialSweep: true
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      error: null,
+      report: { complete: true, partialSweep: true }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'partialSweep flag must not mark absent');
+
+    // 5. Paginated sweep where nextCursor is on run root
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      nextCursor: 'page-3',
+      error: null,
+      report: { complete: true }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'run.nextCursor must not mark absent');
+
+    // During all partial/paginated runs, inventoryFreshness still evaluates unvisited records against their cadence
+    const duringPartial = await db.inventoryFreshness(NOW, { cadences: { hud: 24 } });
+    assert.equal(duringPartial.stale, true, 'HUD-2 (72h old) is still stale');
+    assert.equal(duringPartial.freshListings, 1, 'Only HUD-1 is fresh');
+
+    // 6. Complete full sweep with no continuation signals
+    await scheduler.onSourceRun('hud', {
+      listings: [{ id: 'HUD-1', source: 'hud', sourceKey: 'hud' }],
+      error: null,
+      report: { complete: true, truncated: false, nextCursor: null, continuationToken: null, partialSweep: false }
+    });
+    assert.ok(db.inMemoryData.listings[1].provenance?.publisherAbsence, 'full sweep must mark unobserved HUD-2 absent');
+    assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence.outcome, 'absent_from_complete_index');
+    assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence.sourceKey, 'hud');
+
+    // Freshness is now satisfied for hud because absence was reconciled on complete sweep
+    const afterComplete = await db.inventoryFreshness(NOW, { cadences: { hud: 24 } });
+    assert.equal(afterComplete.stale, false, 'Complete sweep satisfied freshness');
+    assert.equal(afterComplete.freshListings, 2);
+
+    // 7. Subsequent sweep re-observing HUD-2 clears absence
+    await scheduler.onSourceRun('hud', {
+      listings: [
+        { id: 'HUD-1', source: 'hud', sourceKey: 'hud' },
+        { id: 'HUD-2', source: 'hud', sourceKey: 'hud' },
+      ],
+      error: null,
+      report: { complete: true, truncated: false }
+    });
+    assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'Re-observation clears absence');
+  } finally {
+    scheduler.database = prevDb;
+  }
 });

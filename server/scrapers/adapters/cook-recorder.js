@@ -145,6 +145,25 @@ function extractCookCaseNumber(text) {
  * @param {string} str - Raw HTML string
  * @returns {string} Clean plain text
  */
+/**
+ * Normalizes numeric money values for judgment and opening bid amounts.
+ * Returns null for missing, non-numeric, or negative amounts.
+ *
+ * @param {number|string} val - Currency or numeric string
+ * @returns {number|null} Clean numeric float or null
+ */
+function parseCookMoney(val) {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') {
+    return Number.isFinite(val) && val >= 0 ? val : null;
+  }
+  const clean = String(val).replace(/[\$,]/g, '').trim();
+  const num = parseFloat(clean);
+  return Number.isFinite(num) && num >= 0 ? num : null;
+}
+const parseOpeningBid = parseCookMoney;
+const parseCookJudgment = parseCookMoney;
+
 function cleanCellText(str) {
   if (!str) return '';
   return String(str)
@@ -384,6 +403,38 @@ function parseCookRecordRow(rowHtml = '', options = {}) {
   }
 
   const distressStage = identifyDistressStage(docType);
+
+  // 9. Judgment / Decree Amount (for Chancery foreclosure decrees or Sheriff sale notices)
+  let judgment = null;
+  const classJudgment = raw.match(
+    /<(?:td|div|span)\b[^>]*class="[^"]*(?:col-judgment|judgment-amount|decree-amount)[^"]*"[^>]*>([\s\S]*?)<\/(?:td|div|span)>/i
+  );
+  if (classJudgment) {
+    judgment = parseCookMoney(cleanCellText(classJudgment[1]));
+  }
+  if (judgment === null) {
+    const jMatch = raw.match(/\b(?:Judgment(?:\s*Amount)?|Decree(?:\s*Amount)?)\s*:(?:<[^>]+>|\s)*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+    if (jMatch) {
+      judgment = parseCookMoney(jMatch[1]);
+    }
+  }
+
+  // 10. Opening Bid (for Sheriff Sale notices where published)
+  let openingBid = null;
+  if (distressStage === 'SCHEDULED_AUCTION') {
+    const classBid = raw.match(
+      /<(?:td|div|span)\b[^>]*class="[^"]*(?:col-bid|col-opening-bid|opening-bid)[^"]*"[^>]*>([\s\S]*?)<\/(?:td|div|span)>/i
+    );
+    if (classBid) {
+      openingBid = parseCookMoney(cleanCellText(classBid[1]));
+    }
+    if (openingBid === null) {
+      const bMatch = raw.match(/\b(?:Opening\s*Bid|Minimum\s*Bid|Starting\s*Bid)\s*:(?:<[^>]+>|\s)*\$?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
+      if (bMatch) {
+        openingBid = parseCookMoney(bMatch[1]);
+      }
+    }
+  }
   const baseUrl = (options.baseUrl || COOK_RECORDER_BASE_URL).replace(/\/+$/, '');
   const sourceUrl = capturedRecordUrl(rowHtml, baseUrl);
 
@@ -408,7 +459,8 @@ function parseCookRecordRow(rowHtml = '', options = {}) {
     legalDescription: legalDescription || null,
     sourceUrl,
     // Zero-Fabrication Invariant: statutory recorder notices record debt/lis pendens, never bids or valuations
-    openingBid: null,
+    openingBid: openingBid !== null ? openingBid : null,
+    judgment: judgment !== null ? judgment : null,
     estLow: null,
     estHigh: null,
     assessed: null,
@@ -483,6 +535,9 @@ module.exports = {
   identifyDistressStage,
   cleanCellText,
   getCookRecorderSearchUrl,
+  parseCookMoney,
+  parseOpeningBid,
+  parseCookJudgment,
   parseCookRecordRow,
   parseCookSearchHtml,
 };

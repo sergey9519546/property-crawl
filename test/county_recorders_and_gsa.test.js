@@ -25,6 +25,7 @@ const {
   cleanCellText: cleanCookText,
   getCookRecorderSearchUrl,
   parseCookRecordRow,
+  parseCookMoney,
   parseCookSearchHtml,
 } = require('../server/scrapers/adapters/cook-recorder');
 
@@ -579,4 +580,273 @@ test('GsaSurplusScraper: scrapeApi runs cleanly and bypasses /our-listing', asyn
   assert.equal(report.sweepType, 'open_data_api');
   assert.equal(report.robotsExclusion.bypassedVia, 'api.gsa.gov');
   assert.equal(report.recordsEmitted, 1);
+});
+
+// ============================================================================
+// PART 4: Track 1 & Track 4 Control Qualification Suite
+// ============================================================================
+
+test('Track 1 Qualification - GSA API: strict non-real-estate rejection and real-estate acceptance', () => {
+  const mixedPayload = {
+    auctions: [
+      // Positive controls: Real Estate categories
+      { auctionNumber: 'RE-01', propertyType: 'Commercial Real Estate', propertyDescription: 'Commercial site in Dallas', itemState: 'TX' },
+      { auctionNumber: 'RE-02', propertyType: 'Vacant Land / 5 Acres', propertyDescription: 'Acreage in Reno', itemState: 'NV' },
+      { auctionNumber: 'RE-03', propertyType: 'Single Family Residence', propertyDescription: 'House in Atlanta', itemState: 'GA' },
+      { auctionNumber: 'RE-04', propertyType: 'Warehouse / Industrial', propertyDescription: 'Storage facility in Chicago', itemState: 'IL' },
+      // Negative controls: Personal Property, Vehicles, Equipment, Furniture, Electronics
+      { auctionNumber: 'NRE-01', propertyType: 'Personal Property', propertyDescription: 'Surplus items', itemState: 'DC' },
+      { auctionNumber: 'NRE-02', propertyType: 'Vehicles', propertyDescription: '2021 Ford Explorer', itemState: 'CA' },
+      { auctionNumber: 'NRE-03', propertyType: 'Office Furniture & Supplies', propertyDescription: '15 executive desks', itemState: 'NY' },
+      { auctionNumber: 'NRE-04', propertyType: 'Medical & Lab Equipment', propertyDescription: 'Centrifuge and microscopes', itemState: 'MA' },
+      { auctionNumber: 'NRE-05', propertyType: 'Computer Hardware', propertyDescription: 'Server racks and cables', itemState: 'VA' },
+      { auctionNumber: 'NRE-06', propertyType: 'Heavy Machinery & Tools', propertyDescription: 'Forklift and generator', itemState: 'OH' },
+      { auctionNumber: 'NRE-07', propertyType: 'Vessels / Boats', propertyDescription: '30ft patrol vessel', itemState: 'FL' },
+    ],
+  };
+
+  const parsed = parseGsaAuctionsApiResponse(mixedPayload);
+  assert.equal(parsed.totalCount, 11);
+  assert.equal(parsed.emittedCount, 4, 'Only the 4 real estate auctions must be emitted');
+  assert.equal(parsed.rejected.length, 7, 'All 7 non-real-estate items must be rejected');
+
+  const rejectedIds = parsed.rejected.map(r => r.auctionNumber);
+  assert.deepEqual(rejectedIds.sort(), ['NRE-01', 'NRE-02', 'NRE-03', 'NRE-04', 'NRE-05', 'NRE-06', 'NRE-07'].sort());
+  for (const r of parsed.rejected) {
+    assert.equal(r.reason, 'non_real_estate_category');
+  }
+
+  const emittedIds = parsed.items.map(i => i.auctionNumber);
+  assert.deepEqual(emittedIds.sort(), ['RE-01', 'RE-02', 'RE-03', 'RE-04'].sort());
+});
+
+test('Track 1 Qualification - GSA API: never fabricates or admits prohibited /our-listing HTML URLs', () => {
+  // Prohibited HTML route /our-listing must be rejected and never used as sourceUrl
+  const rawWithProhibitedUrl = {
+    auctionNumber: 'GSA-ROBOTS-TEST',
+    auctionUrl: 'https://realestatesales.gov/our-listing',
+    propertyType: 'Commercial',
+    itemState: 'TX',
+    itemCity: 'Houston',
+  };
+  const standardized1 = standardizeGsaAuctionItem(rawWithProhibitedUrl);
+  assert.equal(standardized1.sourceUrl, null, 'Prohibited /our-listing URL must be sanitized to null');
+
+  // No URL provided: sourceUrl remains null, never fabricated to /our-listing
+  const rawWithoutUrl = {
+    auctionNumber: 'GSA-NO-URL-TEST',
+    propertyType: 'Land',
+    itemState: 'AZ',
+    itemCity: 'Phoenix',
+  };
+  const standardized2 = standardizeGsaAuctionItem(rawWithoutUrl);
+  assert.equal(standardized2.sourceUrl, null, 'Must never fabricate /our-listing URL when missing');
+
+  // Allowed official API / asset-details URL is preserved
+  const rawWithAllowedUrl = {
+    auctionNumber: 'GSA-ALLOWED-TEST',
+    auctionUrl: 'https://realestatesales.gov/asset-details/?property_id=987',
+    propertyType: 'Office',
+    itemState: 'IL',
+  };
+  const standardized3 = standardizeGsaAuctionItem(rawWithAllowedUrl);
+  assert.equal(standardized3.sourceUrl, 'https://realestatesales.gov/asset-details/?property_id=987');
+});
+
+test('Track 4 Qualification - Cook County: identity validation, opening bid / judgment, and fail closed', () => {
+  // 1. PIN Validation positive and negative controls
+  assert.equal(formatCookPin('17103050120000'), '17-10-305-012-0000');
+  assert.equal(formatCookPin('1710305012'), '17-10-305-012');
+  assert.equal(formatCookPin('12345'), null, 'Short invalid PIN must return null');
+  assert.equal(formatCookPin('not-a-pin'), null, 'Non-digit PIN must return null');
+  assert.equal(formatCookPin(''), null);
+  assert.equal(formatCookPin(null), null);
+
+  // 2. Case Number Validation positive and negative controls
+  assert.equal(extractCookCaseNumber('Case 2024-CH-04821'), '2024-CH-04821');
+  assert.equal(extractCookCaseNumber('Chancery 24 CH 1234'), '2024-CH-01234');
+  assert.equal(extractCookCaseNumber('Case INVALID-999'), null, 'Non-statutory case format must return null');
+  assert.equal(extractCookCaseNumber(''), null);
+  assert.equal(extractCookCaseNumber(null), null);
+
+  // 3. Monetary amount parsing for judgment and opening bid
+  assert.equal(parseCookMoney('$285,000.00'), 285000);
+  assert.equal(parseCookMoney('149500.50'), 149500.5);
+  assert.equal(parseCookMoney('$0.00'), 0);
+  assert.equal(parseCookMoney('-$500.00'), null, 'Negative bid/judgment must return null');
+  assert.equal(parseCookMoney('N/A'), null, 'Non-numeric string must return null');
+  assert.equal(parseCookMoney('TBD'), null);
+  assert.equal(parseCookMoney(null), null);
+
+  // 4. Positive control: Sheriff Sale Notice with valid judgment and opening bid
+  const sheriffNoticeHtml = `
+    <tr class="cook-record-row">
+      <td class="col-doc">Doc #: 2419888888<a href="https://recording.cookcountyclerkil.gov/details?id=2419888888"></a></td>
+      <td class="col-date">10/20/2026</td>
+      <td class="col-type">SHERIFF SALE NOTICE</td>
+      <td class="col-case">2024-CH-07777</td>
+      <td class="col-pin">14-10-100-020-0000</td>
+      <td class="col-plaintiff">PNC BANK, N.A.</td>
+      <td class="col-defendant">WILLIAMS, SARAH</td>
+      <td class="col-judgment">Judgment: $285,000.00</td>
+      <td class="col-bid">Opening Bid: $140,000.00</td>
+    </tr>
+  `;
+  const parsedSheriff = parseCookRecordRow(sheriffNoticeHtml);
+  assert.ok(parsedSheriff);
+  assert.equal(parsedSheriff.distressStage, 'SCHEDULED_AUCTION');
+  assert.equal(parsedSheriff.caseNumber, '2024-CH-07777');
+  assert.equal(parsedSheriff.pin, '14-10-100-020-0000');
+  assert.equal(parsedSheriff.judgment, 285000);
+  assert.equal(parsedSheriff.openingBid, 140000);
+
+  // 5. Zero-Fabrication negative control: Lis Pendens row enforces null openingBid even if dollar appears
+  const lisPendensHtml = `
+    <tr class="cook-record-row">
+      <td class="col-doc">Doc #: 2419777777<a href="https://recording.cookcountyclerkil.gov/details?id=2419777777"></a></td>
+      <td class="col-type">LIS PENDENS FORECLOSURE</td>
+      <td class="col-case">2024-CH-08888</td>
+      <td class="col-pin">16-20-200-030-0000</td>
+      <td class="col-defendant">TAYLOR, ROBERT</td>
+      <td class="col-judgment">Judgment: $195,000.00</td>
+    </tr>
+  `;
+  const parsedLp = parseCookRecordRow(lisPendensHtml);
+  assert.ok(parsedLp);
+  assert.equal(parsedLp.distressStage, 'PRE_FORECLOSURE');
+  assert.equal(parsedLp.openingBid, null, 'Pre-foreclosure Lis Pendens must never fabricate openingBid');
+  assert.equal(parsedLp.judgment, 195000);
+
+  // 6. Fail-closed controls: empty, whitespace, and identity-free markup
+  assert.equal(parseCookRecordRow(''), null, 'Empty string must return null');
+  assert.equal(parseCookRecordRow('   '), null);
+  assert.equal(parseCookRecordRow(null), null);
+  assert.equal(parseCookRecordRow('<tr><td>Blank footer disclaimer</td></tr>'), null, 'Row lacking identity must return null');
+  assert.deepEqual(parseCookSearchHtml(''), [], 'Empty HTML must return empty array');
+  assert.deepEqual(parseCookSearchHtml('   \n\t  '), [], 'Whitespace HTML must return empty array');
+  assert.deepEqual(parseCookSearchHtml('<html><body><div>No records found</div></body></html>'), [], 'Markup with no rows must return empty array');
+});
+
+test('Track 4 Qualification - Miami-Dade: identity validation, opening bid / judgment, and fail closed', () => {
+  // 1. Folio Validation positive and negative controls
+  assert.equal(formatMiamiDadeFolio('3040180010120'), '30-4018-001-0120');
+  assert.equal(formatMiamiDadeFolio('0131360240010'), '01-3136-024-0010');
+  assert.equal(formatMiamiDadeFolio('12345'), null, 'Short folio must return null');
+  assert.equal(formatMiamiDadeFolio('not-a-folio'), null, 'Non-digit folio must return null');
+  assert.equal(formatMiamiDadeFolio(''), null);
+  assert.equal(formatMiamiDadeFolio(null), null);
+
+  // 2. Case Number Validation positive and negative controls
+  assert.equal(extractMiamiDadeCaseNumber('Tax Deed File: 2024-TX-000123'), '2024-TX-000123');
+  assert.equal(extractMiamiDadeCaseNumber('Case No: 2024-012345-CA-01'), '2024-012345-CA-01');
+  assert.equal(extractMiamiDadeCaseNumber('Case UNVERIFIED-99'), null, 'Non-statutory case format must return null');
+  assert.equal(extractMiamiDadeCaseNumber(''), null);
+  assert.equal(extractMiamiDadeCaseNumber(null), null);
+
+  // 3. Opening bid parsing positive and negative controls
+  assert.equal(parseMiamiOpeningBid('$4,582.19'), 4582.19);
+  assert.equal(parseMiamiOpeningBid('125000'), 125000);
+  assert.equal(parseMiamiOpeningBid('$0.00'), 0);
+  assert.equal(parseMiamiOpeningBid('-$1,000.00'), null, 'Negative opening bid must return null');
+  assert.equal(parseMiamiOpeningBid('NaN'), null, 'NaN string must return null');
+  assert.equal(parseMiamiOpeningBid('N/A'), null, 'Non-numeric string must return null');
+  assert.equal(parseMiamiOpeningBid(null), null);
+
+  // 4. Positive control: Final Judgment Clerk row extracts judgment and enforces zero-fabrication openingBid
+  const finalJudgmentRow = `
+    <tr class="miamidade-record-row">
+      <td class="col-cfn"><b>CFN:</b> 2026R099111<a href="https://onrecords.miamidadeclerk.gov/details?id=2026R099111"></a></td>
+      <td class="col-date">10/22/2026</td>
+      <td class="col-type"><b>Doc Type:</b> FINAL JUDGMENT</td>
+      <td class="col-case"><b>Case #:</b> 2024-034567-CA-01</td>
+      <td class="col-folio"><b>Folio:</b> 01-4112-002-0050</td>
+      <td class="col-grantor"><b>Defendant:</b> ALVAREZ, JORGE</td>
+      <td class="col-grantee"><b>Plaintiff:</b> TRUIST BANK</td>
+      <td class="col-judgment">Final Judgment: $345,000.00</td>
+    </tr>
+  `;
+  const parsedFj = parseMiamiDadeRecordRow(finalJudgmentRow);
+  assert.ok(parsedFj);
+  assert.equal(parsedFj.cfn, '2026R099111');
+  assert.equal(parsedFj.caseNumber, '2024-034567-CA-01');
+  assert.equal(parsedFj.folio, '01-4112-002-0050');
+  assert.equal(parsedFj.judgment, 345000);
+  assert.equal(parsedFj.openingBid, null, 'Official Clerk record must never fabricate openingBid');
+
+  // 5. Fail-closed controls: empty, whitespace, and identity-free markup
+  assert.equal(parseMiamiDadeTaxDeedCard(''), null);
+  assert.equal(parseMiamiDadeTaxDeedCard('   '), null);
+  assert.equal(parseMiamiDadeTaxDeedCard(null), null);
+  assert.equal(parseMiamiDadeTaxDeedCard('<table><tr><td>Header only</td></tr></table>'), null, 'Card lacking identity must return null');
+  assert.equal(parseMiamiDadeRecordRow(''), null);
+  assert.equal(parseMiamiDadeRecordRow('   '), null);
+  assert.equal(parseMiamiDadeRecordRow(null), null);
+  assert.equal(parseMiamiDadeRecordRow('<tr><td>Terms and Conditions Apply</td></tr>'), null, 'Row lacking identity must return null');
+  assert.deepEqual(parseMiamiDadeSearchHtml(''), [], 'Empty HTML must return empty array');
+  assert.deepEqual(parseMiamiDadeSearchHtml('   \n  '), [], 'Whitespace HTML must return empty array');
+  assert.deepEqual(parseMiamiDadeSearchHtml('<html><body><div>No auctions scheduled</div></body></html>'), [], 'Empty container must return empty array');
+});
+
+test('Track 4 Qualification - Harris & Maricopa: evidence-only and robots-fail-closed controls', async () => {
+  const { queryHarrisClerk } = require('../server/scrapers/adapters/harris-clerk-query');
+  const { parseHarrisClerkNotice } = require('../server/scrapers/adapters/harris-clerk-foreclosure');
+  const { getMaricopaSearchUrl, parseMaricopaRecordRow } = require('../server/scrapers/adapters/maricopa-recorder');
+  const { TrusteeSaleScraper } = require('../server/scrapers/trustee');
+
+  // 1. Harris evidence-only control: WebForms grid returns evidenceOnly=true with null openingBid and property facts
+  const harrisGridRow = `
+    <tr>
+      <td><a href="ViewECdocs.aspx?ID=bWXqGXasMeuE7YZXR3B2NUNXeLVZTKlhHSbKofnpRC4r5lhzEImkzlXLdS33pau5">FRCL-2026-9999</a></td>
+      <td><span id="lblFileDate">10/01/2026</span></td>
+      <td><span id="lblSaleDate">11/03/2026</span></td>
+      <td><span id="lblPages">4</span></td>
+    </tr>
+  `;
+  const parsedHarris = parseHarrisClerkNotice(harrisGridRow, { baseUrl: 'https://www.cclerk.hctx.net' });
+  assert.ok(parsedHarris);
+  assert.equal(parsedHarris.evidenceOnly, true);
+  assert.equal(parsedHarris.openingBid, null);
+  assert.equal(parsedHarris.situsAddress, null);
+  assert.equal(parsedHarris.apn, null);
+  assert.equal(parsedHarris.estLow, null);
+  assert.equal(parsedHarris.estHigh, null);
+  assert.equal(parsedHarris.assessed, null);
+
+  // 2. Harris robots-fail-closed control: queryHarrisClerk rejects immediately if robots.txt denies
+  await assert.rejects(
+    queryHarrisClerk({
+      year: 2026,
+      month: 11,
+      requestText: async (url) => {
+        if (url.endsWith('/robots.txt')) return 'User-agent: *\nDisallow: /';
+        return '<html></html>';
+      },
+    }),
+    /HARRIS_ROBOTS_DENIED/
+  );
+
+  // 3. Maricopa URL builder fails closed against inferring detail URLs
+  assert.throws(
+    () => getMaricopaSearchUrl(null, { recordingNumber: '2026-999888' }),
+    /captured publisher record URL is required/
+  );
+
+  // 4. Maricopa row parser fails closed on rows without identity anchors
+  assert.equal(parseMaricopaRecordRow('<tr><td>Blank footer</td></tr>'), null);
+  assert.equal(parseMaricopaRecordRow(''), null);
+
+  // 5. Maricopa robots fail-closed in TrusteeSaleScraper: policy failure prevents search requests
+  const scraper = new TrusteeSaleScraper({ fixtureOnly: false });
+  const requested = [];
+  scraper.fetchText = async (url) => {
+    requested.push(url);
+    if (url.endsWith('/robots.txt')) return 'User-agent: *\nDisallow: /';
+    return '<html></html>';
+  };
+  const listings = await scraper.scrapeFeed({ jurisdiction: 'maricopa', docType: 'NOTICE OF TRUSTEE SALE' });
+  assert.deepEqual(listings, []);
+  assert.equal(requested.length, 1, 'Search must be aborted before fetching search URL');
+  assert.match(requested[0], /\/robots\.txt$/);
+  assert.equal(scraper.lastRunReport.outcome, 'failed');
+
 });

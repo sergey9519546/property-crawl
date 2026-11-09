@@ -90,6 +90,30 @@ function admitListingsScrapers(scrapers) {
   });
 }
 
+function isPartialOrContinuationRun(report, run = {}) {
+  const rep = report && typeof report === 'object' ? report : null;
+  const r = run && typeof run === 'object' ? run : null;
+  const listings = Array.isArray(r?.listings) ? r.listings : (Array.isArray(run) ? run : null);
+
+  return Boolean(
+    rep?.partialSweep === true ||
+    r?.partialSweep === true ||
+    listings?.partialSweep === true ||
+    rep?.truncated === true ||
+    r?.truncated === true ||
+    listings?.truncated === true ||
+    (rep?.nextCursor != null && rep.nextCursor !== '') ||
+    (r?.nextCursor != null && r.nextCursor !== '') ||
+    (listings?.nextCursor != null && listings.nextCursor !== '') ||
+    (rep?.continuationToken != null && rep.continuationToken !== '') ||
+    (r?.continuationToken != null && r.continuationToken !== '') ||
+    (listings?.continuationToken != null && listings.continuationToken !== '') ||
+    (rep?.nextContinuationToken != null && rep.nextContinuationToken !== '') ||
+    (r?.nextContinuationToken != null && r.nextContinuationToken !== '') ||
+    (listings?.nextContinuationToken != null && listings.nextContinuationToken !== '')
+  );
+}
+
 function parseScrapeIntervalHours(value, options = {}) {
   const fallback = Number(options.fallbackHours) || DEFAULT_INTERVAL_HOURS;
   const min = Number(options.minHours) || MIN_INTERVAL_HOURS;
@@ -324,10 +348,11 @@ class IngestionScheduler {
           // to hand over. Treat that shape as a legitimate outcome instead of
           // throwing, which used to make the source fail on every sweep.
           const reportOnly = !Array.isArray(items) && items && typeof items === 'object' && 'report' in items;
-          if (!Array.isArray(items) && !reportOnly) {
+          const isListingEnvelope = !Array.isArray(items) && items && typeof items === 'object' && (Array.isArray(items.listings) || Array.isArray(items.items) || Array.isArray(items.data));
+          if (!Array.isArray(items) && !reportOnly && !isListingEnvelope) {
             throw new TypeError(`${scraper.name} returned a non-array payload`);
           }
-          const itemsToIngest = reportOnly ? [] : items;
+          const itemsToIngest = reportOnly ? [] : (isListingEnvelope ? (items.listings || items.items || items.data) : items);
           if (reportOnly) {
             scraper.lastRunReport = items;
             totalRejected += items.rejected || 0;
@@ -389,8 +414,20 @@ class IngestionScheduler {
             driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
           });
           const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
-          const report = scraper.lastRunReport && typeof scraper.lastRunReport === 'object'
-            ? { outcome: coverage.outcome || null, truncated: coverage.truncated === true, complete: coverage.complete, fullSweepComplete: coverage.fullSweepComplete === true, scope: coverage.acquisitionScope || null, coverage, ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+          const rawReport = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object' ? scraper.lastRunReport : null)
+            || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
+            || (isListingEnvelope ? items : null)
+            || {};
+          const isPartial = isPartialOrContinuationRun(rawReport, items);
+          const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
+          const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
+          const nextContinuationToken = rawReport.nextContinuationToken ?? items?.nextContinuationToken ?? continuationToken;
+          const partialSweep = Boolean(rawReport.partialSweep === true || items?.partialSweep === true);
+          const truncated = Boolean(coverage.truncated === true || rawReport.truncated === true || items?.truncated === true || isPartial);
+          const complete = isPartial ? false : (coverage.complete === true || rawReport.complete === true);
+          const fullSweepComplete = isPartial ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
+          const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
+            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {
@@ -409,9 +446,10 @@ class IngestionScheduler {
               rejected: rejectedForScraper + (coverage.counts?.parserRejected ?? coverage.counts?.malformedRows ?? 0),
               coverage,
             },ownership);
-            const cursor = scraper.lastRunReport?.nextContinuationToken ? {
-              continuationToken: scraper.lastRunReport.nextContinuationToken,
-              sweepStartedAt: scraper.lastRunReport.sweepStartedAt,
+            const cursorToken = nextContinuationToken || continuationToken;
+            const cursor = cursorToken ? {
+              continuationToken: cursorToken,
+              sweepStartedAt: scraper.lastRunReport?.sweepStartedAt || items?.sweepStartedAt,
               pagesCommitted: (scraper.lastRunReport.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport.pagesFetched || 0),
             } : {};
             await assertLease('Collection job lease was lost before checkpoint advancement');
@@ -470,7 +508,7 @@ const scheduler = new IngestionScheduler({
     // band (0 of 10,285 live records carry one), and the county roll is the
     // honest source where a statutory market conversion is enrolled.
     // Bounded per run, disk-cached, fail-open.
-    if (!run.error && run.listings.length) {
+    if (!run.error && run.listings.length && (process.env.NODE_ENV !== 'test' || run.enableAssessorHarvest === true)) {
       try {
         const { harvestAssessorRolls } = require('../enrichment/assessor-harvest');
         // onHarvested persists each roll the moment it attaches: the harvest
@@ -499,6 +537,7 @@ const scheduler = new IngestionScheduler({
     // ingest-time harvest only sees the listings this run observed, so records
     // ingested before a county's enrollment stay dark until a full sweep
     // re-observes them. Bounded per run, cache-backed, fail-open.
+    if (process.env.NODE_ENV !== 'test' || run.enableAssessorBackfill === true) {
     try {
       const { backfillAssessorRolls } = require('../enrichment/assessor-backfill');
       const backfill = await backfillAssessorRolls({ db, limit: 25 });
@@ -508,14 +547,17 @@ const scheduler = new IngestionScheduler({
     } catch (error) {
       console.warn('[Scheduler] Assessor roll backfill failed (non-fatal):', error.message);
     }
+    }
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
     if (!run.error && run.listings.length) {
       const reportForAbsence = run.report && typeof run.report === 'object' ? run.report : null;
-      const runCompletedForDb = Boolean(reportForAbsence && reportForAbsence.complete === true && reportForAbsence.truncated !== true);
-      if (runCompletedForDb && typeof db.reconcilePublisherAbsence === 'function') {
+      const isPartialForDb = isPartialOrContinuationRun(reportForAbsence, run);
+      const runCompletedForDb = Boolean(reportForAbsence && reportForAbsence.complete === true && !isPartialForDb);
+      const targetDb = (this && this.database) || scheduler?.database || db;
+      if (runCompletedForDb && typeof targetDb.reconcilePublisherAbsence === 'function') {
         try {
-          await db.reconcilePublisherAbsence(
+          await targetDb.reconcilePublisherAbsence(
             sourceId,
             run.listings.map((listing) => listing && listing.id).filter(Boolean),
             { runCompleted: true }
@@ -531,7 +573,8 @@ const scheduler = new IngestionScheduler({
       // write sold or closed. Error, partial, truncated, or no report must
       // not annotate. run.report.complete / run.report.truncated is the gate.
       const report = run.report && typeof run.report === 'object' ? run.report : null;
-      const runCompleted = Boolean(report && report.complete === true && report.truncated !== true);
+      const isPartialLive = isPartialOrContinuationRun(report, run);
+      const runCompleted = Boolean(report && report.complete === true && !isPartialLive);
       try {
         mergeLiveRecords(
           process.env.PROPERTY_LIVE_CACHE_PATH || path.resolve(__dirname, '../../.cache/live-listings.json'),
@@ -662,3 +705,4 @@ module.exports.backgroundCollectionEnabled = backgroundCollectionEnabled;
 module.exports.backgroundCollectionReason = backgroundCollectionReason;
 module.exports.collectionRuntimeStatus = collectionRuntimeStatus;
 module.exports.sourcesForWave = sourcesForWave;
+module.exports.isPartialOrContinuationRun = isPartialOrContinuationRun;

@@ -38,9 +38,13 @@ async function handleAlerts(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const saved = await db.getSavedDeals(userId);
     if (url.searchParams.get('format') === 'digest') {
+      const evaluation = {
+        results: saved.map((deal) => ({ identityKey: deal.id, listingId: deal.id, status: 'match' })),
+        matches: saved.map((deal) => ({ listingId: deal.id, listing: deal })),
+      };
       const digest = generateInvestorDigestReport({
         hunt: { id: `watchlist-${userId.slice(0, 8)}`, name: 'Watchlist Deals' },
-        evaluation: { matches: saved.map((deal) => ({ listingId: deal.id, listing: deal })) },
+        evaluation,
         listings: saved,
       });
       return res.json(digest);
@@ -52,9 +56,15 @@ async function handleAlerts(req, res) {
     const { listingId, action, recipientEmail } = req.body || {};
     if (action === 'dispatch_digest') {
       const saved = await db.getSavedDeals(userId);
+      const recipient = (recipientEmail || req.body?.recipient || req.body?.email || '').trim();
+      const evaluation = {
+        results: saved.map((deal) => ({ identityKey: deal.id, listingId: deal.id, status: 'match' })),
+        matches: saved.map((deal) => ({ listingId: deal.id, listing: deal })),
+      };
       const result = await dispatchInvestorAlertDigest({
-        hunt: { id: `watchlist-${userId.slice(0, 8)}`, name: 'Watchlist Deals', notifyEmail: recipientEmail },
-        evaluation: { matches: saved.map((deal) => ({ listingId: deal.id, listing: deal })) },
+        recipient,
+        hunt: { id: `watchlist-${userId.slice(0, 8)}`, name: 'Watchlist Deals', notifyEmail: recipient },
+        evaluation,
         listings: saved,
       });
       return res.json(result);

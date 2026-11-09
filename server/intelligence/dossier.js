@@ -9,6 +9,7 @@ const { buildPossessionDossier } = require('./post-sale-possession');
 const { calculateSurplusEquityWaterfall } = require('./surplus-waterfall');
 const { evaluateAuctionProceedProbability } = require('./auction-microstructure');
 const { getAuctionDepositRules, calculateRequiredDeposit } = require('./escrow-optimizer');
+const { arbitrateTitleRisk } = require('./title-risk-engine');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
@@ -46,9 +47,10 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   const signals = tracked ? observations.signals.filter((signal) => signal.listingId === listing.id && signal.sourceId === listing.source
     && (!signal.recordId || signal.recordId === String(listing.provenance?.recordId))
     && signal.evidence?.every((point) => recordUrls.has(point.sourceUrl))).slice(0, 10) : [];
+  const titleRisk = listing.titleRisk || publicRecords?.titleRisk || arbitrateTitleRisk(listing, listing.raw || '');
   const gaps = [];
-  const VOI_POINTS = { source_identity: 25, title: 22, value_and_debt: 20, opening_bid: 18, payment_terms: 15, sale_date_passed: 14, transaction_outcome: 12, source_stale: 10, occupancy: 10, archive_snapshot: 8 };
-  const VOI_TIER = { source_identity: 'critical_risk', title: 'critical_risk', value_and_debt: 'high_leverage', opening_bid: 'high_leverage', payment_terms: 'high_leverage', sale_date_passed: 'high_leverage', transaction_outcome: 'standard', source_stale: 'standard', occupancy: 'standard', archive_snapshot: 'standard' };
+  const VOI_POINTS = { source_identity: 25, title_docket_joinder: 24, omitted_party_joinder: 24, title: 22, municipal_payoff: 21, municipal_liens: 21, value_and_debt: 20, opening_bid: 18, payment_terms: 15, sale_date_passed: 14, transaction_outcome: 12, source_stale: 10, occupancy: 10, archive_snapshot: 8 };
+  const VOI_TIER = { source_identity: 'critical_risk', title_docket_joinder: 'critical_risk', omitted_party_joinder: 'critical_risk', municipal_payoff: 'critical_risk', municipal_liens: 'critical_risk', title: 'critical_risk', value_and_debt: 'high_leverage', opening_bid: 'high_leverage', payment_terms: 'high_leverage', sale_date_passed: 'high_leverage', transaction_outcome: 'standard', source_stale: 'standard', occupancy: 'standard', archive_snapshot: 'standard' };
   const TIER_ORDER = { critical_risk: 0, high_leverage: 1, standard: 2 };
   function gap(id, title, reason, nextAction) { gaps.push({ id, title, reason, nextAction, potentialPointsGain: VOI_POINTS[id] || 8, priorityTier: VOI_TIER[id] || 'standard' }); }
   if (!capturedEvidence) gap('source_identity', 'Source evidence is missing', 'This record has not passed the source-observation checks.', 'Locate and capture the exact publisher record before relying on its property facts.');
@@ -62,6 +64,29 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
   }
   if (!known(listing.transactionOutcome)) gap('transaction_outcome', 'Transaction outcome is unresolved', 'A closed auction, reserve result, or passed date does not prove that title transferred.', 'Obtain a source record or public record that explicitly confirms the completed disposition.');
   gap('title', 'Title and surviving interests need research', 'A listing or a source match does not establish lien priority or a clear title.', 'Obtain the controlling sale documents and an appropriate recorder/title review.');
+  const hasOmittedPartyDefect = Boolean(
+    titleRisk.instrumentPriority?.omittedPartyJoinderDefect ||
+    listing.omittedPartyJoinderDefect ||
+    listing.instrumentPriority?.omittedPartyJoinderDefect ||
+    (Array.isArray(titleRisk.titleWarnings) && titleRisk.titleWarnings.some((w) => /omitted|unjoined|defective joinder/i.test(w)))
+  );
+  if (hasOmittedPartyDefect) {
+    gap('title_docket_joinder', 'Property-specific docket review required for unjoined parties', 'Notice or docket evidence indicates an omitted junior lienholder or unjoined defendant. Under foreclosure law, unjoined parties retain their lien or statutory equity of redemption post-sale.', 'Examine the property-specific court docket and foreclosure complaint to confirm whether all subordinate interest holders were joined as named defendants.');
+  }
+  const municipalData = titleRisk.municipalLiens || null;
+  const hasMunicipalLienWarnings = Boolean(
+    municipalData?.hasMunicipalViolations ||
+    municipalData?.isCondemnedOrDemolitionRisk ||
+    titleRisk.instrumentPriority?.municipalSuperLienNotice ||
+    (Array.isArray(listing.municipalViolations) && listing.municipalViolations.length > 0) ||
+    (Array.isArray(listing.codeViolations) && listing.codeViolations.length > 0) ||
+    (Array.isArray(titleRisk.titleWarnings) && titleRisk.titleWarnings.some((w) => /municipal|code violation|demolition/i.test(w)))
+  );
+  if (hasMunicipalLienWarnings) {
+    const isDemolition = Boolean(municipalData?.isCondemnedOrDemolitionRisk);
+    const count = municipalData?.activeViolationCount || (Array.isArray(listing.municipalViolations) ? listing.municipalViolations.length : (Array.isArray(listing.codeViolations) ? listing.codeViolations.length : 0));
+    gap('municipal_payoff', 'Municipal payoff certificate required for surviving code/utility liens', isDemolition ? 'Active condemnation or demolition order on file with structural forfeiture risk. Municipal demolition assessments attach as surviving statutory super-liens.' : `Municipal violations or utility assessments detected (${count > 0 ? `${count} active citations` : 'super-lien signal'}). Municipal abatement and utility claims survive foreclosure sale by state statute.`, 'Obtain an official municipal payoff certificate and written code compliance clearance prior to bidding.');
+  }
   gap('value_and_debt', 'Equity is not established', 'Opening bids and assessed values are not market valuations; a missing mortgage balance is not zero debt.', 'Supply current valuation evidence and supported outstanding debt before modeling equity.');
   const contradictions = [];
   const parcel = publicRecords?.parcel;
@@ -121,7 +146,8 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     version: 1, generatedAt: new Date(now).toISOString(), listingId: listing.id, address: listing.address,
     source, facts, signals, contradictions, gaps, documentEvidence,
     hudSafmr: listing.hudSafmr || (listing.zip ? getHudSafmrBenchmark({ zip: listing.zip, bedrooms: listing.beds ?? 2 }) : null),
-    federalHazards: listing.federalHazards || null,
+    federalHazards: listing.federalHazards || publicRecords?.federalHazards || null,
+    titleRisk,
     possessionTimeline,
     auctionDepositTerms,
     auctionMicrostructure,

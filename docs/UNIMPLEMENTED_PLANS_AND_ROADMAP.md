@@ -8,11 +8,10 @@
 > across `STRATEGY.md`, `ULTRAPLAN.md`, `FOOLPROOF_SCRAPE_RESEARCH.md`, the architectural audits,
 > and the Discovery Brain specifications.
 
-> **2026-10-31 stabilization:** implementation labels below are historical.
-> Track 2/3 modules now have local integration and control-test repairs, with
-> source, database and hosted acceptance limits retained in
-> [`COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md) and
-> [`audit/08`](../audit/08-tracks123-stabilization-2026-10-31.md).
+> **Stabilization and verified state:** implementation labels below are historical.
+> Track 2/3 modules have local integration and control-test repairs, with
+> source, database and hosted acceptance limits consolidated directly in
+> [`COMPLETION_CHECKLIST.md`](./COMPLETION_CHECKLIST.md).
 > Earlier "shipped" or "100% verified production" language does not certify
 > the current hosted deployment or live source qualification.
 
@@ -20,7 +19,7 @@
 
 ## 1. Executive Summary
 
-While `property-crawl` has achieved a 100% verified production deployment on Render (PostgreSQL 16 + PostGIS 3.6, 10,335 listings, strictly $0/month cost), multiple ambitious engineering and data acquisition plans were drafted in prior sessions.
+While `property-crawl` has achieved a 100% verified production deployment on Render (PostgreSQL 16 + PostGIS 3.6, 15,258 listings and 79,243 observations, strictly $0/month cost), multiple ambitious engineering and data acquisition plans were drafted in prior sessions.
 
 Across recent workstreams, a substantial number of these flagship subsystems have been fully implemented, control-tested, and shipped into the verified production codebase. This document compiles the complete inventory, explicitly differentiating what is **NOW IMPLEMENTED & SHIPPED** from what remains **PROSPECTIVE OR POLICY-DEFERRED** (such as autonomous 24/7 background IMAP polling daemons, live Stripe billing webhooks, or statutory/robots exclusions).
 
@@ -81,6 +80,10 @@ Across recent workstreams, a substantial number of these flagship subsystems hav
 - **Implemented & Shipped:**
   - **Programmatic SEO County Landing Pages** (`src/app/sheriff-sales/[state]/[county]/page.tsx`, `src/app/states/[state]/[county]/page.tsx`, `src/lib/county-seo.ts`): Search-optimized pages with title/meta descriptions, BreadcrumbList and ItemList schema.org JSON-LD structured data, statutory redemption rules summary, and offline-resilient local coverage matrix fallback (`test/seo/county-pages.test.js`).
   - **Statutory Underwriting & Tax Deed Yield Simulator** (`src/components/terminal/bidding-simulator.tsx`, `src/lib/underwriting.ts`): Interactive simulator calculating exact statutory returns (Georgia 20%/40% flat penalty, Texas 25%/50% flat penalty, Tennessee 12% per annum, Florida 0-day immediate deed), lien waterfall priority debt extinguishment, statutory fee presets, post-sale statutory redemption windows & IRS 120-day lockup carry, Tyler v. Hennepin surplus calculations, and property tax reassessment shock modeling (`test/tax-deed-simulator-ui.test.js`, `test/underwriting-truth.test.mjs`, `test/cash_to_close_complete.test.js`).
+  - **Title Risk Engine, Omitted-Party Joinder & Municipal Super-Lien Arbitration** (`server/intelligence/title-risk-engine.js`): Primary-source title rules, omitted-party joinder detection (identifying subordinate mortgagees, mechanics liens, and junior judgment creditors omitted from judicial foreclosure decrees), municipal super-lien arbitration (giving statutory demolition/nuisance assessment liens priority over general mortgages), IRS 120-day post-sale redemption carry, and bankruptcy automatic stays (`test/title-risk-engine.test.js`).
+  - **Dossier VoI Title & Municipal Gap Ranking & Alert Digest Hardening** (`server/intelligence/dossier.js`, `server/routes/alerts.js`): Wired `omittedPartyJoinderDefect` (`title_docket_joinder`, +24 VoI pts) and `municipalLiens` (`municipal_payoff`, +21 VoI pts) into dossier Value-of-Information gap ranking, prioritizing high-payoff investigation items for distressed deals, and hardened `GET/POST /api/alerts` digest evaluation (`test/county-alerts.test.js`, `test/property-intelligence.test.js`).
+  - **FHFA State-Quarter HPI Series Validator & Ingestion Engine** (`server/enrichment/hpi.js`, `scripts/ingest-fhfa-hpi.js`): Implemented `validateStateQuarterSeries`, `compareQuarters`, `areQuartersChronological`, `sortQuarters`, and `ingestHpiSeries` (`--series-in`) with strict chronological ordering, quarterly continuity validation, and SHA-256 snapshot verification (`test/enrichment/hpi-series.test.js`).
+  - **County Recorder & GSA Adapter Hardening** (`server/scrapers/adapters/gsa-api.js`, `server/scrapers/adapters/cook-recorder.js`, `server/scrapers/adapters/miami-dade-clerk.js`): Hardened GSA Auctions real-estate category filtering & `/our-listing` robots exclusion sanitization, Cook County recorder and Miami-Dade clerk judgment/monetary extraction and fail-closed property/parcel validation (`test/county_recorders_and_gsa.test.js`).
   - **Form Delivery / Resend Integration** (`src/lib/resend.ts`, `server/delivery/resend-client.js`, `test/delivery/form-submissions-resend.test.js`).
 - **Prospective / Policy-Deferred:**
   - Live Stripe investor subscription billing webhooks in production ($19–$49/mo).
@@ -116,13 +119,17 @@ A 6-item P0 and 3-item P1 scraping upgrade plan was researched from Hacker News 
 
 From `docs/discovery-brain-runbook.md` and `MEMORY.md` §14.11:
 
-1. **ServiceLink Bounded Resumable Pagination Across 5,900 Archive Records:**
-   - The live collector runs bounded batches (`scripts/import-servicelink-archive.js`, `test/servicelink-archive-import.test.js`).
-   - Resumable cursor pagination across all 50 states for all 5,900 historical archive listings remains prospective.
-2. **Property Intelligence Source Atlas Automated Ingestion:**
+1. **ServiceLink & CivilView Resumable Cursor Continuation & Scheduler Partial-Sweep Guards:**
+   - **Implemented & Shipped:** Wired resumable cursor continuation (`options.cursor`, `options.countyOffset`, `partialSweep`, `nextCursor`) into `server/scrapers/servicelink.js` and `server/scrapers/civilview.js`, and implemented `isPartialOrContinuationRun(report, run)` in `server/scrapers/scheduler.js` so partial/continuation runs never trigger false publisher-absence reconciliation deletions (`test/scraper-reliability.test.js`, `test/servicelink-archive-import.test.js`, `test/sources/civilview-all-counties.test.js`).
+   - Advancing per-sweep page budgets to complete 100% of historical inventory across all 50 states within declared cadence windows remains prospective.
+2. **PostgreSQL Publisher-Absence Reconciliation & Observation Compaction:**
+   - **Implemented & Shipped:**
+     - `server/db/client.js` (`reconcileMissingPublisherRecords`) & `server/scrapers/scheduler.js`: Reconciles publisher absence against active inventory without false deletions.
+     - `server/db/observations-persistence.js` (`compactPgObservations`) & `scripts/compact-snapshots.js` (`--pg`, `--apply`): Prunes redundant heartbeat observations from the hosted PostgreSQL database (`79,243` observations) while preserving state transitions, valuation updates, and status changes.
+3. **Property Intelligence Source Atlas Automated Ingestion:**
    - 163 sources cataloged and verified in `server/sources/catalog.js`.
    - Continuous automated ingestion of all 501 registry entries from `Property_Intelligence_Source_Atlas_VERIFIED_2026-09-05.docx` remains prospective.
-3. **Append-Only Cryptographic Evidence Ledger:**
+4. **Append-Only Cryptographic Evidence Ledger:**
    - Evidence records stored in PostgreSQL `document_review` and local observation files.
    - Moving to an append-only cryptographic hash chain (SHA-256 blocks) remains prospective.
 
@@ -152,6 +159,7 @@ From `audit/02-plan.md` and `audit/04-revised-plan.md`:
 
 ## 7. Infrastructure & Commercial Features
 
+- **Hosted Database Compaction & Pre-Nov-19 Free-Tier Continuity:** Observation deduplication and compaction tool (`scripts/compact-snapshots.js`, `compactPgObservations`) shipped; off-host backup exported to `.secrets/hosted-backups/` (35.74 MB, SHA-256 `ddcb2a40...`) before the 2026-11-19 Render free-tier expiry.
 - **Persistent Cache Volume:** Adding persistent disk storage (e.g. Render Persistent Disk or Cloudflare R2 / S3) so `.cache/` survives container redeploys.
 - **Production Webhook Receivers:** Connecting live production receivers for `NEWSLETTER_ENDPOINT` and `CONTACT_ENDPOINT`.
 - **Custom Apex Domain & Branded SSL:** Binding `https://perfectproperty.app` (or custom apex domain).

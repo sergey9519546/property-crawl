@@ -379,3 +379,99 @@ test('runAlertsForUser: dispatches rich email alert to county subscriber on new 
   assert.match(call.text, new RegExp(sampleListing.id));
   assert.equal(alertResult.results[0].mailDelivery, 'sent');
 });
+
+
+test('GET /api/alerts (format=digest): generates structured investor digest report for saved watchlist', async () => {
+  const req = makeReq('GET', '/api/alerts?format=digest');
+  const res = makeRes();
+  const userId = 'workspace:operator';
+
+  const inventory = (await db.getListings({ limit: 2 })).listings;
+  assert.ok(inventory.length >= 2, 'Expected at least 2 listings in inventory');
+  const listingA = inventory[0];
+  const listingB = inventory[1];
+  await db.saveDeal(userId, listingA.id);
+  await db.saveDeal(userId, listingB.id);
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body);
+  assert.equal(res.body.matchedCount, 2);
+  assert.ok(res.body.markdown.includes('Institutional Deal Alert Digest'));
+  assert.ok(res.body.markdown.includes(listingA.address));
+  assert.ok(res.body.markdown.includes(listingB.address));
+  assert.ok(res.body.html.includes('Hunt Digest'));
+});
+
+test('POST /api/alerts (dispatch_digest): fails closed with RESEND_API_KEY_UNSET when key is not configured', async () => {
+  const prevKey = process.env.RESEND_API_KEY;
+  delete process.env.RESEND_API_KEY;
+
+  try {
+    const userId = 'workspace:operator';
+    const inventory = (await db.getListings({ limit: 1 })).listings;
+    assert.ok(inventory.length >= 1, 'Expected at least 1 listing in inventory');
+    const listing = inventory[0];
+    await db.saveDeal(userId, listing.id);
+
+    const req = makeReq('POST', '/api/alerts', {
+      action: 'dispatch_digest',
+      recipientEmail: 'investor@example.com',
+    });
+    const res = makeRes();
+
+    await handleAlerts(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.delivered, false);
+    assert.equal(res.body.reason, 'RESEND_API_KEY_UNSET');
+    assert.equal(res.body.dryRun, true);
+    assert.ok(res.body.report);
+    assert.ok(res.body.report.matchedCount >= 1);
+  } finally {
+    if (prevKey !== undefined) process.env.RESEND_API_KEY = prevKey;
+  }
+});
+
+test('POST /api/alerts (dispatch_digest): delivers via Resend when RESEND_API_KEY is configured', async () => {
+  const prevKey = process.env.RESEND_API_KEY;
+  process.env.RESEND_API_KEY = 're_test_suite_key_configured';
+  const originalFetch = globalThis.fetch;
+  let sentOpts = null;
+  globalThis.fetch = async (url, opts) => {
+    sentOpts = opts;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'email_digest_test_9988' }),
+    };
+  };
+
+  try {
+    const userId = 'workspace:operator';
+    const inventory = (await db.getListings({ limit: 1 })).listings;
+    assert.ok(inventory.length >= 1, 'Expected at least 1 listing in inventory');
+    const listing = inventory[0];
+    await db.saveDeal(userId, listing.id);
+
+    const req = makeReq('POST', '/api/alerts', {
+      action: 'dispatch_digest',
+      recipientEmail: 'investor@example.com',
+    });
+    const res = makeRes();
+
+    await handleAlerts(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.delivered, true);
+    assert.equal(res.body.id, 'email_digest_test_9988');
+    assert.ok(sentOpts);
+    const sentBody = JSON.parse(sentOpts.body);
+    assert.deepEqual(sentBody.to, ['investor@example.com']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevKey !== undefined) process.env.RESEND_API_KEY = prevKey;
+    else delete process.env.RESEND_API_KEY;
+  }
+});

@@ -547,7 +547,7 @@ test('scheduler enforces a configurable bounded source concurrency', async () =>
 });
 
 test('telemetry makes zero yield, rejection, and circuit causes observable', () => {
-  const telemetry = new ScraperTelemetry();
+  const telemetry = new ScraperTelemetry({ persist: false });
   telemetry.recordRun('source', [validListing()], 10, null, { rejectedCount: 2 });
   telemetry.recordRun('source', [], 10, null);
   let state = telemetry.getHealthReport().details.source;
@@ -568,4 +568,44 @@ test('telemetry makes zero yield, rejection, and circuit causes observable', () 
   assert.equal(state.circuitBreakerTripped, true);
   assert.equal(state.lastErrorCode, 'UPSTREAM_BOT_CHALLENGE');
   assert.equal(state.circuitBreakerReason, 'Cloudflare challenge');
+});
+
+test('IngestionScheduler: multi-page continuation runs pass continuation signals to report and onSourceRun', async () => {
+  let recordedReport = null;
+  const paginatedScraper = {
+    name: 'PaginatedCollector',
+    sourceKey: 'bid4assets',
+    lastRunReport: { complete: true, nextCursor: 'cursor-page-2', partialSweep: true },
+    async scrapeFeed() {
+      return [validListing({ id: 'PAGINATED-1', source: 'bid4assets' })];
+    }
+  };
+  const scheduler = new schedulerModule.IngestionScheduler({
+    realScrapers: [paginatedScraper],
+    database: { async createListing() {} },
+    telemetry: { recordRun() {} },
+    networkEnabled: true,
+    concurrency: 1,
+    async onSourceRun(sourceId, run) {
+      recordedReport = run.report;
+    }
+  });
+
+  const result = await scheduler.runAll();
+  assert.equal(result.totalIngested, 1);
+  assert.ok(recordedReport, 'onSourceRun received a report');
+  assert.equal(recordedReport.truncated, true, 'paginated sweep must be marked truncated in report');
+  assert.equal(recordedReport.complete, false, 'paginated sweep must not be marked complete');
+  assert.equal(recordedReport.nextCursor, 'cursor-page-2');
+  assert.equal(recordedReport.partialSweep, true);
+  assert.equal(schedulerModule.isPartialOrContinuationRun(recordedReport), true);
+
+  // Now verify full sweep transitions to complete: true
+  paginatedScraper.lastRunReport = { complete: true, truncated: false, nextCursor: null, partialSweep: false };
+  const fullResult = await scheduler.runAll();
+  assert.equal(fullResult.totalIngested, 1);
+  assert.equal(recordedReport.truncated, false, 'full sweep is not truncated');
+  assert.equal(recordedReport.complete, true, 'full sweep is complete');
+  assert.equal(recordedReport.nextCursor, null);
+  assert.equal(schedulerModule.isPartialOrContinuationRun(recordedReport), false);
 });

@@ -292,6 +292,36 @@
       "file": ".agents/skills/scrapling-official/SKILL.md"
     },
     {
+      "name": "seo-title-optimization",
+      "description": "Rewrite and audit SEO page titles, title tags, MDX frontmatter titles, H1 alignment, and bulk title improvements. Use when the user mentions titles, title tags, SERP titles, metadata titles, SEO titles, CTR, truncation, or asks to improve titles across pages.",
+      "domain": "general",
+      "version": "1.0.0",
+      "trigger": [
+        "across",
+        "alignment",
+        "asks",
+        "audit",
+        "bulk",
+        "frontmatter",
+        "improve",
+        "improvements",
+        "mentions",
+        "metadata",
+        "page",
+        "pages",
+        "rewrite",
+        "seo-title-optimization",
+        "serp",
+        "tags",
+        "title",
+        "titles",
+        "truncation",
+        "user"
+      ],
+      "dir": ".agents/skills/seo-title-optimization",
+      "file": ".agents/skills/seo-title-optimization/SKILL.md"
+    },
+    {
       "name": "skill-repair",
       "description": "Use this to fix and re-install agent skills that have failed installation.\nThis skill provides the necessary context and permissions to surgically update\nthe `manifest.json` after a fix has been applied.",
       "domain": "general",
@@ -354,5 +384,5 @@
       "file": ".agents/skills/understand-customers/SKILL.md"
     }
   ],
-  "digest": "002931a6b97c2dcbd6975ef1818a96451cb41c8d20f9bd54fde70b8b2ae7b2cc"
+  "digest": "b931b66cc2869d2fcc576fc137fbefc44d76a0eb5135babbacb7cccd76ef8a94"
 }

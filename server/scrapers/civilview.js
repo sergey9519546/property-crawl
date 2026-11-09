@@ -139,6 +139,28 @@ function positiveInt(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseCountyOffset(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  }
+  if (typeof value === 'object') {
+    const candidate = value.countyOffset
+      ?? value.cursor
+      ?? value.continuationToken
+      ?? value.nextCursor
+      ?? value.countyRotationOffset;
+    return parseCountyOffset(candidate);
+  }
+  return null;
+}
+
 function boundedProjectionText(value, maxLength = 255) {
   const text = String(value || '').trim();
   if (!text) return null;
@@ -289,9 +311,12 @@ class CivilViewScraper extends BaseScraper {
       options.userAgent ||
       'property-crawl-bot/2.0 (+https://github.com/property-crawl; contact: ops@property-crawl.example)';
     this.lastRunReport = null;
-    // Which county the next run starts from. The scheduler hands the previous
-    // run's cursor back through setCheckpoint before each scrapeFeed.
-    this.countyRotationOffset = 0;
+    // Which county the next run starts from. Supports options.countyOffset,
+    // options.cursor, or options.checkpoint.
+    const initialOffset = parseCountyOffset(
+      options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
+    );
+    this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
   }
 
   /**
@@ -301,13 +326,20 @@ class CivilViewScraper extends BaseScraper {
    * rather than guessing.
    */
   setCheckpoint(checkpoint) {
-    const token = checkpoint?.continuationToken;
-    const parsed = typeof token === 'string' ? Number.parseInt(token, 10) : Number.NaN;
-    this.countyRotationOffset = Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+    const offset = parseCountyOffset(checkpoint);
+    this.countyRotationOffset = offset != null ? offset : 0;
     return this;
   }
 
-  async scrapeFeed() {
+  async scrapeFeed(options = {}) {
+    if (options && typeof options === 'object') {
+      const runOffset = parseCountyOffset(
+        options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
+      );
+      if (runOffset != null) this.countyRotationOffset = runOffset;
+      if (options.maxCounties) this.maxCounties = positiveInt(options.maxCounties, DEFAULT_MAX_COUNTIES);
+      if (options.maxDetailPages) this.maxDetailPages = positiveInt(options.maxDetailPages, DEFAULT_DETAIL_LIMIT);
+    }
     return this.executeWithRetry(async () => {
       const report = {
         outcome: 'failed',
@@ -339,16 +371,17 @@ class CivilViewScraper extends BaseScraper {
       report.countiesDiscovered = counties.length;
       // Counties eligible for the rotating window. A run pinned to one county, or
       // given an explicit county list, has nothing to rotate through.
-      const rotationTotal = (this.nationwide || this.countyId || this.extraCountyIds.length > 0)
+      const stateCounties = counties.filter((county) => county.state === this.targetState);
+      const rotationTotal = (this.countyId || this.extraCountyIds.length > 0)
         ? 0
-        : counties.filter((county) => county.state === this.targetState).length;
+        : (this.nationwide ? counties.length : stateCounties.length);
       let ordered;
       if (this.nationwide) {
         // Bounded sample across all participating states (nationwide set).
         const shuffled = [...counties];
         // Deterministic order: alphabetical by state then name (no RNG dependency).
         shuffled.sort((a, b) => String(a.state || '').localeCompare(String(b.state || '')) || String(a.name || '').localeCompare(String(b.name || '')));
-        ordered = shuffled.slice(0, this.maxCounties);
+        ordered = rotateCounties(shuffled, this.countyRotationOffset, this.maxCounties);
         report.scope = {
           endpoint: '/Sales/SalesSearch',
           filters: { mode: 'nationwide-participating', maxCounties: this.maxCounties },
@@ -483,6 +516,16 @@ class CivilViewScraper extends BaseScraper {
       report.nextContinuationToken = rotationTotal > this.maxCounties
         ? String((this.countyRotationOffset + this.maxCounties) % rotationTotal)
         : null;
+      const stoppedAtCountyCap = rotationTotal > this.maxCounties;
+      const stoppedAtDetailCap = report.unattemptedSummaries > 0;
+      report.partialSweep = Boolean(stoppedAtCountyCap || stoppedAtDetailCap);
+      report.nextCursor = report.nextContinuationToken;
+      Object.defineProperties(emitted, {
+        partialSweep: { value: report.partialSweep, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: report.nextCursor, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: report.nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        report: { value: report, enumerable: false, writable: true, configurable: true },
+      });
       report.outcome = report.failures.length > 0
         ? 'partial_failure'
         : emitted.length > 0
@@ -885,9 +928,16 @@ class CivilViewScraper extends BaseScraper {
   }
 }
 
+async function collectCivilView(options = {}) {
+  const scraper = new CivilViewScraper(options);
+  return scraper.scrapeFeed(options);
+}
+
 const civilView = new CivilViewScraper();
 module.exports = civilView;
 module.exports.CivilViewScraper = CivilViewScraper;
+module.exports.collectCivilView = collectCivilView;
+module.exports.parseCountyOffset = parseCountyOffset;
 module.exports.orderCounties = orderCounties;
 module.exports.rotateCounties = rotateCounties;
 module.exports.ALL_COUNTY_MAP = ALL_COUNTY_MAP;

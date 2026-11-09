@@ -417,3 +417,84 @@ test('unsupported method, malformed ID and absent listing return bounded client 
   assert.equal((await invoke(handler, 'GET')).statusCode, 404);
   assert.equal(calls, 0);
 });
+
+
+test('buildPropertyDossier attaches titleRisk, federalHazards, and documentEvidence', () => {
+  const listing = publisherFixture({
+    plaintiff: 'Bank of America, N.A.',
+    state: 'NJ',
+    raw: 'First mortgage foreclosure sale pursuant to final judgment.',
+    federalHazards: {
+      status: 'success',
+      compositeScore: 90,
+      overallTier: 'minimal_hazard',
+      flags: [],
+      provenance: 'federal-environmental-physical-gis-v1',
+    },
+    provenance: {
+      origin: 'live',
+      observed: true,
+      publisher: 'CivilView',
+      recordId: '2128964683',
+      sourceFacts: {
+        documents: [
+          { title: 'Notice of Sheriff Sale', url: 'https://salesweb.civilview.com/docs/notice.pdf', accessState: 'public' },
+        ],
+      },
+    },
+  });
+  const dossier = buildPropertyDossier(listing, { now: NOW });
+
+  // Track 7 Title Risk
+  assert.ok(dossier.titleRisk);
+  assert.equal(dossier.titleRisk.plaintiffType, 'FIRST_MORTGAGE');
+  assert.equal(dossier.titleRisk.firstMortgageSurvives, false);
+  assert.equal(typeof dossier.titleRisk.canProceedWithBid, 'boolean');
+
+  // Track 8/9 Federal Hazards
+  assert.ok(dossier.federalHazards);
+  assert.equal(dossier.federalHazards.compositeScore, 90);
+  assert.equal(dossier.federalHazards.overallTier, 'minimal_hazard');
+
+  // Property-specific docket evidence
+  assert.ok(dossier.documentEvidence);
+  assert.equal(dossier.documentEvidence.status, 'observed');
+  assert.equal(dossier.documentEvidence.count, 1);
+  assert.equal(dossier.documentEvidence.items[0].label, 'Notice of Sheriff Sale');
+});
+
+test('buildPropertyDossier surfaces omittedPartyJoinderDefect into VoI gap ranking requiring court docket review', () => {
+  const listing = publisherFixture({
+    raw: 'Foreclosure sale notice: Defective joinder signal noted; omitted junior lienholder not joined in foreclosure decree.',
+  });
+  const dossier = buildPropertyDossier(listing, { now: NOW });
+
+  assert.ok(dossier.titleRisk);
+  assert.equal(dossier.titleRisk.instrumentPriority.omittedPartyJoinderDefect, true);
+
+  const joinderGap = dossier.gaps.find((g) => g.id === 'title_docket_joinder');
+  assert.ok(joinderGap, 'Expected title_docket_joinder gap in dossier');
+  assert.equal(joinderGap.priorityTier, 'critical_risk');
+  assert.equal(joinderGap.potentialPointsGain, 24);
+  assert.match(joinderGap.title, /docket review required/i);
+  assert.match(joinderGap.nextAction, /court docket/i);
+});
+
+test('buildPropertyDossier surfaces municipalLiens into VoI gap ranking requiring municipal payoff certificate', () => {
+  const listing = publisherFixture({
+    municipalViolations: [
+      { violationType: 'Demolition and Condemnation Order', fineAmount: 25000, isDemolitionRisk: true },
+    ],
+  });
+  const dossier = buildPropertyDossier(listing, { now: NOW });
+
+  assert.ok(dossier.titleRisk);
+  assert.equal(dossier.titleRisk.municipalLiens.isCondemnedOrDemolitionRisk, true);
+
+  const muniGap = dossier.gaps.find((g) => g.id === 'municipal_payoff');
+  assert.ok(muniGap, 'Expected municipal_payoff gap in dossier');
+  assert.equal(muniGap.priorityTier, 'critical_risk');
+  assert.equal(muniGap.potentialPointsGain, 21);
+  assert.match(muniGap.title, /municipal payoff certificate/i);
+  assert.match(muniGap.nextAction, /municipal payoff certificate/i);
+});

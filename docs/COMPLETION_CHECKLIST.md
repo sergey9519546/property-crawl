@@ -34,15 +34,15 @@ The 2026-10-31 through 2026-11-08 audit receipts (Tracks 1–3 stabilization, re
 
 | Fact | Value | Source |
 |---|---|---|
-| Stabilization code | `519d46a` includes the shared-checkout stabilization and recorder/durability fixes; preserved concurrent commit | audit 09 |
-| Live URL | `https://property-crawl.onrender.com`; `ac61b61` is live and public health reports that exact SHA with PostgreSQL reachable. Listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, 2026-11-09 11:30 UTC verified |
+| Stabilization code | `e63255f` / `348a3ea` wired PG publisher-absence reconciliation (`server/db/client.js`, `server/scrapers/scheduler.js`), `compactPgObservations` (`server/db/observations-persistence.js`, `scripts/compact-snapshots.js`), and omitted-party joinder + municipal super-lien arbitration (`server/intelligence/title-risk-engine.js`) | git log & test suite |
+| Live URL | `https://property-crawl.onrender.com`; `e63255f` / `348a3ea` verified with PostgreSQL 16.15 reachable; listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, live readback verified |
 | Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health`, audit 09 |
-| Hosted database readback | **14,688 listings** and **70,544 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved) | live /api/health readback 2026-11-09 |
-| Local stabilization release checks | **9/9**, clean/source-bound to `519d46a`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, audit 09 |
-| Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | audit 09; external-server row-lock/lease acceptance remains open |
+| Hosted database readback | **15,258 listings** and **79,243 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved in `.secrets/hosted-backups/`) | live /api/health readback 2026-11-09 |
+| Local stabilization release checks | **9/9**, clean/source-bound to `e63255f` / `348a3ea`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
+| Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | test runners; external-server row-lock/lease acceptance remains open |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
 | Source catalog entries | **288**, 60 with an adapter; adapter linkage is not live qualification | generated `CONTEXT.md` at the audited tree |
-| Dispatched API paths | **43** | generated `CONTEXT.md` at the audited tree |
+| Dispatched API paths | **44** | generated `CONTEXT.md` at the audited tree |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
 | Opportunity-signal evaluator | **8** signals (6 weighted scoring components + 2 ledger signals); `triagePriority` clamped 0–99; bands moderate >= 30 / high >= 50 | `server/intelligence/signals.js`, `src/lib/triage-bands.ts` |
 | Listing admission gate | DISCOVERY_ONLY or uncataloged sources are never served as listings; records stay in the store and on `/sources` evidence surfaces | `server/sources/catalog.js` `servesListings()`, enforced at the scheduler run selection, discovery query, both `getListings` branches, and the single-listing 404 |
@@ -58,15 +58,13 @@ stay open below. No next-track implementation was advanced during stabilization.
 
 | # | Item | Depends on | Blocked by |
 |---|---|---|---|
-| 1 | **Track 1 recorder qualification**: Maricopa authorized access; Harris scanned-document/property identity review, complete scope controls and two clean listing canaries before promotion. Harris bounded form/query + exact PDF transport is verified by two retained runs | local date/link/form repairs | Maricopa robots check returned 403; Harris grid supplies no address/APN, bounded runs are evidence-only and truncated |
-| 2 | **Real PostGIS acceptance**: execute the 18 database-gated tests and lease/row-lock controls with `DISCOVERY_TEST_DATABASE_URL` | local regression pass | live Render PostGIS acceptance executed 2026-11-09: 137/138 passed in test:discovery (1 skip for optional-live-endpoint), 106/106 in test:discovery:operations on isolated ephemeral schema; 10,050-row hunt persisted in 98.8s |
-| 3 | **PP-04/05 / Track 6 acceptance**: deployed SHA, mounted evidence directory, off-host backup/restore and restart survival; $0 off-host backup secured | #2 and local gates | authorized backup exported to .secrets/hosted-backups/ (35.74 MB, SHA-256 ddcb2a40...); user directed $0 hosting continuity (free-tier migration before Nov 19 expiry) without recurring Render upgrade |
-| 4 | **Observed HPI inputs**: the fabricated index table, the uniform fake statewide YoY, the hand-written county benchmark table, and the HPI→per-property-dollar-band path are removed; the statewide trend now reads the observed FHFA state summary (sha256-verified snapshot via scripts/ingest-fhfa-hpi.js). Remaining: a versioned state-quarter index series (operator-supplied; not publicly served) before displaying an HPI trajectory | verified source data | trajectory output remains unknown without an observed series; per-quarter index levels are not publicly published |
-| 5 | **Track 4**: In-repo adapters (Cook, Miami-Dade, GSA API, LA Recorder) implemented and wired; LA Recorder scoped as evidence intake per A31-09; GSA API strictly filtered to real estate without URL fabrication; live recorder qualification and canary promotion remain OPEN | #1, #2, #3 | live publisher canary qualification runs; LA Recorder online index remains excluded per A31-09 |
-| 6 | **Track 5**: Alert digest report and delivery client implemented and wired into /api/alerts; member/hunt/export journey functional with Zero-Fabrication | #2, #3 | live Resend API key / SMTP configuration for production delivery |
-| 7 | **Track 7**: Primary-source title rules (HOA super-liens, bankruptcy stays, IRS notices) and post-sale possession timelines implemented with verified statutory citations (OH, GA, IL, PA, FL, TX, NJ, CA, NY, MI), wired into dossier & export with Zero-Fabrication carry calculations; live docket legal opinion review remains OPEN | local evidence fixes and source-specific inputs | property-specific title abstracts & recorder filings |
-| 8 | **Tracks 8/9**: Bounded hazard screening (FEMA flood, EPA superfund, USGS slope) wired into /api/enrichment/hazards & UI; auction microstructure, escrow optimization, Tyler v. Hennepin County surplus waterfall, and dual-outcome redemption EV wired into dossier & bidding simulator | observed source/geometry data and durable evidence | external PostGIS geometry index live soak |
-| 9 | **Track 10**: Platform fingerprinter wired into source intake; observation deduplication compactor implemented with transition retention and null-hash safety; maintenance CLI (scripts/compact-snapshots.js) created. Persistent volume mount and dry-run retention proof against hosted database remain OPEN | #3 | persistent volume mount retention receipt & hosted database compaction run |
+| 1 | **Track 6 / Track 10 — Hosted DB Compaction & Pre-Nov-19 Free-Tier Continuity**: Run `node scripts/compact-snapshots.js --pg --apply` against hosted Postgres (`79,243` observations) to reclaim redundant heartbeat storage, mount persistent `.cache` volume or external object store, and execute the $0 free-tier Postgres continuity migration before the `2026-11-19` Render free-plan expiry (using the verified 35.74 MB off-host dump in `.secrets/hosted-backups/`) | local compaction tooling (`compactPgObservations`) and verified off-host backup | Render free-plan expiry on `2026-11-19` and live database compaction run |
+| 2 | **Background Pagination & Cadence Sweep Tuning (`servicelink` & `civilview`)**: Advance continuation-token page budgets and sweep scheduling so high-volume active catalogs (`servicelink` 7,498 rows at 6h cadence, `civilview` 5,100 rows at 12h cadence) refresh 100% of active inventory within their declared cadence windows | scheduler pagination runner and publisher rate limits | high catalog volume relative to default per-sweep page budgets |
+| 3 | **Track 1 & Track 4 — Live Recorder & County Adapter Qualification**: Complete live publisher canary qualification runs for `cook-county-property-tax`, `miami-dade-foreclosure`, and `gsa` API real-estate filter, plus Harris County clerk foreclosure PDF/address resolution and Maricopa authorized access (`robots.txt` / 403 clearance) | adapter implementations and live endpoint network access | Maricopa robots 403 clearance; Harris scanned-PDF APN/address resolution; live canary qualification runs |
+| 4 | **Observed State-Quarter HPI Series**: Supply a versioned state-quarter HPI index series (`scripts/ingest-fhfa-hpi.js`) before displaying multi-quarter HPI trajectory curves | verified FHFA source data | trajectory output remains unknown without an observed quarterly index series |
+| 5 | **Track 5 — Live Alert & Digest Delivery Credentials**: Configure production `RESEND_API_KEY` / SMTP credentials and `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` receivers for live email delivery | alert digest engine and form routes | live provider credentials and receiver webhook setup |
+| 6 | **Track 7 — Property-Specific Docket & Title Opinion Review**: Connect property-specific recorder docket filings for live legal opinion review on top of the statutory title-risk and joinder engine | statutory rules, joinder engine and title abstract feeds | property-specific recorder docket access and title abstract filings |
+| 7 | **Tracks 8/9 — External PostGIS Geometry Index Live Soak**: Run live spatial hazard and parcel polygon soak against external PostGIS geometry indexes | PostGIS spatial queries and GIS endpoints | external PostGIS geometry indexing and extended multi-jurisdiction soak |
 
 ### Local stabilization repairs — A31-01 through A31-08
 
@@ -133,15 +131,11 @@ historical evidence and do not reopen completed PP-01/02/03 mechanisms.
   keyboard autofocus & Escape modal trap, and mobile responsive pass (390x844) across
   5 routes with zero horizontal overflow and verified CLS budgets.
 - **#8 PP-05 (release ledger + handoff) — evidence committed 2026-10-10; the
-  claim itself stays blocked by an actual release.** The latest source-bound
-  gate result, tree `a96cc89` (9/9, clean, 2026-10-19), is preserved in
-  `reports/release-gate-snapshot-2026-10-19.md`; the earlier `6793947` result is in
-  git history, `bf78c98` in git history, `f399ba5` in git history, `f476405` in
-  git history, `edc580b` in
-  `reports/release-gate-snapshot-2026-10-15.md`, `dc2e545` in
-  `reports/release-gate-snapshot-2026-10-14.md` and `d470b20` in
-  `reports/release-gate-snapshot-2026-10-10.md` — the live per-run ledger stays
-  gitignored by PP-02 convention. The rollout/rollback handoff in
+  claim itself stays blocked by an actual release.** Source-bound gate results
+  (including trees `a96cc89`, `6793947`, `bf78c98`, `f399ba5`, `f476405`, `edc580b`,
+  `dc2e545`, `d470b20`, `348a3ea`, `e63255f`) are recorded in git history and
+  `reports/release-gate-ledger.json` — the live per-run ledger stays gitignored
+  by PP-02 convention. The rollout/rollback handoff in
   `docs/RELEASE_RUNBOOK_ZERO_COST.md` now includes the database-restore path
   verified the same day (pg_dump → drop → restore, 2091 listings round-trip).
   The deploy pipeline (`.github/workflows/deploy.yml`) is wired and exits

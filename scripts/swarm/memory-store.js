@@ -62,7 +62,10 @@ class MemoryStore {
   /**
    * @param {string} [storePath] JSON persistence path (default .cache/swarm-memory.json)
    */
-  constructor(storePath) {
+  constructor(storePath, episodesDir) {
+    const resolvedStore = path.resolve(storePath || DEFAULT_STORE);
+    const inRepo = resolvedStore.startsWith(ROOT + path.sep);
+    this.episodesDir = episodesDir || process.env.SWARM_EPISODES_DIR || (inRepo ? EPISODES_DIR : path.join(path.dirname(resolvedStore), 'episodes'));
     this.storePath = storePath || DEFAULT_STORE;
     this.data = { namespaces: {} };
     this._load();
@@ -230,9 +233,10 @@ class MemoryStore {
    * @returns {string} absolute path of the written episode
    */
   flushToEpisodes(namespace = 'default') {
-    fs.mkdirSync(EPISODES_DIR, { recursive: true });
+    const targetDir = this.episodesDir || EPISODES_DIR;
+    fs.mkdirSync(targetDir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filePath = path.join(EPISODES_DIR, `swarm-${stamp}.md`);
+    const filePath = path.join(targetDir, `swarm-${stamp}.md`);
     fs.writeFileSync(filePath, this.toMarkdown(namespace), 'utf8');
     return filePath;
   }

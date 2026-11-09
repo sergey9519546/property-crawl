@@ -44,6 +44,8 @@ function parseArgs(argv) {
       args.source = argv[++i];
     } else if (arg === '--target-dir' && argv[i + 1]) {
       args.targetDir = path.resolve(argv[++i]);
+    } else if ((arg === '--database-url' || arg === '--db') && argv[i + 1]) {
+      process.env.DATABASE_URL = argv[++i];
     }
   }
 
@@ -147,29 +149,78 @@ function runCompaction(options = {}) {
 async function runPgCompaction(options = {}) {
   const { apply = false, source = null, pool = null } = options;
   const { compactPgObservations } = require('../server/db/observations-persistence');
-  const activePool = pool || require('../server/db/client').pool;
+  let activePool = pool || require('../server/db/client').pool;
+  let customPool = null;
+  let embeddedHandle = null;
+
+  if (!activePool && process.env.DATABASE_URL) {
+    try {
+      const { Pool } = require('pg');
+      customPool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        max: 5,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      });
+      activePool = customPool;
+    } catch (err) {
+      console.warn('[Snapshot Compactor] Could not connect to DATABASE_URL:', err.message);
+    }
+  }
+
+  if (!activePool) {
+    try {
+      const { resolveDatabaseTarget } = require('../server/db/database-target');
+      const target = resolveDatabaseTarget(process.env);
+      const embeddedDir = process.env.PROPERTY_PG_DATA_DIR || path.resolve(process.cwd(), '.cache/pgdata');
+      if (target === 'embedded' || (!process.env.DATABASE_URL && fs.existsSync(embeddedDir))) {
+        const { startEmbeddedPostgres } = require('../server/db/pglite-pool');
+        embeddedHandle = await startEmbeddedPostgres({
+          dataDir: embeddedDir,
+          applySchema: false,
+          migrateExisting: false,
+        });
+        activePool = embeddedHandle.pool;
+      }
+    } catch (err) {
+      console.warn('[Snapshot Compactor] Could not open embedded PostgreSQL:', err.message);
+    }
+  }
+
   if (!activePool) {
     console.log('[Snapshot Compactor] PostgreSQL pool is not configured; skipping source_observations compaction.');
     return { scannedRecords: 0, originalRows: 0, retainedRows: 0, prunedRows: 0, deletedIds: [] };
   }
-  const result = await compactPgObservations(activePool, { apply, source });
-  console.log('\n--- PostgreSQL source_observations Compaction Summary ---');
-  console.log(`Records scanned:         ${result.scannedRecords}`);
-  console.log(`Original rows:           ${result.originalRows}`);
-  console.log(`Retained rows:           ${result.retainedRows}`);
-  console.log(`Redundant rows ${apply ? 'deleted' : 'found'}:  ${result.prunedRows}`);
-  return result;
+
+  try {
+    const result = await compactPgObservations(activePool, { apply, source });
+    console.log('\n--- PostgreSQL source_observations Compaction Summary ---');
+    console.log(`Records scanned:         ${result.scannedRecords}`);
+    console.log(`Original rows:           ${result.originalRows}`);
+    console.log(`Retained rows:           ${result.retainedRows}`);
+    console.log(`Redundant rows ${apply ? 'deleted' : 'found'}:  ${result.prunedRows}`);
+    return result;
+  } finally {
+    if (customPool && typeof customPool.end === 'function') {
+      await customPool.end().catch(() => {});
+    }
+    if (embeddedHandle && embeddedHandle.pool && typeof embeddedHandle.pool.end === 'function') {
+      await embeddedHandle.pool.end().catch(() => {});
+    }
+  }
 }
 
 if (require.main === module) {
   const args = parseArgs(process.argv);
-  runCompaction(args);
-  if (args.pg) {
-    runPgCompaction(args).catch((err) => {
-      console.error('[Snapshot Compactor] PostgreSQL compaction error:', err.message);
-      process.exitCode = 1;
-    });
-  }
+  (async () => {
+    runCompaction(args);
+    if (args.pg) {
+      await runPgCompaction(args);
+    }
+  })().catch((err) => {
+    console.error('[Snapshot Compactor] Compaction error:', err.message);
+    process.exitCode = 1;
+  });
 }
 
 module.exports = { runCompaction, runPgCompaction, parseArgs };

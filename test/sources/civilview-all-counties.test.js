@@ -14,6 +14,11 @@ const {
   parseSalesTable,
 } = require('../../server/sources/civilview');
 const { inspectSourceRecordUrl } = require('../../server/scrapers/source-policy');
+const {
+  CivilViewScraper,
+  parseCountyOffset,
+  collectCivilView,
+} = require('../../server/scrapers/civilview');
 
 const EXPECTED_21_NJ_COUNTIES = [
   'Atlantic',
@@ -173,4 +178,100 @@ test('parses Pennsylvania docket table into structured listings', () => {
   assert.equal(rec.address, '1500 Market St, Philadelphia, PA 19102');
   assert.equal(rec.zip, '19102');
   assert.equal(rec.detailUrl, 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=554433221');
+});
+
+test('CivilView cursor continuation parses options.cursor and options.countyOffset', () => {
+  assert.equal(parseCountyOffset(0), 0);
+  assert.equal(parseCountyOffset(5), 5);
+  assert.equal(parseCountyOffset('5'), 5);
+  assert.equal(parseCountyOffset({ cursor: '7' }), 7);
+  assert.equal(parseCountyOffset({ countyOffset: 8 }), 8);
+  assert.equal(parseCountyOffset({ continuationToken: '9' }), 9);
+  assert.equal(parseCountyOffset({ nextCursor: '10' }), 10);
+  assert.equal(parseCountyOffset('invalid'), null);
+  assert.equal(parseCountyOffset(-1), null);
+  assert.equal(parseCountyOffset(null), null);
+
+  const scraper1 = new CivilViewScraper({ cursor: '3' });
+  assert.equal(scraper1.countyRotationOffset, 3);
+
+  const scraper2 = new CivilViewScraper({ countyOffset: 4 });
+  assert.equal(scraper2.countyRotationOffset, 4);
+
+  const scraper3 = new CivilViewScraper();
+  scraper3.setCheckpoint({ cursor: '6' });
+  assert.equal(scraper3.countyRotationOffset, 6);
+  scraper3.setCheckpoint({ countyOffset: 7 });
+  assert.equal(scraper3.countyRotationOffset, 7);
+});
+
+test('CivilView emits explicit partialSweep and nextCursor on bounded county caps vs full catalog sweep', async () => {
+  const mockCounties = [
+    { id: '7', name: 'Bergen', state: 'NJ', fullName: 'Bergen, NJ' },
+    { id: '10', name: 'Essex', state: 'NJ', fullName: 'Essex, NJ' },
+    { id: '8', name: 'Passaic', state: 'NJ', fullName: 'Passaic, NJ' },
+    { id: '17', name: 'Hudson', state: 'NJ', fullName: 'Hudson, NJ' },
+    { id: '2', name: 'Camden', state: 'NJ', fullName: 'Camden, NJ' },
+    { id: '13', name: 'Middlesex', state: 'NJ', fullName: 'Middlesex, NJ' },
+    { id: '21', name: 'Union', state: 'NJ', fullName: 'Union, NJ' },
+  ];
+
+  function makeMockScraper(options = {}) {
+    const s = new CivilViewScraper({
+      targetState: 'NJ',
+      maxRetries: 1,
+      random: () => 0,
+      sleepImpl: async () => {},
+      ...options,
+    });
+    s.fetchCounties = async () => mockCounties;
+    s.fetchCountySummaries = async (county) => ({
+      summaries: [{
+        propertyId: `${county.id}01`,
+        sheriffNumber: `F-${county.id}`,
+        saleDateRaw: '12/01/2026',
+        plaintiff: 'Bank',
+        defendant: 'Borrower',
+        addressRaw: '100 Main St, City, NJ 07000',
+        county,
+        countySearchUrl: `https://salesweb.civilview.com/Sales/SalesSearch?countyId=${county.id}`,
+        detailUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${county.id}01`,
+      }],
+      sessionCookie: 'ASP.NET_SessionId=mock',
+      pageUrl: `https://salesweb.civilview.com/Sales/SalesSearch?countyId=${county.id}`,
+    });
+    s.fetchText = async () => `
+      <div class="sale-details-list">
+        <div class="sale-detail-item"><div class="sale-detail-label">Sheriff #:</div><div class="sale-detail-value">F-100</div></div>
+        <div class="sale-detail-item"><div class="sale-detail-label">Address:</div><div class="sale-detail-value">100 Main St, City, NJ 07000</div></div>
+      </div>
+    `;
+    s.passesFilter = () => true;
+    return s;
+  }
+
+  // Run 1: bounded county cap with maxCounties = 2 (out of 7 counties)
+  const scraperRun1 = makeMockScraper({ maxCounties: 2 });
+  const listingsRun1 = await scraperRun1.scrapeFeed();
+  assert.equal(scraperRun1.lastRunReport.partialSweep, true, 'Run 1 bounded at 2 counties must be a partialSweep');
+  assert.equal(scraperRun1.lastRunReport.nextCursor, '2', 'Run 1 nextCursor must point to next county offset');
+  assert.equal(listingsRun1.partialSweep, true, 'Listings object must carry partialSweep metadata');
+  assert.equal(listingsRun1.nextCursor, '2', 'Listings object must carry nextCursor metadata');
+
+  // Run 2: resume using cursor '2'
+  const scraperRun2 = makeMockScraper({ maxCounties: 2, cursor: scraperRun1.lastRunReport.nextCursor });
+  const listingsRun2 = await scraperRun2.scrapeFeed();
+  assert.equal(scraperRun2.lastRunReport.partialSweep, true, 'Run 2 bounded at 2 counties must be a partialSweep');
+  assert.equal(scraperRun2.lastRunReport.nextCursor, '4', 'Run 2 nextCursor must advance to offset 4');
+  assert.equal(listingsRun2.partialSweep, true);
+  assert.equal(listingsRun2.nextCursor, '4');
+
+  // Run 3: full catalog sweep with maxCounties = 10 (covering all 7 counties)
+  const scraperFull = makeMockScraper({ maxCounties: 10 });
+  const listingsFull = await scraperFull.scrapeFeed();
+  assert.equal(scraperFull.lastRunReport.partialSweep, false, 'Full sweep must have partialSweep = false');
+  assert.equal(scraperFull.lastRunReport.nextCursor, null, 'Full sweep must have nextCursor = null');
+  assert.equal(scraperFull.lastRunReport.nextContinuationToken, null);
+  assert.equal(listingsFull.partialSweep, false);
+  assert.equal(listingsFull.nextCursor, null);
 });
