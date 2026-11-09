@@ -55,9 +55,17 @@ test('messageToPackets requires keyword match and stays evidence-only', () => {
 test('ingestEmlDirectory parses local corpus fixtures', () => {
   const result = ingestEmlDirectory(FIXTURE_DIR);
   assert.equal(result.ok, true);
-  assert.ok(result.matchedMessages >= 1);
-  assert.ok(result.accepted >= 1);
+  assert.ok(result.matchedMessages >= 7);
+  assert.ok(result.accepted >= 7);
   assert.ok(result.packets.every((p) => p.publicationStatus === 'evidence_only'));
+
+  const states = new Set(result.packets.map((p) => p.fields.state));
+  assert.ok(states.has('CA'), 'parses CA trustee sale');
+  assert.ok(states.has('NY'), 'parses NY referee sale');
+  assert.ok(states.has('FL'), 'parses FL foreclosure');
+  assert.ok(states.has('IL'), 'parses IL chancery sale');
+  assert.ok(states.has('TX'), 'parses TX substitute trustee sale');
+  assert.ok(states.has('OH'), 'parses OH sheriff sale');
 });
 
 test('ingestImapMailbox fails closed when credentials are missing', async () => {

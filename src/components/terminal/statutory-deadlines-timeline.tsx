@@ -197,25 +197,25 @@ export function StatutoryDeadlinesTimeline({
           <div className="rounded-lg border border-line bg-card p-2.5 space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-bold text-ink">Objection / Upset</span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                objectionExpired ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                objectionActive ? "bg-amber-50 text-amber-800 border border-amber-300" :
+              <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                objectionExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+                objectionActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
                 "bg-paper text-ink-3 border border-line"
               }`}>
                 {objectionExpired ? "Expired" : objectionActive ? `${objectionRemaining}d left` : "Pending"}
               </span>
             </div>
-            <p className="text-[11px] text-ink-3 leading-tight line-clamp-2">
+            <p className="text-xs text-ink-3 leading-tight line-clamp-2">
               {deadlinesAndCarry.objectionLabel || `${objectionDays}-day court objection window`}
             </p>
             {deadlinesAndCarry.objectionDeadline && (
-              <p className="text-[10px] font-medium text-ink-2">Deadline: {deadlinesAndCarry.objectionDeadline}</p>
+              <p className="text-xs font-medium text-ink-2">Deadline: {deadlinesAndCarry.objectionDeadline}</p>
             )}
           </div>
         ) : (
           <div className="rounded-lg border border-line bg-card p-2.5 space-y-1">
             <span className="font-bold text-ink">Objection / Confirmation</span>
-            <p className="text-[11px] text-ink-3">0-day objection period; title vests upon deed delivery.</p>
+            <p className="text-xs text-ink-3">0-day objection period; title vests upon deed delivery.</p>
           </div>
         )}
 
@@ -223,22 +223,22 @@ export function StatutoryDeadlinesTimeline({
         <div className="rounded-lg border border-line bg-card p-2.5 space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-bold text-ink">IRS 120d Right</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
               !irsDays ? "bg-paper text-ink-3 border border-line" :
-              irsExpired ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-              irsActive ? "bg-amber-50 text-amber-800 border border-amber-300" :
+              irsExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+              irsActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
               "bg-paper text-ink-3 border border-line"
             }`}>
               {irsDays === 0 ? "No IRS Lien" : irsExpired ? "Expired" : irsActive ? `${irsRemaining}d left` : "Pending"}
             </span>
           </div>
-          <p className="text-[11px] text-ink-3 leading-tight">
+          <p className="text-xs text-ink-3 leading-tight">
             {irsDays > 0
               ? "26 U.S.C. § 7425(d): IRS holds 120-day statutory redemption right to reimburse buyer."
               : "No IRS notice phrase detected; 120-day federal redemption does not apply."}
           </p>
           {deadlinesAndCarry.irsRedemptionDeadline && (
-            <p className="text-[10px] font-medium text-catch-ink">Deadline: {deadlinesAndCarry.irsRedemptionDeadline}</p>
+            <p className="text-xs font-medium text-catch-ink">Deadline: {deadlinesAndCarry.irsRedemptionDeadline}</p>
           )}
         </div>
 
@@ -246,51 +246,51 @@ export function StatutoryDeadlinesTimeline({
         <div className="rounded-lg border border-line bg-card p-2.5 space-y-1">
           <div className="flex items-center justify-between">
             <span className="font-bold text-ink">State Redemption</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-              stateRedemptionDays === 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-              stateRedemptionExpired ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-              stateRedemptionActive ? "bg-amber-50 text-amber-800 border border-amber-300" :
+            <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+              stateRedemptionDays === 0 ? "bg-go-wash text-go-fill border border-go-fill/30" :
+              stateRedemptionExpired ? "bg-go-wash text-go-fill border border-go-fill/30" :
+              stateRedemptionActive ? "bg-catch-wash text-catch-ink border border-catch/30" :
               "bg-paper text-ink-3 border border-line"
             }`}>
               {stateRedemptionDays === 0 ? "0 Days" : stateRedemptionExpired ? "Expired" : stateRedemptionActive ? `${stateRedemptionRemaining}d left` : "Pending"}
             </span>
           </div>
-          <p className="text-[11px] text-ink-3 leading-tight">
+          <p className="text-xs text-ink-3 leading-tight">
             {stateRedemptionDays > 0
               ? `${stateRedemptionDays}-day post-sale redemption period under ${st} statute.`
               : `0-day post-sale redemption; immediate fee-simple title upon deed delivery.`}
           </p>
           {deadlinesAndCarry.stateRedemptionDeadline && (
-            <p className="text-[10px] font-medium text-ink-2">Deadline: {deadlinesAndCarry.stateRedemptionDeadline}</p>
+            <p className="text-xs font-medium text-ink-2">Deadline: {deadlinesAndCarry.stateRedemptionDeadline}</p>
           )}
         </div>
       </div>
 
       {/* North Carolina Specific Upset Bid Interactive Module */}
       {isNorthCarolina && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-xs space-y-2">
+        <div className="rounded-lg border border-line bg-card p-3 text-xs space-y-2">
           <div className="flex items-center gap-2">
-            <Scale className="h-4 w-4 text-amber-700" />
-            <span className="font-bold text-amber-950">
+            <Scale className="h-4 w-4 text-yours" />
+            <span className="font-bold text-ink">
               North Carolina 10-Day Rolling Upset-Bid Calculator (N.C.G.S. § 45-21.27)
             </span>
           </div>
-          <p className="text-[11px] text-amber-900 leading-relaxed">
+          <p className="text-xs text-ink-2 leading-relaxed">
             In North Carolina, the high bid at the courthouse steps is not final. Any bidder may submit an upset bid within 10 days of the sale report.
             <strong> Each upset bid resets the 10-day statutory clock for all bidders.</strong>
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-            <div className="bg-white/80 p-2 rounded border border-amber-200">
-              <span className="text-[10px] font-semibold text-amber-800 uppercase block">Current Bid Baseline</span>
-              <span className="text-sm font-bold text-amber-950">{displayMoney(ncActiveBid)}</span>
+            <div className="bg-paper p-2 rounded-md border border-line">
+              <span className="text-xs font-semibold text-ink-3 uppercase block">Current Bid Baseline</span>
+              <span className="text-sm font-bold text-ink">{displayMoney(ncActiveBid)}</span>
             </div>
-            <div className="bg-white/80 p-2 rounded border border-amber-200">
-              <span className="text-[10px] font-semibold text-amber-800 uppercase block">Min Qualifying Upset Bid (+5% / $750 min)</span>
+            <div className="bg-paper p-2 rounded-md border border-line">
+              <span className="text-xs font-semibold text-ink-3 uppercase block">Min Qualifying Upset Bid (+5% / $750 min)</span>
               <span className="text-sm font-bold text-yours">{displayMoney(ncNextUpsetBid)}</span>
             </div>
-            <div className="bg-white/80 p-2 rounded border border-amber-200">
-              <span className="text-[10px] font-semibold text-amber-800 uppercase block">Required Deposit to Clerk (5%)</span>
-              <span className="text-sm font-bold text-amber-950">{displayMoney(ncRequiredDeposit)}</span>
+            <div className="bg-paper p-2 rounded-md border border-line">
+              <span className="text-xs font-semibold text-ink-3 uppercase block">Required Deposit to Clerk (5%)</span>
+              <span className="text-sm font-bold text-ink">{displayMoney(ncRequiredDeposit)}</span>
             </div>
           </div>
         </div>
@@ -308,7 +308,7 @@ export function StatutoryDeadlinesTimeline({
             </div>
             {onHomesteadChange && (
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold text-ink-2">Property Type:</span>
+                <span className="text-xs font-semibold text-ink-2">Property Type:</span>
                 <button
                   type="button"
                   onClick={() => onHomesteadChange(!isHomestead)}
@@ -323,7 +323,7 @@ export function StatutoryDeadlinesTimeline({
               </div>
             )}
           </div>
-          <p className="text-[11px] text-ink-3 leading-relaxed">
+          <p className="text-xs text-ink-3 leading-relaxed">
             {isHomestead
               ? "Ala. Code § 6-5-248(b): 180-day redemption applies to residential properties on which a homestead exemption was claimed in the tax year of the foreclosure sale."
               : "Ala. Code § 6-5-248(a): 1-year (365-day) statutory redemption applies to non-homestead, commercial, or non-exempt real property."}

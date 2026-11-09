@@ -8,6 +8,7 @@ import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
 import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-deadlines-timeline";
+import { TitleRiskForensics } from "@/components/terminal/title-risk-forensics";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -461,6 +462,15 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
           isHomestead={isHomestead}
           onHomesteadChange={setIsHomestead}
           deadlinesAndCarry={deadlinesAndCarry}
+        />
+        <TitleRiskForensics
+          plaintiff={listing.plaintiff}
+          seniorLienRisk={listing.seniorLienRisk}
+          seniorLienWarning={listing.seniorLienWarning}
+          judgment={listing.judgment}
+          openingBid={openingBid}
+          state={listing.state}
+          source={listing.source}
         />
         {redemptionYield && (
           <div className="rounded-xl rounded-xl border border-line bg-card p-3.5 text-xs text-ink space-y-3">
