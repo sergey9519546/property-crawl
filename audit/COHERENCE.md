@@ -95,4 +95,4 @@ Fixed after this report. Not a rewrite of the original findings.
 - Lint CI runs `npm run lint` (`tsc --noEmit`). No eslint config.
 - Seed count is 2093. Do not cite 2096.
 
-Still open: CSP `unsafe-inline`, live Postgres round-trip, gsa/irs/nationwide HUD promotion, operator secrets. Ledger: `docs/GAP_CLOSEOUT_2026-09-20.md`.
+Current open status is tracked exclusively in `docs/COMPLETION_CHECKLIST.md` (single source of truth; CSP `unsafe-inline` and live Postgres round-trip were closed 2026-09-27).

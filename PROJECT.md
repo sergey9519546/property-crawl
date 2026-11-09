@@ -20,7 +20,7 @@
 | 8 | Score Bands Taxonomy Parity | Align `app.js` tier display with canonical 4-tier `SCORE_BANDS` | M3 (Done) | Arch Survey (P2) |
 | 9 | Child Process Shell Remediation | Eliminate `shell: true` and DEP0190 warning in gate tests | M3 (Done) | Security Audit (P2) |
 | 10 | Zero-Regression Verification Gate | Pass 50/50 test suites, 9/9 full release gate, and `npm run verify:gate` | M4 (Done) | R2, R3 |
-| 11 | Structured Audit Checkpoint Report | Write final checkpoint report to `audit/06-remediation-checkpoint.md` | M4 (Done) | AC Checkpoint |
+| 11 | Structured Audit Checkpoint Report | Consolidated into `docs/COMPLETION_CHECKLIST.md` | M4 (Done) | AC Checkpoint |
 | 12 | End-to-End Operator Journey Suite (PP-03) | Operator unlock, discovery, case, pass, intake, Second Look, export, doc review, hunts, watchlist, a11y, mobile CLS | M5 (Done) | Walkthrough Suite |
 | 13 | Case Action Accessibility & 401 Expiry Auto-Prompt | Added `aria-busy`, `aria-live`, `aria-hidden` icons, and 401 session expiry `session.requestUnlock()` trigger in `case-action.tsx` | M5 (Done) | UI & Security Audit |
 
