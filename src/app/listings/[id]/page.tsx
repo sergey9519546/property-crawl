@@ -264,7 +264,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
   const missingOptionalPropertyFacts = optionalPropertyFacts.filter(([, value]) => value === null).map(([label]) => label.toLowerCase());
   propertyFacts.push(...optionalPropertyFacts.filter((fact): fact is [string, string] => fact[1] !== null).map(([label, value]): [string, React.ReactNode] => [label, <Fact key={label} value={value} />]));
   const titleRules = /^[A-Za-z]{2}$/.test(listing.state || "")
-    ? arbitrateTitleRisk({
+    ? arbitrateTitleRisk({ ...listing,
         plaintiff: listing.plaintiff || "",
         state: listing.state,
         raw: typeof listing.raw === "string" ? listing.raw : "",

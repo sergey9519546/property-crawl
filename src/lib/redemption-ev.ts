@@ -101,7 +101,7 @@ export function computeRedemptionExpectedValue(params: RedemptionEvParams): Rede
         statutoryCitation = "Tex. Tax Code § 34.21(a): 25% statutory penalty in year one (months 1-12) on residence homestead / agricultural land.";
       }
     } else {
-      holdingMonths = params.expectedHoldingMonths || 6;
+      holdingMonths = Math.min(params.expectedHoldingMonths || 6, 6);
       statutoryRatePct = 25;
       statutoryCitation = "Tex. Tax Code § 34.21(e): 25% flat statutory redemption penalty (180-day redemption window) on non-homestead property.";
     }

@@ -623,7 +623,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
           { key: "isNew" as const, label: "New" },
           { key: "priceDropped" as const, label: "Price dropped" },
           { key: "hasDocs" as const, label: "Has documents" },
-          { key: "stale" as const, label: "Not updated in 30+ days" },
+          { key: "stale" as const, label: "Refresh due / Stale" },
           { key: "occupancyKnown" as const, label: "Occupancy stated" },
         ]).map(({ key, label: chipLabel }) => (
           <button

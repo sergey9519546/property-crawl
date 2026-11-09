@@ -805,7 +805,7 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
   const statutoryCarryDays = Math.max(
     effectiveRedemptionDays,
     hasIrsNotice ? 120 : 0,
-    isOccupied ? possessionRule.maxDays : 0
+    isOccupied ? Math.max(possessionRule.maxDays, 90) : 0
   );
 
   return {

@@ -106,7 +106,7 @@ function calculateSurplusEquityWaterfall(params = {}) {
       const parsedLien = {
         id: item.id || null,
         claimant: item.claimant || item.creditor || item.name || 'Recorded Lienholder',
-        claimAmount: Number.isFinite(item.amount) && item.amount > 0 ? Number(item.amount.toFixed(2)) : 0,
+        claimAmount: Number.isFinite(Number(item.amount)) && Number(item.amount) > 0 ? Number(Number(item.amount).toFixed(2)) : 0,
         type: item.type || 'recorded_lien',
         recordingDate: item.recordingDate || item.date || null,
         priority: Number.isFinite(item.priority) ? item.priority : 100,

@@ -197,7 +197,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   }
   const hasHistoryRelist = hasDatePushRelist || recordHistory.some((h) => classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive'
     && currentActive);
-  const statutoryStayExhausted = (priorPostponements >= 2 && currentActive) || Boolean(sourceFacts.statutoryStayExhausted);
+  const isNJ = String(listing.state || '').trim().toUpperCase() === 'NJ' || String(listing.source || '').trim().toLowerCase() === 'civilview'; const statutoryStayExhausted = (isNJ && priorPostponements >= 2 && currentActive) || (!isNJ && priorPostponements >= 3 && currentActive) || Boolean(sourceFacts.statutoryStayExhausted);
   const historicalBids = recordHistory
     .map((h) => Number(h?.fields?.openingBid ?? h?.openingBid))
     .filter((v) => Number.isFinite(v) && v > 0);
@@ -233,7 +233,7 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
       reason: (hasObservationRelist || hasHistoryRelist
         ? 'Observation history confirms property returned to active schedule following prior postponement or adjournment.'
         : 'Publisher record indicates property was re-listed or returned following a prior postponement.')
-        + (statutoryStayExhausted ? ` (${priorPostponements} prior postponements recorded — statutory borrower adjournments may be exhausted.)` : ''),
+        + (statutoryStayExhausted ? (isNJ ? ` (${priorPostponements} prior postponements recorded — statutory borrower adjournments under N.J.S.A. § 2A:17-36 are exhausted.)` : ` (${priorPostponements} prior postponements recorded — repeat re-schedulings indicate creditor pursuit nearing gavel.)`) : ''),
       nextAction: 'Review docket for bankruptcy relief, bankruptcy dismissals, or creditor motions.',
     });
   } else if (historyUnavailable && !isReturned) {

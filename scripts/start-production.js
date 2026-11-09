@@ -120,17 +120,18 @@ async function awaitBackendReady() {
     console.log('[Production] Demo/in-memory mode detected (DATABASE_URL unset).');
   }
 
-  const ready = await waitForHealth(readyUrl, hasDatabase ? 45000 : 8000);
+  // Cloud platforms (Render, Fly, Koyeb) require public port binding in < 25s.
+  // Never block for 45s on advanced discovery readiness before falling back to
+  // liveness; probe readiness for up to 3s, then fall back immediately.
+  const ready = await waitForHealth(readyUrl, 3000);
   if (ready) {
     console.log(`[Production] Backend Listing API is healthy on port ${internalApiPort}.`);
     return true;
   }
 
-  if (!hasDatabase) {
-    console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
-  }
+  console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
 
-  const live = await waitForHealth(liveUrl, 30000);
+  const live = await waitForHealth(liveUrl, 10000);
   if (live) {
     console.log(`[Production] Backend Listing API is live on port ${internalApiPort} (liveness /api/health).`);
     return true;

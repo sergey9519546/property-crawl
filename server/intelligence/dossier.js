@@ -12,7 +12,7 @@ const { getAuctionDepositRules, calculateRequiredDeposit } = require('./escrow-o
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, now = Date.now(), historyUnavailable = false } = {}) {
+function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, now = Date.now(), historyUnavailable = false, countyStats = null } = {}) {
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = listing.provenance?.origin === 'live'
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
@@ -95,7 +95,7 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     rules: getAuctionDepositRules(listing.source, { state: listing.state }),
     requiredDeposit: calculateRequiredDeposit(listing),
   };
-  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, null);
+  const auctionMicrostructure = evaluateAuctionProceedProbability(listing, countyStats || listing.countyStats || null);
   // Zero-Fabrication: a published opening bid is a minimum asking term, not a
   // realized gavel price, and the canonical judgment column is `judgment`
   // (LISTING_SELECT in server/db/client.js); `judgmentAmount` is only a legacy

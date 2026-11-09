@@ -348,9 +348,9 @@ function matchedReconsiderationConditions(item, trigger = {}, timestamp = null) 
     if (condition.operator === 'dropped_by_pct') {
       if (trigger.type !== 'origin') return false;
       const currentBid = item.listingSnapshot?.openingBid;
-      const previousBid = typeof trigger.origin?.changes?.openingBid?.previous === 'number'
-        ? trigger.origin.changes.openingBid.previous
-        : trigger.previousSnapshot?.openingBid;
+      const baselineBid = (typeof item.decision?.decidedOpeningBid === 'number' && item.decision.decidedOpeningBid > 0) ? item.decision.decidedOpeningBid : (typeof trigger.origin?.changes?.openingBid?.previous === 'number' ? trigger.origin.changes.openingBid.previous : trigger.previousSnapshot?.openingBid); const previousBid = baselineBid;
+
+
       if (typeof currentBid !== 'number' || typeof previousBid !== 'number' || previousBid <= 0 || currentBid >= previousBid) return false;
       const dropPct = ((previousBid - currentBid) / previousBid) * 100;
       return dropPct + 1e-9 >= condition.value;
@@ -575,7 +575,7 @@ function updateCase(id, input, options = {}) {
   return mutateStore(options.filePath, (store) => {
     const item = findCase(store, id);
     if (item.revision !== expectedRevision) throw new ResearchCaseError('RESEARCH_REVISION_CONFLICT', 'Research case changed; reload before saving', { expectedRevision, currentRevision: item.revision });
-    const decision = input.state === 'inbox' ? null : { state: input.state, reasonCodes, note, decidedAt: timestamp, actor: 'local_operator' };
+    const decision = input.state === 'inbox' ? null : { state: input.state, reasonCodes, note, decidedAt: timestamp, actor: 'local_operator', decidedOpeningBid: item.listingSnapshot?.openingBid ?? null };
     const scenarioChanged = input.underwriteScenario !== undefined
       && canonicalJson(item.underwriteScenario || null) !== canonicalJson(sanitizeUnderwriteScenario(input.underwriteScenario));
     if (item.state === input.state && canonicalJson(item.decision) === canonicalJson(decision)

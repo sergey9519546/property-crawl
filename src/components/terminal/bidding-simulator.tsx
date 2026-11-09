@@ -96,10 +96,10 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   }, [listing.id, listing.redemptionDays]);
 
   const publishedOpeningBid = positiveNumber(listing.openingBid);
-  const customOpeningBidNum = enteredAmount(customOpeningBid);
+  const customOpeningBidNum = (() => { const val = enteredAmount(customOpeningBid); return val !== null && val > 0 ? val : null; })();
   const openingBid = publishedOpeningBid ?? customOpeningBidNum;
   const isCustomOpeningBid = publishedOpeningBid === null && customOpeningBidNum !== null;
-  const publisherValuation = positiveNumber(listing.mid) ?? positiveNumber(listing.estHigh);
+  const publishedMidpoint = (listing.estLow !== null && listing.estLow !== undefined && listing.estHigh !== null && listing.estHigh !== undefined && Number(listing.estHigh) >= Number(listing.estLow)) ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : null; const publisherValuation = positiveNumber(listing.mid) ?? publishedMidpoint ?? positiveNumber(listing.estHigh) ?? positiveNumber(listing.estLow);
   const customValuationNum = enteredAmount(customValuation);
   const estimatedValue = customValuationNum ?? publisherValuation;
   const isCustomValuation = customValuationNum !== null;
@@ -115,9 +115,9 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
 
   const calculateMao = (rehab: number, margin: number, customVal: string | null, customBid: string | null, scenarioMap: Record<ScenarioField, string>) => {
     const customValNum = customVal !== null && customVal !== "" && Number.isFinite(Number(customVal)) ? Number(customVal) : null;
-    const activeEstimatedValue = customValNum ?? (listing.estLow !== null && listing.estLow !== undefined && listing.estHigh !== null && listing.estHigh !== undefined ? (Number(listing.estLow) + Number(listing.estHigh)) / 2 : publisherValuation);
+    const activeEstimatedValue = customValNum ?? publisherValuation;
     const customBidNum = customBid !== null && customBid !== "" && Number.isFinite(Number(customBid)) ? Number(customBid) : null;
-    const activeOpeningBid = customBidNum ?? (listing.openingBid !== null && listing.openingBid !== undefined ? Number(listing.openingBid) : null);
+    const activeOpeningBid = (customBidNum !== null && customBidNum > 0) ? customBidNum : (publishedOpeningBid ?? null);
     if (activeOpeningBid === null) return null;
     const activeAmounts = Object.fromEntries(Object.entries(scenarioMap).map(([field, value]) => [field, enteredAmount(value)])) as Record<ScenarioField, number | null>;
     const activeOtherAcquisitionCosts = acquisitionFields.every((field) => activeAmounts[field] !== null)
