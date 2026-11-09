@@ -273,7 +273,7 @@ class TrusteeSaleScraper extends BaseScraper {
 
           for (const rec of records) {
             if (!rec || !rec.fileNumber) continue;
-            await recordSnapshot({sourceKey:'trustee',recordId:rec.fileNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,postingDate:rec.postingDate || null,earliestEligibleSaleDate:rec.earliestEligibleSaleDate || null}},{snapshotDir:options.snapshotDir});
+            await recordSnapshot({sourceKey:'trustee',recordId:rec.fileNumber,rawPayload:rec,metadata:{sourceUrl:rec.sourceUrl,postingDate:rec.postingDate || null,earliestEligibleSaleDate:rec.earliestEligibleSaleDate || null,reviewRequired:Boolean(rec.evidenceOnly && options.intakeStorePath),confidenceScore:rec.evidenceOnly ? 0.0 : 1.0}},{snapshotDir:options.snapshotDir,intakeStorePath:options.intakeStorePath});
             if (!rec.sourceUrl) continue;
             if (rec.evidenceOnly || (!rec.situsAddress && !rec.legalDescription && !rec.apn)) continue;
             const ref = rec.fileNumber.replace(/[^A-Za-z0-9-]/g, '');

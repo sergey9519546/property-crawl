@@ -19,7 +19,7 @@ for(let offset=0;offset<records.length;offset+=500){
  SELECT $1,entry.identity_key,$2,entry.source_key,entry.source_record_id,entry.observed_at::timestamptz,entry.evaluation
  FROM jsonb_to_recordset($3::jsonb) AS entry(identity_key text,source_key text,source_record_id text,observed_at text,evaluation jsonb)
  ON CONFLICT(hunt_id,identity_key) DO UPDATE SET hunt_version=EXCLUDED.hunt_version,source_key=EXCLUDED.source_key,source_record_id=EXCLUDED.source_record_id,observed_at=EXCLUDED.observed_at,evaluation=EXCLUDED.evaluation
- WHERE discovery_hunt_baselines.observed_at<=EXCLUDED.observed_at`,[hunt.id,evaluated.baseline.huntVersion,JSON.stringify(batch)]);
+ WHERE (discovery_hunt_baselines.observed_at IS NULL OR EXCLUDED.observed_at >= discovery_hunt_baselines.observed_at)`,[hunt.id,evaluated.baseline.huntVersion,JSON.stringify(batch)]);
 }
 for(let offset=0;offset<evaluated.events.length;offset+=500){
  const batch=evaluated.events.slice(offset,offset+500).map(e=>({id:e.id,identity_key:e.identityKey,event_type:e.type,evidence:e,detected_at:e.detectedAt}));

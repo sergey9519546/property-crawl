@@ -27,7 +27,7 @@ function formatContactNotificationHtml(fields, receivedAt) {
   const safeEmail = sanitize(fields.email || 'None Provided', 100);
   const safeMessage = sanitize(fields.message || '', 5000).replace(/\n/g, '<br>');
   return `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #0f172a;">
       <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px; border-bottom: 2px solid #0f172a; padding-bottom: 8px;">
         📬 New Inbound Contact Inquiry
       </h2>

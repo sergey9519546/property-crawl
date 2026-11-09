@@ -272,3 +272,144 @@ test('adversarial trial docket findings integrate cleanly into research case dec
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('nevada HOA foreclosure triggers caution under NRS 116.3116 super-priority extinguishment (not senior trap)', () => {
+  const listing = {
+    id: 'prop_nv_hoa_009',
+    state: 'NV',
+    county: 'Clark',
+    plaintiff: 'Desert Highlands Homeowners Association',
+    openingBid: 15000,
+    seniorLienRisk: 'low',
+    notes: 'HOA assessment lien foreclosure sale under NRS 116.3116',
+  };
+
+  const docket = evaluateAdversarialDocket(listing);
+
+  // In NV, HOA super-priority extinguishes prior 1st mortgage under SFR Investments Pool 1
+  assert.equal(docket.verdict, 'conditional');
+  assert.equal(docket.fatalCount, 0);
+  assert.ok(docket.headline.includes('CONDITIONAL PASS'));
+
+  const hoaPoint = docket.prosecutionPoints.find((p) => p.id === 'prosecution-1-senior-lien');
+  assert.ok(hoaPoint);
+  assert.equal(hoaPoint.status, 'caution');
+  assert.equal(hoaPoint.isFatal, false);
+  assert.ok(hoaPoint.statute.includes('NRS 116.3116'));
+  assert.ok(hoaPoint.statute.includes('SFR Investments Pool 1'));
+  assert.ok(hoaPoint.finding.includes('EXTINGUISHES prior first mortgage'));
+});
+
+test('non-super-priority state HOA foreclosure in Texas/Ohio triggers fatal senior lien survival trap', () => {
+  const listingTx = {
+    id: 'prop_tx_hoa_010',
+    state: 'TX',
+    county: 'Harris',
+    plaintiff: 'Cypress Creek Homeowners Association, Inc.',
+    openingBid: 8500,
+  };
+
+  const docketTx = evaluateAdversarialDocket(listingTx);
+
+  assert.equal(docketTx.verdict, 'fatal');
+  assert.equal(docketTx.fatalCount, 1);
+  assert.equal(docketTx.recommendedDecision, 'pass');
+  assert.ok(docketTx.recommendedReasonCodes.includes('title_risk_unresolved'));
+
+  const hoaPointTx = docketTx.prosecutionPoints.find((p) => p.id === 'prosecution-1-senior-lien');
+  assert.ok(hoaPointTx);
+  assert.equal(hoaPointTx.status, 'disqualified');
+  assert.equal(hoaPointTx.isFatal, true);
+  assert.ok(hoaPointTx.finding.includes('non-super-priority state (TX)'));
+  assert.ok(hoaPointTx.finding.includes('senior 1st mortgage survives'));
+});
+
+test('super-priority state HOA foreclosure in Colorado triggers fatal trap because 1st mortgage not extinguished', () => {
+  const listingCo = {
+    id: 'prop_co_hoa_011',
+    state: 'CO',
+    county: 'Denver',
+    plaintiff: 'Highland Park Condominium Association',
+    openingBid: 12000,
+  };
+
+  const docketCo = evaluateAdversarialDocket(listingCo);
+
+  assert.equal(docketCo.verdict, 'fatal');
+  assert.equal(docketCo.fatalCount, 1);
+  assert.equal(docketCo.recommendedDecision, 'pass');
+
+  const hoaPointCo = docketCo.prosecutionPoints.find((p) => p.id === 'prosecution-1-senior-lien');
+  assert.ok(hoaPointCo);
+  assert.equal(hoaPointCo.status, 'disqualified');
+  assert.equal(hoaPointCo.isFatal, true);
+  assert.ok(hoaPointCo.statute.includes('C.R.S. § 38-33.3-316'));
+  assert.ok(hoaPointCo.finding.includes('senior 1st mortgage debt is NOT extinguished'));
+});
+
+test('foreclosing 1st mortgage in Florida safe harbor state reflects statutory assessment escrow in Defense 1', () => {
+  const listingFl = {
+    id: 'prop_fl_bank_012',
+    state: 'FL',
+    county: 'Hillsborough',
+    plaintiff: 'Wells Fargo Bank, N.A.',
+    seniorLienRisk: 'low',
+    openingBid: 140000,
+  };
+
+  const docketFl = evaluateAdversarialDocket(listingFl);
+
+  const def1 = docketFl.defensePoints.find((p) => p.id === 'defense-1-subordinate-extinguishment');
+  assert.ok(def1);
+  assert.equal(def1.status, 'verified');
+  assert.ok(def1.finding.includes('Fla. Stat. § 718.116'));
+  assert.ok(def1.finding.includes('12 months HOA super-priority assessments must be escrowed'));
+});
+
+test('state-specific municipal super-priority citations match Ohio, Florida, and Texas statutes', () => {
+  const docketOh = evaluateAdversarialDocket({ id: 'p_oh', state: 'OH', county: 'Cuyahoga', delinquentTaxes: 4500 });
+  const muniOh = docketOh.prosecutionPoints.find((p) => p.id === 'prosecution-4-municipal-liens');
+  assert.ok(muniOh);
+  assert.ok(muniOh.statute.includes('Ohio Rev. Code § 323.11 & § 715.261'));
+  assert.ok(muniOh.finding.includes('R.C. § 715.261'));
+
+  const docketFl = evaluateAdversarialDocket({ id: 'p_fl', state: 'FL', county: 'Orange', delinquentTaxes: 3200 });
+  const muniFl = docketFl.prosecutionPoints.find((p) => p.id === 'prosecution-4-municipal-liens');
+  assert.ok(muniFl);
+  assert.ok(muniFl.statute.includes('Fla. Stat. § 197.122'));
+
+  const docketTx = evaluateAdversarialDocket({ id: 'p_tx', state: 'TX', county: 'Travis', delinquentTaxes: 8100 });
+  const muniTx = docketTx.prosecutionPoints.find((p) => p.id === 'prosecution-4-municipal-liens');
+  assert.ok(muniTx);
+  assert.ok(muniTx.statute.includes('Tex. Tax Code § 32.05'));
+});
+
+test('state-specific post-sale possession timelines reflect Florida (5-30d), Texas (30-90d), and Ohio (14-30d)', () => {
+  const docketFl = evaluateAdversarialDocket({ id: 'p_fl_occ', state: 'FL', occupancy: 'Tenant' });
+  const ptfaFl = docketFl.prosecutionPoints.find((p) => p.id === 'prosecution-5-ptfa-occupancy');
+  assert.ok(ptfaFl);
+  assert.ok(ptfaFl.statute.includes('Fla. R. Civ. P. 1.580'));
+  assert.ok(ptfaFl.finding.includes('5-30 days'));
+
+  const docketTx = evaluateAdversarialDocket({ id: 'p_tx_occ', state: 'TX', occupancy: 'Occupied' });
+  const ptfaTx = docketTx.prosecutionPoints.find((p) => p.id === 'prosecution-5-ptfa-occupancy');
+  assert.ok(ptfaTx);
+  assert.ok(ptfaTx.statute.includes('Tex. R. Civ. P. 310'));
+  assert.ok(ptfaTx.finding.includes('30-90 days'));
+
+  const docketOh = evaluateAdversarialDocket({ id: 'p_oh_occ', state: 'OH', occupancy: 'Occupied' });
+  const ptfaOh = docketOh.prosecutionPoints.find((p) => p.id === 'prosecution-5-ptfa-occupancy');
+  assert.ok(ptfaOh);
+  assert.ok(ptfaOh.statute.includes('R.C. § 2329.09'));
+  assert.ok(ptfaOh.finding.includes('14-30 days'));
+});
+
+test('statutory redemption yield floor reflects Alabama 12% statutory interest under Ala. Code § 6-5-253', () => {
+  const alListing = { id: 'p_al', state: 'AL', county: 'Jefferson', redemptionDays: 180 };
+  const docketAl = evaluateAdversarialDocket(alListing);
+
+  const def3 = docketAl.defensePoints.find((p) => p.id === 'defense-3-redemption-yield');
+  assert.ok(def3);
+  assert.ok(def3.statute.includes('Ala. Code § 6-5-248'));
+  assert.ok(def3.finding.includes('12% per annum statutory interest floor'));
+});

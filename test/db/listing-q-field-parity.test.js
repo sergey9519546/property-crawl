@@ -45,7 +45,8 @@ test('q field parity: PG and memory return identical id sets for state/occupancy
     const embedded = await startEmbeddedPostgres({ dataDir });
     await migrate(embedded.pool);
     const pg = new DatabaseClient({ pool: embedded.pool, liveCachePath: null, workspaceStorePath: null });
-    const memory = new DatabaseClient({ liveCachePath: null, workspaceStorePath: null });
+    const memory = new DatabaseClient({ env: { ...process.env, PROPERTY_INVENTORY_BACKEND: 'memory', NODE_ENV: 'test' }, liveCachePath: null, workspaceStorePath: null });
+    memory.inMemoryData.listings = [];
     await seed(pg);
     await seed(memory);
 

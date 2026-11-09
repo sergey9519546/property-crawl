@@ -69,6 +69,7 @@ const GROUPS: MenuGroup[] = [
       [
         { label: "Hunts", desc: "Members get an email when a new listing fits", icon: Radar, href: "/hunts", tint: "#e7f8f0" },
         { label: "Portfolio", desc: "Your tracked properties, price drops and sale dates", icon: PieChart, href: "/portfolio", tint: "#eef1ff" },
+        { label: "Due diligence dossiers", desc: "Adversarial trial dockets and title defect risk", icon: BookOpen, href: "/research", tint: "#fff0e9" },
       ],
     ],
   },

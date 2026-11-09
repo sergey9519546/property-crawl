@@ -86,10 +86,10 @@ function parseFraction(label) {
 }
 
 function explicitStatutoryFraction(text) {
-  const fractionToken = '(two[-\\s]thirds|one[-\\s]half|three[-\\s]fourths|three[-\\s]quarters|2\\s*\\/\\s*3|1\\s*\\/\\s*2|3\\s*\\/\\s*4)';
+  const fractionPattern = '(two[-\\s]thirds|one[-\\s]half|three[-\\s]fourths|three[-\\s]quarters|2\\s*\\/\\s*3|1\\s*\\/\\s*2|3\\s*\\/\\s*4)';
   const patterns = [
-    new RegExp(`(?:minimum(?:\\s+opening)?\\s+bid|shall\\s+not\\s+be\\s+sold|cannot\\s+be\\s+sold|upset\\s+price)[^.\\n]{0,120}?${fractionToken}[^.\\n]{0,80}?(?:appraised|appraisal)`, 'i'),
-    new RegExp(`(?:appraised|appraisal)[^.\\n]{0,100}?${fractionToken}[^.\\n]{0,80}?(?:minimum(?:\\s+opening)?\\s+bid|shall\\s+not\\s+be\\s+sold|upset\\s+price)`, 'i')
+    new RegExp(`(?:minimum(?:\\s+opening)?\\s+bid|shall\\s+not\\s+be\\s+sold|cannot\\s+be\\s+sold|upset\\s+price)[^.\\n]{0,120}?${fractionPattern}[^.\\n]{0,80}?(?:appraised|appraisal)`, 'i'),
+    new RegExp(`(?:appraised|appraisal)[^.\\n]{0,100}?${fractionPattern}[^.\\n]{0,80}?(?:minimum(?:\\s+opening)?\\s+bid|shall\\s+not\\s+be\\s+sold|upset\\s+price)`, 'i')
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);

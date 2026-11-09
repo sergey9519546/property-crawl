@@ -40,7 +40,8 @@ async function handleAlerts(req, res) {
   }
 
   if (method === 'DELETE') {
-    const { listingId } = req.body || {};
+    const url = new URL(req.url, 'http://localhost');
+    const listingId = (req.body && typeof req.body.listingId === 'string' && req.body.listingId) || url.searchParams.get('listingId');
     if (typeof listingId !== 'string' || !listingId || listingId.length > 256) return res.status(400).json({ error: 'listingId is required' });
     await db.removeSavedDeal(userId, listingId);
     return res.json({ success: true, message: 'Deal removed from watchlist' });

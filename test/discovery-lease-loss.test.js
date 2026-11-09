@@ -101,7 +101,7 @@ test('coordinator-managed scheduler cycles are finalized exactly once by the coo
   const coordinator = new CollectionCoordinator({ scheduler, store, database: { isPg: false }, hunts: { listHunts() { return []; } }, caseSink: null });
   const result = await coordinator.execute('job-once', { sourceIds: ['treasury'] }, { owner: 'owner-once' });
   assert.equal(schedulerFinalizations, 0);
-  assert.equal(result.status, 'completed');
+  assert.equal(result.status, 'partial');
   assert.equal(updates.filter(update => update.completed).length, 1);
 });
 

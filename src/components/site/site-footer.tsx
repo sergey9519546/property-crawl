@@ -18,6 +18,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Product",
     links: [
       { label: "Browse listings", href: "/listings" },
+      { label: "Due diligence dossiers", href: "/research" },
       { label: "The catch", href: "/#the-catch" },
       { label: "Hunts", href: "/hunts" },
       { label: "Portfolio", href: "/portfolio" },

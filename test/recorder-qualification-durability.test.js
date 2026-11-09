@@ -48,11 +48,11 @@ test('robots denial, missing form state and unverified result shells cannot qual
 test('actual trustee workflow retains Harris documents and never admits identity-free grid rows',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'recorder-qualify-'));
  try{const scraper=new TrusteeSaleScraper({fixtureOnly:false});scraper.fetchText=fakeQuery().requestText;
- const listings=await scraper.scrapeFeed({jurisdiction:'harris',year:2026,month:11,snapshotDir:dir});
+ const intakeStorePath=path.join(dir,'intake.json');const listings=await scraper.scrapeFeed({jurisdiction:'harris',year:2026,month:11,snapshotDir:dir,intakeStorePath});
  assert.equal(listings.length,0);assert.equal(scraper.lastRunReport.recorderEvidence.capturedDocuments,2);
  assert.equal(scraper.lastRunReport.recorderEvidence.listingQualified,false);assert.equal(scraper.lastRunReport.recorderEvidence.queryComplete,false);
  assert.equal(scraper.lastRunReport.complete,false);assert.equal(scraper.lastRunReport.fullSweepComplete,false);assert.equal(scraper.lastRunReport.outcome,'evidence_only');
- assert.equal(readSnapshot({sourceKey:'trustee',recordId:'FRCL-2026-5654',snapshotDir:dir}).raw.rawPayload.saleDate,'2026-11-03');
+ assert.equal(readSnapshot({sourceKey:'trustee',recordId:'FRCL-2026-5654',snapshotDir:dir}).raw.rawPayload.saleDate,'2026-11-03');const intakeData=JSON.parse(fs.readFileSync(intakeStorePath,'utf8'));assert.ok(JSON.stringify(intakeData).includes('needs_review'));assert.ok(JSON.stringify(intakeData).includes('ViewECdocs.aspx?ID='));
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 

@@ -138,12 +138,15 @@ async function postWebhook(rawUrl, body, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs || DEFAULT_TIMEOUT_MS);
   try {
-    const response = await pinnedFetch(url, records, {
+    const fetchInit = {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
-    });
+    };
+    const response = typeof options.fetchImpl === 'function'
+      ? await options.fetchImpl(url.href, fetchInit)
+      : await pinnedFetch(url, records, fetchInit);
     if (response.status >= 300 && response.status < 400) {
       return { delivery: 'refused', sent: false, reason: 'redirect_refused', status: response.status };
     }

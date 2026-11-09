@@ -27,7 +27,9 @@ function publicIpv6Addresses() {
 }
 
 let harness;
+const prevTlsReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
 test.before(async () => {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   const publicIpv6 = publicIpv6Addresses();
   assert.ok(publicIpv6.length >= 2, 'need at least two public IPv6 addresses for the pinning harness');
   const pfx = Buffer.from(PFX_BASE64, 'base64');
@@ -55,6 +57,8 @@ test.before(async () => {
 });
 
 test.after(async () => {
+  if (prevTlsReject === undefined) delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+  else process.env.NODE_TLS_REJECT_UNAUTHORIZED = prevTlsReject;
   await new Promise((resolve) => harness.server.close(resolve));
 });
 

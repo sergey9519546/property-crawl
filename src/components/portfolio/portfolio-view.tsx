@@ -188,8 +188,10 @@ export function PortfolioView() {
 
   const handleRemove = async (dealId: string) => {
     try {
-      await fetch(`/api/alerts/${encodeURIComponent(dealId)}`, {
+      await fetch("/api/alerts", {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listingId: dealId }),
         credentials: "same-origin",
       });
       setDeals((prev) => prev.filter((d) => (d.listingId || d.id) !== dealId));

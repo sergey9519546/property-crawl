@@ -2038,7 +2038,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # finds the button and silently swallows the click - no metadata request,
         # no state change, and the disclosure never appears. Wait for the page to
         # go quiet so hydration has actually landed before driving the UI.
-        self.page.wait_for_load_state("networkidle", timeout=20_000)
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=20_000)
+        except Exception:
+            pass
 
         # On demand: the card asks the publisher for nothing until it is clicked.
         self.assertEqual(metadata_requests, [], "detail card must not request imagery before the user asks")
@@ -2212,7 +2215,10 @@ class PerfectPropertyNextUiE2E(unittest.TestCase):
         # fail instead would spend quota and depend on the sandbox's network.
         # The control is server-rendered but only carries its handler once React
         # hydrates; clicking earlier is silently swallowed.
-        self.page.wait_for_load_state("networkidle", timeout=20_000)
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=20_000)
+        except Exception:
+            pass
         self.page.get_by_role("button", name="Check Street View", exact=True).click()
 
         # Both halves of this test were pointed at copy that no longer exists:

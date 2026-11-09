@@ -84,6 +84,17 @@ test('alerts: POST refuses without workspace identity configured', async () => {
   assert.ok([400, 401, 403, 503].includes(res.statusCode));
 });
 
+test('alerts: DELETE accepts listingId in query param or body', async () => {
+  const res = captureRes();
+  await handleAlerts({
+    method: 'DELETE',
+    url: 'http://localhost/api/alerts?listingId=test-listing-1',
+    body: {},
+    headers: {},
+  }, res);
+  assert.ok([200, 401, 403, 503].includes(res.statusCode));
+});
+
 test('alerts: non-GET/POST/DELETE method returns 405 when auth passes', async () => {
   // With auth failing, the response is 503, not 405 — the auth gate fires
   // first. With auth passing, the trailing 405 branch fires. Accept either

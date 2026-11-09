@@ -44,9 +44,13 @@ async function loadCountyData(stateCode: string, countyParam: string): Promise<L
     county: normalizeCountySlug(countyParam).toLowerCase(),
     apiUrl: process.env.PROPERTY_API_URL || "http://localhost:3000",
     searchLocal: async (query) => {
-      const db = require("@server/db/client");
+      try {
+        const db = require("@server/db/client");
       const discovery = require("@server/discovery/query");
-      return discovery.search(db, discovery.queryFromUrl(new URL(`http://localhost/api/listings?${query}`)));
+        return discovery.search(db, discovery.queryFromUrl(new URL(`http://localhost/api/listings?${query}`)));
+      } catch {
+        throw new Error("Local inventory search unavailable");
+      }
     },
   });
 }
