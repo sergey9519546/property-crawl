@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { bandForScore } from "@/lib/score-bands";
-import { ArrowLeft, ExternalLink, Gavel, Scale, Calculator, CheckSquare, HelpCircle, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ExternalLink, Gavel, Scale, Calculator, CheckSquare, HelpCircle, AlertTriangle, MapPin } from "lucide-react";
 import { computeStatutoryFeePreset, computeStatutoryDeadlinesAndCarry } from "@/lib/underwriting";
 import { serializeJsonLd } from "@/lib/json-ld";
 import {
@@ -16,7 +16,9 @@ import {
   buildCountyBreadcrumbs,
   buildCountyItemList,
   buildCountyFaqSchema,
+  getCountyCadastralGisLink,
 } from "@/lib/county-seo";
+import { CountyAlertSubscribe } from "@/components/alerts/county-alert-subscribe";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +120,7 @@ export default async function CountyDocketPage({ params }: PageProps) {
   const nextSale = upcomingCount > 0 ? saleOf(listings[0]) : null;
   const stats = computeCountyStats(listings);
   const redemption = getStatutoryRedemption(state);
+  const gisLink = getCountyCadastralGisLink(state, countyName);
   const feeSchedule = getStatutoryFeeSchedule(state, stats.medianOpeningBid || 150000);
 
   // Fee math only runs on a published median bid; no stand-in price.
@@ -440,6 +443,39 @@ export default async function CountyDocketPage({ params }: PageProps) {
             </div>
           </div>
         )}
+
+        {/* Official County Cadastral & GIS Parcel Radar */}
+        {gisLink && (
+          <div className="mt-8 rounded-card border border-line bg-card p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-2.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-2">
+                  <MapPin className="h-3 w-3 text-go" />
+                  {gisLink.authorityType === "county_assessor_gis" ? "Official County Assessor GIS" : "Statewide Cadastral GIS"}
+                </div>
+                <h2 className="text-base font-bold text-ink">
+                  {gisLink.portalName}
+                </h2>
+                <p className="text-xs text-ink-3 max-w-2xl leading-relaxed">
+                  {gisLink.instructions}
+                </p>
+              </div>
+              <a
+                href={gisLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 shrink-0 rounded-control border border-line-strong bg-paper px-4 py-2.5 text-xs font-semibold text-ink-2 hover:bg-line transition"
+              >
+                Open GIS Parcel Viewer <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Automated Sheriff Sale Notice Alerts */}
+        <div className="mt-8">
+          <CountyAlertSubscribe state={state} county={countyName} formalCounty={formalCounty} />
+        </div>
 
         {/* Listings Section */}
         <div className="mt-10">

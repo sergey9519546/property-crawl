@@ -58,6 +58,16 @@ export interface StatutoryFeeSchedule {
   estimatedFees: StatutoryEstimatedFees;
 }
 
+export interface CountyCadastralGisLink {
+  state: string;
+  county: string;
+  portalName: string;
+  authorityType: 'county_assessor_gis' | 'statewide_cadastral';
+  url: string;
+  instructions: string;
+  verified: true;
+}
+
 export interface CountyMetadataResult {
   title: string;
   description: string;
@@ -79,6 +89,10 @@ export function formatCountyDisplayName(county: string | null | undefined): stri
 export function computeCountyStats(listings?: unknown[]): CountyStats;
 export function getStatutoryRedemption(stateCode: string | null | undefined): StatutoryRedemptionInfo;
 export function getStatutoryFeeSchedule(stateCode: string | null | undefined, baselinePrice?: number | null): StatutoryFeeSchedule;
+export function getCountyCadastralGisLink(
+  state: string | null | undefined,
+  county: string | null | undefined
+): CountyCadastralGisLink;
 export function generateHighCtrCountyTitle(county: string | null | undefined, state: string | null | undefined): string;
 export function generateCountyMetadata(params: {
   state: string;
@@ -106,4 +120,6 @@ export function buildCountyFaqSchema(params: {
   listings?: unknown[];
 }): Record<string, unknown>;
 
+export const COUNTY_CADASTRAL_GIS_REGISTRY: Record<string, { portalName: string; url: string; instructions: string }>;
+export const STATEWIDE_CADASTRAL_FALLBACKS: Record<string, { portalName: string; url: string; instructions: string }>;
 export const DEFAULT_BASE_URL: string;

@@ -2,6 +2,32 @@ const db = require('../db/client');
 const { resolveWatchlistIdentity } = require('../security/workspace-identity');
 const { generateInvestorDigestReport, dispatchInvestorAlertDigest } = require('../delivery/alert-digest');
 
+const EMAIL_REGEX = /^[^\s@\r\n]+@[^\s@\r\n]+\.[^\s@\r\n]+$/;
+const ALLOWED_CADENCES = ['instant', 'daily', 'weekly'];
+
+function isValidEmail(email) {
+  if (typeof email !== 'string') return false;
+  const trimmed = email.trim();
+  if (!trimmed || trimmed.length > 254) return false;
+  if (/[\r\n]/.test(trimmed)) return false;
+  return EMAIL_REGEX.test(trimmed);
+}
+
+function isValidState(state) {
+  return typeof state === 'string' && /^[A-Za-z]{2}$/.test(state.trim());
+}
+
+function isValidCounty(county) {
+  return typeof county === 'string' && county.trim().length > 0 && county.trim().length <= 64;
+}
+
+function resolveCadence(cadence) {
+  if (cadence === undefined || cadence === null || cadence === '') return 'daily';
+  if (typeof cadence !== 'string') return null;
+  const lower = cadence.trim().toLowerCase();
+  return ALLOWED_CADENCES.includes(lower) ? lower : null;
+}
+
 async function handleAlerts(req, res) {
   const method = req.method;
   const userId = resolveWatchlistIdentity(req, res);
@@ -32,6 +58,42 @@ async function handleAlerts(req, res) {
         listings: saved,
       });
       return res.json(result);
+    }
+    if (action === 'subscribe_county_digest') {
+      const { email, state, county, cadence } = req.body || {};
+      if (!isValidEmail(email)) {
+        return res.status(400).json({ error: 'Valid email is required' });
+      }
+      if (!isValidState(state)) {
+        return res.status(400).json({ error: 'Valid 2-letter state code is required' });
+      }
+      if (!isValidCounty(county)) {
+        return res.status(400).json({ error: 'Valid county is required' });
+      }
+      const resolvedCadence = resolveCadence(cadence);
+      if (!resolvedCadence) {
+        return res.status(400).json({ error: 'Invalid cadence; must be instant, daily, or weekly' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanState = state.trim().toUpperCase();
+      const cleanCounty = county.trim().toLowerCase();
+
+      const search = await db.createSavedSearch(userId, {
+        label: `${county.trim()}, ${cleanState} Digest`,
+        filters: {
+          states: [cleanState],
+          counties: [cleanCounty],
+          email: cleanEmail,
+          cadence: resolvedCadence,
+        },
+      });
+
+      return res.json({
+        success: true,
+        subscriptionId: search.id,
+        message: `Subscribed to ${county}, ${state} alerts`,
+      });
     }
     if (typeof listingId !== 'string' || !listingId || listingId.length > 256) return res.status(400).json({ error: 'listingId is required' });
     if (!await db.getListingById(listingId)) return res.status(404).json({ error: 'Listing not found' });

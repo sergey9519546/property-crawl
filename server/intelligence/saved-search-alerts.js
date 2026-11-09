@@ -59,6 +59,12 @@ function normalizedStates(search) {
   return [...new Set(states.map((s) => s.trim().toUpperCase()))];
 }
 
+function normalizedCounties(search) {
+  const counties = getFilter(search, 'counties');
+  if (!isStringArray(counties) || counties.length === 0) return null;
+  return [...new Set(counties.map((c) => c.trim().toLowerCase()))];
+}
+
 function normalizedSources(search) {
   const sources = getFilter(search, 'sources');
   if (!isStringArray(sources) || sources.length === 0) return null;
@@ -94,6 +100,7 @@ function numericFilter(search, key) {
 // absent/empty", which would match every listing and spam every user.
 function hasAnyFilter(search) {
   return Boolean(normalizedStates(search)
+    || normalizedCounties(search)
     || normalizedSources(search)
     || normalizedPropTypes(search)
     || normalizedKeywords(search)
@@ -123,6 +130,14 @@ function matchListingAgainstSearch(listing, search) {
     const listingState = typeof listing.state === 'string' ? listing.state.trim().toUpperCase() : '';
     if (!listingState || !states.includes(listingState)) {
       return { match: false, reason: 'state_mismatch' };
+    }
+  }
+
+  const counties = normalizedCounties(search);
+  if (counties) {
+    const listingCounty = typeof listing.county === 'string' ? listing.county.trim().toLowerCase() : '';
+    if (!listingCounty || !counties.includes(listingCounty)) {
+      return { match: false, reason: 'county_mismatch' };
     }
   }
 
@@ -246,5 +261,5 @@ module.exports = {
   matchAllSearches,
   hasAnyFilter,
   // Internal helpers exposed for tests
-  _internals: { normalizedStates, normalizedSources, normalizedKeywords }
+  _internals: { normalizedStates, normalizedCounties, normalizedSources, normalizedKeywords }
 };

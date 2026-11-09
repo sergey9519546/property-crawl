@@ -384,3 +384,13 @@ test('County SEO: server/seo re-exports match src/lib/county-seo', () => {
     getStatutoryFeeSchedule('NJ', 180000)
   );
 });
+
+test('County SEO: county page component wires Cadastral GIS Radar and Notice Alerts Subscription', () => {
+  const pagePath = path.resolve(__dirname, '../../src/app/states/[state]/[county]/page.tsx');
+  const source = fs.readFileSync(pagePath, 'utf8');
+
+  assert.match(source, /getCountyCadastralGisLink/, 'Page must call getCountyCadastralGisLink');
+  assert.match(source, /CountyAlertSubscribe/, 'Page must render CountyAlertSubscribe component');
+  assert.match(source, /Open GIS Parcel Viewer/, 'Page must render GIS Parcel link');
+  assert.match(source, /subscribe_county_digest|CountyAlertSubscribe/, 'Page must integrate subscription workflow');
+});

@@ -1,0 +1,326 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+process.env.PROPERTY_WORKSPACE_ID = process.env.PROPERTY_WORKSPACE_ID || 'operator';
+process.env.SCRAPER_ADMIN_TOKEN = process.env.SCRAPER_ADMIN_TOKEN || 'test-secret';
+
+const { validateFilters } = require('../server/routes/saved-searches');
+const {
+  matchListingAgainstSearch,
+  hasAnyFilter,
+  _internals: { normalizedCounties }
+} = require('../server/intelligence/saved-search-alerts');
+const handleAlerts = require('../server/routes/alerts');
+const db = require('../server/db/client');
+
+function makeRes() {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: null,
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(value) {
+      this.body = value;
+      return this;
+    }
+  };
+}
+
+function makeReq(method = 'GET', url = '/api/alerts', body = null) {
+  return {
+    method,
+    url,
+    headers: {
+      cookie: 'pp_watchlist=test_device_12345',
+      authorization: 'Bearer test-secret'
+    },
+    body
+  };
+}
+
+test('validateFilters: accepts valid county arrays and rejects invalid shapes', () => {
+  // Valid county arrays
+  assert.deepEqual(validateFilters({ counties: ['Travis'] }), { ok: true });
+  assert.deepEqual(validateFilters({ counties: ['Travis', 'Harris', 'Miami-Dade'] }), { ok: true });
+  assert.deepEqual(validateFilters({ counties: [] }), { ok: true });
+
+  // Invalid shapes
+  assert.deepEqual(validateFilters({ counties: 'Travis' }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+  assert.deepEqual(validateFilters({ counties: [123] }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+  assert.deepEqual(validateFilters({ counties: [''] }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+  assert.deepEqual(validateFilters({ counties: ['   '] }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+  assert.deepEqual(validateFilters({ counties: ['A'.repeat(65)] }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+  assert.deepEqual(validateFilters({ counties: null }), {
+    ok: false,
+    reason: 'counties_must_be_array_of_strings'
+  });
+});
+
+test('saved-search-alerts: normalizedCounties helper trims, deduplicates, and lowercases', () => {
+  assert.equal(normalizedCounties({}), null);
+  assert.equal(normalizedCounties({ counties: [] }), null);
+  assert.equal(normalizedCounties({ counties: 'not-array' }), null);
+  assert.deepEqual(
+    normalizedCounties({ counties: [' Travis ', 'TRAVIS', 'harris'] }),
+    ['travis', 'harris']
+  );
+  // Nested filters support
+  assert.deepEqual(
+    normalizedCounties({ filters: { counties: ['Miami-Dade'] } }),
+    ['miami-dade']
+  );
+});
+
+test('hasAnyFilter: recognizes counties filter as a valid constraint', () => {
+  assert.equal(hasAnyFilter({}), false);
+  assert.equal(hasAnyFilter({ counties: [] }), false);
+  assert.equal(hasAnyFilter({ counties: ['Travis'] }), true);
+  assert.equal(hasAnyFilter({ filters: { counties: ['Travis'] } }), true);
+});
+
+test('matchListingAgainstSearch: evaluates counties filter correctly', () => {
+  const search = {
+    filters: {
+      counties: ['Travis', 'Williamson']
+    }
+  };
+
+  // Positive match
+  const matchingListing = {
+    id: 'L-1',
+    address: '100 Main St',
+    county: 'Travis',
+    dealScore: 75
+  };
+  assert.deepEqual(matchListingAgainstSearch(matchingListing, search), { match: true });
+
+  // Case-insensitive & trimmed positive match
+  const matchingListingCase = {
+    id: 'L-2',
+    address: '200 Oak Ave',
+    county: '  williamson  ',
+    dealScore: 75
+  };
+  assert.deepEqual(matchListingAgainstSearch(matchingListingCase, search), { match: true });
+
+  // County mismatch
+  const mismatchListing = {
+    id: 'L-3',
+    address: '300 Pine Rd',
+    county: 'Harris',
+    dealScore: 75
+  };
+  assert.deepEqual(matchListingAgainstSearch(mismatchListing, search), {
+    match: false,
+    reason: 'county_mismatch'
+  });
+
+  // Missing county on listing
+  const missingCountyListing = {
+    id: 'L-4',
+    address: '400 Elm St',
+    dealScore: 75
+  };
+  assert.deepEqual(matchListingAgainstSearch(missingCountyListing, search), {
+    match: false,
+    reason: 'county_mismatch'
+  });
+
+  // Search without county filter does not filter on county
+  const searchNoCounty = {
+    filters: {
+      states: ['TX']
+    }
+  };
+  assert.deepEqual(
+    matchListingAgainstSearch({ state: 'TX', county: 'Harris' }, searchNoCounty),
+    { match: true }
+  );
+
+  // Search with empty county array does not filter on county
+  const searchEmptyCounty = {
+    filters: {
+      states: ['TX'],
+      counties: []
+    }
+  };
+  assert.deepEqual(
+    matchListingAgainstSearch({ state: 'TX', county: 'Harris' }, searchEmptyCounty),
+    { match: true }
+  );
+});
+
+test('POST /api/alerts (subscribe_county_digest): subscribes to county alert digest successfully', async () => {
+  const req = makeReq('POST', '/api/alerts', {
+    action: 'subscribe_county_digest',
+    email: 'investor@example.com',
+    state: 'TX',
+    county: 'Travis',
+    cadence: 'daily'
+  });
+  const res = makeRes();
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.ok(typeof res.body.subscriptionId === 'string' && res.body.subscriptionId.length > 0);
+  assert.equal(res.body.message, 'Subscribed to Travis, TX alerts');
+
+  // Verify saved search was created in db
+  const savedSearch = await db.getSavedSearchById(req.headers ? 'device:test_device_12345' : 'operator', res.body.subscriptionId)
+    || (db.inMemoryData && db.inMemoryData.savedSearches.get(res.body.subscriptionId));
+  assert.ok(savedSearch);
+  assert.deepEqual(savedSearch.filters.states, ['TX']);
+  assert.deepEqual(savedSearch.filters.counties, ['travis']);
+  assert.equal(savedSearch.filters.email, 'investor@example.com');
+  assert.equal(savedSearch.filters.cadence, 'daily');
+});
+
+test('POST /api/alerts (subscribe_county_digest): defaults cadence to daily when omitted', async () => {
+  const req = makeReq('POST', '/api/alerts', {
+    action: 'subscribe_county_digest',
+    email: 'buyer@example.com',
+    state: 'FL',
+    county: 'Miami-Dade'
+  });
+  const res = makeRes();
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.message, 'Subscribed to Miami-Dade, FL alerts');
+
+  const savedSearch = await db.getSavedSearchById(req.headers ? 'device:test_device_12345' : 'operator', res.body.subscriptionId)
+    || (db.inMemoryData && db.inMemoryData.savedSearches.get(res.body.subscriptionId));
+  assert.ok(savedSearch);
+  assert.equal(savedSearch.filters.cadence, 'daily');
+});
+
+test('POST /api/alerts (subscribe_county_digest): supports instant cadence', async () => {
+  const req = makeReq('POST', '/api/alerts', {
+    action: 'subscribe_county_digest',
+    email: 'rapid@example.com',
+    state: 'OH',
+    county: 'Cuyahoga',
+    cadence: 'instant'
+  });
+  const res = makeRes();
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+
+  const savedSearch = await db.getSavedSearchById(req.headers ? 'device:test_device_12345' : 'operator', res.body.subscriptionId)
+    || (db.inMemoryData && db.inMemoryData.savedSearches.get(res.body.subscriptionId));
+  assert.ok(savedSearch);
+  assert.equal(savedSearch.filters.cadence, 'instant');
+});
+
+test('POST /api/alerts (subscribe_county_digest): validates and rejects invalid email format', async () => {
+  const invalidEmails = [
+    '',
+    'not-an-email',
+    'missing-at-domain.com',
+    '@nodomain.com',
+    'spaces in@email.com',
+    'header\rinjection@example.com',
+    'header\ninjection@example.com',
+    null,
+    123
+  ];
+
+  for (const email of invalidEmails) {
+    const req = makeReq('POST', '/api/alerts', {
+      action: 'subscribe_county_digest',
+      email,
+      state: 'TX',
+      county: 'Travis'
+    });
+    const res = makeRes();
+
+    await handleAlerts(req, res);
+
+    assert.equal(res.statusCode, 400, `Expected 400 for email: ${JSON.stringify(email)}`);
+    assert.equal(res.body.error, 'Valid email is required');
+  }
+});
+
+test('POST /api/alerts (subscribe_county_digest): validates state code', async () => {
+  const invalidStates = ['', 'T', 'TEXAS', '12', 'TX1', null, 42];
+
+  for (const state of invalidStates) {
+    const req = makeReq('POST', '/api/alerts', {
+      action: 'subscribe_county_digest',
+      email: 'valid@example.com',
+      state,
+      county: 'Travis'
+    });
+    const res = makeRes();
+
+    await handleAlerts(req, res);
+
+    assert.equal(res.statusCode, 400, `Expected 400 for state: ${JSON.stringify(state)}`);
+    assert.equal(res.body.error, 'Valid 2-letter state code is required');
+  }
+});
+
+test('POST /api/alerts (subscribe_county_digest): validates county name', async () => {
+  const invalidCounties = ['', '   ', 'A'.repeat(65), null, 999];
+
+  for (const county of invalidCounties) {
+    const req = makeReq('POST', '/api/alerts', {
+      action: 'subscribe_county_digest',
+      email: 'valid@example.com',
+      state: 'TX',
+      county
+    });
+    const res = makeRes();
+
+    await handleAlerts(req, res);
+
+    assert.equal(res.statusCode, 400, `Expected 400 for county: ${JSON.stringify(county)}`);
+    assert.equal(res.body.error, 'Valid county is required');
+  }
+});
+
+test('POST /api/alerts (subscribe_county_digest): rejects invalid cadence', async () => {
+  const req = makeReq('POST', '/api/alerts', {
+    action: 'subscribe_county_digest',
+    email: 'valid@example.com',
+    state: 'TX',
+    county: 'Travis',
+    cadence: 'monthly'
+  });
+  const res = makeRes();
+
+  await handleAlerts(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'Invalid cadence; must be instant, daily, or weekly');
+});

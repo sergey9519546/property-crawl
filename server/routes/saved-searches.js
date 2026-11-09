@@ -51,6 +51,9 @@ function validateFilters(filters) {
   if ('states' in filters && !isStringArray(filters.states, 8)) {
     return { ok: false, reason: 'states_must_be_array_of_state_codes' };
   }
+  if ('counties' in filters && !isStringArray(filters.counties, 64)) {
+    return { ok: false, reason: 'counties_must_be_array_of_strings' };
+  }
   if ('sources' in filters && !isStringArray(filters.sources, 32)) {
     return { ok: false, reason: 'sources_must_be_array_of_strings' };
   }
