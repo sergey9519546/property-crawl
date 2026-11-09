@@ -3,7 +3,7 @@ import { SavedHunts } from '@/components/hunts/saved-hunts';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 
 export const metadata: Metadata = {
-  title: 'Saved Hunts | PerfectProperty',
+  title: 'Auction Alerts & Saved Hunts | PerfectProperty',
   description: 'Save a property search, explain each match, and compare source evidence over time.',
 };
 

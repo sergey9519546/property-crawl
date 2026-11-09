@@ -1,6 +1,19 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { countyToSlug, getStatutoryRedemption } from "@/lib/county-seo";
 import { CountyRow, loadStateCounties as loadStateCountiesImpl } from "@/lib/state-coverage";
+
+export async function generateMetadata({ params }: { params: Promise<{ state: string }> }): Promise<Metadata> {
+  const { state: raw } = await params;
+  const state = /^[A-Za-z]{2}$/.test(raw || "") ? raw.toUpperCase() : "US";
+  const title = `${state} Foreclosure & Sheriff Sales | PerfectProperty`;
+  const description = `Browse ${state} sheriff sales, foreclosure auctions, and tax deed listings by county. Check statutory redemption rules and opening bids before you bid.`;
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+  };
+}
 
 export const dynamic = "force-dynamic";
 

@@ -304,6 +304,42 @@ function createDefaultGraph() {
     depends_on: []
   });
 
+  g.register({
+    name: 'synthesize_customer_empathy',
+    description: 'Extract visceral customer pains, nightmares, inner monologue, and Blitz Copy triggers',
+    inputs: ['product_context', 'target_persona'],
+    outputs: ['customer_empathy_profile', 'blitz_copy_angles'],
+    produces: 'customer_empathy',
+    depends_on: []
+  });
+
+  g.register({
+    name: 'map_customer_journey',
+    description: 'Map 5-stage awareness journey across Google, AI LLMs, and social platforms with behavioral prompts',
+    inputs: ['product_context', 'customer_empathy_profile'],
+    outputs: ['journey_stages_map', 'ai_search_prompts'],
+    produces: 'customer_journey',
+    depends_on: ['synthesize_customer_empathy']
+  });
+
+  g.register({
+    name: 'optimize_seo_titles_and_serp',
+    description: 'Engineer high-CTR SERP-matched titles, meta descriptions, and H1 alignment within 40-55 character budgets',
+    inputs: ['target_pages', 'journey_stages_map'],
+    outputs: ['optimized_title_tags', 'serp_briefs'],
+    produces: 'seo_title_plan',
+    depends_on: ['map_customer_journey']
+  });
+
+  g.register({
+    name: 'generate_growth_campaign',
+    description: 'Synthesize audience empathy, journey stages, and SERP title strategy into an executable acquisition plan',
+    inputs: ['customer_empathy_profile', 'journey_stages_map', 'seo_title_plan'],
+    outputs: ['growth_campaign_dossier'],
+    produces: 'growth_campaign_dossier',
+    depends_on: ['synthesize_customer_empathy', 'map_customer_journey', 'optimize_seo_titles_and_serp']
+  });
+
   return g;
 }
 

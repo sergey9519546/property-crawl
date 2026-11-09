@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { countyToSlug } from "@/lib/county-seo";
 import type { MetadataRoute } from 'next';
 
@@ -55,7 +56,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           changeFrequency: 'daily',
           priority: 0.8,
         }));
-
     }
   } catch {
     // Inventory unreachable at build time; static pages still describe the site.
@@ -80,8 +80,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             priority: 0.5,
           }];
         });
-        // Every county with a live record, from the same coverage rollup the
-        // state pages render, so no county is dropped past a listing cap.
         const byCounty = payload?.liveByState?.byCounty;
         if (byCounty && typeof byCounty === 'object') {
           countyPages = Object.entries(byCounty as Record<string, unknown>).flatMap(([state, rows]) =>
@@ -97,7 +95,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
     }
   } catch {
-    // Coverage unreachable: omit state URLs. Do not invent them.
+    // Remote coverage unreachable; fall back to local matrix
+  }
+
+  if (statePages.length === 0) {
+    try {
+      const req = createRequire(process.cwd() + "/package.json");
+      const matrix = req("./server/discovery/coverage-matrix").summarize();
+      const totals = matrix.liveByState?.byStateTotal || {};
+      statePages = Object.entries(totals as Record<string, unknown>).flatMap(([state, count]) => {
+        if (!/^[A-Z]{2}$/.test(state) || typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return [];
+        return [{
+          url: `${baseUrl}/states/${state}`,
+          lastModified: now,
+          changeFrequency: 'daily' as const,
+          priority: 0.5,
+        }];
+      });
+      const byCounty = matrix.liveByState?.byCounty || {};
+      countyPages = Object.entries(byCounty as Record<string, unknown>).flatMap(([state, rows]) =>
+        /^[A-Z]{2}$/.test(state) && Array.isArray(rows)
+          ? rows.flatMap((row: { county?: unknown; count?: unknown }) => {
+              const slug = typeof row?.county === 'string' ? countyToSlug(row.county) : '';
+              return slug && typeof row.count === 'number' && row.count > 0
+                ? [{ url: `${baseUrl}/states/${state}/${slug}`, lastModified: now, changeFrequency: 'daily' as const, priority: 0.7 }]
+                : [];
+            })
+          : []);
+    } catch {
+      // Local matrix unavailable
+    }
   }
 
   return [...staticPages, ...statePages, ...countyPages, ...listingPages];

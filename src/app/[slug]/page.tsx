@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
   ArrowRight,
@@ -71,6 +72,19 @@ const INFO_PAGES: Record<string, InfoPage> = {
 
 export function generateStaticParams() {
   return Object.keys(INFO_PAGES).map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const page = INFO_PAGES[slug];
+  if (!page) return {};
+  const title = `${page.title} | PerfectProperty`;
+  const description = page.intro;
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+  };
 }
 
 export default async function InformationPage({ params }: { params: Promise<{ slug: string }> }) {

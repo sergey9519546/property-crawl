@@ -134,7 +134,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const location = [publishedText(listing.county, ""), listing.state].filter(Boolean).join(", ");
-  const title = `${listing.address}${location ? ` | ${location}` : ""} | PerfectProperty`;
+  const title = `${listing.address}${location ? ` (${location})` : ""} Sheriff Sale | PerfectProperty`;
   const isDemo = !isObservedSourceRecord(listing);
   const publisherPhoto = verifiedPublisherPhoto(listing);
   const description = [

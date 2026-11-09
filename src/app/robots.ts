@@ -7,7 +7,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/api/alerts', '/api/user'],
+        disallow: ['/api/alerts', '/api/user', '/workspace/settings'],
+      },
+      {
+        userAgent: ['GPTBot', 'ChatGPT-User', 'PerplexityBot', 'ClaudeBot', 'Google-Extended', 'cohere-ai'],
+        allow: ['/', '/states', '/states/*', '/listings', '/listings/*', '/resources', '/about'],
+        disallow: ['/api/*'],
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,

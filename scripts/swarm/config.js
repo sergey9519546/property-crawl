@@ -67,6 +67,18 @@ const strategies = {
     defaultMaxAgents: 6,
     phases: ['plan', 'execute', 'gate', 'report'],
   },
+  growth: {
+    description: 'Map customer empathy, 5-stage awareness journey, and Blitz Copy angles.',
+    defaultAgents: ['coordinator', 'marketing_strategist', 'documenter'],
+    defaultMaxAgents: 4,
+    phases: ['empathy', 'journey', 'copy_angles', 'report'],
+  },
+  seo: {
+    description: 'Audit SERP intent, rewrite titles and metadata, and verify CTR optimization.',
+    defaultAgents: ['coordinator', 'seo_specialist', 'reviewer', 'tester'],
+    defaultMaxAgents: 4,
+    phases: ['serp_audit', 'title_optimize', 'meta_align', 'verify'],
+  },
 };
 
 // Capability names align with scripts/capability-graph.js createDefaultGraph().
@@ -137,6 +149,27 @@ const agentTypes = {
       'generate_property_dossier',
     ],
     permissions: { read: 'allow', bash: 'allow', edit: 'server/scrapers/**,scripts/**' },
+    maxConcurrency: 2,
+  },
+  marketing_strategist: {
+    description: 'Audience empathy mapping, 5-stage buyer awareness journeys, and high-converting Blitz Copy.',
+    capabilities: [
+      'synthesize_customer_empathy',
+      'map_customer_journey',
+      'generate_growth_campaign',
+    ],
+    permissions: { read: 'allow', bash: 'allow', edit: 'docs/marketing/**,memory/marketing/**,content/**' },
+    maxConcurrency: 2,
+  },
+  seo_specialist: {
+    description: 'SERP title engineering, CTR optimization, E-E-A-T metadata, and AI search presence (GEO/AEO).',
+    capabilities: [
+      'map_customer_journey',
+      'optimize_seo_titles_and_serp',
+      'generate_growth_campaign',
+      'verify_completion_gate',
+    ],
+    permissions: { read: 'allow', bash: 'allow', edit: 'src/app/**,docs/seo/**,memory/seo/**' },
     maxConcurrency: 2,
   },
 };

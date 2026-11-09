@@ -1,5 +1,15 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { loadStateCounts as loadStateCountsImpl } from "@/lib/state-coverage";
+
+export const metadata: Metadata = {
+  title: "Foreclosure Auctions by State | PerfectProperty",
+  description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state. View active inventory, auction dates, and county court records.",
+  openGraph: {
+    title: "Foreclosure Auctions by State | PerfectProperty",
+    description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state.",
+  },
+};
 
 export const dynamic = "force-dynamic";
 

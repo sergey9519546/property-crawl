@@ -1,0 +1,89 @@
+{
+  "version": "2.0.0",
+  "updated_at": "2026-11-09T03:42:00-08:00",
+  "chief_of_staff": {
+    "role": "Chief of Staff & Lead Systems Architect",
+    "agent": "Antigravity",
+    "directive": "Rulings, Not Stalls. End-to-end autonomous governance without developer overhead.",
+    "subagents_supported": ["marketing-strategist", "seo-specialist", "developer", "tester", "researcher"]
+  },
+  "divisions": {
+    "growth_and_discovery": {
+      "lead": "marketing-strategist",
+      "members": [
+        {
+          "id": "marketing-strategist",
+          "name": "Marketing & Audience Acquisition Strategist",
+          "playbook": ".kilo/agent/marketing-strategist.md",
+          "subagent_alias": "marketing-strategist",
+          "swarm_type": "marketing_strategist",
+          "skills": [
+            "understand-customers",
+            "customer-journey",
+            "positioning-icp",
+            "content-engine"
+          ],
+          "capabilities": [
+            "synthesize_customer_empathy",
+            "map_customer_journey",
+            "generate_growth_campaign"
+          ]
+        },
+        {
+          "id": "seo-specialist",
+          "name": "Director of Organic & Agentic Search",
+          "playbook": ".kilo/agent/seo-specialist.md",
+          "subagent_alias": "seo-specialist",
+          "swarm_type": "seo_specialist",
+          "skills": [
+            "seo-title-optimization",
+            "ai-seo",
+            "geo-content-optimizer",
+            "meta-tags-optimizer",
+            "serp-analysis"
+          ],
+          "capabilities": [
+            "map_customer_journey",
+            "optimize_seo_titles_and_serp",
+            "generate_growth_campaign",
+            "verify_completion_gate"
+          ]
+        }
+      ]
+    },
+    "engineering_and_data": {
+      "lead": "developer",
+      "members": [
+        {
+          "id": "developer",
+          "name": "Full-Stack & Scraper Engineer",
+          "playbook": ".kilo/agent/developer.md",
+          "swarm_type": "developer"
+        },
+        {
+          "id": "specialist",
+          "name": "Government/Auction Domain Specialist",
+          "playbook": ".kilo/agent/specialist.md",
+          "swarm_type": "specialist"
+        }
+      ]
+    },
+    "quality_and_governance": {
+      "lead": "reviewer",
+      "members": [
+        {
+          "id": "reviewer",
+          "name": "Standards & Spec Reviewer",
+          "playbook": ".kilo/agent/reviewer.md",
+          "swarm_type": "reviewer"
+        },
+        {
+          "id": "tester",
+          "name": "Proportional Evidence Gate Tester",
+          "playbook": ".kilo/agent/qa-engineer.md",
+          "swarm_type": "tester"
+        }
+      ]
+    }
+  }
+}

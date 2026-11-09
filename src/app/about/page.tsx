@@ -6,7 +6,7 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata: Metadata = {
-  title: "About PerfectProperty — Find Foreclosure and Government-Sold Homes",
+  title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
   description:
     "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
 };

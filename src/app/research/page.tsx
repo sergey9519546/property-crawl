@@ -3,7 +3,7 @@ import { ResearchInbox } from "@/components/research/research-inbox";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 
 export const metadata: Metadata = {
-  title: "Research Inbox | PerfectProperty",
+  title: "Property Title Risk & Lien Triage | PerfectProperty",
   description: "Review material property changes, evidence gaps, and Second Look reconsideration events.",
 };
 

@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { SectionHeading } from "@/components/site/section-heading";
 
 export const metadata: Metadata = {
-  title: "Buyer's Guide to Foreclosure and Auction Homes | PerfectProperty",
+  title: "Foreclosure Auction Buyer's Guide | PerfectProperty",
   description:
     "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
 };

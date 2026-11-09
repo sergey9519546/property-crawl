@@ -29,7 +29,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PerfectProperty — Find the opportunity that changed",
+  title: "Distressed Property & Sheriff Sales | PerfectProperty",
   description:
     "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out for each sale.",
   keywords: [
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
     apple: "/logo-icon.png",
   },
   openGraph: {
-    title: "PerfectProperty — Find the opportunity that changed",
+    title: "Distressed Property & Sheriff Sales | PerfectProperty",
     description:
       "Search auctions and government-sold homes, see the catch before you bid, and get an email when a new one fits.",
     siteName: "PerfectProperty",
@@ -66,7 +66,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PerfectProperty — Find the opportunity that changed",
+    title: "Distressed Property & Sheriff Sales | PerfectProperty",
     description:
       "Search auctions and government-sold homes, see the catch before you bid, and get an email when a new one fits.",
   },

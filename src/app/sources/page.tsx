@@ -3,7 +3,7 @@ import { SourceNetwork } from '@/components/sources/source-network';
 import { WorkspaceShell } from '@/components/workspace/workspace-shell';
 
 export const metadata: Metadata = {
-  title: 'Source Radar | PerfectProperty',
+  title: 'County Sheriff & Auction Data Sources | PerfectProperty',
   description: 'Follow property sources, investigate changes, and capture evidence from government, county, lender, and auction records.',
 };
 

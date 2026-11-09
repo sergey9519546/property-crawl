@@ -4,7 +4,8 @@
  *
  * Loads typed agent definitions from scripts/swarm/config.js and attaches
  * role-playbook markdown from .kilo/agent/*.md onto the matching agent types
- * (scraper-engineer → specialist, reviewer → reviewer, qa-engineer → tester).
+ * (scraper-engineer → specialist, reviewer → reviewer, qa-engineer → tester,
+ *  marketing-strategist → marketing_strategist, seo-specialist → seo_specialist).
  */
 
 const fs = require('fs');
@@ -25,6 +26,8 @@ const PLAYBOOK_MAP = {
   'scraper-engineer.md': 'specialist',
   'reviewer.md': 'reviewer',
   'qa-engineer.md': 'tester',
+  'marketing-strategist.md': 'marketing_strategist',
+  'seo-specialist.md': 'seo_specialist',
 };
 
 function loadPlaybooks() {

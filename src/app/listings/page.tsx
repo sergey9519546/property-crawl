@@ -7,10 +7,10 @@ import { DataModeBanner } from "@/components/site/data-mode-banner";
 import { discoverySearchParams, readDiscoveryFilters } from "@/lib/discovery-query";
 
 export const metadata: Metadata = {
-  title: "Search Foreclosure and Auction Properties | PerfectProperty",
+  title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
   description: "Search foreclosure, sheriff-sale, tax-sale and government-sold properties by state, county or ZIP. See the sale date, opening bid and what to check before you bid.",
   openGraph: {
-    title: "Search Foreclosure and Auction Properties | PerfectProperty",
+    title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
     description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
   }
 };
