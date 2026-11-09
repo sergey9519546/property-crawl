@@ -231,7 +231,7 @@ function main() {
     process.env.PROPERTY_INVENTORY_BACKEND = process.env.PROPERTY_INVENTORY_BACKEND || 'memory';
     process.env.NODE_ENV = process.env.NODE_ENV || 'test';
     console.log(`[test-coverage] running ${runnable.length} file(s) so CI actually covers them...`);
-    execFileSync(process.execPath, ['--test', ...runnable], {
+    execFileSync(process.execPath, ['--test', '--test-concurrency=1', ...runnable], {
       cwd: ROOT, stdio: 'inherit', timeout: 15 * 60 * 1000,
     });
   }

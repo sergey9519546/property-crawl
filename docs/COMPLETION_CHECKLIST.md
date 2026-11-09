@@ -35,9 +35,9 @@ The later recorder/hosting readbacks and fixes are in
 | Fact | Value | Source |
 |---|---|---|
 | Stabilization code | `519d46a` includes the shared-checkout stabilization and recorder/durability fixes; preserved concurrent commit | audit 09 |
-| Live URL | `https://property-crawl.onrender.com`; `519d46a` is live and public health reports that exact SHA with PostgreSQL reachable. Listing/readiness return 200, anonymous review 401, home has nonce CSP | audit 09, 2026-11-01 02:20 UTC readback |
+| Live URL | `https://property-crawl.onrender.com`; `ac61b61` is live and public health reports that exact SHA with PostgreSQL reachable. Listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, 2026-11-09 11:30 UTC verified |
 | Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health`, audit 09 |
-| Hosted database readback | **11,382 listings** in a read-only transaction; PostgreSQL 16.15, free plan expires **2026-11-19** | audit 09; not a full database backup or recovery receipt |
+| Hosted database readback | **14,688 listings** and **70,544 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved) | live /api/health readback 2026-11-09 |
 | Local stabilization release checks | **9/9**, clean/source-bound to `519d46a`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, audit 09 |
 | Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | audit 09; external-server row-lock/lease acceptance remains open |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |

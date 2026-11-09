@@ -45,7 +45,7 @@ Progress: [██████████] 100%
 - [Phase 1]: Replaced `Roboto`/`Inter` in `src/lib/form-submissions.js` email template with system-ui stack so `impeccable detect` passes with 0 anti-patterns
 - [Phase 1]: Installed GSD v1.42.3 and Agency-Agents globally across Antigravity (`~/.gemini/config/skills/` and `~/.gemini/antigravity/`) and initialized `.planning/` state in `property-crawl`
 - [Phase 2]: Verified snapshot compactor dry-run with 40% observation deduplication and confirmed off-host 35.74 MB database dump and $0 Supabase/Neon continuity readiness
-- [Phase 3]: Clean commit `670b3f1`, passed full 9/9 source-bound release gate (`reports/release-gate-ledger.json`), and pushed to `main` with passing pre-push hook
+- [Phase 3]: Deployed and verified commit `ac61b611077c8a02145c0f5dcf76fb8a9151d7f9` live on Render (deploy `dep-dboqsh8473hc73auc8g0`). Passed full 9/9 source-bound release gate, fixed Docker runtime missing directories (config/ and src/), bounded health check DB queries to 2.5s, and shortened boot readiness probe.
 
 ### Pending Todos
 

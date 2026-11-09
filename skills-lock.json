@@ -1,11 +1,23 @@
 {
   "version": 1,
   "skills": {
+    "customer-journey": {
+      "source": "Illyism/seo-skills",
+      "sourceType": "github",
+      "skillPath": "marketing/customer-journey/SKILL.md",
+      "computedHash": "6c7e19f9d5a22f32c32bb93a7586442df6300ec6df046aaf8109cf1d405047d9"
+    },
     "scrapling-official": {
       "source": "D4Vinci/Scrapling",
       "sourceType": "github",
       "skillPath": "agent-skill/Scrapling-Skill/SKILL.md",
       "computedHash": "b8803b94c1cdcda827372df1b4b9d60f6bbcff6f31971c48d7b4a6c7e63292e3"
+    },
+    "understand-customers": {
+      "source": "Illyism/seo-skills",
+      "sourceType": "github",
+      "skillPath": "copywriting/understand-customers/SKILL.md",
+      "computedHash": "08279c55f2cbe24125d95401d8652cde12d7ff359633c814d26a2db62f397857"
     }
   }
 }
