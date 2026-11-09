@@ -249,32 +249,26 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/health') {
       const { defaultStorePath } = require('./intelligence/document-review-store');
       const unavailableReason = db.inventoryUnavailableReason();
-      // Freshness is an extra fact, not a precondition. If the query fails the
-      // health check must still answer - otherwise a slow COUNT turns a
-      // readable health endpoint into a 503, which is the outage it exists to
-      // report.
+      // Freshness and observation store facts are secondary diagnostics, not preconditions.
+      // Parallelize and bound them to 2500ms so /api/health never exceeds Render's 5s healthcheck deadline.
       let freshness = null;
-      if (typeof db.inventoryFreshness === 'function') {
-        try {
-          // Judge each source against the cadence it declares rather than one
-          // flat window. routes/listings.js already does this per record; the
-          // aggregate has to agree with it or health understates a source that
-          // stopped being collected.
-          freshness = await db.inventoryFreshness(Date.now(), { cadences: sourceCadences() });
-        } catch (error) {
-          freshness = { error: String(error && error.message ? error.message : error).slice(0, 160) };
-        }
-      }
-      // Observation history lives in Postgres (migrations 025 + 027). The
-      // report is the store's own facts — row count, observed span, table
-      // size — because there is no file ceiling left to count down from.
       let observationStore = null;
-      try {
-        const { observationStoreStats } = require('./db/observations-persistence');
-        observationStore = await observationStoreStats(db.pool);
-      } catch (error) {
-        observationStore = { store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) };
-      }
+      const freshnessPromise = (typeof db.inventoryFreshness === 'function')
+        ? Promise.race([
+            db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 2500))
+          ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
+        : Promise.resolve(null);
+
+      const observationPromise = Promise.race([
+        (() => {
+          const { observationStoreStats } = require('./db/observations-persistence');
+          return observationStoreStats(db.pool);
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 2500))
+      ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
+
+      [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
       return res.json({
         status: 'ok',
         uptime: process.uptime(),
