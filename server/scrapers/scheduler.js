@@ -510,6 +510,21 @@ const scheduler = new IngestionScheduler({
     }
     // PostgreSQL already committed listing projections and immutable evidence.
     // The bounded demo cache cannot represent a national or resumed sweep.
+    if (!run.error && run.listings.length) {
+      const reportForAbsence = run.report && typeof run.report === 'object' ? run.report : null;
+      const runCompletedForDb = Boolean(reportForAbsence && reportForAbsence.complete === true && reportForAbsence.truncated !== true);
+      if (runCompletedForDb && typeof db.reconcilePublisherAbsence === 'function') {
+        try {
+          await db.reconcilePublisherAbsence(
+            sourceId,
+            run.listings.map((listing) => listing && listing.id).filter(Boolean),
+            { runCompleted: true }
+          );
+        } catch (absenceError) {
+          console.warn('[Scheduler] Publisher absence reconciliation failed (non-fatal):', absenceError.message);
+        }
+      }
+    }
     if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {
       // A complete, non-truncated run may annotate same-source records that
       // were absent from that index. The store keeps the record and does not

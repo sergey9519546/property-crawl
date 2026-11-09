@@ -27,6 +27,7 @@ const { compactObservations, computeContentHash } = require('../server/discovery
 function parseArgs(argv) {
   const args = {
     apply: false,
+    pg: false,
     source: null,
     targetDir: path.resolve(process.cwd(), '.cache/discovery-evidence'),
   };
@@ -37,6 +38,8 @@ function parseArgs(argv) {
       args.apply = true;
     } else if (arg === '--dry-run') {
       args.apply = false;
+    } else if (arg === '--pg') {
+      args.pg = true;
     } else if (arg === '--source' && argv[i + 1]) {
       args.source = argv[++i];
     } else if (arg === '--target-dir' && argv[i + 1]) {
@@ -141,10 +144,33 @@ function runCompaction(options = {}) {
   };
 }
 
+async function runPgCompaction(options = {}) {
+  const { apply = false, source = null, pool = null } = options;
+  const { compactPgObservations } = require('../server/db/observations-persistence');
+  const activePool = pool || require('../server/db/client').pool;
+  if (!activePool) {
+    console.log('[Snapshot Compactor] PostgreSQL pool is not configured; skipping source_observations compaction.');
+    return { scannedRecords: 0, originalRows: 0, retainedRows: 0, prunedRows: 0, deletedIds: [] };
+  }
+  const result = await compactPgObservations(activePool, { apply, source });
+  console.log('\n--- PostgreSQL source_observations Compaction Summary ---');
+  console.log(`Records scanned:         ${result.scannedRecords}`);
+  console.log(`Original rows:           ${result.originalRows}`);
+  console.log(`Retained rows:           ${result.retainedRows}`);
+  console.log(`Redundant rows ${apply ? 'deleted' : 'found'}:  ${result.prunedRows}`);
+  return result;
+}
+
 if (require.main === module) {
   const args = parseArgs(process.argv);
   runCompaction(args);
+  if (args.pg) {
+    runPgCompaction(args).catch((err) => {
+      console.error('[Snapshot Compactor] PostgreSQL compaction error:', err.message);
+      process.exitCode = 1;
+    });
+  }
 }
 
-module.exports = { runCompaction, parseArgs };
+module.exports = { runCompaction, runPgCompaction, parseArgs };
 

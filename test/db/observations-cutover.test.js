@@ -11,7 +11,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const {
+  compactPgObservations,
   importObservationRun,
+  loadObservationsForRecord,
   loadObservationsFromPg,
   observationStoreStats,
   recordSourceRun,
@@ -278,4 +280,59 @@ test('importObservationRun ignores malformed input', async () => {
   assert.equal((await importObservationRun(null, 'civilview', { runs: 1 })).imported, false);
   assert.equal((await importObservationRun(pool, 'civilview', null)).imported, false);
   assert.equal(pool.queries.length, 0);
+});
+
+test('compactPgObservations prunes only intermediate identical heartbeats and preserves transitions and endpoints', async () => {
+  const rows = [
+    // t1: first observation ($100k, Active) -> MUST KEEP
+    { id: 'obs-1', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-01T00:00:00.000Z'), opening_bid: '100000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'a'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+    // t2: identical intermediate heartbeat -> PRUNE (neither transitions from t1 nor precedes a transition at t3)
+    { id: 'obs-2', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-02T00:00:00.000Z'), opening_bid: '100000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'a'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+    // t3: precedes bid drop at t4 -> MUST KEEP so transition evidence[0].observedAt stays exact
+    { id: 'obs-3', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-03T00:00:00.000Z'), opening_bid: '100000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'a'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+    // t4: bid dropped to $85k -> MUST KEEP (transition row)
+    { id: 'obs-4', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-04T00:00:00.000Z'), opening_bid: '85000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'b'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+    // t5: identical intermediate heartbeat at $85k -> PRUNE
+    { id: 'obs-5', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-05T00:00:00.000Z'), opening_bid: '85000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'b'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+    // t6: latest observation at $85k -> MUST KEEP
+    { id: 'obs-6', listing_id: 'CIV-1', source_key: 'civilview', record_id: 'R1', observed_at: new Date('2026-10-06T00:00:00.000Z'), opening_bid: '85000', sale_date: '2026-11-15', status: 'Active', deposit: '10%', address: '1 Main St', notice_sha256: 'b'.repeat(64), source_url: 'https://example.com/1', state: 'NJ', county: 'Bergen' },
+  ];
+
+  let currentRows = [...rows];
+  const pool = mockPool({
+    handlerFor: (text, params) => {
+      if (/DELETE FROM source_observations/.test(text)) {
+        const toDelete = new Set(params[0]);
+        const before = currentRows.length;
+        currentRows = currentRows.filter((r) => !toDelete.has(r.id));
+        return { rows: [], rowCount: before - currentRows.length };
+      }
+      if (/FROM source_observations/.test(text)) {
+        return { rows: currentRows, rowCount: currentRows.length };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+  });
+
+  const beforeSignals = await loadObservationsForRecord(pool, { source: 'civilview', provenance: { recordId: 'R1' } });
+  const dryRun = await compactPgObservations(pool, { apply: false });
+  assert.equal(dryRun.scannedRecords, 1);
+  assert.equal(dryRun.originalRows, 6);
+  assert.equal(dryRun.retainedRows, 4);
+  assert.equal(dryRun.prunedRows, 2);
+  assert.deepEqual(dryRun.deletedIds, ['obs-2', 'obs-5']);
+  assert.equal(currentRows.length, 6, 'dry-run must not delete rows');
+
+  const applied = await compactPgObservations(pool, { apply: true });
+  assert.equal(applied.prunedRows, 2);
+  assert.deepEqual(currentRows.map((r) => r.id), ['obs-1', 'obs-3', 'obs-4', 'obs-6']);
+
+  const afterSignals = await loadObservationsForRecord(pool, { source: 'civilview', provenance: { recordId: 'R1' } });
+  assert.deepEqual(afterSignals.signals, beforeSignals.signals, 'compaction must preserve all derived change signals');
+  const recordKey = Object.keys(afterSignals.records)[0];
+  assert.equal(afterSignals.records[recordKey].firstObservedAt, beforeSignals.records[recordKey].firstObservedAt);
+  assert.equal(
+    afterSignals.records[recordKey].history.at(-1).observedAt,
+    beforeSignals.records[recordKey].history.at(-1).observedAt,
+  );
 });

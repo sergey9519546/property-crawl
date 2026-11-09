@@ -192,3 +192,42 @@ test('the health payload omits catalog sources that hold no listings', async () 
   assert.equal(f.freshListings, 1);
   assert.equal(f.stale, true);
 });
+
+test('reconcilePublisherAbsence marks absent records on complete sweeps and satisfies freshness within cadence', async () => {
+  const iso = (ageHours) => new Date(NOW - ageHours * HOUR).toISOString();
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, liveCachePath: null, workspaceStorePath: null });
+  db.inMemoryData.listings = [
+    { id: 'HUD-1', source: 'hud', sourceObservedAt: iso(1), provenance: { origin: 'live', recordKind: 'source_record' } },
+    { id: 'HUD-2', source: 'hud', sourceObservedAt: iso(72), provenance: { origin: 'live', recordKind: 'source_record' } },
+  ];
+
+  // Before reconciliation, HUD-2 (72h old) makes hud (24h cadence) report stale
+  const before = await db.inventoryFreshness(NOW, { cadences: { hud: 24 } });
+  assert.equal(before.stale, true);
+  assert.equal(before.freshListings, 1);
+
+  // Truncated/incomplete run must never mark records absent
+  const skipped = await db.reconcilePublisherAbsence('hud', ['HUD-1'], { runCompleted: false, at: iso(0.5) });
+  assert.equal(skipped.retired, 0);
+  assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence, undefined);
+
+  // Complete sweep that observed HUD-1 marks HUD-2 as absent_from_complete_index
+  const reconciled = await db.reconcilePublisherAbsence('hud', ['HUD-1'], { runCompleted: true, at: iso(0.5) });
+  assert.equal(reconciled.retired, 1);
+  assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence.outcome, 'absent_from_complete_index');
+
+  // After complete sweep reconciliation, hud is no longer falsely flagged stale
+  const after = await db.inventoryFreshness(NOW, { cadences: { hud: 24 } });
+  assert.equal(after.stale, false);
+  assert.equal(after.freshListings, 2);
+
+  // If hud later stops running for 30h, both observed and absent records age past the 24h cadence
+  const later = await db.inventoryFreshness(NOW + 30 * HOUR, { cadences: { hud: 24 } });
+  assert.equal(later.stale, true);
+  assert.equal(later.freshListings, 0);
+
+  // Re-observing HUD-2 clears publisherAbsence
+  const restored = await db.reconcilePublisherAbsence('hud', ['HUD-1', 'HUD-2'], { runCompleted: true, at: new Date(NOW + 30 * HOUR).toISOString() });
+  assert.equal(restored.restored, 1);
+  assert.equal(db.inMemoryData.listings[1].provenance.publisherAbsence, undefined);
+});

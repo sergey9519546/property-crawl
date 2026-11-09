@@ -475,7 +475,103 @@ async function importObservationRun(pool, sourceId, runMeta) {
   return { imported: true };
 }
 
+/**
+ * Transition-preserving compaction for PostgreSQL `source_observations`.
+ *
+ * Scans observation history per (source_key, record_id) in chronological order
+ * and prunes only intermediate heartbeats where neither the step from the
+ * preceding row nor the step to the following row produced any change in
+ * `compareSnapshots` or `notice_sha256`. This guarantees:
+ *   1. `firstObservedAt` (row 0) and `latest_observed_at` (row N-1) are untouched.
+ *   2. Every transition event (`compareSnapshots(prev, curr)`) and its exact
+ *      before/after evidence timestamps (`previous.observedAt`, `current.observedAt`)
+ *      in `loadObservationsForRecord` and `loadObservationsFromPg` remain identical.
+ */
+async function compactPgObservations(pool, options = {}) {
+  if (!pool) {
+    return {
+      scannedRecords: 0,
+      originalRows: 0,
+      retainedRows: 0,
+      prunedRows: 0,
+      deletedIds: [],
+    };
+  }
+  const apply = options.apply === true;
+  const sourceFilter = typeof options.source === 'string' && options.source.trim()
+    ? options.source.trim()
+    : null;
+
+  const res = await pool.query(
+    `SELECT id, listing_id, source_key, record_id, observed_at,
+            opening_bid, sale_date, status, deposit, address, notice_sha256,
+            raw_payload->>'sourceUrl' AS source_url,
+            raw_payload->>'state' AS state,
+            raw_payload->>'county' AS county
+       FROM source_observations
+      WHERE ($1::text IS NULL OR source_key = $1)
+      ORDER BY source_key ASC, record_id ASC, observed_at ASC, id ASC`,
+    [sourceFilter]
+  );
+
+  const groups = new Map();
+  for (const row of res.rows) {
+    const key = `${row.source_key}\n${row.record_id}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+
+  const deletedIds = [];
+  let retainedRows = 0;
+
+  for (const group of groups.values()) {
+    if (group.length <= 2) {
+      retainedRows += group.length;
+      continue;
+    }
+    const snapshots = group.map(rowToSnapshot);
+    retainedRows += 2; // Always keep index 0 and index group.length - 1
+    for (let i = 1; i < group.length - 1; i++) {
+      const prevChanges = compareSnapshots(snapshots[i - 1], snapshots[i]);
+      const nextChanges = compareSnapshots(snapshots[i], snapshots[i + 1]);
+      const prevHashSame = String(group[i].notice_sha256 || '') === String(group[i - 1].notice_sha256 || '');
+      const nextHashSame = String(group[i].notice_sha256 || '') === String(group[i + 1].notice_sha256 || '');
+
+      if (prevChanges.length === 0 && nextChanges.length === 0 && prevHashSame && nextHashSame) {
+        deletedIds.push(group[i].id);
+      } else {
+        retainedRows += 1;
+      }
+    }
+  }
+
+  let prunedRows = 0;
+  if (apply && deletedIds.length > 0) {
+    const DELETE_BATCH = 500;
+    for (let offset = 0; offset < deletedIds.length; offset += DELETE_BATCH) {
+      const batch = deletedIds.slice(offset, offset + DELETE_BATCH);
+      const delRes = await pool.query(
+        'DELETE FROM source_observations WHERE id = ANY($1::text[])',
+        [batch]
+      );
+      prunedRows += delRes.rowCount || 0;
+    }
+    cachedStats = null;
+  } else {
+    prunedRows = deletedIds.length;
+  }
+
+  return {
+    scannedRecords: groups.size,
+    originalRows: res.rows.length,
+    retainedRows,
+    prunedRows,
+    deletedIds,
+  };
+}
+
 module.exports = {
+  compactPgObservations,
   importObservationRun,
   loadObservationsForRecord,
   loadObservationsFromPg,

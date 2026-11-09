@@ -531,3 +531,31 @@ test('arbitrateTitleRisk: IRS 25-day notice failure trips CRITICAL defect and su
   assert.ok(risk.titleWarnings.some((w) => w.includes('Federal Tax Lien survives foreclosure under 26 U.S.C. § 7425(b)(1)')));
   assert.match(risk.titleActionAdvice, /Federal tax lien survives sale due to 26 U.S.C. § 7425 25-day notice failure/);
 });
+
+test('arbitrateTitleRisk: detects omitted junior lienholder (defective joinder) and municipal super-liens', () => {
+  const joinderListing = {
+    id: 'fl-joinder-001',
+    plaintiff: 'JPMorgan Chase Bank, N.A.',
+    state: 'FL',
+    raw: 'Notice of Foreclosure Sale. Note: omitted junior mortgagee was not joined in foreclosure complaint.',
+  };
+  const joinderRisk = arbitrateTitleRisk(joinderListing);
+  assert.equal(joinderRisk.instrumentPriority.omittedPartyJoinderDefect, true);
+  assert.equal(joinderRisk.riskLevel, 'HIGH');
+  assert.ok(joinderRisk.titleWarnings.some((w) => w.includes('DEFECTIVE JOINDER / OMITTED PARTY SIGNAL')));
+
+  const muniListing = {
+    id: 'oh-muni-001',
+    plaintiff: 'U.S. Bank National Association',
+    state: 'OH',
+    municipalViolations: [
+      { status: 'open', fineAmount: 4200, violationType: 'Condemnation and emergency demolition order' },
+    ],
+  };
+  const muniRisk = arbitrateTitleRisk(muniListing);
+  assert.equal(muniRisk.municipalLiens.hasMunicipalViolations, true);
+  assert.equal(muniRisk.municipalLiens.isCondemnedOrDemolitionRisk, true);
+  assert.equal(muniRisk.riskLevel, 'CRITICAL');
+  assert.equal(muniRisk.canProceedWithBid, false);
+  assert.ok(muniRisk.titleWarnings.some((w) => w.includes('CRITICAL MUNICIPAL ALERT')));
+});

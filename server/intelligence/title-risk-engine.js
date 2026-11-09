@@ -58,7 +58,8 @@ function classifyForeclosingParty(plaintiff = '', noticeText = '') {
   }
 
   // 5. Junior Mortgage / HELOC / Second Trust Deed
-  if (/(?:second\s*(?:mortgage|(?:trust\s*)?deed)|2nd\s*(?:mortgage|(?:trust\s*)?deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien))/i.test(combined)) {
+  const foreclosingContext = combined.replace(/(?:omitted|unjoined)\s+(?:junior|subordinate)\s+(?:mortgagee?|deed|lien(?:holder)?|defendant|party)/gi, '');
+  if (/(?:second\s*(?:mortgage|(?:trust\s*)?deed)|2nd\s*(?:mortgage|(?:trust\s*)?deed)|junior\s*(?:mortgage|deed|lien)|\bheloc\b|(?:home\s+)?equity\s*line|subordinate\s*(?:deed|mortgage|lien))/i.test(foreclosingContext)) {
     return 'SECOND_MORTGAGE_HELOC';
   }
 
@@ -93,12 +94,16 @@ function extractInstrumentPrioritySignals(noticeText = '') {
   const bookPageMatch = text.match(/(?:book|liber|volume)\s*([0-9A-Za-z]+)\s*,?\s*(?:page|folio)\s*([0-9A-Za-z]+)/i);
   const recordedDateMatch = text.match(/(?:recorded|filed)\s+(?:on\s+)?([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
   const seniorSubjectToMatch = /(?:subject\s+to\s+(?:a\s+|any\s+)?(?:(?:prior|senior|first)\s+)+(?:mortgage|deed\s+of\s+trust|lien)|senior\s+lien\s+remains)/i.test(text);
+  const omittedPartyJoinderDefect = /(?:omitted\s+(?:junior\s+)?(?:lienholder|mortgagee|defendant|party)|not\s+joined\s+(?:in\s+foreclosure|as\s+a\s+party|defendant)|unjoined\s+(?:junior\s+)?(?:lienholder|mortgagee|defendant)|defective\s+joinder|failure\s+to\s+join\s+(?:junior|necessary))/i.test(text);
+  const municipalSuperLienNotice = /(?:municipal\s+(?:water|sewer|utility|code|demolition|abatement)\s+(?:lien|assessment|charge)s?|water\s+(?:and|\/|&)\s*sewer\s+lien|(?:demolition|condemnation)\s+(?:lien|order|assessment)|code\s+enforcement\s+lien)/i.test(text);
 
   return {
     instrumentNumber: instrumentMatch ? instrumentMatch[1] : null,
     bookPage: bookPageMatch ? { book: bookPageMatch[1], page: bookPageMatch[2] } : null,
     recordedDate: recordedDateMatch ? recordedDateMatch[1] : null,
     explicitlySubjectToSeniorMortgage: seniorSubjectToMatch,
+    omittedPartyJoinderDefect,
+    municipalSuperLienNotice,
   };
 }
 
@@ -260,6 +265,30 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
     warnings.push('NORTH CAROLINA 10-DAY UPSET BID: Sale remains open for upset bids (5% or $750 minimum increase) under N.C.G.S. § 45-21.27.');
   }
 
+  // Vb. Defective Joinder / Omitted Junior Lienholder Signal
+  if (instrumentSignals.omittedPartyJoinderDefect) {
+    if (riskLevel !== 'CRITICAL') riskLevel = 'HIGH';
+    warnings.push('DEFECTIVE JOINDER / OMITTED PARTY SIGNAL: Notice or docket indicates an omitted or unjoined junior lienholder/defendant. Under judicial foreclosure law, an omitted junior lienholder is not extinguished by the decree and retains their lien or equity of redemption.');
+  }
+
+  // Vc. Municipal Utility & Code Enforcement Super-Lien Analysis
+  const rawViolations = Array.isArray(listing.municipalViolations)
+    ? listing.municipalViolations
+    : (Array.isArray(listing.codeViolations) ? listing.codeViolations : []);
+  const municipalLiens = analyzeMunicipalViolations(listing, rawViolations);
+  if (municipalLiens.hasMunicipalViolations) {
+    warnings.push(...(municipalLiens.municipalWarnings || []));
+    if (municipalLiens.isCondemnedOrDemolitionRisk) {
+      riskLevel = 'CRITICAL';
+      canProceedWithBid = false;
+    } else if (riskLevel === 'LOW' || riskLevel === 'MODERATE') {
+      riskLevel = 'HIGH';
+    }
+  } else if (instrumentSignals.municipalSuperLienNotice) {
+    if (riskLevel === 'LOW') riskLevel = 'MODERATE';
+    warnings.push('MUNICIPAL SUPER-LIEN SIGNAL: Notice references municipal utility (water/sewer), code enforcement, or abatement liens, which often run with the land as statutory super-liens surviving mortgage foreclosure.');
+  }
+
   // VI. Action Advice Synthesis
   let titleActionAdvice = 'No senior-lien flag from the published plaintiff. This is not a title opinion or a bid instruction.';
   if (riskLevel === 'CRITICAL') {
@@ -301,6 +330,7 @@ function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
       label: redemptionRule.label,
     },
     instrumentPriority: instrumentSignals,
+    municipalLiens,
     titleWarnings: warnings,
     titleActionAdvice,
     canProceedWithBid,

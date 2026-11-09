@@ -779,7 +779,7 @@ class DatabaseClient {
         const res = await this.pool.query(
           `SELECT c.source::text AS source,
                   count(l.id)::int AS n,
-                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff)::int AS fresh,
+                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff OR (l.provenance->'publisherAbsence'->>'at')::timestamptz >= c.cutoff)::int AS fresh,
                   max(l.source_observed_at)::text AS newest,
                   min(l.source_observed_at)::text AS oldest
              FROM unnest($1::text[], $2::timestamptz[]) AS c(source, cutoff)
@@ -815,13 +815,13 @@ class DatabaseClient {
           return {
             source,
             listings: rows.length,
-            freshListings: rows.filter((row) => isFiniteTime(row.sourceObservedAt)
-              && Date.parse(row.sourceObservedAt) >= cutoff).length,
+            freshListings: rows.filter((row) => (isFiniteTime(row.sourceObservedAt) && Date.parse(row.sourceObservedAt) >= cutoff) || (isFiniteTime(row.provenance?.publisherAbsence?.at) && Date.parse(row.provenance.publisherAbsence.at) >= cutoff)).length,
+
             cadenceHours: cadenceHoursFor(source),
             newestObservation: rows.map((row) => row.sourceObservedAt).filter(isFiniteTime)
               .sort()[rows.length - 1] || null,
-            stale: rows.some((row) => !isFiniteTime(row.sourceObservedAt)
-              || Date.parse(row.sourceObservedAt) < cutoff),
+            stale: rows.some((row) => (!isFiniteTime(row.sourceObservedAt) || Date.parse(row.sourceObservedAt) < cutoff) && (!isFiniteTime(row.provenance?.publisherAbsence?.at) || Date.parse(row.provenance.publisherAbsence.at) < cutoff)),
+
           };
         }).filter((row) => row.listings > 0);
         // Count every stored listing, not only those whose source declared a
@@ -841,7 +841,7 @@ class DatabaseClient {
       if (this.isPg) {
         const res = await this.pool.query(
           `SELECT count(*)::int AS n,
-                  count(*) FILTER (WHERE source_observed_at >= $1::timestamptz)::int AS fresh,
+                  count(*) FILTER (WHERE source_observed_at >= $1::timestamptz OR (provenance->'publisherAbsence'->>'at')::timestamptz >= $1::timestamptz)::int AS fresh,
                   min(source_observed_at)::text AS oldest,
                   max(source_observed_at)::text AS newest
              FROM listings`,
@@ -857,7 +857,7 @@ class DatabaseClient {
           .map(Date.parse);
         count = this.inMemoryData.listings.length;
         freshCount = this.inMemoryData.listings
-          .filter(l => isFiniteTime(l.sourceObservedAt) && Date.parse(l.sourceObservedAt) >= cutoffMs).length;
+          .filter(l => (isFiniteTime(l.sourceObservedAt) && Date.parse(l.sourceObservedAt) >= cutoffMs) || (isFiniteTime(l.provenance?.publisherAbsence?.at) && Date.parse(l.provenance.publisherAbsence.at) >= cutoffMs)).length;
         if (times.length) {
           oldest = new Date(Math.min(...times)).toISOString();
           newest = new Date(Math.max(...times)).toISOString();
@@ -2192,7 +2192,7 @@ class DatabaseClient {
         provenance = CASE
           WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
           WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
-          ELSE listings.provenance || EXCLUDED.provenance
+          ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
         END,
         source_observed_at = COALESCE(EXCLUDED.source_observed_at, listings.source_observed_at),
         fetched_at = EXCLUDED.fetched_at,
@@ -2250,6 +2250,86 @@ class DatabaseClient {
     }
     applyCrossSourceBakeOff(this.inMemoryData.listings);
     return enriched;
+  }
+
+  /**
+   * Reconcile publisher-index absence after a complete, non-truncated sweep.
+   * Mirrors mergeLiveRecords() in server/db/live-record-store.js for PostgreSQL
+   * and in-memory backends: records from sourceKey that were absent from the
+   * complete sweep are annotated with provenance.publisherAbsence without
+   * fabricating a 'sold' or 'closed' status, while observed ids clear any prior
+   * publisherAbsence marker. Partial, truncated, or empty runs never annotate.
+   */
+  async reconcilePublisherAbsence(sourceKey, seenIds, options = {}) {
+    if (options.runCompleted !== true || typeof sourceKey !== 'string' || !sourceKey.trim()) {
+      return { retired: 0, restored: 0 };
+    }
+    const ids = Array.isArray(seenIds)
+      ? [...new Set(seenIds.filter((id) => typeof id === 'string' && id.trim()))]
+      : [];
+    if (ids.length === 0) {
+      return { retired: 0, restored: 0 };
+    }
+    const at = typeof options.at === 'string' && isFiniteTime(options.at)
+      ? new Date(Date.parse(options.at)).toISOString()
+      : new Date().toISOString();
+
+    if (this.isPg && this.pool) {
+      const retireRes = await this.pool.query(
+        `UPDATE listings
+            SET provenance = jsonb_set(
+                  COALESCE(provenance, '{}'::jsonb),
+                  '{publisherAbsence}',
+                  jsonb_build_object('at', $3::text, 'sourceKey', $1::text, 'outcome', 'absent_from_complete_index'),
+                  true
+                ),
+                updated_at = NOW()
+          WHERE source_key = $1
+            AND NOT (id = ANY($2::text[]))`,
+        [sourceKey, ids, at]
+      );
+      const restoreRes = await this.pool.query(
+        `UPDATE listings
+            SET provenance = provenance - 'publisherAbsence',
+                updated_at = NOW()
+          WHERE source_key = $1
+            AND id = ANY($2::text[])
+            AND provenance ? 'publisherAbsence'`,
+        [sourceKey, ids]
+      );
+      return {
+        retired: retireRes.rowCount || 0,
+        restored: restoreRes.rowCount || 0,
+      };
+    }
+
+    if (this.memoryInventoryRequested()) {
+      const seenSet = new Set(ids);
+      let retired = 0;
+      let restored = 0;
+      for (let i = 0; i < this.inMemoryData.listings.length; i++) {
+        const record = this.inMemoryData.listings[i];
+        if (!record || record.source !== sourceKey) continue;
+        if (seenSet.has(record.id)) {
+          if (record.provenance?.publisherAbsence) {
+            const provenance = { ...record.provenance };
+            delete provenance.publisherAbsence;
+            this.inMemoryData.listings[i] = { ...record, provenance };
+            restored++;
+          }
+        } else {
+          const provenance = {
+            ...(record.provenance || {}),
+            publisherAbsence: { at, sourceKey, outcome: 'absent_from_complete_index' },
+          };
+          this.inMemoryData.listings[i] = { ...record, provenance };
+          retired++;
+        }
+      }
+      return { retired, restored };
+    }
+
+    return { retired: 0, restored: 0 };
   }
 
   async getSavedDeals(userId) {
