@@ -58,6 +58,8 @@ test('fly.toml production port matches Dockerfile.production', () => {
   assert.match(fly, /\[\[mounts\]\]/);
   assert.match(fly, /destination\s*=\s*'\/app\/\.cache'/);
   assert.match(docker, /EXPOSE 3000/);
+  assert.match(docker, /COPY[^\n]+\/app\/config\s+\.\/config/);
+  assert.match(docker, /COPY[^\n]+\/app\/src\s+\.\/src/);
   const koyeb = fs.readFileSync(path.join(__dirname, '..', 'koyeb.yml'), 'utf8');
   assert.match(koyeb, /SCRAPER_ADMIN_TOKEN/);
   assert.match(koyeb, /PROPERTY_DOCUMENT_REVIEW_STORE_PATH/);
