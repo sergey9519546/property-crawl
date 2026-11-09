@@ -265,7 +265,7 @@ async function handleRequest(req, res) {
           const { observationStoreStats } = require('./db/observations-persistence');
           return observationStoreStats(db.pool);
         })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 2500))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 3500))
       ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
 
       [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);

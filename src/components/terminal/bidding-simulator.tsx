@@ -7,6 +7,7 @@ import { classifyInvestmentStrategies, computeCashToClose, computeConstitutional
 import { computeRedemptionExpectedValue } from "@/lib/redemption-ev";
 import { displayMoney, positiveNumber } from "@/lib/listing-display";
 import { readUnderwriteScenario, writeUnderwriteScenario } from "@/lib/underwrite-scenario";
+import { StatutoryDeadlinesTimeline } from "@/components/terminal/statutory-deadlines-timeline";
 
 interface BiddingSimulatorProps { listing: Listing; }
 
@@ -51,6 +52,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
   const [aiStrategy, setAiStrategy] = useState<string | null>(null);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
   const [appliedPresetCitations, setAppliedPresetCitations] = useState<string[] | null>(null);
+  const [isHomestead, setIsHomestead] = useState<boolean>(Boolean(listing.isHomestead));
   const [holdingMonths, setHoldingMonths] = useState<number>(() => {
     if (typeof listing.redemptionDays === "number" && listing.redemptionDays > 0) {
       return Math.max(1, Math.round(listing.redemptionDays / 30));
@@ -288,7 +290,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
     redemptionDays: typeof listing.redemptionDays === "number" ? listing.redemptionDays : null,
     hasIrsLien: hasIrsNoticeFlag,
     isTaxSale: isTaxCandidate,
-    isHomestead: Boolean(listing.isHomestead),
+    isHomestead,
   });
   const statutoryCarry = deadlinesAndCarry;
   const reassessmentShock = computeReassessmentShock({ purchasePrice: openingBid, state: listing.state });
@@ -306,7 +308,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         assumedArv: estimatedValue,
         redemptionProbability: 0.75,
         stateCode: listing.state,
-        isHomestead: Boolean(listing.isHomestead),
+        isHomestead,
         expectedHoldingMonths: holdingMonths,
       })
     : null;
@@ -316,7 +318,7 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
         state: listing.state,
         redemptionDays: simulatedDays,
         isTaxSale: true,
-        isHomestead: Boolean(listing.isHomestead),
+        isHomestead,
       })
     : null;
   const surplusAnalysis = typeof listing.judgment === "number" && listing.judgment > 0
@@ -452,25 +454,14 @@ export function BiddingSimulator({ listing }: BiddingSimulatorProps) {
             <p className="mt-1 text-xs text-ink-3">Explicit scenario assumptions only — verify exact county clerk / sheriff fee sheet before bidding.</p>
           </div>
         )}
-        {deadlinesAndCarry.effectiveLockupDays > 0 && (
-          <div className="rounded-xl border border-line bg-paper p-3 text-xs text-ink-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-bold text-ink">Post-sale statutory window: {deadlinesAndCarry.effectiveLockupDays} days</span>
-              {deadlinesAndCarry.estimatedCarryCost !== null && (
-                <span className="font-semibold text-yours">Modeled lockup carry ({deadlinesAndCarry.annualCostOfCapitalPct}%/yr): {displayMoney(deadlinesAndCarry.estimatedCarryCost)}</span>
-              )}
-            </div>
-            {deadlinesAndCarry.objectionLabel && (
-              <p className="mt-1 text-xs text-ink-3">{deadlinesAndCarry.objectionLabel}{deadlinesAndCarry.objectionDeadline ? ` — window ends ${deadlinesAndCarry.objectionDeadline}` : ""}</p>
-            )}
-            {deadlinesAndCarry.stateRedemptionDeadline && (
-              <p className="mt-0.5 text-xs text-ink-3">Recorded redemption window ends {deadlinesAndCarry.stateRedemptionDeadline} ({deadlinesAndCarry.stateRedemptionDays}d)</p>
-            )}
-            {deadlinesAndCarry.irsRedemptionDeadline && (
-              <p className="mt-0.5 text-xs text-catch-ink font-semibold">26 U.S.C. § 7425(d) IRS 120-day redemption window ends {deadlinesAndCarry.irsRedemptionDeadline}</p>
-            )}
-          </div>
-        )}
+        <StatutoryDeadlinesTimeline
+          saleDate={listing.saleDate}
+          state={listing.state}
+          openingBid={openingBid}
+          isHomestead={isHomestead}
+          onHomesteadChange={setIsHomestead}
+          deadlinesAndCarry={deadlinesAndCarry}
+        />
         {redemptionYield && (
           <div className="rounded-xl rounded-xl border border-line bg-card p-3.5 text-xs text-ink space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

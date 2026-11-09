@@ -362,8 +362,11 @@ async function loadObservationsFromPg(pool, options = {}) {
 // overflow anymore: history grows by roughly a megabyte a day in rows, which
 // Postgres absorbs, so the report states the facts (rows, span, size) instead
 // of a countdown to a hard failure that no longer exists.
-async function observationStoreStats(pool) {
+let cachedStats = null; let lastStatsFetch = 0; let lastStatsPool = null; const STATS_TTL_MS = 60_000;
+async function observationStoreStats(pool, options = {}) {
   if (!pool) return null;
+  const now = Date.now();
+  if (!options.forceRefresh && cachedStats && lastStatsPool === pool && now - lastStatsFetch < (options.ttlMs || STATS_TTL_MS)) return cachedStats;
   const result = await pool.query(`
     SELECT count(*)::int AS rows,
            count(DISTINCT (source_key, record_id))::int AS tracked_records,
@@ -373,7 +376,7 @@ async function observationStoreStats(pool) {
       FROM source_observations`);
   const row = result.rows[0];
   if (!row) return null;
-  return {
+  cachedStats = {
     store: 'postgres',
     rows: Number(row.rows) || 0,
     trackedRecords: Number(row.tracked_records) || 0,
@@ -382,6 +385,9 @@ async function observationStoreStats(pool) {
     tableBytes: Number(row.table_bytes) || 0,
     willExceedCeiling: false,
   };
+  lastStatsFetch = now;
+  lastStatsPool = pool;
+  return cachedStats;
 }
 
 async function updateTriagePriority(pool, listingId, triagePriority) {

@@ -192,6 +192,15 @@ const JURISDICTION_FEE_SCHEDULES = Object.freeze({
     settlementWindowHours: 24,
     notes: 'Md. Code Tax-Prop. § 14-827 tax sale certificate auction (6-month statutory redemption). 0.5% state transfer tax.',
   },
+  AL: {
+    state: 'AL',
+    name: 'Alabama',
+    docStampRatePerThousand: 1.00, // $0.50 per $500 ($1.00/k) deed tax (Ala. Code § 40-22-1)
+    defaultSheriffPoundagePercent: 0.015, // 1.5% statutory sheriff execution fee (Ala. Code § 12-19-90)
+    defaultRecordingFee: 40.00,
+    settlementWindowHours: 24,
+    notes: 'Ala. Code § 40-22-1 deed tax ($1/k). Ala. Code § 6-5-248 180-day post-foreclosure statutory redemption for residential homestead (or 1 year otherwise).',
+  },
 });
 
 const DEFAULT_SCHEDULE = Object.freeze({

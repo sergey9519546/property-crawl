@@ -672,7 +672,7 @@ export function computeStatutoryFeePreset(params: {
   const st = (params.state || "").trim().toUpperCase();
   const src = (params.source || "").trim().toLowerCase();
   const citations: string[] = [];
-  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD", "SC", "VA", "IN", "MO", "AZ"].includes(st);
+  const isSupported = ["NJ", "OH", "FL", "PA", "NC", "TX", "CA", "GA", "IL", "NY", "MI", "NV", "TN", "WA", "MD", "SC", "VA", "IN", "MO", "AZ", "AL"].includes(st);
   const supportedNotice = isSupported ? null : `Statutory fee preset unavailable for state ${st || "unknown"}. Showing generic baseline estimates.`;
 
   let buyersPremium = 0;
@@ -887,6 +887,16 @@ export function computeStatutoryFeePreset(params: {
         "Md. Code Tax-Prop. § 13-203: Maryland state transfer tax (0.5% / $5.00 per $1,000)."
       );
     }
+  } else if (st === "AL") {
+    scheduleLabel = "Alabama Sheriff Statutory Schedule (Ala. Code § 12-19-90 & § 40-22-1)";
+    sheriffPoundage = Math.round(price * 0.015);
+    transferTax = Math.round((price / 1000) * 1.0);
+    defaultDepositPct = 0.10;
+    citations.push(
+      "Ala. Code § 12-19-90: Sheriff execution fee baseline (approx 1.5% poundage).",
+      "Ala. Code § 40-22-1: Alabama deed recording tax ($0.50 per $500 / $1.00 per $1,000 of purchase consideration).",
+      "Ala. Code § 6-5-248: 180-day post-sale statutory redemption for residential homestead property (1-year otherwise)."
+    );
   } else {
     transferTax = Math.round(price * 0.005);
     scheduleLabel = `${st || "State"} Statutory Baseline (Not Yet Modeled)`;
@@ -1095,6 +1105,9 @@ export function computeStatutoryDeadlinesAndCarry(params: {
   } else if (st === "AZ") {
     objectionOrConfirmationDays = 0;
     objectionLabel = "AZ non-judicial trustee sale under deed of trust (A.R.S. § 33-807; 0-day post-sale redemption)";
+  } else if (st === "AL") {
+    objectionOrConfirmationDays = 0;
+    objectionLabel = "AL non-judicial mortgage foreclosure (Ala. Code § 35-10-1; statutory redemption governs post-sale)";
   }
 
   const irsRedemptionDays = params.hasIrsLien ? 120 : 0;
@@ -1171,6 +1184,8 @@ export function computeStatutoryDeadlinesAndCarry(params: {
     if (isTax) {
       stateRedemptionDays = 1095; // 3 years under A.R.S. § 42-18153
     }
+  } else if (stateRedemptionDays === 0 && st === "AL") {
+    stateRedemptionDays = params.isHomestead ? 180 : 365;
   }
   const effectiveLockupDays = Math.max(objectionOrConfirmationDays, irsRedemptionDays, stateRedemptionDays);
   const annualCostOfCapitalPct = nonNegativeNumber(params.annualCostOfCapitalPct) ?? 10;
@@ -2128,6 +2143,15 @@ export function computeRedemptionYield(params: {
     statutoryRatePct = 10;
     effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
     statutoryCitation = "Mo. Rev. Stat. § 140.340: 10% per annum statutory interest on tax sale redemption.";
+  } else if (st === "AL") {
+    regime = "redeemable_deed_or_lien_interest";
+    yieldType = "interest";
+    isFlatPenalty = false;
+    isAnnualInterest = true;
+    days = passedDays !== null ? passedDays : (params.isHomestead ? 180 : 365);
+    statutoryRatePct = 12;
+    effectiveYieldPct = Number(((statutoryRatePct * days) / 365).toFixed(2));
+    statutoryCitation = "Ala. Code § 40-10-122 & § 6-5-248: 12% per annum simple interest on tax/foreclosure redemption (" + (params.isHomestead ? "180-day homestead" : "1-year standard") + " window).";
   } else {
     regime = "redeemable_deed_or_lien_interest";
     yieldType = "interest";

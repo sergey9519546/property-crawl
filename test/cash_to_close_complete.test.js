@@ -7,7 +7,7 @@ const {
   JURISDICTION_FEE_SCHEDULES,
   calculateCompleteCashToClose,
 } = require('../server/intelligence/cash-to-close');
-const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset } = require('../src/lib/underwriting.ts');
+const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeRedemptionYield } = require('../src/lib/underwriting.ts');
 
 test('calculates complete Florida foreclosure cash-to-close schedule', () => {
   const result = calculateCompleteCashToClose({
@@ -184,7 +184,7 @@ test('deposit crediting never produces negative settlement obligation', () => {
 });
 
 test('evaluates Texas tax sale statutory deadlines: 180-day non-homestead and 730-day homestead', () => {
-  const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset } = require('../src/lib/underwriting.ts');
+  const { computeStatutoryDeadlinesAndCarry, computeStatutoryFeePreset, computeRedemptionYield } = require('../src/lib/underwriting.ts');
 
   // 1. Non-homestead tax sale
   const investorTaxSale = computeStatutoryDeadlinesAndCarry({
@@ -432,6 +432,58 @@ test('calculates complete South Carolina, Virginia, Indiana, Missouri, and Arizo
   const azTaxSale = computeStatutoryDeadlinesAndCarry({ saleDate: '2026-11-03', state: 'AZ', distressType: 'tax_sale', purchasePrice: 100000 });
   assert.equal(azTaxSale.stateRedemptionDays, 1095); // 3 years under A.R.S. § 42-18153
   assert.equal(azTaxSale.effectiveLockupDays, 1095);
+});
+
+test('calculates complete Alabama cash-to-close schedule, 180-day homestead redemption, and 12% interest', () => {
+  // 1. Fee schedule
+  const alResult = calculateCompleteCashToClose({ winningBid: 100000, state: 'AL', creditedDeposit: 10000 });
+  assert.equal(alResult.state, 'AL');
+  assert.equal(alResult.transferTax, 100); // $1.00 per $1k deed tax (Ala. Code § 40-22-1)
+  assert.equal(alResult.sheriffPoundage, 1500); // 1.5% statutory poundage (Ala. Code § 12-19-90)
+  assert.equal(alResult.recordingFees, 40);
+  assert.equal(alResult.totalAcquisitionCost, 101640);
+  assert.equal(alResult.netCashDueAtSettlement, 91640);
+
+  // 2. Deadlines: Homestead 180 days vs Non-Homestead 365 days under Ala. Code § 6-5-248
+  const alHomestead = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'AL',
+    isHomestead: true,
+    purchasePrice: 100000,
+  });
+  assert.equal(alHomestead.stateRedemptionDays, 180);
+  assert.equal(alHomestead.objectionOrConfirmationDays, 0);
+  assert.equal(alHomestead.effectiveLockupDays, 180);
+  assert.match(alHomestead.objectionLabel, /AL non-judicial mortgage foreclosure/);
+
+  const alNonHomestead = computeStatutoryDeadlinesAndCarry({
+    saleDate: '2026-11-03',
+    state: 'AL',
+    isHomestead: false,
+    purchasePrice: 100000,
+  });
+  assert.equal(alNonHomestead.stateRedemptionDays, 365);
+  assert.equal(alNonHomestead.effectiveLockupDays, 365);
+
+  // 3. Preset citations
+  const preset = computeStatutoryFeePreset({ purchasePrice: 100000, state: 'AL' });
+  assert.ok(preset.supported);
+  assert.equal(preset.transferTax, 100);
+  assert.equal(preset.sheriffPoundage, 1500);
+  assert.ok(preset.citations.some(c => c.includes('Ala. Code § 12-19-90')));
+  assert.ok(preset.citations.some(c => c.includes('Ala. Code § 6-5-248')));
+
+  // 4. Redemption yield: 12% per annum simple interest under Ala. Code § 40-10-122
+  const alYield = computeRedemptionYield({
+    purchasePrice: 100000,
+    state: 'AL',
+    redemptionDays: 180,
+    isHomestead: true,
+  });
+  assert.ok(alYield);
+  assert.equal(alYield.statutoryRatePct, 12);
+  assert.equal(alYield.yieldType, 'interest');
+  assert.ok(alYield.statutoryCitation.includes('Ala. Code § 40-10-122'));
 });
 
 test('computes statutory tax sale redemption yield across major statutory states', () => {
