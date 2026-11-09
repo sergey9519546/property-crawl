@@ -582,6 +582,12 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
             <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min deal score<input type="number" min={0} max={99} value={filters.minScore || ""} onChange={(event) => setFilters({ minScore: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <label className="rounded-lg border border-line-strong bg-card px-3 py-2 text-xs font-semibold">Min equity (value minus bid) ($)<input type="number" min={0} value={filters.minEquity || ""} onChange={(event) => setFilters({ minEquity: event.target.value || undefined })} placeholder="0" className="mt-1 block w-full bg-transparent text-sm outline-none" /></label>
             <select aria-label="Documents" value={filters.hasDocuments || "all"} onChange={(event) => selectValue("hasDocuments", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+            <select aria-label="Senior lien risk" value={filters.seniorLien || "all"} onChange={(event) => selectValue("seniorLien", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">Any senior lien status</option><option value="clean">Clean title (low/none)</option><option value="risk">High senior lien risk</option>
+            </select>
+            <select aria-label="Redemption period" value={filters.redemption || "all"} onChange={(event) => selectValue("redemption", event.target.value)} className="min-h-10 rounded-lg border border-line-strong bg-card px-3 text-sm">
+              <option value="all">Any redemption timeline</option><option value="immediate">Immediate deed (0 days)</option><option value="redemption_active">Active redemption period</option>
+            </select>
               <option value="all">Any documents</option><option value="true">Documents available</option><option value="false">No documents posted</option><option value="unknown">Not stated</option>
             </select>
           </div>
@@ -601,7 +607,7 @@ export function DiscoveryWorkbench({ initialPayload = null }: { initialPayload?:
                   }
                   className="inline-flex items-center gap-1 rounded-full bg-line px-2.5 py-1 text-label font-semibold text-ink"
                 >
-                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : sourceDisplayText(value!).replace(/_/g, " ")}
+                  {filterLabels[key] || key}: {key === "hasDocuments" ? value === "true" ? "Available" : value === "false" ? "None posted" : "Not stated" : key === "seniorLien" ? value === "clean" ? "Clean title" : "High risk" : key === "redemption" ? value === "immediate" ? "Immediate deed" : "Active redemption" : sourceDisplayText(value!).replace(/_/g, " ")}
                   <X size={12} />
                 </button>
               ))}

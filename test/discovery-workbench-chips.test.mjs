@@ -114,6 +114,17 @@ test("missing or unparseable sourceObservedAt suppresses the isNew chip", () => 
   assert.equal(garbage.find((chip) => chip.key === "isNew"), undefined);
 });
 
+test("discovery workbench provides seniorLien and redemption filter controls in More Filters", () => {
+  const workbench = fs.readFileSync(
+    path.join(import.meta.dirname, "..", "src/components/listings/discovery-workbench.tsx"),
+    "utf8",
+  );
+  assert.match(workbench, /aria-label="Senior lien risk"/);
+  assert.match(workbench, /aria-label="Redemption period"/);
+  assert.match(workbench, /filters\.seniorLien/);
+  assert.match(workbench, /filters\.redemption/);
+});
+
 test("search results label page scope and do not present catalog total as the page", () => {
   const workbench = fs.readFileSync(
     path.join(import.meta.dirname, "..", "src/components/listings/discovery-workbench.tsx"),
