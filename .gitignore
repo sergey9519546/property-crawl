@@ -126,3 +126,5 @@ reports/release-gate-ledger.json
 scripts/cloudflared.exe
 scripts/check-render-deploy.js
 .impeccable/
+supabase/
+cookies.txt
