@@ -299,7 +299,7 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
   let headline = "DEFENSE VERIFIED — SENIOR POSITION CONFIRMED FOR UNDERWRITING";
   let verdictDescription =
     "Prosecution has identified no fatal title defects. Senior foreclosure eliminates subordinate liens, and cadastral identity is verified.";
-  let badgeClass = "bg-slate-100 text-slate-800 border-slate-300";
+  let badgeClass = "bg-paper text-ink border-line-strong";
   let recommendedDecision: "pass" | "pursue" | "inbox" = "pursue";
   const recommendedReasonCodes: string[] = [];
 
@@ -316,7 +316,7 @@ export function evaluateAdversarialDocket(listing: DocketListingInput): Adversar
     headline = "CONDITIONAL PASS — TITLE BINDER & PACER CLEARANCE REQUIRED";
     verdictDescription =
       "Multiple caution flags detected. Title binder, 120-day IRS redemption modeling, and morning-of PACER verification required before tendering certified funds.";
-    badgeClass = "bg-amber-50 text-amber-900 border-amber-200";
+    badgeClass = "border-catch/30 bg-catch-wash/40 text-catch-ink";
     recommendedDecision = "inbox";
     if (hasIrsNotice) recommendedReasonCodes.push("title_risk_unresolved");
     if (isOccupied) recommendedReasonCodes.push("property_condition");

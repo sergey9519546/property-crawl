@@ -270,8 +270,8 @@ export function DueDiligenceChecklist({ listing, className = "" }: DueDiligenceC
 
       {/* Triage Status Pills */}
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs sm:gap-4">
-        <div className="rounded-control border border-slate-200 bg-slate-100 p-3">
-          <span className="text-label font-semibold text-slate-800">Clear / Verified</span>
+        <div className="rounded-control border border-line-strong bg-card p-3">
+          <span className="text-label font-semibold text-ink">Clear / Verified</span>
           <p className="mt-0.5 text-lg font-black text-ink">{verifiedCount} of 7</p>
         </div>
         <div className="rounded-control border border-catch/30 bg-catch-wash p-3">

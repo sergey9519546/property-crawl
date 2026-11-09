@@ -175,17 +175,17 @@ export function AdversarialTrialDocket({
             {docket.verdict === "fatal" ? (
               <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" aria-hidden="true" />
             ) : docket.verdict === "conditional" ? (
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" aria-hidden="true" />
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-catch-ink" aria-hidden="true" />
             ) : (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-700" aria-hidden="true" />
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-ink-2" aria-hidden="true" />
             )}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-extrabold uppercase tracking-wide text-xs">
                   {docket.headline}
                 </span>
-                <span className="text-[11px] opacity-75">·</span>
-                <span className="text-[11px] font-semibold opacity-90">
+                <span className="text-meta opacity-75">·</span>
+                <span className="text-meta font-semibold opacity-90">
                   Recommended Workspace Action:{" "}
                   <strong className="uppercase">{docket.recommendedDecision}</strong>
                 </span>
@@ -203,14 +203,14 @@ export function AdversarialTrialDocket({
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">{docket.fatalCount}</p>
           </div>
-          <div className="rounded-control border border-amber-200 bg-amber-50/80 p-2.5">
-            <span className="text-label font-bold uppercase tracking-wider text-amber-900">
+          <div className="rounded-control border border-catch/25 bg-catch-wash/40 p-2.5">
+            <span className="text-label font-bold uppercase tracking-wider text-catch-ink">
               Caution Points
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">{docket.cautionCount}</p>
           </div>
-          <div className="rounded-control border border-slate-200 bg-slate-100 p-2.5">
-            <span className="text-label font-bold uppercase tracking-wider text-slate-800">
+          <div className="rounded-control border border-line-strong bg-card p-2.5">
+            <span className="text-label font-bold uppercase tracking-wider text-ink">
               Defenses Verified
             </span>
             <p className="mt-0.5 text-lg font-black text-ink">
@@ -253,7 +253,7 @@ export function AdversarialTrialDocket({
         <div className="space-y-3">
           <div className="flex items-center justify-between border-b border-line pb-2.5">
             <div className="flex items-center gap-2">
-              <div className="rounded bg-slate-100 p-1 text-slate-800">
+              <div className="rounded bg-paper p-1 text-ink border border-line">
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
               </div>
               <h3 className="text-sm font-bold tracking-tight text-ink">
@@ -279,7 +279,7 @@ export function AdversarialTrialDocket({
           <div className="mt-4 rounded-control border border-line bg-paper/80 p-4 text-xs space-y-3 print:hidden">
             <div className="flex items-center justify-between gap-2">
               <span className="font-bold text-ink">Direct Decision Bridge</span>
-              <span className="text-[11px] text-ink-3">Syncs with /research</span>
+              <span className="text-meta text-ink-3">Syncs with /research</span>
             </div>
             <p className="text-ink-2 leading-relaxed">
               Transfer this trial docket to your Research Case to version the findings, apply statutory reason codes, and lock your decision packet.
@@ -345,13 +345,13 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
         isFatal
           ? "border-catch/40 bg-catch-wash/60"
           : isCaution
-          ? "border-amber-200/80 bg-amber-50/50"
+          ? "border-catch/25 bg-catch-wash/30"
           : "border-line bg-card/70"
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-3">
+          <span className="rounded bg-line px-1.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-3">
             {item.category}
           </span>
           <h4 className="font-bold text-ink truncate">{item.title}</h4>
@@ -359,17 +359,17 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
 
         <div>
           {isFatal ? (
-            <span className="inline-flex items-center gap-1 rounded bg-catch/15 px-2 py-0.5 text-[10px] font-black uppercase text-catch-ink">
+            <span className="inline-flex items-center gap-1 rounded bg-catch/15 px-2 py-0.5 text-label font-black uppercase text-catch-ink">
               <ShieldAlert className="h-3 w-3" aria-hidden="true" />
               Fatal Disqualifier
             </span>
           ) : isCaution ? (
-            <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-900">
+            <span className="inline-flex items-center gap-1 rounded border border-catch/20 bg-catch-wash px-2 py-0.5 text-label font-bold uppercase text-catch-ink">
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
               Caution Flagged
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-[10px] font-semibold text-ink-3 border border-line">
+            <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-label font-semibold text-ink-3 border border-line">
               <Search className="h-3 w-3" aria-hidden="true" />
               Pre-Auction Inquiry
             </span>
@@ -379,7 +379,7 @@ function ProsecutionCard({ item }: { item: DocketCheckItem }) {
 
       <p className="mt-2 text-ink leading-relaxed font-medium">{item.finding}</p>
 
-      <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-3">
+      <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-meta text-ink-3">
         <span>
           <strong className="text-ink-2">Statute:</strong> {item.statute}
         </span>
@@ -396,12 +396,12 @@ function DefenseCard({ item }: { item: DocketCheckItem }) {
       data-testid={item.id}
       className={cn(
         "rounded-control border p-3.5 text-xs transition",
-        isVerified ? "border-slate-300 bg-slate-50/70" : "border-line bg-card/70"
+        isVerified ? "border-line-strong bg-card" : "border-line bg-paper/60"
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="rounded bg-line px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-ink-3">
+          <span className="rounded bg-line px-1.5 py-0.5 text-label font-bold uppercase tracking-wider text-ink-3">
             {item.category}
           </span>
           <h4 className="font-bold text-ink truncate">{item.title}</h4>
@@ -409,12 +409,12 @@ function DefenseCard({ item }: { item: DocketCheckItem }) {
 
         <div>
           {isVerified ? (
-            <span className="inline-flex items-center gap-1 rounded bg-slate-200/80 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-800">
+            <span className="inline-flex items-center gap-1 rounded border border-line-strong bg-paper px-2 py-0.5 text-label font-bold uppercase text-ink">
               <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
               Defense Verified
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-[10px] font-semibold text-ink-3 border border-line">
+            <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-0.5 text-label font-semibold text-ink-3 border border-line">
               <Clock className="h-3 w-3" aria-hidden="true" />
               Confirmation Pending
             </span>
@@ -424,7 +424,7 @@ function DefenseCard({ item }: { item: DocketCheckItem }) {
 
       <p className="mt-2 text-ink leading-relaxed font-medium">{item.finding}</p>
 
-      <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-3">
+      <div className="mt-2.5 pt-2 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-meta text-ink-3">
         <span>
           <strong className="text-ink-2">Authority:</strong> {item.statute}
         </span>
