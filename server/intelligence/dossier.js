@@ -63,7 +63,15 @@ function buildPropertyDossier(listing, { observations = { records: {}, signals: 
     gap('sale_date_passed', 'The recorded sale date has passed', 'A past scheduled date does not establish whether a sale occurred, was canceled, or was postponed.', 'Refresh the exact sale record and check the current disposition.');
   }
   if (!known(listing.transactionOutcome)) gap('transaction_outcome', 'Transaction outcome is unresolved', 'A closed auction, reserve result, or passed date does not prove that title transferred.', 'Obtain a source record or public record that explicitly confirms the completed disposition.');
-  gap('title', 'Title and surviving interests need research', 'A listing or a source match does not establish lien priority or a clear title.', 'Obtain the controlling sale documents and an appropriate recorder/title review.');
+  const hasVerifiedTitleReview = Boolean(
+    publicRecords?.titleVerified === true ||
+    publicRecords?.docketVerified === true ||
+    operatorInput?.titleVerified === true ||
+    (publicRecords?.titleReview && publicRecords.titleReview.status === 'verified')
+  );
+  if (!hasVerifiedTitleReview) {
+    gap('title', 'Title and surviving interests need research', 'A listing or a source match does not establish lien priority or a clear title.', 'Obtain the controlling sale documents and an appropriate recorder/title review.');
+  }
   const hasOmittedPartyDefect = Boolean(
     titleRisk.instrumentPriority?.omittedPartyJoinderDefect ||
     listing.omittedPartyJoinderDefect ||

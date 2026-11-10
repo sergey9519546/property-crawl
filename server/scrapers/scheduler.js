@@ -333,7 +333,28 @@ class IngestionScheduler {
             discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope,idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null},ownership);
           }
           else if (typeof scraper.setCheckpoint === 'function') {
-            const saved = this.sourceCheckpoints.get(scraper.sourceKey);
+            let saved = this.sourceCheckpoints.get(scraper.sourceKey);
+            if (!saved && this.database?.isPg && this.database?.pool) {
+              try {
+                const pgRes = await this.database.pool.query(
+                  'SELECT cursor, scope_hash FROM discovery_checkpoints WHERE source_key = $1 LIMIT 1',
+                  [scraper.sourceKey]
+                );
+                if (pgRes?.rows?.[0]?.cursor) {
+                  saved = { continuationToken: pgRes.rows[0].cursor, cursor: pgRes.rows[0].cursor, scopeHash: pgRes.rows[0].scope_hash };
+                  this.sourceCheckpoints.set(scraper.sourceKey, saved);
+                }
+              } catch (_) {}
+            }
+            if (!saved) {
+              try {
+                const cacheFile = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`);
+                if (fs.existsSync(cacheFile)) {
+                  saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                  if (saved) this.sourceCheckpoints.set(scraper.sourceKey, saved);
+                }
+              } catch (_) {}
+            }
             if (saved) scraper.setCheckpoint(saved);
           }
           if (scraper.sourceKey === 'servicelink') {
@@ -466,14 +487,38 @@ class IngestionScheduler {
           } else {
             const cursorToken = nextContinuationToken || continuationToken || nextCursor;
             if (cursorToken && (report?.complete === false || report?.truncated === true || report?.partialSweep === true)) {
-              this.sourceCheckpoints.set(scraper.sourceKey, {
+              const checkpointData = {
                 continuationToken: cursorToken,
                 cursor: cursorToken,
                 sweepStartedAt: scraper.lastRunReport?.sweepStartedAt || items?.sweepStartedAt || null,
                 pagesCommitted: (scraper.lastRunReport?.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport?.pagesFetched || 0),
-              });
+              };
+              this.sourceCheckpoints.set(scraper.sourceKey, checkpointData);
+              if (this.database?.isPg && this.database?.pool) {
+                const scope = collectionScope(scraper);
+                this.database.pool.query(
+                  `INSERT INTO discovery_checkpoints (source_key, cursor, scope_hash, updated_at)
+                   VALUES ($1, $2, $3, NOW())
+                   ON CONFLICT (source_key) DO UPDATE
+                   SET cursor = EXCLUDED.cursor, scope_hash = EXCLUDED.scope_hash, updated_at = NOW()`,
+                  [scraper.sourceKey, String(cursorToken), scopeHash(scope)]
+                ).catch(() => {});
+              } else {
+                try {
+                  const cacheDir = path.resolve(process.cwd(), '.cache');
+                  if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+                  fs.writeFileSync(path.join(cacheDir, `${scraper.sourceKey}-checkpoint.json`), JSON.stringify(checkpointData));
+                } catch (_) {}
+              }
             } else if (report?.complete === true) {
               this.sourceCheckpoints.delete(scraper.sourceKey);
+              if (this.database?.isPg && this.database?.pool) {
+                this.database.pool.query('DELETE FROM discovery_checkpoints WHERE source_key = $1', [scraper.sourceKey]).catch(() => {});
+              }
+              try {
+                const file = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`);
+                if (fs.existsSync(file)) fs.unlinkSync(file);
+              } catch (_) {}
             }
           }
           const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
@@ -594,7 +639,7 @@ const scheduler = new IngestionScheduler({
         }
       }
     }
-    if (!run.error && run.listings.length && !(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) {
+    if (!run.error && run.listings.length && !db.isPg) {
       // A complete, non-truncated run may annotate same-source records that
       // were absent from that index. The store keeps the record and does not
       // write sold or closed. Error, partial, truncated, or no report must
@@ -612,7 +657,7 @@ const scheduler = new IngestionScheduler({
         // Advanced discovery has already committed each listing and its raw
         // publisher snapshot atomically.  The bounded JSON cache is only a
         // compatibility projection and must not invalidate durable evidence.
-        if (!(db.isPg && process.env.DISCOVERY_MODE === 'advanced')) throw error;
+        if (!db.isPg) throw error;
         console.warn('[Scheduler] Live compatibility cache was not updated:', error.message);
       }
     }

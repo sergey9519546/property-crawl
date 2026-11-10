@@ -125,9 +125,9 @@ From `docs/discovery-brain-runbook.md` and `MEMORY.md` §14.11:
 2. **PostgreSQL Publisher-Absence Reconciliation & Observation Compaction:**
    - **Implemented & Shipped:**
      - `server/db/client.js` (`reconcileMissingPublisherRecords`) & `server/scrapers/scheduler.js`: Reconciles publisher absence against active inventory without false deletions.
-     - `server/db/observations-persistence.js` (`compactPgObservations`) & `scripts/compact-snapshots.js` (`--pg`, `--apply`): Prunes redundant heartbeat observations from the hosted PostgreSQL database (`79,243` observations) while preserving state transitions, valuation updates, and status changes.
+     - `server/db/observations-persistence.js` (`compactPgObservations`) & `scripts/compact-snapshots.js` (`--pg`, `--apply`): Prunes redundant heartbeat observations from the hosted PostgreSQL database (`82,510` observations) while preserving state transitions, valuation updates, and status changes.
 3. **Property Intelligence Source Atlas Automated Ingestion:**
-   - 163 sources cataloged and verified in `server/sources/catalog.js`.
+   - 288 sources cataloged and verified in `server/sources/catalog.js`.
    - Continuous automated ingestion of all 501 registry entries from `Property_Intelligence_Source_Atlas_VERIFIED_2026-09-05.docx` remains prospective.
 4. **Append-Only Cryptographic Evidence Ledger:**
    - Evidence records stored in PostgreSQL `document_review` and local observation files.

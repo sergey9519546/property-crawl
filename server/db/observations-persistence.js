@@ -56,7 +56,7 @@ function snapshotToRow(sourceId, snapshot) {
   const fields = snapshot && typeof snapshot === 'object' ? snapshot.fields || {} : {};
   const openingBid = Number(fields.openingBid);
   return [
-    observationRowId(sourceId, snapshot.recordId, snapshot.observedAt),
+     snapshot.id || observationRowId(sourceId, snapshot.recordId, snapshot.observedAt),
     String(snapshot.listingId || '').slice(0, 64),
     sourceId,
     String(snapshot.recordId || '').slice(0, 128),
@@ -114,12 +114,14 @@ async function persistSourceObservations(pool, sourceId, snapshots) {
 
 function rowToSnapshot(row) {
   return {
+    ...(row.id !== undefined ? { id: row.id } : {}),
     listingId: row.listing_id,
     recordId: row.record_id,
-    observedAt: row.observed_at instanceof Date ? row.observed_at.toISOString() : String(row.observed_at),
+    observedAt: row.observed_at instanceof Date ? row.observed_at.toISOString() : String(row.observed_at || ''),
     sourceUrl: row.source_url || null,
     state: row.state || null,
     county: row.county || null,
+    ...(row.notice_sha256 !== undefined ? { noticeSha256: row.notice_sha256 } : {}),
     fields: {
       openingBid: row.opening_bid != null ? Number(row.opening_bid) : null,
       saleDate: row.sale_date instanceof Date ? new Date(row.sale_date).toISOString().slice(0, 10) : row.sale_date,
@@ -233,6 +235,11 @@ const UPSERT_RUN_SQL = `
     runs_count = r.runs_count + 1,
     updated_at = NOW()`;
 
+function isSnapshotPairUnchanged(a, b) {
+  const diff = compareSnapshots(a, b);
+  return Array.isArray(diff) ? diff.length === 0 : diff?.changed === false;
+}
+
 // Ingest write path. PostgreSQL only: without a pool this throws, and the
 // caller reports a failed collection run — a dead database must never read as
 // "no observations recorded".
@@ -246,24 +253,97 @@ async function recordSourceRun(pool, sourceId, run, options = {}) {
   if (!known.rows.length) return { accepted: 0, newSignals: 0, snapshots: [], skipped: 'unknown_source' };
 
   const acceptedListings = acceptedLiveListings(sourceId, run, nowIso);
-  const latestObserved = await latestObservedAtByRecord(pool, sourceId, [...new Set(acceptedListings.map((listing) => String(listing.provenance.recordId)))]);
+  const recordIds = [...new Set(acceptedListings.map((listing) => String(listing.provenance.recordId)))];
+  const latestObserved = await latestObservedAtByRecord(pool, sourceId, recordIds);
+
+  const historyByRecord = new Map();
+  if (!run.error && recordIds.length > 0) {
+    const histRes = await pool.query(
+      `SELECT id, listing_id, source_key, record_id, observed_at,
+              opening_bid, sale_date, status, deposit, address, notice_sha256,
+              raw_payload->>'sourceUrl' AS source_url,
+              raw_payload->>'state' AS state,
+              raw_payload->>'county' AS county
+         FROM source_observations
+        WHERE source_key = $1 AND record_id = ANY($2::text[])
+        ORDER BY record_id ASC, observed_at ASC, id ASC`,
+      [sourceId, recordIds],
+    );
+    for (const row of (histRes?.rows || [])) {
+      if (!row || !row.record_id || !row.observed_at) continue;
+      const recKey = String(row.record_id);
+      const snap = rowToSnapshot(row);
+      if (!historyByRecord.has(recKey)) historyByRecord.set(recKey, []);
+      historyByRecord.get(recKey).push(snap);
+      const ts = Date.parse(snap.observedAt);
+      if (Number.isFinite(ts)) {
+        const prevTs = latestObserved.get(recKey);
+        if (prevTs === undefined || ts > prevTs) latestObserved.set(recKey, ts);
+      }
+    }
+  }
 
   // Only snapshots that actually advance the record are stored. An error run
   // stores none: a failed request is never evidence about sale terms.
   const advancing = [];
+  const toInsert = [];
+  let persistedCount = 0;
+  let rolledForward = 0;
+
   if (!run.error) {
     for (const listing of acceptedListings) {
-      const current = snapshot(listing);
-      const priorMs = latestObserved.get(String(current.recordId));
-      if (priorMs !== undefined && Date.parse(current.observedAt) <= priorMs) continue;
-      latestObserved.set(String(current.recordId), Date.parse(current.observedAt));
-      advancing.push(current);
+      const nextObservation = snapshot(listing);
+      const recKey = String(nextObservation.recordId);
+      const priorMs = latestObserved.get(recKey);
+      if (priorMs !== undefined && Date.parse(nextObservation.observedAt) <= priorMs) continue;
+      latestObserved.set(recKey, Date.parse(nextObservation.observedAt));
+      nextObservation.id = observationRowId(sourceId, nextObservation.recordId, nextObservation.observedAt);
+      advancing.push(nextObservation);
+
+      if (!historyByRecord.has(recKey)) historyByRecord.set(recKey, []);
+      const historyRows = historyByRecord.get(recKey);
+
+      if (historyRows.length >= 2) {
+        const nMinus2 = historyRows[historyRows.length - 2];
+        const nMinus1 = historyRows[historyRows.length - 1];
+        const unchanged = isSnapshotPairUnchanged(nMinus2, nMinus1)
+          && isSnapshotPairUnchanged(nMinus1, nextObservation)
+          && (nMinus2.noticeSha256 || null) === (nMinus1.noticeSha256 || null)
+          && (nMinus1.noticeSha256 || null) === (nextObservation.noticeSha256 || null);
+
+        if (unchanged && nMinus1.id != null) {
+          if (toInsert.length > 0) {
+            const flushed = await persistSourceObservations(pool, sourceId, toInsert.splice(0));
+            persistedCount += flushed.persisted || 0;
+          }
+          const observedAt = nextObservation.observedAt;
+          const upd = await pool.query(
+            'UPDATE source_observations SET observed_at = $1, raw_payload = $2 WHERE id = $3',
+            [observedAt, JSON.stringify(nextObservation), nMinus1.id],
+          );
+          nMinus1.observedAt = observedAt;
+          rolledForward += upd?.rowCount || 1;
+          continue;
+        }
+      }
+
+      toInsert.push(nextObservation);
+      historyRows.push(nextObservation);
     }
   }
 
-  const persisted = advancing.length ? await persistSourceObservations(pool, sourceId, advancing) : { persisted: 0 };
+  if (toInsert.length > 0) {
+    const persisted = await persistSourceObservations(pool, sourceId, toInsert);
+    persistedCount += persisted.persisted || 0;
+  }
   await pool.query(UPSERT_RUN_SQL, runMetadataParams(sourceId, run, advancing.length, nowIso));
-  return { accepted: advancing.length, newSignals: null, snapshots: advancing, persisted: persisted.persisted || 0 };
+  return {
+    accepted: advancing.length,
+    newSignals: null,
+    snapshots: advancing,
+    persisted: persistedCount + rolledForward,
+    rolledForward,
+  };
 }
 
 // Whole-store view for the /sources change-detection page: run metadata per
@@ -475,6 +555,18 @@ async function importObservationRun(pool, sourceId, runMeta) {
   return { imported: true };
 }
 
+async function measureObservationTableBytes(pool) {
+  try {
+    const sizeRes = await pool.query("SELECT pg_total_relation_size('source_observations') AS total_bytes");
+    const raw = sizeRes?.rows?.[0]?.total_bytes;
+    if (raw === null || raw === undefined) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Transition-preserving compaction for PostgreSQL `source_observations`.
  *
@@ -488,6 +580,7 @@ async function importObservationRun(pool, sourceId, runMeta) {
  *      in `loadObservationsForRecord` and `loadObservationsFromPg` remain identical.
  */
 async function compactPgObservations(pool, options = {}) {
+  const compactedAt = new Date().toISOString();
   if (!pool) {
     return {
       scannedRecords: 0,
@@ -495,12 +588,21 @@ async function compactPgObservations(pool, options = {}) {
       retainedRows: 0,
       prunedRows: 0,
       deletedIds: [],
+      groups: 0,
+      totalBefore: 0,
+      totalAfter: 0,
+      pruned: 0,
+      bytesBefore: null,
+      bytesAfter: null,
+      compactedAt,
     };
   }
   const apply = options.apply === true;
   const sourceFilter = typeof options.source === 'string' && options.source.trim()
     ? options.source.trim()
     : null;
+
+  const bytesBefore = await measureObservationTableBytes(pool);
 
   const res = await pool.query(
     `SELECT id, listing_id, source_key, record_id, observed_at,
@@ -556,10 +658,19 @@ async function compactPgObservations(pool, options = {}) {
       );
       prunedRows += delRes.rowCount || 0;
     }
+    if (prunedRows > 0 && options.vacuum === true) {
+      try {
+        await pool.query('VACUUM (ANALYZE) source_observations');
+      } catch {
+        // Non-fatal on mock pools or inside transactions
+      }
+    }
     cachedStats = null;
   } else {
     prunedRows = deletedIds.length;
   }
+
+  const bytesAfter = await measureObservationTableBytes(pool);
 
   return {
     scannedRecords: groups.size,
@@ -567,6 +678,13 @@ async function compactPgObservations(pool, options = {}) {
     retainedRows,
     prunedRows,
     deletedIds,
+    groups: groups.size,
+    totalBefore: res.rows.length,
+    totalAfter: retainedRows,
+    pruned: prunedRows,
+    bytesBefore,
+    bytesAfter,
+    compactedAt,
   };
 }
 

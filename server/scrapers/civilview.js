@@ -294,7 +294,11 @@ class CivilViewScraper extends BaseScraper {
     if (this.countyId != null && !/^\d+$/.test(this.countyId)) {
       throw new TypeError('CivilView countyId must contain only digits');
     }
-    this.observedRecordIds = new Set(options.observedRecordIds || []);
+    this.observedRecordIds = new Set(
+      Array.isArray(options.observedRecordIds)
+        ? options.observedRecordIds.map(String)
+        : (options.observedRecordIds instanceof Set ? Array.from(options.observedRecordIds, String) : [])
+    );
     this.maxCounties = positiveInt(
       options.maxCounties ?? process.env.CIVILVIEW_MAX_COUNTIES,
       DEFAULT_MAX_COUNTIES,
@@ -468,6 +472,8 @@ class CivilViewScraper extends BaseScraper {
               }
               if (seenPropertyIds.has(listing.provenance.propertyId)) continue;
               seenPropertyIds.add(listing.provenance.propertyId);
+              this.observedRecordIds.add(`CIV-${county.state}-${county.id}-${listing.provenance.propertyId}`);
+              if (listing.id) this.observedRecordIds.add(String(listing.id));
               emitted.push(listing);
             } catch (error) {
               report.failures.push({

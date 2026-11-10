@@ -190,9 +190,16 @@ async function handleDecisionPacket(req, res, url, dependencies = {}) {
     if (val !== null) operatorInput[field] = val;
   }
 
-  // Build decision packet
+  // Build decision packet with historical observations when available
+  let observations = null;
+  if (typeof database.getListingObservations === 'function' && listing.id) {
+    try {
+      observations = await database.getListingObservations(listing.id);
+    } catch (_) {}
+  }
+  const enrichedListing = observations && observations.length > 0 ? { ...listing, observations } : listing;
   const packetBuilder = dependencies.buildDecisionPacket || buildDecisionPacket;
-  const packet = packetBuilder(listing, operatorInput);
+  const packet = packetBuilder(enrichedListing, operatorInput);
 
   // Format negotiation
   const format = String(url.searchParams.get('format') || '').toLowerCase();

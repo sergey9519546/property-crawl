@@ -17,7 +17,7 @@
  *   --apply: applies compaction with automatic backup preservation.
  *
  * Usage:
- *   node scripts/compact-snapshots.js [--apply] [--source <sourceId>] [--target-dir <path>]
+ *   node scripts/compact-snapshots.js [--apply] [--pg] [--ssl|--no-ssl] [--vacuum] [--source <sourceId>] [--target-dir <path>]
  */
 
 const fs = require('node:fs');
@@ -28,6 +28,8 @@ function parseArgs(argv) {
   const args = {
     apply: false,
     pg: false,
+    ssl: undefined,
+    vacuum: false,
     source: null,
     targetDir: path.resolve(process.cwd(), '.cache/discovery-evidence'),
   };
@@ -40,6 +42,12 @@ function parseArgs(argv) {
       args.apply = false;
     } else if (arg === '--pg') {
       args.pg = true;
+    } else if (arg === '--ssl') {
+      args.ssl = true;
+    } else if (arg === '--no-ssl') {
+      args.ssl = false;
+    } else if (arg === '--vacuum') {
+      args.vacuum = true;
     } else if (arg === '--source' && argv[i + 1]) {
       args.source = argv[++i];
     } else if (arg === '--target-dir' && argv[i + 1]) {
@@ -147,7 +155,7 @@ function runCompaction(options = {}) {
 }
 
 async function runPgCompaction(options = {}) {
-  const { apply = false, source = null, pool = null } = options;
+  const { apply = false, source = null, pool = null, vacuum = false } = options;
   const { compactPgObservations } = require('../server/db/observations-persistence');
   let activePool = pool || require('../server/db/client').pool;
   let customPool = null;
@@ -155,9 +163,17 @@ async function runPgCompaction(options = {}) {
 
   if (!activePool && process.env.DATABASE_URL) {
     try {
+      const connectionString = process.env.DATABASE_URL;
+      const useSsl = options.ssl === true || (
+        options.ssl !== false && (
+          process.env.PGSSLMODE === 'require' ||
+          /sslmode=require|\.render\.com/i.test(connectionString)
+        )
+      );
       const { Pool } = require('pg');
       customPool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString,
+        ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
         max: 5,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 5000,
@@ -189,16 +205,42 @@ async function runPgCompaction(options = {}) {
 
   if (!activePool) {
     console.log('[Snapshot Compactor] PostgreSQL pool is not configured; skipping source_observations compaction.');
-    return { scannedRecords: 0, originalRows: 0, retainedRows: 0, prunedRows: 0, deletedIds: [] };
+    return {
+      scannedRecords: 0,
+      originalRows: 0,
+      retainedRows: 0,
+      prunedRows: 0,
+      deletedIds: [],
+      groups: 0,
+      totalBefore: 0,
+      totalAfter: 0,
+      pruned: 0,
+      bytesBefore: null,
+      bytesAfter: null,
+    };
   }
 
   try {
-    const result = await compactPgObservations(activePool, { apply, source });
+    const result = await compactPgObservations(activePool, {
+      apply,
+      source,
+      vacuum: Boolean(vacuum),
+    });
     console.log('\n--- PostgreSQL source_observations Compaction Summary ---');
     console.log(`Records scanned:         ${result.scannedRecords}`);
     console.log(`Original rows:           ${result.originalRows}`);
     console.log(`Retained rows:           ${result.retainedRows}`);
     console.log(`Redundant rows ${apply ? 'deleted' : 'found'}:  ${result.prunedRows}`);
+    console.log(`Bytes before / after:    ${result.bytesBefore ?? 'n/a'} -> ${result.bytesAfter ?? 'n/a'}`);
+    console.log(JSON.stringify({
+      groups: result.groups,
+      totalBefore: result.totalBefore,
+      totalAfter: result.totalAfter,
+      pruned: result.pruned,
+      bytesBefore: result.bytesBefore ?? null,
+      bytesAfter: result.bytesAfter ?? null,
+      compactedAt: result.compactedAt,
+    }));
     return result;
   } finally {
     if (customPool && typeof customPool.end === 'function') {
@@ -224,4 +266,3 @@ if (require.main === module) {
 }
 
 module.exports = { runCompaction, runPgCompaction, parseArgs };
-

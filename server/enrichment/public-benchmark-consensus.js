@@ -20,6 +20,7 @@
  */
 
 const { getHpiIndex, getAppreciationMultiplier, getLatestObservedPeriod } = require('./hpi');
+const { loadObservedHpiSeries } = require('./hpi-series');
 const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
 const { resolveCountyKey } = require('./arcgis-parcels');
@@ -56,7 +57,8 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
   const openingBid = Number.isFinite(Number(ctx.openingBid)) && Number(ctx.openingBid) > 0
     ? Number(ctx.openingBid)
     : null;
-  const currentPeriod = options.currentPeriod || getLatestObservedPeriod(options.hpiSeries);
+  const activeHpiSeries = options.hpiSeries !== undefined ? options.hpiSeries : loadObservedHpiSeries();
+  const currentPeriod = options.currentPeriod || getLatestObservedPeriod(activeHpiSeries);
 
   // -------------------------------------------------------------
   // 1. County Certified Assessor Tax Roll
@@ -127,11 +129,11 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     else if (!baselinePeriod) unobservedReasons.push('Assessment quarter is unknown; no HPI trajectory computed.');
 
     try {
-      const baselineHpi = getHpiIndex(state, baselinePeriod, options.hpiSeries);
-      const currentHpi = getHpiIndex(state, currentPeriod, options.hpiSeries);
+      const baselineHpi = getHpiIndex(state, baselinePeriod, activeHpiSeries);
+      const currentHpi = getHpiIndex(state, currentPeriod, activeHpiSeries);
 
       if (baselineHpi && currentHpi && baselineHpi > 0 && baselinePeriod <= currentPeriod) {
-        const multiplier = getAppreciationMultiplier(state, baselinePeriod, currentPeriod, options.hpiSeries);
+        const multiplier = getAppreciationMultiplier(state, baselinePeriod, currentPeriod, activeHpiSeries);
         const hpiAdjustedAssessedValue = Math.round(assessorRoll.assessedValue * multiplier);
         const appreciationPct = Math.round((multiplier - 1.0) * 1000) / 10;
 

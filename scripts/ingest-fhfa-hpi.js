@@ -130,6 +130,73 @@ function buildHpiSeriesSnapshot({
   };
 }
 
+function parseFhfaQuarterlySeriesCsv(csvText) {
+  if (typeof csvText !== 'string' || !csvText.trim()) {
+    throw new Error('CSV text is empty or not a string; fail closed');
+  }
+  const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    throw new Error('CSV must contain a header line and at least one data row');
+  }
+  const headerCols = lines[0].split(',').map(c => c.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+  const stateIdx = headerCols.findIndex(c => c === 'state' || c === 'state_code' || c === 'stusps');
+  const yrIdx = headerCols.findIndex(c => c === 'yr' || c === 'year');
+  const qtrIdx = headerCols.findIndex(c => c === 'qtr' || c === 'quarter');
+  const periodIdx = headerCols.findIndex(c => c === 'period');
+  const valIdx = headerCols.findIndex(c => c === 'index_nsa' || c === 'index_sa' || c === 'index' || c === 'value' || c === 'hpi');
+
+  if (stateIdx === -1) {
+    throw new Error('CSV missing state column; fail closed');
+  }
+  if ((yrIdx === -1 || qtrIdx === -1) && periodIdx === -1) {
+    throw new Error('CSV missing year/quarter or period column; fail closed');
+  }
+  if (valIdx === -1) {
+    throw new Error('CSV missing index value column; fail closed');
+  }
+
+  const values = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+    if (cols.length <= Math.max(stateIdx, valIdx)) continue;
+    const rawState = cols[stateIdx].toUpperCase();
+    if (!/^[A-Z]{2}$/.test(rawState) || rawState === 'US') continue;
+
+    let period = null;
+    if (periodIdx !== -1 && cols[periodIdx]) {
+      const p = cols[periodIdx].trim().toUpperCase();
+      if (/^\d{4}Q[1-4]$/.test(p)) period = p;
+    }
+    if (!period && yrIdx !== -1 && qtrIdx !== -1) {
+      const yr = Number(cols[yrIdx]);
+      const qtr = Number(cols[qtrIdx]);
+      if (Number.isInteger(yr) && yr >= 1970 && Number.isInteger(qtr) && qtr >= 1 && qtr <= 4) {
+        period = `${yr}Q${qtr}`;
+      }
+    }
+    if (!period) continue;
+
+    const val = Number(cols[valIdx]);
+    if (!Number.isFinite(val) || val <= 0) continue;
+
+    if (!values[rawState]) values[rawState] = {};
+    values[rawState][period] = val;
+  }
+
+  if (Object.keys(values).length === 0) {
+    throw new Error('No valid state-quarter observations found in CSV');
+  }
+
+  return {
+    version: 1,
+    sourceUrl: 'https://www.fhfa.gov/data/hpi',
+    retrievedAt: new Date().toISOString(),
+    datasetSha256: sha256Hex(csvText),
+    values,
+    rawJson: csvText,
+  };
+}
+
 /**
  * Ingests and validates an operator-supplied quarterly state HPI series.
  * Enforces Zero-Fabrication invariants:
@@ -156,7 +223,16 @@ function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = 
   let parsed = seriesData;
   if (content && !parsed) {
     try {
-      parsed = JSON.parse(content);
+    const trimmed = content.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = JSON.parse(content);
+      } catch (err) {
+        throw new Error(`Failed to parse series JSON: ${err.message}`);
+      }
+    } else {
+      parsed = parseFhfaQuarterlySeriesCsv(content);
+    }
     } catch (err) {
       throw new Error(`Failed to parse series JSON: ${err.message}`);
     }
@@ -248,6 +324,7 @@ module.exports = {
   sanitizeSourceUrl,
   fetchText,
   buildHpiSeriesSnapshot,
+  parseFhfaQuarterlySeriesCsv,
   ingestHpiSeries,
   run,
 };

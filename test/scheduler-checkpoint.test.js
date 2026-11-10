@@ -238,3 +238,87 @@ test('in-memory checkpoints resume across successive cycles when discoveryStore 
   assert.equal(checkpointsSeen[0]?.continuationToken, 'page-2-cursor');
   assert.equal(subject.sourceCheckpoints.has('civilview'), false, 'cleared on complete');
 });
+
+test('SheriffSaleScraper bounded county rotation emits continuation tokens and advances checkpoints', async () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper({
+    counties: [
+      { name: 'Franklin', state: 'OH', domain: 'franklin.realauction.com' },
+      { name: 'Cuyahoga', state: 'OH', domain: 'cuyahoga.realauction.com' },
+      { name: 'Hamilton', state: 'OH', domain: 'hamilton.realauction.com' },
+    ],
+    maxCounties: 1,
+  });
+  scraper.fetchCountyRealauction = async (c) => [{
+    id: `SHERIFF-${c.state}-${c.name}-1`,
+    source: 'sheriff',
+    address: `100 Main St, ${c.name}, ${c.state}`,
+    openingBid: 50000,
+    saleDate: '2026-12-01',
+    provenance: { county: c.name, state: c.state, recordId: `1-${c.name}` },
+    _alreadyStandardized: true,
+  }];
+
+  const pass1 = await scraper.scrapeFeed();
+  assert.equal(pass1.partialSweep, true);
+  assert.equal(pass1.nextContinuationToken, '1');
+  assert.equal(pass1.complete, false);
+
+  scraper.setCheckpoint({ continuationToken: '1' });
+  const pass2 = await scraper.scrapeFeed();
+  assert.equal(pass2.partialSweep, true);
+  assert.equal(pass2.nextContinuationToken, '2');
+
+  scraper.setCheckpoint('2');
+  const pass3 = await scraper.scrapeFeed();
+  assert.equal(pass3.nextContinuationToken, '0');
+});
+
+test('ScraperScheduler queries and saves PostgreSQL checkpoint when discoveryStore is null', async () => {
+  const pgQueries = [];
+  const mockPool = {
+    async query(sql, params) {
+      pgQueries.push({ sql, params });
+      if (sql.includes('SELECT cursor, scope_hash FROM discovery_checkpoints')) {
+        return { rows: [{ cursor: 'saved-pg-cursor', scope_hash: 'abc' }] };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+  };
+  const mockDb = {
+    isPg: true,
+    pool: mockPool,
+    async createListing(l) { return l; },
+    getAlertSubscriptions() { return []; },
+  };
+
+  const loadedCheckpoints = [];
+  const testScraper = {
+    name: 'PgCheckpointScraper',
+    sourceKey: 'civilview',
+    setCheckpoint(cp) { loadedCheckpoints.push(cp); },
+    async scrapeFeed() {
+      const items = [civilviewListing('pg-1')];
+      items.partialSweep = true;
+      items.complete = false;
+      items.nextContinuationToken = 'next-pg-cursor';
+      return items;
+    },
+    passesFilter() { return true; },
+    getRawPublisherRecord() { return { raw: 'data' }; },
+  };
+
+  const scheduler = new IngestionScheduler({
+    realScrapers: [testScraper],
+    database: mockDb,
+    discoveryStore: null,
+    telemetry: { recordRun() {} },
+    concurrency: 1,
+  });
+
+  const runRes = await scheduler.runAll({ sourceIds: ['civilview'] });
+  assert.equal(runRes.totalIngested, 1);
+  assert.equal(loadedCheckpoints.length, 1);
+  assert.equal(loadedCheckpoints[0]?.cursor, 'saved-pg-cursor');
+  assert.ok(pgQueries.some(q => q.sql.includes('INSERT INTO discovery_checkpoints') && q.params[1] === 'next-pg-cursor'));
+});

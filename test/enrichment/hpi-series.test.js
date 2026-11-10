@@ -324,3 +324,64 @@ test('loadObservedHpiSeries fails closed to null when embedded rawJson does not 
   });
 });
 
+test('scripts/ingest-fhfa-hpi.js: parseFhfaQuarterlySeriesCsv parses multi-quarter state CSV and ingestHpiSeries accepts CSV input', () => {
+  const { parseFhfaQuarterlySeriesCsv, ingestHpiSeries } = require('../../scripts/ingest-fhfa-hpi');
+  const csvData = [
+    'state,year,quarter,index_nsa',
+    'OH,2020,1,200.0',
+    'OH,2024,4,280.0',
+    'NJ,2020,1,300.0',
+    'NJ,2024,4,420.0',
+  ].join('\n');
+
+  const parsed = parseFhfaQuarterlySeriesCsv(csvData);
+  assert.equal(typeof parsed.datasetSha256, 'string');
+  assert.equal(parsed.datasetSha256.length, 64);
+  assert.equal(parsed.values.OH['2020Q1'], 200.0);
+  assert.equal(parsed.values.OH['2024Q4'], 280.0);
+  assert.equal(parsed.values.NJ['2020Q1'], 300.0);
+  assert.equal(parsed.values.NJ['2024Q4'], 420.0);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hpi-csv-test-'));
+  const outJson = path.join(tmpDir, 'output.json');
+  try {
+    const ingested = ingestHpiSeries({ rawText: csvData, outPath: outJson });
+    assert.equal(ingested.values.OH['2024Q4'], 280.0);
+    assert.equal(fs.existsSync(outJson), true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('computePublicBenchmarkConsensus auto-loads observed series and respects explicit null override', () => {
+  const { computePublicBenchmarkConsensus } = require('../../server/enrichment/public-benchmark-consensus');
+  const { file, dir } = writeTempSeries(VALID_SERIES);
+  try {
+    withSeriesPath(file, () => {
+      // Auto-loads series when options.hpiSeries is omitted
+      const resultWithAuto = computePublicBenchmarkConsensus({
+        state: 'FL',
+        assessmentYear: 2020,
+        assessmentPeriod: '2020Q2',
+        parcel: { assessedValue: { total: 300000, land: 50000, improvement: 250000 }, taxYear: 2020 },
+      });
+      assert.ok(resultWithAuto.assessedTrajectory);
+      assert.equal(resultWithAuto.assessedTrajectory.baselinePeriod, '2020Q2');
+      assert.equal(resultWithAuto.assessedTrajectory.currentPeriod, '2026Q1');
+      assert.equal(resultWithAuto.assessedTrajectory.hpiMultiplier, 1.5);
+      assert.equal(resultWithAuto.assessedTrajectory.hpiAdjustedAssessedValue, 450000);
+
+      // Respects explicit null override
+      const resultWithNull = computePublicBenchmarkConsensus({
+        state: 'FL',
+        assessmentYear: 2020,
+        assessmentPeriod: '2020Q2',
+        parcel: { assessedValue: { total: 300000 }, taxYear: 2020 },
+      }, { hpiSeries: null });
+      assert.equal(resultWithNull.assessedTrajectory, null);
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+

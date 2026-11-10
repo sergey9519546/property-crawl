@@ -41,7 +41,7 @@ The 2026-10-31 through 2026-11-08 audit receipts (Tracks 1–3 stabilization, re
 | Local stabilization release checks | **9/9**, clean/source-bound to `a0805da`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
 | Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | test runners; external-server row-lock/lease acceptance remains open |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
-| Source catalog entries | **288**, 60 with an adapter; adapter linkage is not live qualification | generated `CONTEXT.md` at the audited tree |
+| Source catalog entries | **288**, 61 with an adapter; adapter linkage is not live qualification | generated `CONTEXT.md` at the audited tree |
 | Dispatched API paths | **44** | generated `CONTEXT.md` at the audited tree |
 | Scrapling parser tests | **16** | `npm run test:scrapling-parser` |
 | Opportunity-signal evaluator | **8** signals (6 weighted scoring components + 2 ledger signals); `triagePriority` clamped 0–99; bands moderate >= 30 / high >= 50 | `server/intelligence/signals.js`, `src/lib/triage-bands.ts` |

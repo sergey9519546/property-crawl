@@ -88,8 +88,27 @@ function detectIrsFederalTaxLien(noticeText = '', options = {}) {
   };
 }
 
-function extractInstrumentPrioritySignals(noticeText = '') {
-  const text = String(noticeText || '');
+function extractInstrumentPrioritySignals(listing = '', extraNoticeText = '') {
+  const isListingObject = listing && typeof listing === 'object';
+  const sourceFacts = isListingObject ? (listing.provenance?.sourceFacts || {}) : {};
+  const text = isListingObject
+    ? [
+        extraNoticeText,
+        listing.raw,
+        listing.rawNotice,
+        listing.description,
+        listing.remarks,
+        listing.notes,
+        sourceFacts.plaintiff,
+        sourceFacts.instrumentType,
+        sourceFacts.instrument,
+        sourceFacts.lienType,
+        sourceFacts.caseNumber,
+        sourceFacts.docketNumber,
+        sourceFacts.remarks,
+        sourceFacts.notes,
+      ].filter(Boolean).join(' ')
+    : `${String(listing || '')} ${String(extraNoticeText || '')}`.trim();
   const instrumentMatch = text.match(/(?:instrument\s*(?:no\.?|#)|doc(?:ument)?\s*(?:no\.?|#))\s*([A-Za-z0-9-]{4,24})/i);
   const bookPageMatch = text.match(/(?:book|liber|volume)\s*([0-9A-Za-z]+)\s*,?\s*(?:page|folio)\s*([0-9A-Za-z]+)/i);
   const recordedDateMatch = text.match(/(?:recorded|filed)\s+(?:on\s+)?([A-Za-z]+\s+\d{1,2},\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{4}|\d{4}-\d{2}-\d{2})/i);
@@ -98,7 +117,7 @@ function extractInstrumentPrioritySignals(noticeText = '') {
   const municipalSuperLienNotice = /(?:municipal\s+(?:water|sewer|utility|code|demolition|abatement)\s+(?:lien|assessment|charge)s?|water\s+(?:and|\/|&)\s*sewer\s+lien|(?:demolition|condemnation)\s+(?:lien|order|assessment)|code\s+enforcement\s+lien)/i.test(text);
 
   return {
-    instrumentNumber: instrumentMatch ? instrumentMatch[1] : null,
+    instrumentNumber: instrumentMatch ? instrumentMatch[1] : (typeof sourceFacts.instrument === 'string' && /^[A-Za-z0-9-]{4,24}$/.test(sourceFacts.instrument.trim()) ? sourceFacts.instrument.trim() : null),
     bookPage: bookPageMatch ? { book: bookPageMatch[1], page: bookPageMatch[2] } : null,
     recordedDate: recordedDateMatch ? recordedDateMatch[1] : null,
     explicitlySubjectToSeniorMortgage: seniorSubjectToMatch,
@@ -111,12 +130,23 @@ function extractInstrumentPrioritySignals(noticeText = '') {
  * Arbitrate complete title risk profile for a foreclosure listing
  */
 function arbitrateTitleRisk(listing = {}, rawNoticeText = '') {
-  const plaintiff = String(listing.plaintiff || listing.plaintiff_or_seller || '');
+  const sourceFacts = listing.provenance?.sourceFacts || {};
+  const plaintiff = String(listing.plaintiff || listing.plaintiff_or_seller || sourceFacts.plaintiff || '');
   const state = String(listing.state || 'OH').toUpperCase();
-  const notice = `${rawNoticeText} ${listing.raw || ''} ${listing.description || ''}`;
+  const sourceFactsText = [
+    sourceFacts.plaintiff,
+    sourceFacts.instrumentType,
+    sourceFacts.instrument,
+    sourceFacts.lienType,
+    sourceFacts.caseNumber,
+    sourceFacts.docketNumber,
+    sourceFacts.remarks,
+    sourceFacts.notes,
+  ].filter(Boolean).join(' ');
+  const notice = `${rawNoticeText} ${listing.raw || ''} ${listing.rawNotice || ''} ${listing.description || ''} ${listing.remarks || ''} ${listing.notes || ''} ${sourceFactsText}`;
 
   const partyType = classifyForeclosingParty(plaintiff, notice);
-  const instrumentSignals = extractInstrumentPrioritySignals(notice);
+  const instrumentSignals = extractInstrumentPrioritySignals(listing, notice);
   const irsNoticeEval = evaluateIrsNoticeRule({
     hasFederalTaxLien: listing.hasIrsLien ?? listing.hasFederalTaxLien ?? (partyType === 'IRS_TAX_LIEN' || /(?:internal\s*revenue|\birs\b|federal\s*tax\s*lien)/i.test(notice)),
     saleDate: listing.saleDate,

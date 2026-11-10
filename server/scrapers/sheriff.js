@@ -159,6 +159,28 @@ function parseExtraCounties(raw) {
   }).filter(Boolean);
 }
 
+function parseCountyOffset(value) {
+  if (value == null) return null;
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) return null;
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+  }
+  if (typeof value === 'object') {
+    const candidate = value.countyOffset
+      ?? value.cursor
+      ?? value.continuationToken
+      ?? value.nextCursor
+      ?? value.countyRotationOffset;
+    return parseCountyOffset(candidate);
+  }
+  return null;
+}
+
 class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff' });
@@ -189,23 +211,62 @@ class SheriffSaleScraper extends BaseScraper {
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
     this.lastRunReport = null;
+    this.maxCounties = Math.max(1, Number(options.maxCounties || process.env.SHERIFF_MAX_COUNTIES || this.counties.length || 1));
+    const initialOffset = parseCountyOffset(options.countyOffset ?? options.checkpoint ?? process.env.SHERIFF_COUNTY_OFFSET ?? 0);
+    this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
   }
 
-  async scrapeFeed() {
+  getCollectionScope() {
+    return 'national';
+  }
+
+  setCheckpoint(checkpoint) {
+    const offset = parseCountyOffset(checkpoint);
+    this.countyRotationOffset = offset != null ? offset : 0;
+    return this;
+  }
+
+  async scrapeFeed(options = {}) {
+    if (options && typeof options === 'object') {
+      const runOffset = parseCountyOffset(
+        options.countyOffset ?? options.cursor ?? options.continuationToken ?? options.checkpoint
+      );
+      if (runOffset != null) this.countyRotationOffset = runOffset;
+      if (options.maxCounties) {
+        this.maxCounties = Math.max(1, Number(options.maxCounties));
+      }
+    }
     return this.executeWithRetry(async () => {
+      const totalCounties = this.counties.length;
+      const startOffset = totalCounties > 0 ? (this.countyRotationOffset % totalCounties) : 0;
+      let targetCounties = this.counties;
+      if (this.maxCounties < totalCounties) {
+        targetCounties = [];
+        for (let i = 0; i < this.maxCounties; i++) {
+          targetCounties.push(this.counties[(startOffset + i) % totalCounties]);
+        }
+      }
+      const partialSweep = totalCounties > targetCounties.length;
+      const nextContinuationToken = partialSweep
+        ? String((startOffset + targetCounties.length) % totalCounties)
+        : null;
+      this.countyRotationOffset = partialSweep ? Number(nextContinuationToken) : 0;
+
       const report = createRunReport('sheriff', {
         platform: 'realauction-ohio',
-        counties: this.counties.map(c => `${c.name},${c.state}`),
+        counties: targetCounties.map(c => `${c.name},${c.state}`),
       });
-      report.statesRequested = this.counties.map(c => `${c.name},${c.state}`);
-      report.endpointsTried = this.counties.length;
+      report.statesRequested = targetCounties.map(c => `${c.name},${c.state}`);
+      report.endpointsTried = targetCounties.length;
+      report.partialSweep = partialSweep;
+      report.nextContinuationToken = nextContinuationToken;
       this.lastRunReport = report;
 
       const allListings = [];
       this._htmlSamples = [];
       this._lastExtraction = null;
       const concurrency = Math.max(1, Math.min(4, Number(process.env.SHERIFF_COUNTY_CONCURRENCY) || 3));
-      const countyResults = await mapWithConcurrency(this.counties, concurrency, async (c) => {
+      const countyResults = await mapWithConcurrency(targetCounties, concurrency, async (c) => {
         const unit = `${c.name},${c.state}`;
         try {
           const countyListings = await this.scrapeCounty(c, report);
@@ -247,6 +308,14 @@ class SheriffSaleScraper extends BaseScraper {
         throw new Error(`SHERIFF_UPSTREAM_UNAVAILABLE: all ${this.counties.length} county endpoints failed`);
       }
       applyEmptyInventoryHonesty(report, { emitted: standardized.length, htmlSamples: this._htmlSamples || [], sourceKey: 'sheriff' });
+      report.complete = !partialSweep;
+      Object.defineProperties(standardized, {
+        partialSweep: { value: partialSweep, enumerable: false, writable: true, configurable: true },
+        nextContinuationToken: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        nextCursor: { value: nextContinuationToken, enumerable: false, writable: true, configurable: true },
+        complete: { value: !partialSweep, enumerable: false, writable: true, configurable: true },
+        report: { value: report, enumerable: false, writable: true, configurable: true },
+      });
       console.log(`[${this.name}] Standardized ${standardized.length} Sheriff Sale listings (${report.outcome})`);
       return standardized;
     });
@@ -456,10 +525,9 @@ class SheriffSaleScraper extends BaseScraper {
                 }
               }
             } catch (_) {}
-
-            if (accumulatedListings.length > 0) {
-              return accumulatedListings;
-            }
+          }
+          if (accumulatedListings.length > 0) {
+            return accumulatedListings;
           }
         } catch (_) {
           // ColdFusion AJAX failed or mock rejected; fall through to Scrapling
