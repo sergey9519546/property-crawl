@@ -147,22 +147,38 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     "Verify every auction term with the upstream record before bidding.",
   ].filter(Boolean).join(" ");
 
+  const canonicalUrl = `/listings/${encodeURIComponent(id)}`;
+
   return {
     title,
     description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     robots: isDemo ? { index: false, follow: false } : undefined,
     openGraph: {
       title,
       description,
+      url: canonicalUrl,
+      siteName: "PerfectProperty",
       type: "website",
-      images: publisherPhoto ? [{ url: publisherPhoto, alt: listing.address }] : []
+      images: publisherPhoto
+        ? [{ url: publisherPhoto, alt: listing.address }]
+        : [
+            {
+              url: "/og-image.png",
+              width: 1200,
+              height: 630,
+              alt: listing.address,
+            },
+          ],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
-      images: publisherPhoto ? [publisherPhoto] : []
-    }
+      images: [publisherPhoto || "/og-image.png"],
+    },
   };
 }
 

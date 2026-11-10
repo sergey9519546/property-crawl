@@ -1,0 +1,76 @@
+<svg width="1200" height="630" viewBox="0 0 1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#0f172a" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="50" y="50" width="1100" height="530" rx="24" fill="url(#cardBg)" stroke="#334155" stroke-width="1.5"/>
+  <rect x="50" y="50" width="1100" height="4" rx="2" fill="url(#accent)"/>
+
+  <g transform="translate(100, 105)">
+    <rect x="0" y="0" width="48" height="48" rx="12" fill="#f59e0b" fill-opacity="0.15" stroke="#f59e0b" stroke-width="2"/>
+    <path d="M24 10 L38 22 L34 22 L34 36 L14 36 L14 22 L10 22 Z" fill="#f59e0b"/>
+    <rect x="21" y="26" width="6" height="10" fill="#0f172a"/>
+
+    <text x="64" y="34" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="#ffffff" letter-spacing="0.02em">
+      PerfectProperty
+    </text>
+
+    <rect x="310" y="8" width="240" height="32" rx="16" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <circle cx="326" cy="24" r="4" fill="#10b981"/>
+    <text x="340" y="29" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#f59e0b" letter-spacing="0.08em">
+      AUCTION INTELLIGENCE
+    </text>
+  </g>
+
+  <g transform="translate(100, 235)">
+    <text x="0" y="0" font-family="system-ui, -apple-system, sans-serif" font-size="50" font-weight="800" fill="#ffffff" letter-spacing="-0.02em">
+      Distressed Property &amp; Sheriff Sales
+    </text>
+    <text x="0" y="60" font-family="Georgia, serif" font-size="32" font-style="italic" fill="#94a3b8">
+      With the catch spelled out before you bid.
+    </text>
+  </g>
+
+  <text x="100" y="365" font-family="system-ui, -apple-system, sans-serif" font-size="19" font-weight="400" fill="#cbd5e1">
+    Discovery and triage layer for sheriff sales, foreclosure auctions, HUD/REO, IRS, and Treasury dispositions.
+  </text>
+
+  <g transform="translate(100, 425)">
+    <rect x="0" y="0" width="210" height="42" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="20" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">
+      Statutory Title Triage
+    </text>
+
+    <rect x="225" y="0" width="210" height="42" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="245" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">
+      Zero-Fabrication Bids
+    </text>
+
+    <rect x="450" y="0" width="220" height="42" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="470" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">
+      Verified Court Notices
+    </text>
+
+    <rect x="685" y="0" width="210" height="42" rx="10" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+    <text x="705" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">
+      50 States &amp; Counties
+    </text>
+  </g>
+
+  <text x="100" y="530" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#64748b" letter-spacing="0.05em">
+    PERFECTPROPERTY.COM · PUBLIC RECORD DISCOVERABILITY &amp; STATUTORY TRIAGE
+  </text>
+</svg>

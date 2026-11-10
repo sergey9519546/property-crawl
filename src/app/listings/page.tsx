@@ -9,10 +9,30 @@ import { discoverySearchParams, readDiscoveryFilters } from "@/lib/discovery-que
 export const metadata: Metadata = {
   title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
   description: "Search foreclosure, sheriff-sale, tax-sale and government-sold properties by state, county or ZIP. See the sale date, opening bid and what to check before you bid.",
+  alternates: {
+    canonical: "/listings",
+  },
   openGraph: {
     title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
     description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
-  }
+    url: "/listings",
+    siteName: "PerfectProperty",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Foreclosure Auctions & Distressed Homes | PerfectProperty",
+    description: "Search foreclosure and government-sold properties in one list, map and calendar. Each listing links to the original sale notice.",
+    images: ["/og-image.png"],
+  },
 };
 
 export const dynamic = "force-dynamic";

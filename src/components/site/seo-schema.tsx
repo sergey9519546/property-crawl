@@ -19,7 +19,15 @@ export function SeoSchema({ nonce }: { nonce?: string | null }) {
         "url": baseUrl,
         "name": "PerfectProperty",
         "description": "Find sheriff sales, foreclosures, tax sales and government-sold homes in one place, with the risks spelled out.",
-        "publisher": { "@id": `${baseUrl}/#organization` }
+        "publisher": { "@id": `${baseUrl}/#organization` },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": `${baseUrl}/listings?q={search_term_string}`
+          },
+          "query-input": "required name=search_term_string"
+        }
       }
     ]
   };

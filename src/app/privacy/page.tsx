@@ -6,6 +6,32 @@ export const metadata: Metadata = {
   title: "Privacy Policy | PerfectProperty",
   description:
     "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
+  alternates: {
+    canonical: "/privacy",
+  },
+  openGraph: {
+    title: "Privacy Policy | PerfectProperty",
+    description:
+      "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
+    url: "/privacy",
+    siteName: "PerfectProperty",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Privacy Policy | PerfectProperty",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Privacy Policy | PerfectProperty",
+    description:
+      "Data minimization policies, zero third-party monetization, and privacy protections for the PerfectProperty platform.",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function PrivacyPage() {

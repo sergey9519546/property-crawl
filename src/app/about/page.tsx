@@ -9,6 +9,32 @@ export const metadata: Metadata = {
   title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
   description:
     "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
+  alternates: {
+    canonical: "/about",
+  },
+  openGraph: {
+    title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
+    description:
+      "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
+    url: "/about",
+    siteName: "PerfectProperty",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Zero-Fabrication Auction Intelligence | PerfectProperty",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Zero-Fabrication Auction Intelligence | PerfectProperty",
+    description:
+      "Sheriff sales, bank-owned homes, tax sales and government-sold property in one place, with the risks spelled out.",
+    images: ["/og-image.png"],
+  },
 };
 
 const STEPS = [

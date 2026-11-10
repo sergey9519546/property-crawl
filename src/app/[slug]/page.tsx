@@ -80,10 +80,34 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!page) return {};
   const title = `${page.title} | PerfectProperty`;
   const description = page.intro;
+  const canonicalUrl = `/${slug}`;
   return {
     title,
     description,
-    openGraph: { title, description },
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title,
+      description,
+      url: canonicalUrl,
+      siteName: "PerfectProperty",
+      type: "article",
+      images: [
+        {
+          url: "/og-image.png",
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: ["/og-image.png"],
+    },
   };
 }
 

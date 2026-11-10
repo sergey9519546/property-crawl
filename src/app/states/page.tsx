@@ -5,9 +5,29 @@ import { loadStateCounts as loadStateCountsImpl } from "@/lib/state-coverage";
 export const metadata: Metadata = {
   title: "Foreclosure Auctions by State | PerfectProperty",
   description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state. View active inventory, auction dates, and county court records.",
+  alternates: {
+    canonical: "/states",
+  },
   openGraph: {
     title: "Foreclosure Auctions by State | PerfectProperty",
     description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state.",
+    url: "/states",
+    siteName: "PerfectProperty",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Foreclosure Auctions by State | PerfectProperty",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Foreclosure Auctions by State | PerfectProperty",
+    description: "Browse foreclosure auctions, sheriff sales, and government property dispositions by state.",
+    images: ["/og-image.png"],
   },
 };
 

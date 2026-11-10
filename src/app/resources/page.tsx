@@ -7,6 +7,32 @@ export const metadata: Metadata = {
   title: "Foreclosure Auction Buyer's Guide | PerfectProperty",
   description:
     "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
+  alternates: {
+    canonical: "/resources",
+  },
+  openGraph: {
+    title: "Foreclosure Auction Buyer's Guide | PerfectProperty",
+    description:
+      "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
+    url: "/resources",
+    siteName: "PerfectProperty",
+    type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Foreclosure Auction Buyer's Guide | PerfectProperty",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Foreclosure Auction Buyer's Guide | PerfectProperty",
+    description:
+      "Plain-English guide to sheriff sales, trustee sales, tax sales and bank-owned homes: what they are, what can go wrong, and what to check before you bid.",
+    images: ["/og-image.png"],
+  },
 };
 
 const card = "rounded-card border border-line bg-card p-6 shadow-sm sm:p-8";
