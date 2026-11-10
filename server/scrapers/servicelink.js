@@ -89,7 +89,7 @@ function readCheckpointFile(filePath) {
   if (!file || !fs.existsSync(file)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const token = validContinuationToken(parsed?.continuationToken);
+    const token = validContinuationToken(parsed?.continuationToken ?? parsed?.cursor ?? parsed?.token);
     if (!token) return null;
     return {
       continuationToken: token,
@@ -119,7 +119,7 @@ function writeCheckpointFile(filePath, checkpoint) {
 
 function clearCheckpointFile(filePath) {
   const file = explicitCheckpointPath(filePath);
-  if (!file || !fs.existsSync(file)) return false;
+  if (file === DEFAULT_CHECKPOINT_PATH) { const sweepFile = path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', 'servicelink.json'); if (fs.existsSync(sweepFile)) { try { fs.unlinkSync(sweepFile); } catch {} } } if (!file || !fs.existsSync(file)) return false;
   fs.unlinkSync(file);
   return true;
 }
@@ -278,7 +278,7 @@ class ServiceLinkScraper extends BaseScraper {
       if (this.restart) {
         clearCheckpointFile(this.checkpointPath);
       } else if (!explicitToken) {
-        const saved = readCheckpointFile(this.checkpointPath);
+        const saved = readCheckpointFile(this.checkpointPath) || (this.checkpointPath === DEFAULT_CHECKPOINT_PATH ? readCheckpointFile(path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', 'servicelink.json')) : null);
         if (saved) {
           this.setCheckpoint(saved);
         }

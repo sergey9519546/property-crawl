@@ -197,7 +197,10 @@ function evaluateOpportunitySignals(listing = {}, options = {}) {
   }
   const hasHistoryRelist = hasDatePushRelist || recordHistory.some((h) => classifyStatusActivity(h?.fields?.status || h?.status) === 'inactive'
     && currentActive);
-  const isNJ = String(listing.state || '').trim().toUpperCase() === 'NJ' || String(listing.source || '').trim().toLowerCase() === 'civilview'; const statutoryStayExhausted = (isNJ && priorPostponements >= 2 && currentActive) || (!isNJ && priorPostponements >= 3 && currentActive) || Boolean(sourceFacts.statutoryStayExhausted);
+  const isNJ = String(listing.state || '').trim().toUpperCase() === 'NJ' || String(listing.source || '').trim().toLowerCase() === 'civilview';
+  // Under N.J.S.A. § 2A:17-36, debtor has exactly 2 statutory adjournments. In non-NJ states,
+  // do not fabricate statutory stay exhaustion unless supported by explicit publisher source facts.
+  const statutoryStayExhausted = (isNJ && priorPostponements >= 2 && currentActive) || Boolean(sourceFacts.statutoryStayExhausted);
   const historicalBids = recordHistory
     .map((h) => Number(h?.fields?.openingBid ?? h?.openingBid))
     .filter((v) => Number.isFinite(v) && v > 0);

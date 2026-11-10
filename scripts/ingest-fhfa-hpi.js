@@ -9,7 +9,7 @@
  * server/enrichment/data/fhfa-state-hpi.json.
  *
  * Also supports ingesting, normalizing, and validating an operator-supplied
- * versioned quarterly state HPI series (--series-in=path/to/series.json).
+ * versioned quarterly state HPI series (--series-in=path/to/series.json or .csv).
  *
  * The snapshot is the observed input for server/enrichment/fhfa-state-hpi.js.
  * The runtime re-hashes the embedded bytes on read, so the served per-state
@@ -18,7 +18,8 @@
  * Usage:
  *   node scripts/ingest-fhfa-hpi.js
  *   node scripts/ingest-fhfa-hpi.js --url=https://www.fhfa.gov/hpi-state/csv --out=path.json
- *   node scripts/ingest-fhfa-hpi.js --series-in=path/to/series.json --out=.cache/fhfa-hpi-series.json
+ *   node scripts/ingest-fhfa-hpi.js --series-in=path/to/series.csv --out=.cache/fhfa-hpi-series.json
+ *   node scripts/ingest-fhfa-hpi.js --series-in=data/fhfa-hpi-master.csv --check-continuity
  *
  * No network fallback is invented: if the publisher is unreachable the run
  * fails and nothing is written.
@@ -41,6 +42,8 @@ const {
   validateStateQuarterSeries,
   compareQuarters,
   areQuartersChronological,
+  areQuartersContinuous,
+  nextQuarter,
 } = require('../server/enrichment/hpi');
 const {
   DEFAULT_SERIES_PATH,
@@ -56,6 +59,7 @@ function parseArgs(argv) {
     out: DEFAULT_SNAPSHOT_PATH,
     seriesIn: null,
     seriesOut: null,
+    checkContinuity: false,
   };
   for (const flag of argv) {
     if (flag.startsWith('--url=')) options.url = flag.slice('--url='.length);
@@ -63,6 +67,7 @@ function parseArgs(argv) {
     else if (flag.startsWith('--series-in=')) options.seriesIn = flag.slice('--series-in='.length);
     else if (flag.startsWith('--series=')) options.seriesIn = flag.slice('--series='.length);
     else if (flag.startsWith('--series-out=')) options.seriesOut = flag.slice('--series-out='.length);
+    else if (flag === '--check-continuity' || flag === '--continuity') options.checkContinuity = true;
     else throw new Error(`Unknown option: ${flag}`);
   }
   return options;
@@ -139,11 +144,14 @@ function parseFhfaQuarterlySeriesCsv(csvText) {
     throw new Error('CSV must contain a header line and at least one data row');
   }
   const headerCols = lines[0].split(',').map(c => c.trim().toLowerCase().replace(/^["']|["']$/g, ''));
-  const stateIdx = headerCols.findIndex(c => c === 'state' || c === 'state_code' || c === 'stusps');
+  const stateIdx = headerCols.findIndex(c => c === 'state' || c === 'state_code' || c === 'stusps' || c === 'place_id');
   const yrIdx = headerCols.findIndex(c => c === 'yr' || c === 'year');
   const qtrIdx = headerCols.findIndex(c => c === 'qtr' || c === 'quarter');
   const periodIdx = headerCols.findIndex(c => c === 'period');
-  const valIdx = headerCols.findIndex(c => c === 'index_nsa' || c === 'index_sa' || c === 'index' || c === 'value' || c === 'hpi');
+  const valIdx = headerCols.findIndex(c => c === 'index_sa' || c === 'index_nsa' || c === 'index' || c === 'value' || c === 'hpi');
+  const freqIdx = headerCols.findIndex(c => c === 'frequency');
+  const levelIdx = headerCols.findIndex(c => c === 'level');
+  const flavorIdx = headerCols.findIndex(c => c === 'hpi_flavor' || c === 'flavor');
 
   if (stateIdx === -1) {
     throw new Error('CSV missing state column; fail closed');
@@ -159,6 +167,10 @@ function parseFhfaQuarterlySeriesCsv(csvText) {
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
     if (cols.length <= Math.max(stateIdx, valIdx)) continue;
+    if (freqIdx !== -1 && cols[freqIdx] && cols[freqIdx].toLowerCase() !== 'quarterly') continue;
+    if (levelIdx !== -1 && cols[levelIdx] && cols[levelIdx].toLowerCase() !== 'state') continue;
+    if (flavorIdx !== -1 && cols[flavorIdx] && cols[flavorIdx].toLowerCase() !== 'purchase-only') continue;
+
     const rawState = cols[stateIdx].toUpperCase();
     if (!/^[A-Z]{2}$/.test(rawState) || rawState === 'US') continue;
 
@@ -205,10 +217,11 @@ function parseFhfaQuarterlySeriesCsv(csvText) {
  *   - valid retrievedAt timestamp
  *   - verified sha256 digest
  *   - chronological quarter ordering
+ *   - quarterly continuity verification (when checkContinuity is true)
  *   - positive finite values per state-quarter
  *   - fail-closed when absent or invalid
  */
-function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = null, seriesData = null } = {}) {
+function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = null, seriesData = null, checkContinuity = false } = {}) {
   let content = rawText;
   if (!content && seriesFile) {
     if (!fs.existsSync(seriesFile)) {
@@ -223,16 +236,16 @@ function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = 
   let parsed = seriesData;
   if (content && !parsed) {
     try {
-    const trimmed = content.trim();
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        parsed = JSON.parse(content);
-      } catch (err) {
-        throw new Error(`Failed to parse series JSON: ${err.message}`);
+      const trimmed = content.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          parsed = JSON.parse(content);
+        } catch (err) {
+          throw new Error(`Failed to parse series JSON: ${err.message}`);
+        }
+      } else {
+        parsed = parseFhfaQuarterlySeriesCsv(content);
       }
-    } else {
-      parsed = parseFhfaQuarterlySeriesCsv(content);
-    }
     } catch (err) {
       throw new Error(`Failed to parse series JSON: ${err.message}`);
     }
@@ -252,6 +265,9 @@ function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = 
     const sorted = qKeys.slice().sort(compareQuarters);
     if (!areQuartersChronological(sorted, { strictlyAscending: true })) {
       throw new Error(`Non-chronological or invalid quarter keys for state ${state}; fail closed`);
+    }
+    if (checkContinuity && !areQuartersContinuous(sorted)) {
+      throw new Error(`Quarterly continuity gap detected for state ${state}; fail closed`);
     }
     normalizedValues[state] = {};
     for (const q of sorted) {
@@ -276,7 +292,7 @@ function ingestHpiSeries({ seriesFile, outPath = DEFAULT_SERIES_PATH, rawText = 
     rawJson,
   };
 
-  if (!validateStateQuarterSeries(snapshot, { rawPayload: rawJson })) {
+  if (!validateStateQuarterSeries(snapshot, { rawPayload: rawJson, requireContinuousQuarters: checkContinuity })) {
     throw new Error('Series validation failed; fail closed');
   }
 
@@ -295,7 +311,11 @@ async function run(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   if (options.seriesIn) {
     const targetOut = options.seriesOut || (options.out !== DEFAULT_SNAPSHOT_PATH ? options.out : DEFAULT_SERIES_PATH);
-    return ingestHpiSeries({ seriesFile: options.seriesIn, outPath: targetOut });
+    return ingestHpiSeries({
+      seriesFile: options.seriesIn,
+      outPath: targetOut,
+      checkContinuity: options.checkContinuity,
+    });
   }
   const sourceUrl = sanitizeSourceUrl(options.url);
   const csvText = await fetchText(sourceUrl, MAX_CSV_BYTES);

@@ -2273,6 +2273,8 @@ class DatabaseClient {
     const at = typeof options.at === 'string' && isFiniteTime(options.at)
       ? new Date(Date.parse(options.at)).toISOString()
       : new Date().toISOString();
+    const county = typeof options.county === 'string' && options.county.trim() ? options.county.trim() : null;
+    const state = typeof options.state === 'string' && options.state.trim() ? options.state.trim().toUpperCase() : null;
 
     if (this.isPg && this.pool) {
       const retireRes = await this.pool.query(
@@ -2285,17 +2287,21 @@ class DatabaseClient {
                 ),
                 updated_at = NOW()
           WHERE source_key = $1
+            AND ($4::text IS NULL OR LOWER(county) = LOWER($4::text))
+            AND ($5::text IS NULL OR UPPER(state) = $5::text)
             AND NOT (id = ANY($2::text[]))`,
-        [sourceKey, ids, at]
+        [sourceKey, ids, at, county, state]
       );
       const restoreRes = await this.pool.query(
         `UPDATE listings
             SET provenance = provenance - 'publisherAbsence',
                 updated_at = NOW()
           WHERE source_key = $1
+            AND ($3::text IS NULL OR LOWER(county) = LOWER($3::text))
+            AND ($4::text IS NULL OR UPPER(state) = $4::text)
             AND id = ANY($2::text[])
             AND provenance ? 'publisherAbsence'`,
-        [sourceKey, ids]
+        [sourceKey, ids, county, state]
       );
       return {
         retired: retireRes.rowCount || 0,
@@ -2310,6 +2316,8 @@ class DatabaseClient {
       for (let i = 0; i < this.inMemoryData.listings.length; i++) {
         const record = this.inMemoryData.listings[i];
         if (!record || record.source !== sourceKey) continue;
+        if (county && String(record.county || '').trim().toLowerCase() !== county.toLowerCase()) continue;
+        if (state && String(record.state || '').trim().toUpperCase() !== state) continue;
         if (seenSet.has(record.id)) {
           if (record.provenance?.publisherAbsence) {
             const provenance = { ...record.provenance };

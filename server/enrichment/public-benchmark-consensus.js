@@ -19,7 +19,7 @@
  * - Clearly label all metrics as PUBLIC_RECORD_BENCHMARK, never as appraisal or buyer bid authority.
  */
 
-const { getHpiIndex, getAppreciationMultiplier, getLatestObservedPeriod } = require('./hpi');
+const { getHpiIndex, getAppreciationMultiplier, computeHpiAppreciation, getLatestObservedPeriod } = require('./hpi');
 const { loadObservedHpiSeries } = require('./hpi-series');
 const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
@@ -129,23 +129,20 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     else if (!baselinePeriod) unobservedReasons.push('Assessment quarter is unknown; no HPI trajectory computed.');
 
     try {
-      const baselineHpi = getHpiIndex(state, baselinePeriod, activeHpiSeries);
-      const currentHpi = getHpiIndex(state, currentPeriod, activeHpiSeries);
+      const appreciation = computeHpiAppreciation(state, baselinePeriod, currentPeriod, activeHpiSeries, {
+        assessedValue: assessorRoll.assessedValue,
+      });
 
-      if (baselineHpi && currentHpi && baselineHpi > 0 && baselinePeriod <= currentPeriod) {
-        const multiplier = getAppreciationMultiplier(state, baselinePeriod, currentPeriod, activeHpiSeries);
-        const hpiAdjustedAssessedValue = Math.round(assessorRoll.assessedValue * multiplier);
-        const appreciationPct = Math.round((multiplier - 1.0) * 1000) / 10;
-
+      if (appreciation) {
         assessedTrajectory = {
           state,
           baselinePeriod,
           currentPeriod,
-          baselineHpi,
-          currentHpi,
-          hpiMultiplier: multiplier,
-          hpiAppreciationPct: appreciationPct,
-          hpiAdjustedAssessedValue,
+          baselineHpi: appreciation.baselineHpi,
+          currentHpi: appreciation.currentHpi,
+          hpiMultiplier: appreciation.multiplier,
+          hpiAppreciationPct: appreciation.appreciationPct,
+          hpiAdjustedAssessedValue: appreciation.hpiAdjustedAssessedValue,
           source: 'FHFA House Price Index (HPI) Quarterly Series',
           provenance: {
             sourceUrl: options.hpiSeries?.sourceUrl || 'https://www.fhfa.gov/data/hpi',

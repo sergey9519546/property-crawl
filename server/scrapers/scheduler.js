@@ -126,25 +126,31 @@ function declaredCadenceHours(sourceKey) {
 }
 
 function isPartialOrContinuationRun(report, run = {}) {
-  const rep = report && typeof report === 'object' ? report : null;
+  const rep = report && typeof report === 'object' ? (report.report && typeof report.report === 'object' ? report.report : report) : null;
+  const rReport = run && typeof run === 'object' && run.report && typeof run.report === 'object' ? run.report : null;
   const r = run && typeof run === 'object' ? run : null;
   const listings = Array.isArray(r?.listings) ? r.listings : (Array.isArray(run) ? run : null);
 
   return Boolean(
     rep?.partialSweep === true ||
     r?.partialSweep === true ||
+    rReport?.partialSweep === true ||
     listings?.partialSweep === true ||
     rep?.truncated === true ||
     r?.truncated === true ||
+    rReport?.truncated === true ||
     listings?.truncated === true ||
     (rep?.nextCursor != null && rep.nextCursor !== '') ||
     (r?.nextCursor != null && r.nextCursor !== '') ||
+    (rReport?.nextCursor != null && rReport.nextCursor !== '') ||
     (listings?.nextCursor != null && listings.nextCursor !== '') ||
     (rep?.continuationToken != null && rep.continuationToken !== '') ||
     (r?.continuationToken != null && r.continuationToken !== '') ||
+    (rReport?.continuationToken != null && rReport.continuationToken !== '') ||
     (listings?.continuationToken != null && listings.continuationToken !== '') ||
     (rep?.nextContinuationToken != null && rep.nextContinuationToken !== '') ||
     (r?.nextContinuationToken != null && r.nextContinuationToken !== '') ||
+    (rReport?.nextContinuationToken != null && rReport.nextContinuationToken !== '') ||
     (listings?.nextContinuationToken != null && listings.nextContinuationToken !== '')
   );
 }
@@ -409,9 +415,9 @@ class IngestionScheduler {
             }
             if (!saved) {
               try {
-                const cacheFile = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`);
-                if (fs.existsSync(cacheFile)) {
-                  saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+                const cacheFile = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`); const sweepFile = path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', `${scraper.sourceKey}.json`);
+                const activeFile = fs.existsSync(cacheFile) ? cacheFile : (fs.existsSync(sweepFile) ? sweepFile : null); if (activeFile) {
+                  saved = JSON.parse(fs.readFileSync(activeFile, 'utf8'));
                   if (saved) this.sourceCheckpoints.set(scraper.sourceKey, saved);
                 }
               } catch (_) {}
@@ -546,11 +552,11 @@ class IngestionScheduler {
               rejected: rejectedForScraper + (coverage.counts?.parserRejected ?? coverage.counts?.malformedRows ?? 0),
               coverage,
             },ownership);
-            const cursorToken = nextContinuationToken || continuationToken;
+            const cursorToken = nextContinuationToken || continuationToken || nextCursor;
             const cursor = cursorToken ? {
-              continuationToken: cursorToken,
+              continuationToken: cursorToken, cursor: cursorToken,
               sweepStartedAt: scraper.lastRunReport?.sweepStartedAt || items?.sweepStartedAt,
-              pagesCommitted: (scraper.lastRunReport.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport.pagesFetched || 0),
+              pagesCommitted: (scraper.lastRunReport?.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport?.pagesFetched || 0),
             } : {};
             await assertLease('Collection job lease was lost before checkpoint advancement');
             await this.discoveryStore.saveCheckpoint(scraper.sourceKey, cursor, collectionScope(scraper),ownership);
@@ -589,7 +595,7 @@ class IngestionScheduler {
               }
               try {
                 const file = path.resolve(process.cwd(), '.cache', `${scraper.sourceKey}-checkpoint.json`);
-                if (fs.existsSync(file)) fs.unlinkSync(file);
+                if (fs.existsSync(file)) fs.unlinkSync(file); const sweepFile = path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', `${scraper.sourceKey}.json`); if (fs.existsSync(sweepFile)) fs.unlinkSync(sweepFile);
               } catch (_) {}
             }
           }
@@ -707,7 +713,11 @@ const fs = require('node:fs');
           await targetDb.reconcilePublisherAbsence(
             sourceId,
             run.listings.map((listing) => listing && listing.id).filter(Boolean),
-            { runCompleted: true }
+            {
+              runCompleted: true,
+              county: reportForAbsence?.county || run?.county || null,
+              state: reportForAbsence?.state || run?.state || null,
+            }
           );
         } catch (absenceError) {
           console.warn('[Scheduler] Publisher absence reconciliation failed (non-fatal):', absenceError.message);

@@ -17,7 +17,7 @@
 
 const BaseScraper = require('./base');
 const { ScraperResponseError } = require('./circuit-breaker');
-const { readResponseText } = require('./http');
+const { readResponseText } = require('./http'); const { autoThrottle, noteRetryAfter, recordHostLatency } = require('./auto-throttle');
 const { assertFetchableUrl } = require('./http');
 const { normalizeOcrText } = require('../ai/notice-parser');
 const { extractWithScrapling, isScraplingEnabled } = require('./scrapling-bridge');
@@ -569,7 +569,7 @@ class CivilViewScraper extends BaseScraper {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await this.fetchImpl(url, {
+      await autoThrottle(url); const requestStart = Date.now(); const response = await this.fetchImpl(url, {
         headers: {
           'User-Agent': this.userAgent,
           Accept: 'text/html,application/xhtml+xml',
@@ -578,7 +578,7 @@ class CivilViewScraper extends BaseScraper {
         redirect: 'follow',
         signal: controller.signal,
       });
-      // redirect: "follow" can land on a private host; re-validate before any
+      recordHostLatency(url, Date.now() - requestStart); const retryAfter = response.headers?.get?.('retry-after') ?? null; if (retryAfter) noteRetryAfter(url, retryAfter); // redirect: "follow" can land on a private host; re-validate before any
       // body bytes are read so a publisher redirect cannot reach internal
       // services or leak their responses.
       const ssrfCheck = assertFetchableUrl(response.url || url);

@@ -43,6 +43,21 @@ function compareQuarters(a, b) {
 }
 
 /**
+ * Returns the next chronological quarter string in YYYYQq format.
+ * E.g., '2020Q1' -> '2020Q2', '2020Q4' -> '2021Q1'.
+ * Returns null if the quarter string is malformed.
+ */
+function nextQuarter(quarter) {
+  if (typeof quarter !== 'string') return null;
+  const match = quarter.match(/^(\d{4})Q([1-4])$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const qtr = Number(match[2]);
+  if (qtr === 4) return `${year + 1}Q1`;
+  return `${year}Q${qtr + 1}`;
+}
+
+/**
  * Verifies that an array of quarters is in chronological order.
  * @param {string[]} quarters
  * @param {{ strictlyAscending?: boolean }} [options]
@@ -56,6 +71,27 @@ function areQuartersChronological(quarters, { strictlyAscending = false } = {}) 
       const cmp = compareQuarters(quarters[i - 1], quarters[i]);
       if (cmp === null) return false;
       if (strictlyAscending ? cmp >= 0 : cmp > 0) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Verifies that an array of quarters is strictly continuous (no missing quarters).
+ * E.g., ['2020Q1', '2020Q2', '2020Q3', '2020Q4', '2021Q1'] is continuous.
+ * E.g., ['2020Q1', '2020Q3'] has a gap and returns false.
+ *
+ * @param {string[]} quarters
+ * @returns {boolean}
+ */
+function areQuartersContinuous(quarters) {
+  if (!Array.isArray(quarters) || quarters.length === 0) return false;
+  if (quarters.length === 1) return /^\d{4}Q[1-4]$/.test(quarters[0]);
+  for (let i = 0; i < quarters.length; i += 1) {
+    if (typeof quarters[i] !== 'string' || !/^\d{4}Q[1-4]$/.test(quarters[i])) return false;
+    if (i > 0) {
+      const expected = nextQuarter(quarters[i - 1]);
+      if (quarters[i] !== expected) return false;
     }
   }
   return true;
@@ -76,10 +112,10 @@ function sortQuarters(quarters) {
  * Full validation of a versioned state-quarter HPI series.
  * Verifies FHFA provenance, sha256 integrity (when raw bytes are provided),
  * valid state keys (no national 'US' aggregate), valid quarters, positive index
- * values, and optional chronological ordering.
+ * values, and optional chronological ordering / continuity.
  *
  * @param {Object} series
- * @param {{ rawPayload?: string, requireChronologicalKeys?: boolean }} [options]
+ * @param {{ rawPayload?: string, requireChronologicalKeys?: boolean, requireContinuousQuarters?: boolean }} [options]
  * @returns {boolean}
  */
 function validateStateQuarterSeries(series, options = {}) {
@@ -117,6 +153,9 @@ function validateStateQuarterSeries(series, options = {}) {
     if (options.requireChronologicalKeys && !areQuartersChronological(keys)) {
       return false;
     }
+    if (options.requireContinuousQuarters && !areQuartersContinuous(keys)) {
+      return false;
+    }
   }
   return true;
 }
@@ -130,6 +169,41 @@ function getHpiIndex(state, period, series) {
 function getAppreciationMultiplier(state, baseline, current, series) {
   const past = getHpiIndex(state, baseline, series), present = getHpiIndex(state, current, series);
   return past !== null && present !== null ? present / past : null;
+}
+
+/**
+ * Computes observed HPI appreciation metrics between baseline and current quarter for a state.
+ * Enforces Zero-Fabrication rules: returns null if series is unobserved, quarters are
+ * invalid/out-of-order, or indices are non-positive.
+ *
+ * @param {string} state - Two-letter USPS state code
+ * @param {string} baseline - YYYYQn baseline period
+ * @param {string} current - YYYYQn current period
+ * @param {Object} series - Observed HPI series
+ * @param {{ assessedValue?: number }} [options] - Optional assessed value to adjust
+ * @returns {{ state: string, baselinePeriod: string, currentPeriod: string, baselineHpi: number, currentHpi: number, multiplier: number, appreciationPct: number, hpiAdjustedAssessedValue?: number } | null}
+ */
+function computeHpiAppreciation(state, baseline, current, series, options = {}) {
+  if (!baseline || !current || compareQuarters(baseline, current) > 0) return null;
+  const baselineHpi = getHpiIndex(state, baseline, series);
+  const currentHpi = getHpiIndex(state, current, series);
+  if (baselineHpi === null || currentHpi === null || baselineHpi <= 0 || currentHpi <= 0) return null;
+  const multiplier = currentHpi / baselineHpi;
+  const appreciationPct = Math.round((multiplier - 1.0) * 1000) / 10;
+  const res = {
+    state,
+    baselinePeriod: baseline,
+    currentPeriod: current,
+    baselineHpi,
+    currentHpi,
+    multiplier,
+    appreciationPct,
+  };
+  const assessedValue = Number(options.assessedValue);
+  if (Number.isFinite(assessedValue) && assessedValue > 0) {
+    res.hpiAdjustedAssessedValue = Math.round(assessedValue * multiplier);
+  }
+  return res;
 }
 
 /**
@@ -151,9 +225,12 @@ module.exports = {
   isObservedSeries,
   getHpiIndex,
   getAppreciationMultiplier,
+  computeHpiAppreciation,
   getLatestObservedPeriod,
   compareQuarters,
+  nextQuarter,
   areQuartersChronological,
+  areQuartersContinuous,
   sortQuarters,
   validateStateQuarterSeries,
 };

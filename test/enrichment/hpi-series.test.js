@@ -385,3 +385,120 @@ test('computePublicBenchmarkConsensus auto-loads observed series and respects ex
   }
 });
 
+test('hpi.js: nextQuarter helper computes chronological quarterly roll-over', () => {
+  assert.equal(hpi.nextQuarter('2020Q1'), '2020Q2');
+  assert.equal(hpi.nextQuarter('2020Q2'), '2020Q3');
+  assert.equal(hpi.nextQuarter('2020Q3'), '2020Q4');
+  assert.equal(hpi.nextQuarter('2020Q4'), '2021Q1');
+  assert.equal(hpi.nextQuarter('2024Q4'), '2025Q1');
+  assert.equal(hpi.nextQuarter('invalid'), null);
+  assert.equal(hpi.nextQuarter(null), null);
+  assert.equal(hpi.nextQuarter(''), null);
+});
+
+test('hpi.js: areQuartersContinuous verifies strict quarter continuity without gaps', () => {
+  assert.equal(hpi.areQuartersContinuous(['2020Q1', '2020Q2', '2020Q3', '2020Q4', '2021Q1']), true);
+  assert.equal(hpi.areQuartersContinuous(['2024Q3', '2024Q4', '2025Q1', '2025Q2']), true);
+  assert.equal(hpi.areQuartersContinuous(['2020Q1']), true);
+
+  // Gaps fail closed
+  assert.equal(hpi.areQuartersContinuous(['2020Q1', '2020Q3']), false, 'missing 2020Q2 must fail continuity');
+  assert.equal(hpi.areQuartersContinuous(['2020Q4', '2021Q2']), false, 'missing 2021Q1 must fail continuity');
+  assert.equal(hpi.areQuartersContinuous(['2020Q2', '2020Q1']), false, 'reverse order must fail continuity');
+  assert.equal(hpi.areQuartersContinuous([]), false);
+  assert.equal(hpi.areQuartersContinuous(['not-a-quarter']), false);
+});
+
+test('hpi.js: computeHpiAppreciation computes observed appreciation and trajectory', () => {
+  const result = hpi.computeHpiAppreciation('FL', '2020Q2', '2026Q1', VALID_SERIES, { assessedValue: 300000 });
+  assert.ok(result);
+  assert.equal(result.state, 'FL');
+  assert.equal(result.baselinePeriod, '2020Q2');
+  assert.equal(result.currentPeriod, '2026Q1');
+  assert.equal(result.baselineHpi, 300);
+  assert.equal(result.currentHpi, 450);
+  assert.equal(result.multiplier, 1.5);
+  assert.equal(result.appreciationPct, 50.0);
+  assert.equal(result.hpiAdjustedAssessedValue, 450000);
+
+  // Negative controls (all fail closed to null under Zero-Fabrication rules)
+  assert.equal(hpi.computeHpiAppreciation('FL', '2026Q1', '2020Q2', VALID_SERIES), null, 'reverse quarters fail closed');
+  assert.equal(hpi.computeHpiAppreciation('OH', '2020Q2', '2026Q1', VALID_SERIES), null, 'missing state fails closed');
+  assert.equal(hpi.computeHpiAppreciation('FL', '2019Q1', '2026Q1', VALID_SERIES), null, 'missing baseline fails closed');
+  assert.equal(hpi.computeHpiAppreciation('FL', '2020Q2', '2026Q1', null), null, 'null series fails closed');
+});
+
+test('validateStateQuarterSeries supports requireContinuousQuarters option', () => {
+  const continuousSeries = {
+    ...VALID_SERIES,
+    values: {
+      FL: { '2020Q1': 100, '2020Q2': 105, '2020Q3': 110, '2020Q4': 115 },
+    },
+  };
+  assert.equal(hpi.validateStateQuarterSeries(continuousSeries, { requireContinuousQuarters: true }), true);
+
+  const gappedSeries = {
+    ...VALID_SERIES,
+    values: {
+      FL: { '2020Q1': 100, '2020Q3': 110 },
+    },
+  };
+  assert.equal(hpi.validateStateQuarterSeries(gappedSeries, { requireContinuousQuarters: true }), false);
+  // Without the flag, sparse quarters are still valid for non-continuous series
+  assert.equal(hpi.validateStateQuarterSeries(gappedSeries), true);
+});
+
+test('scripts/ingest-fhfa-hpi.js: ingestHpiSeries enforces checkContinuity flag', () => {
+  const gappedInput = {
+    version: 1,
+    sourceUrl: 'https://www.fhfa.gov/data/hpi',
+    retrievedAt: '2026-11-09T00:00:00.000Z',
+    values: {
+      FL: { '2020Q1': 200, '2020Q3': 220 },
+    },
+  };
+
+  assert.throws(
+    () => ingestHpiSeries({ seriesData: gappedInput, checkContinuity: true }),
+    /Quarterly continuity gap detected/
+  );
+});
+
+test('master FHFA state-quarter CSV (data/fhfa-hpi-master.csv) passes ingestion with strict continuity for all 51 states', () => {
+  const masterCsvPath = path.resolve(__dirname, '../../data/fhfa-hpi-master.csv');
+  if (!fs.existsSync(masterCsvPath)) {
+    return; // Optional if not checked in
+  }
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hpi-master-test-'));
+  const outJson = path.join(tmpDir, 'master-series.json');
+
+  try {
+    const ingested = ingestHpiSeries({
+      seriesFile: masterCsvPath,
+      outPath: outJson,
+      checkContinuity: true,
+    });
+
+    assert.ok(ingested);
+    assert.equal(ingested.version, 1);
+    const states = Object.keys(ingested.values);
+    assert.equal(states.length, 51, 'must contain exactly 50 states + DC');
+    assert.ok(!states.includes('US'), 'must not contain US national aggregate');
+
+    // Verify FL and OH have full continuous series ending at 2026Q2
+    assert.ok(ingested.values.FL['2026Q2'] > 0);
+    assert.ok(ingested.values.OH['2026Q2'] > 0);
+    assert.equal(hpi.getLatestObservedPeriod(ingested), '2026Q2');
+
+    // Test appreciation calculation on real observed master data
+    const flApprec = hpi.computeHpiAppreciation('FL', '2020Q2', '2026Q2', ingested, { assessedValue: 300000 });
+    assert.ok(flApprec);
+    assert.ok(flApprec.multiplier > 1.5, 'FL appreciation between 2020 and 2026 should be > 1.5');
+    assert.ok(flApprec.hpiAdjustedAssessedValue > 450000);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+
