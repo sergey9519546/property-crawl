@@ -982,3 +982,42 @@ test('Option B Multi-County Platform Expansion: CivilView nationwide, RealAuctio
   }
 });
 
+test('RealAuction fetchCountyRealauction accumulates listings across candidate dates via ColdFusion AJAX', async () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const initialHtml = `
+    <html>
+      <body>
+        <div class="BLHeaderNext"><a href="/index.cfm?zaction=AUCTION&AuctionDate=11/20/2026">Next</a></div>
+        <div class="BLHeaderToday"><a href="/index.cfm?zaction=AUCTION&AuctionDate=11/13/2026">Today</a></div>
+      </body>
+    </html>
+  `;
+  const ajaxResponseDate1 = JSON.stringify({
+    retHTML: '<tr class="DataRow"><td>Auction ID: 101</td><td>Case #: 2026-CV-01</td><td>Parcel ID: 01-100-20</td><td>Address: 100 Main St, Columbus, OH 43215</td><td>Opening Bid: $50,000</td></tr>'
+  });
+  const ajaxResponseDate2 = JSON.stringify({
+    retHTML: '<tr class="DataRow"><td>Auction ID: 102</td><td>Case #: 2026-CV-02</td><td>Parcel ID: 01-100-21</td><td>Address: 200 Broad St, Columbus, OH 43215</td><td>Opening Bid: $75,000</td></tr>'
+  });
+
+  const scraper = new SheriffSaleScraper();
+  scraper.requestText = async () => initialHtml;
+  let callCount = 0;
+  scraper.fetchImpl = async (url) => {
+    callCount++;
+    if (url.includes('AuctionDate=')) {
+      return { ok: true, text: async () => 'ok' };
+    }
+    if (url.includes('PageDir=0') && url.includes('AREA=W')) {
+      const resp = callCount < 5 ? ajaxResponseDate1 : ajaxResponseDate2;
+      return { ok: true, text: async () => resp };
+    }
+    return { ok: true, text: async () => JSON.stringify({ retHTML: '' }) };
+  };
+
+  const results = await scraper.fetchCountyRealauction({ name: 'Franklin', domain: 'franklin.sheriffsaleauction.ohio.gov', state: 'OH' });
+  assert.ok(Array.isArray(results));
+  assert.equal(results.length, 2);
+  assert.equal(results[0].id, 'SHERIFF-OH-FRA-2026-CV-01');
+  assert.equal(results[1].id, 'SHERIFF-OH-FRA-2026-CV-02');
+});
+

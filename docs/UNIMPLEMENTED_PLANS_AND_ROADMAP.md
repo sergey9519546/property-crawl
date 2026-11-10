@@ -19,7 +19,7 @@
 
 ## 1. Executive Summary
 
-While `property-crawl` has achieved a 100% verified production deployment on Render (PostgreSQL 16 + PostGIS 3.6, 15,528 listings and 82,186 observations, strictly $0/month cost), multiple ambitious engineering and data acquisition plans were drafted in prior sessions.
+While `property-crawl` has achieved a 100% verified production deployment on Render (PostgreSQL 16 + PostGIS 3.6, 15,502 listings and 82,777 observations, strictly $0/month cost), multiple ambitious engineering and data acquisition plans were drafted in prior sessions.
 
 Across recent workstreams, a substantial number of these flagship subsystems have been fully implemented, control-tested, and shipped into the verified production codebase. This document compiles the complete inventory, explicitly differentiating what is **NOW IMPLEMENTED & SHIPPED** from what remains **PROSPECTIVE OR POLICY-DEFERRED** (such as autonomous 24/7 background IMAP polling daemons, live Stripe billing webhooks, or statutory/robots exclusions).
 

@@ -26,8 +26,8 @@ const { attachParcelIdentity } = require('./normalization');
 
 const DETAIL_PATH = '/Sales/SaleDetails';
 const DEFAULT_TIMEOUT_MS = 30000;
-const DEFAULT_MAX_COUNTIES = 4;
-const DEFAULT_DETAIL_LIMIT = 60;
+const DEFAULT_MAX_COUNTIES = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 8 : 4;
+const DEFAULT_DETAIL_LIMIT = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 120 : 60;
 
 // Module-scope helpers. These are parsing primitives with no scraper state:
 // they are not part of the CivilViewScraper interface.

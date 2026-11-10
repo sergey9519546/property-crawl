@@ -211,7 +211,8 @@ class SheriffSaleScraper extends BaseScraper {
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
     this.lastRunReport = null;
-    this.maxCounties = Math.max(1, Number(options.maxCounties || process.env.SHERIFF_MAX_COUNTIES || this.counties.length || 1));
+    const defaultCountyBudget = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 12 : this.counties.length;
+    this.maxCounties = Math.max(1, Number(options.maxCounties || process.env.SHERIFF_MAX_COUNTIES || defaultCountyBudget || 1));
     const initialOffset = parseCountyOffset(options.countyOffset ?? options.checkpoint ?? process.env.SHERIFF_COUNTY_OFFSET ?? 0);
     this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
   }
@@ -461,6 +462,7 @@ class SheriffSaleScraper extends BaseScraper {
           const candidateDates = [...new Set([todayMatch?.[1], nextMatch?.[1], ...allDates].filter(Boolean))];
 
           const datesToTry = candidateDates.length > 0 ? candidateDates.slice(0, 2) : [null];
+          const accumulatedListings = [];
 
           for (const targetDate of datesToTry) {
             if (targetDate) {
@@ -471,7 +473,6 @@ class SheriffSaleScraper extends BaseScraper {
               } catch (_) {}
             }
 
-            const accumulatedListings = [];
             const maxPages = Math.max(1, Math.min(5, Number(process.env.REALAUCTION_MAX_PAGES_PER_DATE) || 3));
             for (let page = 0; page < maxPages; page++) {
               const ajaxUrl = `${baseUrl}/index.cfm?zaction=AUCTION&Zmethod=UPDATE&FNC=LOAD&AREA=W&PageDir=${page}&doR=1&tx=${Date.now()}&bypassPage=1&test=1`;

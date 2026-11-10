@@ -34,12 +34,12 @@ The 2026-10-31 through 2026-11-08 audit receipts (Tracks 1–3 stabilization, re
 
 | Fact | Value | Source |
 |---|---|---|
-| Stabilization code | `a0805da` includes repository cleanup, pagination continuation, FHFA quarterly series validator, adapter hardening, dossier VoI title/municipal gap ranking, and canonical checklist updates | git log & test suite |
-| Live URL | `https://property-crawl.onrender.com`; `a0805da` verified with PostgreSQL 16.15 reachable; listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, live health readback 2026-11-09 |
+| Stabilization code | `80940df` includes durable PG checkpoints, bounded county rotation, heartbeat roll-forward, HPI CSV ingestion, operatorInput fix, ColdFusion date accumulation repair, and ServiceLink/CivilView cadence sizing | git log & test suite |
+| Live URL | `https://property-crawl.onrender.com`; `80940df12b80e328cbbe2b346816c7574e929d93` verified with PostgreSQL 16.15 reachable; listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, live health readback 2026-11-10 |
 | Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health` readback |
-| Hosted database readback | **15,528 listings** and **82,186 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved in `.secrets/hosted-backups/`) | live /api/health readback 2026-11-09 |
-| Local stabilization release checks | **9/9**, clean/source-bound to `a0805da`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
-| Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | test runners; external-server row-lock/lease acceptance remains open |
+| Hosted database readback | **15,502 listings** and **82,777 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved in `.secrets/hosted-backups/`) | live /api/health readback 2026-11-10 |
+| Local stabilization release checks | **9/9**, clean/source-bound; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
+| Fresh stabilization verification | **15/15** quality gate test suites passing, **50/50** verification suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | test runners; external-server row-lock/lease acceptance remains open |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
 | Source catalog entries | **288**, 61 with an adapter; adapter linkage is not live qualification | generated `CONTEXT.md` at the audited tree |
 | Dispatched API paths | **44** | generated `CONTEXT.md` at the audited tree |
