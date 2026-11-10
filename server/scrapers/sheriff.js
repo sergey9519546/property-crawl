@@ -183,7 +183,8 @@ function parseCountyOffset(value) {
 
 class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
-    super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff' });
+    // Per-county failures are already recorded individually; retrying the whole multi-county sweep turned one dead publisher into a multi-minute retry storm.
+    super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff', maxRetries: 1 });
     const flCounties = (options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1')
       ? DEFAULT_FL_COUNTIES
       : (process.env.SHERIFF_INCLUDE_FL === '0' ? [] : TOP_FL_COUNTIES);
