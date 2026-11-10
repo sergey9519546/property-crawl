@@ -181,3 +181,60 @@ test('a running cycle publishes its start and clears it when the cycle finishes'
   assert.equal(after.startedAt, null);
   assert.equal(after.lastFinishedAt, subject.lastCycleFinishedAt);
 });
+
+function civilviewListing(id) {
+  return {
+    id: `civilview:${id}`, source: 'civilview', sourceKey: 'civilview', state: 'NJ',
+    address: `${id} Main Street`, city: 'Newark', zip: '07101', sourceObservedAt: '2026-09-12T00:00:00.000Z',
+    sourceUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${id}`,
+    raw: JSON.stringify({ id }), provenance: { origin: 'live', observed: true, observedAt: '2026-09-12T00:00:00.000Z', publisher: 'CivilView', recordId: String(id), sourceFacts: {} }
+  };
+}
+
+test('in-memory checkpoints resume across successive cycles when discoveryStore is null', async () => {
+  let sweepIndex = 0;
+  const checkpointsSeen = [];
+  const testCollector = {
+    name: 'MemoryResumeFixture',
+    sourceKey: 'civilview',
+    getCollectionScope() { return { endpoint: '/test', filters: {} }; },
+    setCheckpoint(value) { checkpointsSeen.push(value); },
+    async scrapeFeed() {
+      sweepIndex += 1;
+      if (sweepIndex === 1) {
+        return Object.defineProperties([civilviewListing('m-1')], {
+          partialSweep: { value: true, enumerable: false },
+          nextCursor: { value: 'page-2-cursor', enumerable: false },
+          nextContinuationToken: { value: 'page-2-cursor', enumerable: false },
+          report: { value: { complete: false, truncated: true, partialSweep: true, nextContinuationToken: 'page-2-cursor' }, enumerable: false },
+        });
+      }
+      return Object.defineProperties([civilviewListing('m-2')], {
+        partialSweep: { value: false, enumerable: false },
+        nextCursor: { value: null, enumerable: false },
+        nextContinuationToken: { value: null, enumerable: false },
+        report: { value: { complete: true, truncated: false, partialSweep: false, nextContinuationToken: null }, enumerable: false },
+      });
+    },
+  };
+
+  const subject = new IngestionScheduler({
+    realScrapers: [testCollector],
+    discoveryStore: null,
+    telemetry: { recordRun() {} },
+    database: { isPg: false, inMemoryData: { listings: [] }, async createListing() {} },
+    networkEnabled: true,
+    concurrency: 1,
+  });
+
+  const res1 = await subject.runAll({ sourceIds: ['civilview'] });
+  assert.equal(res1.totalIngested, 1);
+  assert.deepEqual(checkpointsSeen, []);
+  assert.equal(subject.sourceCheckpoints.get('civilview')?.continuationToken, 'page-2-cursor');
+
+  const res2 = await subject.runAll({ sourceIds: ['civilview'] });
+  assert.equal(res2.totalIngested, 1);
+  assert.equal(checkpointsSeen.length, 1);
+  assert.equal(checkpointsSeen[0]?.continuationToken, 'page-2-cursor');
+  assert.equal(subject.sourceCheckpoints.has('civilview'), false, 'cleared on complete');
+});

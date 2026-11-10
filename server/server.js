@@ -54,10 +54,14 @@ const apiLimiter = createApiRatePolicy({
 /** Each source's declared refresh cadence, keyed by the adapter key records carry. */
 function sourceCadences() {
   try {
-    const catalog = require('./sources/catalog').SOURCE_CATALOG || [];
+    const { SOURCE_CATALOG, servesListings } = require('./sources/catalog');
+    const catalog = SOURCE_CATALOG || [];
     const cadences = {};
     for (const source of catalog) {
       const key = source.adapterKey || source.id;
+      if (typeof servesListings === 'function' && !servesListings(key)) {
+        continue;
+      }
       const hours = source.workflow && source.workflow.cadenceHours;
       if (key && Number.isFinite(Number(hours)) && Number(hours) > 0) {
         cadences[key] = Number(hours);

@@ -1,5 +1,6 @@
 const { recordSnapshot } = require('./discovery-snapshots');
 const crypto = require('node:crypto');
+const path = require('node:path');
 const sheriff = require('./sheriff');
 const hud = require('./hud');
 const fannie = require('./fannie');
@@ -215,6 +216,7 @@ class IngestionScheduler {
     this.enableAssessorBackfill = options.enableAssessorBackfill !== undefined ? Boolean(options.enableAssessorBackfill) : true;
     this.networkEnabled = options.networkEnabled ?? shouldAllowRealScrapers(options.env || process.env);
     this.concurrency = normalizeConcurrency(options.concurrency ?? (options.env || process.env).SCRAPER_CONCURRENCY);
+    this.sourceCheckpoints = new Map();
     // Derive key set from actual array so the log message never drifts.
     this.realScraperKeys = new Set(this.realScrapers.map(s => s.sourceKey || s.name));
     // Registration gate: only listing-serving collectors get run slots.
@@ -330,14 +332,19 @@ class IngestionScheduler {
             if(typeof scraper.setCheckpoint==='function')scraper.setCheckpoint(scopeMoved?{}:(checkpoint?.cursor||{}));
             discoveryRun=await this.discoveryStore.beginRun({sourceKey:scraper.sourceKey,trigger:options.trigger||'scheduler',scope,idempotencyKey:options.jobId?`${options.jobId}:${scraper.sourceKey}`:null,jobId:options.jobId||null},ownership);
           }
+          else if (typeof scraper.setCheckpoint === 'function') {
+            const saved = this.sourceCheckpoints.get(scraper.sourceKey);
+            if (saved) scraper.setCheckpoint(saved);
+          }
           if (scraper.sourceKey === 'servicelink') {
             if (this.discoveryStore) {
               scraper.checkpointPath = null;
             } else if (typeof scraper.setCheckpoint === 'function') {
-              const checkpointPath = servicelink.explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH);
+              const defaultCheckpointPath = path.resolve(process.cwd(), '.cache', 'servicelink-checkpoint.json');
+              const checkpointPath = servicelink.explicitCheckpointPath(process.env.SERVICELINK_CHECKPOINT_PATH || defaultCheckpointPath);
               scraper.checkpointPath = checkpointPath;
               if (checkpointPath) {
-                const saved = servicelink.readCheckpointFile(checkpointPath);
+                const saved = (checkpointPath && servicelink.readCheckpointFile(checkpointPath)) || this.sourceCheckpoints.get(scraper.sourceKey);
                 if (saved) scraper.setCheckpoint(saved);
               }
             }
@@ -351,7 +358,7 @@ class IngestionScheduler {
           // throwing, which used to make the source fail on every sweep.
           const reportOnly = !Array.isArray(items) && items && typeof items === 'object' && 'report' in items;
           const isListingEnvelope = !Array.isArray(items) && items && typeof items === 'object' && (Array.isArray(items.listings) || Array.isArray(items.items) || Array.isArray(items.data));
-          if (!Array.isArray(items) && !reportOnly && !isListingEnvelope) {
+          if (!Array.isArray(items) && !reportOnly) if (!isListingEnvelope) {
             throw new TypeError(`${scraper.name} returned a non-array payload`);
           }
           const itemsToIngest = reportOnly ? [] : (isListingEnvelope ? (items.listings || items.items || items.data) : items);
@@ -456,6 +463,18 @@ class IngestionScheduler {
             } : {};
             await assertLease('Collection job lease was lost before checkpoint advancement');
             await this.discoveryStore.saveCheckpoint(scraper.sourceKey, cursor, collectionScope(scraper),ownership);
+          } else {
+            const cursorToken = nextContinuationToken || continuationToken || nextCursor;
+            if (cursorToken && (report?.complete === false || report?.truncated === true || report?.partialSweep === true)) {
+              this.sourceCheckpoints.set(scraper.sourceKey, {
+                continuationToken: cursorToken,
+                cursor: cursorToken,
+                sweepStartedAt: scraper.lastRunReport?.sweepStartedAt || items?.sweepStartedAt || null,
+                pagesCommitted: (scraper.lastRunReport?.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport?.pagesFetched || 0),
+              });
+            } else if (report?.complete === true) {
+              this.sourceCheckpoints.delete(scraper.sourceKey);
+            }
           }
           const sourceResult={ sourceId: scraper.sourceKey, runId: discoveryRun?.id || null, accepted: accepted.length, rejected: rejectedForScraper, error: null, observationError, report };
           Object.defineProperty(sourceResult,'acceptedListings',{value:accepted,enumerable:false});
