@@ -13,7 +13,7 @@ const { arbitrateTitleRisk } = require('./title-risk-engine');
 
 function known(value) { return value !== null && value !== undefined && value !== ''; }
 
-function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, now = Date.now(), historyUnavailable = false, countyStats = null } = {}) {
+function buildPropertyDossier(listing, { observations = { records: {}, signals: [] }, publicRecords = null, operatorInput = null, now = Date.now(), historyUnavailable = false, countyStats = null } = {}) {
   const timestamp = listing.sourceObservedAt || listing.provenance?.observedAt;
   const publisherObserved = listing.provenance?.origin === 'live'
     && validateListingForIngestion(listing).isValid && Date.parse(timestamp) <= now + 300_000;
