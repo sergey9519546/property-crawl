@@ -393,7 +393,15 @@ class IngestionScheduler {
                   [scraper.sourceKey]
                 );
                 if (pgRes?.rows?.[0]?.cursor) {
-                  saved = { continuationToken: pgRes.rows[0].cursor, cursor: pgRes.rows[0].cursor, scopeHash: pgRes.rows[0].scope_hash };
+                  const rawCursor = pgRes.rows[0].cursor;
+                  const token = typeof rawCursor === 'string'
+                    ? rawCursor
+                    : (rawCursor && typeof rawCursor === 'object'
+                        ? (rawCursor.continuationToken ?? rawCursor.cursor ?? rawCursor.token ?? null)
+                        : null);
+                  saved = typeof rawCursor === 'object' && rawCursor !== null && !Array.isArray(rawCursor)
+                    ? { ...rawCursor, continuationToken: token, cursor: token, scopeHash: pgRes.rows[0].scope_hash }
+                    : { continuationToken: token, cursor: token, scopeHash: pgRes.rows[0].scope_hash };
                   this.sourceCheckpoints.set(scraper.sourceKey, saved);
                 }
               } catch (_) {}
@@ -557,11 +565,13 @@ class IngestionScheduler {
                 const scope = collectionScope(scraper);
                 this.database.pool.query(
                   `INSERT INTO discovery_checkpoints (source_key, cursor, scope_hash, updated_at)
-                   VALUES ($1, $2, $3, NOW())
+                   VALUES ($1, to_jsonb($2::text), $3, NOW())
                    ON CONFLICT (source_key) DO UPDATE
                    SET cursor = EXCLUDED.cursor, scope_hash = EXCLUDED.scope_hash, updated_at = NOW()`,
                   [scraper.sourceKey, String(cursorToken), scopeHash(scope)]
-                ).catch(() => {});
+                ).catch((err) => {
+                  console.warn(`[Scheduler] Could not persist ${scraper.sourceKey} checkpoint to PostgreSQL:`, err?.message || err);
+                });
               } else {
                 try {
                   const cacheDir = path.resolve(process.cwd(), '.cache');
@@ -611,7 +621,6 @@ class IngestionScheduler {
       const duration = Date.now() - startTime;
       console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
       const result = { totalIngested, totalRejected, durationMs: duration, skipped: false, sourceResults, completeCycle, jobId: cycleContext?.jobId || options.jobId || null };
-      stopCycle();
       if (!options.coordinatorManaged) {
         try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, trigger: options.trigger || 'scheduler', ...ownership, leaseGuard }); }
         catch (error) { console.error('[Scheduler] Could not finalize collection job:', error.message); if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error; }

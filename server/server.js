@@ -51,6 +51,9 @@ const apiLimiter = createApiRatePolicy({
   maxRequests: Number.isInteger(configuredApiLimit) && configuredApiLimit >= 1 && configuredApiLimit <= 10000 ? configuredApiLimit : 120,
 });
 
+let lastHealthCache = { timestamp: 0, freshness: null, observationStore: null };
+const HEALTH_CACHE_TTL_MS = 25000;
+
 /** Each source's declared refresh cadence, keyed by the adapter key records carry. */
 function sourceCadences() {
   try {
@@ -254,13 +257,18 @@ async function handleRequest(req, res) {
       const { defaultStorePath } = require('./intelligence/document-review-store');
       const unavailableReason = db.inventoryUnavailableReason();
       // Freshness and observation store facts are secondary diagnostics, not preconditions.
-      // Parallelize and bound them to 2500ms so /api/health never exceeds Render's 5s healthcheck deadline.
+      // Cache for 25s so frequent container health checks respond in <1ms without DB lock contention; misses bound to 2000ms.
       let freshness = null;
       let observationStore = null;
+      const now = Date.now();
+      if (lastHealthCache.freshness && (now - lastHealthCache.timestamp < HEALTH_CACHE_TTL_MS)) {
+        freshness = lastHealthCache.freshness;
+        observationStore = lastHealthCache.observationStore;
+      } else {
       const freshnessPromise = (typeof db.inventoryFreshness === 'function')
         ? Promise.race([
             db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 2500))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 2000))
           ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
         : Promise.resolve(null);
 
@@ -269,10 +277,12 @@ async function handleRequest(req, res) {
           const { observationStoreStats } = require('./db/observations-persistence');
           return observationStoreStats(db.pool);
         })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 3500))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 2000))
       ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
 
-      [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
+        [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
+        lastHealthCache = { timestamp: Date.now(), freshness, observationStore };
+      }
       return res.json({
         status: 'ok',
         uptime: process.uptime(),

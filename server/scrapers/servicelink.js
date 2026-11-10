@@ -18,12 +18,12 @@ const SOURCE_KEY = 'servicelink';
 const PUBLISHER = 'ServiceLink Auction';
 const API_ORIGIN = 'https://www.servicelinkauction.com';
 const LISTINGS_PATH = '/api/listingsvc/v1/Listings';
-const DEFAULT_MAX_PAGES = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 20 : 1;
+const DEFAULT_MAX_PAGES = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 40 : 1;
 // Manual/canary sweeps may explicitly request a larger bounded segment. The
 // default remains one page; 100 pages caps one process run at 2,500 records at
 // the default page size and every page still observes crawl jitter.
 const MAX_PAGES = 100;
-const DEFAULT_LIMIT = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 50 : 25;
+const DEFAULT_LIMIT = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 100 : 25;
 const MAX_LIMIT = 100;
 const DEFAULT_CHECKPOINT_PATH = path.resolve(process.cwd(), '.cache', 'servicelink-checkpoint.json');
 const rawPublisherRecords = new WeakMap();

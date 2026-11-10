@@ -320,7 +320,60 @@ test('ScraperScheduler queries and saves PostgreSQL checkpoint when discoverySto
   assert.equal(runRes.totalIngested, 1);
   assert.equal(loadedCheckpoints.length, 1);
   assert.equal(loadedCheckpoints[0]?.cursor, 'saved-pg-cursor');
-  assert.ok(pgQueries.some(q => q.sql.includes('INSERT INTO discovery_checkpoints') && q.params[1] === 'next-pg-cursor'));
+  assert.ok(pgQueries.some(q => q.sql.includes('INSERT INTO discovery_checkpoints') && q.sql.includes('to_jsonb($2::text)') && q.params[1] === 'next-pg-cursor'));
+});
+
+test('ScraperScheduler safely unpacks JSONB object cursors from discovery_checkpoints', async () => {
+  const pgQueries = [];
+  const mockPool = {
+    async query(sql, params) {
+      pgQueries.push({ sql, params });
+      if (sql.includes('SELECT cursor, scope_hash FROM discovery_checkpoints')) {
+        return { rows: [{ cursor: { continuationToken: 'obj-token-123', sweepStartedAt: '2026-11-10T00:00:00Z', pagesCommitted: 2 }, scope_hash: 'abc' }] };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+  };
+  const mockDb = {
+    isPg: true,
+    pool: mockPool,
+    async createListing(l) { return l; },
+    getAlertSubscriptions() { return []; },
+  };
+
+  const loadedCheckpoints = [];
+  const testScraper = {
+    name: 'ObjectCheckpointScraper',
+    sourceKey: 'servicelink',
+    setCheckpoint(cp) { loadedCheckpoints.push(cp); },
+    async scrapeFeed() {
+      const items = [listing('pg-obj')];
+      items.partialSweep = true;
+      items.complete = false;
+      items.nextContinuationToken = 'next-token-456';
+      return items;
+    },
+    passesFilter() { return true; },
+    getRawPublisherRecord() { return { raw: 'data' }; },
+  };
+
+  const scheduler = new IngestionScheduler({
+    realScrapers: [testScraper],
+    database: mockDb,
+    discoveryStore: null,
+    telemetry: { recordRun() {} },
+    concurrency: 1,
+  });
+
+  const runRes = await scheduler.runAll({ sourceIds: ['servicelink'] });
+  assert.equal(runRes.totalIngested, 1);
+  assert.ok(loadedCheckpoints.length >= 1);
+  const cp = loadedCheckpoints.at(-1);
+  assert.equal(typeof cp?.continuationToken, 'string');
+  assert.equal(cp?.continuationToken, 'obj-token-123');
+  assert.equal(cp?.cursor, 'obj-token-123');
+  assert.equal(cp?.pagesCommitted, 2);
+  assert.ok(pgQueries.some(q => q.sql.includes('to_jsonb($2::text)') && q.params[1] === 'next-token-456'));
 });
 
 test('a stalled scraper times out instead of wedging the cycle, and the next run proceeds', async () => {
