@@ -34,11 +34,11 @@ The 2026-10-31 through 2026-11-08 audit receipts (Tracks 1–3 stabilization, re
 
 | Fact | Value | Source |
 |---|---|---|
-| Stabilization code | `e63255f` / `348a3ea` wired PG publisher-absence reconciliation (`server/db/client.js`, `server/scrapers/scheduler.js`), `compactPgObservations` (`server/db/observations-persistence.js`, `scripts/compact-snapshots.js`), and omitted-party joinder + municipal super-lien arbitration (`server/intelligence/title-risk-engine.js`) | git log & test suite |
-| Live URL | `https://property-crawl.onrender.com`; `e63255f` / `348a3ea` verified with PostgreSQL 16.15 reachable; listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, live readback verified |
-| Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health`, audit 09 |
-| Hosted database readback | **15,258 listings** and **79,243 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved in `.secrets/hosted-backups/`) | live /api/health readback 2026-11-09 |
-| Local stabilization release checks | **9/9**, clean/source-bound to `e63255f` / `348a3ea`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
+| Stabilization code | `a0805da` includes repository cleanup, pagination continuation, FHFA quarterly series validator, adapter hardening, dossier VoI title/municipal gap ranking, and canonical checklist updates | git log & test suite |
+| Live URL | `https://property-crawl.onrender.com`; `a0805da` verified with PostgreSQL 16.15 reachable; listing/readiness return 200, anonymous review 401, home has nonce CSP | deploy dep-dboqsh8473hc73auc8g0, live health readback 2026-11-09 |
+| Hosted evidence storage | explicitly **ephemeral_filesystem**, mount/backup unverified; startup success does not establish durability | deployed `/api/health` readback |
+| Hosted database readback | **15,528 listings** and **82,186 observations**; PostgreSQL 16.15, free plan expires **2026-11-19** (35.74 MB full off-host dump safely preserved in `.secrets/hosted-backups/`) | live /api/health readback 2026-11-09 |
+| Local stabilization release checks | **9/9**, clean/source-bound to `a0805da`; production build and isolated embedded-database E2E | `reports/release-gate-ledger.json`, git history |
 | Fresh stabilization verification | **50/50** suites, **18 external-PostgreSQL tests skipped**; recorder/durability plus adapter controls 22/22, meta-guards 177/177, coverage remainder runner 2006/2006 | test runners; external-server row-lock/lease acceptance remains open |
 | Seed listings (`data.js`) | **2130** | `scripts/gen-context.js` |
 | Source catalog entries | **288**, 60 with an adapter; adapter linkage is not live qualification | generated `CONTEXT.md` at the audited tree |
@@ -58,8 +58,8 @@ stay open below. No next-track implementation was advanced during stabilization.
 
 | # | Item | Depends on | Blocked by |
 |---|---|---|---|
-| 1 | **Track 6 / Track 10 — Hosted DB Compaction & Pre-Nov-19 Free-Tier Continuity**: Run `node scripts/compact-snapshots.js --pg --apply` against hosted Postgres (`79,243` observations) to reclaim redundant heartbeat storage, mount persistent `.cache` volume or external object store, and execute the $0 free-tier Postgres continuity migration before the `2026-11-19` Render free-plan expiry (using the verified 35.74 MB off-host dump in `.secrets/hosted-backups/`) | local compaction tooling (`compactPgObservations`) and verified off-host backup | Render free-plan expiry on `2026-11-19` and live database compaction run |
-| 2 | **Background Pagination & Cadence Sweep Tuning (`servicelink` & `civilview`)**: Advance continuation-token page budgets and sweep scheduling so high-volume active catalogs (`servicelink` 7,498 rows at 6h cadence, `civilview` 5,100 rows at 12h cadence) refresh 100% of active inventory within their declared cadence windows | scheduler pagination runner and publisher rate limits | high catalog volume relative to default per-sweep page budgets |
+| 1 | **Track 6 / Track 10 — Hosted DB Compaction & Pre-Nov-19 Free-Tier Continuity**: Run `node scripts/compact-snapshots.js --pg --apply` against hosted Postgres (`82,186` observations / 184 MB) to reclaim redundant heartbeat storage after taking a fresh dump, mount persistent `.cache` volume or external object store, and execute the $0 free-tier Postgres continuity migration before the `2026-11-19` Render free-plan expiry (using the verified 35.74 MB off-host dump in `.secrets/hosted-backups/`) | local compaction tooling (`compactPgObservations`) and verified off-host backup | Render free-plan expiry on `2026-11-19` and live database compaction run |
+| 2 | **Background Pagination & Cadence Sweep Tuning (`servicelink`, `civilview`, `sheriff`, `courtlistener`)**: Advance continuation-token page budgets and sweep scheduling so lagging active catalogs (`servicelink` 7,473/7,498 stale at 6h cadence, `civilview` 4,620/5,370 stale at 12h cadence, `sheriff` 333/333 stale at 24h cadence, `courtlistener` 120/120 stale at 168h cadence) refresh 100% of active inventory within their declared cadence windows | scheduler pagination runner and publisher rate limits | high catalog volume relative to default per-sweep page budgets |
 | 3 | **Track 1 & Track 4 — Live Recorder & County Adapter Qualification**: Complete live publisher canary qualification runs for `cook-county-property-tax`, `miami-dade-foreclosure`, and `gsa` API real-estate filter, plus Harris County clerk foreclosure PDF/address resolution and Maricopa authorized access (`robots.txt` / 403 clearance) | adapter implementations and live endpoint network access | Maricopa robots 403 clearance; Harris scanned-PDF APN/address resolution; live canary qualification runs |
 | 4 | **Observed State-Quarter HPI Series**: Supply a versioned state-quarter HPI index series (`scripts/ingest-fhfa-hpi.js`) before displaying multi-quarter HPI trajectory curves | verified FHFA source data | trajectory output remains unknown without an observed quarterly index series |
 | 5 | **Track 5 — Live Alert & Digest Delivery Credentials**: Configure production `RESEND_API_KEY` / SMTP credentials and `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` receivers for live email delivery | alert digest engine and form routes | live provider credentials and receiver webhook setup |
@@ -68,7 +68,7 @@ stay open below. No next-track implementation was advanced during stabilization.
 
 ### Local stabilization repairs — A31-01 through A31-08
 
-The local code issues are repaired with positive and negative controls. Audit 08
+The local code issues are repaired with positive and negative controls. Verification suites
 records the implementation boundaries and final verification receipts. The
 remaining acceptance conditions are the rows above; fixing an unsafe default
 does not promote a source or certify deployment. The old PP receipts below are
@@ -153,7 +153,7 @@ These cannot be closed by writing code here. Each names what would unblock it.
 | Host operator secrets and delivery | operator | Render database/operator/session keys are configured (2026-10-31 readback); optional contact/newsletter delivery configuration remains separate |
 | Form webhook delivery | operator | `NEWSLETTER_ENDPOINT` / `CONTACT_ENDPOINT` |
 | Google Maps key restriction | ops | RESOLVED 2026-10-19: gcloud configured on gmp-demo-project-567127601, apikeys.googleapis.com enabled, key e8e6d89a restricted to *.onrender.com/* and https://*.onrender.com/* across all 7 targets |
-| Public live URL + custom domain | operator | URL exists; 2026-10-20 live receipt is historical. Latest production deployment/readback is tracked in audit 09; custom domain remains separate |
+| Public live URL + custom domain | operator | URL exists; 2026-10-20 live receipt is historical. Latest production deployment/readback is tracked via live `/api/health` readback; custom domain remains separate |
 | Production HTTPS CSP verification | operator | RESOLVED 2026-10-20: live HTTPS CSP verified on https://property-crawl.onrender.com (nonce + strict-dynamic, no unsafe-inline, upgrade-insecure-requests) |
 | Lawyer review of `/privacy` `/terms` | legal | counsel |
 

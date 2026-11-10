@@ -211,6 +211,8 @@ class IngestionScheduler {
     this.onSourceRun = options.onSourceRun || (async () => {});
     this.onCycleStart = options.onCycleStart || (async () => null);
     this.onCycleComplete = options.onCycleComplete || (async () => {});
+    this.enableAssessorHarvest = options.enableAssessorHarvest !== undefined ? Boolean(options.enableAssessorHarvest) : true;
+    this.enableAssessorBackfill = options.enableAssessorBackfill !== undefined ? Boolean(options.enableAssessorBackfill) : true;
     this.networkEnabled = options.networkEnabled ?? shouldAllowRealScrapers(options.env || process.env);
     this.concurrency = normalizeConcurrency(options.concurrency ?? (options.env || process.env).SCRAPER_CONCURRENCY);
     // Derive key set from actual array so the log message never drifts.
@@ -508,7 +510,10 @@ const scheduler = new IngestionScheduler({
     // band (0 of 10,285 live records carry one), and the county roll is the
     // honest source where a statutory market conversion is enrolled.
     // Bounded per run, disk-cached, fail-open.
-    if (!run.error && run.listings.length && (process.env.NODE_ENV !== 'test' || run.enableAssessorHarvest === true)) {
+    const shouldHarvest = run.enableAssessorHarvest !== undefined
+      ? Boolean(run.enableAssessorHarvest)
+      : (this?.enableAssessorHarvest ?? scheduler?.enableAssessorHarvest ?? true);
+    if (!run.error && run.listings.length && shouldHarvest) {
       try {
         const { harvestAssessorRolls } = require('../enrichment/assessor-harvest');
         // onHarvested persists each roll the moment it attaches: the harvest
@@ -537,7 +542,10 @@ const scheduler = new IngestionScheduler({
     // ingest-time harvest only sees the listings this run observed, so records
     // ingested before a county's enrollment stay dark until a full sweep
     // re-observes them. Bounded per run, cache-backed, fail-open.
-    if (process.env.NODE_ENV !== 'test' || run.enableAssessorBackfill === true) {
+    const shouldBackfill = run.enableAssessorBackfill !== undefined
+      ? Boolean(run.enableAssessorBackfill)
+      : (this?.enableAssessorBackfill ?? scheduler?.enableAssessorBackfill ?? true);
+    if (shouldBackfill) {
     try {
       const { backfillAssessorRolls } = require('../enrichment/assessor-backfill');
       const backfill = await backfillAssessorRolls({ db, limit: 25 });

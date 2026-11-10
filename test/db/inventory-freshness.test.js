@@ -263,7 +263,11 @@ test('scheduler onSourceRun skips publisher absence reconciliation on partial/pa
   ];
 
   const prevDb = scheduler.database;
+  const prevHarvest = scheduler.enableAssessorHarvest;
+  const prevBackfill = scheduler.enableAssessorBackfill;
   scheduler.database = db;
+  scheduler.enableAssessorHarvest = false;
+  scheduler.enableAssessorBackfill = false;
 
   try {
     // 1. Partial sweep with truncated: true
@@ -339,5 +343,7 @@ test('scheduler onSourceRun skips publisher absence reconciliation on partial/pa
     assert.equal(db.inMemoryData.listings[1].provenance?.publisherAbsence, undefined, 'Re-observation clears absence');
   } finally {
     scheduler.database = prevDb;
+    scheduler.enableAssessorHarvest = prevHarvest;
+    scheduler.enableAssessorBackfill = prevBackfill;
   }
 });

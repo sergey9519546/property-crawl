@@ -297,3 +297,30 @@ test('scripts/ingest-fhfa-hpi.js: ingestHpiSeries fails closed on missing file o
     /Non-chronological or invalid quarter keys/
   );
 });
+
+test('loadObservedHpiSeries fails closed to null when quarter keys are unchronological', () => {
+  const unchronological = {
+    ...VALID_SERIES,
+    values: {
+      FL: { '2026Q1': 450, '2020Q2': 300 },
+    },
+  };
+  const { file } = writeTempSeries(unchronological);
+  withSeriesPath(file, () => {
+    assert.equal(loadObservedHpiSeries(), null, 'unchronological quarter keys must fail closed');
+  });
+});
+
+test('loadObservedHpiSeries fails closed to null when embedded rawJson does not match datasetSha256', () => {
+  const rawPayload = JSON.stringify({ test: 'tampered' });
+  const tamperedSeries = {
+    ...VALID_SERIES,
+    datasetSha256: crypto.createHash('sha256').update('original', 'utf8').digest('hex'),
+    rawJson: rawPayload,
+  };
+  const { file } = writeTempSeries(tamperedSeries);
+  withSeriesPath(file, () => {
+    assert.equal(loadObservedHpiSeries(), null, 'tampered rawJson payload must fail closed');
+  });
+});
+
