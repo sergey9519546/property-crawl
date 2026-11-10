@@ -11,7 +11,7 @@ const { createRunReport, recordUnitFailure, recordUnitSuccess, finalizeRunReport
 const { mapWithConcurrency } = require('./http');
 const {
   REALAUCTION_FLORIDA_COUNTIES,
-  REALAUCTION_FLORIDA_TAXDEED_COUNTIES,
+  REALAUCTION_FLORIDA_TAXDEED_COUNTIES, REALAUCTION_MULTI_STATE_PORTALS,
   decodeRealAuctionMacros,
   parseRealAuctionDocketHtml,
 } = require('./adapters/realauction');
@@ -181,6 +181,17 @@ function parseCountyOffset(value) {
   return null;
 }
 
+const DEFAULT_MULTI_STATE_COUNTIES = Object.freeze(
+  Object.values(REALAUCTION_MULTI_STATE_PORTALS || {}).map((p) => ({
+    name: p.county,
+    county: p.county,
+    state: p.state,
+    domain: p.domain,
+    mode: p.mode,
+    realauction: true,
+  }))
+);
+
 class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
     // Per-county failures are already recorded individually; retrying the whole multi-county sweep turned one dead publisher into a multi-minute retry storm.
@@ -188,6 +199,9 @@ class SheriffSaleScraper extends BaseScraper {
     const flCounties = (options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1')
       ? DEFAULT_FL_COUNTIES
       : (process.env.SHERIFF_INCLUDE_FL === '0' ? [] : TOP_FL_COUNTIES);
+    const multiStateCounties = (options.includeMultiState || process.env.SHERIFF_INCLUDE_MULTI_STATE === '1')
+      ? DEFAULT_MULTI_STATE_COUNTIES
+      : (process.env.SHERIFF_INCLUDE_MULTI_STATE === '0' ? [] : DEFAULT_MULTI_STATE_COUNTIES);
     const txCounties = (options.includeTexas || process.env.SHERIFF_INCLUDE_TX === '1')
       ? DEFAULT_TX_COUNTIES
       : (process.env.SHERIFF_INCLUDE_TX === '0' ? [] : DEFAULT_TX_COUNTIES);
@@ -196,6 +210,7 @@ class SheriffSaleScraper extends BaseScraper {
         ...DEFAULT_OH_COUNTIES,
         ...flCounties,
         ...txCounties,
+        ...multiStateCounties,
         ...parseExtraCounties(process.env.SHERIFF_EXTRA_COUNTIES),
       ];
     const seenCountyKeys = new Set();

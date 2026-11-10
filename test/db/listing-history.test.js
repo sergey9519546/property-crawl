@@ -158,3 +158,23 @@ test('getListingHistory: includes openingBid, mid, dealScore, source', async () 
   assert.ok(snap.sourceObservedAt);
   assert.ok(snap.recordedAt);
 });
+
+test('getListingHistory: with options.prior returns penultimate snapshot', async () => {
+  await db.recordListingHistorySnapshots([
+    listing({ id: 'DROP_TEST', openingBid: 100000, sourceObservedAt: '2026-08-01T00:00:00.000Z' }),
+    listing({ id: 'DROP_TEST', openingBid: 75000, sourceObservedAt: '2026-09-01T00:00:00.000Z' })
+  ]);
+  const defaultHistory = await db.getListingHistory(['DROP_TEST']);
+  assert.equal(defaultHistory.get('DROP_TEST').openingBid, 75000, 'default returns latest');
+
+  const priorHistory = await db.getListingHistory(['DROP_TEST'], { prior: true });
+  assert.equal(priorHistory.get('DROP_TEST').openingBid, 100000, 'prior returns penultimate');
+});
+
+test('getListingHistory: with options.prior returns empty when only one snapshot exists', async () => {
+  await db.recordListingHistorySnapshots([
+    listing({ id: 'SINGLE_SNAP', openingBid: 50000, sourceObservedAt: '2026-08-01T00:00:00.000Z' })
+  ]);
+  const priorHistory = await db.getListingHistory(['SINGLE_SNAP'], { prior: true });
+  assert.equal(priorHistory.has('SINGLE_SNAP'), false, 'no prior snapshot exists');
+});

@@ -2759,7 +2759,7 @@ class DatabaseClient {
     // is preserved for backward compat with earlier callers.
     const ids = Array.isArray(listingIds) ? listingIds.filter((id) => typeof id === 'string' && id.trim()) : [];
     if (ids.length === 0) return new Map();
-    const result = new Map();
+    const result = new Map(); const prior = Boolean(options && (options.prior === true || options.penultimate === true));
     if (this.isPg) {
       // Fetch the most-recent prior snapshot for each listing by
       // joining on a max-source_observed_at subquery.
@@ -2770,20 +2770,36 @@ class DatabaseClient {
       // The in-memory branch below returns finiteOrNull numbers and ISO strings;
       // without this the two backends return the same keys with different types,
       // which is invisible until DATABASE_URL is set.
-      const res = await this.pool.query(
-        `SELECT DISTINCT ON (listing_id)
-            listing_id,
-            source_observed_at::text AS "sourceObservedAt",
-            opening_bid::float8 AS "openingBid",
-            mid::float8         AS "mid",
-            deal_score::float8  AS "dealScore",
-            source,
-            recorded_at::text   AS "recordedAt"
-         FROM listing_history
-         WHERE listing_id = ANY($1::text[])
-         ORDER BY listing_id, source_observed_at DESC`,
-        [ids]
-      );
+      const historySql = prior
+        ? `WITH ranked AS (
+             SELECT
+               listing_id,
+               source_observed_at::text AS "sourceObservedAt",
+               opening_bid::float8 AS "openingBid",
+               mid::float8         AS "mid",
+               deal_score::float8  AS "dealScore",
+               source,
+               recorded_at::text   AS "recordedAt",
+               ROW_NUMBER() OVER (PARTITION BY listing_id ORDER BY source_observed_at DESC) as rn
+             FROM listing_history
+             WHERE listing_id = ANY($1::text[])
+           )
+           SELECT listing_id, "sourceObservedAt", "openingBid", "mid", "dealScore", source, "recordedAt"
+           FROM ranked
+           WHERE rn = 2
+           ORDER BY listing_id`
+        : `SELECT DISTINCT ON (listing_id)
+             listing_id,
+             source_observed_at::text AS "sourceObservedAt",
+             opening_bid::float8 AS "openingBid",
+             mid::float8         AS "mid",
+             deal_score::float8  AS "dealScore",
+             source,
+             recorded_at::text   AS "recordedAt"
+          FROM listing_history
+          WHERE listing_id = ANY($1::text[])
+          ORDER BY listing_id, source_observed_at DESC`;
+      const res = await this.pool.query(historySql, [ids]);
       for (const row of res.rows) {
         result.set(row.listing_id, {
           listingId: row.listing_id,
@@ -2800,7 +2816,7 @@ class DatabaseClient {
     for (const id of ids) {
       const arr = this.inMemoryData.listingHistory.get(id);
       if (!arr || arr.length === 0) continue;
-      result.set(id, arr[0]);
+      if (prior) { if (arr.length >= 2) result.set(id, arr[1]); } else { result.set(id, arr[0]); }
     }
     return result;
   }

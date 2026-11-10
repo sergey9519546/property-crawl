@@ -229,6 +229,14 @@ class Bid4AssetsScraper extends BaseScraper {
     this.lastRunReport = null;
   }
 
+  setCheckpoint(checkpoint) {
+    if (!checkpoint) return;
+    const offset = Number(checkpoint.cursor ?? checkpoint.continuationToken ?? checkpoint.offset ?? checkpoint);
+    if (Number.isFinite(offset) && offset >= 0) {
+      this.rotationOffset = offset;
+    }
+  }
+
   async scrapeFeed() {
     return this.executeWithRetry(async () => {
       const report = createRunReport('bid4assets', {
@@ -278,9 +286,21 @@ class Bid4AssetsScraper extends BaseScraper {
         .filter((item) => this.passesFilter(item))
         .map((item) => this.standardizeListing(item));
 
+      const totalDiscovered = countySlugs.length;
+      const nextOffset = totalDiscovered > 0 ? (this.rotationOffset + targetSlugs.length) % totalDiscovered : 0;
+      const isComplete = totalDiscovered > 0 ? (this.rotationOffset + targetSlugs.length) >= totalDiscovered : true;
+
       finalizeRunReport(report, { emitted: standardized.length });
       report.outcome = standardized.length ? 'success' : 'empty';
-      report.complete = report.failures.length === 0;
+      report.complete = isComplete && report.failures.length === 0;
+      report.truncated = !isComplete;
+      report.partialSweep = !isComplete;
+      if (!isComplete) {
+        report.nextCursor = String(nextOffset);
+        report.continuationToken = String(nextOffset);
+        report.nextContinuationToken = String(nextOffset);
+      }
+      this.rotationOffset = nextOffset;
 
       return standardized;
     });

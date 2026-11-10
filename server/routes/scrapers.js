@@ -48,14 +48,45 @@ async function handleScrapers(req, res) {
       return res.status(401).json({ error: 'Unauthorized scraper run request' });
     }
 
-    const runPromise = scheduler.runAll();
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const querySources = url.searchParams.get('sources') || url.searchParams.get('sourceIds') || url.searchParams.get('sourceId');
+    const sourceIds = (Array.isArray(body.sourceIds) && body.sourceIds.length > 0)
+      ? body.sourceIds
+      : (body.sourceId ? [body.sourceId] : (querySources ? querySources.split(',').map(s => s.trim()).filter(Boolean) : undefined));
+    const wave = body.wave || url.searchParams.get('wave') || undefined;
+    const allowNetwork = body.allowNetwork !== undefined
+      ? Boolean(body.allowNetwork)
+      : (url.searchParams.get('allowNetwork') !== null ? url.searchParams.get('allowNetwork') === 'true' : undefined);
+    const trigger = body.trigger || url.searchParams.get('trigger') || 'api_on_demand';
+
+    const runOptions = {
+      ...(sourceIds ? { sourceIds } : {}),
+      ...(wave ? { wave } : {}),
+      ...(allowNetwork !== undefined ? { allowNetwork } : {}),
+      trigger
+    };
+
+    const hasExplicitOptions = Boolean(sourceIds || wave || allowNetwork !== undefined);
+    let runPromise;
+    try {
+      runPromise = hasExplicitOptions ? scheduler.runAll(runOptions) : scheduler.runAll();
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
     // If client requested non-blocking trigger
     if (req.headers && req.headers['x-async'] === 'true') {
       runPromise.catch(err => console.error('[Scrapers Route] Async run error:', err));
-      return res.json({ status: 'triggered', message: 'Ingestion cycle running in background' });
+      return res.json({ status: 'triggered', message: 'Ingestion cycle running in background', options: runOptions });
     }
-    const result = await runPromise;
-    return res.json({ status: 'completed', result });
+
+    try {
+      const result = await runPromise;
+      return res.json({ status: 'completed', result });
+    } catch (err) {
+      const status = err.message === 'Choose registered live source collectors' ? 400 : 500;
+      return res.status(status).json({ error: err.message });
+    }
   }
 
   res.status(404).json({ error: 'Scraper endpoint not found' });

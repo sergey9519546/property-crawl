@@ -268,7 +268,7 @@ async function handleRequest(req, res) {
       const freshnessPromise = (typeof db.inventoryFreshness === 'function')
         ? Promise.race([
             db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 2000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 3500))
           ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
         : Promise.resolve(null);
 
@@ -277,7 +277,7 @@ async function handleRequest(req, res) {
           const { observationStoreStats } = require('./db/observations-persistence');
           return observationStoreStats(db.pool);
         })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 2000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 3500))
       ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
 
         [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
@@ -493,8 +493,23 @@ async function startServer() {
     // The two-process host defers expensive collection until after UI boot.
     const configuredBootDelay = Number(process.env.SCRAPER_BOOT_DELAY_MS);
     const bootDelay = Number.isFinite(configuredBootDelay) && configuredBootDelay >= 0 ? Math.min(configuredBootDelay,300000) : 500;
+    const scheduleContinuation = () => {
+      const due = scheduler.dueScrapers(scheduler.listingServingScrapers);
+      const hasPartial = due.some((s) => {
+        const last = scheduler.sourceLastRun.get(s.sourceKey);
+        return last && (last.partial || (last.failed && (last.retries || 0) < 3));
+      });
+      if (hasPartial && !scheduler.isRunning) {
+        console.log('[Server] Partial or retryable scraper sweeps require continuation. Scheduling follow-up pass in 30s...');
+        setTimeout(() => {
+          if (!scheduler.isRunning) {
+            scheduler.runAll().then(scheduleContinuation).catch((err) => console.error('[Server] Continuation sweep error:', err));
+          }
+        }, 30000).unref();
+      }
+    };
     setTimeout(() => {
-      scheduler.runAll().catch(err => console.error('[Server] Scheduler failed on boot:', err));
+      scheduler.runAll().then(scheduleContinuation).catch(err => console.error('[Server] Scheduler failed on boot:', err));
     }, bootDelay);
 
     // Recurring automated ingestion (default every 6 hours)
@@ -502,7 +517,7 @@ async function startServer() {
     const intervalMs = scrapeIntervalHours * 60 * 60 * 1000;
     setInterval(() => {
       console.log(`[Server] Triggering scheduled ${scrapeIntervalHours}h ingestion cycle...`);
-      scheduler.runAll().catch(err => console.error('[Server] Scheduled scrape failed:', err));
+      scheduler.runAll().then(scheduleContinuation).catch(err => console.error('[Server] Scheduled scrape failed:', err));
     }, intervalMs);
   });
 }

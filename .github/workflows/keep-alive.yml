@@ -1,0 +1,17 @@
+name: Keep-Alive Heartbeat
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Every 10 minutes to prevent Render free-tier idle spin-down
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Production Healthcheck
+        run: |
+          TARGET_URL="${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.onrender.com' }}/api/health"
+          echo "Pinging $TARGET_URL to maintain container liveness..."
+          curl -fsS --max-time 15 "$TARGET_URL" > /dev/null || echo "Health ping dispatched"

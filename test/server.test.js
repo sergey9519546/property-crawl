@@ -305,6 +305,27 @@ async function run() {
     }
   });
 
+  await test('POST /api/scrapers/run accepts async trigger with options', async () => {
+    const res = await operatorRequest('/api/scrapers/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-async': 'true' },
+      body: JSON.stringify({ sourceIds: ['treasury'] })
+    });
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(res.body.status, 'triggered');
+    assert.deepStrictEqual(res.body.options?.sourceIds, ['treasury']);
+  });
+
+  await test('POST /api/scrapers/run rejects invalid sourceIds with 400', async () => {
+    const res = await operatorRequest('/api/scrapers/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceIds: ['nonexistent_collector_xyz'] })
+    });
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.body.error, 'Choose registered live source collectors');
+  });
+
   await test('POST /api/parse requires the private operator credential', async () => {
     const res = await request('/api/parse', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { noticeText: 'Test notice' }

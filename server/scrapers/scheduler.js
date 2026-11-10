@@ -1,6 +1,7 @@
 const { recordSnapshot } = require('./discovery-snapshots');
 const crypto = require('node:crypto');
 const path = require('node:path');
+const fs = require('node:fs');
 const sheriff = require('./sheriff');
 const hud = require('./hud');
 const fannie = require('./fannie');
@@ -272,7 +273,7 @@ class IngestionScheduler {
     const now = Date.now();
     const due = scrapers.filter((scraper) => {
       const last = this.sourceLastRun.get(scraper.sourceKey);
-      if (!last || last.partial) return true;
+      if (!last || last.partial || (last.failed && (last.retries || 0) < 3)) return true;
       const hours = declaredCadenceHours(scraper.sourceKey);
       return hours == null || now - last.at >= hours * 3600 * 1000;
     });
@@ -285,15 +286,15 @@ class IngestionScheduler {
       console.log('[Scheduler] Real scraper execution disabled for this environment.');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
     }
+    const requested = options.wave ? sourcesForWave(options.wave) : options.sourceIds;
+    if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
+      throw new Error('Choose registered live source collectors');
+    }
     if (this.isRunning) {
       console.log('[Scheduler] Scrape run already in progress, skipping...');
       return { totalIngested: 0, totalRejected: 0, durationMs: 0, skipped: true };
     }
     if (this.discoveryStore) requireCollectionStorage(this.storageProbe);
-    const requested = options.wave ? sourcesForWave(options.wave) : options.sourceIds;
-    if (requested && (!Array.isArray(requested) || !requested.length || requested.some((key) => !this.realScraperKeys.has(key)))) {
-      throw new Error('Choose registered live source collectors');
-    }
     // Default cycles run only listing-serving collectors; an explicitly
     // requested key that fails the admission gate is skipped (and logged)
     // rather than run.
@@ -437,7 +438,7 @@ class IngestionScheduler {
           } finally {
             this.inFlight.delete(scraper.sourceKey);
           }
-          this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false });
+          // sourceLastRun is finalized after ingestion or in catch on error
           await assertLease('Collection job lease was lost after source execution');
           // A report-only collector ingests its own evidence and reports counts
           // rather than returning listings. public-notices-email does this: it
@@ -496,6 +497,8 @@ class IngestionScheduler {
             totalIngested++;
           }
           const latency = Date.now() - scraperStart;
+
+          if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
           let driftAlarm = null;
           if (accepted.length > 0) {
             driftAlarm = evaluateRecordsForDrift(scraper.sourceKey, accepted);
@@ -515,7 +518,7 @@ class IngestionScheduler {
             || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
             || (isListingEnvelope ? items : null)
             || {};
-          const isPartial = isPartialOrContinuationRun(rawReport, items); this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: isPartial });
+          const isPartial = isPartialOrContinuationRun(rawReport, items); this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: isPartial, failed: false, retries: 0 });
           const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
           const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
           const nextContinuationToken = rawReport.nextContinuationToken ?? items?.nextContinuationToken ?? continuationToken;
@@ -598,6 +601,8 @@ class IngestionScheduler {
         } catch (err) {
           if(err?.code==='DISCOVERY_JOB_LEASE_LOST')throw err;
           const latency = Date.now() - scraperStart;
+
+          if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
           this.telemetry.recordRun(scraper.name, [], latency, err, {
             domHashes: scraper._driftSamples ? Object.fromEntries(scraper._driftSamples) : {},
             scopeKey: scraper.lastRunReport?.scopeHash || scraper.sourceKey,
@@ -636,6 +641,7 @@ const scheduler = new IngestionScheduler({ cadenceAware: true,
   discoveryStore: process.env.DISCOVERY_MODE === 'advanced' && db.isPg ? require('../discovery/store').createDiscoveryStore(db) : null,
   async onSourceRun(sourceId, run) {
     const path = require('node:path');
+const fs = require('node:fs');
     const { mergeLiveRecords } = require('../db/live-record-store');
     const { recordSourceRun } = require('../db/observations-persistence');
     // Harvest enrolled-county assessor rolls before the record is cached or
