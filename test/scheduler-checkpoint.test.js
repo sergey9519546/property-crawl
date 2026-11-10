@@ -322,3 +322,31 @@ test('ScraperScheduler queries and saves PostgreSQL checkpoint when discoverySto
   assert.equal(loadedCheckpoints[0]?.cursor, 'saved-pg-cursor');
   assert.ok(pgQueries.some(q => q.sql.includes('INSERT INTO discovery_checkpoints') && q.params[1] === 'next-pg-cursor'));
 });
+
+test('a stalled scraper times out instead of wedging the cycle, and the next run proceeds', async () => {
+  const stalled = { name: 'Stalled', sourceKey: 'treasury', scrapeFeed: () => new Promise(() => {}), getRawPublisherRecord: () => null };
+  const scheduler = new IngestionScheduler({ realScrapers: [stalled], scraperTimeoutMs: 50, concurrency: 1 });
+  scheduler.telemetry = telemetry;
+  const first = await scheduler.runAll();
+  assert.equal(first.skipped, false);
+  assert.equal(first.sourceResults[0].error.includes('timed out'), true);
+  assert.equal(scheduler.isRunning, false, 'a timeout must release the cycle lock');
+  assert.equal(scheduler.inFlight.size, 0);
+  const second = await scheduler.runAll();
+  assert.equal(second.skipped, false);
+});
+
+test('cadence-aware scheduling skips a source whose cadence has not elapsed but re-runs partial sweeps', () => {
+  const a = { name: 'A', sourceKey: 'treasury' };
+  const b = { name: 'B', sourceKey: 'servicelink' };
+  const scheduler = new IngestionScheduler({ realScrapers: [a, b], cadenceAware: true });
+  assert.equal(scheduler.dueScrapers([a, b]).length, 2, 'never-run sources are due');
+  scheduler.sourceLastRun.set('treasury', { at: Date.now(), partial: false });
+  scheduler.sourceLastRun.set('servicelink', { at: Date.now(), partial: true });
+  assert.deepEqual(scheduler.dueScrapers([a, b]).map((s) => s.sourceKey), ['servicelink']);
+  scheduler.sourceLastRun.set('treasury', { at: Date.now() - 13 * 3600 * 1000, partial: false });
+  assert.equal(scheduler.dueScrapers([a, b]).length, 2, 'elapsed cadence makes it due again');
+  const off = new IngestionScheduler({ realScrapers: [a, b] });
+  off.sourceLastRun.set('treasury', { at: Date.now(), partial: false });
+  assert.equal(off.dueScrapers([a, b]).length, 2, 'filtering is opt-in');
+});

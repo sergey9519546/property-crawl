@@ -91,6 +91,39 @@ function admitListingsScrapers(scrapers) {
   });
 }
 
+const DEFAULT_SCRAPER_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * A stalled publisher socket must not hold a worker slot (and the cycle-wide
+ * isRunning flag) forever. Rejects after timeoutMs; the abandoned promise is
+ * left to settle on its own and its late result is discarded.
+ */
+function withScraperTimeout(scraper, timeoutMs) {
+  const run = Promise.resolve().then(() => scraper.scrapeFeed());
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return run;
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`${scraper.name || scraper.sourceKey} timed out after ${timeoutMs}ms`);
+      error.code = 'SCRAPER_TIMEOUT';
+      reject(error);
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+  });
+  run.catch(() => {});
+  return Promise.race([run, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Declared refresh cadence (hours) for a source, from the catalog; null if unknown. */
+function declaredCadenceHours(sourceKey) {
+  try {
+    const { SOURCE_CATALOG } = require('../sources/catalog'); const entry = (SOURCE_CATALOG || []).find((s) => (s.adapterKey || s.id) === sourceKey && Number(s.workflow?.cadenceHours) > 0); const hours = Number(entry?.workflow?.cadenceHours);
+    return Number.isFinite(hours) && hours > 0 ? hours : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function isPartialOrContinuationRun(report, run = {}) {
   const rep = report && typeof report === 'object' ? report : null;
   const r = run && typeof run === 'object' ? run : null;
@@ -158,6 +191,7 @@ function collectionRuntimeStatus(target, env = process.env) {
     enabled: backgroundCollectionEnabled(env),
     reason: backgroundCollectionReason(env),
     running: Boolean(target && target.isRunning),
+    inFlight: target && target.inFlight instanceof Map ? [...target.inFlight].map(([sourceKey, since]) => ({ sourceKey, elapsedMs: Date.now() - since })) : [],
     startedAt: (target && target.cycleStartedAt) || null,
     lastFinishedAt: (target && target.lastCycleFinishedAt) || null,
     scraperStatus: report ? report.systemStatus : 'idle',
@@ -222,9 +256,27 @@ class IngestionScheduler {
     // Registration gate: only listing-serving collectors get run slots.
     // Logged once per scheduler construction.
     this.listingServingScrapers = admitListingsScrapers(this.realScrapers);
-    this.isRunning = false;
+    this.isRunning = false; this.inFlight = new Map(); this.sourceLastRun = new Map(); this.cadenceAware = options.cadenceAware === true; this.scraperTimeoutMs = (() => { const t = Number(options.scraperTimeoutMs ?? (options.env || process.env).SCRAPER_TIMEOUT_MS); return Number.isFinite(t) && t >= 0 ? t : DEFAULT_SCRAPER_TIMEOUT_MS; })();
     this.cycleStartedAt = null;
     this.lastCycleFinishedAt = null;
+  }
+
+  /**
+   * Cadence-aware selection: a source whose declared catalog cadence has not
+   * elapsed since its last clean run is skipped, so low-cadence sources stop
+   * consuming slots. A partial (continuation) sweep is always due again so
+   * large catalogs keep advancing. Disabled unless cadenceAware is set.
+   */
+  dueScrapers(scrapers) {
+    if (!this.cadenceAware) return scrapers;
+    const now = Date.now();
+    const due = scrapers.filter((scraper) => {
+      const last = this.sourceLastRun.get(scraper.sourceKey);
+      if (!last || last.partial) return true;
+      const hours = declaredCadenceHours(scraper.sourceKey);
+      return hours == null || now - last.at >= hours * 3600 * 1000;
+    });
+    return due;
   }
 
   async runAll(options = {}) {
@@ -247,7 +299,7 @@ class IngestionScheduler {
     // rather than run.
     const scrapers = requested
       ? admitListingsScrapers(this.realScrapers.filter((scraper) => requested.includes(scraper.sourceKey)))
-      : this.listingServingScrapers;
+      : this.dueScrapers(this.listingServingScrapers);
     let ownership = options.jobId && options.owner ? { jobId: options.jobId, owner: options.owner } : {};
     let leaseGuard = options.leaseGuard || null;
     const assertLease = async (message = 'Collection job lease was lost') => {
@@ -257,7 +309,7 @@ class IngestionScheduler {
     this.isRunning = true;
     this.cycleStartedAt = new Date().toISOString();
     const stopCycle = () => {
-      this.isRunning = false;
+      this.isRunning = false; this.inFlight.clear();
       this.cycleStartedAt = null;
       this.lastCycleFinishedAt = new Date().toISOString();
     };
@@ -370,7 +422,14 @@ class IngestionScheduler {
               }
             }
           }
-          const items = await scraper.scrapeFeed();
+          this.inFlight.set(scraper.sourceKey, Date.now());
+          let items;
+          try {
+            items = await withScraperTimeout(scraper, this.scraperTimeoutMs);
+          } finally {
+            this.inFlight.delete(scraper.sourceKey);
+          }
+          this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false });
           await assertLease('Collection job lease was lost after source execution');
           // A report-only collector ingests its own evidence and reports counts
           // rather than returning listings. public-notices-email does this: it
@@ -448,7 +507,7 @@ class IngestionScheduler {
             || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
             || (isListingEnvelope ? items : null)
             || {};
-          const isPartial = isPartialOrContinuationRun(rawReport, items);
+          const isPartial = isPartialOrContinuationRun(rawReport, items); this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: isPartial });
           const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
           const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
           const nextContinuationToken = rawReport.nextContinuationToken ?? items?.nextContinuationToken ?? continuationToken;
@@ -563,7 +622,7 @@ class IngestionScheduler {
   }
 }
 
-const scheduler = new IngestionScheduler({
+const scheduler = new IngestionScheduler({ cadenceAware: true,
   discoveryStore: process.env.DISCOVERY_MODE === 'advanced' && db.isPg ? require('../discovery/store').createDiscoveryStore(db) : null,
   async onSourceRun(sourceId, run) {
     const path = require('node:path');
