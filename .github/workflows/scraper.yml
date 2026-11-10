@@ -46,6 +46,8 @@ jobs:
           PRODUCTION_APP_URL: ${{ secrets.PRODUCTION_APP_URL || 'https://property-crawl.onrender.com' }}
           SCRAPER_ADMIN_TOKEN: ${{ secrets.SCRAPER_ADMIN_TOKEN }}
         run: |
+          # Wake up Render free web service so background collection runs
+          curl -sSf "${PRODUCTION_APP_URL}/api/health" > /dev/null 2>&1 || echo "Wakeup ping dispatched"
           if [ -n "${SCRAPER_ADMIN_TOKEN}" ]; then
             curl -s -X POST "${PRODUCTION_APP_URL}/api/scrapers/run" \
               -H "x-scraper-token: ${SCRAPER_ADMIN_TOKEN}" \

@@ -157,7 +157,7 @@ function runCompaction(options = {}) {
 async function runPgCompaction(options = {}) {
   const { apply = false, source = null, pool = null, vacuum = false } = options;
   const { compactPgObservations } = require('../server/db/observations-persistence');
-  let activePool = pool || require('../server/db/client').pool;
+  let activePool = pool;
   let customPool = null;
   let embeddedHandle = null;
 

@@ -8,5 +8,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const token = request.headers.get("x-scraper-token") || request.headers.get("authorization");
+  if (token) return proxyPropertyApi(request);
   return proxyPrivatePropertyApi(request);
 }

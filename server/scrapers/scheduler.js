@@ -611,6 +611,7 @@ class IngestionScheduler {
       const duration = Date.now() - startTime;
       console.log(`[Scheduler] Ingestion cycle finished. Ingested ${totalIngested} listings in ${duration}ms`);
       const result = { totalIngested, totalRejected, durationMs: duration, skipped: false, sourceResults, completeCycle, jobId: cycleContext?.jobId || options.jobId || null };
+      stopCycle();
       if (!options.coordinatorManaged) {
         try { await this.onCycleComplete(result, { ...cycleContext, completeCycle, trigger: options.trigger || 'scheduler', ...ownership, leaseGuard }); }
         catch (error) { console.error('[Scheduler] Could not finalize collection job:', error.message); if(error?.code==='DISCOVERY_JOB_LEASE_LOST')throw error; }
