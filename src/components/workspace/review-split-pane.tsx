@@ -67,6 +67,15 @@ function resolveVerbatimSpan(
       return { quote: candidate, start: idx, end: idx + candidate.length, verified: true };
     }
   }
+  const normalizedRaw = rawText.replace(/[\u00A0\r\n\t]/g, ' ');
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const normalizedCandidate = candidate.replace(/[\u00A0\r\n\t]/g, ' ');
+    const normIdx = normalizedRaw.indexOf(normalizedCandidate);
+    if (normIdx >= 0) {
+      return { quote: rawText.slice(normIdx, normIdx + candidate.length), start: normIdx, end: normIdx + candidate.length, verified: true };
+    }
+  }
   return { quote: String(value), start: -1, end: -1, verified: false };
 }
 
