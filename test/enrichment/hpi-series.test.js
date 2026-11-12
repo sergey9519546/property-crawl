@@ -501,4 +501,24 @@ test('master FHFA state-quarter CSV (data/fhfa-hpi-master.csv) passes ingestion 
   }
 });
 
+test('hpi-series.js: fallback to COMMITTED_SERIES_PATH when DEFAULT_SERIES_PATH does not exist', () => {
+  const { COMMITTED_SERIES_PATH, loadObservedHpiSeries, invalidateHpiSeriesCache } = require('../../server/enrichment/hpi-series');
+  assert.ok(fs.existsSync(COMMITTED_SERIES_PATH), 'server/enrichment/data/fhfa-hpi-series.json must exist in repo');
+
+  invalidateHpiSeriesCache();
+  const prevEnv = process.env.FHFA_HPI_SERIES_PATH;
+  delete process.env.FHFA_HPI_SERIES_PATH;
+
+  try {
+    const series = loadObservedHpiSeries();
+    assert.ok(series, 'must load observed series');
+    assert.equal(series.version, 1);
+    assert.equal(Object.keys(series.values).length, 51);
+  } finally {
+    if (prevEnv !== undefined) process.env.FHFA_HPI_SERIES_PATH = prevEnv;
+    invalidateHpiSeriesCache();
+  }
+});
+
+
 

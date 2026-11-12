@@ -26,15 +26,23 @@ const { isObservedSeries, validateStateQuarterSeries } = require('./hpi');
 
 const SERIES_PATH_ENV = 'FHFA_HPI_SERIES_PATH';
 const DEFAULT_SERIES_PATH = path.resolve(__dirname, '../../.cache/fhfa-hpi-series.json');
+const COMMITTED_SERIES_PATH = path.resolve(__dirname, 'data/fhfa-hpi-series.json');
 
 const CACHE_TTL_MS = 60 * 1000;
 const cache = new Map(); // resolvedPath -> { series, loadedAtMs }
 
 function resolveSeriesPath() {
   const fromEnv = process.env[SERIES_PATH_ENV];
-  return fromEnv && String(fromEnv).trim() !== ''
-    ? path.resolve(String(fromEnv).trim())
-    : DEFAULT_SERIES_PATH;
+  if (fromEnv && String(fromEnv).trim() !== '') {
+    return path.resolve(String(fromEnv).trim());
+  }
+  if (fs.existsSync(DEFAULT_SERIES_PATH)) {
+    return DEFAULT_SERIES_PATH;
+  }
+  if (fs.existsSync(COMMITTED_SERIES_PATH)) {
+    return COMMITTED_SERIES_PATH;
+  }
+  return DEFAULT_SERIES_PATH;
 }
 
 function validateSeries(series, options = {}) {
@@ -77,6 +85,7 @@ function invalidateHpiSeriesCache() {
 module.exports = {
   SERIES_PATH_ENV,
   DEFAULT_SERIES_PATH,
+  COMMITTED_SERIES_PATH,
   loadObservedHpiSeries,
   invalidateHpiSeriesCache,
   validateSeries,
