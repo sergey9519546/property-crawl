@@ -470,3 +470,155 @@ test('unvalued score sort falls back to upcoming sale date and triage priority w
   assert.deepEqual(pgResult.listings.map((l) => l.id), expectedOrder, 'PostgreSQL order must match expected fallback');
   assert.deepEqual(pgResult.listings.map((l) => l.id), memoryResult.listings.map((l) => l.id), 'both backends must agree on fallback order');
 });
+
+test('sort=score sinks terminal, superseded, and absent records and rewards actionable evidence with PG/memory parity', async () => {
+  await pool.query('DELETE FROM listings');
+  const now = Date.now();
+  const iso = (offsetDays) => new Date(now + offsetDays * 86_400_000).toISOString().slice(0, 10);
+  const rows = [
+    {
+      id: 'sold-scored',
+      status: 'sold',
+      lifecycle_status: 'Purchased - 3rd Party',
+      deal_score: 90,
+      opening_bid: 50000,
+      est_low: 150000,
+      est_high: 180000,
+      sale_date: iso(-5),
+      triage_priority: 95,
+      latitude: 40.8,
+      longitude: -74.1,
+      provenance: { origin: 'live', sourceFacts: { transactionOutcome: 'sold_to_third_party' } },
+    },
+    {
+      id: 'closed-plaintiff',
+      status: 'closed',
+      lifecycle_status: 'Purchased - Plaintiff',
+      deal_score: null,
+      opening_bid: 100,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(-2),
+      triage_priority: 60,
+      latitude: 40.81,
+      longitude: -74.12,
+      provenance: { origin: 'live', sourceFacts: { transactionOutcome: 'reverted_to_plaintiff' } },
+    },
+    {
+      id: 'superseded-dup',
+      status: 'scheduled',
+      lifecycle_status: 'Scheduled',
+      deal_score: null,
+      opening_bid: 120000,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(4),
+      triage_priority: 80,
+      latitude: 40.82,
+      longitude: -74.13,
+      provenance: { origin: 'live', supersededBy: { byId: 'active-priced-geocoded' } },
+    },
+    {
+      id: 'absent-old',
+      status: 'scheduled',
+      lifecycle_status: 'Scheduled',
+      deal_score: null,
+      opening_bid: 90000,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(6),
+      triage_priority: 80,
+      latitude: 40.83,
+      longitude: -74.14,
+      provenance: { origin: 'live', publisherAbsence: { at: '2026-10-01T00:00:00Z', sourceKey: 'civilview', outcome: 'absent_from_complete_index' } },
+    },
+    {
+      id: 'active-priced-geocoded',
+      status: 'scheduled',
+      lifecycle_status: 'Scheduled',
+      deal_score: null,
+      opening_bid: 85000,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(20),
+      triage_priority: 40,
+      latitude: 40.85,
+      longitude: -74.15,
+      provenance: { origin: 'live' },
+    },
+    {
+      id: 'active-upset-only',
+      status: 'scheduled',
+      lifecycle_status: 'Scheduled',
+      deal_score: null,
+      opening_bid: null,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(12),
+      triage_priority: 50,
+      latitude: null,
+      longitude: null,
+      provenance: { origin: 'live', sourceFacts: { upsetPrice: 249593.48 } },
+    },
+    {
+      id: 'active-bare',
+      status: 'scheduled',
+      lifecycle_status: 'Scheduled',
+      deal_score: null,
+      opening_bid: null,
+      est_low: null,
+      est_high: null,
+      sale_date: iso(2),
+      triage_priority: 90,
+      latitude: null,
+      longitude: null,
+      provenance: { origin: 'live' },
+    },
+  ];
+
+  for (const r of rows) {
+    await pool.query(
+      'INSERT INTO listings (id, status, lifecycle_status, deal_score, opening_bid, est_low, est_high, sale_date, triage_priority, latitude, longitude, provenance, source_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)',
+      [r.id, r.status, r.lifecycle_status, r.deal_score, r.opening_bid, r.est_low, r.est_high, r.sale_date, r.triage_priority, r.latitude, r.longitude, JSON.stringify(r.provenance), 'civilview'],
+    );
+  }
+
+  const memoryDatabase = {
+    getListings: async () => ({
+      total: rows.length,
+      listings: rows.map((r) => ({
+        id: r.id,
+        source: 'civilview',
+        status: r.status,
+        lifecycleStatus: r.lifecycle_status,
+        dealScore: r.deal_score,
+        openingBid: r.opening_bid,
+        estLow: r.est_low,
+        estHigh: r.est_high,
+        saleDate: r.sale_date,
+        triagePriority: r.triage_priority,
+        lat: r.latitude,
+        lng: r.longitude,
+        provenance: r.provenance,
+        sourceObservedAt: '2026-10-06T00:00:00.000Z',
+      })),
+    }),
+  };
+  const pgDatabase = {
+    isPg: true,
+    pool,
+    listingSelect: 'id, status, lifecycle_status AS "lifecycleStatus", deal_score::int AS "dealScore", opening_bid::numeric AS "openingBid", est_low::numeric AS "estLow", est_high::numeric AS "estHigh", sale_date::text AS "saleDate", triage_priority::int AS "triagePriority", latitude::float8 AS lat, longitude::float8 AS lng, provenance',
+  };
+
+  const memoryResult = await query.search(memoryDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+  const pgResult = await query.search(pgDatabase, query.queryFromUrl(new URL('http://localhost/api/listings?sort=score&limit=10')));
+
+  const memIds = memoryResult.listings.map((l) => l.id);
+  const pgIds = pgResult.listings.map((l) => l.id);
+  assert.deepEqual(pgIds, memIds, 'PG and memory sort=score must match exactly');
+  assert.deepEqual(memIds.slice(0, 3), ['active-priced-geocoded', 'active-upset-only', 'active-bare']);
+  assert.equal(new Set(memIds.slice(3)).size, 4);
+  for (const terminalId of ['sold-scored', 'closed-plaintiff', 'superseded-dup', 'absent-old']) {
+    assert.ok(memIds.indexOf(terminalId) >= 3, `${terminalId} must sink below active listings`);
+  }
+});

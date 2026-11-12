@@ -533,7 +533,7 @@ class IngestionScheduler {
           const complete = isPartial ? false : (coverage.complete === true || rawReport.complete === true);
           const fullSweepComplete = isPartial ? false : (coverage.fullSweepComplete === true || rawReport.fullSweepComplete === true);
           const report = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object') || isPartial || items?.report || isListingEnvelope
-            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
+            ? { outcome: coverage.outcome || (isPartial ? 'partial' : null), truncated, complete, fullSweepComplete, partialSweep, nextCursor, continuationToken, nextContinuationToken, scope: coverage.acquisitionScope || null, coverage, ...(Array.isArray(rawReport.completedCounties) ? { completedCounties: rawReport.completedCounties } : {}), ...(Array.isArray(rawReport.completedStates) ? { completedStates: rawReport.completedStates } : {}), ...(rawReport.sweepStartedAt ? { sweepStartedAt: rawReport.sweepStartedAt } : {}), ...(driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : {}) }
             : (driftAlarm && driftAlarm.hasDrift ? { driftAlarm } : null);
           let observationError = null;
           try {
@@ -692,8 +692,16 @@ const fs = require('node:fs');
       : (this?.enableAssessorBackfill ?? scheduler?.enableAssessorBackfill ?? true);
     if (shouldBackfill) {
     try {
-      const { backfillAssessorRolls } = require('../enrichment/assessor-backfill');
+      const { backfillAssessorRolls, resolveNjCadastralBatch } = require('../enrichment/assessor-backfill');
       const backfill = await backfillAssessorRolls({ db, limit: 25 });
+      if (sourceId === 'civilview' && (backfill.njEnriched || 0) === 0) {
+        const njBatch = await resolveNjCadastralBatch({ db, limit: 25 });
+        backfill.njEnriched = njBatch.njEnriched || 0;
+        backfill.persisted += njBatch.persisted || 0;
+        if (njBatch.njEnriched > 0) {
+          console.log(`[Scheduler] Backfilled ${njBatch.persisted} NJ cadastral/geocode record(s) (enriched ${njBatch.njEnriched}, notFound ${njBatch.notFound}, failed ${njBatch.failed})`);
+        }
+      }
       if (backfill.harvested > 0) {
         console.log(`[Scheduler] Backfilled ${backfill.persisted} stored assessor roll(s) (harvested ${backfill.harvested}, notFound ${backfill.notFound}, failed ${backfill.failed})`);
       }
@@ -721,6 +729,36 @@ const fs = require('node:fs');
           );
         } catch (absenceError) {
           console.warn('[Scheduler] Publisher absence reconciliation failed (non-fatal):', absenceError.message);
+        }
+      }
+    }
+    if (!run.error && Array.isArray(run.report?.completedCounties) && !run.report?.complete) {
+      const targetDb = (this && this.database) || scheduler?.database || db;
+      if (typeof targetDb.reconcilePublisherAbsence === 'function') {
+        for (const countyEntry of run.report.completedCounties) {
+          if (!countyEntry?.county || !countyEntry?.state || !Array.isArray(countyEntry.seenIds) || countyEntry.seenIds.length === 0) continue;
+          try {
+            await targetDb.reconcilePublisherAbsence(
+              sourceId,
+              countyEntry.seenIds,
+              { runCompleted: true, county: countyEntry.county, state: countyEntry.state }
+            );
+          } catch (absenceError) {
+            console.warn(`[Scheduler] County absence reconciliation failed for ${countyEntry.county}, ${countyEntry.state} (non-fatal):`, absenceError.message);
+          }
+        }
+      }
+    }
+    if (!run.error && run.listings.length) {
+      const targetDb = (this && this.database) || scheduler?.database || db;
+      if (typeof targetDb.reconcileDuplicateDockets === 'function') {
+        try {
+          const dupOut = await targetDb.reconcileDuplicateDockets(sourceId, run.listings);
+          if (dupOut?.superseded > 0) {
+            console.log(`[Scheduler] Reconciled ${dupOut.superseded} duplicate docket listing(s) for ${sourceId}`);
+          }
+        } catch (dupError) {
+          console.warn('[Scheduler] Duplicate docket reconciliation failed (non-fatal):', dupError.message);
         }
       }
     }

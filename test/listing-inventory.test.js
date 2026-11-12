@@ -63,3 +63,25 @@ test('a settled pass expires rather than serving the inventory forever', () => {
     'the shared result must expire',
   );
 });
+
+test('Hero autocomplete queries /api/listings?q=... across the full catalog instead of truncating via loadListingInventory', () => {
+  const hero = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'components', 'site', 'hero.tsx'),
+    'utf8',
+  );
+  assert.doesNotMatch(
+    hero,
+    /loadListingInventory\s*</,
+    'Hero must not wait on or truncate suggestions to 10,000-row client pagination',
+  );
+  assert.match(
+    hero,
+    /\/api\/listings\?q=/,
+    'Hero must query the full catalog via /api/listings?q=...',
+  );
+  assert.match(
+    hero,
+    /AbortController/,
+    'Hero autocomplete must abort stale in-flight search requests cleanly',
+  );
+});

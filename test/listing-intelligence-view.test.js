@@ -70,3 +70,63 @@ test('the response says when its total counts this page rather than the search',
   assert.equal(whole.totalIsPageScoped, false);
   assert.equal(whole.sort, null);
 });
+
+test('GET /api/listings?sort=quality expands the DB candidate window before slicing the requested limit', async () => {
+  const prevBackend = process.env.PROPERTY_INVENTORY_BACKEND;
+  process.env.PROPERTY_INVENTORY_BACKEND = 'memory';
+  const discovery = require('../server/discovery/query');
+  const origSearch = discovery.search;
+  const seenLimits = [];
+  discovery.search = async (_db, f) => {
+    seenLimits.push(f.limit);
+    return {
+      listings: [
+        {
+          id: 'BARE-1',
+          source: 'civilview',
+          state: 'NJ',
+          status: 'scheduled',
+          propType: 'Unknown',
+          openingBid: null,
+          lat: null,
+          lng: null,
+          provenance: { origin: 'live', observed: true },
+        },
+        {
+          id: 'RICH-2',
+          source: 'civilview',
+          state: 'NJ',
+          status: 'scheduled',
+          propType: 'Single Family',
+          openingBid: 100000,
+          assessed: 350000,
+          lat: 40.78,
+          lng: -74.48,
+          parcelKey: '34027-1-1',
+          sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2',
+          sourceObservedAt: new Date().toISOString(),
+          provenance: { origin: 'live', observed: true },
+        },
+      ],
+      total: 500,
+      page: { nextCursor: null, hasMore: true },
+    };
+  };
+  try {
+    const handleListings = require('../server/routes/listings');
+    let statusCode = 200;
+    let body = null;
+    await handleListings(
+      { method: 'GET', url: '/api/listings?sort=quality&limit=1', headers: { host: 'localhost' } },
+      { status(code) { statusCode = code; return this; }, json(payload) { body = payload; } },
+    );
+    assert.equal(statusCode, 200);
+    assert.ok(seenLimits[0] >= 100, `expected expanded candidate limit >= 100, got ${seenLimits[0]}`);
+    assert.equal(body.listings.length, 1);
+    assert.equal(body.listings[0].id, 'RICH-2');
+  } finally {
+    discovery.search = origSearch;
+    if (prevBackend === undefined) delete process.env.PROPERTY_INVENTORY_BACKEND;
+    else process.env.PROPERTY_INVENTORY_BACKEND = prevBackend;
+  }
+});

@@ -10,10 +10,11 @@
 // harvest's own per-run limit and disk cache, and fail-open on every error.
 // A backfill failure must never affect ingest or serving.
 
-const { harvestAssessorRolls, loadCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
+const { harvestAssessorRolls, loadCache, saveCache, cacheKeyFor, DEFAULT_CACHE_PATH, DEFAULT_CACHE_TTL_MS, DEFAULT_MISS_TTL_MS } = require('./assessor-harvest');
 const { extractRawApn, normalizeApn, buildParcelKey } = require('../scrapers/normalization');
 const { MARKET_CONVERSION } = require('./assessor-reading');
 const { resolveCountyKey, COUNTY_ARCGIS_REGISTRY } = require('./arcgis-parcels');
+const { enrichNjListing, extractNjGeocodeQuery, applyNjCadastralData } = require('./nj-cadastral');
 
 // States whose counties carry verified market conversions in this registry.
 // FL is included: its conversions resolve through the statewide fallback.
@@ -53,8 +54,73 @@ function candidateReady(listing) {
   return countyEnrolled(listing.state, listing.county);
 }
 
+async function resolveNjCadastralBatch({ db, fetchFn, now, limit = 15, perStateLimit = 60, cachePath, logger = null } = {}) {
+  const out = { considered: 0, njEnriched: 0, persisted: 0, failed: 0, notFound: 0 };
+  if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function' || limit <= 0) {
+    return out;
+  }
+  const effectiveCachePath = cachePath || DEFAULT_CACHE_PATH;
+  const cache = loadCache(effectiveCachePath);
+  const cacheTtlMs = DEFAULT_CACHE_TTL_MS;
+  const missTtlMs = DEFAULT_MISS_TTL_MS;
+  const nowMs = Number.isFinite(now) ? now : Date.now();
+  let page = { listings: [] };
+  try {
+    page = await db.getListings({ state: 'NJ', missingAssessorRoll: true, limit: perStateLimit });
+  } catch (error) {
+    if (logger?.warn) logger.warn(`[NjCadastralBackfill] NJ query failed (non-fatal): ${error.message}`);
+    return out;
+  }
+  const candidates = [];
+  for (const row of page.listings || []) {
+    if (!row || typeof row !== 'object' || !row.id || String(row.state || '').toUpperCase() !== 'NJ') continue;
+    if (row.assessorParcel || row.provenance?.derivedFields?.assessorRoll) continue;
+    const queryLine = extractNjGeocodeQuery(row);
+    if (!queryLine) continue;
+    const key = `NJ-GEO|${queryLine.toUpperCase()}`;
+    const entry = cache[key];
+    if (entry && Number.isFinite(Date.parse(entry.observedAt))) {
+      const age = nowMs - Date.parse(entry.observedAt);
+      if (entry.hit ? age < cacheTtlMs : age < missTtlMs) continue;
+    }
+    candidates.push({ row, key });
+    if (candidates.length >= limit) break;
+  }
+  if (!candidates.length) return out;
+
+  let cacheDirty = false;
+  for (const { row, key } of candidates) {
+    out.considered += 1;
+    try {
+      const res = await enrichNjListing(row, { fetchFn, now: nowMs });
+      if (res.found) {
+        out.njEnriched += 1;
+        cache[key] = { observedAt: new Date(nowMs).toISOString(), hit: true };
+        cacheDirty = true;
+        try {
+          await db.createListing(row);
+          out.persisted += 1;
+        } catch (persistErr) {
+          if (logger?.warn) logger.warn(`[NjCadastralBackfill] persist failed (non-fatal): ${persistErr.message}`);
+        }
+      } else {
+        out.notFound += 1;
+        cache[key] = { observedAt: new Date(nowMs).toISOString(), hit: false };
+        cacheDirty = true;
+      }
+    } catch (err) {
+      out.failed += 1;
+      if (logger?.warn) logger.warn(`[NjCadastralBackfill] enrich failed (non-fatal): ${err.message}`);
+    }
+  }
+  if (cacheDirty && typeof saveCache === 'function') {
+    try { saveCache(effectiveCachePath, cache); } catch { /* best effort cache persistence */ }
+  }
+  return out;
+}
+
 async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLimit = 60, cachePath, logger = null } = {}) {
-  const result = { considered: 0, harvested: 0, persisted: 0, failed: 0, notFound: 0, skipped: null };
+  const result = { considered: 0, harvested: 0, njEnriched: 0, persisted: 0, failed: 0, notFound: 0, skipped: null };
   if (!db || typeof db.getListings !== 'function' || typeof db.createListing !== 'function') {
     result.skipped = 'db-unavailable';
     return result;
@@ -112,7 +178,7 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
     }
     idx++;
   }
-  if (!candidates.length) return result;
+  if (candidates.length) {
   result.considered = candidates.length;
 
   // onHarvested persists each roll the moment it attaches (see the harvest
@@ -151,7 +217,26 @@ async function backfillAssessorRolls({ db, fetchFn, now, limit = 30, perStateLim
   } catch (error) {
     if (logger?.warn) logger.warn(`[AssessorBackfill] harvest failed (non-fatal): ${error.message}`);
   }
+  }
+
+  const remainingForNj = Math.max(0, limit - result.considered);
+  if (remainingForNj > 0) {
+    const njOut = await resolveNjCadastralBatch({
+      db,
+      fetchFn,
+      now,
+      limit: remainingForNj,
+      perStateLimit,
+      cachePath,
+      logger,
+    });
+    result.njEnriched = njOut.njEnriched;
+    result.considered += njOut.considered;
+    result.persisted += njOut.persisted;
+    result.failed += njOut.failed;
+    result.notFound += njOut.notFound;
+  }
   return result;
 }
 
-module.exports = { backfillAssessorRolls, CONVERTED_STATES, candidateReady, countyEnrolled };
+module.exports = { backfillAssessorRolls, resolveNjCadastralBatch, CONVERTED_STATES, candidateReady, countyEnrolled };

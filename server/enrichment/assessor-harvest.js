@@ -300,6 +300,7 @@ module.exports = {
   candidateListing,
   harvestAssessorRolls,
   loadCache,
+  saveCache,
   readYearField,
   resolveHarvestLimit,
   taxYearFromRawAttributes,

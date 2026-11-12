@@ -21,4 +21,10 @@ test('persistence keeps a recorded sale and a finished auction apart', () => {
   assert.equal(storedStatus('pending'), 'pending');
   assert.equal(storedStatus('STAYED_BANKRUPTCY'), 'stayed');
   assert.equal(storedStatus('active'), 'active');
+  assert.equal(storedStatus('Purchased - 3rd Party'), 'sold');
+  assert.equal(storedStatus('Purchased - Plaintiff'), 'closed');
+  assert.equal(storedStatus('Reverted to Plaintiff'), 'closed');
+  assert.equal(storedStatus('Dismissed'), 'cancelled');
+  assert.equal(storedStatus('Settled'), 'cancelled');
+  assert.equal(storedStatus('Bankruptcy'), 'stayed');
 });

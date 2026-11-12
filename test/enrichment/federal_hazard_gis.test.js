@@ -480,3 +480,12 @@ test('Federal hazard sources: blank elevation is unavailable, while measured zer
   assert.equal(zero.status, 'success');
   assert.equal(zero.elevationMeters, 0);
 });
+
+test('PropertyIntelligence UI preflight gates /api/federal-hazards on valid US coordinates', () => {
+  const intelSrc = fs.readFileSync(path.resolve(__dirname, '../../src/components/listings/property-intelligence.tsx'), 'utf8');
+  const detailSrc = fs.readFileSync(path.resolve(__dirname, '../../src/app/listings/[id]/page.tsx'), 'utf8');
+  const drawerSrc = fs.readFileSync(path.resolve(__dirname, '../../src/components/terminal/property-drawer.tsx'), 'utf8');
+  assert.match(intelSrc, /hasValidUsCoordinates\(lat,\s*lng\)/);
+  assert.match(detailSrc, /<PropertyIntelligence[^>]+lat=\{listing\.lat\s*\?\?\s*null\}[^>]+lng=\{listing\.lng\s*\?\?\s*null\}/);
+  assert.match(drawerSrc, /<PropertyIntelligence[^>]+lat=\{listing\.lat\s*\?\?\s*null\}[^>]+lng=\{listing\.lng\s*\?\?\s*null\}/);
+});

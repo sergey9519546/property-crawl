@@ -149,7 +149,14 @@ function valueLabel(value: unknown, key?: string): string {
 const humanize = (value: string) => value.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 const date = (value: string) => new Date(value).toLocaleDateString();
 
-export function PropertyIntelligence({ listingId, documentsShown = false }: { listingId: string; documentsShown?: boolean }) {
+function hasValidUsCoordinates(lat: number | null | undefined, lng: number | null | undefined): boolean {
+  return (
+    typeof lat === 'number' && Number.isFinite(lat) && lat >= 15 && lat <= 72 &&
+    typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= -65
+  );
+}
+
+export function PropertyIntelligence({ listingId, documentsShown = false, lat, lng }: { listingId: string; documentsShown?: boolean; lat?: number | null; lng?: number | null }) {
   const session = useWorkspaceSession();
   const [dossier, setDossier] = useState<Dossier | null>(null);
   const [hazards, setHazards] = useState<any | null>(null);
@@ -168,13 +175,16 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
       if (!response.ok) throw new Error(result.error || 'Property investigation could not be completed');
       if (requestGeneration !== generation.current || controller.signal.aborted) return;
       setDossier(result);
-      void fetch(`/api/federal-hazards?listingId=${encodeURIComponent(listingId)}`, { signal: controller.signal })
-        .then((r) => r.ok ? r.json() : null)
-        .then((h) => { if (requestGeneration === generation.current && h?.status === 'success') setHazards(h); })
-        .catch(() => {});
+      const coordinatesProvided = lat !== undefined || lng !== undefined;
+      if (!coordinatesProvided || hasValidUsCoordinates(lat, lng)) {
+        void fetch(`/api/federal-hazards?listingId=${encodeURIComponent(listingId)}`, { signal: controller.signal })
+          .then((r) => r.ok ? r.json() : null)
+          .then((h) => { if (requestGeneration === generation.current && h?.status === 'success') setHazards(h); })
+          .catch(() => {});
+      }
     } catch (caught) { if (!(caught instanceof DOMException && caught.name === 'AbortError') && requestGeneration === generation.current) setError(caught instanceof Error ? caught.message : 'Property investigation could not be completed'); }
     finally { if (requestGeneration === generation.current && publicRequest.current === controller) setBusy(false); }
-  }, [listingId]);
+  }, [listingId, lat, lng]);
   useEffect(() => { const requestGeneration=++generation.current;researchRequest.current?.abort();setDossier(null);setHazards(null);void loadPublic(requestGeneration);return()=>{publicRequest.current?.abort();researchRequest.current?.abort();}; }, [loadPublic]);
 
   async function research() {

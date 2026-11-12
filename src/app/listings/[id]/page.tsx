@@ -525,7 +525,7 @@ export default async function ListingPage({ params, searchParams }: Props) {
           </div>
 
           <div id="evidence-dossier" className="mt-8 scroll-mt-6">
-            <PropertyIntelligence key={listing.id} listingId={listing.id} documentsShown />
+            <PropertyIntelligence key={listing.id} listingId={listing.id} lat={listing.lat ?? null} lng={listing.lng ?? null} documentsShown />
             {/* Parcel enrichment, mounted for the records that can actually use
                 it. 114 of 6,539 live records (1.7%) carry a parcelKey - all from
                 fl-dor-cadastral (100) and treasury (14) - because most publishers

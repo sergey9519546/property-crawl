@@ -466,8 +466,15 @@ async function handleListings(req, res) {
         // Intelligence sorts (quality/opportunity) are applied after annotation.
         // The discovery SQL layer only understands score/date/bid-asc/equity.
         const discoveryUrl = new URL(url);
+        const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
+        const candidateLimit = (filters.offset === 0 && !filters.cursor && isIntelligenceView && filters.limit < 250)
+          ? Math.min(250, Math.max(filters.limit * 5, 100))
+          : filters.limit;
         if (String(filters.sort) === 'quality') {
           discoveryUrl.searchParams.set('sort', 'score');
+        }
+        if (candidateLimit > filters.limit) {
+          discoveryUrl.searchParams.set('limit', String(candidateLimit));
         }
         result = await discovery.search(db, discovery.queryFromUrl(discoveryUrl));
       } else {
@@ -533,16 +540,20 @@ async function handleListings(req, res) {
         return { ...rest, provenance: kept };
       });
     // Post-annotation intelligence view: quality/opportunity sort + minQuality.
-    const viewListings = applyIntelligenceView(presentedListings, filters);
+    const viewListingsAll = applyIntelligenceView(presentedListings, filters);
+    const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
+    const viewListings = (filters.offset === 0 && !filters.cursor && isIntelligenceView && viewListingsAll.length > filters.limit)
+      ? viewListingsAll.slice(0, filters.limit)
+      : viewListingsAll;
     const body = {
       ...result,
       page,
       revision: result.revision || null,
       facets: result.facets || {},
-      intelligence: intelligenceScope(presentedListings.length, viewListings.length, filters),
+      intelligence: intelligenceScope(presentedListings.length, viewListingsAll.length, filters),
       pipeline: summarizeInventory(viewListings),
       listings: viewListings,
-      total: INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0
+      total: isIntelligenceView
         ? viewListings.length
         : result.total,
       // Surface the same honesty signals the health endpoint provides so

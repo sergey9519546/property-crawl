@@ -220,11 +220,12 @@ function canonicalStatus(value) {
   const raw = optionalText(value);
   if (!raw) return 'unknown';
   const normalized = raw.toLowerCase();
-  if (/cancel|withdraw/.test(normalized)) return 'cancelled';
+  if (/cancel|withdraw|dismiss|settl|discontinu/.test(normalized)) return 'cancelled';
   if (/postpon/.test(normalized)) return 'postponed';
   if (/adjourn/.test(normalized)) return 'adjourned';
-  if (/stay/.test(normalized)) return 'stayed';
-  if (/\bsold\b/.test(normalized)) return 'sold';
+  if (/stay|bankruptc/.test(normalized)) return 'stayed';
+  if (/reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*(?:-|to|:)\s*(?:plaintiff|beneficiary)/.test(normalized)) return 'closed';
+  if (/\bsold\b|purchased\s*[-:]\s*(?:3rd|third)[-\s]*party/.test(normalized)) return 'sold';
   if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b/.test(normalized)) return 'closed';
   if (/scheduled|coming soon|pre.?auction/.test(normalized)) return 'scheduled';
   if (/pending/.test(normalized)) return 'pending';
@@ -327,6 +328,15 @@ function prepareListingForPersistence(listing = {}) {
       countyFips: listing.countyFips ?? sourceFacts.countyFips ?? listing.provenance?.countyFips
     });
   }
+  if (normalized.parcelKey && normalized.provenance && !normalized.provenance.parcelKey) {
+    normalized.provenance.parcelKey = normalized.parcelKey;
+  }
+  if (normalized.transactionOutcome && normalized.provenance) {
+    normalized.provenance.sourceFacts = {
+      ...(normalized.provenance.sourceFacts || {}),
+      transactionOutcome: normalized.transactionOutcome,
+    };
+  }
   normalized.triage = computeTriage(normalized);
   return normalized;
 }
@@ -345,6 +355,12 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
   }
   if (existing.provenance || incoming.provenance) {
     merged.provenance = { ...(existing.provenance || {}), ...(incoming.provenance || {}) };
+    if (existing.provenance?.derivedFields || incoming.provenance?.derivedFields) {
+      merged.provenance.derivedFields = {
+        ...(existing.provenance?.derivedFields || {}),
+        ...(incoming.provenance?.derivedFields || {}),
+      };
+    }
   }
   for (const field of [
     'county', 'city', 'zip', 'beds', 'baths', 'sqft', 'year', 'assessed',
@@ -359,6 +375,9 @@ function mergeListingForInMemoryUpsert(existing, incoming) {
   }
   if (incoming.status === 'unknown' && existing.status && existing.status !== 'unknown') {
     merged.status = existing.status;
+  }
+  if ((!incoming.propType || incoming.propType === 'Unknown') && existing.propType && existing.propType !== 'Unknown') {
+    merged.propType = existing.propType;
   }
   if (incoming.hasDocuments !== true && existing.hasDocuments === true) {
     merged.hasDocuments = true;
@@ -2178,7 +2197,7 @@ class DatabaseClient {
         baths = COALESCE(EXCLUDED.baths, listings.baths),
         sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
         year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
-        prop_type = COALESCE(EXCLUDED.prop_type, listings.prop_type),
+        prop_type = COALESCE(NULLIF(NULLIF(EXCLUDED.prop_type, ''), 'Unknown'), listings.prop_type, EXCLUDED.prop_type),
         opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
         est_low = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_low ELSE listings.est_low END,
         est_high = CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_high ELSE listings.est_high END,
@@ -2352,6 +2371,169 @@ class DatabaseClient {
     }
 
     return { retired: 0, restored: 0 };
+  }
+
+  /**
+   * Reconcile duplicate publisher notices sharing the same source, county,
+   * docket/sheriff writ identifier, and normalized street address (e.g. a
+   * CivilView county re-indexing a writ under a newer PropertyId). Stamps
+   * provenance.supersededBy on older duplicate records cleanly without
+   * conflating distinct unit addresses on multi-parcel writs.
+   */
+  async reconcileDuplicateDockets(sourceKey, seenListings = [], options = {}) {
+    if (typeof sourceKey !== 'string' || !sourceKey.trim() || !Array.isArray(seenListings) || seenListings.length === 0) {
+      return { superseded: 0, cleared: 0 };
+    }
+    const at = typeof options.at === 'string' && isFiniteTime(options.at)
+      ? new Date(Date.parse(options.at)).toISOString()
+      : new Date().toISOString();
+
+    const docketInfoFor = (listing) => {
+      if (!listing || typeof listing !== 'object') return null;
+      const facts = listing.provenance?.sourceFacts || {};
+      const fields = listing.provenance?.sourceFields || {};
+      const sheriff = String(facts.sheriffNumber || fields['Sheriff #'] || listing.sheriffNumber || listing.raw?.sheriffNumber || '')
+        .replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const court = String(listing.courtCaseNumber || facts.courtCaseNumber || fields['Court Case #'] || '')
+        .replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const docketKey = sheriff.length >= 3 ? `SH:${sheriff}` : (court.length >= 3 ? `CC:${court}` : '');
+      const state = String(listing.state || '').trim().toUpperCase();
+      const county = String(listing.county || '').trim().toLowerCase();
+      const addrKey = String(listing.address || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (!docketKey || !state || !county || addrKey.length < 6) return null;
+      return {
+        groupKey: `${sourceKey}|${state}|${county}|${docketKey}|${addrKey}`,
+        docket: sheriff || court,
+        state,
+        county,
+      };
+    };
+
+    const pickPreferred = (a, b) => {
+      const aAbsent = Boolean(a.provenance?.publisherAbsence);
+      const bAbsent = Boolean(b.provenance?.publisherAbsence);
+      if (aAbsent !== bAbsent) return aAbsent ? 1 : -1;
+      const aDate = typeof a.saleDate === 'string' ? a.saleDate : '';
+      const bDate = typeof b.saleDate === 'string' ? b.saleDate : '';
+      if (aDate !== bDate) {
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate > bDate ? -1 : 1;
+      }
+      const aObs = a.sourceObservedAt ? Date.parse(a.sourceObservedAt) : 0;
+      const bObs = b.sourceObservedAt ? Date.parse(b.sourceObservedAt) : 0;
+      if (Number.isFinite(aObs) && Number.isFinite(bObs) && aObs !== bObs) return bObs - aObs;
+      const aNum = Number((String(a.id || '').match(/(\d+)$/) || [])[1] || 0);
+      const bNum = Number((String(b.id || '').match(/(\d+)$/) || [])[1] || 0);
+      if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) return bNum - aNum;
+      return String(b.id || '').localeCompare(String(a.id || ''));
+    };
+
+    const seenScopes = new Map();
+    const seenMap = new Map();
+    for (const item of seenListings) {
+      if (!item || typeof item !== 'object' || !item.id) continue;
+      const info = docketInfoFor(item);
+      if (!info) continue;
+      seenMap.set(item.id, item);
+      seenScopes.set(`${info.state}|${info.county}`, { state: info.state, county: info.county });
+    }
+    if (seenScopes.size === 0) return { superseded: 0, cleared: 0 };
+
+    let candidates = [];
+    if (this.isPg && this.pool) {
+      const states = [...new Set([...seenScopes.values()].map((s) => s.state))];
+      const counties = [...new Set([...seenScopes.values()].map((s) => s.county))];
+      const res = await this.pool.query(
+        `SELECT ${LISTING_SELECT} FROM listings
+          WHERE source_key = $1
+            AND UPPER(state) = ANY($2::text[])
+            AND LOWER(COALESCE(county, '')) = ANY($3::text[])`,
+        [sourceKey, states, counties],
+      );
+      const merged = new Map(res.rows.map((r) => [r.id, mapPgListingRow(r)]));
+      for (const [id, item] of seenMap.entries()) {
+        merged.set(id, { ...(merged.get(id) || {}), ...item });
+      }
+      candidates = [...merged.values()];
+    } else if (this.memoryInventoryRequested()) {
+      candidates = this.inMemoryData.listings.filter((row) => {
+        if (!row || row.source !== sourceKey) return false;
+        const st = String(row.state || '').trim().toUpperCase();
+        const co = String(row.county || '').trim().toLowerCase();
+        return seenScopes.has(`${st}|${co}`);
+      });
+    } else {
+      return { superseded: 0, cleared: 0 };
+    }
+
+    const groups = new Map();
+    for (const candidate of candidates) {
+      const info = docketInfoFor(candidate);
+      if (!info) continue;
+      if (!groups.has(info.groupKey)) groups.set(info.groupKey, []);
+      groups.get(info.groupKey).push({ record: candidate, info });
+    }
+
+    const toSupersede = [];
+    const toClearIds = [];
+    for (const entries of groups.values()) {
+      if (entries.length < 2) continue;
+      entries.sort((x, y) => pickPreferred(x.record, y.record));
+      const winner = entries[0].record;
+      if (winner.provenance?.supersededBy) toClearIds.push(winner.id);
+      for (let i = 1; i < entries.length; i += 1) {
+        const loser = entries[i].record;
+        if (loser.provenance?.supersededBy?.byId === winner.id) continue;
+        toSupersede.push({
+          id: loser.id,
+          marker: { byId: winner.id, at, reason: 'duplicate_docket_superseded', docket: entries[i].info.docket },
+        });
+      }
+    }
+
+    if (this.isPg && this.pool) {
+      for (const item of toSupersede) {
+        await this.pool.query(
+          `UPDATE listings
+              SET provenance = jsonb_set(COALESCE(provenance, '{}'::jsonb), '{supersededBy}', $2::jsonb, true),
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [item.id, JSON.stringify(item.marker)],
+        );
+      }
+      if (toClearIds.length > 0) {
+        await this.pool.query(
+          `UPDATE listings
+              SET provenance = provenance - 'supersededBy',
+                  updated_at = NOW()
+            WHERE id = ANY($1::text[])
+              AND provenance ? 'supersededBy'`,
+          [toClearIds],
+        );
+      }
+      return { superseded: toSupersede.length, cleared: toClearIds.length };
+    }
+
+    const supersedeMap = new Map(toSupersede.map((x) => [x.id, x.marker]));
+    const clearSet = new Set(toClearIds);
+    let superseded = 0;
+    let cleared = 0;
+    for (let i = 0; i < this.inMemoryData.listings.length; i += 1) {
+      const rec = this.inMemoryData.listings[i];
+      if (!rec) continue;
+      if (supersedeMap.has(rec.id)) {
+        const provenance = { ...(rec.provenance || {}), supersededBy: supersedeMap.get(rec.id) };
+        this.inMemoryData.listings[i] = { ...rec, provenance };
+        superseded += 1;
+      } else if (clearSet.has(rec.id) && rec.provenance?.supersededBy) {
+        const provenance = { ...rec.provenance };
+        delete provenance.supersededBy;
+        this.inMemoryData.listings[i] = { ...rec, provenance };
+        cleared += 1;
+      }
+    }
+    return { superseded, cleared };
   }
 
   async getSavedDeals(userId) {

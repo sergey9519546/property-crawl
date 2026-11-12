@@ -324,11 +324,48 @@ function matches(row, f) {
   }
   return true;
 }
+const TERMINAL_LIFECYCLE_RE = /(?:reverted\s+to\s+(?:plaintiff|beneficiary)|(?:purchased|sold)\s*[-:]\s*(?:3rd|third)[-\s]*party|(?:purchased|sold)\s*[-:]\s*(?:plaintiff|beneficiary)|(?:^|[^a-z0-9])(?:closed|sold)(?:$|[^a-z0-9])|dismiss|settl|cancel)/i;
+function isTerminalForRanking(row) {
+  if (!row || typeof row !== "object") return false;
+  const st = String(row.status || "").trim().toLowerCase();
+  if (st === "sold" || st === "closed" || st === "cancelled") return true;
+  const lc = String(row.lifecycleStatus ?? row.lifecycle_status ?? "").trim();
+  if (lc && TERMINAL_LIFECYCLE_RE.test(lc)) return true;
+  const prov = row.provenance && typeof row.provenance === "object" ? row.provenance : null;
+  const tx = row.transactionOutcome ?? row.transaction_outcome ?? prov?.sourceFacts?.transactionOutcome ?? null;
+  if (tx && String(tx).trim()) return true;
+  if (prov?.publisherAbsence || prov?.supersededBy) return true;
+  return false;
+}
+function positiveNum(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function actionableEvidenceTier(row) {
+  if (!row || typeof row !== "object") return 0;
+  const prov = row.provenance && typeof row.provenance === "object" ? row.provenance : null;
+  const facts = prov?.sourceFacts || {};
+  const hasPriceOrRoll = positiveNum(row.openingBid ?? row.opening_bid) !== null
+    || positiveNum(facts.upsetPrice) !== null
+    || positiveNum(facts.approximateUpsetPrice?.amount) !== null
+    || Boolean(prov?.derivedFields?.assessorRoll?.parcel);
+  const lat = row.lat ?? row.latitude;
+  const lng = row.lng ?? row.longitude;
+  const hasCoords = lat !== null && lat !== undefined && lng !== null && lng !== undefined
+    && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+  return (hasPriceOrRoll ? 2 : 0) + (hasCoords ? 1 : 0);
+}
 function compare(a, b, sort) {
   let av,
     bv,
     asc = false;
   const now = Date.now();
+  if (sort === "score" || sort === "opportunity") {
+    const aTerm = isTerminalForRanking(a);
+    const bTerm = isTerminalForRanking(b);
+    if (aTerm !== bTerm) return aTerm ? 1 : -1;
+  }
   if (sort === "date") {
     av = a.saleDate ? Date.parse(a.saleDate) : null;
     bv = b.saleDate ? Date.parse(b.saleDate) : null;
@@ -355,6 +392,11 @@ function compare(a, b, sort) {
   if (ak && Number(av) !== Number(bv))
     return asc ? Number(av) - Number(bv) : Number(bv) - Number(av);
   if (sort === "score" || sort === "opportunity" || sort === "triage") {
+    if (sort === "score" || sort === "opportunity") {
+      const aTier = actionableEvidenceTier(a);
+      const bTier = actionableEvidenceTier(b);
+      if (aTier !== bTier) return bTier - aTier;
+    }
     const aDateRaw = a.saleDate || a.sale_date || null;
     const bDateRaw = b.saleDate || b.sale_date || null;
     const aDate = aDateRaw ? Date.parse(aDateRaw) : null;
@@ -603,15 +645,33 @@ function pgSort(f) {
         + "ELSE -1 END)",
       dir: sortDirection("triage"),
     };
-  if (f.sort === "score" || f.sort === "opportunity")
+  if (f.sort === "score" || f.sort === "opportunity") {
+    const terminalSql = "("
+      + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
+      + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel)' "
+      + "OR nullif(coalesce(provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
+      + "OR (provenance ? 'publisherAbsence') "
+      + "OR (provenance ? 'supersededBy')"
+      + ")";
+    const actionTierSql = "("
+      + "(CASE WHEN coalesce(opening_bid, 0) > 0 "
+      + "OR (CASE WHEN (provenance->'sourceFacts'->>'upsetPrice') ~ '^[0-9]+([.][0-9]+)?$' THEN (provenance->'sourceFacts'->>'upsetPrice')::numeric ELSE 0 END) > 0 "
+      + "OR (CASE WHEN (provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount') ~ '^[0-9]+([.][0-9]+)?$' THEN (provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount')::numeric ELSE 0 END) > 0 "
+      + "OR (provenance->'derivedFields'->'assessorRoll'->'parcel') IS NOT NULL "
+      + "THEN 2 ELSE 0 END) "
+      + "+ (CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END)"
+      + ")";
+    const dateTriageSql = "(CASE "
+      + "WHEN sale_date >= CURRENT_DATE THEN 2e11 + (1e6 - LEAST(1e6, GREATEST(0, (sale_date - CURRENT_DATE)))) * 1e5 + LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) "
+      + "WHEN sale_date < CURRENT_DATE THEN 1e5 + (1e6 - LEAST(1e6, GREATEST(0, (CURRENT_DATE - sale_date)))) * 1e5 + LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) "
+      + "ELSE LEAST(99999, GREATEST(0, coalesce(triage_priority, 0))) END)";
     return {
-      expr: "(CASE "
-        + `WHEN ${derivedScore} IS NOT NULL THEN 1e11 + (${derivedScore} * 1e8) + coalesce(triage_priority, 0) `
-        + "WHEN sale_date >= CURRENT_DATE THEN 1e9 + (1e7 - LEAST(1e7, GREATEST(0, (sale_date - CURRENT_DATE)))) * 100 + coalesce(triage_priority, 0) "
-        + "WHEN sale_date < CURRENT_DATE THEN 1e6 + LEAST(1e6, GREATEST(0, (CURRENT_DATE - sale_date))) * 10 + coalesce(triage_priority, 0) "
-        + "ELSE coalesce(triage_priority, 0) END)",
+      expr: `((CASE WHEN ${terminalSql} THEN -1e14::float8 ELSE 0::float8 END) + (CASE `
+        + `WHEN ${derivedScore} IS NOT NULL THEN 1e13 + (${derivedScore} * 1e10) + (${actionTierSql} * 1e8) + floor(${dateTriageSql} / 1e4) `
+        + `ELSE (${actionTierSql} * 1e12) + ${dateTriageSql} END))`,
       dir: sortDirection("score"),
     };
+  }
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
 async function pgRevision(database) {

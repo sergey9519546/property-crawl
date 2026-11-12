@@ -101,6 +101,58 @@ function computeResearchQuality(listing = {}, now = Date.now()) {
     factors.push({ factor: 'cadastral_parcel_verified', weight: 5 });
   }
 
+  const positiveNumber = (val) => {
+    if (val === null || val === undefined || val === '') return null;
+    const num = Number(val);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  };
+  const statusLower = String(listing.status || '').trim().toLowerCase();
+  const isTerminal = Boolean(
+    listing.transactionOutcome
+    || listing.provenance?.sourceFacts?.transactionOutcome
+    || listing.provenance?.publisherAbsence
+    || listing.provenance?.supersededBy
+    || statusLower === 'sold'
+    || statusLower === 'closed'
+    || statusLower === 'cancelled',
+  );
+  const hasConcreteFields = Object.prototype.hasOwnProperty.call(listing, 'openingBid')
+    || Object.prototype.hasOwnProperty.call(listing, 'lat')
+    || Object.prototype.hasOwnProperty.call(listing, 'propType')
+    || (Array.isArray(completeness?.missing) && completeness.missing.length > 0);
+  if (hasConcreteFields) {
+    const facts = listing.provenance?.sourceFacts || {};
+    const hasValuationOrPrice = positiveNumber(listing.openingBid) !== null
+      || positiveNumber(listing.assessed) !== null
+      || positiveNumber(facts.upsetPrice) !== null
+      || positiveNumber(facts.approximateUpsetPrice?.amount) !== null
+      || Boolean(listing.assessorParcel || listing.provenance?.derivedFields?.assessorRoll?.parcel);
+    const hasCoords = listing.lat != null && listing.lng != null
+      && Number.isFinite(Number(listing.lat)) && Number.isFinite(Number(listing.lng));
+    const hasKnownType = Boolean(listing.propType && String(listing.propType).trim() && String(listing.propType).trim().toLowerCase() !== 'unknown');
+
+    if (!hasValuationOrPrice) {
+      score -= 12;
+      factors.push({ factor: 'missing_price_and_valuation', weight: -12 });
+    }
+    if (!hasCoords) {
+      score -= 10;
+      factors.push({ factor: 'missing_coordinates', weight: -10 });
+    }
+    if (Object.prototype.hasOwnProperty.call(listing, 'propType') && !hasKnownType) {
+      score -= 6;
+      factors.push({ factor: 'unknown_property_type', weight: -6 });
+    }
+    if (!hasValuationOrPrice && !hasCoords && score > 64) {
+      factors.push({ factor: 'capped_unpriced_ungeocoded', weight: -(score - 64) });
+      score = 64;
+    }
+  }
+  if (isTerminal && score > 35) {
+    factors.push({ factor: 'terminal_or_superseded_cap', weight: -(score - 35) });
+    score = 35;
+  }
+
   score = Math.max(0, Math.min(100, score));
   const band = score >= 75 ? 'strong' : score >= 50 ? 'usable' : score >= 25 ? 'thin' : 'weak';
   return {

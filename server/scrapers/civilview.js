@@ -60,7 +60,22 @@ function field(fields, name) {
 }
 
 function parseAddress(raw) {
-  const clean = cleanText(raw, true).replace(/\n+/g, ' ').trim();
+  const lines = cleanText(raw, true)
+    .split('\n')
+    .map((line) => line.replace(/\s*,+\s*,+/g, ', ').replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (lines.length >= 2) {
+    const tail = lines[lines.length - 1];
+    const tailMatch = tail.match(/^(.+?)\s+([A-Z]{2})\s+(\d{5})(?:-\d{4})?$/);
+    if (tailMatch) {
+      const city = tailMatch[1].replace(/^,+|,+$/g, '').trim();
+      const street = lines.slice(0, -1).join(' ').replace(/,+$/, '').trim();
+      if (street && city) {
+        return { street, city, state: tailMatch[2], zip: tailMatch[3] };
+      }
+    }
+  }
+  const clean = lines.join(' ').replace(/\s*,+\s*,+/g, ', ').replace(/\s+,/g, ',').trim();
   if (!clean) return { street: '', city: '', state: '', zip: '' };
   const stateZip = clean.match(/\b([A-Z]{2})\s+(\d{5})(?:-\d{4})?\b/);
   if (!stateZip) return { street: clean, city: '', state: '', zip: '' };
@@ -68,6 +83,14 @@ function parseAddress(raw) {
   const state = stateZip[1];
   const zip = stateZip[2];
   const head = clean.slice(0, stateZip.index).replace(/,+$/, '').trim();
+  const commaIdx = head.lastIndexOf(',');
+  if (commaIdx > 0 && commaIdx < head.length - 1) {
+    const streetPart = head.slice(0, commaIdx).replace(/,+$/, '').trim();
+    const cityPart = head.slice(commaIdx + 1).replace(/^,+/, '').trim();
+    if (streetPart && cityPart) {
+      return { street: streetPart, city: cityPart, state, zip };
+    }
+  }
   const tokens = head.split(/\s+/);
   const streetTypes = new Set([
     'AVENUE', 'AVE', 'STREET', 'ST', 'ROAD', 'RD', 'DRIVE', 'DR',
@@ -75,17 +98,19 @@ function parseAddress(raw) {
     'TERRACE', 'TER', 'WAY', 'HIGHWAY', 'HWY', 'PARKWAY', 'PKWY',
     'TRAIL', 'TRL', 'CIRCLE', 'CIR', 'PLAZA', 'PLZ', 'SQUARE', 'SQ',
     'LOOP', 'PATH', 'PIKE', 'ROW', 'RUN', 'PASS', 'CROSSING', 'XING',
+    'WALK', 'WLK', 'MEWS', 'ALLEY', 'ALY', 'BEND', 'TRACE', 'TRCE',
+    'COVE', 'CV', 'RIDGE', 'RDG',
   ]);
   let splitIndex = -1;
-  for (let index = 0; index < tokens.length; index += 1) {
+  for (let index = 0; index < tokens.length - 1; index += 1) {
     if (streetTypes.has(tokens[index].toUpperCase().replace(/[.,]$/, ''))) splitIndex = index;
   }
-  if (splitIndex < 0 || splitIndex >= tokens.length - 1) {
+  if (splitIndex < 0) {
     return { street: head, city: '', state, zip };
   }
   return {
-    street: tokens.slice(0, splitIndex + 1).join(' '),
-    city: tokens.slice(splitIndex + 1).join(' '),
+    street: tokens.slice(0, splitIndex + 1).join(' ').replace(/,+$/, '').trim(),
+    city: tokens.slice(splitIndex + 1).join(' ').replace(/^,+/, '').trim(),
     state,
     zip,
   };
@@ -121,11 +146,155 @@ function parseExecutionAmount(description) {
   return match ? parseMoney(match[1]) : 0;
 }
 
-function parseDescriptionUpset(description) {
+function parseDescriptionUpsetMatch(description) {
+  const text = String(description || '');
+  const patterns = [
+    {
+      regex: /\bplaintiff\s+upset\s+price\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      source: 'CivilView Description — Plaintiff Upset Price',
+    },
+    {
+      regex: /\bgood\s+faith\s+estimated\s+upset\s+price\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      source: 'CivilView Description — Good Faith Estimated Upset Price',
+    },
+    {
+      regex: /\bapproximate\s+upset\s+price\s+(?:is\s+)?[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      source: 'CivilView Description — Approximate Upset Price',
+    },
+    {
+      regex: /\bupset\s+price\s*[:\-]\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+      source: 'CivilView Description — Upset Price',
+    },
+  ];
+  for (const { regex, source } of patterns) {
+    const match = text.match(regex);
+    if (match) return { raw: match[1].trim(), source };
+  }
+  return null;
+}
+
+function parseLotBlockFromNotice(fields, description, propertyNote) {
+  const explicitParcel = field(fields, 'parcel #')
+    || field(fields, 'parcel number')
+    || field(fields, 'lot/block')
+    || field(fields, 'block/lot');
+  const prose = [explicitParcel, description, propertyNote].filter(Boolean).join('\n');
+  let lot = null;
+  let block = null;
+  let extractedLabel = explicitParcel || null;
+
+  const knownAsMatch = prose.match(/\bbeing\s+known\s+as\s*[:\-]?\s*(Lot\s+[A-Z0-9.,-]+(?:\s*,\s*Block\s+[A-Z0-9.,-]+))/i);
+  if (knownAsMatch && !extractedLabel) {
+    extractedLabel = knownAsMatch[1].replace(/\s+/g, ' ').trim();
+  }
+
+  const lotThenBlock = prose.match(/\bLOT\s*[:#.]?\s*([A-Z0-9.-]+)\b\s*(?:[,;/]|in|of|\s)+\s*BLOCK\s*[:#.]?\s*([A-Z0-9.-]+)\b/i);
+  const blockThenLot = prose.match(/\bBLOCK\s*[:#.]?\s*([A-Z0-9.-]+)\b\s*(?:[,;/]|in|of|\s)+\s*LOT\s*[:#.]?\s*([A-Z0-9.-]+)\b/i);
+  if (lotThenBlock) {
+    lot = lotThenBlock[1].trim();
+    block = lotThenBlock[2].trim();
+    if (!extractedLabel) extractedLabel = `Lot ${lot}, Block ${block}`;
+  } else if (blockThenLot) {
+    block = blockThenLot[1].trim();
+    lot = blockThenLot[2].trim();
+    if (!extractedLabel) extractedLabel = `Block ${block}, Lot ${lot}`;
+  }
+
+  return {
+    parcelNumber: extractedLabel || null,
+    lotBlock: block && lot ? { block, lot } : null,
+  };
+}
+
+function parseDimensionsFromNotice(description, propertyNote) {
+  const combined = [propertyNote, description].filter(Boolean).join('\n');
+  const match = combined.match(/(?:Approximate\s+)?Dimensions(?:\s*\(APPROX\.?\))?\s*[:\-]?\s*([^\n;]{2,80})/i);
+  return match ? match[1].replace(/[.\s]+$/, '').trim() : null;
+}
+
+function parsePriorLiensFromNotice(description) {
   const match = String(description || '').match(
-    /\bapproximate\s+upset\s+price\s+is\s+(\$[\d,\s]+(?:\.\d{1,2})?)/i,
+    /Lien\(s\)\/Taxes\s*:\s*([\s\S]*?)(?:\n\s*Note\s*:|\n\s*Subject\s+to\s+any\s+unpaid|\n\s*If\s+the\s+sale|$)/i,
   );
-  return match ? match[1].trim() : '';
+  if (!match) return { priorLiensNotice: null, priorLiensTotal: null };
+  const cleaned = match[1]
+    .replace(/^\s*Prior\s+Liens\/Encumbrances\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || /^(?:n\/a|none|unknown)$/i.test(cleaned)) {
+    return { priorLiensNotice: null, priorLiensTotal: null };
+  }
+  const notice = cleaned.length > 500 ? `${cleaned.slice(0, 497)}...` : cleaned;
+  let total = null;
+  const totalMatch = notice.match(/TOTAL(?:\s+AS\s+OF[^:$]{0,40})?\s*[:\-]?\s*(\$[\d,\s]+(?:\.\d{1,2})?)/i);
+  if (totalMatch) {
+    total = parseMoney(totalMatch[1]) || null;
+  } else {
+    const singleAmounts = [...notice.matchAll(/\$[\d,\s]+(?:\.\d{1,2})?/g)]
+      .map((m) => parseMoney(m[0]))
+      .filter((n) => n > 0);
+    if (singleAmounts.length === 1) total = singleAmounts[0];
+  }
+  return { priorLiensNotice: notice, priorLiensTotal: total };
+}
+
+function parseDocketFromDescription(description) {
+  const match = String(description || '').match(/\bDOCKET\s*(?:NO\.?|#)\s*[:\-]?\s*([A-Z0-9-]{3,40})/i);
+  return match ? match[1].trim() : null;
+}
+
+function deriveStatusFromHistory(statusHistory) {
+  if (!Array.isArray(statusHistory) || statusHistory.length === 0) {
+    return { status: 'scheduled', lifecycleStatus: 'scheduled', transactionOutcome: null };
+  }
+  let latestEntry = null;
+  let latestMs = -Infinity;
+  for (const entry of statusHistory) {
+    const label = String(entry?.status || '').trim();
+    if (!label) continue;
+    const ms = entry?.date ? Date.parse(entry.date) : NaN;
+    const rank = Number.isFinite(ms) ? ms : -Infinity;
+    if (!latestEntry || rank >= latestMs) {
+      latestEntry = label;
+      latestMs = rank;
+    }
+  }
+  if (!latestEntry) {
+    return { status: 'scheduled', lifecycleStatus: 'scheduled', transactionOutcome: null };
+  }
+  const normalized = latestEntry.toLowerCase();
+  if (/purchased\s*[-:]\s*(?:3rd|third)[-\s]*party|\bsold\b.*\b(?:3rd|third)[-\s]*party/.test(normalized)) {
+    return { status: 'sold', lifecycleStatus: latestEntry, transactionOutcome: 'sold_to_third_party' };
+  }
+  if (/reverted\s+to\s+(?:plaintiff|beneficiary)|purchased\s*[-:]\s*(?:plaintiff|beneficiary)|sold\s*[-:]\s*(?:plaintiff|beneficiary)/.test(normalized)) {
+    return { status: 'closed', lifecycleStatus: latestEntry, transactionOutcome: 'reverted_to_plaintiff' };
+  }
+  if (/cancel|withdraw|dismiss|settl|discontinu/.test(normalized)) {
+    return { status: 'cancelled', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  if (/bankruptc|stay/.test(normalized)) {
+    if (/lifted|relief|vacated|exhaust/.test(normalized)) {
+      return { status: 'scheduled', lifecycleStatus: latestEntry, transactionOutcome: null };
+    }
+    return { status: 'stayed', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  if (/postpon/.test(normalized)) {
+    return { status: 'postponed', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  if (/adjourn/.test(normalized)) {
+    return { status: 'adjourned', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  if (/\bsold\b/.test(normalized)) {
+    return { status: 'sold', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  if (/\bclosed\b|\bauctioned\b|\bpost[-\s]?auction\b/.test(normalized)) {
+    return { status: 'closed', lifecycleStatus: latestEntry, transactionOutcome: null };
+  }
+  return { status: 'scheduled', lifecycleStatus: latestEntry, transactionOutcome: null };
+}
+
+function parseDescriptionUpset(description) {
+  return parseDescriptionUpsetMatch(description)?.raw || '';
 }
 
 function parseLabeledNote(note, label) {
@@ -365,6 +534,7 @@ class CivilViewScraper extends BaseScraper {
         newDetailsAttempted: 0,
         refreshDetailsAttempted: 0,
         failures: [],
+        completedCounties: [],
         boundedSample: true,
         truncated: true,
         complete: false,
@@ -423,8 +593,11 @@ class CivilViewScraper extends BaseScraper {
       for (let index = 0; index < ordered.length; index += 1) {
         const county = ordered[index];
         report.countiesAttempted += 1;
+        const failuresBefore = report.failures.length;
+        let discoveredCounty = null;
         try {
           const discovered = await this.fetchCountySummaries(county);
+          discoveredCounty = discovered;
           report.summariesDiscovered += discovered.summaries.length;
 
           const countiesRemaining = ordered.length - index;
@@ -491,6 +664,18 @@ class CivilViewScraper extends BaseScraper {
           });
         }
 
+        if (report.failures.length === failuresBefore && discoveredCounty && Array.isArray(discoveredCounty.summaries) && discoveredCounty.summaries.length > 0) {
+          report.completedCounties.push({
+            state: county.state,
+            county: county.name,
+            countyId: String(county.id),
+            seenIds: [...new Set(
+              discoveredCounty.summaries
+                .map((summary) => (summary?.propertyId ? `CIV-${county.state}-${county.id}-${summary.propertyId}` : null))
+                .filter(Boolean),
+            )],
+          });
+        }
         if (remainingDetailBudget <= 0 || this.circuitBreaker.isOpen()) break;
         if (index < ordered.length - 1) await this.crawlJitter();
       }
@@ -719,7 +904,7 @@ class CivilViewScraper extends BaseScraper {
     if (!html || !/sale-details-list/i.test(html)) return null;
     const fields = parseDetailFields(html);
     const sheriffNumber = field(fields, 'sheriff #') || summary.sheriffNumber;
-    const courtCaseNumber = field(fields, 'court case #');
+    const rawCourtCaseNumber = field(fields, 'court case #');
     const detailAddressRaw = field(fields, 'address') || summary.addressRaw;
     const parsedAddress = parseAddress(detailAddressRaw);
     const saleDateRaw = field(fields, 'sales date') || summary.saleDateRaw;
@@ -727,15 +912,19 @@ class CivilViewScraper extends BaseScraper {
     const propertyNote = normalizeOcrText(field(fields, 'property note'));
     const detailUpsetRaw = field(fields, 'approx. upset*') || field(fields, 'approx. upset');
     const noteUpsetRaw = parseLabeledNote(propertyNote, 'GOOD FAITH ESTIMATED UPSET PRICE');
-    const descriptionUpsetRaw = parseDescriptionUpset(description);
-    const upsetRaw = detailUpsetRaw || noteUpsetRaw || descriptionUpsetRaw;
+    const courtCaseNumber = rawCourtCaseNumber || parseDocketFromDescription(description);
+    const descriptionUpset = parseDescriptionUpsetMatch(description);
+    const lotBlockInfo = parseLotBlockFromNotice(fields, description, propertyNote);
+    const dimensions = parseDimensionsFromNotice(description, propertyNote);
+    const { priorLiensNotice, priorLiensTotal } = parsePriorLiensFromNotice(description);
+    const upsetRaw = detailUpsetRaw || noteUpsetRaw || descriptionUpset?.raw || '';
     const approximateUpsetPrice = parseMoney(upsetRaw);
     const approximateUpsetSource = detailUpsetRaw
       ? 'CivilView Approx. Upset'
       : noteUpsetRaw
         ? 'CivilView Property Note — Good Faith Estimated Upset Price'
-        : descriptionUpsetRaw
-          ? 'CivilView Description — Approximate Upset Price'
+        : descriptionUpset?.raw
+          ? descriptionUpset.source
           : null;
     const openingBidRaw = field(fields, 'opening bid') || field(fields, 'minimum bid');
     const openingBid = parseMoney(openingBidRaw);
@@ -745,7 +934,7 @@ class CivilViewScraper extends BaseScraper {
         ? 'CivilView Minimum Bid'
         : null;
     const judgment = parseExecutionAmount(description);
-    let occupancy = this.parseOccupancy(propertyNote);
+    let occupancy = this.parseOccupancy(propertyNote) || this.parseOccupancy(description);
     if (!occupancy && typeof this.extractWithAdaptiveFallback === 'function') {
       const adaptive = this.extractWithAdaptiveFallback(html, {
         caseNumber: { selector: '.sale-detail-value', extractor: (h) => (h.match(/Sheriff\s*#:[^<]*<span[^>]*class="sale-detail-value"[^>]*>([^<]+)<\/span>/i)?.[1]?.trim() || sheriffNumber || null) },
@@ -792,11 +981,16 @@ class CivilViewScraper extends BaseScraper {
       }
     }
 
+    const derivedStatus = deriveStatusFromHistory(statusHistory);
     const sourceFacts = {
       priorPostponements,
       statutoryStayExhausted,
       stayActive,
       upsetPrice: approximateUpsetPrice || null,
+      lotBlock: lotBlockInfo.lotBlock,
+      dimensions,
+      priorLiensNotice,
+      priorLiensTotal,
       adjournmentTrajectory: {
         totalAdjournments: priorPostponements,
         debtorAdjournments,
@@ -848,15 +1042,17 @@ class CivilViewScraper extends BaseScraper {
       photo: null,
       sourceUrl: summary.detailUrl,
       raw: description || propertyNote || JSON.stringify(sourceFields),
-      status: 'scheduled',
+      status: derivedStatus.status,
+      lifecycleStatus: derivedStatus.lifecycleStatus,
+      transactionOutcome: derivedStatus.transactionOutcome,
       sourceObservedAt,
-      apn: field(fields, 'parcel #') || null,
-      parcelId: field(fields, 'parcel #') || null,
+      apn: lotBlockInfo.parcelNumber,
+      parcelId: lotBlockInfo.parcelNumber,
       parcelKey: attachParcelIdentity({
         state: parsedAddress.state || summary.county.state,
         county: summary.county.name,
-        apn: field(fields, 'parcel #') || null,
-        parcelId: field(fields, 'parcel #') || null,
+        apn: lotBlockInfo.parcelNumber,
+        parcelId: lotBlockInfo.parcelNumber,
       }),
       sourceFacts,
       provenance: {
@@ -869,7 +1065,7 @@ class CivilViewScraper extends BaseScraper {
         propertyId,
         sheriffNumber,
         courtCaseNumber: courtCaseNumber || null,
-        parcelNumber: field(fields, 'parcel #') || null,
+        parcelNumber: lotBlockInfo.parcelNumber,
         countySearchUrl: summary.countySearchUrl,
         detailUrl: summary.detailUrl,
         detailUrlRequiresCountySession: true,
@@ -946,5 +1142,7 @@ module.exports.collectCivilView = collectCivilView;
 module.exports.parseCountyOffset = parseCountyOffset;
 module.exports.orderCounties = orderCounties;
 module.exports.rotateCounties = rotateCounties;
+module.exports.deriveStatusFromHistory = deriveStatusFromHistory;
+module.exports.parseLotBlockFromNotice = parseLotBlockFromNotice;
 module.exports.ALL_COUNTY_MAP = ALL_COUNTY_MAP;
 module.exports.NATIONWIDE_COUNTY_MAP = NATIONWIDE_COUNTY_MAP;

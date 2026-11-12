@@ -409,3 +409,49 @@ test('cadence-aware scheduling skips a source whose cadence has not elapsed but 
   off.sourceLastRun.set('treasury', { at: Date.now(), partial: false });
   assert.equal(off.dueScrapers([a, b]).length, 2, 'filtering is opt-in');
 });
+
+test('runAll forwards completedCounties, completedStates, and sweepStartedAt into onSourceRun report', async () => {
+  let seenReport = null;
+  const scraper = {
+    name: 'CivilViewForwardFixture',
+    sourceKey: 'civilview',
+    lastRunReport: null,
+    async scrapeFeed() {
+      this.lastRunReport = {
+        outcome: 'success',
+        complete: true,
+        fullSweepComplete: true,
+        truncated: false,
+        sweepStartedAt: '2026-11-12T00:00:00.000Z',
+        completedStates: ['NJ'],
+        completedCounties: [{ state: 'NJ', county: 'Morris County' }],
+      };
+      return [{
+        id: 'CIV-NJ-9-9990001',
+        source: 'civilview',
+        sourceKey: 'civilview',
+        state: 'NJ',
+        county: 'Morris County',
+        address: '11 Christopher Street, Dover, NJ 07801',
+        city: 'Dover',
+        zip: '07801',
+        sourceObservedAt: '2026-11-12T00:00:00.000Z',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=9990001',
+        raw: JSON.stringify({ id: '9990001' }),
+        provenance: { origin: 'live', observed: true, observedAt: '2026-11-12T00:00:00.000Z', publisher: 'CivilView', recordId: '9990001', sourceFacts: {} },
+      }];
+    },
+  };
+  const sched = new IngestionScheduler({
+    realScrapers: [scraper],
+    telemetry,
+    database: { isPg: false, async createListing() {}, async reconcileDuplicateDockets() {}, async reconcilePublisherAbsence() {} },
+    networkEnabled: true,
+    concurrency: 1,
+    onSourceRun: async (_sourceKey, info) => { seenReport = info.report; },
+  });
+  await sched.runAll({ sourceIds: ['civilview'] });
+  assert.deepEqual(seenReport?.completedCounties, [{ state: 'NJ', county: 'Morris County' }]);
+  assert.deepEqual(seenReport?.completedStates, ['NJ']);
+  assert.equal(seenReport?.sweepStartedAt, '2026-11-12T00:00:00.000Z');
+});

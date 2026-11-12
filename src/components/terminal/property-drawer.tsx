@@ -546,7 +546,7 @@ export function PropertyDrawer({ listing, onClose, isSaved, onToggleSave }: Prop
                 <span>SEC 04 // OFFICIAL DOCKET &amp; EVIDENCE</span>
               </div>
               {/* Fail-closed official-record evidence check. */}
-              <PropertyIntelligence key={listing.id} listingId={listing.id} />
+              <PropertyIntelligence key={listing.id} listingId={listing.id} lat={listing.lat ?? null} lng={listing.lng ?? null} />
               <DocketAgent listing={listing} />
 
               {/* Cadastral Parcel Footprint & Boundary */}

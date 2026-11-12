@@ -347,3 +347,56 @@ test('scheduler onSourceRun skips publisher absence reconciliation on partial/pa
     scheduler.enableAssessorBackfill = prevBackfill;
   }
 });
+
+test('reconcileDuplicateDockets supersedes older CivilView docket clones on same county+address without touching separate units', async () => {
+  const db = new DatabaseClient({ env: { NODE_ENV: 'test' }, liveCachePath: null, workspaceStorePath: null });
+  db.inMemoryData.listings = [
+    {
+      id: 'CIV-NJ-9-2240544560',
+      source: 'civilview',
+      sourceKey: 'civilview',
+      state: 'NJ',
+      county: 'Morris County',
+      address: '10 ELM ST, MORRISTOWN, NJ 07960',
+      saleDate: '2026-07-09',
+      status: 'adjourned',
+      courtCaseNumber: 'F-293-25',
+      sourceObservedAt: '2026-07-01T00:00:00.000Z',
+      provenance: { origin: 'live', sourceFacts: { sheriffNumber: 'F-293-25', courtCaseNumber: 'F-293-25' } },
+    },
+    {
+      id: 'CIV-NJ-9-2242070159',
+      source: 'civilview',
+      sourceKey: 'civilview',
+      state: 'NJ',
+      county: 'Morris County',
+      address: '10 ELM ST, MORRISTOWN, NJ 07960',
+      saleDate: '2026-09-10',
+      status: 'sold',
+      transactionOutcome: 'sold_to_third_party',
+      courtCaseNumber: 'F-293-25',
+      sourceObservedAt: '2026-09-11T00:00:00.000Z',
+      provenance: { origin: 'live', sourceFacts: { sheriffNumber: 'F-293-25', courtCaseNumber: 'F-293-25' } },
+    },
+    {
+      id: 'CIV-NJ-9-2242079999',
+      source: 'civilview',
+      sourceKey: 'civilview',
+      state: 'NJ',
+      county: 'Morris County',
+      address: '10 ELM ST UNIT 2B, MORRISTOWN, NJ 07960',
+      saleDate: '2026-08-01',
+      status: 'scheduled',
+      courtCaseNumber: 'F-293-25',
+      sourceObservedAt: '2026-09-11T00:00:00.000Z',
+      provenance: { origin: 'live', sourceFacts: { sheriffNumber: 'F-293-25', courtCaseNumber: 'F-293-25' } },
+    },
+  ];
+
+  assert.equal(typeof db.reconcileDuplicateDockets, 'function');
+  const out = await db.reconcileDuplicateDockets('civilview', [db.inMemoryData.listings[1]], { at: '2026-09-12T00:00:00.000Z' });
+  assert.equal(out.superseded, 1);
+  assert.equal(db.inMemoryData.listings[0].provenance?.supersededBy?.byId, 'CIV-NJ-9-2242070159');
+  assert.equal(db.inMemoryData.listings[1].provenance?.supersededBy, undefined);
+  assert.equal(db.inMemoryData.listings[2].provenance?.supersededBy, undefined);
+});

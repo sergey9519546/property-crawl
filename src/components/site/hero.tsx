@@ -8,7 +8,6 @@ import { ArrowRight, ArrowUp, Building2, Database, Flag, Globe2, House, Map as M
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
-import { loadListingInventory } from "@/lib/listing-inventory";
 
 const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
 
@@ -98,6 +97,13 @@ const KIND_ORDER: MarketSuggestion["kind"][] = [
  * Frosted glass applied ONLY to the URL input field (glass-input token).
  * Toggle and buttons use solid/opaque styling (NOT pill, NOT glass).
  */
+/** Merges incoming catalog rows into suggestion cache without duplicating ids. */
+function mergeMarketListings(prev: ListingMarket[], incoming: ListingMarket[]): ListingMarket[] {
+  const seen = new Set(prev.map((item) => item.id));
+  const additions = incoming.filter((item) => item?.id && !seen.has(item.id));
+  return additions.length > 0 ? [...prev, ...additions] : prev;
+}
+
 export function Hero() {
   const [url, setUrl] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -110,14 +116,13 @@ export function Hero() {
   const [marketListings, setMarketListings] = React.useState<ListingMarket[]>([]);
 
   React.useEffect(() => {
-    let disposed = false;
-    loadListingInventory<ListingMarket>().then(({ listings }) => {
-      if (!disposed) setMarketListings(listings);
-    }).catch(() => { /* Free-text search remains available if suggestions fail. */ });
-    const onInventory = (event: Event) => setMarketListings((event as CustomEvent<ListingMarket[]>).detail);
+    const onInventory = (event: Event) => {
+      const incoming = (event as CustomEvent<ListingMarket[]>).detail;
+      if (!Array.isArray(incoming) || incoming.length === 0) return;
+      setMarketListings((prev) => mergeMarketListings(prev, incoming));
+    };
     window.addEventListener("perfectproperty:inventory", onInventory);
     return () => {
-      disposed = true;
       window.removeEventListener("perfectproperty:inventory", onInventory);
     };
   }, []);
@@ -238,6 +243,34 @@ export function Hero() {
         setSuggestionsOpen(matches.length > 0);
         setActiveSuggestion(-1);
   }, [deferredUrl, selectedMarket, marketListings]);
+
+  React.useEffect(() => {
+    if (deferredUrl.length < 2 || /^https?:\/\//i.test(deferredUrl) || selectedMarket?.label === deferredUrl) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/listings?q=${encodeURIComponent(deferredUrl)}&limit=12`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok || controller.signal.aborted) return;
+        const payload = (await response.json().catch(() => null)) as { listings?: ListingMarket[] } | null;
+        const incoming = Array.isArray(payload?.listings) ? payload.listings : [];
+        if (incoming.length === 0 || controller.signal.aborted) return;
+        setMarketListings((prev) => mergeMarketListings(prev, incoming));
+      } catch {
+        // Free-text search remains available if live autocomplete fails or aborts.
+      }
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [deferredUrl, selectedMarket]);
 
   const selectSuggestion = (suggestion: MarketSuggestion) => {
     setUrl(suggestion.label);

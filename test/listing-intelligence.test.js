@@ -60,6 +60,59 @@ test('opportunity rank uses modeled deal score and sale urgency only', () => {
   assert.match(rank.note, /Triage only/);
 });
 
+test('computeResearchQuality caps terminal/superseded notices and penalizes missing core triage facts', () => {
+  const soldUnpriced = computeResearchQuality({
+    id: 'CIV-NJ-9-SOLD',
+    status: 'sold',
+    lifecycleStatus: 'Purchased - 3rd Party',
+    transactionOutcome: 'sold_to_third_party',
+    propType: 'Unknown',
+    openingBid: null,
+    assessed: null,
+    lat: null,
+    lng: null,
+    provenance: { origin: 'live', observed: true },
+    evidenceCompleteness: { known: 6, total: 8, missing: ['auctionProgram', 'openingBid'] },
+    sourceFreshness: { status: 'current' },
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1',
+  });
+  assert.ok(soldUnpriced.score <= 35, `expected sold notice capped <= 35, got ${soldUnpriced.score}`);
+  assert.notEqual(soldUnpriced.band, 'strong');
+
+  const activeThin = computeResearchQuality({
+    id: 'CIV-NJ-9-BARE',
+    status: 'scheduled',
+    propType: 'Unknown',
+    openingBid: null,
+    assessed: null,
+    lat: null,
+    lng: null,
+    provenance: { origin: 'live', observed: true },
+    evidenceCompleteness: { known: 7, total: 8, missing: ['openingBid'] },
+    sourceFreshness: { status: 'current' },
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2',
+  });
+  assert.ok(activeThin.score < 65, `expected unpriced/un-geocoded active notice < 65, got ${activeThin.score}`);
+  assert.notEqual(activeThin.band, 'strong');
+
+  const activeEnriched = computeResearchQuality({
+    id: 'CIV-NJ-9-RICH',
+    status: 'scheduled',
+    propType: 'Single Family',
+    openingBid: 100,
+    assessed: 385000,
+    lat: 40.78,
+    lng: -74.48,
+    parcelKey: '34027-2002-6',
+    provenance: { origin: 'live', observed: true, sourceFacts: { upsetPrice: 249593.48 } },
+    evidenceCompleteness: { known: 7, total: 8, missing: ['hasDocuments'] },
+    sourceFreshness: { status: 'current' },
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=3',
+  });
+  assert.ok(activeEnriched.score >= 75, `expected enriched active notice >= 75, got ${activeEnriched.score}`);
+  assert.equal(activeEnriched.band, 'strong');
+});
+
 test('annotateListing attaches quality and opportunity without mutating raw facts', () => {
   const annotated = annotateListing({
     id: 'X1',

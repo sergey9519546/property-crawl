@@ -251,3 +251,250 @@ test('backfill round-robins across states so no single state starves others', as
 
   assert.equal(result.considered, 3);
 });
+
+test('NJ enrichment resolves N/K/A addresses via NJ_Geocode + NJGIN Cadastral with map policy compliance and condo disambiguation', async () => {
+  const { inspectMapLocation, inspectParcelBoundaryInputs } = require('../src/lib/listing-map-policy');
+  const {
+    extractNjGeocodeQuery,
+    enrichNjListing,
+    NJ_GEOCODE_URL,
+  } = require('../server/enrichment/nj-cadastral');
+
+  assert.equal(
+    extractNjGeocodeQuery({
+      address: '12 OLD OAK RD N/K/A 19 WEST PARK AVENUE, PARK RIDGE, NJ 07656',
+      city: 'PARK RIDGE',
+      state: 'NJ',
+      zip: '07656',
+    }),
+    '19 WEST PARK AVENUE, PARK RIDGE, NJ 07656',
+  );
+
+  const requestedUrls = [];
+  const fetchMock = async (url) => {
+    requestedUrls.push(String(url));
+    if (String(url).startsWith(NJ_GEOCODE_URL)) {
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              address: '19 West Park Avenue, Park Ridge, New Jersey, 07656',
+              location: { x: -74.044125, y: 41.034969 },
+              score: 100,
+              attributes: {
+                Score: 100,
+                Addr_type: 'PointAddress',
+                StAddr: '19 West Park Avenue',
+                City: 'Park Ridge',
+                RegionAbbr: 'NJ',
+                Postal: '07656',
+                Addr_Block: '1203',
+                Addr_Lot: '7',
+              },
+            },
+          ],
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            attributes: {
+              PAMS_PIN: '0247_1203_6',
+              PCLBLOCK: '1203',
+              PCLLOT: '6',
+              COUNTY: 'BERGEN',
+              PROP_CLASS: '2',
+              NET_VALUE: 999999,
+              LAND_VAL: 500000,
+              IMPRVT_VAL: 499999,
+              YR_CONSTR: 1960,
+              DWELL: 1,
+              BLDG_DESC: 'CONDO',
+              ST_ADDRESS: '17 W PARK AVE',
+            },
+          },
+          {
+            attributes: {
+              PAMS_PIN: '0247_1203_7',
+              PCLBLOCK: '1203',
+              PCLLOT: '7',
+              COUNTY: 'BERGEN',
+              PROP_CLASS: '2',
+              NET_VALUE: 334600,
+              LAND_VAL: 241500,
+              IMPRVT_VAL: 93100,
+              YR_CONSTR: 1952,
+              DWELL: 1,
+              BLDG_DESC: '1SF1G',
+              ST_ADDRESS: '19 W PARK AVE',
+            },
+          },
+        ],
+      }),
+    };
+  };
+
+  const listing = {
+    id: 'CIV-NJ-7-2128964683',
+    source: 'civilview',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2128964683',
+    state: 'NJ',
+    county: 'Bergen County',
+    address: '19 WEST PARK AVENUE, PARK RIDGE, NJ 07656',
+    city: 'PARK RIDGE',
+    zip: '07656',
+    propType: 'Unknown',
+    apn: 'LOT 7, BLOCK 1203',
+    lat: null,
+    lng: null,
+    assessed: null,
+    estLow: null,
+    estHigh: null,
+    dealScore: null,
+    sourceObservedAt: '2026-10-01T12:00:00.000Z',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'CivilView',
+      recordId: '2128964683',
+      observedAt: '2026-10-01T12:00:00.000Z',
+      sourceFacts: { lotBlock: { block: '1203', lot: '7' } },
+    },
+  };
+
+  const enriched = await enrichNjListing(listing, {
+    fetchFn: fetchMock,
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+  assert.equal(enriched.found, true);
+  assert.equal(listing.lat, 41.034969);
+  assert.equal(listing.lng, -74.044125);
+  assert.equal(listing.assessed, 334600);
+  assert.equal(listing.year, 1952);
+  assert.equal(listing.propType, 'Single Family');
+  assert.equal(listing.parcelKey, '34003-024712037');
+  assert.equal(listing.estLow, null, 'must never fabricate estLow for NJ');
+  assert.equal(listing.estHigh, null, 'must never fabricate estHigh for NJ');
+  assert.equal(listing.dealScore, null, 'must never fabricate dealScore for NJ');
+  assert.equal(inspectMapLocation(listing).accepted, true, 'must pass interactive map location policy');
+  assert.equal(inspectParcelBoundaryInputs(listing).eligible, true, 'must pass parcel-boundary preflight');
+
+  // Negative control: low-confidence StreetAddress geocode must NOT attach coords
+  const streetOnly = {
+    ...listing,
+    id: 'CIV-NJ-7-STREETONLY',
+    lat: null,
+    lng: null,
+    assessed: null,
+    propType: 'Unknown',
+    provenance: { ...listing.provenance, coordinates: undefined, derivedFields: {} },
+  };
+  const rejected = await enrichNjListing(streetOnly, {
+    fetchFn: async () => ({
+      ok: true,
+      json: async () => ({
+        candidates: [{
+          address: '19 West Park Avenue, Park Ridge, NJ, 07656',
+          location: { x: -74.044, y: 41.034 },
+          score: 80,
+          attributes: { Score: 80, Addr_type: 'StreetAddress', StAddr: '19 West Park Avenue', City: 'Park Ridge', RegionAbbr: 'NJ', Postal: '07656' },
+        }],
+      }),
+    }),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+  });
+  assert.equal(rejected.found, false);
+  assert.equal(streetOnly.lat, null);
+  assert.equal(streetOnly.lng, null);
+});
+
+test('backfillAssessorRolls includes NJ geocoding+cadastral phase without adding NJ to CONVERTED_STATES', async () => {
+  assert.equal(CONVERTED_STATES.includes('NJ'), false, 'NJ equalization varies by municipality; must not be in CONVERTED_STATES');
+  const njRow = {
+    id: 'CIV-NJ-9-2242070159',
+    source: 'civilview',
+    sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2242070159',
+    state: 'NJ',
+    county: 'Morris County',
+    address: '10 ELM ST, MORRISTOWN, NJ 07960',
+    city: 'MORRISTOWN',
+    zip: '07960',
+    propType: 'Unknown',
+    apn: 'LOT 6, BLOCK 2002',
+    lat: null,
+    lng: null,
+    assessed: null,
+    sourceObservedAt: '2026-10-01T12:00:00.000Z',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      recordKind: 'source_record',
+      publisher: 'CivilView',
+      recordId: '2242070159',
+      observedAt: '2026-10-01T12:00:00.000Z',
+      sourceFacts: { lotBlock: { block: '2002', lot: '6' } },
+    },
+  };
+  const persisted = [];
+  const db = {
+    async getListings({ state }) {
+      return { total: state === 'NJ' ? 1 : 0, listings: state === 'NJ' ? [njRow] : [] };
+    },
+    async createListing(l) {
+      persisted.push(l);
+      return l;
+    },
+  };
+  const res = await backfillAssessorRolls({
+    db,
+    limit: 5,
+    cachePath: temporaryCachePath(),
+    now: Date.parse('2026-11-01T00:00:00.000Z'),
+    fetchFn: async (url) => {
+      if (String(url).includes('NJ_Geocode')) {
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [{
+              address: '10 Elm Street, Morristown, NJ, 07960',
+              location: { x: -74.48, y: 40.79 },
+              score: 98,
+              attributes: { Score: 98, Addr_type: 'PointAddress', StAddr: '10 Elm St', City: 'Morristown', RegionAbbr: 'NJ', Postal: '07960' },
+            }],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          features: [{
+            attributes: {
+              PAMS_PIN: '1424_2002_6',
+              PCLBLOCK: '2002',
+              PCLLOT: '6',
+              COUNTY: 'MORRIS',
+              PROP_CLASS: '2',
+              NET_VALUE: 412000,
+              LAND_VAL: 180000,
+              IMPRVT_VAL: 232000,
+              YR_CONSTR: 1928,
+              DWELL: 1,
+              BLDG_DESC: '2SF',
+              ST_ADDRESS: '10 ELM ST',
+            },
+          }],
+        }),
+      };
+    },
+  });
+  assert.equal(res.njEnriched, 1);
+  assert.equal(persisted.length, 1);
+  assert.equal(njRow.lat, 40.79);
+  assert.equal(njRow.assessed, 412000);
+  assert.equal(njRow.propType, 'Single Family');
+});

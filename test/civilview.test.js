@@ -463,3 +463,125 @@ test('CivilView nationwide mode accepts multi-state records and attaches determi
   const singleStateNjScraper = scraper({ nationwide: false, targetState: 'NJ' });
   assert.equal(singleStateNjScraper.passesFilter(listing), false, 'single-state NJ scraper must still reject PA records');
 });
+
+test('CivilView derives sold/closed/cancelled/stayed status and transactionOutcome from statusHistory', () => {
+  const subject = scraper();
+  const [summary] = subject.parseSalesTable(SEARCH_HTML, COUNTY, COUNTY_URL);
+
+  const soldHtml = DETAIL_HTML.replace(
+    '<tr><td>Adjourned - Court</td><td>9/11/2026</td></tr>',
+    '<tr><td>Adjourned by the Defendant to</td><td>11/12/2026</td></tr>\n    <tr><td>Purchased - 3rd Party</td><td>11/12/2026</td></tr>',
+  );
+  const sold = subject.parseDetailPage(soldHtml, summary);
+  assert.equal(sold.status, 'sold');
+  assert.equal(sold.lifecycleStatus, 'Purchased - 3rd Party');
+  assert.equal(sold.transactionOutcome, 'sold_to_third_party');
+
+  const plaintiffHtml = DETAIL_HTML.replace(
+    '<tr><td>Adjourned - Court</td><td>9/11/2026</td></tr>',
+    '<tr><td>Purchased - Plaintiff</td><td>11/12/2026</td></tr>',
+  );
+  const reverted = subject.parseDetailPage(plaintiffHtml, summary);
+  assert.equal(reverted.status, 'closed');
+  assert.equal(reverted.lifecycleStatus, 'Purchased - Plaintiff');
+  assert.equal(reverted.transactionOutcome, 'reverted_to_plaintiff');
+
+  const cancelledHtml = DETAIL_HTML.replace(
+    '<tr><td>Adjourned - Court</td><td>9/11/2026</td></tr>',
+    '<tr><td>Dismissed</td><td>11/12/2026</td></tr>',
+  );
+  const cancelled = subject.parseDetailPage(cancelledHtml, summary);
+  assert.equal(cancelled.status, 'cancelled');
+  assert.equal(cancelled.transactionOutcome, null);
+
+  const stayedHtml = DETAIL_HTML.replace(
+    '<tr><td>Adjourned - Court</td><td>9/11/2026</td></tr>',
+    '<tr><td>Bankruptcy</td><td>11/12/2026</td></tr>',
+  );
+  const stayed = subject.parseDetailPage(stayedHtml, summary);
+  assert.equal(stayed.status, 'stayed');
+  assert.equal(stayed.transactionOutcome, null);
+});
+
+test('CivilView extracts Plaintiff Upset Price, Lot/Block, description occupancy, dimensions, open liens, WALK, and N/K/A', () => {
+  const subject = scraper();
+  const morrisCounty = { id: '9', name: 'Morris County', state: 'NJ', fullName: 'Morris County, NJ' };
+  const morrisUrl = 'https://salesweb.civilview.com/Sales/SalesSearch?countyId=9';
+  const morrisDetailUrl = 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2242070159';
+  const morrisSearchHtml = `<table><tr>
+    <td><a href="/Sales/SaleDetails?PropertyId=2242070159">View Details</a></td>
+    <td>26001169</td>
+    <td>11/12/2026</td>
+    <td>PENNYMAC LOAN SERVICES, LLC</td>
+    <td>BOLIVAR MARTINEZ</td>
+    <td>1400 HOWARD BOULEVARD,, N/K/A 1400 ROGERS WALK MT. LAUREL NJ 08054</td>
+  </tr></table>`;
+  const [summary] = subject.parseSalesTable(morrisSearchHtml, morrisCounty, morrisUrl);
+  assert.equal(summary.detailUrl, morrisDetailUrl);
+
+  const morrisDetailHtml = `
+  <div class="sale-details-list">
+    ${detailItem('Sheriff #', '26001169')}
+    ${detailItem('Sales Date', '11/12/2026')}
+    ${detailItem('Plaintiff', 'PENNYMAC LOAN SERVICES, LLC')}
+    ${detailItem('Defendant', 'BOLIVAR MARTINEZ, et als.')}
+    ${detailItem('Address', '1400 HOWARD BOULEVARD,, N/K/A 1400 ROGERS WALK<br/>MT. LAUREL NJ 08054')}
+    ${detailItem('Description', `SUPERIOR COURT OF NEW JERSEY\nMorris County Chancery Division\nSHERIFF'S SALE NO. 26001169\nDOCKET NO. F-293-25\nBeing known as: Lot 6, Block 2002\nApproximate Dimensions: 50 x 100\nNearest Cross Street: Cooper Street\nPlaintiff Upset Price: $249,593.48\nOccupancy Status: Owner Occupied\nPREMISES COMMONLY KNOWN AS:\n1400 Rogers Walk, Mt. Laurel, NJ 08054\nLien(s)/Taxes: Prior Liens/Encumbrances\nWATER OPEN AND DUE $140.24\nSEWER OPEN AND DUE $95.91\nTOTAL AS OF June 26, 2026: $236.15\nNote: The street address is merely given as a convenience.\nThe approximate amount due on this execution is $231,480.42 plus interest.`)}
+  </div>
+  <table id="longTable">
+    <tr><th>Status</th><th>Date</th></tr>
+    <tr><td>Scheduled</td><td>9/17/2026</td></tr>
+  </table>`;
+
+  const listing = subject.parseDetailPage(morrisDetailHtml, summary);
+  assert.ok(listing);
+  assert.equal(listing.openingBid, null, 'Plaintiff Upset Price must NEVER fabricate openingBid');
+  assert.deepEqual(listing.sourceFacts.approximateUpsetPrice, {
+    raw: '$249,593.48',
+    amount: 249593.48,
+    qualifier: 'approximate',
+    source: 'CivilView Description — Plaintiff Upset Price',
+  });
+  assert.equal(listing.sourceFacts.upsetPrice, 249593.48);
+  assert.equal(listing.occupancy, 'OWNER OCCUPIED');
+  assert.equal(listing.apn, 'Lot 6, Block 2002');
+  assert.equal(listing.provenance.parcelNumber, 'Lot 6, Block 2002');
+  assert.deepEqual(listing.sourceFacts.lotBlock, { block: '2002', lot: '6' });
+  assert.equal(listing.sourceFacts.dimensions, '50 x 100');
+  assert.equal(listing.sourceFacts.priorLiensTotal, 236.15);
+  assert.match(listing.sourceFacts.priorLiensNotice, /WATER OPEN AND DUE \$140\.24/);
+  assert.equal(listing.provenance.courtCaseNumber, 'F-293-25');
+  assert.equal(listing.city, 'MT. LAUREL');
+  assert.equal(listing.zip, '08054');
+  assert.doesNotMatch(listing.address, /,,/);
+});
+
+test('CivilView records completedCounties for lossless per-county absence reconciliation only when county has zero failures', async () => {
+  const subject = scraper({ countyId: null, targetState: 'NJ', maxCounties: 2, maxDetailPages: 10 });
+  const c1 = { id: '7', name: 'Bergen County', state: 'NJ' };
+  const c2 = { id: '9', name: 'Morris County', state: 'NJ' };
+  subject.fetchCounties = async () => [c1, c2];
+  subject.fetchCountySummaries = async (county) => ({
+    sessionCookie: 'ASP.NET_SessionId=test',
+    summaries: [{
+      propertyId: county.id === '7' ? '111' : '222',
+      county,
+      detailUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=${county.id === '7' ? '111' : '222'}`,
+    }],
+  });
+  subject.fetchText = async (url) => {
+    if (url.endsWith('=222')) throw new Error('detail timeout');
+    return '<div class="sale-details-list">ok</div>';
+  };
+  subject.parseDetailPage = (_html, summary) => ({
+    id: `CIV-NJ-${summary.county.id}-${summary.propertyId}`,
+    provenance: { propertyId: summary.propertyId },
+  });
+  subject.passesFilter = () => true;
+
+  await subject.scrapeFeed();
+  assert.equal(Array.isArray(subject.lastRunReport.completedCounties), true);
+  assert.deepEqual(subject.lastRunReport.completedCounties, [
+    { state: 'NJ', county: 'Bergen County', countyId: '7', seenIds: ['CIV-NJ-7-111'] },
+  ]);
+});
