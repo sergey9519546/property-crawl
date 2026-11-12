@@ -554,7 +554,7 @@ class IngestionScheduler {
             },ownership);
             const cursorToken = nextContinuationToken || continuationToken || nextCursor;
             const cursor = cursorToken ? {
-              continuationToken: cursorToken, cursor: cursorToken,
+              continuationToken: cursorToken,
               sweepStartedAt: scraper.lastRunReport?.sweepStartedAt || items?.sweepStartedAt,
               pagesCommitted: (scraper.lastRunReport?.pagesPreviouslyCommitted || 0) + (scraper.lastRunReport?.pagesFetched || 0),
             } : {};

@@ -192,6 +192,12 @@ function civilviewListing(id) {
 }
 
 test('in-memory checkpoints resume across successive cycles when discoveryStore is null', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const cacheFile = path.resolve(process.cwd(), '.cache', 'civilview-checkpoint.json');
+  if (fs.existsSync(cacheFile)) fs.unlinkSync(cacheFile);
+  const sweepFile = path.resolve(process.cwd(), '.cache', 'sweep-checkpoints', 'civilview.json');
+  if (fs.existsSync(sweepFile)) fs.unlinkSync(sweepFile);
   let sweepIndex = 0;
   const checkpointsSeen = [];
   const testCollector = {

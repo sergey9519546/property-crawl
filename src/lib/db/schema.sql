@@ -264,6 +264,7 @@ CREATE INDEX IF NOT EXISTS idx_listings_geog ON listings USING GIST(geog);
 CREATE INDEX IF NOT EXISTS idx_listings_zip ON listings(zip);
 CREATE INDEX IF NOT EXISTS idx_listings_state_city ON listings(state, city);
 CREATE INDEX IF NOT EXISTS idx_listings_source_observed ON listings(source_observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listings_source_key_observed ON listings(source_key, source_observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_has_documents ON listings(has_documents) WHERE has_documents = TRUE;
 CREATE INDEX IF NOT EXISTS idx_listings_lat_lng ON listings(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);

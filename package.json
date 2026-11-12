@@ -72,6 +72,7 @@
     "triage:measure": "node scripts/measure-triage-resolution.js",
     "sources:email": "node scripts/collect-email-notices.js",
     "sources:email:corpus": "node scripts/collect-email-notices.js --corpus test/fixtures/email-notices",
+    "sources:email:pipeline": "node scripts/collect-email-notices.js --pipeline --corpus test/fixtures/email-notices",
     "sources:intake": "node scripts/source-intake.js",
     "sources:notices": "node scripts/collect-federal-notices.js",
     "sources:public-records": "node scripts/collect-public-records.js",

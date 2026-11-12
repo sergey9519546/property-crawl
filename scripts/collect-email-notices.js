@@ -24,11 +24,12 @@ const {
 } = require('../server/sources/email-notices');
 
 function parseArgs(argv) {
-  const flags = { corpus: '', imap: false, status: false, help: false };
+  const flags = { corpus: '', imap: false, pipeline: false, status: false, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') flags.help = true;
     else if (arg === '--imap') flags.imap = true;
+    else if (arg === '--pipeline') flags.pipeline = true;
     else if (arg === '--status') flags.status = true;
     else if (arg.startsWith('--corpus=')) flags.corpus = arg.slice('--corpus='.length);
     else if (arg === '--corpus') {
@@ -43,6 +44,7 @@ function usage() {
   console.log(`Press-association email notice ingestion (docs/STRATEGY.md Hack #1)
 
   node scripts/collect-email-notices.js --corpus <dir>   Parse local .eml/.txt fixtures
+  node scripts/collect-email-notices.js --pipeline [--corpus <dir>] Ingest via EmailNoticesPipeline into DB and Document Review
   node scripts/collect-email-notices.js --imap           Fetch operator mailbox via EmailNoticesPipeline (requires IMAP_*)
   node scripts/collect-email-notices.js --status         Show configuration and store path
 `);
@@ -72,16 +74,19 @@ async function main() {
     process.exit(0);
   }
 
-  if (!flags.corpus && !flags.imap) {
+  if (!flags.corpus && !flags.imap && !flags.pipeline) {
     usage();
-    console.error('Choose --corpus or --imap (or --status).');
+    console.error('Choose --corpus, --pipeline, or --imap (or --status).');
     process.exit(2);
   }
 
-  if (flags.imap && !flags.corpus) {
-    // Phase 2 canonical IMAP pipeline with statewide press association domain query and standard ingestion
-    const pipeline = new EmailNoticesPipeline({ env: process.env });
-    if (!pipeline.isConfigured()) {
+  if (flags.pipeline || (flags.imap && !flags.corpus)) {
+    // Canonical EmailNoticesPipeline with statewide press association domain query and standard ingestion
+    const pipeline = new EmailNoticesPipeline({
+      env: process.env,
+      corpusDir: flags.corpus || process.env.IMAP_CORPUS_DIR || '',
+    });
+    if (!pipeline.isConfigured() && !flags.corpus) {
       const err = new ImapCredentialsUnsetError();
       console.error(`[${err.code}] ${err.message}`);
       process.exit(1);
@@ -98,7 +103,7 @@ async function main() {
       if (err.code === 'IMAP_CREDENTIALS_UNSET' || err instanceof ImapCredentialsUnsetError) {
         console.error(`[${err.code}] ${err.message}`);
       } else {
-        console.error(`IMAP collection failed: ${err.message}`);
+        console.error(`Pipeline collection failed: ${err.message}`);
       }
       process.exit(1);
     }

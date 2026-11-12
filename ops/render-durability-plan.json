@@ -1,6 +1,7 @@
 {
   "version": 1,
-  "status": "prepared_not_applied_requires_recurring_cost_approval",
+  "status": "superseded_by_supabase_cutover",
+  "cutoverNotes": "Render expiring instance dpg-dbbc8su7bikc73819uo0-a was backed up to .secrets/hosted-backups/property-crawl-render-2026-11-09.dump (SHA-256 ddcb2a40b13baf0e8a0dc0a1d6d0dfc79735855f53671c004292ec2fef54539e). Production DATABASE_URL was pointed to permanent Supabase PostgreSQL (project icxjpoudcwqfsobaohjz), preserving the zero-cost architecture with zero downtime.",
   "serviceId": "srv-dbbc3vgm7kps73eehimg",
   "postgresId": "dpg-dbbc8su7bikc73819uo0-a",
   "region": "oregon",

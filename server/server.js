@@ -78,6 +78,48 @@ function sourceCadences() {
   }
 }
 
+let healthProbeInFlight = null;
+async function refreshHealthDiagnostics() {
+  if (healthProbeInFlight) return healthProbeInFlight;
+  healthProbeInFlight = (async () => {
+    try {
+      const freshnessPromise = (typeof db.inventoryFreshness === 'function')
+        ? Promise.race([
+            db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 6500))
+          ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
+        : Promise.resolve(null);
+
+      const observationPromise = Promise.race([
+        (() => {
+          const { observationStoreStats } = require('./db/observations-persistence');
+          return observationStoreStats(db.pool);
+        })(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 6500))
+      ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
+
+      const [freshnessRes, obsRes] = await Promise.all([freshnessPromise, observationPromise]);
+      const now = Date.now();
+      const freshnessIsError = Boolean(freshnessRes && freshnessRes.error);
+      const obsIsError = Boolean(obsRes && obsRes.error);
+
+      const nextFreshness = (!freshnessIsError || !lastHealthCache.freshness || lastHealthCache.freshness.error)
+        ? freshnessRes
+        : lastHealthCache.freshness;
+
+      const nextObs = (!obsIsError || !lastHealthCache.observationStore || lastHealthCache.observationStore.error)
+        ? obsRes
+        : lastHealthCache.observationStore;
+
+      lastHealthCache = { timestamp: now, freshness: nextFreshness, observationStore: nextObs };
+      return lastHealthCache;
+    } finally {
+      healthProbeInFlight = null;
+    }
+  })();
+  return healthProbeInFlight;
+}
+
 function configuredCorsOrigins(env = process.env) {
   return new Set(String(env.CORS_ALLOWED_ORIGINS || '')
     .split(',')
@@ -257,31 +299,25 @@ async function handleRequest(req, res) {
       const { defaultStorePath } = require('./intelligence/document-review-store');
       const unavailableReason = db.inventoryUnavailableReason();
       // Freshness and observation store facts are secondary diagnostics, not preconditions.
-      // Cache for 25s so frequent container health checks respond in <1ms without DB lock contention; misses bound to 2000ms.
+      // Freshness and observation store facts are secondary diagnostics, not preconditions.
+      // Cache with stale-while-revalidate so health checks respond in <1ms without DB lock contention or WAN delay.
+      const now = Date.now();
+      const hasFreshness = Boolean(lastHealthCache.freshness && !lastHealthCache.freshness.error);
+      const isFresh = (now - lastHealthCache.timestamp < HEALTH_CACHE_TTL_MS);
       let freshness = null;
       let observationStore = null;
-      const now = Date.now();
-      if (lastHealthCache.freshness && (now - lastHealthCache.timestamp < HEALTH_CACHE_TTL_MS)) {
+
+      if (hasFreshness && isFresh) {
         freshness = lastHealthCache.freshness;
         observationStore = lastHealthCache.observationStore;
+      } else if (hasFreshness && !isFresh) {
+        freshness = lastHealthCache.freshness;
+        observationStore = lastHealthCache.observationStore;
+        refreshHealthDiagnostics().catch(() => {});
       } else {
-      const freshnessPromise = (typeof db.inventoryFreshness === 'function')
-        ? Promise.race([
-            db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 6500))
-          ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
-        : Promise.resolve(null);
-
-      const observationPromise = Promise.race([
-        (() => {
-          const { observationStoreStats } = require('./db/observations-persistence');
-          return observationStoreStats(db.pool);
-        })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 6500))
-      ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
-
-        [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
-        lastHealthCache = { timestamp: Date.now(), freshness, observationStore };
+        await refreshHealthDiagnostics();
+        freshness = lastHealthCache.freshness;
+        observationStore = lastHealthCache.observationStore;
       }
       return res.json({
         status: 'ok',
