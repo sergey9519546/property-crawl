@@ -24,6 +24,7 @@ const { loadObservedHpiSeries } = require('./hpi-series');
 const { getHudSafmrBenchmark } = require('./hud-safmr');
 const { interpretAssessorParcel } = require('./assessor-reading');
 const { resolveCountyKey } = require('./arcgis-parcels');
+const { getStateHpiContext } = require('./fhfa-state-hpi');
 
 const DISCLAIMER = 'Public record consensus benchmarks are statutory and administrative observations, not an appraisal, valuation opinion, or buyer bid recommendation.';
 
@@ -246,6 +247,9 @@ function computePublicBenchmarkConsensus(listingContext = {}, options = {}) {
     // 3. HUD SAFMR Rent Benchmark & GRM
     hudSafmr,
     impliedGrm,
+
+    // 4. Statewide FHFA HPI Macro Trend
+    stateMacroHpi: state ? getStateHpiContext(state) : null,
 
     // Strict Zero-Fabrication: estLow, estHigh, and dealScore must NEVER be generated here
     estLow: null,

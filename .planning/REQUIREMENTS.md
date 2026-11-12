@@ -14,8 +14,8 @@ Requirements for full production completion and $0 continuous deployment.
 
 ### Infrastructure & $0 Continuity
 
-- [ ] **INFRA-01**: Preserve verified off-host PostgreSQL backup (`.secrets/hosted-backups/property-crawl-render-2026-11-09.dump`, 11,382 listings) and configure $0 database continuity before 2026-11-19 expiry
-- [ ] **COMPACT-01**: Execute and verify observation snapshot deduplication compactor (`scripts/compact-snapshots.js`) with transition retention
+- [x] **INFRA-01**: Preserve verified off-host PostgreSQL backup (`.secrets/hosted-backups/property-crawl-render-2026-11-09.dump`, 11,382 listings) and configure $0 database continuity before 2026-11-19 expiry
+- [x] **COMPACT-01**: Execute and verify observation snapshot deduplication compactor (`scripts/compact-snapshots.js`) with transition retention
 
 ### Full-Stack Completeness & UI Craft
 
@@ -25,7 +25,7 @@ Requirements for full production completion and $0 continuous deployment.
 
 ### Release & Verification Gates
 
-- [ ] **REL-01**: Reconcile working tree, regenerate `CONTEXT.md` digest if needed, and pass all 9/9 PP-02 source-bound release gates (`scripts/release-gate.js`)
+- [x] **REL-01**: Reconcile working tree, regenerate `CONTEXT.md` digest if needed, and pass all 9/9 PP-02 source-bound release gates (`scripts/release-gate.js`)
 
 ## v2 Requirements
 
@@ -52,9 +52,9 @@ Deferred to future external-access milestones.
 | UI-01 | Phase 1 | Complete |
 | API-01 | Phase 1 | Complete |
 | DOCKET-01 | Phase 1 | Complete |
-| INFRA-01 | Phase 2 | Pending |
-| COMPACT-01 | Phase 2 | Pending |
-| REL-01 | Phase 3 | Pending |
+| INFRA-01 | Phase 2 | Complete |
+| COMPACT-01 | Phase 2 | Complete |
+| REL-01 | Phase 3 | Complete |
 
 **Coverage:**
 - v1 requirements: 8 total

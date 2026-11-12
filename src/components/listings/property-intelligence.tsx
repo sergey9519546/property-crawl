@@ -91,6 +91,44 @@ type Dossier = DiscoveryEvidenceData & {
       holding: string;
     };
   };
+  publicBenchmarks?: {
+    benchmarkType: string;
+    isAppraisal: boolean;
+    evidenceAvailabilityRatio: number;
+    availableSourceCount: number;
+    sourcesAvailable: string[];
+    unobservedReasons: string[];
+    assessorRoll?: {
+      assessedValue: number;
+      landValue?: number | null;
+      improvementValue?: number | null;
+      county?: string | null;
+      apn?: string | null;
+      citation?: string | null;
+    } | null;
+    assessedTrajectory?: {
+      state: string;
+      baselinePeriod: string;
+      currentPeriod: string;
+      baselineHpi: number;
+      currentHpi: number;
+      hpiMultiplier: number;
+      hpiAppreciationPct: number;
+      hpiAdjustedAssessedValue: number;
+      source: string;
+      provenance?: { sourceUrl?: string; retrievedAt?: string };
+    } | null;
+    stateMacroHpi?: {
+      state: string;
+      quarterPct: number;
+      yoyPct: number;
+      fiveYearPct: number;
+      since1991Pct: number;
+      sourceUrl: string;
+    } | null;
+    hudSafmr?: unknown;
+    impliedGrm?: number | null;
+  } | null;
   publicRecords: {
     issues: string[]; sources: { id: string; label: string; url: string; observedAt?: string }[];
     parcel: { status: string; rawParcelId?: string; properties: Record<string, unknown>; source?: { url: string } } | null;
@@ -205,6 +243,86 @@ export function PropertyIntelligence({ listingId, documentsShown = false }: { li
           <div className="flex flex-wrap gap-3">{dossier.publicRecords.sources.map((source) => <a key={`${source.id}:${source.url}`} href={source.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-meta font-semibold text-ink underline hover:text-ink-2">{sourceDisplayText(source.label)}<ExternalLink size={11} /></a>)}</div>
         </div></details>}
         <DiscoveryEvidence evidence={dossier} documentsShown={documentsShown} />
+        {dossier.publicBenchmarks?.assessedTrajectory && (
+          <div className="rounded-control border border-line bg-paper p-4" data-testid="hpi-trajectory-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">
+                FHFA State-Quarter HPI Trajectory · {dossier.publicBenchmarks.assessedTrajectory.state}
+              </h3>
+              <span className="rounded-full border border-yours/40 bg-yours-wash px-2 py-0.5 text-xs font-semibold text-yours">
+                +{dossier.publicBenchmarks.assessedTrajectory.hpiAppreciationPct}% Trajectory
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Observed Federal Housing Finance Agency quarterly appreciation from {dossier.publicBenchmarks.assessedTrajectory.baselinePeriod} to {dossier.publicBenchmarks.assessedTrajectory.currentPeriod} ({dossier.publicBenchmarks.assessedTrajectory.hpiMultiplier}x index multiplier).
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-meta font-bold uppercase text-ink-3">Baseline HPI</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.assessedTrajectory.baselineHpi}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Period: {dossier.publicBenchmarks.assessedTrajectory.baselinePeriod}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-meta font-bold uppercase text-ink-3">Current Observed HPI</span>
+                <p className="mt-1 text-sm font-bold text-ink">
+                  {dossier.publicBenchmarks.assessedTrajectory.currentHpi}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Period: {dossier.publicBenchmarks.assessedTrajectory.currentPeriod}
+                </p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2.5">
+                <span className="text-meta font-bold uppercase text-ink-3">HPI-Indexed Assessed Value</span>
+                <p className="mt-1 text-sm font-bold text-yours">
+                  ${Math.round(dossier.publicBenchmarks.assessedTrajectory.hpiAdjustedAssessedValue).toLocaleString()}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-3">
+                  Assessed baseline adjusted by macro index
+                </p>
+              </div>
+            </div>
+            <p className="mt-2 text-label text-ink-3">
+              Source: {dossier.publicBenchmarks.assessedTrajectory.source}. Macro index observation only; not an appraisal.
+            </p>
+          </div>
+        )}
+        {!dossier.publicBenchmarks?.assessedTrajectory && dossier.publicBenchmarks?.stateMacroHpi && (
+          <div className="rounded-control border border-line bg-paper p-4" data-testid="fhfa-macro-hpi-card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-ink">
+                FHFA Statewide Macro HPI Context · {dossier.publicBenchmarks.stateMacroHpi.state}
+              </h3>
+              <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold text-ink-2">
+                Official Summary
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-ink-3">
+              Federal Housing Finance Agency seasonally-adjusted House Price Index changes across {dossier.publicBenchmarks.stateMacroHpi.state}.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-control border border-line bg-card p-2 text-center">
+                <span className="text-xs font-bold uppercase text-ink-3">1 Quarter</span>
+                <p className="mt-0.5 text-sm font-bold text-ink">{dossier.publicBenchmarks.stateMacroHpi.quarterPct > 0 ? '+' : ''}{dossier.publicBenchmarks.stateMacroHpi.quarterPct}%</p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2 text-center">
+                <span className="text-xs font-bold uppercase text-ink-3">1 Year (YoY)</span>
+                <p className="mt-0.5 text-sm font-bold text-ink">{dossier.publicBenchmarks.stateMacroHpi.yoyPct > 0 ? '+' : ''}{dossier.publicBenchmarks.stateMacroHpi.yoyPct}%</p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2 text-center">
+                <span className="text-xs font-bold uppercase text-ink-3">5 Years</span>
+                <p className="mt-0.5 text-sm font-bold text-ink">+{dossier.publicBenchmarks.stateMacroHpi.fiveYearPct}%</p>
+              </div>
+              <div className="rounded-control border border-line bg-card p-2 text-center">
+                <span className="text-xs font-bold uppercase text-ink-3">Since 1991</span>
+                <p className="mt-0.5 text-sm font-bold text-yours">+{dossier.publicBenchmarks.stateMacroHpi.since1991Pct}%</p>
+              </div>
+            </div>
+          </div>
+        )}
         {dossier.hudSafmr && (
           <div className="rounded-control border border-line bg-paper p-4">
             <div className="flex items-center justify-between">

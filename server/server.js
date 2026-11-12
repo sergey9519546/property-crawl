@@ -268,7 +268,7 @@ async function handleRequest(req, res) {
       const freshnessPromise = (typeof db.inventoryFreshness === 'function')
         ? Promise.race([
             db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 3500))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 6500))
           ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
         : Promise.resolve(null);
 
@@ -277,7 +277,7 @@ async function handleRequest(req, res) {
           const { observationStoreStats } = require('./db/observations-persistence');
           return observationStoreStats(db.pool);
         })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 3500))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 6500))
       ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
 
         [freshness, observationStore] = await Promise.all([freshnessPromise, observationPromise]);
