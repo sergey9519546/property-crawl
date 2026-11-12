@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { inspectMapLocation, groupMapLocations } = require('../src/lib/listing-map-policy');
+const { inspectMapLocation, groupMapLocations, inspectParcelBoundaryInputs } = require('../src/lib/listing-map-policy');
 
 function record(overrides = {}) {
   const sourceUrl = 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=1234';
@@ -52,4 +52,61 @@ test('coincident records share one unchanged location and retain their distinct 
   assert.equal(groups.length, 1);
   assert.deepEqual(groups[0].map((listing) => listing.id), ['CIV-1234', 'CIV-5678']);
   assert.deepEqual(groups[0].map(({ lat, lng }) => [lat, lng]), [[41.03, -74.04], [41.03, -74.04]]);
+});
+
+
+test('inspectParcelBoundaryInputs matches /api/parcel-boundary preflight eligibility rules', () => {
+  const base = record();
+
+  const missingState = inspectParcelBoundaryInputs({ ...base, state: '' });
+  assert.equal(missingState.eligible, false);
+  assert.equal(missingState.code, 'STATE_REQUIRED');
+
+  const missingCoordsAndApn = inspectParcelBoundaryInputs({
+    id: 'CIV-NJ-9-2240544560',
+    state: 'NJ',
+    county: 'Morris County',
+    lat: null,
+    lng: null,
+    apn: '',
+    provenance: { observed: true, origin: 'live' },
+  });
+  assert.equal(missingCoordsAndApn.eligible, false);
+  assert.equal(missingCoordsAndApn.code, 'EXACT_COORDINATES_REQUIRED');
+
+  const nilInput = inspectParcelBoundaryInputs(null);
+  assert.equal(nilInput.eligible, false);
+  assert.equal(nilInput.code, 'EXACT_COORDINATES_REQUIRED');
+
+  for (const provenance of [
+    undefined,
+    { ...base.provenance, origin: 'snapshot' },
+    { ...base.provenance, recordKind: 'demo' },
+    { ...base.provenance, observed: false },
+    { ...base.provenance, derivedFields: { geocode: true } },
+    { ...base.provenance, derivedFields: { coordinates: true } },
+    { ...base.provenance, derivedFields: { location: true } },
+  ]) {
+    const unverified = inspectParcelBoundaryInputs({ ...base, provenance });
+    assert.equal(unverified.eligible, false);
+    assert.equal(unverified.code, 'EXACT_COORDINATES_UNVERIFIED');
+  }
+
+  const validCoords = inspectParcelBoundaryInputs(base);
+  assert.equal(validCoords.eligible, true);
+  assert.equal(validCoords.code, null);
+  assert.equal(validCoords.lat, 41.03);
+  assert.equal(validCoords.lng, -74.04);
+
+  const validApnOnly = inspectParcelBoundaryInputs({
+    ...base,
+    lat: null,
+    lng: null,
+    apn: '0123-456',
+  });
+  assert.equal(validApnOnly.eligible, true);
+  assert.equal(validApnOnly.code, null);
+  assert.equal(validApnOnly.apn, '0123-456');
+  assert.equal(validApnOnly.lat, null);
+  assert.equal(validApnOnly.lng, null);
 });

@@ -235,3 +235,40 @@ test('evaluateRecordsForDrift: honors gsa and irs source-specific publisher sche
   const irsBroken = [{ id: 'IRS-1', address: 'only-address', city: null, zip: null, openingBid: null, saleDate: null, sourceUrl: null }];
   assert.equal(evaluateRecordsForDrift('irs', irsBroken).hasDrift, true);
 });
+
+test('evaluateRecordsForDrift uses HUD ArcGIS expected schema without false drift on valid 52-state runs', () => {
+  const hudHealthy = [
+    {
+      id: 'HUD-100',
+      address: '100 Main St',
+      city: 'Columbus',
+      zip: '43215',
+      lat: 39.9612,
+      lng: -82.9988,
+      openingBid: null,
+      saleDate: null,
+      county: null,
+      sourceUrl: 'https://www.hudhomestore.gov/Home/PropertyDetails?caseNumber=100',
+    },
+  ];
+  const healthy = evaluateRecordsForDrift('hud', hudHealthy);
+  assert.equal(healthy.hasDrift, false);
+  assert.equal(healthy.currentYield, 1);
+
+  const hudBroken = [
+    {
+      id: 'HUD-101',
+      address: '101 Main St',
+      city: null,
+      zip: null,
+      lat: null,
+      lng: null,
+      openingBid: null,
+      saleDate: null,
+      county: null,
+      sourceUrl: null,
+    },
+  ];
+  const broken = evaluateRecordsForDrift('hud', hudBroken);
+  assert.equal(broken.hasDrift, true);
+});

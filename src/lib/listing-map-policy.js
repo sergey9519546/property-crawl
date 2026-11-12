@@ -67,4 +67,105 @@ function groupMapLocations(listings) {
   return [...groups.values()];
 }
 
-module.exports = { inspectMapLocation, groupMapLocations };
+function parcelTextValue(value) {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+}
+
+function parcelCoordinate(value, min, max) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= min && numeric <= max ? numeric : null;
+}
+
+function hasObservedParcelCoordinates(listing) {
+  const provenance = listing && listing.provenance;
+  if (!provenance || typeof provenance !== 'object' || provenance.observed !== true) return false;
+  if (provenance.origin === 'snapshot' || provenance.recordKind === 'demo') return false;
+  const derived = provenance.derivedFields;
+  if (!derived || typeof derived !== 'object') return true;
+  return !derived.geocode && !derived.coordinates && !derived.location;
+}
+
+/** Preflight /api/parcel-boundary eligibility to prevent doomed 422 UI requests. */
+function inspectParcelBoundaryInputs(listing) {
+  if (!listing || typeof listing !== 'object') {
+    return {
+      eligible: false,
+      code: 'EXACT_COORDINATES_REQUIRED',
+      message: 'Exact source coordinates are required for parcel geometry lookup.',
+      state: '',
+      county: '',
+      apn: '',
+      lat: null,
+      lng: null,
+    };
+  }
+
+  const state = parcelTextValue(listing.state);
+  const county = parcelTextValue(listing.county);
+  const apn = parcelTextValue(
+    listing.apn ?? listing.parcelNumber ?? listing.parcelId ?? listing.provenance?.parcelNumber
+  );
+  const lat = parcelCoordinate(listing.lat, -90, 90);
+  const lng = parcelCoordinate(listing.lng, -180, 180);
+  const hasListingCoords =
+    listing.lat !== null &&
+    listing.lat !== undefined &&
+    listing.lat !== '' &&
+    listing.lng !== null &&
+    listing.lng !== undefined &&
+    listing.lng !== '';
+
+  if (hasListingCoords && !hasObservedParcelCoordinates(listing)) {
+    return {
+      eligible: false,
+      code: 'EXACT_COORDINATES_UNVERIFIED',
+      message: 'This listing does not have source-observed coordinates for parcel geometry lookup.',
+      state,
+      county,
+      apn,
+      lat,
+      lng,
+    };
+  }
+
+  if ((lat === null || lng === null) && !apn) {
+    return {
+      eligible: false,
+      code: 'EXACT_COORDINATES_REQUIRED',
+      message: 'Exact source coordinates are required for parcel geometry lookup.',
+      state,
+      county,
+      apn,
+      lat,
+      lng,
+    };
+  }
+
+  if (!state) {
+    return {
+      eligible: false,
+      code: 'STATE_REQUIRED',
+      message: 'State is required for parcel geometry lookup.',
+      state,
+      county,
+      apn,
+      lat,
+      lng,
+    };
+  }
+
+  return {
+    eligible: true,
+    code: null,
+    message: null,
+    state,
+    county,
+    apn,
+    lat,
+    lng,
+  };
+}
+
+module.exports = { inspectMapLocation, groupMapLocations, inspectParcelBoundaryInputs };

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Box, LoaderCircle, MapPin } from "lucide-react";
 import { Listing } from "@/data/listings";
+import { inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 
 interface Parcel3DProps {
   listing: Listing;
@@ -120,32 +121,35 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
-  const [loadState, setLoadState] = useState<LoadState>({ status: "loading", feature: null, message: null });
+  const preflight = useMemo(() => inspectParcelBoundaryInputs(listing), [listing]);
+  const unavailableMessage = preflight.message || "Parcel geometry is unavailable.";
+  const [loadState, setLoadState] = useState<LoadState>(() =>
+    preflight.eligible
+      ? { status: "loading", feature: null, message: null }
+      : { status: "unavailable", feature: null, message: unavailableMessage }
+  );
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    setLoadState({ status: "loading", feature: null, message: null });
 
-    const apn = (
-      listing.apn ||
-      (listing.provenance as Record<string, unknown> | null | undefined)?.parcelNumber ||
-      (listing as unknown as { parcelId?: string; parcelNumber?: string }).parcelId ||
-      (listing as unknown as { parcelId?: string; parcelNumber?: string }).parcelNumber ||
-      ""
-    ).toString().trim();
+    if (!preflight.eligible) {
+      setLoadState({ status: "unavailable", feature: null, message: unavailableMessage });
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
+
+    setLoadState({ status: "loading", feature: null, message: null });
 
     const query = new URLSearchParams();
     if (listing.id) query.set("listingId", listing.id);
-    if (apn) query.set("apn", apn);
-    if (listing.state) query.set("state", listing.state);
-    if (listing.county) query.set("county", listing.county);
-    if (listing.lat !== null && listing.lat !== undefined && Number.isFinite(Number(listing.lat))) {
-      query.set("lat", String(listing.lat));
-    }
-    if (listing.lng !== null && listing.lng !== undefined && Number.isFinite(Number(listing.lng))) {
-      query.set("lng", String(listing.lng));
-    }
+    if (preflight.apn) query.set("apn", preflight.apn);
+    if (preflight.state) query.set("state", preflight.state);
+    if (preflight.county) query.set("county", preflight.county);
+    if (preflight.lat !== null) query.set("lat", String(preflight.lat));
+    if (preflight.lng !== null) query.set("lng", String(preflight.lng));
 
     void fetch(`/api/parcel-boundary?${query.toString()}`, { signal: controller.signal })
       .then(async (response) => {
@@ -173,7 +177,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
       active = false;
       controller.abort();
     };
-  }, [listing.id, listing.state, listing.county, listing.apn, listing.lat, listing.lng]);
+  }, [listing.id, preflight.eligible, unavailableMessage, preflight.state, preflight.county, preflight.apn, preflight.lat, preflight.lng]);
 
   const ring = useMemo(() => outerRing(loadState.feature), [loadState.feature]);
   const points = useMemo(() => toSvgPoints(ring), [ring]);
@@ -185,12 +189,7 @@ export function Parcel3DVisualizer({ listing }: Parcel3DProps) {
     ? `${metadata.frontageFt.toLocaleString()}′ × ${metadata.depthFt.toLocaleString()}′`
     : "Not reported";
 
-  const resolvedApn = (
-    metadata?.parcelId ||
-    listing.apn ||
-    (listing.provenance as Record<string, unknown> | null | undefined)?.parcelNumber ||
-    ""
-  ).toString().trim();
+  const resolvedApn = (metadata?.parcelId || preflight.apn || "").toString().trim();
 
   return (
     <section className="overflow-hidden rounded-2xl border border-line bg-ink text-white shadow-xl" aria-label="Parcel geometry reference">

@@ -19,6 +19,7 @@ const DEFAULT_EXPECTED_FIELDS = [
 const SOURCE_EXPECTED_FIELDS = Object.freeze({
   gsa: ['id', 'address', 'city', 'zip', 'sourceUrl'],
   irs: ['id', 'address', 'city', 'zip', 'openingBid', 'saleDate', 'sourceUrl'],
+  hud: ['id', 'address', 'city', 'zip', 'lat', 'lng', 'sourceUrl'],
   trustee: ['id', 'address', 'county', 'sourceUrl'],
 });
 

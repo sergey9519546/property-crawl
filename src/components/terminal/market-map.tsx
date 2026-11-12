@@ -6,7 +6,7 @@ import { ArrowRight, LocateFixed, MapPin, Minus, Plus, X } from "lucide-react";
 import type { LngLatBoundsLike, Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import type { Feature as GeoJsonFeature } from "geojson";
 import { displayMoney, displayText, knownNumber } from "@/lib/listing-display";
-import { inspectMapLocation, groupMapLocations } from "@/lib/listing-map-policy";
+import { inspectMapLocation, groupMapLocations, inspectParcelBoundaryInputs } from "@/lib/listing-map-policy";
 import { sourceDisplayText } from "@/lib/source-display";
 import { ListingCompareToggle } from "@/components/listings/listing-compare";
 import { PropertyListing, SOURCES } from "./property-data";
@@ -95,7 +95,8 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
   }, [selectedId]);
 
   React.useEffect(() => {
-    if (!selectedId) {
+    const parcelPreflight = selected ? inspectParcelBoundaryInputs(selected) : null;
+    if (!selectedId || !parcelPreflight?.eligible) {
       setParcelBoundary(null);
       const map = mapRef.current;
       if (map && map.isStyleLoaded()) {
@@ -108,14 +109,13 @@ export function MarketMap({ listings, onUnderwrite, returnTo = "/listings?view=m
     }
 
     let active = true;
-    const apn = (selected?.apn || (selected?.provenance as Record<string, unknown> | null | undefined)?.parcelNumber || "").toString().trim();
     const query = new URLSearchParams();
     if (selectedId) query.set("listingId", selectedId);
-    if (apn) query.set("apn", apn);
-    if (selected?.state) query.set("state", selected.state);
-    if (selected?.county) query.set("county", selected.county);
-    if (selected?.lat != null && Number.isFinite(selected.lat)) query.set("lat", String(selected.lat));
-    if (selected?.lng != null && Number.isFinite(selected.lng)) query.set("lng", String(selected.lng));
+    if (parcelPreflight.apn) query.set("apn", parcelPreflight.apn);
+    if (parcelPreflight.state) query.set("state", parcelPreflight.state);
+    if (parcelPreflight.county) query.set("county", parcelPreflight.county);
+    if (parcelPreflight.lat !== null) query.set("lat", String(parcelPreflight.lat));
+    if (parcelPreflight.lng !== null) query.set("lng", String(parcelPreflight.lng));
 
     void fetch(`/api/parcel-boundary?${query.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
