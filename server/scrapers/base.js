@@ -101,6 +101,21 @@ class BaseScraper {
     return (listing && this._publisherRecords.get(listing)) || null;
   }
 
+  getScopedCircuitBreaker(scopeKey) {
+    const key = String(scopeKey || 'default').trim().toLowerCase() || 'default';
+    if (!this._scopedBreakers) {
+      this._scopedBreakers = new Map();
+    }
+    if (!this._scopedBreakers.has(key)) {
+      this._scopedBreakers.set(key, new ScraperCircuitBreaker({
+        failureThreshold: this.circuitBreaker.failureThreshold,
+        cooldownMs: this.circuitBreaker.cooldownMs,
+        minPayloadBytes: this.circuitBreaker.minPayloadBytes,
+      }));
+    }
+    return this._scopedBreakers.get(key);
+  }
+
   async executeWithRetry(fn) {
     if (this.circuitBreaker.isOpen()) {
       throw new Error(`[${this.name}] Scraper halted: Circuit breaker is OPEN`);
@@ -164,7 +179,7 @@ class BaseScraper {
       nativeFetch: (targetUrl) => fetchTextWithPolicy(targetUrl, {
         ...options,
         timeoutMs,
-        circuitBreaker: this.circuitBreaker,
+        circuitBreaker: options.circuitBreaker || this.circuitBreaker,
         fetchImpl: options.fetchImpl || this.fetchImpl
       }),
     });
@@ -181,14 +196,14 @@ class BaseScraper {
       return await fetchTextWithPolicy(url, {
         ...options,
         timeoutMs: options.timeoutMs ?? this.timeoutMs,
-        circuitBreaker: this.circuitBreaker,
+        circuitBreaker: options.circuitBreaker || this.circuitBreaker,
         fetchImpl: options.fetchImpl || this.fetchImpl
       });
     } catch (primaryErr) {
       if (!canEscalate) throw primaryErr;
       if (
         primaryErr?.haltScraper
-        || this.circuitBreaker?.isOpen?.()
+        || (options.circuitBreaker || this.circuitBreaker)?.isOpen?.()
         || primaryErr?.code === 'SCRAPER_CIRCUIT_OPEN'
         || /bot\s*challenge|cloudflare|turnstile|captcha|access\s*denied/i.test(primaryErr?.message || '')
       ) {
@@ -214,7 +229,7 @@ class BaseScraper {
     return fetchJsonWithPolicy(url, {
       ...options,
       timeoutMs: options.timeoutMs ?? this.timeoutMs,
-      circuitBreaker: this.circuitBreaker,
+      circuitBreaker: options.circuitBreaker || this.circuitBreaker,
       fetchImpl: options.fetchImpl || this.fetchImpl
     });
   }

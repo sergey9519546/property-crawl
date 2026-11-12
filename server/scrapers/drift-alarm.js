@@ -16,6 +16,12 @@ const DEFAULT_EXPECTED_FIELDS = [
   'sourceUrl'
 ];
 
+const SOURCE_EXPECTED_FIELDS = Object.freeze({
+  gsa: ['id', 'address', 'city', 'zip', 'sourceUrl'],
+  irs: ['id', 'address', 'city', 'zip', 'openingBid', 'saleDate', 'sourceUrl'],
+  trustee: ['id', 'address', 'county', 'sourceUrl'],
+});
+
 const DEFAULT_MIN_YIELD_THRESHOLD = 0.4; // Alarm triggers if yield drops below 40%
 const DEFAULT_MAX_COLLAPSE_RATIO = 0.3;  // Alarm triggers if yield collapses by > 30% from baseline
 const DEFAULT_HISTORICAL_BASELINE = 0.8;
@@ -161,8 +167,12 @@ function checkSelectorDrift(source, currentYield, historicalYieldThreshold = DEF
 /**
  * Convenience helper to evaluate a batch of records directly for drift.
  */
-function evaluateRecordsForDrift(source, records, expectedFields = DEFAULT_EXPECTED_FIELDS, historicalYieldThreshold = DEFAULT_HISTORICAL_BASELINE, options = {}) {
-  const batch = computeBatchYield(records, expectedFields);
+function evaluateRecordsForDrift(source, records, expectedFields, historicalYieldThreshold = DEFAULT_HISTORICAL_BASELINE, options = {}) {
+  const srcKey = String(source || '').trim().toLowerCase();
+  const resolvedFields = Array.isArray(expectedFields) && expectedFields.length > 0
+    ? expectedFields
+    : (SOURCE_EXPECTED_FIELDS[srcKey] || DEFAULT_EXPECTED_FIELDS);
+  const batch = computeBatchYield(records, resolvedFields);
   const driftCheck = checkSelectorDrift(source, batch.meanYield, historicalYieldThreshold, options);
   return {
     ...driftCheck,
@@ -177,6 +187,7 @@ module.exports = {
   evaluateRecordsForDrift,
   isFieldPresent,
   DEFAULT_EXPECTED_FIELDS,
+  SOURCE_EXPECTED_FIELDS,
   DEFAULT_MIN_YIELD_THRESHOLD,
   DEFAULT_MAX_COLLAPSE_RATIO,
   DEFAULT_HISTORICAL_BASELINE

@@ -312,6 +312,28 @@ test('AcclaimWeb parses multi-line alias grantors and tag-wrapped recording labe
 });
 
 
+test('AcclaimWeb ignores search-form tables, column headers, and UI placeholder text', () => {
+  const searchFormHtml = `
+    <form action="/AcclaimWeb/search/SearchTypeDocType">
+      <table>
+        <tr>
+          <th class="col-inst">Instrument</th>
+          <th>Record Date</th>
+          <th>Doc Type</th>
+          <th>Grantor</th>
+        </tr>
+        <tr>
+          <td><label>Record Type</label><select name="docType"><option value="LP">Lis Pendens</option></select></td>
+          <td><input name="grantor" title="Enter grantor name, such as a trust or corporation name." /></td>
+        </tr>
+      </table>
+      <div>Doc: Clerk File Number</div>
+    </form>
+  `;
+  assert.deepEqual(parseAcclaimSearchHtml(searchFormHtml, 'brevard'), []);
+  assert.equal(parseAcclaimRecordRow('<tr><td>Record Date</td><td>Clerk File Number</td></tr>', 'duval'), null);
+});
+
 test('RealAuction tax-deed mode (.realtaxdeed.com) and SheriffSaleScraper docket bridge', () => {
   const { REALAUCTION_FLORIDA_TAXDEED_COUNTIES } = require('../server/scrapers/adapters/realauction');
   const { SheriffSaleScraper, DEFAULT_FL_COUNTIES } = require('../server/scrapers/sheriff');

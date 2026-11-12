@@ -551,13 +551,22 @@ class DatabaseClient {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
     if (target === 'tcp') {
+      const configuredMax = Number(this.env.DATABASE_POOL_MAX);
+      const poolMax = Number.isInteger(configuredMax) && configuredMax > 0
+        ? Math.min(configuredMax, 50)
+        : 10;
+      const configuredConnectTimeout = Number(this.env.DATABASE_CONNECTION_TIMEOUT_MS);
+      const connectionTimeoutMillis = Number.isFinite(configuredConnectTimeout) && configuredConnectTimeout > 0
+        ? Math.min(configuredConnectTimeout, 60_000)
+        : 12_000;
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({
           connectionString: this.env.DATABASE_URL,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 5000,
+          max: poolMax,
+          idleTimeoutMillis: 60000,
+          connectionTimeoutMillis,
+          keepAlive: true,
         });
         // Do not claim postgres until a query succeeds. Pool construction
         // does not open a socket.
@@ -573,13 +582,18 @@ class DatabaseClient {
 
       const roUrl = this.env.DATABASE_RO_URL || this.env.DATABASE_READ_URL || null;
       if (roUrl && !this.readPool) {
+        const configuredRoMax = Number(this.env.DATABASE_RO_POOL_MAX);
+        const roPoolMax = Number.isInteger(configuredRoMax) && configuredRoMax > 0
+          ? Math.min(configuredRoMax, 50)
+          : poolMax;
         try {
           const { Pool } = require('pg');
           this.readPool = new Pool({
             connectionString: roUrl,
-            max: Number(this.env.DATABASE_RO_POOL_MAX) || 20,
-            idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 5000,
+            max: roPoolMax,
+            idleTimeoutMillis: 60000,
+            connectionTimeoutMillis,
+            keepAlive: true,
           });
         } catch (err) {
           console.warn('[DB] PostgreSQL read-replica driver not initialized, using primary pool:', err.message);

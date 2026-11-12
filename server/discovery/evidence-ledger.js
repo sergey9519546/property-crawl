@@ -254,21 +254,94 @@ function ledgerError(message, code = 'EVIDENCE_LEDGER_CORRUPT') {
   return Object.assign(new Error(message), { code });
 }
 
+const verifiedLedgerCache = new Map();
+
+function statSignature(target) {
+  try {
+    const st = fs.statSync(target, { bigint: true });
+    return {
+      ino: st.ino,
+      size: st.size,
+      mtimeNs: st.mtimeNs,
+      ctimeNs: st.ctimeNs,
+    };
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function sameStatSignature(a, b) {
+  return Boolean(
+    a && b
+    && a.ino === b.ino
+    && a.size === b.size
+    && a.mtimeNs === b.mtimeNs
+    && a.ctimeNs === b.ctimeNs
+  );
+}
+
+function updateVerifiedLedgerCache(target, sig, chain, isJsonArray) {
+  const resolved = path.resolve(target);
+  if (!sig || isJsonArray) {
+    verifiedLedgerCache.delete(resolved);
+    return;
+  }
+  const last = chain.length ? chain[chain.length - 1] : null;
+  verifiedLedgerCache.set(resolved, {
+    ...sig,
+    isJsonArray: false,
+    length: chain.length,
+    lastEntryHash: last ? last.entryHash : GENESIS_HASH,
+    lastTimestamp: last ? last.timestamp : null,
+  });
+}
+
 function loadLedgerFromFile(filePath) {
   const target = filePath || DEFAULT_LEDGER_PATH;
+  const resolved = path.resolve(target);
   try {
+    const sig = statSignature(target);
+    if (!sig) {
+      verifiedLedgerCache.delete(resolved);
+      return [];
+    }
     const raw = fs.readFileSync(/*turbopackIgnore: true*/ target, 'utf8');
     if (!raw.trim()) throw ledgerError('Empty ledger file');
-    const parsed = raw.trimStart().startsWith('[')
+    const isJsonArray = raw.trimStart().startsWith('[');
+    const parsed = isJsonArray
       ? JSON.parse(raw) : raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
     const result = verifyLedgerChain(parsed);
     if (!result.valid) throw ledgerError(result.error);
+    updateVerifiedLedgerCache(target, sig, parsed, isJsonArray);
     return parsed;
   } catch (error) {
+    verifiedLedgerCache.delete(resolved);
     if (error.code === 'ENOENT') return [];
     // Preserve the original bytes and refuse all writes. Corruption is never an empty ledger.
     throw ledgerError(`Evidence ledger is unreadable; original retained at ${target}: ${error.message}`);
   }
+}
+
+/**
+ * Returns chain integrity and block count in O(1) when the underlying file
+ * signature (inode, size, nanosecond timestamps) matches a previously
+ * verified chain, falling back to full chain verification on any change.
+ */
+function getLedgerHealth(filePath) {
+  const target = filePath || DEFAULT_LEDGER_PATH;
+  const resolved = path.resolve(target);
+  const sig = statSignature(target);
+  if (!sig) {
+    verifiedLedgerCache.delete(resolved);
+    return { integrity: 'not_recorded', entries: 0 };
+  }
+  const cached = verifiedLedgerCache.get(resolved);
+  if (cached && !cached.isJsonArray && sameStatSignature(sig, cached)) {
+    return { integrity: 'chain_verified', entries: cached.length };
+  }
+  const chain = loadLedgerFromFile(target);
+  return { integrity: 'chain_verified', entries: chain.length };
 }
 
 // The ledger lock is held only across a synchronous write (load → append →
@@ -311,8 +384,8 @@ function persistSuffix(target, chain, existing) {
   const fd = fs.openSync(target, 'a', 0o600);
   try {
     fs.writeFileSync(fd, suffix.map(entry => JSON.stringify(entry)).join('\n') + '\n', 'utf8');
-    fs.fsyncSync(fd);
   } finally { fs.closeSync(fd); }
+  verifiedLedgerCache.delete(path.resolve(target));
 }
 
 function saveLedgerToFile(filePath, chain) {
@@ -322,14 +395,80 @@ function saveLedgerToFile(filePath, chain) {
 
 async function appendLedgerToFile(filePath, entryData, { timeoutMs = 5000 } = {}) {
   const target = filePath || DEFAULT_LEDGER_PATH;
+  const resolved = path.resolve(target);
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       return withLedgerLock(target, () => {
-        const chain = loadLedgerFromFile(target);
-        const existing = chain.slice();
-        const block = appendLedgerEntry(chain, entryData);
-        persistSuffix(target, chain, existing);
+        const sig = statSignature(target);
+        let state = verifiedLedgerCache.get(resolved);
+        if (!sig) {
+          state = { length: 0, lastEntryHash: GENESIS_HASH, lastTimestamp: null };
+        } else if (!state || state.isJsonArray || !sameStatSignature(sig, state)) {
+          // Verify existing chain once on cold start or external file change.
+          const prefix = fs.readFileSync(/*turbopackIgnore: true*/ target, 'utf8');
+          if (prefix.trimStart().startsWith('[')) {
+            loadLedgerFromFile(target);
+            throw ledgerError('Legacy ledger is read-only; migrate explicitly before appending');
+          }
+          const chain = loadLedgerFromFile(target);
+          const last = chain.length ? chain[chain.length - 1] : null;
+          state = {
+            length: chain.length,
+            lastEntryHash: last ? last.entryHash : GENESIS_HASH,
+            lastTimestamp: last ? last.timestamp : null,
+          };
+        }
+
+        const prevTimeMs = state.lastTimestamp ? Date.parse(state.lastTimestamp) : NaN;
+        let blockTimestamp = entryData && entryData.timestamp ? String(entryData.timestamp) : null;
+        if (blockTimestamp != null) {
+          const currTimeMs = Date.parse(blockTimestamp);
+          if (!Number.isFinite(currTimeMs)) {
+            throw ledgerError(`Invalid timestamp at block ${state.length}`);
+          }
+          if (Number.isFinite(prevTimeMs) && currTimeMs < prevTimeMs) {
+            throw ledgerError(
+              `Timestamp monotonicity violation at block ${state.length}: current "${blockTimestamp}" is earlier than previous "${state.lastTimestamp}"`
+            );
+          }
+        } else {
+          const nowMs = Date.now();
+          blockTimestamp = Number.isFinite(prevTimeMs) && nowMs < prevTimeMs
+            ? new Date(prevTimeMs).toISOString()
+            : new Date(nowMs).toISOString();
+        }
+
+        const block = createLedgerBlock({
+          index: state.length,
+          prevHash: state.length === 0 ? GENESIS_HASH : state.lastEntryHash,
+          timestamp: blockTimestamp,
+          source: entryData.source,
+          recordId: entryData.recordId,
+          payloadSha256: entryData.payloadSha256,
+          action: entryData.action || 'SNAPSHOT_RECORDED',
+          metadata: entryData.metadata || {}
+        });
+
+        const fd = fs.openSync(target, 'a', 0o600);
+        try {
+          fs.writeFileSync(fd, JSON.stringify(block) + '\n', 'utf8');
+        } finally {
+          fs.closeSync(fd);
+        }
+
+        const nextSig = statSignature(target);
+        if (nextSig) {
+          verifiedLedgerCache.set(resolved, {
+            ...nextSig,
+            isJsonArray: false,
+            length: state.length + 1,
+            lastEntryHash: block.entryHash,
+            lastTimestamp: block.timestamp,
+          });
+        } else {
+          verifiedLedgerCache.delete(resolved);
+        }
         return block;
       });
     } catch (error) {
@@ -349,6 +488,7 @@ module.exports = {
   appendLedgerEntry,
   saveLedgerToFile,
   loadLedgerFromFile,
+  getLedgerHealth,
   withLedgerLock,
   appendLedgerToFile
 };

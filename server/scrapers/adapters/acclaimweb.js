@@ -127,6 +127,8 @@ function cleanCellText(str) {
 function parseAcclaimRecordRow(rowHtml = '', jurisdiction = 'clark') {
   const raw = String(rowHtml || '');
   if (!raw) return null;
+  if (/<(?:th|input|select|option|label)\b/i.test(raw)) return null;
+  if (/such as a trust or corporation name/i.test(raw)) return null;
 
   const config = DEFAULT_JURISDICTIONS[jurisdiction.toLowerCase()] || DEFAULT_JURISDICTIONS.clark;
 
@@ -144,6 +146,8 @@ function parseAcclaimRecordRow(rowHtml = '', jurisdiction = 'clark') {
       if (m) instNum = m[1].trim();
     }
   }
+
+  if (instNum && !/\d/.test(instNum)) instNum = null;
 
   // 2. Recording Date: e.g. "Recorded: 10/08/2026" or "10/08/2026"
   let recordedDate = null;
@@ -214,6 +218,8 @@ function parseAcclaimRecordRow(rowHtml = '', jurisdiction = 'clark') {
       if (m) apn = m[1].trim();
     }
   }
+
+  if (apn && !/\d/.test(apn)) apn = null;
 
   // 7. Legal description or address:
   let legalDescription = null;

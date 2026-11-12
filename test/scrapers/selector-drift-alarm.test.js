@@ -191,3 +191,47 @@ test('IngestionScheduler: records driftAlarm when accepted records suffer select
   assert.equal(recordedTelemetry.driftAlarm?.hasDrift, true);
   assert.ok(runReport?.driftAlarm?.hasDrift);
 });
+
+test('evaluateRecordsForDrift: honors gsa and irs source-specific publisher schemas without false drift alarms', () => {
+  const gsaHealthy = [{
+    id: 'GSA-TX-TEST-78701',
+    address: '300 E 8th St, Austin, TX 78701',
+    city: 'Austin',
+    zip: '78701',
+    county: null,
+    openingBid: null,
+    saleDate: null,
+    sourceUrl: 'https://www.gsa.gov/real-estate/real-property-disposition/assets-identified-for-accelerated-disposition',
+  }];
+  assert.equal(evaluateRecordsForDrift('gsa', gsaHealthy).hasDrift, false);
+
+  const gsaBroken = [{ id: 'GSA-1', address: null, city: null, zip: null, sourceUrl: 'https://www.gsa.gov/x' }];
+  assert.equal(evaluateRecordsForDrift('gsa', gsaBroken).hasDrift, true);
+
+  const irsHealthy = [
+    {
+      id: 'IRS-PA-101',
+      address: '101 Market St, Drexel Hill, PA 19026',
+      city: 'Drexel Hill',
+      zip: '19026',
+      county: null,
+      openingBid: 110665,
+      saleDate: '2026-12-01',
+      sourceUrl: 'https://www.irsauctions.gov/ad/101',
+    },
+    {
+      id: 'IRS-TX-102',
+      address: '202 Oak Ave, Austin, TX 78701',
+      city: 'Austin',
+      zip: '78701',
+      county: null,
+      openingBid: null,
+      saleDate: null,
+      sourceUrl: 'https://www.irsauctions.gov/ad/102',
+    },
+  ];
+  assert.equal(evaluateRecordsForDrift('irs', irsHealthy).hasDrift, false);
+
+  const irsBroken = [{ id: 'IRS-1', address: 'only-address', city: null, zip: null, openingBid: null, saleDate: null, sourceUrl: null }];
+  assert.equal(evaluateRecordsForDrift('irs', irsBroken).hasDrift, true);
+});

@@ -14,9 +14,10 @@ const {
   loadLedgerFromFile,
   canonicalStringify,
   withLedgerLock,
-  appendLedgerToFile
+  appendLedgerToFile,
+  getLedgerHealth
 } = require('../../server/discovery/evidence-ledger');
-const { createMarkdownEvidenceSnapshot } = require('../../server/scrapers/discovery-snapshots');
+const { createMarkdownEvidenceSnapshot, evidenceStoreHealth } = require('../../server/scrapers/discovery-snapshots');
 
 test('Append-Only Evidence Ledger: createLedgerBlock & canonicalStringify', async (t) => {
   await t.test('canonicalStringify produces deterministic JSON regardless of key order', () => {
@@ -292,6 +293,79 @@ test('Evidence ledger lock: a fresh foreign lock is respected, a stale one self-
     assert.equal(wrote, 'ok', 'a stale lock must be broken and the write must proceed');
     assert.equal(fs.existsSync(lockPath), false, 'the broken lock must be cleaned up');
     assert.equal(fs.readFileSync(target, 'utf8'), `${JSON.stringify({ seq: 1 })}\n`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
+test('Evidence ledger append scales O(1) per block and health detects external tampering', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-ledger-scale-'));
+  const target = path.join(dir, 'evidence-ledger.jsonl');
+
+  try {
+    const startMs = Date.now();
+    for (let i = 0; i < 600; i++) {
+      await appendLedgerToFile(target, {
+        source: 'hud',
+        recordId: `HUD-${i}`,
+        payloadSha256: String(i).padStart(64, '0'),
+        action: 'SNAPSHOT_RECORDED'
+      });
+    }
+    const elapsedMs = Date.now() - startMs;
+    assert.ok(elapsedMs < 3000, `600 appends took too long (${elapsedMs}ms), expected O(1) per append`);
+
+    const cachedHealth = getLedgerHealth(target);
+    assert.equal(cachedHealth.integrity, 'chain_verified');
+    assert.equal(cachedHealth.entries, 600);
+
+    const storeHealth = evidenceStoreHealth(dir);
+    assert.equal(storeHealth.integrity, 'chain_verified');
+    assert.equal(storeHealth.entries, 600);
+
+    const verified = verifyLedgerChain(loadLedgerFromFile(target));
+    assert.equal(verified.valid, true);
+    assert.equal(verified.verifiedCount, 600);
+
+    // Reject explicit backward timestamp monotonicity violation even via fast append path
+    await assert.rejects(
+      () => appendLedgerToFile(target, {
+        source: 'hud',
+        recordId: 'HUD-BACKWARD',
+        payloadSha256: 'f'.repeat(64),
+        timestamp: '2020-01-01T00:00:00.000Z'
+      }),
+      (err) => err && /monotonicity violation/i.test(err.message)
+    );
+
+    // Tamper one block in-place and confirm both getLedgerHealth and evidenceStoreHealth fail closed
+    const raw = fs.readFileSync(target, 'utf8');
+    fs.writeFileSync(target, raw.replace('HUD-10', 'HUD-XX'), 'utf8');
+    assert.throws(
+      () => getLedgerHealth(target),
+      (err) => err && err.code === 'EVIDENCE_LEDGER_CORRUPT'
+    );
+    assert.equal(evidenceStoreHealth(dir).integrity, 'unreadable');
+
+    // Legacy JSON array ledger remains read-only
+    const legacyFile = path.join(dir, 'legacy-ledger.json');
+    const singleChain = [createLedgerBlock({
+      index: 0,
+      prevHash: GENESIS_HASH,
+      timestamp: '2026-10-31T12:00:00.000Z',
+      source: 'hud',
+      recordId: 'LEG-1',
+      payloadSha256: 'a'.repeat(64)
+    })];
+    fs.writeFileSync(legacyFile, JSON.stringify(singleChain), 'utf8');
+    await assert.rejects(
+      () => appendLedgerToFile(legacyFile, {
+        source: 'hud',
+        recordId: 'LEG-2',
+        payloadSha256: 'b'.repeat(64)
+      }),
+      (err) => err && /Legacy ledger is read-only/i.test(err.message)
+    );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }

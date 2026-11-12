@@ -11,6 +11,8 @@ test('production orchestrator waits on liveness, not advanced readiness, for dem
   assert.match(startProduction, /\/api\/health['"`]/);
   assert.match(startProduction, /Demo\/in-memory mode detected/);
   assert.match(startProduction, /Advanced discovery readiness failed/);
+  assert.match(startProduction, /if \(hasDatabase\)/);
+  assert.match(startProduction, /Database discovery readiness still initializing/);
   // Must not gate Next UI start on /api/health/ready.
   assert.doesNotMatch(
     startProduction,

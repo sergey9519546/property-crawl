@@ -129,7 +129,11 @@ async function awaitBackendReady() {
     return true;
   }
 
-  console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
+  if (hasDatabase) {
+    console.log('[Production] Database discovery readiness still initializing — falling back to /api/health liveness check.');
+  } else {
+    console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
+  }
 
   const live = await waitForHealth(liveUrl, 10000);
   if (live) {

@@ -477,6 +477,70 @@ test('bid4assets extracts APN, deposit, and postponement reschedule trajectory',
   assert.deepEqual(rotateStorefronts(slugs, 3, 2), ['/countyD', '/countyA']);
 });
 
+const { Bid4AssetsScraper } = require('../../server/scrapers/bid4assets');
+
+test('bid4assets scrapeFeed: rethrows immediately when WAF challenge opens circuit during channel discovery', async () => {
+  const urlsRequested = [];
+  const scraper = new Bid4AssetsScraper({
+    sleep: async () => {},
+    fetchImpl: async (url) => {
+      urlsRequested.push(url);
+      return {
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        text: async () => '<html><body>Please solve this CAPTCHA to continue</body></html>',
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => scraper.scrapeFeed(),
+    (err) => err && (err.haltScraper === true || /captcha|circuit/i.test(err.message)),
+  );
+  assert.equal(scraper.circuitBreaker.isOpen(), true);
+  assert.equal(urlsRequested.length, 1, 'should halt on first WAF challenge without requesting remaining channels or fallback storefronts');
+  assert.equal(scraper.rotationOffset, 0, 'should preserve rotationOffset when sweep halts');
+});
+
+test('bid4assets scrapeFeed: rethrows immediately when WAF challenge opens circuit during storefront fetch', async () => {
+  const urlsRequested = [];
+  const scraper = new Bid4AssetsScraper({
+    sleep: async () => {},
+    maxStorefronts: 2,
+    rotationOffset: 1,
+    fetchImpl: async (url) => {
+      urlsRequested.push(url);
+      if (url.endsWith('/sheriffsales')) {
+        return {
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/html' }),
+          text: async () => '<a href="/berkscountysheriffsales">Berks</a><a href="/adamscountysheriffsales">Adams</a>',
+        };
+      }
+      if (url.endsWith('/county-tax-sales') || url.endsWith('/real-estate-auctions')) {
+        return {
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/html' }),
+          text: async () => '<html><body>No extra channels</body></html>',
+        };
+      }
+      return {
+        status: 403,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        text: async () => '<html><body>Access Denied - CAPTCHA</body></html>',
+      };
+    },
+  });
+
+  await assert.rejects(
+    () => scraper.scrapeFeed(),
+    (err) => err && (err.haltScraper === true || /forbidden|captcha|circuit/i.test(err.message)),
+  );
+  assert.equal(scraper.circuitBreaker.isOpen(), true);
+  assert.equal(scraper.rotationOffset, 1, 'should not advance rotationOffset when sweep halts');
+  assert.equal(urlsRequested.filter((u) => u.includes('sheriffsales') && !u.endsWith('/sheriffsales')).length, 1, 'should stop after first storefront trips breaker');
+});
+
 // --- US Marshals --------------------------------------------------------
 
 const { UsMarshalsScraper } = require('../../server/scrapers/marshals');
@@ -694,6 +758,60 @@ test('treasury parseMoney + parseInt0: strip non-digits, reject null', () => {
   assert.equal(s.parseInt0('1500'), 1500);
   assert.equal(s.parseInt0('1,500'), 1500);
   assert.equal(s.parseInt0(''), null);
+});
+
+test('sheriff scrapeFeed: isolates county circuit breakers so WAF/empty TX county does not discard OH Realauction listings', async () => {
+  const realauctionHtml = `
+    <tr class="auction-row">
+      <td>Case No. CV-2026-9901</td>
+      <td class="address">450 Public Square, Cleveland, OH 44114</td>
+      <td>Opening Bid: $88,000</td>
+      <td>Appraised Value: $140,000</td>
+      <td>Sale Date: 12/15/2026</td>
+      <td><a href="/index.cfm?zaction=AUCTION&zmethod=DETAILS&AID=9901">View</a></td>
+    </tr>
+  `;
+  const scraper = new SheriffSaleScraper({
+    sleep: async () => {},
+    useScrapling: false,
+    counties: [
+      { name: 'Collin', state: 'TX', domain: 'collincountytx.gov', url: 'https://www.collincountytx.gov/tax-sales' },
+      { name: 'Tarrant', state: 'TX', domain: 'tarrantcountytx.gov', url: 'https://www.tarrantcountytx.gov/tax-sales' },
+      { name: 'Cuyahoga', state: 'OH', domain: 'cuyahoga.sheriffsaleauction.ohio.gov' },
+    ],
+    fetchImpl: async (url) => {
+      if (url.includes('collincountytx.gov')) {
+        return { status: 200, headers: new Headers({ 'content-type': 'text/html' }), text: async () => '' };
+      }
+      if (url.includes('tarrantcountytx.gov')) {
+        return { status: 403, headers: new Headers({ 'content-type': 'text/html' }), text: async () => '<html><body>CAPTCHA verification</body></html>' };
+      }
+      return { status: 200, headers: new Headers({ 'content-type': 'text/html' }), text: async () => realauctionHtml };
+    },
+  });
+
+  const listings = await scraper.scrapeFeed();
+  assert.equal(listings.length, 1, 'Cuyahoga OH listing must survive TX empty/captcha county failures');
+  assert.equal(listings[0].state, 'OH');
+  assert.equal(scraper.circuitBreaker.isOpen(), false, 'scraper-level breaker must stay closed when individual county hosts trip');
+  assert.equal(scraper.lastRunReport.statesFailed.length, 2, 'failed TX counties must still be audited in statesFailed');
+});
+
+test('trustee scrapeFeed: isolates jurisdiction circuit breakers across county hosts', async () => {
+  const { TrusteeSaleScraper } = require('../../server/scrapers/trustee');
+  const scraper = new TrusteeSaleScraper({
+    sleep: async () => {},
+    fetchImpl: async (url) => {
+      if (url.includes('clarkcountynv')) {
+        return { status: 403, headers: new Headers({ 'content-type': 'text/html' }), text: async () => '<html>Access Denied - captcha</html>' };
+      }
+      return { status: 200, headers: new Headers({ 'content-type': 'text/html' }), text: async () => '<html><body>No records found</body></html>' };
+    },
+  });
+
+  const out = await scraper.scrapeFeed({ jurisdictions: ['clark', 'washoe'] });
+  assert.deepEqual(out, []);
+  assert.equal(scraper.circuitBreaker.isOpen(), false, 'clark 403 must not leave trustee.circuitBreaker open');
 });
 
 // --- Trustee ------------------------------------------------------------

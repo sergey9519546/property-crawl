@@ -61,3 +61,37 @@ test('PROPERTY_INVENTORY_BACKEND=memory is honoured outside tests', () => {
   assert.ok(db.inMemoryData.listings.length > 0);
   assert.equal(db.dataMode(), 'memory');
 });
+
+test('PostgreSQL pool defaults fit Supavisor session bounds and honour env overrides', async () => {
+  const defaultDb = new DatabaseClient({
+    env: {
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:1/property_crawl',
+    },
+    liveCachePath: null,
+    workspaceStorePath: null,
+  });
+  try {
+    assert.equal(defaultDb.pool.options.max, 10);
+    assert.equal(defaultDb.pool.options.connectionTimeoutMillis, 12000);
+    assert.equal(defaultDb.pool.options.idleTimeoutMillis, 60000);
+    assert.equal(defaultDb.pool.options.keepAlive, true);
+  } finally {
+    await defaultDb.close();
+  }
+
+  const customDb = new DatabaseClient({
+    env: {
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:1/property_crawl',
+      DATABASE_POOL_MAX: '6',
+      DATABASE_CONNECTION_TIMEOUT_MS: '18000',
+    },
+    liveCachePath: null,
+    workspaceStorePath: null,
+  });
+  try {
+    assert.equal(customDb.pool.options.max, 6);
+    assert.equal(customDb.pool.options.connectionTimeoutMillis, 18000);
+  } finally {
+    await customDb.close();
+  }
+});

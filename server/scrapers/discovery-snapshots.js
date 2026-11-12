@@ -11,7 +11,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { createLedgerBlock, GENESIS_HASH, appendLedgerToFile, loadLedgerFromFile } = require('../discovery/evidence-ledger');
+const { createLedgerBlock, GENESIS_HASH, appendLedgerToFile, loadLedgerFromFile, getLedgerHealth } = require('../discovery/evidence-ledger');
 
 const DEFAULT_SNAPSHOT_DIR = path.resolve(__dirname, '../../.cache/discovery-snapshots');
 
@@ -332,7 +332,7 @@ async function recordSnapshot(input = {}, options = {}) {
   fs.mkdirSync(sourceDir, {recursive:true});
   const rawPath = path.join(/*turbopackIgnore: true*/ sourceDir, `${rawFileSha256}.json`);
   const writeImmutable = (target, text) => {
-    try { const fd=fs.openSync(target,'wx',0o600); try { fs.writeFileSync(fd,text,'utf8'); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } }
+    try { const fd=fs.openSync(target,'wx',0o600); try { fs.writeFileSync(fd,text,'utf8'); } finally { fs.closeSync(fd); } }
     catch (error) { if (error.code !== 'EEXIST') throw error; if (fs.readFileSync(/*turbopackIgnore: true*/ target,'utf8') !== text) throw new Error('Snapshot content collision'); }
   };
   writeImmutable(rawPath,rawText);
@@ -389,7 +389,7 @@ function evidenceStoreHealth(snapshotDir = process.env.PROPERTY_EVIDENCE_DIR || 
   const target = path.join(snapshotDir,'evidence-ledger.jsonl');
   const base = {backend:'file',...require('../discovery/evidence-storage').evidenceStorageStatus({evidenceDir:snapshotDir}),externalAnchor:false};
   if (!fs.existsSync(target)) return {...base,integrity:'not_recorded',entries:0};
-  try { const chain=loadLedgerFromFile(target); return {...base,integrity:'chain_verified',entries:chain.length}; }
+  try { return {...base, ...getLedgerHealth(target)}; }
   catch { return {...base,integrity:'unreadable',writesBlocked:true,reason:'Evidence ledger is unreadable; original retained and writes refused'}; }
 }
 

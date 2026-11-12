@@ -273,6 +273,9 @@ class Bid4AssetsScraper extends BaseScraper {
           console.log(`[${this.name}]   ${slug}: ${listings.length} raw / ${added} new`);
         } catch (err) {
           recordUnitFailure(report, slug.replace(/^\//, ''), err);
+          if (err?.haltScraper || err?.code === 'SCRAPER_CIRCUIT_OPEN' || this.circuitBreaker.isOpen()) {
+            throw err;
+          }
           console.warn(`[${this.name}] Failed ${slug}: ${err.message}`);
         }
         if (i < targetSlugs.length - 1) await this.crawlJitter();
@@ -302,6 +305,9 @@ class Bid4AssetsScraper extends BaseScraper {
       }
       this.rotationOffset = nextOffset;
 
+      if (this.circuitBreaker.isOpen()) {
+        throw new Error(`[${this.name}] Scraper halted: Circuit breaker opened during storefront sweep`);
+      }
       return standardized;
     });
   }
@@ -331,6 +337,9 @@ class Bid4AssetsScraper extends BaseScraper {
           slugs.add(m[1]);
         }
       } catch (err) {
+        if (err?.haltScraper || err?.code === 'SCRAPER_CIRCUIT_OPEN' || this.circuitBreaker.isOpen()) {
+          throw err;
+        }
         console.warn(`[${this.name}] Channel discovery warning on ${channel}: ${err.message}`);
       }
     }

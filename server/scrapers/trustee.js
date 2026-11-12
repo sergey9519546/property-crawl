@@ -54,6 +54,22 @@ class TrusteeSaleScraper extends BaseScraper {
     this.lastRunReport = null;
   }
 
+  getJurisdictionCircuitBreaker(scopeKey, url = null) {
+    let host = null;
+    if (url) {
+      try { host = new URL(url).hostname; } catch {}
+    }
+    return this.getScopedCircuitBreaker(host || scopeKey);
+  }
+
+  async fetchJurisdictionText(url, scopeKey, fetchOptions = {}) {
+    const circuitBreaker = this.getJurisdictionCircuitBreaker(scopeKey, url);
+    if (circuitBreaker.isOpen()) {
+      throw new Error(`[${this.name}] Skipped ${scopeKey}: host circuit breaker is OPEN`);
+    }
+    return this.fetchText(url, { ...fetchOptions, circuitBreaker });
+  }
+
   // AcclaimWeb recorder helpers
   getAcclaimSearchUrl(jurisdiction, docType) {
     return getAcclaimSearchUrl(jurisdiction, docType);
@@ -168,9 +184,9 @@ class TrusteeSaleScraper extends BaseScraper {
           try {
             const targetUrl = this.getMaricopaSearchUrl(docType, options);
             const robotsUrl = new URL('/robots.txt',targetUrl).href;
-            const rules = await this.fetchText(robotsUrl,{headers:{'User-Agent':'property-crawl-bot/1.0'}});
+            const rules = await this.fetchJurisdictionText(robotsUrl, jurKey, { headers: { 'User-Agent': 'property-crawl-bot/1.0' } });
             if (require('robots-parser')(robotsUrl,rules).isAllowed(targetUrl,'property-crawl-bot/1.0') !== true) throw new Error('MARICOPA_ROBOTS_UNVERIFIED_OR_DENIED');
-            const html = await this.fetchText(targetUrl);
+            const html = await this.fetchJurisdictionText(targetUrl, jurKey);
             const records = this.parseMaricopaSearchHtml(html, { ...options, docType });
             if (!records.length) throw new Error('RECORDER_QUERY_UNVERIFIED: no validated recorder query results');
             let added = 0;
@@ -260,7 +276,7 @@ class TrusteeSaleScraper extends BaseScraper {
           };
           const now = new Date();
           const query = await require('./adapters/harris-clerk-query').queryHarrisClerk({
-            requestText:(url, init) => this.fetchText(url, { ...init, fetchImpl:transport }),
+            requestText:(url, init) => this.fetchJurisdictionText(url, jurKey, { ...init, fetchImpl:transport }),
             year:options.year ?? now.getUTCFullYear(), month:options.month ?? now.getUTCMonth()+1,
             maxPages:options.maxPages ?? 1, baseUrl:options.baseUrl,
           });
@@ -348,7 +364,7 @@ class TrusteeSaleScraper extends BaseScraper {
           report.endpointsTried++;
           try {
             const targetUrl = this.getCookRecorderSearchUrl(docType, options);
-            const html = await this.fetchText(targetUrl);
+            const html = await this.fetchJurisdictionText(targetUrl, jurKey);
             const records = this.parseCookSearchHtml(html, { ...options, docType });
             let added = 0;
 
@@ -439,7 +455,7 @@ class TrusteeSaleScraper extends BaseScraper {
           report.endpointsTried++;
           try {
             const targetUrl = this.getMiamiDadeClerkSearchUrl({ ...options, docType });
-            const html = await this.fetchText(targetUrl);
+            const html = await this.fetchJurisdictionText(targetUrl, jurKey);
             const records = this.parseMiamiDadeSearchHtml(html, { ...options, docType });
             let added = 0;
 
@@ -529,7 +545,7 @@ class TrusteeSaleScraper extends BaseScraper {
         report.endpointsTried++;
         try {
           const targetUrl = this.getAcclaimSearchUrl(jurKey, docType);
-          const html = await this.fetchText(targetUrl);
+          const html = await this.fetchJurisdictionText(targetUrl, jurKey);
           const records = this.parseAcclaimSearchHtml(html, jurKey);
           let added = 0;
 

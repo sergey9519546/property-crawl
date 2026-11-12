@@ -6,11 +6,18 @@
 
 ## 1. Executive Summary & Ground Truth
 - **Live Production URL**: `https://property-crawl.onrender.com`
-- **Live Release Commit**: `797de176cac6c4c65c27763485b8e911c0b3d585` (Verified Live on Render deploy `dep-dbr3a5qvcj2c73enruig`).
-- **Persistent Database**: PostgreSQL 17.11 on Supabase (us-west-2, project `icxjpoudcwqfsobaohjz`).
-- **Render Free-Tier PG**: `dpg-dbbc8su7bikc73819uo0-a` retirement date is **2026-11-19**. Production traffic is 100% decoupled and routed to Supabase (zero runtime dependencies).
-- **Inventory Metrics**: 17,913 total listings (+1,866 since Nov 10); observation store tracking 14,799 rows (62.6 MB).
-- **Scraper Status**: 0 in fault; 2 challenge-gated (`LandBankSearchScraper`, `Bid4AssetsScraper`); 4 federal collectors operating at 100% yield (`treasury`, `gsa`, `irs`, `usda`). Active background crawling in-flight (`civilview`).
+- **Current Live Release Commit**: `4046ed86ea0e46380c8aa90073d48dee812e270c` (Render deploy `dep-dbr3h8etlv9c738eg4cg`; next release candidate adds local fixes pending release gate & push).
+- **Persistent Database**: PostgreSQL 17.11 on Supabase (us-west-2, project `icxjpoudcwqfsobaohjz`; Session Pooler `port=5432`).
+- **Render Free-Tier PG**: `dpg-dbbc8su7bikc73819uo0-a` retirement date is **2026-11-19**. Production traffic is 100% decoupled and routed to Supabase (zero runtime references).
+- **Single-Service Render Worker Config**: `SCRAPER_BACKGROUND_ENABLED=1` runs in-process on `srv-dbbc3vgm7kps73eehimg`; `DISCOVERY_MODE=advanced` is intentionally unset in the live single-service env because setting it without a separate always-on background worker disables in-process collection (`server/scrapers/scheduler.js`).
+- **Live SSR & API Audit Findings (2026-11-12 on `4046ed8`)**:
+  - Public SSR routes (`/`, `/listings`, `/states`, `/states/CA`, `/sources`, `/portfolio`, `/hunts`, `/workspace/documents-review`, `/sign-in`, `/sitemap.xml`, `/robots.txt`) returned HTTP `200` with `ssrErr=false`; `/foreclosure` & `/sheriff-sales` returned `308 -> /states` (`200`, `ssrErr=false`).
+  - Live Render logs & HTTP probes revealed 5 runtime defects now fixed locally:
+    1. `SheriffSaleScraper` shared circuit breaker allowed Collin/Tarrant failures to discard **122 valid Ohio/FL listings** (`Scheduler` refused ingestion). Fixed via per-county circuit breaker scoping (`BaseScraper.prototype.getScopedCircuitBreaker`).
+    2. `Bid4AssetsScraper` swallowed open-breaker errors into `[]`; `TrusteeSaleScraper` shared a single breaker across dead/403 hosts (`clark`, `washoe`), while unpoisoned Acclaim hosts (`duval`, `brevard`) exposed search-form label scraping (`TRUSTEE-FL-DUV-Type`). Fixed via breaker propagation, per-jurisdiction scoping, and AcclaimWeb form-row/placeholder filtering.
+    3. `SELECTOR_DRIFT_WARNING` false 50.0% alarms on `irs` & `gsa` (`3/6` fields vs generic schema). Fixed via `SOURCE_EXPECTED_FIELDS` (`gsa`, `irs`, `trustee`) in `server/scrapers/drift-alarm.js`.
+    4. `scripts/start-production.js` false `"Demo/in-memory"` log when `hasDatabase` readiness probe is still initializing. Branched cleanly on `if (hasDatabase)`.
+    5. Under 2,000+ listing snapshotting on Render (`NODE_OPTIONS=--max-old-space-size=256`), `appendLedgerToFile()` and `evidenceStoreHealth()` re-read and SHA-256 hashed the entire `evidence-ledger.jsonl` chain ($O(N^2)$ writes + per-file `fs.fsyncSync`), stalling the event loop for 4–18s and causing `pg.Pool` (`max: 20, connectionTimeoutMillis: 5000`) WAN/Supavisor Session Pooler timeouts (`/api/listings` and `/api/health/ready` 503). Fixed via stat-signature-verified $O(1)$ append/`getLedgerHealth`, removing per-block `fs.fsyncSync`, and bounding `DatabaseClient` PG pool defaults (`max: 10`, `connectionTimeoutMillis: 12000`, `idleTimeoutMillis: 60000`, `keepAlive: true`).
 
 ## 2. Persistent Requirements Matrix
 
@@ -35,8 +42,8 @@
 | **INF-03** | Hosted Evidence Durability | Render Web Service Persistent Disk | PARTIAL | Render service configuration | Ephemeral filesystem wipes `.cache/snapshots` on deploy | Mount persistent volume at `/var/data` or configure external S3/Supabase storage sync |
 
 ## 3. Completed Verification Receipts
-- **Commit `797de17`**: Live on Render (`dep-dbr3a5qvcj2c73enruig`), verified with sub-second health probe, 17,913 total listings, and zero scraper faults.
-- **Checklist Honesty**: `test/docs-checklist-honesty.test.js` passes 8/8.
-- **Meta-Guards**: `npm run test:meta-guards` passes 177/177.
-- **Canonical Runtime**: `npm run test:canonical` passes 48/48.
-- **Pre-Push Gate**: `scripts/release-gate.js` passed 9/9 source-bound gates before deployment.
+- **Checklist Honesty**: `node --test test/docs-checklist-honesty.test.js` passes 8/8.
+- **Meta-Guards & Canonical Runtime**: `npm run test:meta-guards` (**177/177 pass**) and `npm run test:canonical` (**48/48 pass**) pass cleanly after all fixes.
+- **Targeted Regression Suites**: `node --test test/scrapers/federal-scrapers.test.js test/county_platform_adapters.test.js test/scrapers/selector-drift-alarm.test.js test/sheriff-fallback-reports-failure.test.js test/scheduler-checkpoint.test.js test/scraper-reliability.test.js test/discovery/evidence-ledger.test.js test/db-unreachable.test.js test/scrapers/dev-cache-snapshots.test.js test/production-boot.test.js` — **217/217 pass** (plus earlier `test/discovery/evidence-ledger.test.js`, `test/db-unreachable.test.js`, `test/scrapers/dev-cache-snapshots.test.js` 32/32 pass with 600-append scale test dropping from `2968ms` -> `239ms`).
+- **Test Wiring Coverage**: `node scripts/verify-test-coverage.js` green across repo suites (`2352` + `44` in pre-ledger run; re-verified prior to release gate).
+- **Pre-Push Release Gate (`scripts/release-gate.js`)**: Source-bound 9/9 run executed after committing changes on clean tree before `git push origin main`.

@@ -195,7 +195,7 @@ const DEFAULT_MULTI_STATE_COUNTIES = Object.freeze(
 class SheriffSaleScraper extends BaseScraper {
   constructor(options = {}) {
     // Per-county failures are already recorded individually; retrying the whole multi-county sweep turned one dead publisher into a multi-minute retry storm.
-    super({ name: 'SheriffSaleScraper', sourceKey: 'sheriff', maxRetries: 1 });
+    super({ fetchImpl: options.fetchImpl, sleep: options.sleep, random: options.random, name: 'SheriffSaleScraper', sourceKey: 'sheriff', maxRetries: 1 });
     const flCounties = (options.includeFlorida || process.env.SHERIFF_INCLUDE_FL === '1')
       ? DEFAULT_FL_COUNTIES
       : (process.env.SHERIFF_INCLUDE_FL === '0' ? [] : TOP_FL_COUNTIES);
@@ -356,6 +356,16 @@ class SheriffSaleScraper extends BaseScraper {
     return String(c.platform || '').includes('texas');
   }
 
+  getCountyCircuitBreaker(county) {
+    const c = county && typeof county === 'object' ? county : { name: String(county || 'default') };
+    let host = c.domain ? String(c.domain).trim() : '';
+    if (!host && c.url) {
+      try { host = new URL(c.url).hostname; } catch {}
+    }
+    const key = host || `${String(c.state || '').toUpperCase()}:${String(c.name || 'default')}`;
+    return this.getScopedCircuitBreaker(key);
+  }
+
   async scrapeCounty(county, runReport = null, options = {}) {
     const c = typeof county === 'string' ? normalizeCountyInput(county) : county;
     const isTx = this.isTexasCounty(c);
@@ -381,6 +391,7 @@ class SheriffSaleScraper extends BaseScraper {
     if (!html) {
       const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
       html = await this.requestText(targetUrl, {
+        circuitBreaker: this.getCountyCircuitBreaker(c),
         headers: {
           'User-Agent': ua,
           Accept: 'text/html,application/xhtml+xml',
@@ -451,6 +462,7 @@ class SheriffSaleScraper extends BaseScraper {
     const url = `${baseUrl}/index.cfm?zaction=AUCTION&zmethod=PREVIEW`;
     try {
       const html = await this.requestText(url, {
+        circuitBreaker: this.getCountyCircuitBreaker(county),
         headers: {
           'User-Agent': ua,
           Accept: 'text/html,application/xhtml+xml',
@@ -797,6 +809,7 @@ class SheriffSaleScraper extends BaseScraper {
     const fallbackUrl = `https://www.publicnoticesohio.com/search?county=${encodeURIComponent(county.name)}`;
     try {
       const html = await this.requestText(fallbackUrl, {
+        circuitBreaker: this.getCountyCircuitBreaker({ domain: 'www.publicnoticesohio.com' }),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           Accept: 'text/html,application/xhtml+xml',
