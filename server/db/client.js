@@ -715,14 +715,14 @@ class DatabaseClient {
     }
     try {
       const result = await pool.query(
-        `SELECT count(*)::int AS n
+        `SELECT count(*)::int AS n, (to_regclass(quote_ident(current_schema()) || '.idx_listings_discovery_search_text_trgm') IS NOT NULL) AS idx_ready
            FROM information_schema.columns
           WHERE table_schema = current_schema()
             AND table_name = 'listings'
             AND column_name = ANY($1::text[])`,
         [ACCELERATED_LISTINGS_COLUMNS],
       );
-      const ready = Number(result.rows[0]?.n || 0) === ACCELERATED_LISTINGS_COLUMNS.length;
+      const ready = Number(result.rows[0]?.n || 0) === ACCELERATED_LISTINGS_COLUMNS.length && Boolean(result.rows[0]?.idx_ready);
       ACCELERATION_CACHE.set(pool, ready);
       if (this.pool && this.pool !== pool) ACCELERATION_CACHE.set(this.pool, ready);
       this.hasDiscoveryAcceleration = ready;

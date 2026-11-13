@@ -430,3 +430,212 @@ test('start-production grants >= 60s backend liveness budget when Postgres is co
   const startProd = fs.readFileSync(path.join(root, 'scripts/start-production.js'), 'utf8');
   assert.match(startProd, /hasDatabase\s*\?\s*(90000|120000)/, 'Postgres startup liveness window must allow migrations such as 034 to finish without a 10s SIGTERM');
 });
+
+test('discovery-migrate retries transient 55P03/40P01 lock errors and fails closed on non-lock SQL errors', async () => {
+  const migrationsDir = path.resolve(__dirname, '..', '..', 'server', 'db', 'migrations');
+  const firstMigration = fs.readdirSync(migrationsDir).filter((n) => /^\d+.*\.sql$/.test(n)).sort()[0];
+  let applyAttempt = 0;
+  const queries = [];
+  const fakePool = {
+    async connect() {
+      return {
+        async query(text) {
+          const sql = String(text);
+          queries.push(sql);
+          if (sql.includes('SELECT to_regclass')) return { rows: [{ relation: 'listings' }] };
+          if (sql.includes('SELECT sha256 FROM discovery_schema_migrations')) return { rows: [] };
+          if (sql.includes('CREATE TABLE') || sql.startsWith('SET ') || sql.startsWith('RESET') || sql.startsWith('SELECT pg_advisory') || sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK' || sql.startsWith('INSERT INTO discovery_schema_migrations')) {
+            return { rows: [] };
+          }
+          // Fail first attempt on the first migration with PG lock timeout (55P03), succeed after.
+          if (queries.filter((q) => q === 'BEGIN').length === 1 && applyAttempt === 0) {
+            applyAttempt += 1;
+            const err = new Error('canceling statement due to lock timeout');
+            err.code = '55P03';
+            throw err;
+          }
+          return { rows: [] };
+        },
+        release() {},
+      };
+    },
+  };
+
+  await migrate(fakePool, { maxLockAttempts: 3, retryDelayMs: 1, lockTimeout: '25s' });
+  const inserts = queries.filter((q) => q.startsWith('INSERT INTO discovery_schema_migrations'));
+  const migrationFiles = fs.readdirSync(migrationsDir).filter((n) => /^\d+.*\.sql$/.test(n));
+  assert.equal(applyAttempt, 1, 'positive control: first attempt hit 55P03 and retried');
+  assert.equal(inserts.length, migrationFiles.length, 'all migrations applied cleanly after lock retry');
+  assert.ok(queries.includes("SET lock_timeout = '25s'"), 'configured DDL lock timeout is applied');
+
+  // Negative control: persistent 55P03 beyond maxLockAttempts or non-lock SQL error (42703) must still throw with filename prefix.
+  const errPool = {
+    async connect() {
+      return {
+        async query(text) {
+          const sql = String(text);
+          if (sql.includes('SELECT to_regclass')) return { rows: [{ relation: 'listings' }] };
+          if (sql.includes('SELECT sha256 FROM discovery_schema_migrations')) return { rows: [] };
+          if (sql.includes('CREATE TABLE') || sql.startsWith('SET ') || sql.startsWith('RESET') || sql.startsWith('SELECT pg_advisory') || sql === 'BEGIN' || sql === 'ROLLBACK') {
+            return { rows: [] };
+          }
+          const err = new Error('column missing');
+          err.code = '42703';
+          throw err;
+        },
+        release() {},
+      };
+    },
+  };
+  await assert.rejects(
+    () => migrate(errPool, { maxLockAttempts: 3, retryDelayMs: 1 }),
+    { message: new RegExp(`^${firstMigration.replace('.', '\\.')}: column missing`) },
+  );
+
+  // Also test persistent 55P03 exhausts retries and throws with filename prefix.
+  let persistCalls = 0;
+  const persistPool = {
+    async connect() {
+      return {
+        async query(text) {
+          const sql = String(text);
+          if (sql.includes('SELECT to_regclass')) return { rows: [{ relation: 'listings' }] };
+          if (sql.includes('SELECT sha256 FROM discovery_schema_migrations')) return { rows: [] };
+          if (sql.includes('CREATE TABLE') || sql.startsWith('SET ') || sql.startsWith('RESET') || sql.startsWith('SELECT pg_advisory') || sql === 'BEGIN' || sql === 'ROLLBACK') {
+            return { rows: [] };
+          }
+          persistCalls += 1;
+          const err = new Error('canceling statement due to lock timeout');
+          err.code = '55P03';
+          throw err;
+        },
+        release() {},
+      };
+    },
+  };
+  await assert.rejects(
+    () => migrate(persistPool, { maxLockAttempts: 3, retryDelayMs: 1 }),
+    { message: new RegExp(`^${firstMigration.replace('.', '\\.')}: canceling statement due to lock timeout`) },
+  );
+  assert.equal(persistCalls, 3, 'persistent lock timeout retries exactly maxLockAttempts times');
+});
+
+test('pre-034 Postgres upgrades cleanly through split 034 (DDL) and 035 (backfill + GIN index)', { timeout: BOOT_TIMEOUT_MS }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-upgrade-034-035-'));
+  try {
+    const embedded = await startEmbeddedPostgres({ dataDir, applySchema: false });
+    await embedded.pool.query(`
+      CREATE TABLE IF NOT EXISTS discovery_listing_revision (
+        singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+        revision BIGINT NOT NULL DEFAULT 1,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO discovery_listing_revision (singleton, revision) VALUES (TRUE, 1) ON CONFLICT DO NOTHING;
+      CREATE TABLE listings (
+        id TEXT PRIMARY KEY,
+        source_key TEXT,
+        state TEXT,
+        county TEXT,
+        city TEXT,
+        zip TEXT,
+        address TEXT,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        beds INT,
+        baths NUMERIC,
+        sqft INT,
+        year_built INT,
+        prop_type TEXT,
+        opening_bid NUMERIC,
+        est_low NUMERIC,
+        est_high NUMERIC,
+        assessed_value NUMERIC,
+        equity_spread NUMERIC,
+        deal_score INT,
+        sale_date DATE,
+        plaintiff TEXT,
+        defendant TEXT,
+        judgment_amount NUMERIC,
+        attorney TEXT,
+        occupancy TEXT,
+        deposit_terms TEXT,
+        photo_url TEXT,
+        images JSONB,
+        source_url TEXT,
+        raw_notice TEXT,
+        provenance JSONB,
+        source_observed_at TIMESTAMPTZ,
+        fetched_at TIMESTAMPTZ DEFAULT NOW(),
+        price NUMERIC,
+        listing_date DATE,
+        redemption_days INT,
+        redemption_warning TEXT,
+        senior_lien_risk TEXT,
+        senior_lien_warning TEXT,
+        cash_to_close NUMERIC,
+        cash_to_close_details JSONB,
+        status TEXT DEFAULT 'active',
+        auction_program TEXT,
+        lifecycle_status TEXT,
+        transaction_outcome TEXT,
+        has_documents BOOLEAN,
+        triage_priority INT,
+        triage_priority_refreshed_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE discovery_schema_migrations (
+        name text PRIMARY KEY,
+        sha256 text NOT NULL,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      );
+      INSERT INTO listings (id, source_key, state, county, city, zip, address, opening_bid, status, provenance)
+      VALUES
+        ('upg:active', 'hud', 'NJ', 'Essex', 'Montclair', '07042', '42 Christopher Street', 120000, 'active', '{"origin":"live","recordId":"UPG-1","sourceFacts":{"auctionProgram":"HUD TPS"}}'::jsonb),
+        ('upg:sold', 'hud', 'NJ', 'Essex', 'Newark', '07102', '99 Christopher Way', 90000, 'sold', '{"origin":"live","recordId":"UPG-2"}'::jsonb);
+    `);
+
+    const migrationsDir = path.resolve(__dirname, '..', '..', 'server', 'db', 'migrations');
+    const pre034Files = fs.readdirSync(migrationsDir).filter((n) => /^\d+.*\.sql$/.test(n) && n < '034_').sort();
+    const crypto = require('node:crypto');
+    for (const name of pre034Files) {
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(path.join(migrationsDir, name), 'utf8')).digest('hex');
+      await embedded.pool.query('INSERT INTO discovery_schema_migrations(name, sha256) VALUES($1, $2)', [name, digest]);
+    }
+
+    const pg = new DatabaseClient({ pool: embedded.pool, liveCachePath: null, workspaceStorePath: null });
+    assert.equal(await pg.hasAcceleratedDiscovery({ forceRefresh: true }), false);
+
+    // Apply ONLY 034: columns exist, but index is not yet created -> acceleration gate must remain false.
+    const sql034 = fs.readFileSync(path.join(migrationsDir, '034_discovery_fast_search_and_rank.sql'), 'utf8');
+    await embedded.pool.query(sql034);
+    assert.equal(
+      await pg.hasAcceleratedDiscovery({ forceRefresh: true }),
+      false,
+      'hasAcceleratedDiscovery must stay false between 034 (columns added) and 035 (backfill + GIN index)',
+    );
+
+    // Record 034 and let migrate() apply 035 cleanly.
+    const d034 = crypto.createHash('sha256').update(sql034).digest('hex');
+    await embedded.pool.query('INSERT INTO discovery_schema_migrations(name, sha256) VALUES($1, $2)', ['034_discovery_fast_search_and_rank.sql', d034]);
+    await migrate(embedded.pool);
+
+    assert.equal(await pg.hasAcceleratedDiscovery({ forceRefresh: true }), true);
+    const backfilled = (await embedded.pool.query(
+      "SELECT id, discovery_terminal, discovery_action_tier, discovery_is_live, discovery_program, discovery_search_text FROM listings ORDER BY id",
+    )).rows;
+    const activeRow = backfilled.find((r) => r.id === 'upg:active');
+    const soldRow = backfilled.find((r) => r.id === 'upg:sold');
+    assert.equal(activeRow.discovery_terminal, false);
+    assert.equal(activeRow.discovery_action_tier, 2);
+    assert.equal(activeRow.discovery_is_live, true);
+    assert.equal(activeRow.discovery_program, 'HUD TPS');
+    assert.match(activeRow.discovery_search_text, /Christopher Street/);
+    assert.equal(soldRow.discovery_terminal, true);
+
+    const out = await discovery.search(pg, discovery.queryFromUrl(new URL('http://localhost/api/listings?q=Christopher&status=active')));
+    assert.equal(out.total, 1);
+    assert.equal(out.listings[0].id, 'upg:active');
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

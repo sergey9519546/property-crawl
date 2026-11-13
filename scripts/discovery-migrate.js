@@ -3,8 +3,31 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-async function migrate(pool) {
+const TRANSIENT_LOCK_CODES = new Set(['55P03', '40P01']);
+
+function isTransientLockError(error) {
+  if (!error) return false;
+  if (TRANSIENT_LOCK_CODES.has(error.code)) return true;
+  const msg = String(error.message || '');
+  return /lock timeout|lock_not_available|deadlock detected/i.test(msg);
+}
+
+function normalizeLockTimeout(value) {
+  const raw = String(value || '').trim();
+  return /^\d+(?:ms|s|min)$/.test(raw) ? raw : '30s';
+}
+
+async function migrate(pool, options = {}) {
   const client = await pool.connect();
+  const migrationLockTimeout = normalizeLockTimeout(
+    options.lockTimeout ?? process.env.DISCOVERY_MIGRATION_LOCK_TIMEOUT ?? '30s',
+  );
+  const rawAttempts = Number(options.maxLockAttempts ?? process.env.DISCOVERY_MIGRATION_LOCK_ATTEMPTS ?? 4);
+  const maxLockAttempts = Number.isFinite(rawAttempts) && rawAttempts >= 1 ? Math.floor(rawAttempts) : 4;
+  const rawDelay = Number(options.retryDelayMs ?? 1500);
+  const retryDelayMs = Number.isFinite(rawDelay) && rawDelay >= 0 ? rawDelay : 1500;
+  let migrationLockTimeoutSet = false;
+
   try {
     // A held advisory lock used to hang boot indefinitely (the deploy then
     // failed its health check while blocked). Fail fast with a clear name
@@ -36,17 +59,35 @@ async function migrate(pool) {
         }
         continue;
       }
-      await client.query('BEGIN');
-      try {
-        await client.query(sql);
-        await client.query('INSERT INTO discovery_schema_migrations(name,sha256) VALUES($1,$2)', [name, digest]);
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        // Name the file: a bare Postgres error ('column X does not exist')
-        // without the migration name once cost a deploy outage.
-        error.message = `${name}: ${error.message}`;
-        throw error;
+
+      if (!migrationLockTimeoutSet) {
+        await client.query(`SET lock_timeout = '${migrationLockTimeout}'`);
+        migrationLockTimeoutSet = true;
+      }
+
+      for (let attempt = 1; attempt <= maxLockAttempts; attempt += 1) {
+        await client.query('BEGIN');
+        try {
+          await client.query(sql);
+          await client.query('INSERT INTO discovery_schema_migrations(name,sha256) VALUES($1,$2)', [name, digest]);
+          await client.query('COMMIT');
+          break;
+        } catch (error) {
+          await client.query('ROLLBACK').catch(() => {});
+          if (attempt < maxLockAttempts && isTransientLockError(error)) {
+            console.warn(
+              `[migrate] ${name}: transient lock conflict (attempt ${attempt}/${maxLockAttempts}): ${error.message}; retrying...`,
+            );
+            if (retryDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+            }
+            continue;
+          }
+          // Name the file: a bare Postgres error ('column X does not exist')
+          // without the migration name once cost a deploy outage.
+          error.message = `${name}: ${error.message}`;
+          throw error;
+        }
       }
     }
   } finally {
@@ -98,4 +139,4 @@ if (require.main === module) {
       .catch((error) => { console.error(error.message); process.exitCode = 1; });
   }
 }
-module.exports = { migrate, migrationTarget, openConfiguredPool };
+module.exports = { migrate, migrationTarget, openConfiguredPool, isTransientLockError };
