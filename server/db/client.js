@@ -3176,9 +3176,9 @@ class DatabaseClient {
     if (!this.isPg || !this.pool) {
       return { deleted: 0, observationsDeleted: 0, snapshotsDeleted: 0, skipped: 'postgres_unavailable' };
     }
-    const batchSize = Math.min(5000, Math.max(1, Math.trunc(Number(options.batchSize) || 1000)));
+    const batchSize = Math.min(5000, Math.max(1, Math.trunc(Number(options.batchSize) || 500)));
     const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 100)));
-    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 25))));
+    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 100))));
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
@@ -3273,39 +3273,51 @@ class DatabaseClient {
 
     let snapshotsDeleted = 0;
     try {
-      for (let batch = 0; batch < maxBatches; batch += 1) {
-        await this.pool.query(
-          `DELETE FROM discovery_observations
-            WHERE snapshot_id IN (
-              SELECT snap.id
-                FROM discovery_snapshots snap
-               WHERE COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
-                  OR snap.provenance->>'recordKind' = 'archive_record'
-                  OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
-                  OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
-               LIMIT $3
-            )`,
-          [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
-        );
-        const snapRes = await this.pool.query(
-          `DELETE FROM discovery_snapshots
-            WHERE id IN (
-              SELECT snap.id
-                FROM discovery_snapshots snap
-               WHERE (
-                 COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
-                 OR snap.provenance->>'recordKind' = 'archive_record'
-                 OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
-                 OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
-               )
-                 AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.snapshot_id = snap.id)
-               LIMIT $3
-            )`,
-          [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
-        );
-        const batchSnaps = snapRes.rowCount || 0;
-        snapshotsDeleted += batchSnaps;
-        if (batchSnaps < batchSize) break;
+      const idxCheck = await this.pool.query(
+        `SELECT 1 FROM pg_indexes
+          WHERE schemaname = 'public'
+            AND tablename = 'discovery_observations'
+            AND indexname = 'idx_discovery_observations_snapshot'
+          LIMIT 1`,
+      );
+      if (idxCheck.rows.length > 0) {
+        for (let batch = 0; batch < maxBatches; batch += 1) {
+          await this.pool.query(
+            `DELETE FROM discovery_observations
+              WHERE snapshot_id IN (
+                SELECT snap.id
+                  FROM discovery_snapshots snap
+                 WHERE COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
+                    OR snap.provenance->>'recordKind' = 'archive_record'
+                    OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                    OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+                 LIMIT $3
+              )`,
+            [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
+          );
+          const snapRes = await this.pool.query(
+            `DELETE FROM discovery_snapshots
+              WHERE id IN (
+                SELECT snap.id
+                  FROM discovery_snapshots snap
+                 WHERE (
+                   COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
+                   OR snap.provenance->>'recordKind' = 'archive_record'
+                   OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                   OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+                 )
+                   AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.snapshot_id = snap.id)
+                 LIMIT $3
+              )`,
+            [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
+          );
+          const batchSnaps = snapRes.rowCount || 0;
+          snapshotsDeleted += batchSnaps;
+          if (batchSnaps < batchSize) break;
+          if (batchPauseMs > 0 && batch + 1 < maxBatches) {
+            await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+          }
+        }
       }
       await this.pool.query(
         `DELETE FROM discovery_checkpoints

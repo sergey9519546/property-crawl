@@ -329,15 +329,14 @@ async function handleRequest(req, res) {
       let freshness = null;
       let observationStore = null;
 
-      if (hasFreshness && isFresh) {
-        freshness = lastHealthCache.freshness;
-        observationStore = lastHealthCache.observationStore;
-      } else if (hasFreshness && !isFresh) {
-        freshness = lastHealthCache.freshness;
-        observationStore = lastHealthCache.observationStore;
-        refreshHealthDiagnostics().catch(() => {});
-      } else {
+      if (url.searchParams.get('refresh') === '1') {
         await refreshHealthDiagnostics();
+        freshness = lastHealthCache.freshness;
+        observationStore = lastHealthCache.observationStore;
+      } else {
+        if (!hasFreshness || !isFresh) {
+          refreshHealthDiagnostics().catch(() => {});
+        }
         freshness = lastHealthCache.freshness;
         observationStore = lastHealthCache.observationStore;
       }
@@ -497,6 +496,7 @@ async function attachEmbeddedDatabaseIfRequested() {
 async function startServer() {
   await attachEmbeddedDatabaseIfRequested();
 
+  let migrationDeferred = false;
   if (typeof db.verifyConnection === 'function') {
     await db.verifyConnection();
     if (db.isPg && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
@@ -505,7 +505,8 @@ async function startServer() {
         await migrate(db.pool);
         console.log('[Server] discovery migrations verified and applied to database');
       } catch (migErr) {
-        console.warn('[Server] auto-migration warning:', migErr.message);
+        migrationDeferred = true;
+        console.warn('[Server] auto-migration warning (will retry after cutover):', migErr.message);
       }
     }
     if (db.postgresReachable === true && db.pool) {
@@ -542,18 +543,39 @@ async function startServer() {
     console.log(`[Server] dataMode=${db.dataMode()} postgresReachable=${db.postgresReachable === true}\n`);
     const reason = db.inventoryUnavailableReason();
     if (reason) console.log(`[Server] NO INVENTORY WILL BE SERVED - ${reason}\n`);
-    if (process.env.NODE_ENV !== 'test' && db.isPg && typeof db.purgeStaleListings === 'function') {
-      setTimeout(() => {
-        db.purgeStaleListings({ batchSize: 1000, maxBatches: 100 })
-          .then((res) => {
-            if (res && (res.deleted > 0 || res.observationsDeleted > 0 || res.snapshotsDeleted > 0)) {
-              console.log(
-                `[Server] Boot inventory purge removed ${res.deleted} stale/archive listings, ${res.observationsDeleted} stale observations, and ${res.snapshotsDeleted || 0} stale snapshots.`,
-              );
+    let bootMaintenancePromise = Promise.resolve();
+    if (process.env.NODE_ENV !== 'test' && db.isPg) {
+      refreshHealthDiagnostics().catch(() => {});
+      bootMaintenancePromise = new Promise((resolve) => {
+        setTimeout(async () => {
+          try {
+            if (migrationDeferred && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
+              try {
+                const { migrate } = require('../scripts/discovery-migrate');
+                await migrate(db.pool);
+                console.log('[Server] deferred discovery migrations applied post-cutover');
+                if (typeof db.hasAcceleratedDiscovery === 'function') {
+                  await db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false);
+                }
+              } catch (retryMigErr) {
+                console.warn('[Server] deferred auto-migration warning:', retryMigErr && retryMigErr.message ? retryMigErr.message : retryMigErr);
+              }
             }
-          })
-          .catch((err) => console.warn('[Server] Boot inventory purge warning:', err && err.message ? err.message : err));
-      }, 1500).unref();
+            if (typeof db.purgeStaleListings === 'function') {
+              const res = await db.purgeStaleListings({ batchSize: 500, maxBatches: 100, batchPauseMs: 120 });
+              if (res && (res.deleted > 0 || res.observationsDeleted > 0 || res.snapshotsDeleted > 0)) {
+                console.log(
+                  `[Server] Boot inventory purge removed ${res.deleted} stale/archive listings, ${res.observationsDeleted} stale observations, and ${res.snapshotsDeleted || 0} stale snapshots.`,
+                );
+              }
+            }
+          } catch (err) {
+            console.warn('[Server] Boot maintenance warning:', err && err.message ? err.message : err);
+          } finally {
+            resolve();
+          }
+        }, 20000).unref();
+      });
     }
     if (!scheduler.shouldAllowRealScrapers(process.env)) {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
@@ -584,7 +606,13 @@ async function startServer() {
       }
     };
     setTimeout(() => {
-      scheduler.runAll().then(scheduleContinuation).catch(err => console.error('[Server] Scheduler failed on boot:', err));
+      Promise.race([
+        bootMaintenancePromise,
+        new Promise((resolve) => setTimeout(resolve, 90000).unref()),
+      ])
+        .catch(() => {})
+        .then(() => scheduler.runAll().then(scheduleContinuation))
+        .catch(err => console.error('[Server] Scheduler failed on boot:', err));
     }, bootDelay);
 
     // Recurring automated ingestion (default every 6 hours)
