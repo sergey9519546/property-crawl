@@ -155,12 +155,21 @@ async function probeDatabaseCapabilities(pool) {
   }
   let postgisVersion = extensions.postgis || null;
   if (extensions.postgis != null) {
+    // Cosmetic version string only: functionality is already proven by the
+    // st_dwithin/geography checks above. Bound it so a saturated pooler cannot
+    // stall boot (observed 89s hang on live); on timeout keep the extversion.
     try {
-      const version = await pool.query('SELECT postgis_version() AS v');
-      postgisVersion = version.rows[0] && version.rows[0].v;
-    } catch {
-      missing.push('function:postgis_version');
-      postgisVersion = null;
+      let timer;
+      const version = await Promise.race([
+        pool.query('SELECT postgis_version() AS v'),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('postgis_version_timeout')), 3000); if (timer.unref) timer.unref(); }),
+      ]).finally(() => clearTimeout(timer));
+      postgisVersion = (version.rows[0] && version.rows[0].v) || postgisVersion;
+    } catch (err) {
+      if (!/timeout/i.test(String(err && err.message))) {
+        missing.push('function:postgis_version');
+        postgisVersion = null;
+      }
     }
   }
   return {
