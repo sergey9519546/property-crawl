@@ -552,7 +552,7 @@ async function startServer() {
         console.warn('[Server] auto-migration warning (will retry after cutover):', migErr.message);
       }
     }
-    await refreshDbCapabilities(5000);
+    await refreshDbCapabilities(15000);
     wireStoresAfterVerify(db);
     return true;
   };
@@ -601,10 +601,10 @@ async function startServer() {
               }
             }
             if (db.isPg) {
-              await refreshDbCapabilities(10000);
+              await refreshDbCapabilities(15000);
             }
             if (db.isPg && typeof db.purgeStaleListings === 'function') {
-              const res = await db.purgeStaleListings({ batchSize: 50, maxBatches: 40, batchPauseMs: 200, maxDurationMs: 15000 });
+              const res = await db.purgeStaleListings({ batchSize: 25, maxBatches: 40, batchPauseMs: 200, maxDurationMs: 15000 });
               console.log(
                 `[Server] Boot inventory purge removed ${res?.deleted || 0} stale/archive listings, ${res?.observationsDeleted || 0} stale observations, and ${res?.snapshotsDeleted || 0} stale snapshots.`,
               );

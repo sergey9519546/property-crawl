@@ -464,18 +464,42 @@ async function loadObservationsFromPg(pool, options = {}) {
 // overflow anymore: history grows by roughly a megabyte a day in rows, which
 // Postgres absorbs, so the report states the facts (rows, span, size) instead
 // of a countdown to a hard failure that no longer exists.
-let cachedStats = null; let lastStatsFetch = 0; let lastStatsPool = null; const STATS_TTL_MS = 180_000;
+async function queryWithStatementTimeout(pool, sql, params = [], statementTimeoutMs = 8000) {
+  if (typeof pool?.connect !== 'function') {
+    return pool.query(sql, params);
+  }
+  const client = await pool.connect();
+  let txOpen = false;
+  try {
+    await client.query('BEGIN');
+    txOpen = true;
+    await client.query(`SET LOCAL statement_timeout = '${Math.max(1000, Math.trunc(Number(statementTimeoutMs) || 8000))}'`);
+    const result = await client.query(sql, params);
+    await client.query('COMMIT');
+    txOpen = false;
+    return result;
+  } catch (err) {
+    if (txOpen) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+let cachedStats = null; let lastStatsFetch = 0; let lastStatsPool = null; const STATS_TTL_MS = 300_000;
 async function observationStoreStats(pool, options = {}) {
   if (!pool) return null;
   const now = Date.now();
   if (!options.forceRefresh && cachedStats && lastStatsPool === pool && now - lastStatsFetch < (options.ttlMs || STATS_TTL_MS)) return cachedStats;
-  const result = await pool.query(`
+  const result = await queryWithStatementTimeout(pool, `
     SELECT count(*)::int AS rows,
            (SELECT count(*)::int FROM (SELECT 1 FROM source_observations GROUP BY source_key, record_id) AS pairs) AS tracked_records,
            (SELECT observed_at FROM source_observations ORDER BY observed_at ASC LIMIT 1) AS oldest_observed_at,
            (SELECT observed_at FROM source_observations ORDER BY observed_at DESC LIMIT 1) AS newest_observed_at,
            pg_total_relation_size('source_observations')::bigint AS table_bytes
-      FROM source_observations`);
+      FROM source_observations`, [], 8000);
   const row = result.rows[0];
   if (!row) return null;
   cachedStats = {
@@ -837,5 +861,6 @@ module.exports = {
   persistSourceObservations,
   recordSourceRun,
   recomputeTriageForListings,
+  queryWithStatementTimeout,
   updateTriagePriority,
 };

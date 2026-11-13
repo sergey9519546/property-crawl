@@ -10,6 +10,7 @@ const { computeTriage, buildParcelKey } = require('../scrapers/normalization');
 // The catalog is the single source of truth; import the gate, never re-derive it.
 const { servesListings, listingServingSourceSqlList } = require('../sources/catalog');
 const { resolveDatabaseTarget } = require('./database-target');
+const { queryWithStatementTimeout } = require('./observations-persistence');
 
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -740,10 +741,10 @@ class DatabaseClient {
       const result = await pool.query(
         `SELECT count(*)::int AS n, (to_regclass(quote_ident(current_schema()) || '.idx_listings_discovery_search_text_trgm') IS NOT NULL) AS idx_ready
            FROM pg_attribute a
-           JOIN pg_class c ON c.oid = a.attrelid
-           JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = current_schema()
-            AND c.relname = 'listings'
+           -- direct attrelid lookup avoids 3-table catalog join on throttled Postgres
+           -- catalog schema scoped via current_schema() below
+          WHERE a.attrelid = to_regclass(quote_ident(current_schema()) || '.listings')
+            -- OID matched above without pg_class scan
             AND a.attname = ANY($1::text[])
             AND a.attnum > 0
             AND NOT a.attisdropped`,
@@ -865,16 +866,19 @@ class DatabaseClient {
         // re-scans this 46-column table and listings.source_observed_at has no
         // index. The data-mode banner fetches this endpoint on every page render,
         // so the per-source column is the only version that costs nothing.
-        const res = await this.pool.query(
+        const res = await queryWithStatementTimeout(
+          this.pool,
           `SELECT c.source::text AS source,
                   count(l.id)::int AS n,
-                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff OR (l.discovery_terminal IS TRUE AND (l.provenance->'publisherAbsence'->>'at')::timestamptz >= c.cutoff))::int AS fresh,
+                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff OR (l.discovery_terminal IS TRUE AND l.updated_at >= c.cutoff))::int AS fresh,
                   max(l.source_observed_at)::text AS newest,
                   min(l.source_observed_at)::text AS oldest
              FROM unnest($1::text[], $2::timestamptz[]) AS c(source, cutoff)
              LEFT JOIN listings l ON l.source_key = c.source
             GROUP BY c.source`,
-          [cutoffs.map((entry) => entry.source), cutoffs.map((entry) => entry.cutoff)]);
+          [cutoffs.map((entry) => entry.source), cutoffs.map((entry) => entry.cutoff)],
+          8000,
+        );
         const rows = res.rows.map((row) => ({
           source: row.source,
           listings: row.n,
@@ -3181,7 +3185,7 @@ class DatabaseClient {
     if (!this.isPg || !this.pool) {
       return { deleted: 0, observationsDeleted: 0, snapshotsDeleted: 0, skipped: 'postgres_unavailable' };
     }
-    const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 50)));
+    const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 25)));
     const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 40)));
     const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 200))));
     const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 15_000));
@@ -3193,10 +3197,11 @@ class DatabaseClient {
     const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 14));
     const absentGraceDays = Math.max(1, Math.trunc(Number(options.absentGraceDays) || 3));
     const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
+    const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(this.pool, sql, params, timeoutMs);
 
     let hasFreshServiceLinkLive = false;
     try {
-      const freshCheck = await this.pool.query(
+      const freshCheck = await purgeQuery(
         `SELECT 1 FROM listings
           WHERE source_key = 'servicelink'
             AND discovery_is_live IS TRUE
@@ -3210,7 +3215,7 @@ class DatabaseClient {
     let deleted = 0;
     // Pass A: fast indexed purge of non-live, terminal, or stale ServiceLink bulk
     for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-      const slRes = await this.pool.query(
+      const slRes = await purgeQuery(
         `DELETE FROM listings
           WHERE id IN (
             SELECT id
@@ -3239,7 +3244,7 @@ class DatabaseClient {
     }
 
     for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-      const deletedRes = await this.pool.query(
+      const deletedRes = await purgeQuery(
         `DELETE FROM listings
           WHERE id IN (
             SELECT id
@@ -3299,7 +3304,7 @@ class DatabaseClient {
     const obsBatchSize = Math.min(500, Math.max(50, batchSize * 2));
     try {
       for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-        const obsRes = await this.pool.query(
+        const obsRes = await purgeQuery(
           `DELETE FROM source_observations
             WHERE id IN (
               SELECT so.id
@@ -3318,7 +3323,7 @@ class DatabaseClient {
         }
       }
       for (let batch = 0; batch < Math.min(maxBatches, 15) && !budgetExceeded(); batch += 1) {
-        const orphanRes = await this.pool.query(
+        const orphanRes = await purgeQuery(
           `DELETE FROM source_observations
             WHERE id IN (
               SELECT so.id
@@ -3340,16 +3345,18 @@ class DatabaseClient {
 
     let snapshotsDeleted = 0;
     try {
-      const idxCheck = await this.pool.query(
+      const idxCheck = await purgeQuery(
         `SELECT 1 FROM pg_indexes
           WHERE schemaname = 'public'
             AND tablename = 'discovery_observations'
             AND indexname = 'idx_discovery_observations_snapshot'
           LIMIT 1`,
+        [],
+        5000,
       );
       if (idxCheck.rows.length > 0 && !budgetExceeded()) {
         for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-          await this.pool.query(
+          await purgeQuery(
             `DELETE FROM discovery_observations
               WHERE snapshot_id IN (
                 SELECT snap.id
@@ -3362,7 +3369,7 @@ class DatabaseClient {
               )`,
             [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
           );
-          const snapRes = await this.pool.query(
+          const snapRes = await purgeQuery(
             `DELETE FROM discovery_snapshots
               WHERE id IN (
                 SELECT snap.id
