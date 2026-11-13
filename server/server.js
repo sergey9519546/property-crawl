@@ -497,12 +497,15 @@ async function startServer() {
   await attachEmbeddedDatabaseIfRequested();
 
   let migrationDeferred = false;
-  if (typeof db.verifyConnection === 'function') {
-    await db.verifyConnection();
+  const initializePostgresRuntime = async () => {
+    if (typeof db.verifyConnection !== 'function') return false;
+    const connected = await db.verifyConnection();
+    if (!connected) return false;
     if (db.isPg && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
       try {
         const { migrate } = require('../scripts/discovery-migrate');
         await migrate(db.pool);
+        migrationDeferred = false;
         console.log('[Server] discovery migrations verified and applied to database');
       } catch (migErr) {
         migrationDeferred = true;
@@ -531,12 +534,16 @@ async function startServer() {
         console.warn('[DB] DATABASE_URL capability probe failed:', db.databaseCapabilities.missing[0]);
       }
     }
-  }
+    wireStoresAfterVerify(db);
+    return true;
+  };
 
-  // Wire verified database into dependent stores (document-review, hunts durable, etc.)
-  // so they switch from file-backed to postgres when a reachable pool exists.
-  // This is the central "connect the database" point for operator surfaces.
-  wireStoresAfterVerify(db);
+  await initializePostgresRuntime();
+
+  // Ensure stores stay wired when starting without Postgres verified yet.
+  if (!db.isPg) {
+    wireStoresAfterVerify(db);
+  }
 
   server.listen(PORT, () => {
     console.log(`[Server] PROPERTY_CRAWL production server listening on http://localhost:${PORT}`);
@@ -544,15 +551,31 @@ async function startServer() {
     const reason = db.inventoryUnavailableReason();
     if (reason) console.log(`[Server] NO INVENTORY WILL BE SERVED - ${reason}\n`);
     let bootMaintenancePromise = Promise.resolve();
-    if (process.env.NODE_ENV !== 'test' && db.isPg) {
-      refreshHealthDiagnostics().catch(() => {});
+    const transientPgBootFailure = !db.isPg
+      && Boolean((db.env && db.env.DATABASE_URL) || process.env.DATABASE_URL)
+      && /timeout|terminat|reset|too many|authentication did not complete/i.test(db.postgresError || '');
+    if (process.env.NODE_ENV !== 'test' && (db.isPg || transientPgBootFailure)) {
+      if (db.isPg) refreshHealthDiagnostics().catch(() => {});
       bootMaintenancePromise = new Promise((resolve) => {
         setTimeout(async () => {
           try {
-            if (migrationDeferred && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
+            if (!db.isPg && transientPgBootFailure && typeof db.init === 'function') {
+              const backoffMs = [0, 15000, 25000];
+              for (let i = 0; i < backoffMs.length; i += 1) {
+                if (backoffMs[i] > 0) await new Promise((r) => setTimeout(r, backoffMs[i]));
+                console.log(`[Server] Retrying transient PostgreSQL connection post-cutover (attempt ${i + 1}/${backoffMs.length})...`);
+                db.init();
+                if (await initializePostgresRuntime()) {
+                  refreshHealthDiagnostics().catch(() => {});
+                  break;
+                }
+              }
+            }
+            if (db.isPg && migrationDeferred && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
               try {
                 const { migrate } = require('../scripts/discovery-migrate');
                 await migrate(db.pool);
+                migrationDeferred = false;
                 console.log('[Server] deferred discovery migrations applied post-cutover');
                 if (typeof db.hasAcceleratedDiscovery === 'function') {
                   await db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false);
@@ -561,7 +584,7 @@ async function startServer() {
                 console.warn('[Server] deferred auto-migration warning:', retryMigErr && retryMigErr.message ? retryMigErr.message : retryMigErr);
               }
             }
-            if (typeof db.purgeStaleListings === 'function') {
+            if (db.isPg && typeof db.purgeStaleListings === 'function') {
               const res = await db.purgeStaleListings({ batchSize: 500, maxBatches: 100, batchPauseMs: 120 });
               if (res && (res.deleted > 0 || res.observationsDeleted > 0 || res.snapshotsDeleted > 0)) {
                 console.log(
