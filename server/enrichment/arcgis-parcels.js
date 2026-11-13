@@ -1378,6 +1378,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
     // APN attribute search
     const clean = normalizeApn(apn);
     if (!clean) return null;
+    if (config.apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(clean)) return null;
     let whereClause = `UPPER(${config.apnField}) LIKE '%${clean}%'`;
     if (config.apnNumericField && /^\d+$/.test(clean)) whereClause = `(${whereClause} OR ${config.apnNumericField} = ${clean})`;
     if (config.apnSeparatorRetry) {
@@ -1494,7 +1495,7 @@ async function queryArcgisParcel(params = {}, init = {}) {
  * with recorded sales was found, so this entry rests on the statutory
  * definition: assessment = market value.
  */
-async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn }) {
+async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn = globalThis.fetch, signal }) {
   const REGISTRY_SERVICE_ID = '9a1c60bd-f9f7-4aba-aeb7-af8c3aaa44e5';
   const endpoint = 'https://data.wprdc.org/api/3/action/datastore_search';
 
@@ -1505,7 +1506,7 @@ async function queryWparcelsParcel({ apn, state, county, lat, lng, fetchFn }) {
 
   let res;
   try {
-    res = await fetchFn(url);
+    res = await fetchFn(url, { signal: signal || AbortSignal.timeout(8000) });
   } catch (_) {
     return null;
   }

@@ -287,6 +287,7 @@ async function recordSourceRun(pool, sourceId, run, options = {}) {
   // stores none: a failed request is never evidence about sale terms.
   const advancing = [];
   const toInsert = [];
+  const pendingRollForward = new Map();
   let persistedCount = 0;
   let rolledForward = 0;
 
@@ -312,17 +313,13 @@ async function recordSourceRun(pool, sourceId, run, options = {}) {
           && (nMinus1.noticeSha256 || null) === (nextObservation.noticeSha256 || null);
 
         if (unchanged && nMinus1.id != null) {
-          if (toInsert.length > 0) {
-            const flushed = await persistSourceObservations(pool, sourceId, toInsert.splice(0));
-            persistedCount += flushed.persisted || 0;
-          }
           const observedAt = nextObservation.observedAt;
-          const upd = await pool.query(
-            'UPDATE source_observations SET observed_at = $1, raw_payload = $2 WHERE id = $3',
-            [observedAt, JSON.stringify(nextObservation), nMinus1.id],
-          );
+          pendingRollForward.set(nMinus1.id, {
+            id: nMinus1.id,
+            observedAt,
+            rawPayload: JSON.stringify(nextObservation),
+          });
           nMinus1.observedAt = observedAt;
-          rolledForward += upd?.rowCount || 1;
           continue;
         }
       }
@@ -335,6 +332,27 @@ async function recordSourceRun(pool, sourceId, run, options = {}) {
   if (toInsert.length > 0) {
     const persisted = await persistSourceObservations(pool, sourceId, toInsert);
     persistedCount += persisted.persisted || 0;
+  }
+
+  if (pendingRollForward.size > 0) {
+    const ROLL_FORWARD_BATCH_SIZE = 500;
+    const rollForwards = [...pendingRollForward.values()];
+    for (let offset = 0; offset < rollForwards.length; offset += ROLL_FORWARD_BATCH_SIZE) {
+      const batch = rollForwards.slice(offset, offset + ROLL_FORWARD_BATCH_SIZE);
+      const upd = await pool.query(
+        `UPDATE source_observations AS o
+            SET observed_at = u.observed_at,
+                raw_payload = u.raw_payload::jsonb
+           FROM UNNEST($1::text[], $2::timestamptz[], $3::text[]) AS u(id, observed_at, raw_payload)
+          WHERE o.id = u.id`,
+        [
+          batch.map((entry) => entry.id),
+          batch.map((entry) => entry.observedAt),
+          batch.map((entry) => entry.rawPayload),
+        ],
+      );
+      rolledForward += upd?.rowCount || batch.length;
+    }
   }
   await pool.query(UPSERT_RUN_SQL, runMetadataParams(sourceId, run, advancing.length, nowIso));
   return {

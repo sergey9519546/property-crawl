@@ -2225,6 +2225,21 @@ class DatabaseClient {
         provenance = CASE
           WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
           WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
+          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
+           AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
+            jsonb_set(
+              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+              '{derivedFields}',
+              (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
+              true
+            )
+          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
+            jsonb_set(
+              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+              '{derivedFields}',
+              listings.provenance->'derivedFields',
+              true
+            )
           ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
         END,
         source_observed_at = COALESCE(EXCLUDED.source_observed_at, listings.source_observed_at),
@@ -2493,13 +2508,16 @@ class DatabaseClient {
     }
 
     if (this.isPg && this.pool) {
-      for (const item of toSupersede) {
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < toSupersede.length; i += BATCH_SIZE) {
+        const chunk = toSupersede.slice(i, i + BATCH_SIZE);
         await this.pool.query(
           `UPDATE listings
-              SET provenance = jsonb_set(COALESCE(provenance, '{}'::jsonb), '{supersededBy}', $2::jsonb, true),
+              SET provenance = jsonb_set(COALESCE(listings.provenance, '{}'::jsonb), '{supersededBy}', u.marker::jsonb, true),
                   updated_at = NOW()
-            WHERE id = $1`,
-          [item.id, JSON.stringify(item.marker)],
+             FROM UNNEST($1::text[], $2::text[]) AS u(id, marker)
+            WHERE listings.id = u.id`,
+          [chunk.map((item) => item.id), chunk.map((item) => JSON.stringify(item.marker))],
         );
       }
       if (toClearIds.length > 0) {

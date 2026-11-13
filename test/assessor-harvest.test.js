@@ -437,3 +437,106 @@ test('harvest attaches assessor parcel via APN lookup when coordinates are null'
   assert.equal(cachedResults.cacheHits, 1);
   assert.equal(secondListing.assessed, 70000);
 });
+
+test('NJ Block/Lot APN without coordinates skips full-table PAMS_PIN wildcard scan while spatial NJ lookups still harvest', async () => {
+  const { queryArcgisParcel, queryWparcelsParcel } = require('../server/enrichment/arcgis-parcels');
+  const cachePath = temporaryCachePath();
+  const njUnlocated = {
+    id: 'CIV-NJ-1-TAXLOT',
+    source: 'civilview',
+    state: 'NJ',
+    county: 'Camden County',
+    address: '18 EAST TAUNTON AVENUE, BERLIN, NJ 08009',
+    apn: 'TaxLot: 8 Block: 1400',
+    lat: null,
+    lng: null,
+    provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: '2242210237', sourceFacts: { parcelNumber: 'TaxLot: 8 Block: 1400' } },
+  };
+  let fetchCalls = 0;
+  const direct = await queryArcgisParcel({
+    apn: njUnlocated.apn,
+    state: 'NJ',
+    county: 'Camden County',
+    fetchFn: async () => { fetchCalls += 1; throw new Error('must not query PAMS_PIN LIKE wildcard'); },
+  });
+  assert.equal(direct, null);
+  assert.equal(fetchCalls, 0);
+
+  const harvestNoGeo = await harvestAssessorRolls([njUnlocated], {
+    cachePath,
+    fetchFn: async () => { fetchCalls += 1; throw new Error('must not query NJ without coords or PAMS_PIN'); },
+    now: Date.parse('2026-11-12T00:00:00.000Z'),
+  });
+  assert.equal(harvestNoGeo.considered, 0);
+  assert.equal(njUnlocated.provenance?.derivedFields?.assessorRoll, undefined, 'must not stamp found:false over unlocated NJ records');
+  assert.equal(fetchCalls, 0);
+
+  // When NJ coordinates exist, spatial harvest still works.
+  const njLocated = {
+    ...njUnlocated,
+    id: 'CIV-NJ-1-GEO',
+    lat: 39.792519,
+    lng: -74.928191,
+    provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: 'geo-1' },
+  };
+  const harvestWithGeo = await harvestAssessorRolls([njLocated], {
+    cachePath,
+    fetchFn: async () => arcgisFetchReturning({ PAMS_PIN: '0405_1400_8', NET_VALUE: 181200, PROP_CLASS: '2', TAX_YEAR: 2025 })(),
+    now: Date.parse('2026-11-12T00:00:00.000Z'),
+  });
+  assert.equal(harvestWithGeo.harvested, 1);
+  assert.equal(njLocated.assessed, 181200);
+
+  // queryWparcelsParcel forwards bounded AbortSignal to fetchFn.
+  let seenSignal = null;
+  const wRes = await queryWparcelsParcel({
+    apn: '0001A00001000000',
+    state: 'PA',
+    county: 'Allegheny',
+    fetchFn: async (_url, opts) => {
+      seenSignal = opts?.signal || null;
+      return { ok: true, json: async () => ({ result: { records: [] } }) };
+    },
+  });
+  assert.equal(wRes, null);
+  assert.ok(seenSignal instanceof AbortSignal, 'queryWparcelsParcel must pass an AbortSignal');
+});
+
+test('harvestAssessorRolls respects maxDurationMs wall-clock budget and breaks consecutive slow error streaks per county', async () => {
+  const cachePath = temporaryCachePath();
+  const many = Array.from({ length: 10 }, (_, i) => liveListing({ id: `OH-CUY-BUDGET-${i}`, lat: 41.4 + i * 0.01 }));
+  let wallMs = 0;
+  let calls = 0;
+  const timedOut = await harvestAssessorRolls(many, {
+    cachePath,
+    maxDurationMs: 100,
+    wallClock: () => wallMs,
+    fetchFn: async () => {
+      calls += 1;
+      wallMs += 60;
+      return arcgisFetchReturning(CUYAHOGA_ATTRIBUTES)();
+    },
+    now: Date.parse('2026-11-12T00:00:00.000Z'),
+  });
+  assert.equal(calls, 2, 'must stop once wall-clock budget is reached');
+  assert.equal(timedOut.harvested, 2);
+
+  // Consecutive failure/slow-timeout streak in a single county skips remaining uncached items for that county without poisoning the miss cache.
+  const streakCache = temporaryCachePath();
+  const streakListings = Array.from({ length: 5 }, (_, i) => liveListing({ id: `OH-CUY-STREAK-${i}`, lat: 41.5 + i * 0.01 }));
+  let streakCalls = 0;
+  let fakeNow = 0;
+  const streakRes = await harvestAssessorRolls(streakListings, {
+    cachePath: streakCache,
+    maxDurationMs: 0,
+    wallClock: () => fakeNow,
+    queryFn: async () => {
+      streakCalls += 1;
+      fakeNow += 6500;
+      return null;
+    },
+    now: Date.parse('2026-11-12T00:00:00.000Z'),
+  });
+  assert.equal(streakCalls, 2, 'must circuit-break county after 2 consecutive slow timeouts');
+  assert.ok(streakRes.skippedUnresponsive >= 3);
+});

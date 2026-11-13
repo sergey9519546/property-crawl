@@ -487,6 +487,7 @@ class IngestionScheduler {
             const confidenceScores = (validation.listing.provenance.sourceFacts?.documents || []).map(document => document?.confidenceScore ?? document?.confidence_score).filter(score => typeof score === 'number' && Number.isFinite(score));
             const snapshot = await recordSnapshot({sourceKey:scraper.sourceKey,recordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt || validation.listing.provenance.observedAt,rawPayload:originalPublisherRecord ?? null,provenance:validation.listing.provenance,metadata:{sourceUrl:validation.listing.sourceUrl,confidenceScore:confidenceScores.length ? Math.min(...confidenceScores) : null}});
             validation.listing.provenance.evidenceLedger = {index:snapshot.ledgerBlock.index,entryHash:snapshot.ledgerBlock.entryHash,payloadSha256:snapshot.payloadSha256};
+            let persistedListing = null;
             if(this.discoveryStore&&discoveryRun){
               // raw_payload records what the publisher actually returned. Prefer the
               // scraper's captured publisher record; otherwise use the stored raw only
@@ -497,8 +498,22 @@ class IngestionScheduler {
               // chain while the run reported success. See migration 016.
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return null;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
-              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.readPool=client;transactionalDb.isPg=true;await transactionalDb.createListing(validation.listing);},ownership);
-            }else await this.database.createListing(validation.listing);
+              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.readPool=client;transactionalDb.isPg=true;persistedListing=await transactionalDb.createListing(validation.listing);},ownership);
+            }else persistedListing=await this.database.createListing(validation.listing);
+            if(persistedListing&&typeof persistedListing==='object'){
+              for(const field of ['lat','lng','assessed','year','propType']){
+                const cur=validation.listing[field];
+                const next=persistedListing[field];
+                if(next!=null&&next!==''&&(cur==null||cur===''||(field==='propType'&&cur==='Unknown'&&next!=='Unknown'))){
+                  validation.listing[field]=next;
+                }
+              }
+              const persistedDerived=persistedListing.provenance?.derivedFields;
+              if(persistedDerived&&typeof persistedDerived==='object'&&!Array.isArray(persistedDerived)){
+                validation.listing.provenance=validation.listing.provenance||{};
+                validation.listing.provenance.derivedFields={...persistedDerived,...(validation.listing.provenance.derivedFields||{})};
+              }
+            }
             accepted.push(validation.listing);
             totalIngested++;
           }
@@ -666,6 +681,7 @@ const fs = require('node:fs');
         // spin-down, deploy) — a batch persist at the end would lose all of it.
         let persistedFromRun = 0;
         const harvest = await harvestAssessorRolls(run.listings, {
+          maxDurationMs: 25_000,
           onHarvested: async (listing) => {
             if (!listing?.provenance?.derivedFields?.assessorRoll) return;
             try {
@@ -702,8 +718,8 @@ const fs = require('node:fs');
           console.log(`[Scheduler] Backfilled ${njBatch.persisted} NJ cadastral/geocode record(s) (enriched ${njBatch.njEnriched}, notFound ${njBatch.notFound}, failed ${njBatch.failed})`);
         }
       }
-      if (backfill.harvested > 0) {
-        console.log(`[Scheduler] Backfilled ${backfill.persisted} stored assessor roll(s) (harvested ${backfill.harvested}, notFound ${backfill.notFound}, failed ${backfill.failed})`);
+      if (backfill.harvested > 0 || (backfill.njEnriched || 0) > 0) {
+        console.log(`[Scheduler] Backfilled ${backfill.persisted} stored assessor/NJ cadastral record(s) (harvested ${backfill.harvested}, njEnriched ${backfill.njEnriched || 0}, notFound ${backfill.notFound}, failed ${backfill.failed})`);
       }
     } catch (error) {
       console.warn('[Scheduler] Assessor roll backfill failed (non-fatal):', error.message);

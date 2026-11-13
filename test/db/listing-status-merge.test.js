@@ -71,3 +71,113 @@ test('a stale unknown-status refresh cannot erase a resolved disposition in Post
   }
 });
 
+test('Postgres ON CONFLICT DO UPDATE preserves derivedFields.assessorRoll and batches reconcileDuplicateDockets', { timeout: BOOT_TIMEOUT_MS * 2 }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-derived-merge-'));
+  try {
+    const embedded = await startEmbeddedPostgres({ dataDir });
+    await migrate(embedded.pool);
+
+    const queries = [];
+    const trackedPool = {
+      query(text, params) {
+        queries.push({ text: String(text), params });
+        return embedded.pool.query(text, params);
+      },
+      connect() {
+        return embedded.pool.connect();
+      },
+    };
+    const db = new DatabaseClient({ pool: trackedPool, liveCachePath: null, workspaceStorePath: null });
+
+    // Enriched NJ listing with NJGIN MOD-IV parcel + coords + assessed value.
+    await db.createListing(saleListing({
+      id: 'CIV-NJ-1-2242210237',
+      county: 'Camden County',
+      lat: 39.792519,
+      lng: -74.928191,
+      assessed: 181200,
+      status: 'scheduled',
+      provenance: {
+        observed: true,
+        origin: 'live',
+        recordKind: 'source_record',
+        publisher: 'CivilView',
+        recordId: '2242210237',
+        observedAt: '2026-11-01T12:00:00.000Z',
+        derivedFields: {
+          parcelKey: true,
+          assessorRoll: {
+            basis: 'NJGIN_MODIV_CADASTRAL',
+            countyKey: 'NJ-CAMDEN',
+            observedAt: '2026-11-01T12:05:00.000Z',
+            parcel: { source: 'NJGIN_MODIV_CADASTRAL', canonicalApn: '040514008', assessedValue: { total: 181200 } },
+          },
+        },
+      },
+    }));
+
+    // Re-scrape arrives without coords, assessed, or assessorRoll (only instrumentPriority).
+    await db.createListing(saleListing({
+      id: 'CIV-NJ-1-2242210237',
+      county: 'Camden County',
+      lat: null,
+      lng: null,
+      assessed: null,
+      status: 'scheduled',
+      sourceObservedAt: '2026-11-02T12:00:00.000Z',
+      provenance: {
+        observed: true,
+        origin: 'live',
+        recordKind: 'source_record',
+        publisher: 'CivilView',
+        recordId: '2242210237',
+        observedAt: '2026-11-02T12:00:00.000Z',
+        derivedFields: { instrumentPriority: { priority: 'first_lien' } },
+      },
+    }));
+
+    const reloaded = await db.getListingById('CIV-NJ-1-2242210237');
+    assert.equal(reloaded.lat, 39.792519);
+    assert.equal(reloaded.assessed, 181200);
+    assert.equal(reloaded.provenance?.derivedFields?.assessorRoll?.basis, 'NJGIN_MODIV_CADASTRAL', 're-scrape must preserve prior derivedFields.assessorRoll');
+    assert.equal(reloaded.provenance?.derivedFields?.parcelKey, true);
+    assert.equal(reloaded.provenance?.derivedFields?.instrumentPriority?.priority, 'first_lien', 'new derivedFields keys must also persist');
+
+    // Batched reconcileDuplicateDockets across 3 duplicate pairs.
+    const dupListings = [];
+    for (let i = 1; i <= 3; i += 1) {
+      const older = saleListing({
+        id: `CIV-NJ-9-OLD-${i}`,
+        county: 'Morris County',
+        address: `${100 + i} Pine St, Dover, NJ 07801`,
+        saleDate: '2026-10-01',
+        sourceObservedAt: '2026-10-01T00:00:00.000Z',
+        provenance: { observed: true, origin: 'live', publisher: 'CivilView', recordId: `OLD-${i}`, sourceFacts: { courtCaseNumber: `F-10${i}-25` } },
+      });
+      const newer = saleListing({
+        id: `CIV-NJ-9-NEW-${i}`,
+        county: 'Morris County',
+        address: `${100 + i} Pine St, Dover, NJ 07801`,
+        saleDate: '2026-12-01',
+        sourceObservedAt: '2026-11-02T00:00:00.000Z',
+        provenance: { observed: true, origin: 'live', publisher: 'CivilView', recordId: `NEW-${i}`, sourceFacts: { courtCaseNumber: `F-10${i}-25` } },
+      });
+      await db.createListing(older);
+      await db.createListing(newer);
+      dupListings.push(newer);
+    }
+
+    queries.length = 0;
+    const dupOut = await db.reconcileDuplicateDockets('civilview', dupListings, { at: '2026-11-03T00:00:00.000Z' });
+    assert.equal(dupOut.superseded, 3);
+    const updateQueries = queries.filter((q) => /^UPDATE listings\b/i.test(q.text.trim()));
+    assert.equal(updateQueries.length, 1, 'reconcileDuplicateDockets must batch superseded updates into a single SQL statement');
+    for (let i = 1; i <= 3; i += 1) {
+      const oldRow = await db.getListingById(`CIV-NJ-9-OLD-${i}`);
+      assert.equal(oldRow.provenance?.supersededBy?.byId, `CIV-NJ-9-NEW-${i}`);
+    }
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+

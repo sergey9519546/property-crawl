@@ -455,3 +455,63 @@ test('runAll forwards completedCounties, completedStates, and sweepStartedAt int
   assert.deepEqual(seenReport?.completedStates, ['NJ']);
   assert.equal(seenReport?.sweepStartedAt, '2026-11-12T00:00:00.000Z');
 });
+
+test('runAll merges persisted coordinates, assessed value, and derivedFields.assessorRoll returned by createListing into onSourceRun listings', async () => {
+  let seenListings = null;
+  const scraper = {
+    name: 'CivilViewMergeFixture',
+    sourceKey: 'civilview',
+    lastRunReport: null,
+    async scrapeFeed() {
+      this.lastRunReport = { outcome: 'success', complete: false, truncated: true };
+      return [{
+        id: 'CIV-NJ-1-2242210237',
+        source: 'civilview',
+        sourceKey: 'civilview',
+        state: 'NJ',
+        county: 'Camden County',
+        address: '18 East Taunton Ave, Berlin, NJ 08009',
+        city: 'Berlin',
+        zip: '08009',
+        lat: null,
+        lng: null,
+        assessed: null,
+        sourceObservedAt: '2026-11-12T00:00:00.000Z',
+        sourceUrl: 'https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=2242210237',
+        raw: JSON.stringify({ id: '2242210237' }),
+        provenance: { origin: 'live', observed: true, observedAt: '2026-11-12T00:00:00.000Z', publisher: 'CivilView', recordId: '2242210237', sourceFacts: {} },
+      }];
+    },
+  };
+  const persistedRow = {
+    id: 'CIV-NJ-1-2242210237',
+    source: 'civilview',
+    lat: 39.792519,
+    lng: -74.928191,
+    assessed: 181200,
+    year: 1965,
+    propType: 'Single Family',
+    provenance: {
+      origin: 'live',
+      observed: true,
+      derivedFields: {
+        parcelKey: true,
+        assessorRoll: { basis: 'NJGIN_MODIV_CADASTRAL', countyKey: 'NJ-CAMDEN', parcel: { canonicalApn: '040514008' } },
+      },
+    },
+  };
+  const sched = new IngestionScheduler({
+    realScrapers: [scraper],
+    telemetry,
+    database: { isPg: true, async createListing() { return persistedRow; } },
+    networkEnabled: true,
+    concurrency: 1,
+    onSourceRun: async (_sourceKey, info) => { seenListings = info.listings; },
+  });
+  await sched.runAll({ sourceIds: ['civilview'] });
+  assert.equal(seenListings?.length, 1);
+  assert.equal(seenListings[0].lat, 39.792519);
+  assert.equal(seenListings[0].lng, -74.928191);
+  assert.equal(seenListings[0].assessed, 181200);
+  assert.equal(seenListings[0].provenance?.derivedFields?.assessorRoll?.basis, 'NJGIN_MODIV_CADASTRAL');
+});

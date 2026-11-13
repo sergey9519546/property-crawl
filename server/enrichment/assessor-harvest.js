@@ -30,6 +30,9 @@ const DEFAULT_CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 // failing county from consuming the candidate budget every run, short enough
 // that a transient endpoint failure is not permanent.
 const DEFAULT_MISS_TTL_MS = 3 * 24 * 3600 * 1000;
+const DEFAULT_MAX_DURATION_MS = 25_000;
+const DEFAULT_SLOW_TIMEOUT_MS = 6000;
+const DEFAULT_COUNTY_STREAK_LIMIT = 2;
 // Per-run fetch budget. With 12 enrolled counties the default 25 left whole
 // runs unharvested; the env knob lets a deployment raise it without a code
 // change. Clamped so a bad value cannot turn the harvest into an unbounded
@@ -125,6 +128,9 @@ function candidateListing(listing, now = Date.now()) {
 
   const countyKey = resolveCountyKey(listing.state, listing.county);
   if (!countyKey) return null;
+  if (!hasCoords && COUNTY_ARCGIS_REGISTRY[countyKey]?.apnField === 'PAMS_PIN' && /(?:TAXLOT|BLOCK|BLK|LOT)/i.test(cleanApn)) {
+    return null;
+  }
 
   return {
     listing,
@@ -187,22 +193,44 @@ function applyHarvest(candidate, parcel, observedAt) {
 
 async function harvestAssessorRolls(listings, options = {}) {
   const fetchFn = options.fetchFn || globalThis.fetch;
-  const queryFn = options.queryFn || queryArcgisParcel;
+  const customQueryFn = typeof options.queryFn === 'function' ? options.queryFn : null;
   const limit = resolveHarvestLimit(options);
   const cachePath = options.cachePath || DEFAULT_CACHE_PATH;
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs) ? options.cacheTtlMs : DEFAULT_CACHE_TTL_MS;
   const missTtlMs = Number.isFinite(options.missTtlMs) ? options.missTtlMs : DEFAULT_MISS_TTL_MS;
+  const wallClock = typeof options.wallClock === 'function' ? options.wallClock : Date.now;
+  const maxDurationMs = Number.isFinite(options.maxDurationMs) ? options.maxDurationMs : DEFAULT_MAX_DURATION_MS;
+  const slowTimeoutMs = Number.isFinite(options.slowTimeoutMs) ? options.slowTimeoutMs : DEFAULT_SLOW_TIMEOUT_MS;
+  const countyStreakLimit = Number.isFinite(options.countyStreakLimit) && options.countyStreakLimit > 0
+    ? options.countyStreakLimit
+    : DEFAULT_COUNTY_STREAK_LIMIT;
+  const startedAt = wallClock();
   const now = Number.isFinite(options.now) ? options.now : Date.now();
   const candidates = (Array.isArray(listings) ? listings : [])
     .map((l) => candidateListing(l, now))
     .filter(Boolean);
-  const results = { considered: 0, harvested: 0, cacheHits: 0, fetched: 0, failed: 0, notFound: 0 };
+  const results = {
+    considered: 0,
+    harvested: 0,
+    cacheHits: 0,
+    fetched: 0,
+    failed: 0,
+    notFound: 0,
+    skippedUnresponsive: 0,
+    timedOutBudget: false,
+  };
   if (!candidates.length) return results;
 
+  const countySlowStreak = new Map();
+  const unresponsiveCounties = new Set();
   let cache = {};
   let cacheLoaded = false;
   let cacheDirty = false;
   for (const candidate of candidates) {
+    if (maxDurationMs > 0 && (wallClock() - startedAt) >= maxDurationMs) {
+      results.timedOutBudget = true;
+      break;
+    }
     if (results.considered >= limit) break;
     results.considered += 1;
     const key = cacheKeyFor(candidate.countyKey, candidate.lat, candidate.lng, candidate.cleanApn);
@@ -233,11 +261,16 @@ async function harvestAssessorRolls(listings, options = {}) {
         continue;
       }
     }
+    if (unresponsiveCounties.has(candidate.countyKey)) {
+      results.skippedUnresponsive += 1;
+      continue;
+    }
     let parcel = null;
+    const callStartedAt = wallClock();
     try {
       const registryEntry = COUNTY_ARCGIS_REGISTRY[candidate.countyKey] || null;
-      const queryFn = registryEntry?.source === 'wparcels' ? queryWparcelsParcel : queryArcgisParcel;
-      parcel = await queryFn({
+      const activeQueryFn = customQueryFn || (registryEntry?.source === 'wparcels' ? queryWparcelsParcel : queryArcgisParcel);
+      parcel = await activeQueryFn({
         lat: candidate.lat,
         lng: candidate.lng,
         apn: candidate.apn,
@@ -247,9 +280,23 @@ async function harvestAssessorRolls(listings, options = {}) {
       });
     } catch (_) {
       results.failed += 1;
+      if ((wallClock() - callStartedAt) >= slowTimeoutMs) {
+        const nextStreak = (countySlowStreak.get(candidate.countyKey) || 0) + 1;
+        countySlowStreak.set(candidate.countyKey, nextStreak);
+        if (nextStreak >= countyStreakLimit) unresponsiveCounties.add(candidate.countyKey);
+      }
       continue;
     }
+    const callElapsedMs = wallClock() - callStartedAt;
     if (!parcel) {
+      if (callElapsedMs >= slowTimeoutMs) {
+        results.failed += 1;
+        const nextStreak = (countySlowStreak.get(candidate.countyKey) || 0) + 1;
+        countySlowStreak.set(candidate.countyKey, nextStreak);
+        if (nextStreak >= countyStreakLimit) unresponsiveCounties.add(candidate.countyKey);
+        continue;
+      }
+      countySlowStreak.set(candidate.countyKey, 0);
       results.notFound += 1;
       // Negatively cache the miss (short TTL): the retry window keeps a
       // transient failure from being permanent while stopping a failing
@@ -271,9 +318,8 @@ async function harvestAssessorRolls(listings, options = {}) {
         try { await options.onHarvested(candidate.listing); } catch (_) { /* persist failures are the caller's concern */ }
       }
       continue;
-      cacheDirty = true;
-      continue;
     }
+    countySlowStreak.set(candidate.countyKey, 0);
     results.fetched += 1;
     const observedAt = new Date(now).toISOString();
     cache[key] = { parcel, observedAt };

@@ -8,6 +8,7 @@
 // database required; live-PG behavior is covered behind
 // DISCOVERY_TEST_DATABASE_URL in test/db.test.js-style round-trips.
 
+const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const {
@@ -335,4 +336,53 @@ test('compactPgObservations prunes only intermediate identical heartbeats and pr
     afterSignals.records[recordKey].history.at(-1).observedAt,
     beforeSignals.records[recordKey].history.at(-1).observedAt,
   );
+});
+
+test('recordSourceRun batches unchanged observation roll-forwards instead of running one UPDATE per row', async () => {
+  const noticeSha = crypto.createHash('sha256').update('a'.repeat(10)).digest('hex');
+  const unchangedHistory = Array.from({ length: 5 }, (_, idx) => ([
+    {
+      id: `obs-${idx}-1`, listing_id: `CIV-NJ-1-${idx}`, source_key: 'civilview', record_id: `rec-${idx}`,
+      observed_at: new Date('2026-10-01T00:00:00.000Z'), opening_bid: '50000', sale_date: '2026-12-01',
+      status: 'Status: Active', deposit: '5000', address: `${idx} Main Street`, notice_sha256: noticeSha,
+    },
+    {
+      id: `obs-${idx}-2`, listing_id: `CIV-NJ-1-${idx}`, source_key: 'civilview', record_id: `rec-${idx}`,
+      observed_at: new Date('2026-10-02T00:00:00.000Z'), opening_bid: '50000', sale_date: '2026-12-01',
+      status: 'Status: Active', deposit: '5000', address: `${idx} Main Street`, notice_sha256: noticeSha,
+    },
+  ])).flat();
+
+  const pool = mockPool({
+    handlerFor: (text) => {
+      if (/SELECT 1 FROM sources/.test(text)) return KNOWN_SOURCE;
+      if (/max\(observed_at\)/i.test(text)) {
+        return {
+          rows: Array.from({ length: 5 }, (_, idx) => ({ record_id: `rec-${idx}`, latest_observed_at: new Date('2026-10-02T00:00:00.000Z') })),
+          rowCount: 5,
+        };
+      }
+      if (/FROM source_observations/.test(text)) return { rows: unchangedHistory, rowCount: unchangedHistory.length };
+      if (/UPDATE source_observations/i.test(text)) return { rows: [], rowCount: /UNNEST/i.test(text) ? 5 : 1 };
+      return { rows: [], rowCount: 1 };
+    },
+  });
+
+  const listings = Array.from({ length: 5 }, (_, idx) => listing({
+    id: `CIV-NJ-1-${idx}`,
+    source: 'civilview',
+    openingBid: 50000,
+    saleDate: '2026-12-01',
+    status: 'Status: Active',
+    deposit: '5000',
+    address: `${idx} Main Street`,
+    sourceObservedAt: '2026-10-03T00:00:00.000Z',
+    raw: 'a'.repeat(10),
+    provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: `rec-${idx}`, noticeSha256: noticeSha },
+  }));
+
+  const res = await recordSourceRun(pool, 'civilview', { listings, error: null, durationMs: 100 }, { now: '2026-10-03T00:00:00.000Z' });
+  assert.equal(res.rolledForward, 5);
+  const updateQueries = pool.queries.filter((q) => /UPDATE source_observations/i.test(q.text));
+  assert.equal(updateQueries.length, 1, 'must batch unchanged roll-forward updates with UNNEST instead of 5 separate queries');
 });
