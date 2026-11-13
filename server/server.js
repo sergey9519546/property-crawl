@@ -542,6 +542,19 @@ async function startServer() {
     console.log(`[Server] dataMode=${db.dataMode()} postgresReachable=${db.postgresReachable === true}\n`);
     const reason = db.inventoryUnavailableReason();
     if (reason) console.log(`[Server] NO INVENTORY WILL BE SERVED - ${reason}\n`);
+    if (process.env.NODE_ENV !== 'test' && db.isPg && typeof db.purgeStaleListings === 'function') {
+      setTimeout(() => {
+        db.purgeStaleListings({ batchSize: 1000, maxBatches: 100 })
+          .then((res) => {
+            if (res && (res.deleted > 0 || res.observationsDeleted > 0 || res.snapshotsDeleted > 0)) {
+              console.log(
+                `[Server] Boot inventory purge removed ${res.deleted} stale/archive listings, ${res.observationsDeleted} stale observations, and ${res.snapshotsDeleted || 0} stale snapshots.`,
+              );
+            }
+          })
+          .catch((err) => console.warn('[Server] Boot inventory purge warning:', err && err.message ? err.message : err));
+      }, 1500).unref();
+    }
     if (!scheduler.shouldAllowRealScrapers(process.env)) {
       console.log('[Server] Background scrapers disabled for this test/offline environment.');
       return;

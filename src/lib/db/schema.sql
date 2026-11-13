@@ -321,6 +321,7 @@ CREATE TRIGGER listings_sync_discovery_columns
 BEFORE INSERT OR UPDATE ON listings
 FOR EACH ROW EXECUTE FUNCTION sync_listings_discovery_columns();
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
+CREATE INDEX IF NOT EXISTS idx_saved_deals_listing ON saved_deals(listing_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_id) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_alert_matches_listing ON alert_matches(listing_id);

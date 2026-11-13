@@ -3174,66 +3174,150 @@ class DatabaseClient {
    */
   async purgeStaleListings(options = {}) {
     if (!this.isPg || !this.pool) {
-      return { deleted: 0, observationsDeleted: 0, skipped: 'postgres_unavailable' };
+      return { deleted: 0, observationsDeleted: 0, snapshotsDeleted: 0, skipped: 'postgres_unavailable' };
     }
+    const batchSize = Math.min(5000, Math.max(1, Math.trunc(Number(options.batchSize) || 1000)));
+    const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 100)));
+    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 25))));
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
+    const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
     const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 14));
     const absentGraceDays = Math.max(1, Math.trunc(Number(options.absentGraceDays) || 3));
     const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
 
-    const deletedRes = await this.pool.query(
-      `DELETE FROM listings
-        WHERE COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice')
-           OR provenance->>'recordKind' = 'archive_record'
-           OR discovery_terminal IS TRUE
-           OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
-           OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
-           OR provenance ? 'supersededBy'
-           OR (
-             provenance ? 'publisherAbsence'
-             AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
-           )
-           OR (
-             sale_date IS NOT NULL
-             AND sale_date < CURRENT_DATE - ($2::int * INTERVAL '1 day')
-             AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-             AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-           )
-           OR (
-             sale_date IS NOT NULL
-             AND sale_date < CURRENT_DATE - INTERVAL '45 days'
-           )
-           OR (
-             source_key = 'servicelink'
-             AND COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
-             AND EXISTS (
-               SELECT 1 FROM listings fresh
-                WHERE fresh.source_key = 'servicelink'
-                  AND fresh.provenance->>'origin' = 'live'
-                  AND fresh.source_observed_at > NOW() - ($4::int * INTERVAL '1 day')
-             )
-           )
-           OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'`,
-      [absentGraceDays, concludedGraceDays, serviceLinkStaleDays, serviceLinkFreshWindowDays],
-    );
-    const deleted = deletedRes.rowCount || 0;
+    let deleted = 0;
+    for (let batch = 0; batch < maxBatches; batch += 1) {
+      const deletedRes = await this.pool.query(
+        `DELETE FROM listings
+          WHERE id IN (
+            SELECT id
+              FROM listings
+             WHERE COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice')
+                OR provenance->>'recordKind' = 'archive_record'
+                OR discovery_terminal IS TRUE
+                OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                OR provenance ? 'supersededBy'
+                OR (
+                  provenance ? 'publisherAbsence'
+                  AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
+                )
+                OR (
+                  sale_date IS NOT NULL
+                  AND sale_date < CURRENT_DATE - ($2::int * INTERVAL '1 day')
+                  AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                  AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                )
+                OR (
+                  sale_date IS NOT NULL
+                  AND sale_date < CURRENT_DATE - INTERVAL '45 days'
+                )
+                OR (
+                  source_key = 'servicelink'
+                  AND (
+                    COALESCE(source_observed_at, updated_at) < NOW() - ($5::int * INTERVAL '1 day')
+                    OR (
+                      COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
+                      AND EXISTS (
+                        SELECT 1 FROM listings fresh
+                         WHERE fresh.source_key = 'servicelink'
+                           AND fresh.provenance->>'origin' = 'live'
+                           AND fresh.source_observed_at > NOW() - ($4::int * INTERVAL '1 day')
+                      )
+                    )
+                  )
+                )
+                OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
+             ORDER BY id
+             LIMIT $6
+          )`,
+        [
+          absentGraceDays,
+          concludedGraceDays,
+          serviceLinkStaleDays,
+          serviceLinkFreshWindowDays,
+          serviceLinkHardStaleDays,
+          batchSize,
+        ],
+      );
+      const batchDeleted = deletedRes.rowCount || 0;
+      deleted += batchDeleted;
+      if (batchDeleted < batchSize) break;
+      if (batchPauseMs > 0 && batch + 1 < maxBatches) {
+        await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+      }
+    }
 
     let observationsDeleted = 0;
+    const obsBatchSize = Math.min(5000, Math.max(1, batchSize * 2));
     try {
-      const obsRes = await this.pool.query(
-        `DELETE FROM source_observations so
-          WHERE (so.listing_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so.listing_id))
-             OR so.observed_at < NOW() - ($1::int * INTERVAL '1 day')`,
-        [observationRetentionDays],
+      for (let batch = 0; batch < maxBatches; batch += 1) {
+        const obsRes = await this.pool.query(
+          `DELETE FROM source_observations
+            WHERE id IN (
+              SELECT so.id
+                FROM source_observations so
+               WHERE (so.listing_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so.listing_id))
+                  OR (so.source_key = 'servicelink' AND so.observed_at < NOW() - ($3::int * INTERVAL '1 day'))
+                  OR so.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+               LIMIT $2
+            )`,
+          [observationRetentionDays, obsBatchSize, serviceLinkFreshWindowDays],
+        );
+        const batchObs = obsRes.rowCount || 0;
+        observationsDeleted += batchObs;
+        if (batchObs < obsBatchSize) break;
+      }
+    } catch (_) {}
+
+    let snapshotsDeleted = 0;
+    try {
+      for (let batch = 0; batch < maxBatches; batch += 1) {
+        await this.pool.query(
+          `DELETE FROM discovery_observations
+            WHERE snapshot_id IN (
+              SELECT snap.id
+                FROM discovery_snapshots snap
+               WHERE COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
+                  OR snap.provenance->>'recordKind' = 'archive_record'
+                  OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                  OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+               LIMIT $3
+            )`,
+          [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
+        );
+        const snapRes = await this.pool.query(
+          `DELETE FROM discovery_snapshots
+            WHERE id IN (
+              SELECT snap.id
+                FROM discovery_snapshots snap
+               WHERE (
+                 COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
+                 OR snap.provenance->>'recordKind' = 'archive_record'
+                 OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                 OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
+               )
+                 AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.snapshot_id = snap.id)
+               LIMIT $3
+            )`,
+          [observationRetentionDays, serviceLinkFreshWindowDays, batchSize],
+        );
+        const batchSnaps = snapRes.rowCount || 0;
+        snapshotsDeleted += batchSnaps;
+        if (batchSnaps < batchSize) break;
+      }
+      await this.pool.query(
+        `DELETE FROM discovery_checkpoints
+          WHERE source_key = 'servicelink'
+            AND updated_at < NOW() - INTERVAL '2 days'`,
       );
-      observationsDeleted = obsRes.rowCount || 0;
     } catch (_) {}
 
     if (deleted > 0) {
       await this.pool.query("SELECT nextval('discovery_listing_revision_seq')").catch(() => {});
     }
-    return { deleted, observationsDeleted };
+    return { deleted, observationsDeleted, snapshotsDeleted };
   }
 }
 

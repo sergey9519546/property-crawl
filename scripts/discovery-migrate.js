@@ -66,12 +66,19 @@ async function migrate(pool, options = {}) {
       }
 
       for (let attempt = 1; attempt <= maxLockAttempts; attempt += 1) {
+        const startedAt = Date.now();
+        if (process.env.NODE_ENV !== 'test') {
+          console.log(`[migrate] applying ${name} (attempt ${attempt}/${maxLockAttempts})...`);
+        }
         await client.query('BEGIN');
         try {
           await client.query("SET LOCAL statement_timeout = '0'");
           await client.query(sql);
           await client.query('INSERT INTO discovery_schema_migrations(name,sha256) VALUES($1,$2)', [name, digest]);
           await client.query('COMMIT');
+          if (process.env.NODE_ENV !== 'test') {
+            console.log(`[migrate] applied ${name} in ${Date.now() - startedAt}ms`);
+          }
           break;
         } catch (error) {
           await client.query('ROLLBACK').catch(() => {});

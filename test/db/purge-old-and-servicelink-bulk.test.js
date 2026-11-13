@@ -164,8 +164,8 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
         [isoDaysAgo(10), isoDaysAgo(0.2)],
       );
 
-      // Verify purgeStaleListings purges the stale/archive/seed/concluded rows and preserves live active rows
-      const runtimePurge = await db.purgeStaleListings();
+      // Verify batched purgeStaleListings loops cleanly across multiple small batches while keeping active live records
+      const runtimePurge = await db.purgeStaleListings({ batchSize: 2, maxBatches: 10, batchPauseMs: 0 });
       assert.equal(runtimePurge.deleted, 4, 'purgeStaleListings must delete archive, seed, concluded, and stale ServiceLink rows');
       assert.equal(runtimePurge.observationsDeleted, 1, 'purgeStaleListings must clean orphaned observations');
 
