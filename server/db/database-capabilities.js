@@ -114,11 +114,15 @@ async function probeDatabaseCapabilities(pool) {
               WHERE n.nspname = 'public'
                 AND c.relkind IN ('r', 'p', 'v', 'm')
                 AND c.relname = ANY($2::text[])) AS tables,
-            (SELECT coalesce(jsonb_agg(table_name || '.' || column_name), '[]'::jsonb)
-               FROM information_schema.columns
-              WHERE table_schema = 'public'
-                AND table_name = ANY($3::text[])
-                AND column_name = ANY($4::text[])) AS columns`,
+            (SELECT coalesce(jsonb_agg(c.relname || '.' || a.attname), '[]'::jsonb)
+               FROM pg_attribute a
+               JOIN pg_class c ON c.oid = a.attrelid
+               JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relname = ANY($3::text[])
+                AND a.attname = ANY($4::text[])
+                AND a.attnum > 0
+                AND NOT a.attisdropped) AS columns`,
     [REQUIRED_EXTENSIONS, names, columnTables, columnNames]
   );
   const row = result.rows[0] || {};

@@ -588,6 +588,11 @@ class DatabaseClient {
       const connectionTimeoutMillis = Number.isFinite(configuredConnectTimeout) && configuredConnectTimeout > 0
         ? Math.min(configuredConnectTimeout, 60_000)
         : 12_000;
+      const configuredStatementTimeout = Number(this.env.DATABASE_STATEMENT_TIMEOUT_MS);
+      const statementTimeoutMs = Number.isFinite(configuredStatementTimeout) && configuredStatementTimeout >= 0
+        ? Math.min(Math.trunc(configuredStatementTimeout), 120_000)
+        : 30_000;
+      const statementTimeoutOpt = statementTimeoutMs > 0 ? { statement_timeout: statementTimeoutMs } : {};
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({
@@ -596,19 +601,11 @@ class DatabaseClient {
           idleTimeoutMillis: 60000,
           connectionTimeoutMillis,
           keepAlive: true,
+          ...statementTimeoutOpt,
         });
         this.pool.on('error', (err) => {
           console.error('[db] Idle PostgreSQL client error:', err?.message || err);
         });
-        const configuredStatementTimeout = Number(this.env.DATABASE_STATEMENT_TIMEOUT_MS);
-        const statementTimeoutMs = Number.isFinite(configuredStatementTimeout) && configuredStatementTimeout >= 0
-          ? Math.min(Math.trunc(configuredStatementTimeout), 120_000)
-          : 30_000;
-        if (statementTimeoutMs > 0) {
-          this.pool.on('connect', (client) => {
-            client.query(`SET statement_timeout = '${statementTimeoutMs}'`).catch(() => {});
-          });
-        }
         // Do not claim postgres until a query succeeds. Pool construction
         // does not open a socket.
         this.isPg = false;
@@ -635,6 +632,7 @@ class DatabaseClient {
             idleTimeoutMillis: 60000,
             connectionTimeoutMillis,
             keepAlive: true,
+            ...statementTimeoutOpt,
           });
         } catch (err) {
           console.warn('[DB] PostgreSQL read-replica driver not initialized, using primary pool:', err.message);
@@ -736,10 +734,14 @@ class DatabaseClient {
     try {
       const result = await pool.query(
         `SELECT count(*)::int AS n, (to_regclass(quote_ident(current_schema()) || '.idx_listings_discovery_search_text_trgm') IS NOT NULL) AS idx_ready
-           FROM information_schema.columns
-          WHERE table_schema = current_schema()
-            AND table_name = 'listings'
-            AND column_name = ANY($1::text[])`,
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = current_schema()
+            AND c.relname = 'listings'
+            AND a.attname = ANY($1::text[])
+            AND a.attnum > 0
+            AND NOT a.attisdropped`,
         [ACCELERATED_LISTINGS_COLUMNS],
       );
       const ready = Number(result.rows[0]?.n || 0) === ACCELERATED_LISTINGS_COLUMNS.length && Boolean(result.rows[0]?.idx_ready);
@@ -3164,6 +3166,74 @@ class DatabaseClient {
       if (prior) { if (arr.length >= 2) result.set(id, arr[1]); } else { result.set(id, arr[0]); }
     }
     return result;
+  }
+
+  /**
+   * Automatically purge non-live archive/seed rows, concluded/past-sale records,
+   * and stale unrefreshed ServiceLink bulk while preserving active live-scraped inventory.
+   */
+  async purgeStaleListings(options = {}) {
+    if (!this.isPg || !this.pool) {
+      return { deleted: 0, observationsDeleted: 0, skipped: 'postgres_unavailable' };
+    }
+    const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
+    const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
+    const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 14));
+    const absentGraceDays = Math.max(1, Math.trunc(Number(options.absentGraceDays) || 3));
+    const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
+
+    const deletedRes = await this.pool.query(
+      `DELETE FROM listings
+        WHERE COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice')
+           OR provenance->>'recordKind' = 'archive_record'
+           OR discovery_terminal IS TRUE
+           OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+           OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+           OR provenance ? 'supersededBy'
+           OR (
+             provenance ? 'publisherAbsence'
+             AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
+           )
+           OR (
+             sale_date IS NOT NULL
+             AND sale_date < CURRENT_DATE - ($2::int * INTERVAL '1 day')
+             AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+             AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+           )
+           OR (
+             sale_date IS NOT NULL
+             AND sale_date < CURRENT_DATE - INTERVAL '45 days'
+           )
+           OR (
+             source_key = 'servicelink'
+             AND COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
+             AND EXISTS (
+               SELECT 1 FROM listings fresh
+                WHERE fresh.source_key = 'servicelink'
+                  AND fresh.provenance->>'origin' = 'live'
+                  AND fresh.source_observed_at > NOW() - ($4::int * INTERVAL '1 day')
+             )
+           )
+           OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'`,
+      [absentGraceDays, concludedGraceDays, serviceLinkStaleDays, serviceLinkFreshWindowDays],
+    );
+    const deleted = deletedRes.rowCount || 0;
+
+    let observationsDeleted = 0;
+    try {
+      const obsRes = await this.pool.query(
+        `DELETE FROM source_observations so
+          WHERE (so.listing_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so.listing_id))
+             OR so.observed_at < NOW() - ($1::int * INTERVAL '1 day')`,
+        [observationRetentionDays],
+      );
+      observationsDeleted = obsRes.rowCount || 0;
+    } catch (_) {}
+
+    if (deleted > 0) {
+      await this.pool.query("SELECT nextval('discovery_listing_revision_seq')").catch(() => {});
+    }
+    return { deleted, observationsDeleted };
   }
 }
 

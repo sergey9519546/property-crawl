@@ -537,8 +537,15 @@ async function importArchive(options = {}) {
     dryRun = false,
     outPath = null,
     useDb = false,
+    allowDeprecatedArchive = false,
     logger = console.log,
   } = options;
+
+  if (useDb && !dryRun && !allowDeprecatedArchive) {
+    throw new Error(
+      'ServiceLink archive database import is deprecated; live ServiceLink listings are scraped automatically. Pass --allow-deprecated-archive only for explicit historical research opt-in.'
+    );
+  }
 
   logger(`[ServiceLink Importer] Target archive: ${inputPath}`);
   logger(`[ServiceLink Importer] Configuration: limit=${limit || 'all'}, dryRun=${dryRun}, out=${outPath || 'none'}, db=${useDb}`);
@@ -642,6 +649,7 @@ if (require.main === module) {
   let dryRun = false;
   let outPath = null;
   let useDb = false;
+  let allowDeprecatedArchive = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -653,12 +661,14 @@ if (require.main === module) {
       outPath = args[++i];
     } else if (arg === '--db') {
       useDb = true;
+    } else if (arg === '--allow-deprecated-archive') {
+      allowDeprecatedArchive = true;
     } else if (!arg.startsWith('--')) {
       inputPath = arg;
     }
   }
 
-  importArchive({ inputPath, limit, dryRun, outPath, useDb })
+  importArchive({ inputPath, limit, dryRun, outPath, useDb, allowDeprecatedArchive })
     .then(() => process.exit(0))
     .catch((err) => {
       console.error('[ServiceLink Importer] Fatal error:', err);

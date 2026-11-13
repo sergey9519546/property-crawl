@@ -428,7 +428,7 @@ test('frontend Hero requests mode=autocomplete and InteractiveTerminal defers bu
 test('start-production grants >= 60s backend liveness budget when Postgres is configured for startup migrations', () => {
   const root = path.resolve(__dirname, '..', '..');
   const startProd = fs.readFileSync(path.join(root, 'scripts/start-production.js'), 'utf8');
-  assert.match(startProd, /hasDatabase\s*\?\s*(90000|120000)/, 'Postgres startup liveness window must allow migrations such as 034 to finish without a 10s SIGTERM');
+  assert.match(startProd, /hasDatabase\s*\?\s*(90000|120000|180000|240000)/, 'Postgres startup liveness window must allow migrations such as 034 to finish without a 10s SIGTERM');
 });
 
 test('discovery-migrate retries transient 55P03/40P01 lock errors and fails closed on non-lock SQL errors', async () => {

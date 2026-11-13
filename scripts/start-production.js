@@ -141,7 +141,7 @@ async function awaitBackendReady() {
   const configuredTimeout = Number(bootEnv.BACKEND_HEALTH_TIMEOUT_MS);
   const liveTimeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
     ? configuredTimeout
-    : (hasDatabase ? 120000 : 25000);
+    : (hasDatabase ? 240000 : 25000);
   const live = await waitForHealth(liveUrl, liveTimeoutMs);
   if (live) {
     console.log(`[Production] Backend Listing API is live on port ${internalApiPort} (liveness /api/health).`);

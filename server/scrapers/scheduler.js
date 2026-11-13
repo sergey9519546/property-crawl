@@ -927,6 +927,16 @@ scheduler.onCycleStart = async ({ jobId, trigger, sourceIds }) => {
 scheduler.onCycleComplete = async (result, context = {}) => {
   const id = context.jobId || result.jobId;
   if (id) await collectionCoordinator.finalize(id, result, {owner:context.owner,leaseGuard:context.leaseGuard});
+  if (db.isPg && typeof db.purgeStaleListings === 'function') {
+    try {
+      const purged = await runBgDb(db, () => db.purgeStaleListings());
+      if (purged?.deleted > 0 || purged?.observationsDeleted > 0) {
+        console.log(`[Scheduler] Auto-purged ${purged.deleted || 0} stale/archive listing(s) and ${purged.observationsDeleted || 0} stale observation(s).`);
+      }
+    } catch (purgeErr) {
+      console.warn('[Scheduler] Automatic stale listing cleanup warning:', purgeErr?.message || purgeErr);
+    }
+  }
 };
 
 if (require.main === module) {
