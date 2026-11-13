@@ -88,7 +88,7 @@ function loadRoutes() {
       const route = m[1];
       if (routed.some((r) => r.path === route)) continue;
       const window = `${line}\n${lines[i + 1] || ''}\n${lines[i + 2] || ''}`;
-      const handler = window.match(/return\s+((?:handle[A-Za-z]+)|(?:\w*[Hh]andlers\.\w+))/);
+      const handler = window.match(/return\s+(?:await\s+)?((?:handle[A-Za-z]+)|(?:\w*[Hh]andlers\.\w+))/);
       routed.push({ path: route, handler: handler ? handler[1] : 'inline' });
     }
   }

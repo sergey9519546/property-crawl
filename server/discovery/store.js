@@ -37,9 +37,29 @@ class DiscoveryStore {
   }
   async appendSnapshot({ runId, sourceKey, sourceRecordId, observedAt, rawPayload, provenance = {}, observations = {} }, options = {}) {
     const payloadSha256 = hash(rawPayload); const client = options.client || await this.pool.connect(); const ownsTransaction=!options.client;
-    try { if(ownsTransaction) await client.query('BEGIN'); let r = await client.query('INSERT INTO discovery_snapshots(run_id,source_key,source_record_id,observed_at,payload_sha256,raw_payload,provenance) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(source_key,source_record_id,observed_at,payload_sha256) DO NOTHING RETURNING *', [runId,sourceKey,sourceRecordId,observedAt,payloadSha256,rawPayload,provenance]);
-      if (!r.rows[0]) r=await client.query('SELECT * FROM discovery_snapshots WHERE source_key=$1 AND source_record_id=$2 AND observed_at=$3 AND payload_sha256=$4',[sourceKey,sourceRecordId,observedAt,payloadSha256]);
-      for (const [field,item] of Object.entries(observations)) { const wrapped=item&&typeof item==='object'&&!Array.isArray(item)&&Object.hasOwn(item,'value'); const value=wrapped?item.value:item; const evidenceClass=wrapped&&item.evidenceClass?item.evidenceClass:'publisher_reported'; await client.query('INSERT INTO discovery_observations(snapshot_id,field_name,value,evidence_class) VALUES($1,$2,$3,$4) ON CONFLICT(snapshot_id,field_name) DO NOTHING', [r.rows[0].id,field,JSON.stringify(value===undefined?null:value),evidenceClass]); }
+    try { if(ownsTransaction) await client.query('BEGIN');
+      const entries = Object.entries(observations);
+      const snapCte = 'WITH ins AS (INSERT INTO discovery_snapshots(run_id,source_key,source_record_id,observed_at,payload_sha256,raw_payload,provenance) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(source_key,source_record_id,observed_at,payload_sha256) DO NOTHING RETURNING *), snap AS (SELECT * FROM ins UNION ALL SELECT * FROM discovery_snapshots WHERE source_key=$2 AND source_record_id=$3 AND observed_at=$4 AND payload_sha256=$5 AND NOT EXISTS (SELECT 1 FROM ins) LIMIT 1)';
+      let r;
+      if (entries.length > 0) {
+        const fieldNames = [], valuesJson = [], evidenceClasses = [];
+        for (const [field, item] of entries) {
+          const wrapped = item && typeof item === 'object' && !Array.isArray(item) && Object.hasOwn(item, 'value');
+          const value = wrapped ? item.value : item;
+          fieldNames.push(field);
+          valuesJson.push(JSON.stringify(value === undefined ? null : value));
+          evidenceClasses.push(wrapped && item.evidenceClass ? item.evidenceClass : 'publisher_reported');
+        }
+        r = await client.query(
+          `${snapCte}, obs AS (INSERT INTO discovery_observations(snapshot_id,field_name,value,evidence_class) SELECT snap.id, u.field_name, u.value::jsonb, u.evidence_class FROM snap CROSS JOIN unnest($8::text[], $9::text[], $10::text[]) AS u(field_name, value, evidence_class) ON CONFLICT(snapshot_id,field_name) DO NOTHING) SELECT * FROM snap`,
+          [runId, sourceKey, sourceRecordId, observedAt, payloadSha256, rawPayload, provenance, fieldNames, valuesJson, evidenceClasses]
+        );
+      } else {
+        r = await client.query(
+          `${snapCte} SELECT * FROM snap`,
+          [runId, sourceKey, sourceRecordId, observedAt, payloadSha256, rawPayload, provenance]
+        );
+      }
       if(ownsTransaction) await client.query('COMMIT'); return r.rows[0]; } catch(e){ if(ownsTransaction) await client.query('ROLLBACK'); throw e; } finally { if(ownsTransaction) client.release(); }
   }
   async finishRun(id, result, options = {}) {

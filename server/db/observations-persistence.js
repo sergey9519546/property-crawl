@@ -137,6 +137,41 @@ function rowToSnapshot(row) {
 // the persisted snapshots in observation order — the same classifier the
 // ingest path uses — so a relist or bid reduction cannot be classified one
 // way at ingest and another way here.
+function buildObservationsBundle(sourceKey, recordId, rows) {
+  if (!Array.isArray(rows) || !rows.length) return { records: {}, signals: [] };
+  const recordIdStr = String(recordId);
+  const snapshots = rows.map(rowToSnapshot);
+  const signals = [];
+  for (let index = 1; index < snapshots.length; index++) {
+    for (const change of compareSnapshots(snapshots[index - 1], snapshots[index])) {
+      signals.push({
+        id: `${observationRowId(sourceKey, recordIdStr, snapshots[index].observedAt)}-${change.field}`.slice(0, 24),
+        kind: change.kind,
+        field: change.field,
+        before: change.before,
+        after: change.after,
+        listingId: snapshots[index].listingId,
+        recordId: recordIdStr,
+        observedAt: snapshots[index].observedAt,
+      });
+    }
+  }
+  return {
+    records: {
+      [recordKeyFor(sourceKey, recordIdStr)]: {
+        firstObservedAt: snapshots[0].observedAt,
+        observations: snapshots.length,
+        // All persisted snapshots count as history here: the evaluator
+        // compares each against the current live status, so a snapshot that
+        // was inactive followed by a live record that is active is a
+        // returned-to-market transition even when no newer snapshot exists.
+        history: snapshots,
+      },
+    },
+    signals,
+  };
+}
+
 async function loadObservationsForRecord(pool, listing) {
   if (!pool || !listing?.source || !listing?.provenance?.recordId) {
     return { records: {}, signals: [] };
@@ -150,38 +185,7 @@ async function loadObservationsForRecord(pool, listing) {
       LIMIT 200`,
     [listing.source, String(listing.provenance.recordId)],
   );
-  if (!result.rows.length) return { records: {}, signals: [] };
-
-  const snapshots = result.rows.map(rowToSnapshot);
-  const signals = [];
-  for (let index = 1; index < snapshots.length; index++) {
-    for (const change of compareSnapshots(snapshots[index - 1], snapshots[index])) {
-      signals.push({
-        id: `${observationRowId(listing.source, listing.provenance.recordId, snapshots[index].observedAt)}-${change.field}`.slice(0, 24),
-        kind: change.kind,
-        field: change.field,
-        before: change.before,
-        after: change.after,
-        listingId: snapshots[index].listingId,
-        recordId: String(listing.provenance.recordId),
-        observedAt: snapshots[index].observedAt,
-      });
-    }
-  }
-  return {
-    records: {
-      [recordKeyFor(listing.source, listing.provenance.recordId)]: {
-        firstObservedAt: snapshots[0].observedAt,
-        observations: snapshots.length,
-        // All persisted snapshots count as history here: the evaluator
-        // compares each against the current live status, so a snapshot that
-        // was inactive followed by a live record that is active is a
-        // returned-to-market transition even when no newer snapshot exists.
-        history: snapshots,
-      },
-    },
-    signals,
-  };
+  return buildObservationsBundle(listing.source, listing.provenance.recordId, result.rows);
 }
 
 // Reads the record's most recent observation per record and rejects snapshots
@@ -515,20 +519,138 @@ async function recomputeTriageForListings(pool, listings, options = {}) {
   const evaluate = options.evaluateOpportunitySignals
     || require('../intelligence/signals').evaluateOpportunitySignals;
   const limit = Number.isInteger(options.limit) && options.limit > 0 ? options.limit : 500;
-  let evaluated = 0;
-  let updated = 0;
+  const validListings = [];
   for (const listing of listings) {
-    if (evaluated >= limit) break;
+    if (validListings.length >= limit) break;
     if (!listing || typeof listing !== 'object' || !listing.id) continue;
+    validListings.push(listing);
+  }
+  if (validListings.length === 0) return { evaluated: 0, updated: 0 };
+
+  if (validListings.length === 1 || options.forceRowUpdates) {
+    let evaluated = 0;
+    let updated = 0;
+    for (const listing of validListings) {
+      try {
+        const observations = await loadObservationsForRecord(pool, listing);
+        const evaluation = evaluate(listing, { observations, ...(options.now ? { now: options.now } : {}) });
+        evaluated += 1;
+        const result = await updateTriagePriority(pool, listing.id, evaluation.triagePriority);
+        if (result.updated) updated += 1;
+      } catch (_) { /* best-effort: skip the listing */ }
+    }
+    return { evaluated, updated };
+  }
+
+  const pairMap = new Map();
+  for (const listing of validListings) {
+    if (listing.source && listing.provenance?.recordId) {
+      const recId = String(listing.provenance.recordId);
+      const key = `${listing.source}\0${recId}`;
+      if (!pairMap.has(key)) pairMap.set(key, [listing.source, recId]);
+    }
+  }
+
+  const obsByKey = new Map();
+  if (pairMap.size > 0) {
+    const pairSources = [];
+    const pairRecordIds = [];
+    for (const [s, r] of pairMap.values()) {
+      pairSources.push(s);
+      pairRecordIds.push(r);
+    }
     try {
-      const observations = await loadObservationsForRecord(pool, listing);
+      const batchRes = await pool.query(
+        `WITH pairs AS (
+           SELECT DISTINCT t.source_key, t.record_id
+             FROM unnest($1::text[], $2::text[]) AS t(source_key, record_id)
+         )
+         SELECT s.source_key, s.record_id, s.listing_id, s.observed_at, s.opening_bid, s.sale_date,
+                s.status, s.deposit, s.address,
+                s.raw_payload->>'sourceUrl' AS source_url,
+                s.raw_payload->>'state' AS state,
+                s.raw_payload->>'county' AS county
+           FROM pairs p
+           CROSS JOIN LATERAL (
+             SELECT so.source_key, so.record_id, so.listing_id, so.observed_at, so.opening_bid,
+                    so.sale_date, so.status, so.deposit, so.address, so.raw_payload, so.id
+               FROM source_observations so
+              WHERE so.source_key = p.source_key AND so.record_id = p.record_id
+              ORDER BY so.observed_at ASC, so.id ASC
+              LIMIT 200
+           ) s
+          ORDER BY s.source_key ASC, s.record_id ASC, s.observed_at ASC, s.id ASC`,
+        [pairSources, pairRecordIds],
+      );
+      const grouped = new Map();
+      for (const row of batchRes.rows || []) {
+        const key = `${row.source_key}\0${row.record_id}`;
+        let list = grouped.get(key);
+        if (!list) {
+          list = [];
+          grouped.set(key, list);
+        }
+        list.push(row);
+      }
+      for (const [key, rows] of grouped.entries()) {
+        const [sourceKey, recordId] = key.split('\0');
+        obsByKey.set(key, buildObservationsBundle(sourceKey, recordId, rows));
+      }
+    } catch (_) {
+      // Fall back to row-level loading when a custom pool mock rejects LATERAL/unnest
+      let evaluated = 0;
+      let updated = 0;
+      for (const listing of validListings) {
+        try {
+          const observations = await loadObservationsForRecord(pool, listing);
+          const evaluation = evaluate(listing, { observations, ...(options.now ? { now: options.now } : {}) });
+          evaluated += 1;
+          const result = await updateTriagePriority(pool, listing.id, evaluation.triagePriority);
+          if (result.updated) updated += 1;
+        } catch (_err) { /* best-effort */ }
+      }
+      return { evaluated, updated };
+    }
+  }
+
+  let evaluated = 0;
+  const pendingUpdates = new Map();
+  for (const listing of validListings) {
+    try {
+      const obsKey = listing.source && listing.provenance?.recordId
+        ? `${listing.source}\0${String(listing.provenance.recordId)}`
+        : null;
+      const observations = (obsKey && obsByKey.get(obsKey)) || { records: {}, signals: [] };
       const evaluation = evaluate(listing, { observations, ...(options.now ? { now: options.now } : {}) });
       evaluated += 1;
-      const result = await updateTriagePriority(pool, listing.id, evaluation.triagePriority);
-      if (result.updated) updated += 1;
+      const tp = evaluation?.triagePriority;
+      if (Number.isInteger(tp) && tp >= 0 && tp <= 99) {
+        pendingUpdates.set(listing.id, tp);
+      }
     } catch (_) { /* best-effort: skip the listing */ }
   }
-  return { evaluated, updated };
+
+  if (pendingUpdates.size === 0) return { evaluated, updated: 0 };
+  const ids = Array.from(pendingUpdates.keys());
+  const scores = ids.map((id) => pendingUpdates.get(id));
+  try {
+    const updRes = await pool.query(
+      `UPDATE listings AS l
+          SET triage_priority = u.score,
+              triage_priority_refreshed_at = NOW()
+         FROM unnest($1::text[], $2::int[]) AS u(id, score)
+        WHERE l.id = u.id
+          AND (
+            l.triage_priority IS DISTINCT FROM u.score
+            OR l.triage_priority_refreshed_at IS NULL
+            OR l.triage_priority_refreshed_at < NOW() - INTERVAL '6 hours'
+          )`,
+      [ids, scores],
+    );
+    return { evaluated, updated: Number(updRes?.rowCount || 0) };
+  } catch (_) {
+    return { evaluated, updated: 0 };
+  }
 }
 
 // One-time import helper for scripts/import-observation-store.js: the legacy

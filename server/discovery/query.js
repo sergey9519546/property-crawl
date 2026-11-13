@@ -677,10 +677,38 @@ function pgSort(f, options = {}) {
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
 const REVISION_TABLE_MISSING = new WeakSet();
+const REVISION_SEQ_MISSING = new WeakSet();
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    const err = new DiscoveryQueryError(499, "Client closed request");
+    err.name = "AbortError";
+    throw err;
+  }
+}
+function getReadPool(database) {
+  return typeof database?.getReadPool === "function"
+    ? database.getReadPool()
+    : database.pool;
+}
 async function pgRevision(database) {
+  const pool = getReadPool(database);
+  if (!REVISION_SEQ_MISSING.has(database.pool) && !REVISION_TABLE_MISSING.has(database.pool)) {
+    try {
+      const r = await pool.query(
+        "SELECT GREATEST(coalesce((SELECT revision FROM discovery_listing_revision WHERE singleton = TRUE), 0), coalesce((SELECT last_value FROM discovery_listing_revision_seq), 0))::text AS revision",
+      );
+      if (r.rows[0]?.revision != null) return String(r.rows[0].revision);
+    } catch (err) {
+      if (err && err.code === "42P01") {
+        REVISION_SEQ_MISSING.add(database.pool);
+      } else {
+        throw err;
+      }
+    }
+  }
   if (!REVISION_TABLE_MISSING.has(database.pool)) {
     try {
-      const r = await database.pool.query(
+      const r = await pool.query(
         "SELECT revision::text AS revision FROM discovery_listing_revision WHERE singleton = TRUE",
       );
       if (r.rows[0]?.revision != null) return String(r.rows[0].revision);
@@ -689,21 +717,25 @@ async function pgRevision(database) {
       REVISION_TABLE_MISSING.add(database.pool);
     }
   }
-  const r = await database.pool.query(
+  const r = await pool.query(
     "SELECT md5(count(*)::text||':'||coalesce(max(updated_at)::text,'')) AS revision FROM listings",
   );
   return r.rows[0].revision;
 }
-async function pgSearch(database, f) {
+async function pgSearch(database, f, options = {}) {
+  const signal = options?.signal;
+  throwIfAborted(signal);
+  const readPool = getReadPool(database);
   const accelerated = typeof database.hasAcceleratedDiscovery === "function"
     ? await database.hasAcceleratedDiscovery()
     : database.hasDiscoveryAcceleration === true;
+  throwIfAborted(signal);
   const where = pgWhere(f, 1, { accelerated });
   const sort = pgSort(f, { accelerated });
   if (f.mode === "autocomplete") {
     const params = [...where.params, f.limit, f.offset || 0];
     const rows = (
-      await database.pool.query(
+      await readPool.query(
         `SELECT id, address, city, county, state, zip FROM listings${where.sql} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length - 1} OFFSET $${params.length}`,
         params,
       )
@@ -718,6 +750,7 @@ async function pgSearch(database, f) {
   }
   const revision = await pgRevision(database),
     binding = hash({ ...f, cursor: null }).slice(0, 24);
+  throwIfAborted(signal);
   let cursorClause = "",
     params = [...where.params];
   if (f.cursor) {
@@ -738,7 +771,7 @@ async function pgSearch(database, f) {
       "PostgreSQL listing projection is unavailable",
     );
   const rows = (
-    await database.pool.query(
+    await readPool.query(
        `SELECT ${select}, ${sort.expr}::float8 AS "cursorValue" FROM listings${where.sql}${cursorClause} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     )
@@ -747,14 +780,7 @@ async function pgSearch(database, f) {
   if (hasMore) rows.pop();
   const { mapPgListingRow } = require("../db/client");
   const listings = rows.map(({ cursorValue, ...r }) => mapPgListingRow(r));
-  const total = Number(
-    (
-      await database.pool.query(
-        `SELECT count(*)::int AS count FROM listings${where.sql}`,
-        where.params,
-      )
-    ).rows[0].count,
-  );
+  let total;
   const allowed = {
       state: "state",
       county: "county",
@@ -818,14 +844,50 @@ async function pgSearch(database, f) {
         freshness: "CASE WHEN discovery_is_live THEN 'observed' ELSE 'unverified' END",
       }
     : allowed;
-  for (const field of f.facets) {
-    if (!queryAllowed[field]) continue;
-    facets[field] = (
-      await database.pool.query(
-        `SELECT coalesce(${queryAllowed[field]}::text,'unknown') AS value,count(*)::int AS count FROM listings${where.sql} GROUP BY 1 ORDER BY count DESC,value`,
-        where.params,
-      )
-    ).rows;
+  const validFacets = f.facets.filter((field) => Boolean(queryAllowed[field]));
+  for (const field of validFacets) facets[field] = [];
+  if (accelerated && validFacets.length > 1) {
+    throwIfAborted(signal);
+    const selectCols = validFacets
+      .map((field, idx) => `coalesce((${queryAllowed[field]})::text,'unknown') AS f${idx}`)
+      .join(", ");
+    const groupSets = ["()", ...validFacets.map((_, idx) => `(f${idx})`)].join(", ");
+    const giCases = validFacets.map((_, idx) => `WHEN GROUPING(f${idx}) = 0 THEN ${idx}`).join(" ");
+    const valCases = validFacets.map((_, idx) => `WHEN GROUPING(f${idx}) = 0 THEN f${idx}`).join(" ");
+    const facetSql = `SELECT CASE ${giCases} ELSE -1 END::int AS gi, CASE ${valCases} ELSE 'unknown' END AS value, count(*)::int AS count FROM (SELECT ${selectCols} FROM listings${where.sql}) sub GROUP BY GROUPING SETS (${groupSets}) ORDER BY gi ASC, count DESC, value ASC`;
+    const aggRows = (await readPool.query(facetSql, where.params)).rows;
+    total = 0;
+    for (const row of aggRows) {
+      if (row.gi === -1) {
+        total = Number(row.count);
+      } else {
+        const field = validFacets[row.gi];
+        if (field) facets[field].push({ value: row.value, count: Number(row.count) });
+      }
+    }
+  } else {
+    throwIfAborted(signal);
+    if (!hasMore && (f.offset || 0) === 0 && !f.cursor) {
+      total = listings.length;
+    } else {
+      total = Number(
+        (
+          await readPool.query(
+            `SELECT count(*)::int AS count FROM listings${where.sql}`,
+            where.params,
+          )
+        ).rows[0].count,
+      );
+    }
+    for (const field of validFacets) {
+      throwIfAborted(signal);
+      facets[field] = (
+        await readPool.query(
+          `SELECT coalesce(${queryAllowed[field]}::text,'unknown') AS value,count(*)::int AS count FROM listings${where.sql} GROUP BY 1 ORDER BY count DESC,value`,
+          where.params,
+        )
+      ).rows;
+    }
   }
   const last = rows.at(-1);
   return {
@@ -855,7 +917,7 @@ async function pgMap(database, f) {
     limit = Math.min(f.limit, 2000),
     params = [...where.params, grid, limit + 1];
   const sql = `SELECT ST_X(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lng,ST_Y(ST_Centroid(ST_Collect(geog::geometry)))::float8 AS lat,count(*)::int AS count,min(id) AS id,CASE WHEN count(DISTINCT source_key)=1 THEN min(source_key) ELSE 'multiple' END AS source,CASE WHEN count(DISTINCT lifecycle_status)=1 THEN min(lifecycle_status) ELSE 'mixed' END AS status FROM listings${where.sql}${where.sql ? " AND" : " WHERE"} geog IS NOT NULL GROUP BY ST_SnapToGrid(geog::geometry,$${where.params.length + 1}) ORDER BY count(*) DESC,min(id) LIMIT $${where.params.length + 2}`;
-  const rows = (await database.pool.query(sql, params)).rows,
+  const rows = (await getReadPool(database).query(sql, params)).rows,
     more = rows.length > limit;
   if (more) rows.pop();
   return {
@@ -887,8 +949,8 @@ async function load(database) {
     );
   return r.listings;
 }
-async function search(database, f) {
-  if (database.isPg) return pgSearch(database, f);
+async function search(database, f, options = {}) {
+  if (database.isPg) return pgSearch(database, f, options);
   const all = await load(database),
     revision = revisionOf(all),
     binding = hash({ ...f, cursor: null }).slice(0, 24);

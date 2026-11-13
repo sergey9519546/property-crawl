@@ -346,7 +346,7 @@ async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
   });
 }
 
-async function handleListings(req, res, dbOverride = null) {
+async function handleListings(req, res, dbOverride = null, options = {}) {
   const db = dbOverride || defaultDb;
   const url = new URL(req.url, 'http://localhost');
   const method = req.method;
@@ -482,12 +482,31 @@ async function handleListings(req, res, dbOverride = null) {
         if (candidateLimit > filters.limit) {
           discoveryUrl.searchParams.set('limit', String(candidateLimit));
         }
-        result = await discovery.search(db, discovery.queryFromUrl(discoveryUrl));
+        const ac = new AbortController();
+        if (options?.signal?.aborted) ac.abort();
+        const onParentAbort = () => ac.abort();
+        options?.signal?.addEventListener?.('abort', onParentAbort, { once: true });
+        const onClose = () => { if (!res?.writableEnded) ac.abort(); };
+        if (typeof res?.on === 'function') res.on('close', onClose);
+        try {
+          result = await discovery.search(db, discovery.queryFromUrl(discoveryUrl), { signal: ac.signal });
+        } finally {
+          options?.signal?.removeEventListener?.('abort', onParentAbort);
+          if (typeof res?.off === 'function') res.off('close', onClose);
+          else if (typeof res?.removeListener === 'function') res.removeListener('close', onClose);
+        }
       } else {
         result = await db.getListings(filters);
       }
     }
-    catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
+    catch (error) {
+      if (error?.name === 'AbortError' || error?.status === 499 || res.writableEnded) return;
+      const status = error?.status || 503;
+      if (status >= 500) {
+        console.warn('[api/listings] error:', status, error?.message || error);
+      }
+      return res.status(status).json({ error: error.message });
+    }
     if (isAutocomplete) {
       return res.json({
         ...result,

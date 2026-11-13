@@ -259,7 +259,7 @@ test('accelerated discovery schema, triggers, search parity, explain plan, and a
     const mainSql = capturedSql.find((s) => s.includes('"cursorValue"'));
     assert.ok(mainSql && mainSql.includes('discovery_terminal') && mainSql.includes('discovery_search_text'), 'main SELECT must use accelerated inline columns');
     assert.doesNotMatch(mainSql, /provenance->'sourceFacts'/, 'main sort/search SQL must not detoast provenance->sourceFacts');
-    assert.ok(capturedSql.some((s) => s.includes('discovery_is_live') && s.includes('GROUP BY 1')), 'freshness facet must use discovery_is_live');
+    assert.ok(capturedSql.some((s) => s.includes('discovery_is_live') && (s.includes('GROUP BY 1') || s.includes('GROUP BY GROUPING SETS'))), 'freshness facet must use discovery_is_live');
 
     // 5. Autocomplete fast path via HTTP handler & discovery.search (PG + memory parity, minimal shape, <= 1 SQL query).
     const acQueries = [];

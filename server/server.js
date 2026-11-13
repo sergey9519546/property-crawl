@@ -229,71 +229,93 @@ async function handleRequest(req, res) {
 
     await parseJsonBody(req);
 
-    if (url.pathname === '/api/health/ready') {
-      const readiness = await discoveryReadiness({ databaseProbe: () => probeDiscoveryDatabase(db.pool) });
-      return res.status(readiness.ready ? 200 : 503).json(readiness);
-    }
-    if (process.env.DISCOVERY_MODE === 'advanced' && !db.isPg && url.pathname !== '/api/health') {
-      return res.status(503).json({ error: 'Advanced discovery requires PostgreSQL. No demo inventory was substituted.' });
-    }
+    const isHealthPing = url.pathname === '/api/health' || url.pathname === '/api/scrapers/health';
+    const webQueryTracked = !isHealthPing && typeof db.enterWebQuery === 'function';
+    const routeStartedAt = Date.now();
+    if (webQueryTracked) db.enterWebQuery();
+    try {
+      if (url.pathname === '/api/health/ready') {
+        try {
+          const readiness = await discoveryReadiness({ databaseProbe: () => probeDiscoveryDatabase(db.pool) });
+          return res.status(readiness.ready ? 200 : 503).json(readiness);
+        } catch (err) {
+          console.warn('[api/health/ready] failed:', err?.message || err);
+          return res.status(503).json({ ready: false, error: err?.message || 'Readiness check failed' });
+        }
+      }
+      if (process.env.DISCOVERY_MODE === 'advanced' && !db.isPg && url.pathname !== '/api/health') {
+        return res.status(503).json({ error: 'Advanced discovery requires PostgreSQL. No demo inventory was substituted.' });
+      }
 
-    // API Routes Routing
-    if (url.pathname === '/api/listings/compare') {
-      return handlePropertyComparison(req, res, url);
-    }
-    const packetMatch = url.pathname.match(/^\/api\/listings\/(.+?)\/(?:packet|decision-packet)$/);
-    if (packetMatch) {
-      return handleDecisionPacket(req, res, url);
-    }
-    if (url.pathname.startsWith('/api/listings')) return handleListings(req, res);
-    if (url.pathname === '/api/parse') return handleParse(req, res);
-    if (url.pathname === '/api/enrich') return handleEnrich(req, res);
-    if (url.pathname === '/api/alerts') return handleAlerts(req, res);
-    if (url.pathname === '/api/export') return handleExport(req, res);
-    if (url.pathname === '/api/verify-docket') return handleVerifyDocket(req, res);
-    if (url.pathname === '/api/parcel-boundary') return handleParcelBoundary(req, res);
-    if (url.pathname === '/api/federal-hazards') return handleFederalHazards(req, res);
-    if (url.pathname === '/api/property-image') return handlePropertyImage(req, res);
-    if (url.pathname === '/api/property-image/providers') return handlePropertyImageProviders(req, res);
-    if (url.pathname === '/api/property-intelligence') return handlePropertyIntelligence(req, res);
-    if (url.pathname === '/api/property-signals') return handlePropertySignals(req, res);
-    if (url.pathname.startsWith('/api/accounts/')) return handleAccounts(req, res, url);
-    if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return handleHunts(req, res, url);
-    if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return handleWorkspace(req, res, url);
-    if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return handleDocumentReview(req, res, { database: db });
-    if (url.pathname === '/api/source-network' || url.pathname.startsWith('/api/source-network/')) return handleSourceNetwork(req, res);
-    if (url.pathname.startsWith('/api/scrapers')) return handleScrapers(req, res);
-    if (url.pathname === '/api/sources') {
-      const sources = await db.getSources();
-      return res.json(sources);
-    }
-    if (url.pathname.startsWith('/api/sources/')) return handleSourceNetwork(req, res);
-    if (url.pathname === '/api/coverage') {
-      return handleCoverage(req, res);
-    }
-    if (url.pathname === '/api/enrichment' || url.pathname.startsWith('/api/enrichment/')) {
-      return handleEnrichmentGateway(req, res);
-    }
-    if (url.pathname.startsWith('/api/watchlist/')) {
-      return handleWatchlistComps(req, res, url);
-    }
-    if (url.pathname === '/api/neighborhoods' || url.pathname.startsWith('/api/neighborhoods/')) {
-      return handleNeighborhoods(req, res, url);
-    }
-    if (url.pathname === '/api/auction-calendar' || url.pathname.startsWith('/api/auction-calendar/')) {
-      return handleAuctionCalendar(req, res, url);
-    }
-    if (url.pathname === '/api/saved-searches' || url.pathname.startsWith('/api/saved-searches/')) {
-      return savedSearchesHandlers.handleSavedSearches(req, res, url);
-    }
-    if (url.pathname === '/api/alerts/matches' || url.pathname.startsWith('/api/alerts/matches/')) {
-      return savedSearchesHandlers.handleAlertMatches(req, res, url);
-    }
-    if (url.pathname === '/api/portfolio/dashboard' || url.pathname.startsWith('/api/portfolio/')) {
-      return handlePortfolioDashboard(req, res, url);
-    }
-    if (url.pathname === '/api/price-drops') {
-      return handlePriceDrop(req, res, url);
+      // API Routes Routing
+      if (url.pathname === '/api/listings/compare') {
+        return await handlePropertyComparison(req, res, url);
+      }
+      const packetMatch = url.pathname.match(/^\/api\/listings\/(.+?)\/(?:packet|decision-packet)$/);
+      if (packetMatch) {
+        return await handleDecisionPacket(req, res, url);
+      }
+      if (url.pathname.startsWith('/api/listings')) return await handleListings(req, res);
+      if (url.pathname === '/api/parse') return await handleParse(req, res);
+      if (url.pathname === '/api/enrich') return await handleEnrich(req, res);
+      if (url.pathname === '/api/alerts') return await handleAlerts(req, res);
+      if (url.pathname === '/api/export') return await handleExport(req, res);
+      if (url.pathname === '/api/verify-docket') return await handleVerifyDocket(req, res);
+      if (url.pathname === '/api/parcel-boundary') return await handleParcelBoundary(req, res);
+      if (url.pathname === '/api/federal-hazards') return await handleFederalHazards(req, res);
+      if (url.pathname === '/api/property-image') return await handlePropertyImage(req, res);
+      if (url.pathname === '/api/property-image/providers') return await handlePropertyImageProviders(req, res);
+      if (url.pathname === '/api/property-intelligence') return await handlePropertyIntelligence(req, res);
+      if (url.pathname === '/api/property-signals') return await handlePropertySignals(req, res);
+      if (url.pathname.startsWith('/api/accounts/')) return await handleAccounts(req, res, url);
+      if (url.pathname === '/api/hunts' || url.pathname.startsWith('/api/hunts/')) return await handleHunts(req, res, url);
+      if (url.pathname === '/api/workspace' || url.pathname.startsWith('/api/workspace/')) return await handleWorkspace(req, res, url);
+      if (url.pathname === '/api/document-review' || url.pathname.startsWith('/api/document-review/')) return await handleDocumentReview(req, res, { database: db });
+      if (url.pathname === '/api/source-network' || url.pathname.startsWith('/api/source-network/')) return await handleSourceNetwork(req, res);
+      if (url.pathname.startsWith('/api/scrapers')) return await handleScrapers(req, res);
+      if (url.pathname === '/api/sources') {
+        try {
+          const sources = await db.getSources();
+          return res.json(sources);
+        } catch (err) {
+          console.warn('[api/sources] failed:', err?.message || err);
+          return res.status(503).json({ error: err?.message || 'Sources unavailable' });
+        }
+      }
+      if (url.pathname.startsWith('/api/sources/')) return await handleSourceNetwork(req, res);
+      if (url.pathname === '/api/coverage') {
+        return await handleCoverage(req, res);
+      }
+      if (url.pathname === '/api/enrichment' || url.pathname.startsWith('/api/enrichment/')) {
+        return await handleEnrichmentGateway(req, res);
+      }
+      if (url.pathname.startsWith('/api/watchlist/')) {
+        return await handleWatchlistComps(req, res, url);
+      }
+      if (url.pathname === '/api/neighborhoods' || url.pathname.startsWith('/api/neighborhoods/')) {
+        return await handleNeighborhoods(req, res, url);
+      }
+      if (url.pathname === '/api/auction-calendar' || url.pathname.startsWith('/api/auction-calendar/')) {
+        return await handleAuctionCalendar(req, res, url);
+      }
+      if (url.pathname === '/api/saved-searches' || url.pathname.startsWith('/api/saved-searches/')) {
+        return await savedSearchesHandlers.handleSavedSearches(req, res, url);
+      }
+      if (url.pathname === '/api/alerts/matches' || url.pathname.startsWith('/api/alerts/matches/')) {
+        return await savedSearchesHandlers.handleAlertMatches(req, res, url);
+      }
+      if (url.pathname === '/api/portfolio/dashboard' || url.pathname.startsWith('/api/portfolio/')) {
+        return await handlePortfolioDashboard(req, res, url);
+      }
+      if (url.pathname === '/api/price-drops') {
+        return await handlePriceDrop(req, res, url);
+      }
+    } finally {
+      if (webQueryTracked) db.leaveWebQuery();
+      const routeElapsedMs = Date.now() - routeStartedAt;
+      if (routeElapsedMs > 2000) {
+        console.warn('[api] slow route:', req.method, url.pathname, `${routeElapsedMs}ms`);
+      }
     }
     if (url.pathname === '/api/health') {
       const { defaultStorePath } = require('./intelligence/document-review-store');
@@ -530,8 +552,9 @@ async function startServer() {
     }
 
     // The two-process host defers expensive collection until after UI boot.
-    const configuredBootDelay = Number(process.env.SCRAPER_BOOT_DELAY_MS);
-    const bootDelay = Number.isFinite(configuredBootDelay) && configuredBootDelay >= 0 ? Math.min(configuredBootDelay,300000) : 500;
+    const rawBootDelay = process.env.SCRAPER_BOOT_DELAY_MS;
+    const configuredBootDelay = rawBootDelay != null && rawBootDelay !== '' ? Number(rawBootDelay) : NaN;
+    const bootDelay = Number.isFinite(configuredBootDelay) && configuredBootDelay >= 0 ? Math.min(configuredBootDelay,300000) : 5000;
     const scheduleContinuation = () => {
       const due = scheduler.dueScrapers(scheduler.listingServingScrapers);
       const hasPartial = due.some((s) => {

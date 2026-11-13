@@ -276,6 +276,9 @@ CREATE INDEX IF NOT EXISTS idx_listings_lat_lng ON listings(latitude, longitude)
 DROP INDEX IF EXISTS idx_listings_discovery_full_search;
 CREATE INDEX IF NOT EXISTS idx_listings_discovery_search_text_trgm ON listings USING GIN (discovery_search_text gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_listings_discovery_source_key_bid ON listings(source_key, opening_bid) WHERE opening_bid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_listings_lower_state_bid ON listings (lower(state), opening_bid ASC NULLS LAST, id ASC);
+CREATE INDEX IF NOT EXISTS idx_listings_lower_state_county ON listings (lower(state), lower(county));
+CREATE SEQUENCE IF NOT EXISTS discovery_listing_revision_seq START WITH 1;
 
 CREATE OR REPLACE FUNCTION sync_listings_discovery_columns()
 RETURNS trigger

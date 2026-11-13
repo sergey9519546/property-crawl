@@ -43,6 +43,40 @@ const MIN_INTERVAL_HOURS = 0.25;
 const MAX_INTERVAL_HOURS = 168;
 const DEFAULT_CONCURRENCY = 3;
 const MAX_CONCURRENCY = 8;
+const BACKFILL_COOLDOWN_MS = 5 * 60_000;
+function runBgDb(database, fn) {
+  return typeof database?.runBackgroundDbTask === 'function'
+    ? database.runBackgroundDbTask(fn)
+    : fn();
+}
+function shouldRunBackfill(schedulerState, shouldBackfill, run) {
+  if (!shouldBackfill) return false;
+  const forceBackfill = run?.enableAssessorBackfill === true;
+  const hasFreshAccepted = !run?.error && Array.isArray(run?.listings) && run.listings.length > 0;
+  if (!forceBackfill && !hasFreshAccepted) return false;
+  if (!forceBackfill && schedulerState && (
+    schedulerState._assessorBackfillInFlight
+    || (Number.isFinite(schedulerState._lastAssessorBackfillAt)
+      && (Date.now() - schedulerState._lastAssessorBackfillAt) < BACKFILL_COOLDOWN_MS)
+  )) {
+    return false;
+  }
+  return true;
+}
+async function executeAssessorBackfillStep(state, database, fn) {
+  if (state) state._assessorBackfillInFlight = true;
+  try {
+    return await runBgDb(database, fn);
+  } finally {
+    if (state) {
+      state._assessorBackfillInFlight = false;
+      state._lastAssessorBackfillAt = Date.now();
+    }
+  }
+}
+async function reconcileAbsenceBg(targetDb, sourceId, ids, options) {
+  return runBgDb(targetDb, () => targetDb.reconcilePublisherAbsence(sourceId, ids, options));
+}
 const { sourcesForWave } = require('../discovery/contracts');
 
 function normalizeConcurrency(value) {
@@ -498,8 +532,8 @@ class IngestionScheduler {
               // chain while the run reported success. See migration 016.
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return null;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
-              await this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.readPool=client;transactionalDb.isPg=true;persistedListing=await transactionalDb.createListing(validation.listing);},ownership);
-            }else persistedListing=await this.database.createListing(validation.listing);
+              await runBgDb(this.database, () => this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.readPool=client;transactionalDb.isPg=true;persistedListing=await transactionalDb.createListing(validation.listing);},ownership));
+            }else persistedListing=await runBgDb(this.database, () => this.database.createListing(validation.listing));
             if(persistedListing&&typeof persistedListing==='object'){
               for(const field of ['lat','lng','assessed','year','propType']){
                 const cur=validation.listing[field];
@@ -685,7 +719,7 @@ const fs = require('node:fs');
           onHarvested: async (listing) => {
             if (!listing?.provenance?.derivedFields?.assessorRoll) return;
             try {
-              await db.createListing(listing);
+              await runBgDb(db, () => db.createListing(listing));
               persistedFromRun += 1;
             } catch (persistError) {
               console.warn('[Scheduler] Could not persist harvested assessor roll to DB (non-fatal):', persistError.message);
@@ -706,12 +740,12 @@ const fs = require('node:fs');
     const shouldBackfill = run.enableAssessorBackfill !== undefined
       ? Boolean(run.enableAssessorBackfill)
       : (this?.enableAssessorBackfill ?? scheduler?.enableAssessorBackfill ?? true);
-    if (shouldBackfill) {
+    if (shouldRunBackfill((this && typeof this === 'object') ? this : scheduler, shouldBackfill, run)) {
     try {
       const { backfillAssessorRolls, resolveNjCadastralBatch } = require('../enrichment/assessor-backfill');
-      const backfill = await backfillAssessorRolls({ db, limit: 25 });
+      const backfill = await executeAssessorBackfillStep((this && typeof this === 'object') ? this : scheduler, db, () => backfillAssessorRolls({ db, limit: 25 }));
       if (sourceId === 'civilview' && (backfill.njEnriched || 0) === 0) {
-        const njBatch = await resolveNjCadastralBatch({ db, limit: 25 });
+        const njBatch = await runBgDb(db, () => resolveNjCadastralBatch({ db, limit: 25 }));
         backfill.njEnriched = njBatch.njEnriched || 0;
         backfill.persisted += njBatch.persisted || 0;
         if (njBatch.njEnriched > 0) {
@@ -734,7 +768,7 @@ const fs = require('node:fs');
       const targetDb = (this && this.database) || scheduler?.database || db;
       if (runCompletedForDb && typeof targetDb.reconcilePublisherAbsence === 'function') {
         try {
-          await targetDb.reconcilePublisherAbsence(
+          await reconcileAbsenceBg(targetDb,
             sourceId,
             run.listings.map((listing) => listing && listing.id).filter(Boolean),
             {
@@ -754,7 +788,7 @@ const fs = require('node:fs');
         for (const countyEntry of run.report.completedCounties) {
           if (!countyEntry?.county || !countyEntry?.state || !Array.isArray(countyEntry.seenIds) || countyEntry.seenIds.length === 0) continue;
           try {
-            await targetDb.reconcilePublisherAbsence(
+            await reconcileAbsenceBg(targetDb,
               sourceId,
               countyEntry.seenIds,
               { runCompleted: true, county: countyEntry.county, state: countyEntry.state }
@@ -769,7 +803,7 @@ const fs = require('node:fs');
       const targetDb = (this && this.database) || scheduler?.database || db;
       if (typeof targetDb.reconcileDuplicateDockets === 'function') {
         try {
-          const dupOut = await targetDb.reconcileDuplicateDockets(sourceId, run.listings);
+          const dupOut = await runBgDb(targetDb, () => targetDb.reconcileDuplicateDockets(sourceId, run.listings));
           if (dupOut?.superseded > 0) {
             console.log(`[Scheduler] Reconciled ${dupOut.superseded} duplicate docket listing(s) for ${sourceId}`);
           }
@@ -808,7 +842,7 @@ const fs = require('node:fs');
     // dead database can never read as "no observations recorded".
     let observationResult = null;
     try {
-      observationResult = await recordSourceRun(db.pool, sourceId, run);
+      observationResult = await runBgDb(db, () => recordSourceRun(db.pool, sourceId, run));
     } catch (obsErr) {
       console.warn('[Scheduler] Source observation run was not recorded to PostgreSQL:', obsErr.message);
     }
@@ -822,7 +856,7 @@ const fs = require('node:fs');
         const { recomputeTriageForListings } = require('../db/observations-persistence');
         const advancedIds = new Set(observationResult.snapshots.map((snapshot) => snapshot.listingId));
         const advanced = run.listings.filter((listing) => listing && advancedIds.has(listing.id));
-        const refreshed = await recomputeTriageForListings(db.pool, advanced, {});
+        const refreshed = await runBgDb(db, () => recomputeTriageForListings(db.pool, advanced, {}));
         if (refreshed.updated > 0) {
           console.log(`[Scheduler] Refreshed triage_priority for ${refreshed.updated} listing(s) from ${sourceId}`);
         }
@@ -846,7 +880,7 @@ const fs = require('node:fs');
           // Members get saved-search alerts only while their subscription is active.
           if (userId.startsWith('account:') && !(await accounts.get(userId.slice(8)))?.entitled) continue;
           if (!userId.startsWith('workspace:') && !userId.startsWith('account:') && !userId.startsWith('device:')) continue;
-          const alertResult = await runAlertsForUser({ userId, listings: run.listings, database: db });
+          const alertResult = await runBgDb(db, () => runAlertsForUser({ userId, listings: run.listings, database: db }));
           if (alertResult && alertResult.totalNewMatches > 0) {
             console.log(`[Alerts] ${alertResult.totalNewMatches} new matches across ${alertResult.searches} searches for ${userId}`);
           }
@@ -863,7 +897,7 @@ const fs = require('node:fs');
     // — a failure here must never break ingestion.
     if (Array.isArray(run.listings) && run.listings.length > 0) {
       try {
-        const recorded = await db.recordListingHistorySnapshots(run.listings);
+        const recorded = await runBgDb(db, () => db.recordListingHistorySnapshots(run.listings));
         if (recorded > 0) {
           console.log(`[History] Snapshotted ${recorded} listings for price-drop tracking.`);
         }

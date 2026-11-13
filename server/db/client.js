@@ -557,6 +557,14 @@ class DatabaseClient {
       get pool() { return self.pool; },
       seed: this.inMemoryData.aiCache,
     });
+    this._activeWebQueries = 0;
+    this._webDrainWaiters = [];
+    this._activeBgDbTasks = 0;
+    this._bgDbWaiters = [];
+    this._maxBgDbConcurrency = Math.max(
+      1,
+      Math.min(4, Number.parseInt(this.env.DATABASE_BG_MAX || '2', 10) || 2),
+    );
     this.init();
   }
 
@@ -589,6 +597,18 @@ class DatabaseClient {
           connectionTimeoutMillis,
           keepAlive: true,
         });
+        this.pool.on('error', (err) => {
+          console.error('[db] Idle PostgreSQL client error:', err?.message || err);
+        });
+        const configuredStatementTimeout = Number(this.env.DATABASE_STATEMENT_TIMEOUT_MS);
+        const statementTimeoutMs = Number.isFinite(configuredStatementTimeout) && configuredStatementTimeout >= 0
+          ? Math.min(Math.trunc(configuredStatementTimeout), 120_000)
+          : 30_000;
+        if (statementTimeoutMs > 0) {
+          this.pool.on('connect', (client) => {
+            client.query(`SET statement_timeout = '${statementTimeoutMs}'`).catch(() => {});
+          });
+        }
         // Do not claim postgres until a query succeeds. Pool construction
         // does not open a socket.
         this.isPg = false;
@@ -2168,12 +2188,67 @@ class DatabaseClient {
     return { total, listings: paginated };
   }
 
-  async getListingById(id) {
+  enterWebQuery() {
+    this._activeWebQueries = (this._activeWebQueries || 0) + 1;
+  }
+
+  leaveWebQuery() {
+    this._activeWebQueries = Math.max(0, (this._activeWebQueries || 0) - 1);
+    if (this._activeWebQueries === 0 && Array.isArray(this._webDrainWaiters) && this._webDrainWaiters.length > 0) {
+      const waiters = this._webDrainWaiters.splice(0);
+      for (const resolve of waiters) resolve();
+    }
+  }
+
+  async yieldToWebQueries(maxWaitMs = 2500) {
+    if (!(this._activeWebQueries > 0)) return;
+    await new Promise((resolve) => {
+      let settled = false;
+      let timer = null;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        if (Array.isArray(this._webDrainWaiters)) {
+          const idx = this._webDrainWaiters.indexOf(finish);
+          if (idx !== -1) this._webDrainWaiters.splice(idx, 1);
+        }
+        resolve();
+      };
+      if (!Array.isArray(this._webDrainWaiters)) this._webDrainWaiters = [];
+      this._webDrainWaiters.push(finish);
+      timer = setTimeout(finish, maxWaitMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    });
+  }
+
+  async runBackgroundDbTask(fn, options = {}) {
+    const maxWaitMs = Number.isFinite(options.maxWebWaitMs) ? options.maxWebWaitMs : 2500;
+    const yieldOnWeb = options.yieldToWeb !== false;
+    if (yieldOnWeb) await this.yieldToWebQueries(maxWaitMs);
+    const maxBg = this._maxBgDbConcurrency || 2;
+    if (!Array.isArray(this._bgDbWaiters)) this._bgDbWaiters = [];
+    while ((this._activeBgDbTasks || 0) >= maxBg) {
+      await new Promise((resolve) => this._bgDbWaiters.push(resolve));
+      if (yieldOnWeb) await this.yieldToWebQueries(maxWaitMs);
+    }
+    this._activeBgDbTasks = (this._activeBgDbTasks || 0) + 1;
+    try {
+      return await fn();
+    } finally {
+      this._activeBgDbTasks = Math.max(0, (this._activeBgDbTasks || 0) - 1);
+      const next = this._bgDbWaiters.shift();
+      if (next) next();
+    }
+  }
+
+  async getListingById(id, options = {}) {
     if (this.isPg) {
-      const res = await this.getReadPool().query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
+      const queryClient = options.client || this.getReadPool();
+      const res = await queryClient.query(`SELECT ${LISTING_SELECT} FROM listings WHERE id = $1`, [id]);
       if (res.rows[0]) return mapPgListingRow(res.rows[0]);
       if (NAMESPACED_ID.test(id)) {
-        const alias = await this.getReadPool().query(
+        const alias = await queryClient.query(
           `SELECT ${LISTING_SELECT} FROM listings WHERE id LIKE $1`, [`%-${id}`]);
         if (alias.rows.length === 1) return mapPgListingRow(alias.rows[0]);
       }
@@ -2313,7 +2388,7 @@ class DatabaseClient {
       // UPSERT WHERE can reject a stale partial refresh (e.g. null observedAt
       // on an existing newer row). Surface the retained record instead of null.
       if (enriched && typeof enriched.id === 'string' && enriched.id) {
-        return this.getListingById(enriched.id);
+        return this.getListingById(enriched.id, { client: queryClient });
       }
       return null;
     }

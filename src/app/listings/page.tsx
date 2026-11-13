@@ -52,7 +52,7 @@ async function loadInitialListings(raw: Record<string, string | string[] | undef
   try {
     const response = await fetch(`${apiUrl}/api/listings?${query}`, {
       cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) return null;
     const payload = (await response.json()) as DiscoveryPayload;

@@ -4,21 +4,47 @@ const { inspectCollectionStorage } = require('./discovery/storage-health');
 const REQUIRED_TABLES=['listings','discovery_source_runs','discovery_snapshots','discovery_observations','discovery_checkpoints','discovery_jobs','discovery_leases','discovery_source_rollouts','discovery_hunts','discovery_hunt_baselines','discovery_hunt_events','discovery_listing_revision','discovery_media_references','discovery_media_assets','discovery_media_links','discovery_atlas_sources','discovery_public_record_research','discovery_worker_health'];
 async function probeDiscoveryDatabase(pool) {
   if(!pool?.query)throw new Error('PostgreSQL is not configured');
-  const result=await pool.query(`SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis') AS postgis,
-    (SELECT coalesce(jsonb_agg(table_name),'[]'::jsonb) FROM information_schema.tables
-      WHERE table_schema=current_schema() AND table_name=ANY($1::text[])) AS tables`,[REQUIRED_TABLES]);
-  const row=result.rows[0];
+  const requiredJobCols = ['id','idempotency_scope_hash','lease_owner','lease_expires_at'];
+  let row;
+  try {
+    const result = await pool.query(`SELECT
+      EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis') AS postgis,
+      (SELECT coalesce(jsonb_agg(c.relname),'[]'::jsonb)
+        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname=current_schema() AND c.relname=ANY($1::text[]) AND c.relkind IN ('r','p','v','m','f')) AS tables,
+      (SELECT coalesce(jsonb_agg(a.attname),'[]'::jsonb)
+        FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname=current_schema() AND c.relname='discovery_jobs' AND a.attname=ANY($2::text[]) AND NOT a.attisdropped) AS job_cols,
+      EXISTS(
+        SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname=current_schema() AND c.relname='discovery_source_runs' AND a.attname='coverage' AND NOT a.attisdropped
+      ) AS has_coverage_col,
+      (SELECT row_to_json(w) FROM (SELECT * FROM discovery_worker_health WHERE worker_key='wave1' LIMIT 1) w) AS worker,
+      (SELECT jsonb_build_object(
+        'queued', count(*) FILTER (WHERE status='queued')::int,
+        'expired', count(*) FILTER (WHERE status='running' AND lease_expires_at<NOW())::int
+      ) FROM discovery_jobs) AS backlog`, [REQUIRED_TABLES, requiredJobCols]);
+    row = result.rows[0];
+  } catch (err) {
+    if (err && (err.code === '42P01' || err.code === '42703')) {
+      const diag = await pool.query(`SELECT
+        EXISTS(SELECT 1 FROM pg_extension WHERE extname='postgis') AS postgis,
+        (SELECT coalesce(jsonb_agg(table_name),'[]'::jsonb) FROM information_schema.tables
+          WHERE table_schema=current_schema() AND table_name=ANY($1::text[])) AS tables`, [REQUIRED_TABLES]);
+      const drow = diag.rows[0];
+      const missing = REQUIRED_TABLES.filter(name => !drow.tables.includes(name));
+      if (missing.length) throw new Error(`Required discovery tables are missing: ${missing.join(', ')}`);
+    }
+    throw err;
+  }
   const missing=REQUIRED_TABLES.filter(name=>!row.tables.includes(name));
   if(missing.length)throw new Error(`Required discovery tables are missing: ${missing.join(', ')}`);
-  await pool.query('SELECT id,idempotency_scope_hash,lease_owner,lease_expires_at FROM discovery_jobs LIMIT 1');
-  await pool.query('SELECT coverage FROM discovery_source_runs LIMIT 0');
-  const [worker,backlog]=await Promise.all([
-    pool.query("SELECT * FROM discovery_worker_health WHERE worker_key='wave1'"),
-    pool.query("SELECT count(*) FILTER(WHERE status='queued')::int queued,count(*) FILTER(WHERE status='running' AND lease_expires_at<NOW())::int expired FROM discovery_jobs")
-  ]);
-  const health=worker.rows[0],status=workerHealthStatus(health);
-  const backlogCounts={queued:backlog.rows[0].queued||0,expiredRunning:backlog.rows[0].expired||0};
-  return {...row,collectionHealth:{status,degraded:collectionDegraded(status,backlogCounts),lastSeenAt:health?.last_seen_at||null,lastLoopStatus:health?.last_loop_status||null,currentJobId:health?.current_job_id||null,backlog:backlogCounts}};
+  const missingJobCols = requiredJobCols.filter(c => !(row.job_cols || []).includes(c));
+  if (missingJobCols.length) throw new Error(`column "${missingJobCols[0]}" does not exist`);
+  if (!row.has_coverage_col) throw new Error('column "coverage" does not exist');
+  const health=row.worker||null,status=workerHealthStatus(health);
+  const backlogCounts={queued:row.backlog?.queued||0,expiredRunning:row.backlog?.expired||0};
+  return {postgis:row.postgis,tables:row.tables,collectionHealth:{status,degraded:collectionDegraded(status,backlogCounts),lastSeenAt:health?.last_seen_at||null,lastLoopStatus:health?.last_loop_status||null,currentJobId:health?.current_job_id||null,backlog:backlogCounts}};
 }
 
 /**
