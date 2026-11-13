@@ -770,9 +770,23 @@ async function pgSearch(database, f, options = {}) {
       503,
       "PostgreSQL listing projection is unavailable",
     );
+  // Late-row-lookup CTE: sort and paginate on lightweight indexed columns in
+  // the inner CTE, then join the full LISTING_SELECT (which includes TOAST
+  // columns raw_notice / provenance / cash_to_close_details) only for the
+  // ≤limit result IDs.  This prevents dragging heavy TOAST pages through the
+  // sort/scan for the entire filtered set.
   const rows = (
     await readPool.query(
-       `SELECT ${select}, ${sort.expr}::float8 AS "cursorValue" FROM listings${where.sql}${cursorClause} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      `WITH _page AS (
+         SELECT id, ${sort.expr}::float8 AS "cursorValue"
+           FROM listings${where.sql}${cursorClause}
+          ORDER BY ${sort.expr} ${sort.dir}, id ${sort.dir}
+          LIMIT $${params.length - 1} OFFSET $${params.length}
+       )
+       SELECT ${select}, p."cursorValue"
+         FROM _page p
+         JOIN listings USING (id)
+        ORDER BY p."cursorValue" ${sort.dir}, id ${sort.dir}`,
       params,
     )
   ).rows;

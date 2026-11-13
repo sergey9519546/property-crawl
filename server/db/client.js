@@ -2416,6 +2416,180 @@ class DatabaseClient {
   }
 
   /**
+   * Bulk upsert a batch of listings in a single parameterized query, chunked to
+   * avoid exceeding the PostgreSQL parameter limit ($1..$65535).  Falls back to
+   * sequential createListing() for the in-memory backend or when the pool is
+   * unavailable.  Callers should collect listings across a source run and call
+   * createListingsBulk() once per batch rather than createListing() per item.
+   *
+   * @param {object[]} listings  - Array of listing objects (same shape as createListing input).
+   * @param {object}   [options] - { client?: pg.Client, chunkSize?: number, yieldEveryChunks?: number }
+   * @returns {Promise<number>}  - Total rows upserted (may be 0 for no-op rows that failed the WHERE guard).
+   */
+  async createListingsBulk(listings, options = {}) {
+    if (!Array.isArray(listings) || listings.length === 0) return 0;
+    if (!this.isPg || !this.pool) {
+      // In-memory fallback: sequential upsert
+      for (const l of listings) await this.createListing(l, options);
+      return listings.length;
+    }
+
+    const CHUNK = Math.min(100, Math.max(1, Math.trunc(Number(options.chunkSize) || 50)));
+    const YIELD_EVERY = Math.max(1, Math.trunc(Number(options.yieldEveryChunks) || 5));
+    const queryClient = options.client || this.pool;
+    let total = 0;
+
+    for (let i = 0; i < listings.length; i += CHUNK) {
+      const chunk = listings.slice(i, i + CHUNK);
+      // Build parameterized VALUES list.  Each listing maps to 46 params ($N..$N+45).
+      const valueParts = [];
+      const params = [];
+      let pIdx = 1;
+
+      for (const listing of chunk) {
+        const e = prepareListingForPersistence(listing);
+        const p = (n) => `$${pIdx + n}`;
+        valueParts.push(
+          `(${p(0)},${p(1)},${p(2)},${p(3)},${p(4)},${p(5)},${p(6)},${p(7)},${p(8)},` +
+          `CASE WHEN ${p(7)}::float8 IS NOT NULL AND ${p(8)}::float8 IS NOT NULL ` +
+          `  THEN ST_SetSRID(ST_MakePoint(${p(8)},${p(7)}),4326)::geography ELSE NULL END,` +
+          `${p(9)},${p(10)},${p(11)},${p(12)},${p(13)},${p(14)},${p(15)},${p(16)},` +
+          `${p(17)},${p(18)},${p(19)},${p(20)},${p(21)},${p(22)},${p(23)},${p(24)},` +
+          `${p(25)},${p(26)},${p(27)},${p(28)},${p(29)},${p(30)},${p(31)},${p(32)},` +
+          `${p(33)},${p(34)},${p(35)},${p(36)},${p(37)},${p(38)},${p(39)},${p(40)},` +
+          `${p(41)},${p(42)},${p(43)},${p(44)},${p(45)})`
+        );
+        params.push(
+          e.id, e.source, e.state, e.county, e.city, e.zip, e.address, e.lat, e.lng,
+          e.beds, e.baths, e.sqft, e.year, e.propType,
+          e.openingBid, e.estLow, e.estHigh, e.assessed, e.dealScore,
+          e.saleDate, e.plaintiff ?? null, e.defendant ?? null, e.judgment,
+          e.attorney ?? null, e.occupancy, e.deposit,
+          e.photo, e.images || null, e.sourceUrl, e.raw,
+          e.provenance, e.sourceObservedAt, e.fetchedAt,
+          e.price ?? null, e.listingDate ?? null,
+          e.redemptionDays, e.redemptionWarning || null,
+          e.seniorLienRisk, e.seniorLienWarning || null,
+          e.cashToClose ?? null, e.cashToCloseDetails, e.status || 'unknown',
+          e.auctionProgram ?? null, e.lifecycleStatus ?? null, e.transactionOutcome ?? null,
+          e.hasDocuments === true
+        );
+        pIdx += 46;
+      }
+
+      const resolvedOpeningBidSql = 'COALESCE(EXCLUDED.opening_bid, listings.opening_bid)';
+      const resolvedEstLowSql = 'CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_low ELSE listings.est_low END';
+      const resolvedEstHighSql = 'CASE WHEN EXCLUDED.est_low IS NOT NULL AND EXCLUDED.est_high IS NOT NULL THEN EXCLUDED.est_high ELSE listings.est_high END';
+      const sql = `INSERT INTO listings (
+        id, source_key, state, county, city, zip, address, latitude, longitude, geog,
+        beds, baths, sqft, year_built, prop_type, opening_bid, est_low, est_high,
+        assessed_value, deal_score, sale_date, plaintiff, defendant, judgment_amount, attorney,
+        occupancy, deposit_terms, photo_url, images, source_url, raw_notice,
+        provenance, source_observed_at, fetched_at,
+        price, listing_date, redemption_days, redemption_warning, senior_lien_risk,
+        senior_lien_warning, cash_to_close, cash_to_close_details, status,
+        auction_program, lifecycle_status, transaction_outcome, has_documents
+      ) VALUES ${valueParts.join(',')}
+      ON CONFLICT (id) DO UPDATE SET
+        source_key = EXCLUDED.source_key,
+        state = EXCLUDED.state,
+        county = COALESCE(EXCLUDED.county, listings.county),
+        city = COALESCE(EXCLUDED.city, listings.city),
+        zip = COALESCE(EXCLUDED.zip, listings.zip),
+        address = EXCLUDED.address,
+        latitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.latitude ELSE listings.latitude END,
+        longitude = CASE WHEN EXCLUDED.geog IS NOT NULL THEN EXCLUDED.longitude ELSE listings.longitude END,
+        geog = COALESCE(EXCLUDED.geog, listings.geog),
+        beds = COALESCE(EXCLUDED.beds, listings.beds),
+        baths = COALESCE(EXCLUDED.baths, listings.baths),
+        sqft = COALESCE(EXCLUDED.sqft, listings.sqft),
+        year_built = COALESCE(EXCLUDED.year_built, listings.year_built),
+        prop_type = COALESCE(NULLIF(NULLIF(EXCLUDED.prop_type, ''), 'Unknown'), listings.prop_type, EXCLUDED.prop_type),
+        opening_bid = COALESCE(EXCLUDED.opening_bid, listings.opening_bid),
+        est_low = ${resolvedEstLowSql},
+        est_high = ${resolvedEstHighSql},
+        assessed_value = COALESCE(EXCLUDED.assessed_value, listings.assessed_value),
+        deal_score = CASE
+          WHEN ${resolvedOpeningBidSql} > 0
+            AND ${resolvedEstLowSql} > 0
+            AND ${resolvedEstHighSql} >= ${resolvedEstLowSql}
+          THEN GREATEST(1, LEAST(99, ROUND(
+            (1 - (${resolvedOpeningBidSql} / ((${resolvedEstLowSql} + ${resolvedEstHighSql}) / 2))) * 130
+          )))::int
+          ELSE NULL
+        END,
+        sale_date = COALESCE(EXCLUDED.sale_date, listings.sale_date),
+        plaintiff = COALESCE(EXCLUDED.plaintiff, listings.plaintiff),
+        defendant = COALESCE(EXCLUDED.defendant, listings.defendant),
+        judgment_amount = COALESCE(EXCLUDED.judgment_amount, listings.judgment_amount),
+        attorney = COALESCE(EXCLUDED.attorney, listings.attorney),
+        occupancy = COALESCE(EXCLUDED.occupancy, listings.occupancy),
+        deposit_terms = COALESCE(EXCLUDED.deposit_terms, listings.deposit_terms),
+        photo_url = EXCLUDED.photo_url,
+        images = COALESCE(EXCLUDED.images, listings.images),
+        source_url = COALESCE(EXCLUDED.source_url, listings.source_url),
+        raw_notice = COALESCE(EXCLUDED.raw_notice, listings.raw_notice),
+        provenance = CASE
+          WHEN EXCLUDED.provenance IS NULL THEN listings.provenance
+          WHEN listings.provenance IS NULL THEN EXCLUDED.provenance
+          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object'
+           AND jsonb_typeof(EXCLUDED.provenance->'derivedFields') = 'object' THEN
+            jsonb_set(
+              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+              '{derivedFields}',
+              (listings.provenance->'derivedFields') || (EXCLUDED.provenance->'derivedFields'),
+              true
+            )
+          WHEN jsonb_typeof(listings.provenance->'derivedFields') = 'object' THEN
+            jsonb_set(
+              (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance,
+              '{derivedFields}',
+              listings.provenance->'derivedFields',
+              true
+            )
+          ELSE (listings.provenance - 'publisherAbsence') || EXCLUDED.provenance
+        END,
+        source_observed_at = COALESCE(EXCLUDED.source_observed_at, listings.source_observed_at),
+        fetched_at = EXCLUDED.fetched_at,
+        price = COALESCE(EXCLUDED.price, listings.price),
+        listing_date = COALESCE(EXCLUDED.listing_date, listings.listing_date),
+        redemption_days = COALESCE(EXCLUDED.redemption_days, listings.redemption_days),
+        redemption_warning = COALESCE(EXCLUDED.redemption_warning, listings.redemption_warning),
+        senior_lien_risk = COALESCE(EXCLUDED.senior_lien_risk, listings.senior_lien_risk),
+        senior_lien_warning = COALESCE(EXCLUDED.senior_lien_warning, listings.senior_lien_warning),
+        cash_to_close = COALESCE(EXCLUDED.cash_to_close, listings.cash_to_close),
+        cash_to_close_details = COALESCE(EXCLUDED.cash_to_close_details, listings.cash_to_close_details),
+        status = CASE WHEN EXCLUDED.status IS NOT NULL AND EXCLUDED.status <> 'unknown' THEN EXCLUDED.status ELSE listings.status END,
+        auction_program = COALESCE(EXCLUDED.auction_program, listings.auction_program),
+        lifecycle_status = COALESCE(EXCLUDED.lifecycle_status, listings.lifecycle_status),
+        transaction_outcome = COALESCE(EXCLUDED.transaction_outcome, listings.transaction_outcome),
+        has_documents = COALESCE(EXCLUDED.has_documents, listings.has_documents),
+        updated_at = NOW()
+      WHERE EXCLUDED.source_observed_at IS NULL
+         OR listings.source_observed_at IS NULL
+         OR (EXCLUDED.source_observed_at IS NOT NULL AND EXCLUDED.source_observed_at >= listings.source_observed_at)`;
+
+      try {
+        const result = await queryClient.query(sql, params);
+        total += result.rowCount || 0;
+      } catch (err) {
+        // On bulk failure, fall back to sequential createListing for this chunk
+        for (const l of chunk) {
+          try { await this.createListing(l, options); total += 1; } catch (_) {}
+        }
+      }
+
+      // Yield to the event loop every YIELD_EVERY chunks to avoid starving the HTTP server
+      const chunkNumber = Math.floor(i / CHUNK) + 1;
+      if (chunkNumber % YIELD_EVERY === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
+
+    return total;
+  }
+
+  /**
    * Reconcile publisher-index absence after a complete, non-truncated sweep.
    * Mirrors mergeLiveRecords() in server/db/live-record-store.js for PostgreSQL
    * and in-memory backends: records from sourceKey that were absent from the
@@ -3222,7 +3396,8 @@ class DatabaseClient {
               FROM listings
              WHERE source_key = 'servicelink'
                AND (
-                 ((NOT discovery_is_live) AND COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice'))
+                 ((NOT discovery_is_live)
+                  AND source_key = 'servicelink')
                  OR discovery_terminal IS TRUE
                  OR COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
                  OR (
@@ -3250,15 +3425,14 @@ class DatabaseClient {
             SELECT id
               FROM listings
              WHERE discovery_terminal IS TRUE
-                OR ((NOT discovery_is_live) AND COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice'))
-                OR provenance->>'recordKind' = 'archive_record'
+                OR NOT discovery_is_live
                 OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
                 OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
                 OR provenance ? 'supersededBy'
                 OR (
-                  provenance ? 'publisherAbsence'
-                  AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
-                )
+                   provenance ? 'publisherAbsence'
+                   AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
+                 )
                 OR (
                   sale_date IS NOT NULL
                   AND sale_date < CURRENT_DATE - ($2::int * INTERVAL '1 day')
@@ -3361,9 +3535,7 @@ class DatabaseClient {
               WHERE snapshot_id IN (
                 SELECT snap.id
                   FROM discovery_snapshots snap
-                 WHERE COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
-                    OR snap.provenance->>'recordKind' = 'archive_record'
-                    OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                 WHERE (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
                     OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
                  LIMIT $3
               )`,
@@ -3375,9 +3547,7 @@ class DatabaseClient {
                 SELECT snap.id
                   FROM discovery_snapshots snap
                  WHERE (
-                   COALESCE(snap.provenance->>'origin', '') NOT IN ('live', 'email_notice')
-                   OR snap.provenance->>'recordKind' = 'archive_record'
-                   OR (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
+                   (snap.source_key = 'servicelink' AND snap.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
                    OR snap.observed_at < NOW() - ($1::int * INTERVAL '1 day')
                  )
                    AND NOT EXISTS (SELECT 1 FROM discovery_observations o WHERE o.snapshot_id = snap.id)

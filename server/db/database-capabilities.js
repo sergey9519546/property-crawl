@@ -108,21 +108,19 @@ async function probeDatabaseCapabilities(pool) {
             ) AS gin_trgm_ops,
             (SELECT coalesce(jsonb_object_agg(extname, extversion), '{}'::jsonb)
                FROM pg_extension WHERE extname = ANY($1::text[])) AS extensions,
-            (SELECT coalesce(jsonb_agg(c.relname), '[]'::jsonb)
-               FROM pg_class c
-               JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relkind IN ('r', 'p', 'v', 'm')
-                AND c.relname = ANY($2::text[])) AS tables,
-            (SELECT coalesce(jsonb_agg(c.relname || '.' || a.attname), '[]'::jsonb)
-               FROM pg_attribute a
-               JOIN pg_class c ON c.oid = a.attrelid
-               JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = 'public'
-                AND c.relname = ANY($3::text[])
-                AND a.attname = ANY($4::text[])
-                AND a.attnum > 0
-                AND NOT a.attisdropped) AS columns`,
+            (SELECT coalesce(jsonb_agg(t.tbl), '[]'::jsonb)
+               FROM unnest($2::text[]) t(tbl)
+              WHERE to_regclass('public.' || quote_ident(t.tbl)) IS NOT NULL) AS tables,
+            (SELECT coalesce(jsonb_agg(tbl.t || '.' || a.attname), '[]'::jsonb)
+               FROM unnest($3::text[]) tbl(t)
+               CROSS JOIN LATERAL (
+                 SELECT a.attname
+                   FROM pg_attribute a
+                  WHERE a.attrelid = to_regclass('public.' || quote_ident(tbl.t))
+                    AND a.attname = ANY($4::text[])
+                    AND a.attnum > 0
+                    AND NOT a.attisdropped
+               ) a) AS columns`,
     [REQUIRED_EXTENSIONS, names, columnTables, columnNames]
   );
   const row = result.rows[0] || {};

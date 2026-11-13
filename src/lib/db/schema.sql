@@ -327,6 +327,7 @@ CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_i
 CREATE INDEX IF NOT EXISTS idx_alert_matches_listing ON alert_matches(listing_id);
 CREATE INDEX IF NOT EXISTS idx_listing_history_listing ON listing_history(listing_id, source_observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listing_history_recorded ON listing_history(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_listing_history_listing_id_only ON listing_history(listing_id);
 CREATE INDEX IF NOT EXISTS idx_source_observations_listing_observed ON source_observations(listing_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_source_observations_source_record ON source_observations(source_key, record_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_source_observations_observed_at ON source_observations(observed_at DESC);
