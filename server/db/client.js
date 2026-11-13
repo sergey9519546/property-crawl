@@ -2909,25 +2909,44 @@ class DatabaseClient {
     const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
     let recorded = 0;
     if (this.isPg) {
+      const seen = new Set();
+      const rows = [];
       for (const listing of listings) {
         if (!listing || typeof listing !== 'object' || !listing.id) continue;
         const sourceObservedAt = listing.sourceObservedAt || listing.provenance?.observedAt;
         if (!sourceObservedAt) continue;
+        const id = String(listing.id);
+        const obs = String(sourceObservedAt);
+        const dedupKey = `${id}\0${obs}`;
+        if (seen.has(dedupKey)) continue;
+        seen.add(dedupKey);
+        rows.push({
+          id,
+          sourceObservedAt: obs,
+          openingBid: finiteOrNull(listing.openingBid),
+          mid: finiteOrNull(listing.mid),
+          dealScore: finiteOrNull(listing.dealScore),
+          source: typeof listing.source === 'string' ? listing.source.slice(0, 64) : null,
+        });
+      }
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
         const res = await this.pool.query(
           `INSERT INTO listing_history (listing_id, source_observed_at, opening_bid, mid, deal_score, source)
-           VALUES ($1, $2, $3, $4, $5, $6)
+           SELECT * FROM UNNEST($1::text[], $2::timestamptz[], $3::numeric[], $4::numeric[], $5::numeric[], $6::text[])
            ON CONFLICT (listing_id, source_observed_at) DO NOTHING
            RETURNING id`,
           [
-            listing.id,
-            sourceObservedAt,
-            listing.openingBid ?? null,
-            listing.mid ?? null,
-            listing.dealScore ?? null,
-            listing.source ?? null
+            batch.map((r) => r.id),
+            batch.map((r) => r.sourceObservedAt),
+            batch.map((r) => r.openingBid),
+            batch.map((r) => r.mid),
+            batch.map((r) => r.dealScore),
+            batch.map((r) => r.source),
           ]
         );
-        if (res.rows.length > 0) recorded += 1;
+        recorded += res.rows.length;
       }
       return recorded;
     }

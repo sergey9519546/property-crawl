@@ -178,3 +178,54 @@ test('getListingHistory: with options.prior returns empty when only one snapshot
   const priorHistory = await db.getListingHistory(['SINGLE_SNAP'], { prior: true });
   assert.equal(priorHistory.has('SINGLE_SNAP'), false, 'no prior snapshot exists');
 });
+
+test('recordListingHistorySnapshots (pg): batches inserts via UNNEST, deduplicates within batch, and matches getListingHistory', async () => {
+  const { PGlite } = require('@electric-sql/pglite');
+  const pg = new PGlite();
+  await pg.exec(`
+    CREATE TABLE listing_history (
+      id SERIAL PRIMARY KEY,
+      listing_id TEXT NOT NULL,
+      source_observed_at TIMESTAMPTZ NOT NULL,
+      opening_bid NUMERIC(14, 2),
+      mid NUMERIC(14, 2),
+      deal_score NUMERIC(5, 2),
+      source VARCHAR(64),
+      recorded_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(listing_id, source_observed_at)
+    );
+  `);
+
+  let queryCalls = 0;
+  const instrumentedPool = {
+    query: (sql, params) => {
+      queryCalls += 1;
+      return pg.query(sql, params);
+    },
+  };
+  const { DatabaseClient } = require('../../server/db/client');
+  const pgClient = new DatabaseClient({ env: { NODE_ENV: 'test' } });
+  pgClient.attachPostgres(instrumentedPool, 'pglite');
+
+  const bulk = Array.from({ length: 1050 }, (_, idx) => listing({
+    id: `PG-${idx}`,
+    openingBid: idx === 0 ? null : 50000 + idx,
+    mid: idx === 0 ? null : 100000 + idx,
+    dealScore: idx === 0 ? null : 70,
+    sourceObservedAt: '2026-09-10T12:00:00.000Z',
+  }));
+  // Add an in-batch duplicate and a missing-timestamp row that must be ignored cleanly.
+  bulk.push(listing({ id: 'PG-1', sourceObservedAt: '2026-09-10T12:00:00.000Z' }));
+  bulk.push({ id: 'NO_TS', openingBid: 1000 });
+
+  const recorded = await pgClient.recordListingHistorySnapshots(bulk);
+  assert.equal(recorded, 1050);
+  assert.ok(queryCalls <= 5, `expected batched UNNEST inserts (<=5 queries), got ${queryCalls}`);
+
+  const duplicateRun = await pgClient.recordListingHistorySnapshots(bulk.slice(0, 50));
+  assert.equal(duplicateRun, 0, 're-inserting existing snapshots must stay idempotent');
+
+  const fetched = await pgClient.getListingHistory(['PG-0', 'PG-1']);
+  assert.equal(fetched.get('PG-0').openingBid, null);
+  assert.equal(fetched.get('PG-1').openingBid, 50001);
+});

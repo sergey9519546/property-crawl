@@ -5,6 +5,7 @@
 -- Enable PostGIS and UUID extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "postgis";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- 1. Verified Sources Registry Table
 CREATE TABLE IF NOT EXISTS sources (
@@ -267,6 +268,17 @@ CREATE INDEX IF NOT EXISTS idx_listings_source_observed ON listings(source_obser
 CREATE INDEX IF NOT EXISTS idx_listings_source_key_observed ON listings(source_key, source_observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_has_documents ON listings(has_documents) WHERE has_documents = TRUE;
 CREATE INDEX IF NOT EXISTS idx_listings_lat_lng ON listings(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_listings_discovery_full_search ON listings USING GIN (
+  (
+    coalesce(id, '') || ' ' ||
+    coalesce(address, '') || ' ' ||
+    coalesce(city, '') || ' ' ||
+    coalesce(county, '') || ' ' ||
+    coalesce(source_key, '') || ' ' ||
+    coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram', '') || ' ' ||
+    coalesce(provenance->>'recordId', '')
+  ) gin_trgm_ops
+);
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_id) WHERE read_at IS NULL;

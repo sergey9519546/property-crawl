@@ -8,101 +8,20 @@ import { ArrowRight, ArrowUp, Building2, Database, Flag, Globe2, House, Map as M
 import { EASE_OUT } from "./motion";
 import { UnicornHeroBg } from "./unicorn-hero-bg";
 import { ErrorBoundary } from "./error-boundary";
+import {
+  buildMarketSuggestions,
+  mergeMarketListings,
+  type ListingMarket,
+  type MarketSuggestion,
+} from "@/lib/hero-market-suggestions";
 
 const H1_WORDS = ["Find", "the", "deal", "before", "everyone", "else."];
-
-type MarketSuggestion = {
-  id: string;
-  label: string;
-  query: string;
-  kind: "address" | "city" | "county" | "state" | "area" | "country";
-  description: string;
-};
-
-type ListingMarket = {
-  id: string;
-  address: string;
-  city: string;
-  county: string;
-  state: string;
-  zip: string;
-};
-
-const STATE_NAMES: Record<string, string> = {
-  AK: "Alaska",
-  AL: "Alabama",
-  AR: "Arkansas",
-  AZ: "Arizona",
-  CA: "California",
-  CO: "Colorado",
-  CT: "Connecticut",
-  DC: "District of Columbia",
-  DE: "Delaware",
-  FL: "Florida",
-  GA: "Georgia",
-  HI: "Hawaii",
-  IA: "Iowa",
-  ID: "Idaho",
-  IL: "Illinois",
-  IN: "Indiana",
-  KS: "Kansas",
-  KY: "Kentucky",
-  LA: "Louisiana",
-  MA: "Massachusetts",
-  MD: "Maryland",
-  ME: "Maine",
-  MI: "Michigan",
-  MN: "Minnesota",
-  MO: "Missouri",
-  MS: "Mississippi",
-  MT: "Montana",
-  NC: "North Carolina",
-  ND: "North Dakota",
-  NE: "Nebraska",
-  NH: "New Hampshire",
-  NJ: "New Jersey",
-  NM: "New Mexico",
-  NV: "Nevada",
-  NY: "New York",
-  OH: "Ohio",
-  OK: "Oklahoma",
-  OR: "Oregon",
-  PA: "Pennsylvania",
-  PR: "Puerto Rico",
-  RI: "Rhode Island",
-  SC: "South Carolina",
-  SD: "South Dakota",
-  TN: "Tennessee",
-  TX: "Texas",
-  UT: "Utah",
-  VA: "Virginia",
-  VT: "Vermont",
-  WA: "Washington",
-  WI: "Wisconsin",
-  WV: "West Virginia",
-  WY: "Wyoming",
-};
-
-const KIND_ORDER: MarketSuggestion["kind"][] = [
-  "city",
-  "county",
-  "state",
-  "area",
-  "address",
-  "country",
-];
 
 /**
  * Hero — Unicorn Studio WebGL shader in a rounded panel (arcade structure).
  * Frosted glass applied ONLY to the URL input field (glass-input token).
  * Toggle and buttons use solid/opaque styling (NOT pill, NOT glass).
  */
-/** Merges incoming catalog rows into suggestion cache without duplicating ids. */
-function mergeMarketListings(prev: ListingMarket[], incoming: ListingMarket[]): ListingMarket[] {
-  const seen = new Set(prev.map((item) => item.id));
-  const additions = incoming.filter((item) => item?.id && !seen.has(item.id));
-  return additions.length > 0 ? [...prev, ...additions] : prev;
-}
 
 export function Hero() {
   const [url, setUrl] = React.useState("");
@@ -166,82 +85,10 @@ export function Hero() {
       return;
     }
 
-    const normalizedQuery = deferredUrl.toLowerCase();
-        const markets = new Map<string, MarketSuggestion>();
-        markets.set("country:US", {
-          id: "country:US",
-          label: "United States",
-          query: "",
-          kind: "country",
-          description: "Country coverage",
-        });
-        for (const listing of marketListings) {
-          const suggestionsForListing: MarketSuggestion[] = [
-            {
-              id: `address:${listing.id}`,
-              label: listing.address,
-              query: listing.city,
-              kind: "address",
-              description: `Address nearby ${listing.city}`,
-            },
-            {
-              id: `city:${listing.city}:${listing.state}`,
-              label: `${listing.city}, ${listing.state}`,
-              query: listing.city,
-              kind: "city",
-              description: "City market",
-            },
-            {
-              id: `county:${listing.county}:${listing.state}`,
-              // Publishers are inconsistent: some send "Camden", others
-              // "Bergen County". Appending " County" unconditionally rendered
-              // "Bergen County County, NJ" in the suggestion list.
-              label: `${String(listing.county).replace(/\s+county\s*$/i, "")} County, ${listing.state}`,
-              query: listing.county,
-              kind: "county",
-              description: "County market",
-            },
-            {
-              id: `state:${listing.state}`,
-              label: STATE_NAMES[listing.state] || listing.state,
-              query: listing.state,
-              kind: "state",
-              description: "State",
-            },
-            {
-              id: `area:${listing.zip}:${listing.city}`,
-              label: `${listing.zip} \u2014 ${listing.city} area`,
-              query: listing.zip,
-              kind: "area",
-              description: "ZIP area",
-            },
-          ];
-          for (const suggestion of suggestionsForListing) {
-            if (!suggestion.label || !suggestion.query || /\b(?:unknown|undefined|null)\b/i.test(suggestion.label)) continue;
-            if (suggestion.kind === "area" && (!/^\d{5}$/.test(listing.zip) || listing.zip === "00000")) continue;
-            // Dedupe on the normalized label, not the id. Publisher data carries
-            // the same market in different cases ("Haddon Township" and
-            // "HADDON TOWNSHIP"), and a case-sensitive key let both through - the
-            // user typed one city and got it offered twice. The filter below
-            // already matches case-insensitively, so the key should too.
-            markets.set(`${suggestion.kind}:${suggestion.label.toLowerCase()}`, suggestion);
-          }
-        }
-        const matches = Array.from(markets.values())
-          .filter((market) => market.label.toLowerCase().includes(normalizedQuery))
-          .sort((a, b) => {
-            const aStarts = a.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
-            const bStarts = b.label.toLowerCase().startsWith(normalizedQuery) ? 0 : 1;
-            return aStarts - bStarts || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.label.localeCompare(b.label);
-          })
-          // Six was too few to reach a real market: four cities named Camden
-            // (WY, AR, NJ, SC) filled the list and pushed Camden County, NJ -
-            // the market someone typing "Camden" most likely means - out of
-            // reach entirely.
-            .slice(0, 8);
-        setSuggestions(matches);
-        setSuggestionsOpen(matches.length > 0);
-        setActiveSuggestion(-1);
+    const matches = buildMarketSuggestions(deferredUrl, marketListings, 8);
+    setSuggestions(matches);
+    setSuggestionsOpen(matches.length > 0);
+    setActiveSuggestion(-1);
   }, [deferredUrl, selectedMarket, marketListings]);
 
   React.useEffect(() => {
