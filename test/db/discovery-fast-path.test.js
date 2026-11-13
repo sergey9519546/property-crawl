@@ -422,5 +422,11 @@ test('frontend Hero requests mode=autocomplete and InteractiveTerminal defers bu
   const terminalSrc = fs.readFileSync(path.join(root, 'src/components/terminal/interactive-terminal.tsx'), 'utf8');
 
   assert.match(heroSrc, /\/api\/listings\?q=.*mode=autocomplete/, 'Hero must request lightweight mode=autocomplete payload');
-  assert.match(terminalSrc, /requestIdleCallback|setTimeout/, 'InteractiveTerminal initial mount load must yield briefly to avoid starving Hero on /');
+  assert.match(terminalSrc, /setTimeout/, 'InteractiveTerminal initial mount load must defer past initial Hero hydration to avoid starving Hero on /');
+});
+
+test('start-production grants >= 60s backend liveness budget when Postgres is configured for startup migrations', () => {
+  const root = path.resolve(__dirname, '..', '..');
+  const startProd = fs.readFileSync(path.join(root, 'scripts/start-production.js'), 'utf8');
+  assert.match(startProd, /hasDatabase\s*\?\s*(90000|120000)/, 'Postgres startup liveness window must allow migrations such as 034 to finish without a 10s SIGTERM');
 });

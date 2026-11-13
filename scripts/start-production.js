@@ -135,7 +135,14 @@ async function awaitBackendReady() {
     console.log('[Production] Advanced discovery readiness failed — continuing in Demo/in-memory mode.');
   }
 
-  const live = await waitForHealth(liveUrl, 10000);
+  // Startup database migrations (e.g. column backfills + GIN index creation)
+  // run synchronously before server.listen(), so a 10s budget can SIGTERM an
+  // active migration on resource-constrained hosts.
+  const configuredTimeout = Number(bootEnv.BACKEND_HEALTH_TIMEOUT_MS);
+  const liveTimeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : (hasDatabase ? 120000 : 25000);
+  const live = await waitForHealth(liveUrl, liveTimeoutMs);
   if (live) {
     console.log(`[Production] Backend Listing API is live on port ${internalApiPort} (liveness /api/health).`);
     return true;
