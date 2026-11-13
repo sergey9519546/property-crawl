@@ -1,10 +1,10 @@
-const db = require('../db/client');
+const defaultDb = require('../db/client');
 const Validator = require('../security/validation');
 const { readMediaStore, attachMedia } = require('../db/property-media-store');
 const discovery = require('../discovery/query');
 const { buildDocumentEvidence } = require('../intelligence/document-evidence');
 const { computeTriage, buildParcelKey, extractRawApn, extractCountyFips } = require('../scrapers/normalization');
-const { applyCrossSourceBakeOff } = db;
+const { applyCrossSourceBakeOff } = defaultDb;
 const { annotateListing, summarizeInventory } = require('../scrapers/listing-intelligence');
 const { resolveCountyKey, resolveCountyEndpoint, queryArcgisParcel } = require('../enrichment/arcgis-parcels');
 const { queryLocalParcelIndex } = require('../enrichment/local-parcel-index');
@@ -146,7 +146,8 @@ const PARAM_CAPS = Object.freeze({
   occupancy:  { maxLen: 32,  defaultIfEmpty: 'all'  },
   seniorLien: { maxLen: 16,  defaultIfEmpty: 'all'  },
   redemption: { maxLen: 32,  defaultIfEmpty: 'all'  },
-  sort:       { maxLen: 16,  defaultIfEmpty: 'score' }
+  sort:       { maxLen: 16,  defaultIfEmpty: 'score' },
+  mode:       { maxLen: 16,  defaultIfEmpty: ''     }
 });
 
 const INTELLIGENCE_SORTS = new Set(['quality', 'opportunity']);
@@ -258,7 +259,7 @@ function publishedApn(listing) {
   return extractRawApn(listing) || null;
 }
 
-async function handleAssessorLookup(encodedId, req, res) {
+async function handleAssessorLookup(encodedId, req, res, db = defaultDb) {
   let id;
   try { id = decodeURIComponent(encodedId); }
   catch (_) { return res.status(400).json({ error: 'Invalid listing identifier encoding' }); }
@@ -345,13 +346,14 @@ async function handleAssessorLookup(encodedId, req, res) {
   });
 }
 
-async function handleListings(req, res) {
+async function handleListings(req, res, dbOverride = null) {
+  const db = dbOverride || defaultDb;
   const url = new URL(req.url, 'http://localhost');
   const method = req.method;
 
   if (method === 'GET') {
     const assessorMatch = url.pathname.match(/^\/api\/listings\/([^/]+)\/assessor$/);
-    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], req, res);
+    if (assessorMatch) return handleAssessorLookup(assessorMatch[1], req, res, db);
     if (url.pathname === '/api/listings/map') {
       try {
         // The map view is fed by the same filter state as the grid, so it can
@@ -460,13 +462,17 @@ async function handleListings(req, res) {
         });
       }
     }
+    const isAutocomplete = filters.mode === 'autocomplete';
+    if (filters.mode && filters.mode !== 'autocomplete' && filters.mode !== 'default') {
+      return res.status(400).json({ error: 'Invalid mode' });
+    }
     let result;
     try {
       if (usesDiscovery) {
         // Intelligence sorts (quality/opportunity) are applied after annotation.
         // The discovery SQL layer only understands score/date/bid-asc/equity.
         const discoveryUrl = new URL(url);
-        const isIntelligenceView = INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0;
+        const isIntelligenceView = !isAutocomplete && (INTELLIGENCE_SORTS.has(String(filters.sort)) || (Number(filters.minQuality) || 0) > 0);
         const candidateLimit = (filters.offset === 0 && !filters.cursor && isIntelligenceView && filters.limit < 250)
           ? Math.min(250, Math.max(filters.limit * 5, 100))
           : filters.limit;
@@ -482,6 +488,13 @@ async function handleListings(req, res) {
       }
     }
     catch (error) { return res.status(error.status || 503).json({ error: error.message }); }
+    if (isAutocomplete) {
+      return res.json({
+        ...result,
+        dataMode: typeof db.dataMode === 'function' ? db.dataMode() : (db.isPg ? 'postgres' : 'unavailable'),
+        postgresReachable: db.postgresReachable === true,
+      });
+    }
 
     // Apply delta filter when since is present: keep only listings whose
     // observation timestamp is strictly greater than the provided cutoff.

@@ -99,7 +99,7 @@ export function Hero() {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/listings?q=${encodeURIComponent(deferredUrl)}&limit=12`, {
+        const response = await fetch(`/api/listings?q=${encodeURIComponent(deferredUrl)}&limit=12&mode=autocomplete`, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -111,7 +111,7 @@ export function Hero() {
       } catch {
         // Free-text search remains available if live autocomplete fails or aborts.
       }
-    }, 150);
+    }, 100);
 
     return () => {
       window.clearTimeout(timer);

@@ -123,6 +123,11 @@ CREATE TABLE IF NOT EXISTS listings (
     -- (docker-compose.yml mounts this file into docker-entrypoint-initdb.d).
     has_documents BOOLEAN,
     status VARCHAR(32) NOT NULL DEFAULT 'unknown' CHECK (status IN ('unknown', 'active', 'pending', 'sold', 'closed', 'cancelled', 'scheduled', 'STAYED_BANKRUPTCY', 'ADJOURNED', 'ACTIVE_SCHEDULED', 'POSTPONED', 'STAYED', 'WITHDRAWN', 'postponed', 'stayed', 'adjourned')),
+    discovery_terminal BOOLEAN NOT NULL DEFAULT FALSE,
+    discovery_action_tier SMALLINT NOT NULL DEFAULT 0,
+    discovery_is_live BOOLEAN NOT NULL DEFAULT FALSE,
+    discovery_program TEXT,
+    discovery_search_text TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -268,17 +273,50 @@ CREATE INDEX IF NOT EXISTS idx_listings_source_observed ON listings(source_obser
 CREATE INDEX IF NOT EXISTS idx_listings_source_key_observed ON listings(source_key, source_observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_listings_has_documents ON listings(has_documents) WHERE has_documents = TRUE;
 CREATE INDEX IF NOT EXISTS idx_listings_lat_lng ON listings(latitude, longitude) WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_listings_discovery_full_search ON listings USING GIN (
-  (
-    coalesce(id, '') || ' ' ||
-    coalesce(address, '') || ' ' ||
-    coalesce(city, '') || ' ' ||
-    coalesce(county, '') || ' ' ||
-    coalesce(source_key, '') || ' ' ||
-    coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram', '') || ' ' ||
-    coalesce(provenance->>'recordId', '')
-  ) gin_trgm_ops
-);
+DROP INDEX IF EXISTS idx_listings_discovery_full_search;
+CREATE INDEX IF NOT EXISTS idx_listings_discovery_search_text_trgm ON listings USING GIN (discovery_search_text gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_listings_discovery_source_key_bid ON listings(source_key, opening_bid) WHERE opening_bid IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION sync_listings_discovery_columns()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.discovery_terminal := coalesce(
+    lower(coalesce(NEW.status, '')) IN ('sold', 'closed', 'cancelled')
+    OR lower(coalesce(NEW.lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel)'
+    OR nullif(coalesce(nullif(NEW.transaction_outcome, ''), NEW.provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL
+    OR (NEW.provenance IS NOT NULL AND (NEW.provenance ? 'publisherAbsence'))
+    OR (NEW.provenance IS NOT NULL AND (NEW.provenance ? 'supersededBy')),
+    FALSE
+  );
+  NEW.discovery_action_tier := (
+    (CASE WHEN coalesce(NEW.opening_bid, 0) > 0
+      OR (CASE WHEN (NEW.provenance->'sourceFacts'->>'upsetPrice') ~ '^[0-9]+([.][0-9]+)?$' THEN (NEW.provenance->'sourceFacts'->>'upsetPrice')::numeric ELSE 0 END) > 0
+      OR (CASE WHEN (NEW.provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount') ~ '^[0-9]+([.][0-9]+)?$' THEN (NEW.provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount')::numeric ELSE 0 END) > 0
+      OR (NEW.provenance->'derivedFields'->'assessorRoll'->'parcel') IS NOT NULL
+      THEN 2 ELSE 0 END)
+    + (CASE WHEN NEW.latitude IS NOT NULL AND NEW.longitude IS NOT NULL THEN 1 ELSE 0 END)
+  )::smallint;
+  NEW.discovery_is_live := coalesce(NEW.provenance->>'origin' = 'live', FALSE);
+  NEW.discovery_program := nullif(coalesce(NEW.auction_program, NEW.provenance->'sourceFacts'->>'auctionProgram'), '');
+  NEW.discovery_search_text := (
+    coalesce(NEW.id, '') || ' ' ||
+    coalesce(NEW.address, '') || ' ' ||
+    coalesce(NEW.city, '') || ' ' ||
+    coalesce(NEW.county, '') || ' ' ||
+    coalesce(NEW.source_key, '') || ' ' ||
+    coalesce(NEW.auction_program, NEW.provenance->'sourceFacts'->>'auctionProgram', '') || ' ' ||
+    coalesce(NEW.provenance->>'recordId', '')
+  );
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS listings_sync_discovery_columns ON listings;
+CREATE TRIGGER listings_sync_discovery_columns
+BEFORE INSERT OR UPDATE ON listings
+FOR EACH ROW EXECUTE FUNCTION sync_listings_discovery_columns();
 CREATE INDEX IF NOT EXISTS idx_saved_deals_user ON saved_deals(user_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_matches_user_unread ON alert_matches(user_id) WHERE read_at IS NULL;

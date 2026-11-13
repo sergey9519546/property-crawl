@@ -487,6 +487,9 @@ async function startServer() {
       }
     }
     if (db.postgresReachable === true && db.pool) {
+      if (typeof db.hasAcceleratedDiscovery === 'function') {
+        await db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false);
+      }
       try {
         const { probeDatabaseCapabilities } = require('./db/database-capabilities');
         db.databaseCapabilities = await probeDatabaseCapabilities(db.pool);

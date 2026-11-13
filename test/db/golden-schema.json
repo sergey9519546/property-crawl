@@ -1680,6 +1680,41 @@
     },
     {
       "table": "listings",
+      "column": "discovery_action_tier",
+      "type": "smallint",
+      "nullable": false,
+      "default": "0"
+    },
+    {
+      "table": "listings",
+      "column": "discovery_is_live",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "listings",
+      "column": "discovery_program",
+      "type": "text",
+      "nullable": true,
+      "default": null
+    },
+    {
+      "table": "listings",
+      "column": "discovery_search_text",
+      "type": "text",
+      "nullable": false,
+      "default": "''::text"
+    },
+    {
+      "table": "listings",
+      "column": "discovery_terminal",
+      "type": "boolean",
+      "nullable": false,
+      "default": "false"
+    },
+    {
+      "table": "listings",
       "column": "equity_spread",
       "type": "numeric",
       "nullable": true,

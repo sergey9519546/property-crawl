@@ -485,6 +485,8 @@ function applyCrossSourceBakeOff(listings) {
 // without a new observation, at which point nothing in the table can still be
 // called current - and "still active" is exactly the claim a buyer makes.
 const DEFAULT_STALE_AFTER_HOURS = 24;
+const ACCELERATION_CACHE = new WeakMap();
+const ACCELERATED_LISTINGS_COLUMNS = ['discovery_terminal', 'discovery_action_tier', 'discovery_is_live', 'discovery_program', 'discovery_search_text'];
 
 function isFiniteTime(value) {
   const t = Date.parse(value || '');
@@ -700,6 +702,33 @@ class DatabaseClient {
       return false;
     } finally {
       if (client) client.release();
+    }
+  }
+
+  async hasAcceleratedDiscovery({ forceRefresh = false } = {}) {
+    if (!this.isPg || !this.pool) return false;
+    const pool = typeof this.getReadPool === 'function' ? (this.getReadPool() || this.pool) : this.pool;
+    if (!forceRefresh && ACCELERATION_CACHE.has(pool)) {
+      const cached = ACCELERATION_CACHE.get(pool);
+      this.hasDiscoveryAcceleration = cached;
+      return cached;
+    }
+    try {
+      const result = await pool.query(
+        `SELECT count(*)::int AS n
+           FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'listings'
+            AND column_name = ANY($1::text[])`,
+        [ACCELERATED_LISTINGS_COLUMNS],
+      );
+      const ready = Number(result.rows[0]?.n || 0) === ACCELERATED_LISTINGS_COLUMNS.length;
+      ACCELERATION_CACHE.set(pool, ready);
+      if (this.pool && this.pool !== pool) ACCELERATION_CACHE.set(this.pool, ready);
+      this.hasDiscoveryAcceleration = ready;
+      return ready;
+    } catch {
+      return false;
     }
   }
 

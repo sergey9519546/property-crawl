@@ -225,7 +225,30 @@ export function InteractiveTerminal() {
   }, []);
 
   useEffect(() => {
-    void loadListings();
+    let cancelled = false;
+    let idleId: number | null = null;
+    const w = window as unknown as {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const startLoad = () => {
+      if (!cancelled) void loadListings();
+    };
+    // Keep t=0..450ms clear for Hero hydration and initial autocomplete typing
+    // before below-the-fold bulk inventory polling begins.
+    const timerId = window.setTimeout(() => {
+      if (cancelled) return;
+      if (typeof w.requestIdleCallback === "function") {
+        idleId = w.requestIdleCallback(startLoad, { timeout: 350 });
+      } else {
+        startLoad();
+      }
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+      if (idleId !== null && typeof w.cancelIdleCallback === "function") w.cancelIdleCallback(idleId);
+    };
   }, [loadListings]);
 
   useEffect(() => {

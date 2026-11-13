@@ -153,6 +153,10 @@ function queryFromUrl(url) {
   const saleTo = parseDate(get("saleTo"), "saleTo");
   if (saleFrom && saleTo && saleFrom > saleTo)
     throw new DiscoveryQueryError(400, "saleFrom must not be after saleTo");
+  const rawMode = text(get("mode"));
+  if (rawMode && rawMode !== "default" && rawMode !== "autocomplete") {
+    throw new DiscoveryQueryError(400, "mode must be default or autocomplete");
+  }
   return {
     q: text(get("q")),
     state: text(get("state")),
@@ -180,6 +184,7 @@ function queryFromUrl(url) {
     lng,
     radiusKm,
     zoom,
+    mode: rawMode || "default",
     facets: (get("facets") || "").split(",").filter(Boolean),
   };
 }
@@ -454,7 +459,8 @@ function buildFacets(rows, fields) {
       }),
   );
 }
-function pgWhere(f, start = 1) {
+function pgWhere(f, start = 1, options = {}) {
+  const accel = options.accelerated === true;
   const p = [],
     w = [];
   // Admission gate. The inline literal list is deliberate: pgWhere's bound
@@ -490,25 +496,16 @@ function pgWhere(f, start = 1) {
     ["occupancy", f.occupancy],
   ]) {
     if (!v || v === "all") continue;
+    const sqlCol = accel && col.startsWith("nullif(coalesce(auction_program")
+      ? "discovery_program"
+      : col;
     // Mirrors the in-memory matcher: "unknown" selects records whose field was
     // never determined, so it must test for NULL/blank rather than the literal.
     if (v === "unknown") {
-      w.push(`coalesce(${col},'')=''`);
+      w.push(`coalesce(${sqlCol},'')=''`);
       continue;
     }
-    // Every value above reached here through text(), which lowercases it, and
-    // matches() lowercases the row too - so the two backends only agree if the
-    // SQL lowercases the column. It did not: `col=?` compared 'maricopa'
-    // against 'Maricopa', and on Postgres - the backend production runs on -
-    // every filter whose stored values contain an uppercase letter returned
-    // nothing. The workbench rendered those facets with real counts
-    // ("Single Family Home" 5,661, "TPS" 4,533, "Status: Active" 2,239,
-    // "Vacant" 2,044, "Maricopa" 186) and every one of them filtered to zero.
-    //
-    // `state` used to be special-cased back to upper case, which only worked
-    // because every state code is already stored uppercase; lower() on both
-    // sides is the same rule the memory matcher applies, applied once.
-    add(`lower(${col})=?`, v);
+    add(`lower(${sqlCol})=?`, v);
   }
   if (f.q) {
     // The same derived program matches() searches: a record whose program only
@@ -521,10 +518,10 @@ function pgWhere(f, start = 1) {
     // above). Unescaped, q=100% matched every Postgres row and none in memory.
     // Escape the metacharacters so both backends apply the same literal rule.
     const literalQuery = f.q.replace(/[\\%_]/g, (ch) => '\\' + ch);
-    add(
-      `(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId','')) ILIKE ? ESCAPE '\\'`,
-      `%${literalQuery}%`,
-    );
+    const qExpr = accel
+      ? "discovery_search_text"
+      : "(coalesce(id,'')||' '||coalesce(address,'')||' '||coalesce(city,'')||' '||coalesce(county,'')||' '||coalesce(source_key,'')||' '||coalesce(auction_program, provenance->'sourceFacts'->>'auctionProgram','')||' '||coalesce(provenance->>'recordId',''))";
+    add(`${qExpr} ILIKE ? ESCAPE '\\'`, `%${literalQuery}%`);
   }
   if (f.saleFrom) add("sale_date>=?", f.saleFrom);
   if (f.saleTo) add("sale_date<=?", f.saleTo);
@@ -569,9 +566,9 @@ function pgWhere(f, start = 1) {
   else if (f.hasDocuments === true) w.push(docsTrue);
   else if (f.hasDocuments === false) w.push(docsFalse);
   if (f.freshness && f.freshness !== "all") {
-    if (f.freshness === "observed") w.push("provenance->>'origin'='live'");
+    if (f.freshness === "observed") w.push(accel ? "discovery_is_live IS TRUE" : "provenance->>'origin'='live'");
     else if (f.freshness === "unverified")
-      w.push("coalesce(provenance->>'origin','')<>'live'");
+      w.push(accel ? "discovery_is_live IS NOT TRUE" : "coalesce(provenance->>'origin','')<>'live'");
     else throw new DiscoveryQueryError(400, "Invalid freshness");
   }
   if (f.bbox) {
@@ -600,7 +597,8 @@ function pgWhere(f, start = 1) {
 function sortDirection(sort) {
   return sort === "date" || sort === "bid-asc" ? "ASC" : "DESC";
 }
-function pgSort(f) {
+function pgSort(f, options = {}) {
+  const accel = options.accelerated === true;
   // "Date" means soonest opportunity first, not oldest record first. Ascending
   // sale_date put every concluded auction ahead of every upcoming one - and
   // there are 2,026 of the former against 1,906 of the latter, so the first
@@ -646,14 +644,18 @@ function pgSort(f) {
       dir: sortDirection("triage"),
     };
   if (f.sort === "score" || f.sort === "opportunity") {
-    const terminalSql = "("
+    const terminalSql = accel
+      ? "discovery_terminal"
+      : "("
       + "lower(coalesce(status, '')) IN ('sold', 'closed', 'cancelled') "
       + "OR lower(coalesce(lifecycle_status, '')) ~ '(reverted[[:space:]]+to[[:space:]]+(plaintiff|beneficiary)|(purchased|sold)[[:space:]]*[-:][[:space:]]*(3rd|third)[- [:space:]]*party|(purchased|sold)[[:space:]]*[-:][[:space:]]*(plaintiff|beneficiary)|(^|[^a-z0-9])(closed|sold)($|[^a-z0-9])|dismiss|settl|cancel)' "
       + "OR nullif(coalesce(provenance->'sourceFacts'->>'transactionOutcome', ''), '') IS NOT NULL "
       + "OR (provenance ? 'publisherAbsence') "
       + "OR (provenance ? 'supersededBy')"
       + ")";
-    const actionTierSql = "("
+    const actionTierSql = accel
+      ? "discovery_action_tier"
+      : "("
       + "(CASE WHEN coalesce(opening_bid, 0) > 0 "
       + "OR (CASE WHEN (provenance->'sourceFacts'->>'upsetPrice') ~ '^[0-9]+([.][0-9]+)?$' THEN (provenance->'sourceFacts'->>'upsetPrice')::numeric ELSE 0 END) > 0 "
       + "OR (CASE WHEN (provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount') ~ '^[0-9]+([.][0-9]+)?$' THEN (provenance->'sourceFacts'->'approximateUpsetPrice'->>'amount')::numeric ELSE 0 END) > 0 "
@@ -674,17 +676,48 @@ function pgSort(f) {
   }
   throw new DiscoveryQueryError(400, "Invalid sort");
 }
+const REVISION_TABLE_MISSING = new WeakSet();
 async function pgRevision(database) {
+  if (!REVISION_TABLE_MISSING.has(database.pool)) {
+    try {
+      const r = await database.pool.query(
+        "SELECT revision::text AS revision FROM discovery_listing_revision WHERE singleton = TRUE",
+      );
+      if (r.rows[0]?.revision != null) return String(r.rows[0].revision);
+    } catch (err) {
+      if (err && err.code !== "42P01") throw err;
+      REVISION_TABLE_MISSING.add(database.pool);
+    }
+  }
   const r = await database.pool.query(
     "SELECT md5(count(*)::text||':'||coalesce(max(updated_at)::text,'')) AS revision FROM listings",
   );
   return r.rows[0].revision;
 }
 async function pgSearch(database, f) {
+  const accelerated = typeof database.hasAcceleratedDiscovery === "function"
+    ? await database.hasAcceleratedDiscovery()
+    : database.hasDiscoveryAcceleration === true;
+  const where = pgWhere(f, 1, { accelerated });
+  const sort = pgSort(f, { accelerated });
+  if (f.mode === "autocomplete") {
+    const params = [...where.params, f.limit, f.offset || 0];
+    const rows = (
+      await database.pool.query(
+        `SELECT id, address, city, county, state, zip FROM listings${where.sql} ORDER BY ${sort.expr} ${sort.dir},id ${sort.dir} LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params,
+      )
+    ).rows;
+    return {
+      listings: rows,
+      total: rows.length,
+      page: { hasMore: false, nextCursor: null },
+      revision: null,
+      facets: {},
+    };
+  }
   const revision = await pgRevision(database),
-    binding = hash({ ...f, cursor: null }).slice(0, 24),
-    where = pgWhere(f),
-    sort = pgSort(f);
+    binding = hash({ ...f, cursor: null }).slice(0, 24);
   let cursorClause = "",
     params = [...where.params];
   if (f.cursor) {
@@ -778,11 +811,18 @@ async function pgSearch(database, f) {
         "CASE WHEN provenance->>'origin'='live' THEN 'observed' ELSE 'unverified' END",
     },
     facets = {};
+  const queryAllowed = accelerated
+    ? {
+        ...allowed,
+        program: "discovery_program",
+        freshness: "CASE WHEN discovery_is_live THEN 'observed' ELSE 'unverified' END",
+      }
+    : allowed;
   for (const field of f.facets) {
-    if (!allowed[field]) continue;
+    if (!queryAllowed[field]) continue;
     facets[field] = (
       await database.pool.query(
-        `SELECT coalesce(${allowed[field]}::text,'unknown') AS value,count(*)::int AS count FROM listings${where.sql} GROUP BY 1 ORDER BY count DESC,value`,
+        `SELECT coalesce(${queryAllowed[field]}::text,'unknown') AS value,count(*)::int AS count FROM listings${where.sql} GROUP BY 1 ORDER BY count DESC,value`,
         where.params,
       )
     ).rows;
@@ -871,8 +911,25 @@ async function search(database, f) {
   if (after && start === 0)
     throw new DiscoveryQueryError(409, "Cursor is stale; restart the search");
   start += f.offset || 0;
-  const listings = filtered.slice(start, start + f.limit),
-    hasMore = start + listings.length < filtered.length;
+  const listings = filtered.slice(start, start + f.limit);
+  if (f.mode === "autocomplete") {
+    const compact = listings.map((l) => ({
+      id: l.id ?? null,
+      address: l.address ?? null,
+      city: l.city ?? null,
+      county: l.county ?? null,
+      state: l.state ?? null,
+      zip: l.zip ?? null,
+    }));
+    return {
+      listings: compact,
+      total: compact.length,
+      page: { hasMore: false, nextCursor: null },
+      revision: null,
+      facets: {},
+    };
+  }
+  const hasMore = start + listings.length < filtered.length;
   return {
     listings,
     total: filtered.length,
