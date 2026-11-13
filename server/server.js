@@ -83,22 +83,20 @@ async function refreshHealthDiagnostics() {
   if (healthProbeInFlight) return healthProbeInFlight;
   healthProbeInFlight = (async () => {
     try {
-      const freshnessPromise = (typeof db.inventoryFreshness === 'function')
-        ? Promise.race([
+      const freshnessRes = (typeof db.inventoryFreshness === 'function')
+        ? await Promise.race([
             db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 6500))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 10000))
           ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
-        : Promise.resolve(null);
+        : null;
 
-      const observationPromise = Promise.race([
+      const obsRes = await Promise.race([
         (() => {
           const { observationStoreStats } = require('./db/observations-persistence');
           return observationStoreStats(db.pool);
         })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 6500))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 10000))
       ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
-
-      const [freshnessRes, obsRes] = await Promise.all([freshnessPromise, observationPromise]);
       const now = Date.now();
       const freshnessIsError = Boolean(freshnessRes && freshnessRes.error);
       const obsIsError = Boolean(obsRes && obsRes.error);
@@ -496,6 +494,37 @@ async function attachEmbeddedDatabaseIfRequested() {
 async function startServer() {
   await attachEmbeddedDatabaseIfRequested();
 
+  const refreshDbCapabilities = async (timeoutMs = 5000) => {
+    if (db.postgresReachable !== true || !db.pool) return;
+    if (typeof db.hasAcceleratedDiscovery === 'function') {
+      await Promise.race([
+        db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs).unref()),
+      ]);
+    }
+    try {
+      const { probeDatabaseCapabilities } = require('./db/database-capabilities');
+      const probed = await Promise.race([
+        probeDatabaseCapabilities(db.pool),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('capability_probe_timeout')), timeoutMs).unref()),
+      ]);
+      db.databaseCapabilities = probed;
+      if (db.databaseCapabilities.functional) {
+        console.log(`[DB] DATABASE_URL is fully functional (${db.databaseCapabilities.version}, PostGIS ${db.databaseCapabilities.postgisVersion})`);
+      } else {
+        console.warn(`[DB] DATABASE_URL is connected but not fully functional: ${db.databaseCapabilities.missing.join(', ')}`);
+      }
+    } catch (probeErr) {
+      db.databaseCapabilities = {
+        functional: false,
+        missing: [String(probeErr && probeErr.message ? probeErr.message : probeErr).slice(0, 200)],
+        version: null,
+        postgisVersion: null,
+      };
+      console.warn('[DB] DATABASE_URL capability probe deferred:', db.databaseCapabilities.missing[0]);
+    }
+  };
+
   let migrationDeferred = false;
   const initializePostgresRuntime = async () => {
     if (typeof db.verifyConnection !== 'function') return false;
@@ -512,28 +541,7 @@ async function startServer() {
         console.warn('[Server] auto-migration warning (will retry after cutover):', migErr.message);
       }
     }
-    if (db.postgresReachable === true && db.pool) {
-      if (typeof db.hasAcceleratedDiscovery === 'function') {
-        await db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false);
-      }
-      try {
-        const { probeDatabaseCapabilities } = require('./db/database-capabilities');
-        db.databaseCapabilities = await probeDatabaseCapabilities(db.pool);
-        if (db.databaseCapabilities.functional) {
-          console.log(`[DB] DATABASE_URL is fully functional (${db.databaseCapabilities.version}, PostGIS ${db.databaseCapabilities.postgisVersion})`);
-        } else {
-          console.warn(`[DB] DATABASE_URL is connected but not fully functional: ${db.databaseCapabilities.missing.join(', ')}`);
-        }
-      } catch (probeErr) {
-        db.databaseCapabilities = {
-          functional: false,
-          missing: [String(probeErr && probeErr.message ? probeErr.message : probeErr).slice(0, 200)],
-          version: null,
-          postgisVersion: null,
-        };
-        console.warn('[DB] DATABASE_URL capability probe failed:', db.databaseCapabilities.missing[0]);
-      }
-    }
+    await refreshDbCapabilities(5000);
     wireStoresAfterVerify(db);
     return true;
   };
@@ -577,20 +585,19 @@ async function startServer() {
                 await migrate(db.pool);
                 migrationDeferred = false;
                 console.log('[Server] deferred discovery migrations applied post-cutover');
-                if (typeof db.hasAcceleratedDiscovery === 'function') {
-                  await db.hasAcceleratedDiscovery({ forceRefresh: true }).catch(() => false);
-                }
               } catch (retryMigErr) {
                 console.warn('[Server] deferred auto-migration warning:', retryMigErr && retryMigErr.message ? retryMigErr.message : retryMigErr);
               }
             }
+            if (db.isPg) {
+              await refreshDbCapabilities(10000);
+            }
             if (db.isPg && typeof db.purgeStaleListings === 'function') {
-              const res = await db.purgeStaleListings({ batchSize: 500, maxBatches: 100, batchPauseMs: 120 });
-              if (res && (res.deleted > 0 || res.observationsDeleted > 0 || res.snapshotsDeleted > 0)) {
-                console.log(
-                  `[Server] Boot inventory purge removed ${res.deleted} stale/archive listings, ${res.observationsDeleted} stale observations, and ${res.snapshotsDeleted || 0} stale snapshots.`,
-                );
-              }
+              const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 50, batchPauseMs: 150, maxDurationMs: 18000 });
+              console.log(
+                `[Server] Boot inventory purge removed ${res?.deleted || 0} stale/archive listings, ${res?.observationsDeleted || 0} stale observations, and ${res?.snapshotsDeleted || 0} stale snapshots.`,
+              );
+              refreshHealthDiagnostics().catch(() => {});
             }
           } catch (err) {
             console.warn('[Server] Boot maintenance warning:', err && err.message ? err.message : err);

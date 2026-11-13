@@ -17,6 +17,46 @@ function normalizeLockTimeout(value) {
   return /^\d+(?:ms|s|min)$/.test(raw) ? raw : '30s';
 }
 
+async function acquireMigrationLock(client) {
+  try {
+    await client.query('SELECT pg_advisory_lock(72463198)');
+    return;
+  } catch (lockErr) {
+    if (!isTransientLockError(lockErr)) throw lockErr;
+  }
+
+  // Inspect whether an orphaned Supavisor/deploy session is stranded holding 72463198.
+  try {
+    const blockers = await client.query(
+      `SELECT a.pid,
+              a.usename,
+              a.state,
+              EXTRACT(EPOCH FROM (now() - COALESCE(a.query_start, a.state_change, a.backend_start)))::int AS age_s,
+              left(COALESCE(a.query, ''), 120) AS query_snippet
+         FROM pg_locks l
+         JOIN pg_stat_activity a ON a.pid = l.pid
+        WHERE l.locktype = 'advisory'
+          AND (l.objid = 72463198 OR l.classid = 72463198)
+          AND a.pid <> pg_backend_pid()
+          AND a.usename = current_user`,
+    );
+    for (const row of blockers.rows) {
+      const ageS = Number(row.age_s || 0);
+      const isIdle = /idle/i.test(String(row.state || ''));
+      console.warn(`[migrate] advisory lock 72463198 held by pid=${row.pid} state=${row.state} age=${ageS}s query=${row.query_snippet}`);
+      if ((isIdle && ageS >= 15) || ageS >= 120) {
+        await client.query('SELECT pg_terminate_backend($1)', [row.pid]).catch(() => {});
+        console.warn(`[migrate] terminated stale migration lock holder pid=${row.pid}`);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  } catch (_) {
+    // Non-Postgres engines (PGlite) or restricted roles fall through cleanly to final lock attempt.
+  }
+
+  await client.query('SELECT pg_advisory_lock(72463198)');
+}
+
 async function migrate(pool, options = {}) {
   const client = await pool.connect();
   const migrationLockTimeout = normalizeLockTimeout(
@@ -27,15 +67,14 @@ async function migrate(pool, options = {}) {
   const rawDelay = Number(options.retryDelayMs ?? 1500);
   const retryDelayMs = Number.isFinite(rawDelay) && rawDelay >= 0 ? rawDelay : 1500;
   let migrationLockTimeoutSet = false;
+  let destroyConnection = false;
 
   try {
     // A held advisory lock used to hang boot indefinitely (the deploy then
-    // failed its health check while blocked). Fail fast with a clear name
-    // instead: two migrators racing is a bug to surface, not a queue to join.
-    // Session-level SET (not SET LOCAL): the lock is taken in autocommit.
-    // The RESET in the finally keeps the pooled connection clean.
+    // failed its health check while blocked). Fail fast or recover stranded
+    // lock holders from crashed rolling deploys instead.
     await client.query("SET lock_timeout = '15s'");
-    await client.query('SELECT pg_advisory_lock(72463198)');
+    await acquireMigrationLock(client);
     await client.query('CREATE TABLE IF NOT EXISTS discovery_schema_migrations(name text PRIMARY KEY, sha256 text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())');
     const directory = path.resolve(__dirname, '../server/db/migrations');
     const base = await client.query("SELECT to_regclass('public.listings') AS relation");
@@ -99,9 +138,9 @@ async function migrate(pool, options = {}) {
       }
     }
   } finally {
-    try { await client.query('RESET lock_timeout'); } catch (_) { /* connection may already be gone */ }
-    await client.query('SELECT pg_advisory_unlock(72463198)').catch(() => {});
-    client.release();
+    try { await client.query('RESET lock_timeout'); } catch (_) { destroyConnection = true; }
+    try { await client.query('SELECT pg_advisory_unlock(72463198)'); } catch (_) { destroyConnection = true; }
+    client.release(destroyConnection ? new Error('Migration session cleanup required socket reset') : undefined);
   }
 }
 function migrationTarget(env = process.env) {

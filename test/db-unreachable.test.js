@@ -79,6 +79,22 @@ test('PostgreSQL pool defaults fit Supavisor session bounds and honour env overr
     await defaultDb.close();
   }
 
+  const renderDb = new DatabaseClient({
+    env: {
+      DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:1/property_crawl',
+      RENDER: 'true',
+    },
+    liveCachePath: null,
+    workspaceStorePath: null,
+  });
+  try {
+    assert.equal(renderDb.pool.options.max, 4);
+    assert.equal(renderDb.pool.options.idleTimeoutMillis, 15000);
+    assert.equal(renderDb._maxBgDbConcurrency, 1);
+  } finally {
+    await renderDb.close();
+  }
+
   const customDb = new DatabaseClient({
     env: {
       DATABASE_URL: 'postgres://postgres:postgres@127.0.0.1:1/property_crawl',

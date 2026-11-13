@@ -639,3 +639,79 @@ test('pre-034 Postgres upgrades cleanly through split 034 (DDL) and 035 (backfil
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('discovery-migrate diagnoses and terminates stale current_user advisory lock holders after 55P03', async () => {
+  let lockAttempts = 0;
+  const terminated = [];
+  const migrationsDir = path.resolve(__dirname, '..', '..', 'server', 'db', 'migrations');
+  const allMigrations = fs.readdirSync(migrationsDir).filter((n) => /^\d+.*\.sql$/.test(n)).sort();
+
+  const recoveryPool = {
+    async connect() {
+      return {
+        async query(text, params) {
+          const sql = String(text);
+          if (sql === 'SELECT pg_advisory_lock(72463198)') {
+            lockAttempts += 1;
+            if (lockAttempts === 1) {
+              const err = new Error('canceling statement due to lock timeout');
+              err.code = '55P03';
+              throw err;
+            }
+            return { rows: [] };
+          }
+          if (sql.includes('FROM pg_locks l')) {
+            return {
+              rows: [
+                {
+                  pid: 99999,
+                  usename: 'postgres',
+                  state: 'idle in transaction',
+                  age_s: 180,
+                  query_snippet: 'DELETE FROM listings',
+                },
+              ],
+            };
+          }
+          if (sql.startsWith('SELECT pg_terminate_backend')) {
+            terminated.push(params[0]);
+            return { rows: [{ pg_terminate_backend: true }] };
+          }
+          if (sql.includes('SELECT to_regclass')) return { rows: [{ relation: 'listings' }] };
+          if (sql.includes('SELECT sha256 FROM discovery_schema_migrations')) {
+            return { rows: [{ sha256: 'already-applied' }] };
+          }
+          return { rows: [] };
+        },
+        release() {},
+      };
+    },
+  };
+
+  // Bypass re-recording warning noise checks by hashing real SQL digests in lookup
+  const nodeCrypto = require('node:crypto');
+  const digests = new Map(
+    allMigrations.map((name) => {
+      const sql = fs.readFileSync(path.join(migrationsDir, name), 'utf8');
+      return [name, nodeCrypto.createHash('sha256').update(sql).digest('hex')];
+    }),
+  );
+  const pool = {
+    async connect() {
+      const client = await recoveryPool.connect();
+      const origQuery = client.query.bind(client);
+      client.query = async (text, params) => {
+        const sql = String(text);
+        if (sql.includes('SELECT sha256 FROM discovery_schema_migrations')) {
+          return { rows: [{ sha256: digests.get(params[0]) }] };
+        }
+        return origQuery(text, params);
+      };
+      return client;
+    },
+  };
+
+  await migrate(pool, { maxLockAttempts: 2, retryDelayMs: 1 });
+  assert.equal(lockAttempts, 2, 'retries advisory lock after terminating stranded locker');
+  assert.deepEqual(terminated, [99999], 'terminates stale current_user advisory lock holder');
+});

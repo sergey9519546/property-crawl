@@ -14,6 +14,9 @@ BEGIN
   IF to_regclass('public.discovery_observations') IS NOT NULL THEN
     EXECUTE 'CREATE INDEX IF NOT EXISTS idx_discovery_observations_snapshot ON discovery_observations(snapshot_id)';
   END IF;
+  IF to_regclass('public.source_observations') IS NOT NULL THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_source_observations_source_observed ON source_observations(source_key, observed_at DESC)';
+  END IF;
 END $$;
 
 -- 2. Bounded purge of old, archive, seed, concluded, and unrefreshed ServiceLink rows.
@@ -53,7 +56,7 @@ DELETE FROM listings
        )
        OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
     ORDER BY id
-    LIMIT 3000
+    LIMIT 250
  );
 
 -- 3. Advance listing revision sequence and refresh planner statistics.

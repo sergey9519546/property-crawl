@@ -330,6 +330,7 @@ CREATE INDEX IF NOT EXISTS idx_listing_history_recorded ON listing_history(recor
 CREATE INDEX IF NOT EXISTS idx_source_observations_listing_observed ON source_observations(listing_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_source_observations_source_record ON source_observations(source_key, record_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_source_observations_observed_at ON source_observations(observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_source_observations_source_observed ON source_observations(source_key, observed_at DESC);
 
 -- ==========================================================
 -- Migration 002: Spatial Radius Search Function

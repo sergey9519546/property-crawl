@@ -561,9 +561,11 @@ class DatabaseClient {
     this._webDrainWaiters = [];
     this._activeBgDbTasks = 0;
     this._bgDbWaiters = [];
+    const isRenderHosted = String(this.env.RENDER || '').toLowerCase() === 'true'
+      || Boolean(this.env.RENDER_SERVICE_ID);
     this._maxBgDbConcurrency = Math.max(
       1,
-      Math.min(4, Number.parseInt(this.env.DATABASE_BG_MAX || '2', 10) || 2),
+      Math.min(4, Number.parseInt(this.env.DATABASE_BG_MAX || (isRenderHosted ? '1' : '2'), 10) || 1),
     );
     this.init();
   }
@@ -580,10 +582,12 @@ class DatabaseClient {
       throw new Error('DISCOVERY_MODE=advanced requires DATABASE_URL');
     }
     if (target === 'tcp') {
+      const isRenderHosted = String(this.env.RENDER || '').toLowerCase() === 'true'
+        || Boolean(this.env.RENDER_SERVICE_ID);
       const configuredMax = Number(this.env.DATABASE_POOL_MAX);
       const poolMax = Number.isInteger(configuredMax) && configuredMax > 0
         ? Math.min(configuredMax, 50)
-        : 10;
+        : (isRenderHosted ? 4 : 10);
       const configuredConnectTimeout = Number(this.env.DATABASE_CONNECTION_TIMEOUT_MS);
       const connectionTimeoutMillis = Number.isFinite(configuredConnectTimeout) && configuredConnectTimeout > 0
         ? Math.min(configuredConnectTimeout, 60_000)
@@ -592,13 +596,14 @@ class DatabaseClient {
       const statementTimeoutMs = Number.isFinite(configuredStatementTimeout) && configuredStatementTimeout >= 0
         ? Math.min(Math.trunc(configuredStatementTimeout), 120_000)
         : 30_000;
+      const idleTimeoutMillis = isRenderHosted ? 15000 : 60000;
       const statementTimeoutOpt = statementTimeoutMs > 0 ? { statement_timeout: statementTimeoutMs } : {};
       try {
         const { Pool } = require('pg');
         this.pool = new Pool({
           connectionString: this.env.DATABASE_URL,
           max: poolMax,
-          idleTimeoutMillis: 60000,
+          idleTimeoutMillis,
           connectionTimeoutMillis,
           keepAlive: true,
           ...statementTimeoutOpt,
@@ -3176,9 +3181,12 @@ class DatabaseClient {
     if (!this.isPg || !this.pool) {
       return { deleted: 0, observationsDeleted: 0, snapshotsDeleted: 0, skipped: 'postgres_unavailable' };
     }
-    const batchSize = Math.min(5000, Math.max(1, Math.trunc(Number(options.batchSize) || 500)));
-    const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 100)));
-    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 100))));
+    const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 100)));
+    const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 50)));
+    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 150))));
+    const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 18_000));
+    const startedAt = Date.now();
+    const budgetExceeded = () => maxDurationMs > 0 && (Date.now() - startedAt) >= maxDurationMs;
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
@@ -3186,8 +3194,21 @@ class DatabaseClient {
     const absentGraceDays = Math.max(1, Math.trunc(Number(options.absentGraceDays) || 3));
     const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
 
+    let hasFreshServiceLinkLive = false;
+    try {
+      const freshCheck = await this.pool.query(
+        `SELECT 1 FROM listings
+          WHERE source_key = 'servicelink'
+            AND provenance->>'origin' = 'live'
+            AND source_observed_at > NOW() - ($1::int * INTERVAL '1 day')
+          LIMIT 1`,
+        [serviceLinkFreshWindowDays],
+      );
+      hasFreshServiceLinkLive = freshCheck.rows.length > 0;
+    } catch (_) {}
+
     let deleted = 0;
-    for (let batch = 0; batch < maxBatches; batch += 1) {
+    for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
       const deletedRes = await this.pool.query(
         `DELETE FROM listings
           WHERE id IN (
@@ -3218,25 +3239,19 @@ class DatabaseClient {
                   AND (
                     COALESCE(source_observed_at, updated_at) < NOW() - ($5::int * INTERVAL '1 day')
                     OR (
-                      COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
-                      AND EXISTS (
-                        SELECT 1 FROM listings fresh
-                         WHERE fresh.source_key = 'servicelink'
-                           AND fresh.provenance->>'origin' = 'live'
-                           AND fresh.source_observed_at > NOW() - ($4::int * INTERVAL '1 day')
-                      )
+                      $4::boolean
+                      AND COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
                     )
                   )
                 )
                 OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
-             ORDER BY id
              LIMIT $6
           )`,
         [
           absentGraceDays,
           concludedGraceDays,
           serviceLinkStaleDays,
-          serviceLinkFreshWindowDays,
+          hasFreshServiceLinkLive,
           serviceLinkHardStaleDays,
           batchSize,
         ],
@@ -3244,30 +3259,51 @@ class DatabaseClient {
       const batchDeleted = deletedRes.rowCount || 0;
       deleted += batchDeleted;
       if (batchDeleted < batchSize) break;
-      if (batchPauseMs > 0 && batch + 1 < maxBatches) {
+      if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
         await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
       }
     }
 
     let observationsDeleted = 0;
-    const obsBatchSize = Math.min(5000, Math.max(1, batchSize * 2));
+    const obsBatchSize = Math.min(500, Math.max(50, batchSize * 2));
     try {
-      for (let batch = 0; batch < maxBatches; batch += 1) {
+      for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
         const obsRes = await this.pool.query(
           `DELETE FROM source_observations
             WHERE id IN (
               SELECT so.id
                 FROM source_observations so
-               WHERE (so.listing_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so.listing_id))
-                  OR (so.source_key = 'servicelink' AND so.observed_at < NOW() - ($3::int * INTERVAL '1 day'))
+               WHERE (so.source_key = 'servicelink' AND so.observed_at < NOW() - ($2::int * INTERVAL '1 day'))
                   OR so.observed_at < NOW() - ($1::int * INTERVAL '1 day')
-               LIMIT $2
+               LIMIT $3
             )`,
-          [observationRetentionDays, obsBatchSize, serviceLinkFreshWindowDays],
+          [observationRetentionDays, serviceLinkFreshWindowDays, obsBatchSize],
         );
         const batchObs = obsRes.rowCount || 0;
         observationsDeleted += batchObs;
         if (batchObs < obsBatchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
+      }
+      for (let batch = 0; batch < Math.min(maxBatches, 15) && !budgetExceeded(); batch += 1) {
+        const orphanRes = await this.pool.query(
+          `DELETE FROM source_observations
+            WHERE id IN (
+              SELECT so.id
+                FROM source_observations so
+               WHERE so.listing_id IS NOT NULL
+                 AND NOT EXISTS (SELECT 1 FROM listings l WHERE l.id = so.listing_id)
+               LIMIT $1
+            )`,
+          [obsBatchSize],
+        );
+        const batchOrphan = orphanRes.rowCount || 0;
+        observationsDeleted += batchOrphan;
+        if (batchOrphan < obsBatchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < Math.min(maxBatches, 15) && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
       }
     } catch (_) {}
 
@@ -3280,8 +3316,8 @@ class DatabaseClient {
             AND indexname = 'idx_discovery_observations_snapshot'
           LIMIT 1`,
       );
-      if (idxCheck.rows.length > 0) {
-        for (let batch = 0; batch < maxBatches; batch += 1) {
+      if (idxCheck.rows.length > 0 && !budgetExceeded()) {
+        for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
           await this.pool.query(
             `DELETE FROM discovery_observations
               WHERE snapshot_id IN (
