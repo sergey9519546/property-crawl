@@ -181,3 +181,40 @@ test('comps: finds the nearest comparable that sits past the first 1,000 rows', 
   assert.equal(ids[0], 'NEAR-1', 'and it ranks first, because it is the nearest');
   assert.ok(res.body.comps[0].distanceKm < 1, 'at ~14 metres from the target');
 });
+
+test('createWatchlistCompsHandler decodes URL-encoded colon listing IDs and rejects malformed encodings', async () => {
+  const colonTarget = { ...TARGET, id: 'servicelink:a1cVO00000CW545YAD' };
+  const pool = [
+    colonTarget,
+    { id: 'hud:999', source: 'hud', state: 'TX', city: 'Bruni', zip: '78344', sqft: 1500, openingBid: 52000, mid: 100000, dealScore: 75, propType: 'Single Family', lat: 27.455, lng: -98.881, sourceObservedAt: '2026-09-01T12:00:00.000Z' }
+  ];
+  const handler = createWatchlistCompsHandler({ database: stubDb(colonTarget, pool), now: FIXED_NOW });
+
+  const okRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/watchlist/servicelink%3Aa1cVO00000CW545YAD/comps'),
+    okRes,
+    new URL('http://localhost/api/watchlist/servicelink%3Aa1cVO00000CW545YAD/comps')
+  );
+  assert.equal(okRes.statusCode, 200);
+  assert.equal(okRes.body.targetId, 'servicelink:a1cVO00000CW545YAD');
+  assert.equal(okRes.body.comps.length, 1);
+
+  const badEncodingRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/watchlist/%E0%A4%A/comps'),
+    badEncodingRes,
+    new URL('http://localhost/api/watchlist/%E0%A4%A/comps')
+  );
+  assert.equal(badEncodingRes.statusCode, 400);
+  assert.equal(badEncodingRes.body.error, 'invalid_listing_id');
+
+  const extraSegmentRes = makeRes();
+  await handler(
+    makeReq('GET', '/api/watchlist/TARGET-1/comps/extra'),
+    extraSegmentRes,
+    new URL('http://localhost/api/watchlist/TARGET-1/comps/extra')
+  );
+  assert.equal(extraSegmentRes.statusCode, 404);
+  assert.equal(extraSegmentRes.body.error, 'not_found');
+});

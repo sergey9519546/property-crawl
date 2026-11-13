@@ -64,9 +64,14 @@ function createWatchlistCompsHandler(dependencies = {}) {
     const url = urlInput instanceof URL ? urlInput : new URL(req.url, 'http://localhost');
     const segments = url.pathname.split('/').filter(Boolean);
     // Path shape: /api/watchlist/:listingId/comps
-    const listingId = segments[2];
+    let listingId = '';
+    try {
+      listingId = decodeURIComponent(segments[2] || '').trim();
+    } catch {
+      return res.status(400).json({ error: 'invalid_listing_id' });
+    }
     const action = segments[3];
-    if (!listingId || action !== 'comps') {
+    if (segments.length !== 4 || !listingId || action !== 'comps') {
       return res.status(404).json({ error: 'not_found' });
     }
 

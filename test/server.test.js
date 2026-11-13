@@ -646,6 +646,41 @@ async function run() {
     }
   });
 
+  await test('GET /api/parcel-boundary resolves Clark County NV via maps.clarkcountynv.gov Assessor Layers and extracts APN', async () => {
+    const originalFetch = global.fetch;
+    let requestedUrl = '';
+    global.fetch = async (url) => {
+      requestedUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[[-115.1083, 36.1936], [-115.1080, 36.1936], [-115.1080, 36.1939], [-115.1083, 36.1939], [-115.1083, 36.1936]]]
+            },
+            properties: { APN: '13924314002', CALC_ACRES: 0.14 }
+          }]
+        })
+      };
+    };
+
+    try {
+      const res = await request('/api/parcel-boundary?state=NV&county=Clark&lat=36.1937561&lng=-115.108197');
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.type, 'Feature');
+      assert.strictEqual(res.body.geometry.type, 'Polygon');
+      assert.strictEqual(res.body.properties.parcelId, '13924314002');
+      assert.ok(requestedUrl.startsWith('https://maps.clarkcountynv.gov/arcgis/rest/services/Assessor/Layers/MapServer/1/query'), `unexpected Clark endpoint: ${requestedUrl}`);
+      assert.ok(!requestedUrl.includes('gisgate.co.clark.nv.us'));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   await test('API throttling returns retry guidance and cannot be bypassed with forged forwarded headers', async () => {
     let limited;
     for (let i = 0; i < 121; i++) {

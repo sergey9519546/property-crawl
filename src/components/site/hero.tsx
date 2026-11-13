@@ -31,7 +31,8 @@ export function Hero() {
   const [suggestionsOpen, setSuggestionsOpen] = React.useState(false);
   const [activeSuggestion, setActiveSuggestion] = React.useState(-1);
   const blurTimerRef = React.useRef<number | null>(null);
-  const deferredUrl = React.useDeferredValue(url.trim());
+  const queryUrl = url.trim();
+  const deferredUrl = React.useDeferredValue(queryUrl);
   const [marketListings, setMarketListings] = React.useState<ListingMarket[]>([]);
 
   React.useEffect(() => {
@@ -92,14 +93,14 @@ export function Hero() {
   }, [deferredUrl, selectedMarket, marketListings]);
 
   React.useEffect(() => {
-    if (deferredUrl.length < 2 || /^https?:\/\//i.test(deferredUrl) || selectedMarket?.label === deferredUrl) {
+    if (queryUrl.length < 2 || /^https?:\/\//i.test(queryUrl) || selectedMarket?.label === queryUrl) {
       return;
     }
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/listings?q=${encodeURIComponent(deferredUrl)}&limit=12&mode=autocomplete`, {
+        const response = await fetch(`/api/listings?q=${encodeURIComponent(queryUrl)}&limit=12&mode=autocomplete`, {
           cache: "no-store",
           signal: controller.signal,
         });
@@ -117,7 +118,7 @@ export function Hero() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [deferredUrl, selectedMarket]);
+  }, [queryUrl, selectedMarket]);
 
   const selectSuggestion = (suggestion: MarketSuggestion) => {
     setUrl(suggestion.label);

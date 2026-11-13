@@ -600,8 +600,8 @@ const COUNTY_ARCGIS_REGISTRY = {
   'NV-CLARK': {
     name: 'Clark County Assessor (Las Vegas)',
     fips: '32003',
-    endpoint: 'https://gisgate.co.clark.nv.us/arcgis/rest/services/Parcels/MapServer/0/query',
-    apnField: 'PARCEL_NUM',
+    endpoint: 'https://maps.clarkcountynv.gov/arcgis/rest/services/Assessor/Layers/MapServer/1/query',
+    apnField: 'APN',
     landUseField: 'LU_DESC',
     assessedTotalField: 'TAX_VAL',
     assessedLandField: 'LAND_VAL',
