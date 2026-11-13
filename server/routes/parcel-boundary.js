@@ -220,6 +220,9 @@ async function queryArcGisRest(lat, lng, state, apn = null, county = null) {
         : 'State is required to select a parcel geometry source.'
     );
   }
+  if (!serviceInfo.apnField && apnField) {
+    serviceInfo = { ...serviceInfo, apnField };
+  }
   if (typeof fetch !== 'function') {
     throw new ParcelBoundaryError(503, 'PARCEL_SOURCE_UNAVAILABLE', 'Parcel geometry service is unavailable.');
   }

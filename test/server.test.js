@@ -681,6 +681,41 @@ async function run() {
     }
   });
 
+  await test('GET /api/parcel-boundary resolves New York statewide parcels via NYS_Tax_Parcels_Public polygons and extracts PRINT_KEY', async () => {
+    const originalFetch = global.fetch;
+    let requestedUrl = '';
+    global.fetch = async (url) => {
+      requestedUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[[-73.7886, 41.0512], [-73.7882, 41.0512], [-73.7882, 41.0515], [-73.7886, 41.0515], [-73.7886, 41.0512]]]
+            },
+            properties: { PRINT_KEY: '7.340-164-10', ACRES: 0.24, CALC_ACRES: 0.2371 }
+          }]
+        })
+      };
+    };
+
+    try {
+      const res = await request('/api/parcel-boundary?state=NY&county=Westchester&lat=41.0513347&lng=-73.7884154');
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(res.body.type, 'Feature');
+      assert.strictEqual(res.body.geometry.type, 'Polygon');
+      assert.strictEqual(res.body.properties.parcelId, '7.340-164-10');
+      assert.ok(requestedUrl.startsWith('https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcels_Public/FeatureServer/1/query'), `unexpected NY endpoint: ${requestedUrl}`);
+      assert.ok(!requestedUrl.includes('NYS_Tax_Parcel_Centroid_Points'));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   await test('API throttling returns retry guidance and cannot be bypassed with forged forwarded headers', async () => {
     let limited;
     for (let i = 0; i < 121; i++) {

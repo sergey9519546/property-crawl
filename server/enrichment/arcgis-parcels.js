@@ -61,9 +61,9 @@ const STATEWIDE_ARCGIS_REGISTRY = {
     countyFilterField: 'cntyname'
   },
   NY: {
-    name: 'NYS GIS Program Office Statewide Tax Parcel Centroid Points',
+    name: 'NYS GIS Program Office Statewide Tax Parcels Public',
     stateFips: '36',
-    endpoint: 'https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcel_Centroid_Points/FeatureServer/0/query',
+    endpoint: 'https://nysgeohub.ny.gov/arcgis/rest/services/Parcels/NYS_Tax_Parcels_Public/FeatureServer/1/query',
     apnField: 'PRINT_KEY',
     landUseField: 'PROP_CLASS',
     assessedTotalField: 'FULL_MARKET_VAL',
