@@ -52,7 +52,7 @@ const apiLimiter = createApiRatePolicy({
 });
 
 let lastHealthCache = { timestamp: 0, freshness: null, observationStore: null };
-const HEALTH_CACHE_TTL_MS = 25000;
+const HEALTH_CACHE_TTL_MS = 120000;
 
 /** Each source's declared refresh cadence, keyed by the adapter key records carry. */
 function sourceCadences() {
@@ -79,24 +79,35 @@ function sourceCadences() {
 }
 
 let healthProbeInFlight = null;
-async function refreshHealthDiagnostics() {
+async function refreshHealthDiagnostics(options = {}) {
+  const force = Boolean(options && options.force);
   if (healthProbeInFlight) return healthProbeInFlight;
+  if (!force && lastHealthCache.timestamp > 0 && (db._activeBgDbTasks || 0) >= (db._maxBgDbConcurrency || 1)) {
+    return lastHealthCache;
+  }
+  const runProbe = async () => {
+    const freshnessRes = (typeof db.inventoryFreshness === 'function')
+      ? await Promise.race([
+          db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 10000)),
+        ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
+      : null;
+
+    const obsRes = await Promise.race([
+      (() => {
+        const { observationStoreStats } = require('./db/observations-persistence');
+        return observationStoreStats(db.pool);
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 10000)),
+    ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
+
+    return { freshnessRes, obsRes };
+  };
   healthProbeInFlight = (async () => {
     try {
-      const freshnessRes = (typeof db.inventoryFreshness === 'function')
-        ? await Promise.race([
-            db.inventoryFreshness(Date.now(), { cadences: sourceCadences() }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('freshness_probe_timeout')), 10000))
-          ]).catch(error => ({ error: String(error && error.message ? error.message : error).slice(0, 160) }))
-        : null;
-
-      const obsRes = await Promise.race([
-        (() => {
-          const { observationStoreStats } = require('./db/observations-persistence');
-          return observationStoreStats(db.pool);
-        })(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('stats_probe_timeout')), 10000))
-      ]).catch(error => ({ store: 'postgres', error: String(error && error.message ? error.message : error).slice(0, 160) }));
+      const { freshnessRes, obsRes } = (!force && typeof db.runBackgroundDbTask === 'function')
+        ? await db.runBackgroundDbTask(runProbe, { yieldToWeb: true, maxWebWaitMs: 3000 })
+        : await runProbe();
       const now = Date.now();
       const freshnessIsError = Boolean(freshnessRes && freshnessRes.error);
       const obsIsError = Boolean(obsRes && obsRes.error);
@@ -328,11 +339,11 @@ async function handleRequest(req, res) {
       let observationStore = null;
 
       if (url.searchParams.get('refresh') === '1') {
-        await refreshHealthDiagnostics();
+        await refreshHealthDiagnostics({ force: true });
         freshness = lastHealthCache.freshness;
         observationStore = lastHealthCache.observationStore;
       } else {
-        if (!hasFreshness || !isFresh) {
+        if (!lastHealthCache.timestamp || !isFresh) {
           refreshHealthDiagnostics().catch(() => {});
         }
         freshness = lastHealthCache.freshness;
@@ -533,7 +544,7 @@ async function startServer() {
     if (db.isPg && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
       try {
         const { migrate } = require('../scripts/discovery-migrate');
-        await migrate(db.pool);
+        await migrate(db.pool, { statementTimeoutMs: 45000 });
         migrationDeferred = false;
         console.log('[Server] discovery migrations verified and applied to database');
       } catch (migErr) {
@@ -582,7 +593,7 @@ async function startServer() {
             if (db.isPg && migrationDeferred && db.pool && (process.env.AUTO_MIGRATE === '1' || process.env.DISCOVERY_MIGRATE === '1')) {
               try {
                 const { migrate } = require('../scripts/discovery-migrate');
-                await migrate(db.pool);
+                await migrate(db.pool, { statementTimeoutMs: 45000 });
                 migrationDeferred = false;
                 console.log('[Server] deferred discovery migrations applied post-cutover');
               } catch (retryMigErr) {
@@ -593,7 +604,7 @@ async function startServer() {
               await refreshDbCapabilities(10000);
             }
             if (db.isPg && typeof db.purgeStaleListings === 'function') {
-              const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 50, batchPauseMs: 150, maxDurationMs: 18000 });
+              const res = await db.purgeStaleListings({ batchSize: 50, maxBatches: 40, batchPauseMs: 200, maxDurationMs: 15000 });
               console.log(
                 `[Server] Boot inventory purge removed ${res?.deleted || 0} stale/archive listings, ${res?.observationsDeleted || 0} stale observations, and ${res?.snapshotsDeleted || 0} stale snapshots.`,
               );
@@ -620,19 +631,27 @@ async function startServer() {
     const rawBootDelay = process.env.SCRAPER_BOOT_DELAY_MS;
     const configuredBootDelay = rawBootDelay != null && rawBootDelay !== '' ? Number(rawBootDelay) : NaN;
     const bootDelay = Number.isFinite(configuredBootDelay) && configuredBootDelay >= 0 ? Math.min(configuredBootDelay,300000) : 5000;
+    if (process.env.RENDER === 'true' && !process.env.SCRAPER_CONCURRENCY && scheduler.concurrency > 2) {
+      scheduler.concurrency = 2;
+    }
+    const MAX_CONTINUATIONS_PER_CYCLE = 1;
+    const CONTINUATION_DELAY_MS = 120000;
+    let continuationsThisCycle = 0;
     const scheduleContinuation = () => {
+      if (continuationsThisCycle >= MAX_CONTINUATIONS_PER_CYCLE) return;
       const due = scheduler.dueScrapers(scheduler.listingServingScrapers);
       const hasPartial = due.some((s) => {
         const last = scheduler.sourceLastRun.get(s.sourceKey);
         return last && (last.partial || (last.failed && (last.retries || 0) < 3));
       });
       if (hasPartial && !scheduler.isRunning) {
-        console.log('[Server] Partial or retryable scraper sweeps require continuation. Scheduling follow-up pass in 30s...');
+        continuationsThisCycle += 1;
+        console.log(`[Server] Partial or retryable scraper sweeps require continuation (${continuationsThisCycle}/${MAX_CONTINUATIONS_PER_CYCLE}). Scheduling follow-up pass in ${Math.round(CONTINUATION_DELAY_MS / 1000)}s...`);
         setTimeout(() => {
           if (!scheduler.isRunning) {
             scheduler.runAll().then(scheduleContinuation).catch((err) => console.error('[Server] Continuation sweep error:', err));
           }
-        }, 30000).unref();
+        }, CONTINUATION_DELAY_MS).unref();
       }
     };
     setTimeout(() => {
@@ -650,6 +669,7 @@ async function startServer() {
     const intervalMs = scrapeIntervalHours * 60 * 60 * 1000;
     setInterval(() => {
       console.log(`[Server] Triggering scheduled ${scrapeIntervalHours}h ingestion cycle...`);
+      continuationsThisCycle = 0;
       scheduler.runAll().then(scheduleContinuation).catch(err => console.error('[Server] Scheduled scrape failed:', err));
     }, intervalMs);
   });

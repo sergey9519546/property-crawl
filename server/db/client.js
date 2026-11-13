@@ -868,7 +868,7 @@ class DatabaseClient {
         const res = await this.pool.query(
           `SELECT c.source::text AS source,
                   count(l.id)::int AS n,
-                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff OR (l.provenance->'publisherAbsence'->>'at')::timestamptz >= c.cutoff)::int AS fresh,
+                  count(l.id) FILTER (WHERE l.source_observed_at >= c.cutoff OR (l.discovery_terminal IS TRUE AND (l.provenance->'publisherAbsence'->>'at')::timestamptz >= c.cutoff))::int AS fresh,
                   max(l.source_observed_at)::text AS newest,
                   min(l.source_observed_at)::text AS oldest
              FROM unnest($1::text[], $2::timestamptz[]) AS c(source, cutoff)
@@ -3181,10 +3181,10 @@ class DatabaseClient {
     if (!this.isPg || !this.pool) {
       return { deleted: 0, observationsDeleted: 0, snapshotsDeleted: 0, skipped: 'postgres_unavailable' };
     }
-    const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 100)));
-    const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 50)));
-    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 150))));
-    const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 18_000));
+    const batchSize = Math.min(2000, Math.max(1, Math.trunc(Number(options.batchSize) || 50)));
+    const maxBatches = Math.min(500, Math.max(1, Math.trunc(Number(options.maxBatches) || 40)));
+    const batchPauseMs = Math.min(1000, Math.max(0, Math.trunc(Number(options.batchPauseMs ?? 200))));
+    const maxDurationMs = options.maxDurationMs === 0 ? 0 : Math.max(1000, Math.trunc(Number(options.maxDurationMs) || 15_000));
     const startedAt = Date.now();
     const budgetExceeded = () => maxDurationMs > 0 && (Date.now() - startedAt) >= maxDurationMs;
     const serviceLinkStaleDays = Math.max(1, Math.trunc(Number(options.serviceLinkStaleDays) || 5));
@@ -3199,7 +3199,7 @@ class DatabaseClient {
       const freshCheck = await this.pool.query(
         `SELECT 1 FROM listings
           WHERE source_key = 'servicelink'
-            AND provenance->>'origin' = 'live'
+            AND discovery_is_live IS TRUE
             AND source_observed_at > NOW() - ($1::int * INTERVAL '1 day')
           LIMIT 1`,
         [serviceLinkFreshWindowDays],
@@ -3208,15 +3208,45 @@ class DatabaseClient {
     } catch (_) {}
 
     let deleted = 0;
+    // Pass A: fast indexed purge of non-live, terminal, or stale ServiceLink bulk
+    for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
+      const slRes = await this.pool.query(
+        `DELETE FROM listings
+          WHERE id IN (
+            SELECT id
+              FROM listings
+             WHERE source_key = 'servicelink'
+               AND (
+                 ((NOT discovery_is_live) AND COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice'))
+                 OR discovery_terminal IS TRUE
+                 OR COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
+                 OR (
+                   $2::boolean
+                   AND COALESCE(source_observed_at, updated_at) < NOW() - ($1::int * INTERVAL '1 day')
+                 )
+               )
+             LIMIT $4
+             FOR UPDATE SKIP LOCKED
+          )`,
+        [serviceLinkStaleDays, hasFreshServiceLinkLive, serviceLinkHardStaleDays, batchSize],
+      );
+      const slDeleted = slRes.rowCount || 0;
+      deleted += slDeleted;
+      if (slDeleted < batchSize) break;
+      if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
+        await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+      }
+    }
+
     for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
       const deletedRes = await this.pool.query(
         `DELETE FROM listings
           WHERE id IN (
             SELECT id
               FROM listings
-             WHERE COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice')
+             WHERE discovery_terminal IS TRUE
+                OR ((NOT discovery_is_live) AND COALESCE(provenance->>'origin', '') NOT IN ('live', 'email_notice'))
                 OR provenance->>'recordKind' = 'archive_record'
-                OR discovery_terminal IS TRUE
                 OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
                 OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
                 OR provenance ? 'supersededBy'
@@ -3246,6 +3276,7 @@ class DatabaseClient {
                 )
                 OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
              LIMIT $6
+             FOR UPDATE SKIP LOCKED
           )`,
         [
           absentGraceDays,

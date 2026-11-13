@@ -66,6 +66,8 @@ async function migrate(pool, options = {}) {
   const maxLockAttempts = Number.isFinite(rawAttempts) && rawAttempts >= 1 ? Math.floor(rawAttempts) : 4;
   const rawDelay = Number(options.retryDelayMs ?? 1500);
   const retryDelayMs = Number.isFinite(rawDelay) && rawDelay >= 0 ? rawDelay : 1500;
+  const statementTimeoutMs = Number(options.statementTimeoutMs);
+  const statementTimeoutSetting = Number.isFinite(statementTimeoutMs) && statementTimeoutMs > 0 ? String(Math.trunc(statementTimeoutMs)) : null;
   let migrationLockTimeoutSet = false;
   let destroyConnection = false;
 
@@ -111,7 +113,7 @@ async function migrate(pool, options = {}) {
         }
         await client.query('BEGIN');
         try {
-          await client.query("SET LOCAL statement_timeout = '0'");
+          await client.query(statementTimeoutSetting ? `SET LOCAL statement_timeout = '${statementTimeoutSetting}'` : "SET LOCAL statement_timeout = '0'");
           await client.query(sql);
           await client.query('INSERT INTO discovery_schema_migrations(name,sha256) VALUES($1,$2)', [name, digest]);
           await client.query('COMMIT');
