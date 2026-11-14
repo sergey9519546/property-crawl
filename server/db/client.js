@@ -3514,6 +3514,13 @@ class DatabaseClient {
                   )
                   OR (
                     sale_date IS NOT NULL
+                    AND sale_date < CURRENT_DATE
+                    AND COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '24 hours'
+                    AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                    AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                  )
+                  OR (
+                    sale_date IS NOT NULL
                     AND sale_date < CURRENT_DATE - INTERVAL '45 days'
                   )
                   OR (

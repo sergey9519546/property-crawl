@@ -149,6 +149,40 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
           provenance: { origin: 'live', observed: true, publisher: 'GSA', recordId: 'fresh-gsa' },
           sourceObservedAt: isoDaysAgo(1),
         },
+        // 7. Past-sale sheriff row not re-observed for >24h -> MUST BE PURGED
+        {
+          id: 'sheriff:past-unreobserved',
+          source: 'sheriff',
+          state: 'OH',
+          county: 'Cuyahoga',
+          city: 'Cleveland',
+          zip: '44101',
+          address: '600 Past Sale Ave, Cleveland, OH 44101',
+          propType: 'Single Family',
+          openingBid: 45000,
+          saleDate: dateDaysOffset(-3),
+          status: 'active',
+          lifecycleStatus: 'active',
+          provenance: { origin: 'live', observed: true, publisher: 'Cuyahoga Sheriff', recordId: 'past-unreobserved' },
+          sourceObservedAt: isoDaysAgo(2),
+        },
+        // 8. Postponed past-sale sheriff row -> MUST BE KEPT
+        {
+          id: 'sheriff:past-postponed',
+          source: 'sheriff',
+          state: 'FL',
+          county: 'Hillsborough',
+          city: 'Tampa',
+          zip: '33602',
+          address: '700 Postponed Way, Tampa, FL 33602',
+          propType: 'Single Family',
+          openingBid: 95000,
+          saleDate: dateDaysOffset(-2),
+          status: 'postponed',
+          lifecycleStatus: 'postponed',
+          provenance: { origin: 'live', observed: true, publisher: 'Hillsborough Sheriff', recordId: 'past-postponed' },
+          sourceObservedAt: isoDaysAgo(2),
+        },
       ];
 
       for (const item of fixtures) {
@@ -166,11 +200,11 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
 
       // Verify batched purgeStaleListings loops cleanly across multiple small batches while keeping active live records
       const runtimePurge = await db.purgeStaleListings({ batchSize: 2, maxBatches: 10, batchPauseMs: 0 });
-      assert.equal(runtimePurge.deleted, 4, 'purgeStaleListings must delete archive, seed, concluded, and stale ServiceLink rows');
+      assert.equal(runtimePurge.deleted, 5, 'purgeStaleListings must delete archive, seed, concluded, stale ServiceLink, and past-sale un-reobserved sheriff rows');
       assert.equal(runtimePurge.observationsDeleted, 1, 'purgeStaleListings must clean orphaned observations');
 
       const remainingRuntime = (await embedded.pool.query('SELECT id FROM listings ORDER BY id')).rows.map((r) => r.id);
-      assert.deepEqual(remainingRuntime, ['gsa:fresh-active', 'servicelink:fresh-active']);
+      assert.deepEqual(remainingRuntime, ['gsa:fresh-active', 'servicelink:fresh-active', 'sheriff:past-postponed']);
 
       // Verify consecutive-duplicate compaction on source_observations preserves endpoints and drops middle heartbeats
       await embedded.pool.query(
@@ -200,7 +234,7 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
       await embedded.pool.query(sql037);
 
       const remainingAfter037 = (await embedded.pool.query('SELECT id FROM listings ORDER BY id')).rows.map((r) => r.id);
-      assert.deepEqual(remainingAfter037, ['gsa:fresh-active', 'servicelink:fresh-active']);
+      assert.deepEqual(remainingAfter037, ['gsa:fresh-active', 'servicelink:fresh-active', 'sheriff:past-postponed']);
     } finally {
       await embedded.pool.end().catch(() => {});
     }

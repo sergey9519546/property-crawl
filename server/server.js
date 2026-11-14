@@ -604,7 +604,7 @@ async function startServer() {
               await refreshDbCapabilities(15000);
             }
             if (db.isPg && typeof db.purgeStaleListings === 'function') {
-              const res = await db.purgeStaleListings({ batchSize: 25, maxBatches: 40, batchPauseMs: 200, maxDurationMs: 15000 });
+              const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 40, batchPauseMs: 100, maxDurationMs: 15000 });
               console.log(
                 `[Server] Boot inventory purge removed ${res?.deleted || 0} stale/archive listings, ${res?.observationsDeleted || 0} stale observations, and ${res?.snapshotsDeleted || 0} stale snapshots.`,
               );
@@ -634,7 +634,22 @@ async function startServer() {
     if (process.env.RENDER === 'true' && !process.env.SCRAPER_CONCURRENCY && scheduler.concurrency > 2) {
       scheduler.concurrency = 2;
     }
-    const MAX_CONTINUATIONS_PER_CYCLE = 1;
+    const MAX_CONTINUATIONS_PER_CYCLE = 2;
+    const runCycleWithMaintenance = async () => {
+      await scheduler.runAll();
+      if (db.isPg && typeof db.purgeStaleListings === 'function') {
+        try {
+          const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 20, batchPauseMs: 50, maxDurationMs: 10000 });
+          if ((res?.deleted || 0) > 0 || (res?.observationsDeleted || 0) > 0) {
+            console.log(`[Server] Post-cycle purge removed ${res?.deleted || 0} stale listings and ${res?.observationsDeleted || 0} stale observations.`);
+          }
+          refreshHealthDiagnostics().catch(() => {});
+        } catch (purgeErr) {
+          console.warn('[Server] Post-cycle purge warning:', purgeErr && purgeErr.message ? purgeErr.message : purgeErr);
+        }
+      }
+      scheduleContinuation();
+    };
     const CONTINUATION_DELAY_MS = 120000;
     let continuationsThisCycle = 0;
     const scheduleContinuation = () => {
@@ -649,7 +664,7 @@ async function startServer() {
         console.log(`[Server] Partial or retryable scraper sweeps require continuation (${continuationsThisCycle}/${MAX_CONTINUATIONS_PER_CYCLE}). Scheduling follow-up pass in ${Math.round(CONTINUATION_DELAY_MS / 1000)}s...`);
         setTimeout(() => {
           if (!scheduler.isRunning) {
-            scheduler.runAll().then(scheduleContinuation).catch((err) => console.error('[Server] Continuation sweep error:', err));
+            runCycleWithMaintenance().catch((err) => console.error('[Server] Continuation sweep error:', err));
           }
         }, CONTINUATION_DELAY_MS).unref();
       }
@@ -660,7 +675,7 @@ async function startServer() {
         new Promise((resolve) => setTimeout(resolve, 180000).unref()),
       ])
         .catch(() => {})
-        .then(() => scheduler.runAll().then(scheduleContinuation))
+        .then(() => runCycleWithMaintenance())
         .catch(err => console.error('[Server] Scheduler failed on boot:', err));
     }, bootDelay);
 
@@ -670,7 +685,7 @@ async function startServer() {
     setInterval(() => {
       console.log(`[Server] Triggering scheduled ${scrapeIntervalHours}h ingestion cycle...`);
       continuationsThisCycle = 0;
-      scheduler.runAll().then(scheduleContinuation).catch(err => console.error('[Server] Scheduled scrape failed:', err));
+      runCycleWithMaintenance().catch(err => console.error('[Server] Scheduled scrape failed:', err));
     }, intervalMs);
   });
 }

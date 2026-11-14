@@ -850,3 +850,32 @@ test('Track 4 Qualification - Harris & Maricopa: evidence-only and robots-fail-c
   assert.equal(scraper.lastRunReport.outcome, 'failed');
 
 });
+
+test('BK-04 Wiring: DEFAULT_TRUSTEE_JURISDICTIONS includes Cook, Miami-Dade, Maricopa, Harris, and AcclaimWeb platforms', async () => {
+  const { TrusteeSaleScraper, DEFAULT_TRUSTEE_JURISDICTIONS } = require('../server/scrapers/trustee');
+  for (const jur of ['clark', 'washoe', 'maricopa', 'harris', 'cook', 'miami-dade']) {
+    assert.ok(DEFAULT_TRUSTEE_JURISDICTIONS.includes(jur), `DEFAULT_TRUSTEE_JURISDICTIONS missing ${jur}`);
+  }
+
+  const visitedUrls = [];
+  const scraper = new TrusteeSaleScraper({
+    fixtureOnly: false,
+    fetchImpl: async () => ({ status: 200, headers: new Headers(), text: async () => '' }),
+  });
+  scraper.fetchText = async (url) => {
+    visitedUrls.push(url);
+    return '';
+  };
+
+  await scraper.scrapeFeed();
+  assert.deepEqual(scraper.lastRunReport.scope.endpoints, [
+    'acclaimweb-recorder',
+    'maricopa-recorder',
+    'harris-clerk-foreclosure',
+    'cook-recorder',
+    'miami-dade-clerk',
+  ]);
+  assert.ok(visitedUrls.some((u) => u.includes('cookcountyclerkil.gov')), 'default sweep must include Cook County Recorder');
+  assert.ok(visitedUrls.some((u) => u.includes('miamidadeclerk.gov')), 'default sweep must include Miami-Dade Clerk');
+  assert.ok(visitedUrls.some((u) => u.includes('recorder.clarkcountynv.gov')), 'default sweep must include Clark County AcclaimWeb');
+});

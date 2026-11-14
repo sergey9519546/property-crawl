@@ -227,7 +227,7 @@ class SheriffSaleScraper extends BaseScraper {
     this.useScrapling = options.useScrapling ?? isScraplingEnabled('sheriff');
     this.extract = options.extractImpl || extractWithScrapling;
     this.lastRunReport = null;
-    const defaultCountyBudget = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 12 : this.counties.length;
+    const defaultCountyBudget = (process.env.RENDER === 'true' || process.env.NODE_ENV === 'production') ? 20 : this.counties.length;
     this.maxCounties = Math.max(1, Number(options.maxCounties || process.env.SHERIFF_MAX_COUNTIES || defaultCountyBudget || 1));
     const initialOffset = parseCountyOffset(options.countyOffset ?? options.checkpoint ?? process.env.SHERIFF_COUNTY_OFFSET ?? 0);
     this.countyRotationOffset = initialOffset != null ? initialOffset : 0;
@@ -256,18 +256,26 @@ class SheriffSaleScraper extends BaseScraper {
     return this.executeWithRetry(async () => {
       const totalCounties = this.counties.length;
       const startOffset = totalCounties > 0 ? (this.countyRotationOffset % totalCounties) : 0;
-      let targetCounties = this.counties;
-      if (this.maxCounties < totalCounties) {
-        targetCounties = [];
-        for (let i = 0; i < this.maxCounties; i++) {
-          targetCounties.push(this.counties[(startOffset + i) % totalCounties]);
+      const sliceCount = Math.min(this.maxCounties, totalCounties);
+      let baseSlice = this.counties;
+      if (sliceCount < totalCounties) {
+        baseSlice = [];
+        for (let i = 0; i < sliceCount; i++) {
+          baseSlice.push(this.counties[(startOffset + i) % totalCounties]);
         }
       }
-      const partialSweep = totalCounties > targetCounties.length;
+      const partialSweep = totalCounties > sliceCount;
       const nextContinuationToken = partialSweep
-        ? String((startOffset + targetCounties.length) % totalCounties)
+        ? String((startOffset + sliceCount) % totalCounties)
         : null;
       this.countyRotationOffset = partialSweep ? Number(nextContinuationToken) : 0;
+
+      // Expand targetCounties so multi-portal counties sharing (state, name) run atomically in one pass.
+      const countyPortalKey = (c) => `${String(c?.state || '').toUpperCase()}:${String(c?.name || '').toLowerCase()}`;
+      const sliceCountyKeys = new Set(baseSlice.map(countyPortalKey));
+      const targetCounties = partialSweep
+        ? this.counties.filter((c) => sliceCountyKeys.has(countyPortalKey(c)))
+        : this.counties;
 
       const report = createRunReport('sheriff', {
         platform: 'realauction-ohio',
@@ -287,15 +295,19 @@ class SheriffSaleScraper extends BaseScraper {
         const unit = `${c.name},${c.state}`;
         try {
           const countyListings = await this.scrapeCounty(c, report);
-          return countyListings;
+          return { county: c, ok: true, listings: countyListings };
         } catch (err) {
           recordUnitFailure(report, unit, err, 'county');
           console.warn(`[${this.name}] Warning for ${c.name} County: ${err.message}`);
-          return [];
+          return { county: c, ok: false, listings: [] };
         }
       });
+      const portalOutcomes = [];
       for (const result of countyResults) {
-        if (result.status === 'fulfilled' && Array.isArray(result.value)) allListings.push(...result.value);
+        if (result.status === 'fulfilled' && result.value) {
+          portalOutcomes.push(result.value);
+          if (Array.isArray(result.value.listings)) allListings.push(...result.value.listings);
+        }
       }
 
       const standardized = [];
@@ -318,6 +330,35 @@ class SheriffSaleScraper extends BaseScraper {
         }
       }
       finalizeRunReport(report, { emitted: standardized.length, rejected: schemaRejected });
+
+      const totalPortalsByCounty = new Map();
+      for (const c of this.counties) {
+        const k = countyPortalKey(c);
+        totalPortalsByCounty.set(k, (totalPortalsByCounty.get(k) || 0) + 1);
+      }
+      const outcomesByCounty = new Map();
+      for (const outcome of portalOutcomes) {
+        if (!outcome || !outcome.county) continue;
+        const k = countyPortalKey(outcome.county);
+        if (!outcomesByCounty.has(k)) outcomesByCounty.set(k, []);
+        outcomesByCounty.get(k).push(outcome);
+      }
+      const completedCounties = [];
+      for (const [k, outcomes] of outcomesByCounty.entries()) {
+        const expectedPortals = totalPortalsByCounty.get(k) || 1;
+        if (outcomes.length >= expectedPortals && outcomes.every((o) => o.ok)) {
+          const state = String(outcomes[0].county.state || '').toUpperCase();
+          const countyName = String(outcomes[0].county.name || '');
+          const seenIds = standardized
+            .filter((item) => String(item.state || '').toUpperCase() === state && String(item.county || '').toLowerCase() === countyName.toLowerCase())
+            .map((item) => item.id)
+            .filter(Boolean);
+          if (seenIds.length > 0) {
+            completedCounties.push({ county: countyName, state, seenIds });
+          }
+        }
+      }
+      report.completedCounties = completedCounties;
       report.scrapling = this.useScrapling
         ? { enabled: true, profile: 'table-extract', engine: this._lastExtraction?.engine || null, error: this._lastExtraction?.error || null }
         : { enabled: false };

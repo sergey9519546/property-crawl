@@ -1043,3 +1043,84 @@ test('RealAuction fetchCountyRealauction accumulates listings across candidate d
   assert.equal(results[1].id, 'SHERIFF-OH-FRA-2026-CV-02');
 });
 
+test('SheriffSaleScraper emits completedCounties atomically across multi-portal FL counties while keeping slice cursor exact', async () => {
+  const { SheriffSaleScraper } = require('../server/scrapers/sheriff');
+  const scraper = new SheriffSaleScraper({
+    maxCounties: 2,
+    countyOffset: 0,
+    counties: [
+      { name: 'Cuyahoga', state: 'OH', domain: 'cuyahoga.sheriffsaleauction.ohio.gov' },
+      { name: 'Hillsborough', state: 'FL', domain: 'hillsborough.realforeclose.com' },
+      { name: 'Hillsborough', state: 'FL', domain: 'hillsborough.realtaxdeed.com' },
+      { name: 'Franklin', state: 'OH', domain: 'franklin.sheriffsaleauction.ohio.gov' },
+    ],
+  });
+
+  // First slice (offset 0, maxCounties 2) spans Cuyahoga and the first portal of Hillsborough;
+  // expansion must include BOTH Hillsborough portals atomically while advancing nextContinuationToken to '2'.
+  const visitedDomains = [];
+  scraper.fetchCountyRealauction = async (county) => {
+    visitedDomains.push(county.domain);
+    const id = county.state === 'OH'
+      ? `SHERIFF-OH-CUY-CV-26-001`
+      : (county.domain.includes('realforeclose') ? 'SHERIFF-FL-HIL-FORE-1' : 'SHERIFF-FL-HIL-DEED-2');
+    return [{
+      id,
+      state: county.state,
+      county: county.name,
+      address: county.domain.includes('realforeclose') ? '100 Tampa Bay Ave, Tampa, FL 33602' : '200 Public Sq, Cleveland, OH 44114',
+      openingBid: 50000,
+      sourceUrl: `https://${county.domain}/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=1`,
+      raw: 'valid',
+      provenance: { origin: 'live', observed: true, publisher: `${county.name} Sheriff`, recordId: id },
+    }];
+  };
+
+  const out = await scraper.scrapeFeed();
+  assert.equal(out.length, 3);
+  assert.deepEqual(visitedDomains, [
+    'cuyahoga.sheriffsaleauction.ohio.gov',
+    'hillsborough.realforeclose.com',
+    'hillsborough.realtaxdeed.com',
+  ]);
+  assert.equal(out.nextContinuationToken, '2', 'rotation offset advances strictly by sliceCount (2), not expanded sibling length');
+  assert.equal(scraper.lastRunReport.partialSweep, true);
+  assert.equal(scraper.lastRunReport.completedCounties.length, 2);
+  const hil = scraper.lastRunReport.completedCounties.find((c) => c.county === 'Hillsborough' && c.state === 'FL');
+  assert.ok(hil);
+  assert.deepEqual(hil.seenIds.sort(), ['SHERIFF-FL-HIL-DEED-2', 'SHERIFF-FL-HIL-FORE-1']);
+
+  // If one portal of a multi-portal FL county fails, Hillsborough must NOT be emitted in completedCounties.
+  const partialFailScraper = new SheriffSaleScraper({
+    maxCounties: 2,
+    countyOffset: 0,
+    counties: [
+      { name: 'Cuyahoga', state: 'OH', domain: 'cuyahoga.sheriffsaleauction.ohio.gov' },
+      { name: 'Hillsborough', state: 'FL', domain: 'hillsborough.realforeclose.com' },
+      { name: 'Hillsborough', state: 'FL', domain: 'hillsborough.realtaxdeed.com' },
+    ],
+  });
+  partialFailScraper.fetchCountyRealauction = async (county) => {
+    if (county.domain.includes('realtaxdeed')) {
+      throw new Error('Upstream 503');
+    }
+    const id = county.state === 'OH' ? 'SHERIFF-OH-CUY-CV-26-009' : 'SHERIFF-FL-HIL-FORE-9';
+    return [{
+      id,
+      state: county.state,
+      county: county.name,
+      address: '300 Bayshore Blvd, Tampa, FL 33606',
+      openingBid: 75000,
+      sourceUrl: `https://${county.domain}/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&aid=9`,
+      raw: 'valid',
+      provenance: { origin: 'live', observed: true, publisher: `${county.name} Sheriff`, recordId: id },
+    }];
+  };
+  await partialFailScraper.scrapeFeed();
+  assert.deepEqual(
+    partialFailScraper.lastRunReport.completedCounties.map((c) => c.county),
+    ['Cuyahoga'],
+    'Hillsborough must not reconcile absence when one of its portals failed',
+  );
+});
+

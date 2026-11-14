@@ -46,6 +46,14 @@ const {
   finalizeRunReport,
 } = require('./run-report');
 
+const DEFAULT_TRUSTEE_JURISDICTIONS = Object.freeze([
+  ...Object.keys(DEFAULT_JURISDICTIONS),
+  'maricopa',
+  'harris',
+  'cook',
+  'miami-dade',
+]);
+
 class TrusteeSaleScraper extends BaseScraper {
   constructor(options = {}) {
     super({ name: 'TrusteeSaleScraper', sourceKey: 'trustee', ...options });
@@ -141,13 +149,17 @@ class TrusteeSaleScraper extends BaseScraper {
 
   async scrapeFeed(options = {}) {
     const report = createRunReport('trustee', {
-      endpoints: ['acclaimweb-recorder', 'maricopa-recorder', 'harris-clerk-foreclosure'],
+      endpoints: ['acclaimweb-recorder', 'maricopa-recorder', 'harris-clerk-foreclosure', 'cook-recorder', 'miami-dade-clerk'],
       jurisdiction: options.jurisdiction || null,
     });
     this.lastRunReport = report;
 
+    const isUnconfiguredTestNoop =
+      (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT)) &&
+      !this.fetchImpl &&
+      this.fetchText === BaseScraper.prototype.fetchText;
     if (
-      this.fixtureOnly &&
+      (this.fixtureOnly || isUnconfiguredTestNoop) &&
       !options.jurisdiction &&
       !options.jurisdictions &&
       !options.platform &&
@@ -162,7 +174,7 @@ class TrusteeSaleScraper extends BaseScraper {
 
     const jurisdictions = options.jurisdiction
       ? [options.jurisdiction]
-      : (Array.isArray(options.jurisdictions) ? options.jurisdictions : Object.keys(DEFAULT_JURISDICTIONS));
+      : (Array.isArray(options.jurisdictions) ? options.jurisdictions : DEFAULT_TRUSTEE_JURISDICTIONS);
 
     const standardized = [];
     const seenRefs = new Set();
@@ -622,6 +634,7 @@ class TrusteeSaleScraper extends BaseScraper {
 module.exports = new TrusteeSaleScraper();
 module.exports.TrusteeSaleScraper = TrusteeSaleScraper;
 module.exports.DEFAULT_JURISDICTIONS = DEFAULT_JURISDICTIONS;
+module.exports.DEFAULT_TRUSTEE_JURISDICTIONS = DEFAULT_TRUSTEE_JURISDICTIONS;
 module.exports.RECORD_DOC_TYPES = RECORD_DOC_TYPES;
 module.exports.MARICOPA_DOC_TYPES = MARICOPA_DOC_TYPES;
 module.exports.HARRIS_DOC_TYPES = HARRIS_DOC_TYPES;
