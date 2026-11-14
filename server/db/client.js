@@ -2427,16 +2427,24 @@ class DatabaseClient {
    * @returns {Promise<number>}  - Total rows upserted (may be 0 for no-op rows that failed the WHERE guard).
    */
   async createListingsBulk(listings, options = {}) {
-    if (!Array.isArray(listings) || listings.length === 0) return 0;
+    const returnPersisted = options.returnPersisted === true;
+    if (!Array.isArray(listings) || listings.length === 0) {
+      return returnPersisted ? { count: 0, persistedById: new Map() } : 0;
+    }
     if (!this.isPg || !this.pool) {
       // In-memory fallback: sequential upsert
-      for (const l of listings) await this.createListing(l, options);
-      return listings.length;
+      const persistedById = returnPersisted ? new Map() : null;
+      for (const l of listings) {
+        const persisted = await this.createListing(l, options);
+        if (persistedById && persisted?.id) persistedById.set(persisted.id, persisted);
+      }
+      return returnPersisted ? { count: listings.length, persistedById } : listings.length;
     }
 
     const CHUNK = Math.min(100, Math.max(1, Math.trunc(Number(options.chunkSize) || 50)));
     const YIELD_EVERY = Math.max(1, Math.trunc(Number(options.yieldEveryChunks) || 5));
     const queryClient = options.client || this.pool;
+    const persistedById = returnPersisted ? new Map() : null;
     let total = 0;
 
     for (let i = 0; i < listings.length; i += CHUNK) {
@@ -2567,15 +2575,59 @@ class DatabaseClient {
         updated_at = NOW()
       WHERE EXCLUDED.source_observed_at IS NULL
          OR listings.source_observed_at IS NULL
-         OR (EXCLUDED.source_observed_at IS NOT NULL AND EXCLUDED.source_observed_at >= listings.source_observed_at)`;
+         OR (EXCLUDED.source_observed_at IS NOT NULL AND EXCLUDED.source_observed_at >= listings.source_observed_at)${
+        returnPersisted
+          ? '\n      RETURNING id, latitude::float8 AS "lat", longitude::float8 AS "lng", assessed_value::float8 AS "assessed", year_built AS "year", prop_type AS "propType", provenance->\'derivedFields\' AS "derivedFields"'
+          : ''
+      }`;
 
       try {
         const result = await queryClient.query(sql, params);
         total += result.rowCount || 0;
+        if (persistedById) {
+          for (const row of result.rows || []) {
+            if (row?.id) {
+              persistedById.set(row.id, {
+                lat: finiteOrNull(row.lat),
+                lng: finiteOrNull(row.lng),
+                assessed: finiteOrNull(row.assessed),
+                year: row.year == null ? null : Number(row.year),
+                propType: row.propType || null,
+                provenance: row.derivedFields ? { derivedFields: row.derivedFields } : undefined,
+              });
+            }
+          }
+          const missingIds = chunk.map((l) => l?.id).filter((id) => typeof id === 'string' && id && !persistedById.has(id));
+          if (missingIds.length > 0) {
+            try {
+              const retained = await queryClient.query(
+                `SELECT id, latitude::float8 AS "lat", longitude::float8 AS "lng", assessed_value::float8 AS "assessed", year_built AS "year", prop_type AS "propType", provenance->'derivedFields' AS "derivedFields"
+                   FROM listings WHERE id = ANY($1::text[])`,
+                [missingIds],
+              );
+              for (const row of retained.rows || []) {
+                if (row?.id) {
+                  persistedById.set(row.id, {
+                    lat: finiteOrNull(row.lat),
+                    lng: finiteOrNull(row.lng),
+                    assessed: finiteOrNull(row.assessed),
+                    year: row.year == null ? null : Number(row.year),
+                    propType: row.propType || null,
+                    provenance: row.derivedFields ? { derivedFields: row.derivedFields } : undefined,
+                  });
+                }
+              }
+            } catch (_) {}
+          }
+        }
       } catch (err) {
         // On bulk failure, fall back to sequential createListing for this chunk
         for (const l of chunk) {
-          try { await this.createListing(l, options); total += 1; } catch (_) {}
+          try {
+            const persisted = await this.createListing(l, options);
+            total += 1;
+            if (persistedById && persisted?.id) persistedById.set(persisted.id, persisted);
+          } catch (_) {}
         }
       }
 
@@ -2586,7 +2638,7 @@ class DatabaseClient {
       }
     }
 
-    return total;
+    return returnPersisted ? { count: total, persistedById } : total;
   }
 
   /**
@@ -3369,7 +3421,6 @@ class DatabaseClient {
     const serviceLinkFreshWindowDays = Math.max(1, Math.trunc(Number(options.serviceLinkFreshWindowDays) || 3));
     const serviceLinkHardStaleDays = Math.max(serviceLinkStaleDays, Math.trunc(Number(options.serviceLinkHardStaleDays) || 7));
     const concludedGraceDays = Math.max(1, Math.trunc(Number(options.concludedGraceDays) || 14));
-    const absentGraceDays = Math.max(1, Math.trunc(Number(options.absentGraceDays) || 3));
     const observationRetentionDays = Math.max(7, Math.trunc(Number(options.observationRetentionDays) || 30));
     const purgeQuery = (sql, params = [], timeoutMs = 12_000) => queryWithStatementTimeout(this.pool, sql, params, timeoutMs);
 
@@ -3388,91 +3439,113 @@ class DatabaseClient {
 
     let deleted = 0;
     // Pass A: fast indexed purge of non-live, terminal, or stale ServiceLink bulk
-    for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-      const slRes = await purgeQuery(
-        `DELETE FROM listings
-          WHERE id IN (
-            SELECT id
-              FROM listings
-             WHERE source_key = 'servicelink'
-               AND (
-                 ((NOT discovery_is_live)
-                  AND source_key = 'servicelink')
-                 OR discovery_terminal IS TRUE
-                 OR COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
-                 OR (
-                   $2::boolean
-                   AND COALESCE(source_observed_at, updated_at) < NOW() - ($1::int * INTERVAL '1 day')
+    try {
+      for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
+        const slRes = await purgeQuery(
+          `DELETE FROM listings
+            WHERE id IN (
+              SELECT id
+                FROM listings
+               WHERE source_key = 'servicelink'
+                 AND (
+                   ((NOT discovery_is_live)
+                    AND source_key = 'servicelink')
+                   OR discovery_terminal IS TRUE
+                   OR COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
+                   OR (
+                     $2::boolean
+                     AND COALESCE(source_observed_at, updated_at) < NOW() - ($1::int * INTERVAL '1 day')
+                   )
                  )
-               )
-             LIMIT $4
-             FOR UPDATE SKIP LOCKED
-          )`,
-        [serviceLinkStaleDays, hasFreshServiceLinkLive, serviceLinkHardStaleDays, batchSize],
-      );
-      const slDeleted = slRes.rowCount || 0;
-      deleted += slDeleted;
-      if (slDeleted < batchSize) break;
-      if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
-        await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+               LIMIT $4
+               FOR UPDATE SKIP LOCKED
+            )`,
+          [serviceLinkStaleDays, hasFreshServiceLinkLive, serviceLinkHardStaleDays, batchSize],
+        );
+        const slDeleted = slRes.rowCount || 0;
+        deleted += slDeleted;
+        if (slDeleted < batchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
       }
-    }
+    } catch (_) {}
 
-    for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
-      const deletedRes = await purgeQuery(
-        `DELETE FROM listings
-          WHERE id IN (
-            SELECT id
-              FROM listings
-             WHERE discovery_terminal IS TRUE
-                OR NOT discovery_is_live
-                OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
-                OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
-                OR provenance ? 'supersededBy'
-                OR (
-                   provenance ? 'publisherAbsence'
-                   AND COALESCE(updated_at, source_observed_at) < NOW() - ($1::int * INTERVAL '1 day')
-                 )
-                OR (
-                  sale_date IS NOT NULL
-                  AND sale_date < CURRENT_DATE - ($2::int * INTERVAL '1 day')
-                  AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-                  AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
-                )
-                OR (
-                  sale_date IS NOT NULL
-                  AND sale_date < CURRENT_DATE - INTERVAL '45 days'
-                )
-                OR (
-                  source_key = 'servicelink'
-                  AND (
-                    COALESCE(source_observed_at, updated_at) < NOW() - ($5::int * INTERVAL '1 day')
-                    OR (
-                      $4::boolean
-                      AND COALESCE(source_observed_at, updated_at) < NOW() - ($3::int * INTERVAL '1 day')
+    // Pass A2: remove non-listing DISCOVERY_ONLY sources (e.g. courtlistener, fl-dor-cadastral)
+    try {
+      for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
+        const nonServingRes = await purgeQuery(
+          `DELETE FROM listings
+            WHERE id IN (
+              SELECT id
+                FROM listings
+               WHERE source_key NOT IN (${listingServingSourceSqlList()})
+               LIMIT $1
+               FOR UPDATE SKIP LOCKED
+            )`,
+          [batchSize],
+        );
+        const nonServingDeleted = nonServingRes.rowCount || 0;
+        deleted += nonServingDeleted;
+        if (nonServingDeleted < batchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
+      }
+    } catch (_) {}
+
+    // Pass B: purge terminal, non-live, past-sale, and 30d stale rows without scanning TOAST provenance JSONB
+    try {
+      for (let batch = 0; batch < maxBatches && !budgetExceeded(); batch += 1) {
+        const deletedRes = await purgeQuery(
+          `DELETE FROM listings
+            WHERE id IN (
+              SELECT id
+                FROM listings
+               WHERE discovery_terminal IS TRUE
+                  OR NOT discovery_is_live
+                  OR LOWER(COALESCE(lifecycle_status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                  OR LOWER(COALESCE(status, '')) IN ('sold', 'closed', 'ended', 'completed', 'cancelled', 'retired', 'withdrawn')
+                  OR (
+                    sale_date IS NOT NULL
+                    AND sale_date < CURRENT_DATE - ($1::int * INTERVAL '1 day')
+                    AND LOWER(COALESCE(status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                    AND LOWER(COALESCE(lifecycle_status, '')) NOT IN ('postponed', 'adjourned', 'stayed')
+                  )
+                  OR (
+                    sale_date IS NOT NULL
+                    AND sale_date < CURRENT_DATE - INTERVAL '45 days'
+                  )
+                  OR (
+                    source_key = 'servicelink'
+                    AND (
+                      COALESCE(source_observed_at, updated_at) < NOW() - ($4::int * INTERVAL '1 day')
+                      OR (
+                        $3::boolean
+                        AND COALESCE(source_observed_at, updated_at) < NOW() - ($2::int * INTERVAL '1 day')
+                      )
                     )
                   )
-                )
-                OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
-             LIMIT $6
-             FOR UPDATE SKIP LOCKED
-          )`,
-        [
-          absentGraceDays,
-          concludedGraceDays,
-          serviceLinkStaleDays,
-          hasFreshServiceLinkLive,
-          serviceLinkHardStaleDays,
-          batchSize,
-        ],
-      );
-      const batchDeleted = deletedRes.rowCount || 0;
-      deleted += batchDeleted;
-      if (batchDeleted < batchSize) break;
-      if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
-        await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+                  OR COALESCE(source_observed_at, updated_at) < NOW() - INTERVAL '30 days'
+               LIMIT $5
+               FOR UPDATE SKIP LOCKED
+            )`,
+          [
+            concludedGraceDays,
+            serviceLinkStaleDays,
+            hasFreshServiceLinkLive,
+            serviceLinkHardStaleDays,
+            batchSize,
+          ],
+        );
+        const batchDeleted = deletedRes.rowCount || 0;
+        deleted += batchDeleted;
+        if (batchDeleted < batchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < maxBatches && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
       }
-    }
+    } catch (_) {}
 
     let observationsDeleted = 0;
     const obsBatchSize = Math.min(500, Math.max(50, batchSize * 2));
@@ -3512,6 +3585,58 @@ class DatabaseClient {
         observationsDeleted += batchOrphan;
         if (batchOrphan < obsBatchSize) break;
         if (batchPauseMs > 0 && batch + 1 < Math.min(maxBatches, 15) && !budgetExceeded()) {
+          await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
+        }
+      }
+      // Bounded consecutive-duplicate compaction on source_observations (>2 obs per record)
+      for (let batch = 0; batch < Math.min(maxBatches, 10) && !budgetExceeded(); batch += 1) {
+        const dupRes = await purgeQuery(
+          `WITH multi AS (
+             SELECT source_key, record_id
+               FROM source_observations
+              GROUP BY source_key, record_id
+             HAVING count(*) > 2
+              ORDER BY count(*) DESC
+              LIMIT 200
+           ),
+           ordered AS (
+             SELECT so.id,
+                    so.opening_bid,
+                    so.sale_date,
+                    so.status,
+                    so.deposit,
+                    so.notice_sha256,
+                    LAG(so.id) OVER w AS prev_id,
+                    LAG(so.opening_bid) OVER w AS prev_bid,
+                    LAG(so.sale_date) OVER w AS prev_sale_date,
+                    LAG(so.status) OVER w AS prev_status,
+                    LAG(so.deposit) OVER w AS prev_deposit,
+                    LAG(so.notice_sha256) OVER w AS prev_sha,
+                    LEAD(so.id) OVER w AS next_id
+               FROM source_observations so
+               JOIN multi m ON m.source_key = so.source_key AND m.record_id = so.record_id
+              WINDOW w AS (PARTITION BY so.source_key, so.record_id ORDER BY so.observed_at ASC, so.id ASC)
+           ),
+           redundant AS (
+             SELECT id
+               FROM ordered
+              WHERE prev_id IS NOT NULL
+                AND next_id IS NOT NULL
+                AND opening_bid IS NOT DISTINCT FROM prev_bid
+                AND sale_date IS NOT DISTINCT FROM prev_sale_date
+                AND status IS NOT DISTINCT FROM prev_status
+                AND deposit IS NOT DISTINCT FROM prev_deposit
+                AND notice_sha256 IS NOT DISTINCT FROM prev_sha
+              LIMIT $1
+           )
+           DELETE FROM source_observations
+            WHERE id IN (SELECT id FROM redundant)`,
+          [obsBatchSize],
+        );
+        const batchDups = dupRes.rowCount || 0;
+        observationsDeleted += batchDups;
+        if (batchDups < obsBatchSize) break;
+        if (batchPauseMs > 0 && batch + 1 < Math.min(maxBatches, 10) && !budgetExceeded()) {
           await new Promise((resolve) => setTimeout(resolve, batchPauseMs));
         }
       }

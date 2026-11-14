@@ -172,6 +172,20 @@ test('Migration 037 and purgeStaleListings remove old, archive, concluded, and s
       const remainingRuntime = (await embedded.pool.query('SELECT id FROM listings ORDER BY id')).rows.map((r) => r.id);
       assert.deepEqual(remainingRuntime, ['gsa:fresh-active', 'servicelink:fresh-active']);
 
+      // Verify consecutive-duplicate compaction on source_observations preserves endpoints and drops middle heartbeats
+      await embedded.pool.query(
+        `INSERT INTO source_observations (id, listing_id, source_key, record_id, observed_at, opening_bid, status, raw_payload)
+         VALUES
+           ('obs-gsa-1', 'gsa:fresh-active', 'gsa', 'fresh-gsa', $1, 180000, 'scheduled', '{}'::jsonb),
+           ('obs-gsa-2', 'gsa:fresh-active', 'gsa', 'fresh-gsa', $2, 180000, 'scheduled', '{}'::jsonb),
+           ('obs-gsa-3', 'gsa:fresh-active', 'gsa', 'fresh-gsa', $3, 180000, 'scheduled', '{}'::jsonb)`,
+        [isoDaysAgo(3), isoDaysAgo(2), isoDaysAgo(1)],
+      );
+      const compactPurge = await db.purgeStaleListings({ batchSize: 10, maxBatches: 5, batchPauseMs: 0 });
+      assert.equal(compactPurge.observationsDeleted, 1, 'must compact 1 redundant intermediate duplicate observation');
+      const remainingObsIds = (await embedded.pool.query(`SELECT id FROM source_observations WHERE record_id = 'fresh-gsa' ORDER BY observed_at ASC`)).rows.map((r) => r.id);
+      assert.deepEqual(remainingObsIds, ['obs-gsa-1', 'obs-gsa-3']);
+
       // Re-insert one archive row + an old 4-day ServiceLink row and run 037 SQL migration directly to verify SQL script parity
       await db.createListing(fixtures[1]);
       await db.createListing({

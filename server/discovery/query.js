@@ -678,6 +678,52 @@ function pgSort(f, options = {}) {
 }
 const REVISION_TABLE_MISSING = new WeakSet();
 const REVISION_SEQ_MISSING = new WeakSet();
+const PG_FACET_CACHE = new WeakMap();
+const FACET_CACHE_TTL_MS = 60_000;
+const FACET_CACHE_MAX_ENTRIES = 128;
+
+function cloneFacetBuckets(facets) {
+  const out = {};
+  for (const [k, list] of Object.entries(facets || {})) {
+    out[k] = Array.isArray(list) ? list.map((item) => ({ ...item })) : [];
+  }
+  return out;
+}
+
+function getCachedFacets(pool, key) {
+  if (!pool || !key) return null;
+  const poolCache = PG_FACET_CACHE.get(pool);
+  if (!poolCache) return null;
+  const hit = poolCache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.expiresAt) {
+    poolCache.delete(key);
+    return null;
+  }
+  poolCache.delete(key);
+  poolCache.set(key, hit);
+  return { total: hit.total, facets: cloneFacetBuckets(hit.facets) };
+}
+
+function setCachedFacets(pool, key, total, facets) {
+  if (!pool || !key) return;
+  let poolCache = PG_FACET_CACHE.get(pool);
+  if (!poolCache) {
+    poolCache = new Map();
+    PG_FACET_CACHE.set(pool, poolCache);
+  }
+  if (poolCache.has(key)) poolCache.delete(key);
+  while (poolCache.size >= FACET_CACHE_MAX_ENTRIES) {
+    const oldestKey = poolCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    poolCache.delete(oldestKey);
+  }
+  poolCache.set(key, {
+    expiresAt: Date.now() + FACET_CACHE_TTL_MS,
+    total: Number(total) || 0,
+    facets: cloneFacetBuckets(facets),
+  });
+}
 function throwIfAborted(signal) {
   if (signal?.aborted) {
     const err = new DiscoveryQueryError(499, "Client closed request");
@@ -860,6 +906,28 @@ async function pgSearch(database, f, options = {}) {
     : allowed;
   const validFacets = f.facets.filter((field) => Boolean(queryAllowed[field]));
   for (const field of validFacets) facets[field] = [];
+  const canCacheFacets =
+    revision != null &&
+    revision !== "" &&
+    revision !== "0" &&
+    revision !== "undefined" &&
+    validFacets.length > 0;
+  const facetCacheKey = canCacheFacets
+    ? JSON.stringify({
+        revision,
+        accelerated: Boolean(accelerated),
+        whereSql: where.sql,
+        params: where.params,
+        facets: validFacets,
+      })
+    : null;
+  const cachedFacetResult = getCachedFacets(readPool, facetCacheKey);
+  if (cachedFacetResult) {
+    total = cachedFacetResult.total;
+    for (const field of validFacets) {
+      facets[field] = cachedFacetResult.facets[field] || [];
+    }
+  } else {
   if (accelerated && validFacets.length > 1) {
     throwIfAborted(signal);
     const selectCols = validFacets
@@ -901,6 +969,10 @@ async function pgSearch(database, f, options = {}) {
           where.params,
         )
       ).rows;
+    }
+  }
+    if (facetCacheKey && total !== undefined) {
+      setCachedFacets(readPool, facetCacheKey, total, facets);
     }
   }
   const last = rows.at(-1);

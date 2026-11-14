@@ -715,3 +715,57 @@ test('discovery-migrate diagnoses and terminates stale current_user advisory loc
   assert.equal(lockAttempts, 2, 'retries advisory lock after terminating stranded locker');
   assert.deepEqual(terminated, [99999], 'terminates stale current_user advisory lock holder');
 });
+
+test('pgSearch caches facet counts by (revision, filter) and invalidates when revision advances', { timeout: BOOT_TIMEOUT_MS }, async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-facet-cache-'));
+  try {
+    const embedded = await startEmbeddedPostgres({ dataDir });
+    await migrate(embedded.pool);
+    const pg = new DatabaseClient({ pool: embedded.pool, liveCachePath: null, workspaceStorePath: null });
+    assert.equal(await pg.verifyConnection(), true);
+
+    for (const item of parityFixtures()) {
+      await pg.createListing(item);
+    }
+
+    const origQuery = embedded.pool.query.bind(embedded.pool);
+    const facetSqlCalls = [];
+    embedded.pool.query = async (sql, params) => {
+      const s = String(sql);
+      if (s.includes('GROUP BY GROUPING SETS')) facetSqlCalls.push(s);
+      return origQuery(sql, params);
+    };
+
+    try {
+      const f = discovery.queryFromUrl(new URL('http://localhost/api/listings?state=NJ&facets=freshness,program,source'));
+      const first = await discovery.search(pg, f);
+      const second = await discovery.search(pg, f);
+      assert.equal(facetSqlCalls.length, 1, 'second identical query at same revision must reuse cached facet counts');
+      assert.equal(second.total, first.total);
+      assert.deepEqual(second.facets, first.facets);
+
+      // Mutation bumps discovery_listing_revision -> cache invalidates automatically
+      await pg.createListing({
+        id: 'fast:facet-new',
+        source: 'hud',
+        state: 'NJ',
+        county: 'Hudson',
+        city: 'Jersey City',
+        zip: '07302',
+        address: '999 Facet Cache St, Jersey City, NJ 07302',
+        openingBid: 95000,
+        status: 'active',
+        provenance: { origin: 'live', observed: true, recordId: 'FACET-NEW-1' },
+      });
+
+      const third = await discovery.search(pg, f);
+      assert.equal(facetSqlCalls.length, 2, 'advancing revision must invalidate facet cache and recompute');
+      assert.equal(third.total, first.total + 1);
+    } finally {
+      embedded.pool.query = origQuery;
+      await embedded.pool.end().catch(() => {});
+    }
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

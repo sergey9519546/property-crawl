@@ -502,6 +502,42 @@ class IngestionScheduler {
           }
 
           const accepted = [];
+          const useBulkListings = !(this.discoveryStore && discoveryRun)
+            && typeof this.database?.createListingsBulk === 'function';
+          const mergePersistedFields = (listing, persistedListing) => {
+            if (!persistedListing || typeof persistedListing !== 'object') return;
+            for (const field of ['lat', 'lng', 'assessed', 'year', 'propType']) {
+              const cur = listing[field];
+              const next = persistedListing[field];
+              if (next != null && next !== '' && (cur == null || cur === '' || (field === 'propType' && cur === 'Unknown' && next !== 'Unknown'))) {
+                listing[field] = next;
+              }
+            }
+            const persistedDerived = persistedListing.provenance?.derivedFields;
+            if (persistedDerived && typeof persistedDerived === 'object' && !Array.isArray(persistedDerived)) {
+              listing.provenance = listing.provenance || {};
+              listing.provenance.derivedFields = { ...persistedDerived, ...(listing.provenance.derivedFields || {}) };
+            }
+          };
+          const bulkPending = [];
+          const flushBulkPending = async () => {
+            if (bulkPending.length === 0) return;
+            const chunk = bulkPending.splice(0, bulkPending.length);
+            await assertLease('Collection job lease was lost; refusing further writes');
+            const bulkRes = await runBgDb(this.database, () =>
+              this.database.createListingsBulk(chunk, { chunkSize: 50, yieldEveryChunks: 1, returnPersisted: true })
+            );
+            const persistedById = bulkRes && typeof bulkRes === 'object' ? bulkRes.persistedById : null;
+            for (const listing of chunk) {
+              if (persistedById instanceof Map) {
+                mergePersistedFields(listing, persistedById.get(listing.id));
+              } else if (persistedById && typeof persistedById === 'object') {
+                mergePersistedFields(listing, persistedById[listing.id]);
+              }
+              accepted.push(listing);
+              totalIngested++;
+            }
+          };
           for (const item of itemsToIngest) {
             if (this.discoveryStore && accepted.length % 50 === 0) requireCollectionStorage(this.storageProbe);
             await assertLease('Collection job lease was lost; refusing further writes');
@@ -533,6 +569,10 @@ class IngestionScheduler {
               const rawPayload=originalPublisherRecord||(()=>{try{return JSON.parse(validation.listing.raw);}catch{return null;}})();
               const sourceFacts=validation.listing.provenance?.sourceFacts||{};
               await runBgDb(this.database, () => this.discoveryStore.ingestSnapshot({runId:discoveryRun.id,sourceKey:scraper.sourceKey,sourceRecordId:String(validation.listing.provenance.recordId),observedAt:validation.listing.sourceObservedAt||validation.listing.provenance.observedAt,rawPayload,provenance:validation.listing.provenance,observations:{auctionProgram:{value:validation.listing.auctionProgram??sourceFacts.auctionProgram??null,evidenceClass:'publisher_reported'},openingBid:{value:validation.listing.openingBid??null,evidenceClass:'publisher_reported'},saleDate:{value:validation.listing.saleDate??null,evidenceClass:'publisher_reported'},status:{value:validation.listing.status??null,evidenceClass:'publisher_reported'},sourceStatus:{value:sourceFacts.sourceStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},lifecycleStatus:{value:validation.listing.lifecycleStatus??validation.listing.status??null,evidenceClass:'publisher_reported'},transactionOutcome:{value:validation.listing.transactionOutcome??null,evidenceClass:'unknown'},deposit:{value:validation.listing.deposit??null,evidenceClass:'publisher_reported'},address:{value:validation.listing.address??null,evidenceClass:'publisher_reported'},documents:{value:Array.isArray(sourceFacts.documents)?sourceFacts.documents:null,evidenceClass:'publisher_reported'}}},async(client)=>{const transactionalDb=Object.create(this.database);transactionalDb.pool=client;transactionalDb.readPool=client;transactionalDb.isPg=true;persistedListing=await transactionalDb.createListing(validation.listing);},ownership));
+            }else if(useBulkListings){
+              bulkPending.push(validation.listing);
+              if(bulkPending.length>=50)await flushBulkPending();
+              continue;
             }else persistedListing=await runBgDb(this.database, () => this.database.createListing(validation.listing));
             if(persistedListing&&typeof persistedListing==='object'){
               for(const field of ['lat','lng','assessed','year','propType']){
@@ -554,6 +594,7 @@ class IngestionScheduler {
           const latency = Date.now() - scraperStart;
 
           if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
+          await flushBulkPending();
           let driftAlarm = null;
           if (accepted.length > 0) {
             driftAlarm = evaluateRecordsForDrift(scraper.sourceKey, accepted);

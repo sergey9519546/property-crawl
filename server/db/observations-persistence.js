@@ -495,9 +495,9 @@ async function observationStoreStats(pool, options = {}) {
   if (!options.forceRefresh && cachedStats && lastStatsPool === pool && now - lastStatsFetch < (options.ttlMs || STATS_TTL_MS)) return cachedStats;
   const result = await queryWithStatementTimeout(pool, `
     SELECT count(*)::int AS rows,
-           (SELECT count(*)::int FROM (SELECT 1 FROM source_observations GROUP BY source_key, record_id) AS pairs) AS tracked_records,
-           (SELECT observed_at FROM source_observations ORDER BY observed_at ASC LIMIT 1) AS oldest_observed_at,
-           (SELECT observed_at FROM source_observations ORDER BY observed_at DESC LIMIT 1) AS newest_observed_at,
+           count(DISTINCT (source_key || ':' || record_id))::int AS tracked_records,
+           min(observed_at) AS oldest_observed_at,
+           max(observed_at) AS newest_observed_at,
            pg_total_relation_size('source_observations')::bigint AS table_bytes
       FROM source_observations`, [], 8000);
   const row = result.rows[0];

@@ -657,7 +657,7 @@ async function startServer() {
     setTimeout(() => {
       Promise.race([
         bootMaintenancePromise,
-        new Promise((resolve) => setTimeout(resolve, 90000).unref()),
+        new Promise((resolve) => setTimeout(resolve, 180000).unref()),
       ])
         .catch(() => {})
         .then(() => scheduler.runAll().then(scheduleContinuation))

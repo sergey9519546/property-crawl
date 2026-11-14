@@ -113,10 +113,81 @@ test('DatabaseClient.createListingsBulk in PostgreSQL executes chunked upserts',
       const updated = await db.getListingById('bulk:pg-1');
       assert.equal(updated.openingBid, 120000);
       assert.equal(updated.estLow, 250000);
+
+      // Verify returnPersisted preserves existing derived fields and returns counts + map
+      await embedded.pool.query('UPDATE listings SET latitude = 33.68, longitude = -117.82 WHERE id = $1', ['bulk:pg-1']);
+      const withReturn = await db.createListingsBulk([
+        {
+          id: 'bulk:pg-1',
+          source: 'treasury',
+          state: 'CA',
+          county: 'Orange',
+          city: 'Irvine',
+          address: '100 Spectrum Way, Irvine, CA',
+          openingBid: 125000,
+          status: 'active',
+          lifecycleStatus: 'active',
+          sourceObservedAt: new Date(Date.now() + 2000).toISOString(),
+        },
+      ], { returnPersisted: true });
+      assert.equal(withReturn.count, 1);
+      assert.equal(withReturn.persistedById.get('bulk:pg-1')?.lat, 33.68);
     } finally {
       await embedded.pool.end().catch(() => {});
     }
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
+});
+
+test('IngestionScheduler uses createListingsBulk when discoveryStore is absent', async () => {
+  const { IngestionScheduler } = require('../../server/scrapers/scheduler');
+  const bulkCalls = [];
+  const singleCalls = [];
+  const mockDb = {
+    isPg: true,
+    async createListing(item) {
+      singleCalls.push(item.id);
+      return item;
+    },
+    async createListingsBulk(items, opts) {
+      bulkCalls.push({ count: items.length, returnPersisted: opts?.returnPersisted });
+      const persistedById = new Map(items.map((l) => [l.id, { lat: 40.71, lng: -74.01, propType: 'Single Family' }]));
+      return { count: items.length, persistedById };
+    },
+  };
+  const fakeScraper = {
+    name: 'BulkSchedulerFixture',
+    sourceKey: 'civilview',
+    async scrapeFeed() {
+      return Array.from({ length: 3 }, (_, idx) => ({
+        id: `civilview:bulk-sched-${idx}`,
+        source: 'civilview',
+        state: 'NJ',
+        county: 'Essex',
+        city: 'Newark',
+        zip: '07101',
+        address: `${10 + idx} Oak St, Newark, NJ 07101`,
+        sourceUrl: `https://salesweb.civilview.com/Sales/SaleDetails?PropertyId=bulk${idx}`,
+        raw: JSON.stringify({ propertyId: `bulk${idx}` }),
+        sourceObservedAt: '2026-11-13T00:00:00.000Z',
+        provenance: { origin: 'live', observed: true, publisher: 'CivilView', recordId: `bulk-sched-${idx}`, sourceFacts: {} },
+      }));
+    },
+  };
+  const sched = new IngestionScheduler({
+    realScrapers: [fakeScraper],
+    discoveryStore: null,
+    telemetry: { recordRun() {} },
+    database: mockDb,
+    networkEnabled: true,
+    concurrency: 1,
+  });
+  const res = await sched.runAll({ sourceIds: ['civilview'] });
+  assert.equal(res.totalIngested, 3);
+  assert.equal(singleCalls.length, 0, 'scheduler must not invoke single-row createListing when createListingsBulk is present');
+  assert.equal(bulkCalls.length, 1);
+  assert.equal(bulkCalls[0].count, 3);
+  assert.equal(bulkCalls[0].returnPersisted, true);
+  assert.equal(res.sourceResults[0].acceptedListings[0].lat, 40.71);
 });
