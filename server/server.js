@@ -604,7 +604,7 @@ async function startServer() {
               await refreshDbCapabilities(15000);
             }
             if (db.isPg && typeof db.purgeStaleListings === 'function') {
-              const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 40, batchPauseMs: 100, maxDurationMs: 15000 });
+              const res = await db.purgeStaleListings({ batchSize: 200, maxBatches: 40, batchPauseMs: 25, maxDurationMs: 15000 });
               console.log(
                 `[Server] Boot inventory purge removed ${res?.deleted || 0} stale/archive listings, ${res?.observationsDeleted || 0} stale observations, and ${res?.snapshotsDeleted || 0} stale snapshots.`,
               );
@@ -639,7 +639,7 @@ async function startServer() {
       await scheduler.runAll();
       if (db.isPg && typeof db.purgeStaleListings === 'function') {
         try {
-          const res = await db.purgeStaleListings({ batchSize: 100, maxBatches: 20, batchPauseMs: 50, maxDurationMs: 10000 });
+          const res = await db.purgeStaleListings({ batchSize: 200, maxBatches: 30, batchPauseMs: 25, maxDurationMs: 12000 });
           if ((res?.deleted || 0) > 0 || (res?.observationsDeleted || 0) > 0) {
             console.log(`[Server] Post-cycle purge removed ${res?.deleted || 0} stale listings and ${res?.observationsDeleted || 0} stale observations.`);
           }

@@ -353,3 +353,40 @@ test('Integration: BaseScraper and Telemetry methods', () => {
   assert.ok(state.driftReport);
   assert.equal(state.driftReport.hasDrift, false);
 });
+
+test('ScraperTelemetry ignores sparse (<25%) fields in auto-captured baselines while catching genuine core-field collapse', () => {
+  const telemetry = new ScraperTelemetry({ persist: false });
+  // Run 1 auto-captures baseline: 100% address/saleDate/state/zip, 1/50 (2%) openingBid
+  const run1 = Array.from({ length: 50 }, (_, i) => ({
+    address: `${100 + i} Bergen Ave`,
+    saleDate: '2026-12-01',
+    state: 'NJ',
+    zip: '07601',
+    openingBid: i === 0 ? 150000 : null,
+  }));
+  telemetry.recordRun('CivilViewSparse', run1, 100, null, { scopeKey: 'civilview:counties:NJ:Bergen' });
+  assert.equal(telemetry.getHealthReport().details.CivilViewSparse.driftDetected, false);
+
+  // Run 2 on the same slice has 0% openingBid (0.02 -> 0.00), while all core fields stay 100%: must NOT false-alarm
+  const run2 = Array.from({ length: 20 }, (_, i) => ({
+    address: `${200 + i} Bergen Ave`,
+    saleDate: '2026-12-01',
+    state: 'NJ',
+    zip: '07601',
+    openingBid: null,
+  }));
+  telemetry.recordRun('CivilViewSparse', run2, 100, null, { scopeKey: 'civilview:counties:NJ:Bergen' });
+  assert.equal(telemetry.getHealthReport().details.CivilViewSparse.driftDetected, false);
+
+  // Run 3 drops a core (>= 25%) baseline field (saleDate 100% -> 0%): MUST trigger driftDetected
+  const run3 = Array.from({ length: 20 }, (_, i) => ({
+    address: `${300 + i} Bergen Ave`,
+    saleDate: null,
+    state: 'NJ',
+    zip: '07601',
+    openingBid: null,
+  }));
+  telemetry.recordRun('CivilViewSparse', run3, 100, null, { scopeKey: 'civilview:counties:NJ:Bergen' });
+  assert.equal(telemetry.getHealthReport().details.CivilViewSparse.driftDetected, true);
+  assert.equal(telemetry.history.CivilViewSparse.driftReport.yieldCollapse, true);
+});

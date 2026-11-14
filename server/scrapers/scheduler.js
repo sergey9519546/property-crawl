@@ -241,6 +241,21 @@ function collectionRuntimeStatus(target, env = process.env) {
   };
 }
 
+function deriveTelemetryScopeKey(scraper, rawReport) {
+  if (scraper?.lastRunReport?.scopeHash) return scraper.lastRunReport.scopeHash;
+  const sourceKey = scraper?.sourceKey || 'default';
+  let sliceId = null;
+  if (Array.isArray(rawReport?.completedCounties) && rawReport.completedCounties.length > 0) {
+    const keys = rawReport.completedCounties
+      .map((c) => (typeof c === 'string' ? c : `${c?.state || ''}:${c?.county || ''}`))
+      .sort();
+    sliceId = `counties:${keys.join(',')}`;
+  } else if (rawReport && (rawReport.pagesPreviouslyCommitted != null || rawReport.continuationToken || rawReport.nextContinuationToken)) {
+    sliceId = `slice:${rawReport.pagesPreviouslyCommitted ?? 0}`;
+  }
+  return sliceId ? `${sourceKey}:${sliceId}` : sourceKey;
+}
+
 class IngestionScheduler {
   constructor(options = {}) {
     this.mockScrapers = [];
@@ -595,6 +610,12 @@ class IngestionScheduler {
 
           if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
           await flushBulkPending();
+          const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
+          const rawReport = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object' ? scraper.lastRunReport : null)
+            || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
+            || (isListingEnvelope ? items : null)
+            || {};
+          const telemetryScopeKey = deriveTelemetryScopeKey(scraper, rawReport);
           let driftAlarm = null;
           if (accepted.length > 0) {
             driftAlarm = evaluateRecordsForDrift(scraper.sourceKey, accepted);
@@ -604,16 +625,11 @@ class IngestionScheduler {
           }
           this.telemetry.recordRun(scraper.name, accepted, latency, null, {
             domHashes: scraper._driftSamples ? Object.fromEntries(scraper._driftSamples) : {},
-            scopeKey: scraper.lastRunReport?.scopeHash || scraper.sourceKey,
+            scopeKey: telemetryScopeKey,
             rejectedCount: rejectedForScraper,
             circuitOpen: false,
             driftAlarm: driftAlarm && driftAlarm.hasDrift ? driftAlarm : null
           });
-          const coverage = sanitizeRunReport(scraper.lastRunReport, { accepted: accepted.length, ingestionRejected: rejectedForScraper });
-          const rawReport = (scraper.lastRunReport && typeof scraper.lastRunReport === 'object' ? scraper.lastRunReport : null)
-            || (items && typeof items === 'object' && items.report && typeof items.report === 'object' ? items.report : null)
-            || (isListingEnvelope ? items : null)
-            || {};
           const isPartial = isPartialOrContinuationRun(rawReport, items); this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: isPartial, failed: false, retries: 0 });
           const nextCursor = rawReport.nextCursor ?? items?.nextCursor ?? null;
           const continuationToken = rawReport.continuationToken ?? rawReport.nextContinuationToken ?? items?.continuationToken ?? items?.nextContinuationToken ?? null;
@@ -699,9 +715,10 @@ class IngestionScheduler {
           const latency = Date.now() - scraperStart;
 
           if (typeof err !== 'undefined') { const priorRetries = this.sourceLastRun.get(scraper.sourceKey)?.retries || 0; this.sourceLastRun.set(scraper.sourceKey, { at: Date.now(), partial: false, failed: true, retries: priorRetries + 1, error: err.message }); }
+          const telemetryScopeKey = deriveTelemetryScopeKey(scraper, scraper.lastRunReport);
           this.telemetry.recordRun(scraper.name, [], latency, err, {
             domHashes: scraper._driftSamples ? Object.fromEntries(scraper._driftSamples) : {},
-            scopeKey: scraper.lastRunReport?.scopeHash || scraper.sourceKey,
+            scopeKey: telemetryScopeKey,
             rejectedCount: rejectedForScraper,
             errorCode: err.code || err.name,
             circuitOpen: Boolean(scraper.circuitBreaker && scraper.circuitBreaker.isOpen()),

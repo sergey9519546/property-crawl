@@ -132,7 +132,17 @@ class ScraperTelemetry {
     state.baselines ||= {};
     const baseline = metadata.historicalBaseline || state.baselines[scopeKey] || null;
     const domHashes = metadata.domHashes || (metadata.html ? {page:computeDomStructureHash(metadata.html)} : {});
-    const driftReport = evaluateDrift(sourceName, metadata.html || '', listings, baseline ? {fieldYield:baseline.fieldYield, ...(baseline.domHash ? {domHash:baseline.domHash} : {})} : {});
+    const resolvedBaseline = baseline
+      ? {
+          fieldYield: !metadata.historicalBaseline && baseline.fieldYield && typeof baseline.fieldYield === 'object'
+            ? Object.fromEntries(
+                Object.entries(baseline.fieldYield).filter(([, val]) => typeof val === 'number' && Number.isFinite(val) && val >= 0.25)
+              )
+            : baseline.fieldYield,
+          ...(baseline.domHash ? { domHash: baseline.domHash } : {}),
+        }
+      : {};
+    const driftReport = evaluateDrift(sourceName, metadata.html || '', listings, resolvedBaseline);
     const changedPages = Object.keys(domHashes).filter(key => baseline?.domHashes?.[key] && baseline.domHashes[key] !== domHashes[key]);
     if (changedPages.length) {
       driftReport.domDrift = true;

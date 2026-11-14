@@ -609,3 +609,103 @@ test('IngestionScheduler: multi-page continuation runs pass continuation signals
   assert.equal(recordedReport.nextCursor, null);
   assert.equal(schedulerModule.isPartialOrContinuationRun(recordedReport), false);
 });
+
+test('IngestionScheduler scopes drift telemetry baselines per slice and detects same-slice collapse', async (t) => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const evidenceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prop-crawl-slice-drift-'));
+  const previousEvidenceDir = process.env.PROPERTY_EVIDENCE_DIR;
+  const checkpointFile = path.resolve('.cache', 'sheriff-checkpoint.json');
+  const hadCheckpointBefore = fs.existsSync(checkpointFile);
+  process.env.PROPERTY_EVIDENCE_DIR = evidenceDir;
+  t.after(() => {
+    if (previousEvidenceDir === undefined) delete process.env.PROPERTY_EVIDENCE_DIR;
+    else process.env.PROPERTY_EVIDENCE_DIR = previousEvidenceDir;
+    fs.rmSync(evidenceDir, { recursive: true, force: true });
+    if (!hadCheckpointBefore && fs.existsSync(checkpointFile)) {
+      fs.unlinkSync(checkpointFile);
+    }
+  });
+
+  const makeItems = (prefix, count, withOpeningBid) =>
+    Array.from({ length: count }, (_, i) =>
+      validListing({
+        id: `SHF-${prefix}-${i}`,
+        source: 'sheriff',
+        state: prefix,
+        county: prefix === 'OH' ? 'Cuyahoga' : 'Miami-Dade',
+        openingBid: withOpeningBid(i) ? 50_000 : null,
+        saleDate: '2026-12-10',
+        sourceUrl: prefix === 'OH'
+          ? `https://cuyahoga.sheriffsaleauction.ohio.gov/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AID=${i}`
+          : `https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AID=${i}`
+      })
+    );
+
+  let scenario = 'oh';
+  const rotatingScraper = {
+    name: 'RotatingSheriffProbe',
+    sourceKey: 'sheriff',
+    lastRunReport: null,
+    async scrapeFeed() {
+      if (scenario === 'oh') {
+        this.lastRunReport = {
+          complete: false,
+          truncated: true,
+          nextContinuationToken: '20',
+          completedCounties: [{ state: 'OH', county: 'Cuyahoga', seenIds: ['1'] }]
+        };
+        return makeItems('OH', 10, () => true); // 100% openingBid
+      }
+      if (scenario === 'fl') {
+        this.lastRunReport = {
+          complete: false,
+          truncated: true,
+          nextContinuationToken: '40',
+          completedCounties: [{ state: 'FL', county: 'Miami-Dade', seenIds: ['2'] }]
+        };
+        return makeItems('FL', 10, (i) => i < 6); // 60% openingBid (<75% of OH baseline)
+      }
+      // Same OH slice collapses to 0% openingBid
+      this.lastRunReport = {
+        complete: false,
+        truncated: true,
+        nextContinuationToken: '20',
+        completedCounties: [{ state: 'OH', county: 'Cuyahoga', seenIds: ['3'] }]
+      };
+      return makeItems('OH', 10, () => false); // 0% openingBid
+    }
+  };
+
+  const telemetry = new ScraperTelemetry({ persist: false });
+  const scheduler = new schedulerModule.IngestionScheduler({
+    realScrapers: [rotatingScraper],
+    database: { async createListing() {} },
+    telemetry,
+    networkEnabled: true,
+    concurrency: 1
+  });
+
+  scenario = 'oh';
+  await scheduler.runAll();
+  assert.equal(telemetry.getHealthReport().details.RotatingSheriffProbe.driftDetected, false);
+  assert.ok(telemetry.history.RotatingSheriffProbe.baselines['sheriff:counties:OH:Cuyahoga']);
+
+  scenario = 'fl';
+  await scheduler.runAll();
+  assert.equal(
+    telemetry.getHealthReport().details.RotatingSheriffProbe.driftDetected,
+    false,
+    'FL slice must not compare against OH slice baseline'
+  );
+  assert.ok(telemetry.history.RotatingSheriffProbe.baselines['sheriff:counties:FL:Miami-Dade']);
+
+  scenario = 'oh-collapse';
+  await scheduler.runAll();
+  assert.equal(
+    telemetry.getHealthReport().details.RotatingSheriffProbe.driftDetected,
+    true,
+    'genuine yield collapse on the same OH slice must trigger driftDetected'
+  );
+});
