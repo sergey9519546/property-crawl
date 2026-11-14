@@ -66,7 +66,7 @@ function sourceCadences() {
         continue;
       }
       const hours = source.workflow && source.workflow.cadenceHours;
-      if (key && Number.isFinite(Number(hours)) && Number(hours) > 0) {
+      if (key && !(key in cadences) && Number.isFinite(Number(hours)) && Number(hours) > 0) {
         cadences[key] = Number(hours);
       }
     }
@@ -744,3 +744,4 @@ function wireStoresAfterVerify(database) {
 module.exports = server;
 module.exports.configuredCorsOrigins = configuredCorsOrigins;
 module.exports.isCorsOriginAllowed = isCorsOriginAllowed;
+module.exports.sourceCadences = sourceCadences;

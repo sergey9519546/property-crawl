@@ -400,3 +400,40 @@ test('reconcileDuplicateDockets supersedes older CivilView docket clones on same
   assert.equal(db.inMemoryData.listings[1].provenance?.supersededBy, undefined);
   assert.equal(db.inMemoryData.listings[2].provenance?.supersededBy, undefined);
 });
+
+test('sourceCadences matches presentListing cadenceHours across all catalog adapter keys including sheriff', () => {
+  const originalEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'test';
+  try {
+    const server = require('../../server/server');
+    const { presentListing } = require('../../server/routes/listings');
+    const { SOURCE_CATALOG, servesListings } = require('../../server/sources/catalog');
+
+    const cadences = server.sourceCadences();
+    assert.equal(cadences.sheriff, 12);
+
+    const seenKeys = new Set();
+    for (const source of SOURCE_CATALOG) {
+      const key = source.adapterKey;
+      if (!key || !servesListings(key) || seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      const presented = presentListing({
+        id: `CHECK-${key}`,
+        source: key,
+        sourceObservedAt: new Date(NOW).toISOString(),
+        provenance: { origin: 'live', publisher: 'Test' },
+      });
+      if (key in cadences) {
+        assert.equal(
+          cadences[key],
+          presented.sourceFreshness.cadenceHours,
+          `sourceCadences()[${key}] must match presentListing().sourceFreshness.cadenceHours`,
+        );
+      }
+    }
+  } finally {
+    if (originalEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalEnv;
+  }
+});
